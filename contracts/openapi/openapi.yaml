@@ -1,0 +1,449 @@
+openapi: 3.1.0
+info:
+  title: AI Hotspot Radar API
+  version: 0.1.0
+  description: >
+    Contract baseline for the internal AI hotspot monitoring platform.
+    This file is the source of truth for public HTTP API semantics during the scaffold phase.
+servers:
+  - url: http://localhost:8000
+    description: Local development
+tags:
+  - name: sources
+  - name: x-config
+  - name: events
+  - name: digests
+  - name: search
+  - name: feedback
+paths:
+  /api/sources:
+    get:
+      tags: [sources]
+      summary: List configured content sources
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: enabled
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Paginated source configs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedSourceConfig"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+  /api/x/keywords:
+    get:
+      tags: [x-config]
+      summary: List X keyword monitoring rules
+      responses:
+        "200":
+          description: Keyword rules
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/KeywordRule"
+                  meta:
+                    $ref: "#/components/schemas/PageMeta"
+                required: [items, meta]
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+  /api/x/accounts:
+    get:
+      tags: [x-config]
+      summary: List monitored X accounts
+      responses:
+        "200":
+          description: Monitored accounts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MonitoredAccount"
+                  meta:
+                    $ref: "#/components/schemas/PageMeta"
+                required: [items, meta]
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+  /api/events:
+    get:
+      tags: [events]
+      summary: List hotspot events
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: topic
+          in: query
+          schema:
+            type: string
+        - name: source_type
+          in: query
+          schema:
+            type: string
+        - name: from_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to_date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Paginated hotspot events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedHotspotEvent"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+  /api/events/{event_id}:
+    get:
+      tags: [events]
+      summary: Get hotspot event detail
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Event detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HotspotEvent"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+  /api/digests/today:
+    get:
+      tags: [digests]
+      summary: Get today's digest
+      responses:
+        "200":
+          description: Daily digest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyDigest"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+  /api/search:
+    get:
+      tags: [search]
+      summary: Search hotspot events and source summaries
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/HotspotEvent"
+                  meta:
+                    $ref: "#/components/schemas/PageMeta"
+                required: [items, meta]
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+  /api/feedback:
+    post:
+      tags: [feedback]
+      summary: Submit feedback for an event or digest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeedbackRecord"
+      responses:
+        "201":
+          description: Feedback accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedbackRecord"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
+components:
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+  responses:
+    ErrorResponse:
+      description: Standardized error envelope
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    PageMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+      required: [page, page_size, total]
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        request_id:
+          type: string
+      required: [code, message, request_id]
+    SourceConfig:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        source_type:
+          type: string
+        access_method:
+          type: string
+        language:
+          type: string
+        region:
+          type: string
+        weight:
+          type: number
+        poll_interval_minutes:
+          type: integer
+        enabled:
+          type: boolean
+      required:
+        - id
+        - name
+        - source_type
+        - access_method
+        - weight
+        - poll_interval_minutes
+        - enabled
+    KeywordRule:
+      type: object
+      properties:
+        id:
+          type: string
+        keyword:
+          type: string
+        category:
+          type: string
+        query_template:
+          type: string
+        priority:
+          type: integer
+        enabled:
+          type: boolean
+      required: [id, keyword, category, priority, enabled]
+    MonitoredAccount:
+      type: object
+      properties:
+        id:
+          type: string
+        platform:
+          type: string
+          enum: [x]
+        handle:
+          type: string
+        display_name:
+          type: string
+        account_type:
+          type: string
+        weight:
+          type: number
+        enabled:
+          type: boolean
+      required: [id, platform, handle, account_type, weight, enabled]
+    RawContentItem:
+      type: object
+      properties:
+        id:
+          type: string
+        source_config_id:
+          type: string
+        external_id:
+          type: string
+        title:
+          type: string
+        content_excerpt:
+          type: string
+        url:
+          type: string
+          format: uri
+        author:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+        language:
+          type: string
+        ingested_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - source_config_id
+        - external_id
+        - url
+        - published_at
+        - ingested_at
+    HotspotEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        event_title:
+          type: string
+        summary_zh:
+          type: string
+        topic_tags:
+          type: array
+          items:
+            type: string
+        score:
+          type: number
+        status:
+          type: string
+        first_seen_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+        source_count:
+          type: integer
+        evidence_links:
+          type: array
+          items:
+            type: string
+            format: uri
+      required:
+        - id
+        - event_title
+        - summary_zh
+        - score
+        - status
+        - first_seen_at
+        - last_seen_at
+        - source_count
+        - evidence_links
+    DailyDigest:
+      type: object
+      properties:
+        id:
+          type: string
+        digest_date:
+          type: string
+          format: date
+        title:
+          type: string
+        highlights:
+          type: array
+          items:
+            type: string
+        event_ids:
+          type: array
+          items:
+            type: string
+        generated_at:
+          type: string
+          format: date-time
+        delivery_status:
+          type: string
+      required:
+        - id
+        - digest_date
+        - title
+        - highlights
+        - event_ids
+        - generated_at
+        - delivery_status
+    FeedbackRecord:
+      type: object
+      properties:
+        id:
+          type: string
+        target_type:
+          type: string
+        target_id:
+          type: string
+        feedback_type:
+          type: string
+        comment:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required: [target_type, target_id, feedback_type]
+    PaginatedSourceConfig:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SourceConfig"
+        meta:
+          $ref: "#/components/schemas/PageMeta"
+      required: [items, meta]
+    PaginatedHotspotEvent:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/HotspotEvent"
+        meta:
+          $ref: "#/components/schemas/PageMeta"
+      required: [items, meta]
