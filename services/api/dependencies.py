@@ -2,8 +2,16 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from backend.core.application import HotspotDiscoveryService, SourceGovernanceService
+from backend.core.application import (
+    DigestService,
+    FeedbackService,
+    HotspotDiscoveryService,
+    SearchService,
+    SourceGovernanceService,
+)
 from backend.core.infrastructure import (
+    InMemoryDailyDigestRepository,
+    InMemoryFeedbackRepository,
     InMemoryHotspotEventRepository,
     InMemoryKeywordRuleRepository,
     InMemoryMonitoredAccountRepository,
@@ -56,3 +64,31 @@ def get_hotspot_service() -> HotspotDiscoveryService:
 def get_initialized_hotspot_event_repository() -> InMemoryHotspotEventRepository:
     get_hotspot_service()
     return get_hotspot_event_repository()
+
+
+@lru_cache(maxsize=1)
+def get_daily_digest_repository() -> InMemoryDailyDigestRepository:
+    return InMemoryDailyDigestRepository()
+
+
+@lru_cache(maxsize=1)
+def get_feedback_repository() -> InMemoryFeedbackRepository:
+    return InMemoryFeedbackRepository()
+
+
+@lru_cache(maxsize=1)
+def get_digest_service() -> DigestService:
+    return DigestService(
+        hotspot_event_repository=get_initialized_hotspot_event_repository(),
+        daily_digest_repository=get_daily_digest_repository(),
+    )
+
+
+@lru_cache(maxsize=1)
+def get_search_service() -> SearchService:
+    return SearchService(get_initialized_hotspot_event_repository())
+
+
+@lru_cache(maxsize=1)
+def get_feedback_service() -> FeedbackService:
+    return FeedbackService(get_feedback_repository())

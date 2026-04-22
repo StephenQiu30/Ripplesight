@@ -1,7 +1,9 @@
-from .application import HotspotDiscoveryService, SourceGovernanceService
+from .application import DigestService, FeedbackService, HotspotDiscoveryService, SearchService, SourceGovernanceService
 from .domain import (
     AccessMethod,
+    DailyDigest,
     EvidenceLink,
+    FeedbackRecord,
     HotspotEvent,
     KeywordRule,
     MonitoredAccount,
@@ -13,7 +15,11 @@ from .interface import EventListQuery, PageMeta, PaginatedResult, SearchQuery, S
 
 __all__ = [
     "AccessMethod",
+    "DailyDigest",
+    "DigestService",
     "EvidenceLink",
+    "FeedbackRecord",
+    "FeedbackService",
     "EventListQuery",
     "HotspotDiscoveryService",
     "HotspotEvent",
@@ -23,6 +29,7 @@ __all__ = [
     "PaginatedResult",
     "RawContentItem",
     "SearchQuery",
+    "SearchService",
     "SourceConfig",
     "SourceGovernanceService",
     "SourceListQuery",

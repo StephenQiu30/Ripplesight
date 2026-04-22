@@ -1,17 +1,28 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from uuid import uuid4
 from typing import Any
 
 from backend.core.application.protocols import (
+    DailyDigestRepository,
+    FeedbackRepository,
     HotspotEventRepository,
     KeywordRuleRepository,
     MonitoredAccountRepository,
     SourceConfigRepository,
 )
 from backend.core.domain.hotspot_rules import cluster_raw_content
-from backend.core.domain.models import HotspotEvent, KeywordRule, MonitoredAccount, RawContentItem, SourceConfig
+from backend.core.domain.models import (
+    DailyDigest,
+    FeedbackRecord,
+    HotspotEvent,
+    KeywordRule,
+    MonitoredAccount,
+    RawContentItem,
+    SourceConfig,
+)
 
 
 class SourceGovernanceService:
@@ -79,6 +90,75 @@ class HotspotDiscoveryService:
         if self._hotspot_event_repository is not None:
             self._hotspot_event_repository.save_all(events)
         return events
+
+
+class DigestService:
+    def __init__(
+        self,
+        hotspot_event_repository: HotspotEventRepository,
+        daily_digest_repository: DailyDigestRepository,
+    ) -> None:
+        self._hotspot_event_repository = hotspot_event_repository
+        self._daily_digest_repository = daily_digest_repository
+
+    def get_today_digest(self, *, today: date | None = None, generated_at: datetime | None = None) -> DailyDigest:
+        digest_date = today or datetime.now(tz=UTC).date()
+        cached = self._daily_digest_repository.get_by_date(digest_date.isoformat())
+        if cached is not None:
+            return cached
+
+        events = list(self._hotspot_event_repository.list_all())
+        highlights = tuple(event.event_title for event in events[:3])
+        digest = DailyDigest(
+            id=f"digest-{digest_date.isoformat()}",
+            digest_date=digest_date,
+            title=f"AI 热点日报 {digest_date.isoformat()}",
+            highlights=highlights,
+            event_ids=tuple(event.id for event in events[:5]),
+            generated_at=generated_at or datetime.now(tz=UTC),
+            delivery_status="assembled",
+        )
+        return self._daily_digest_repository.save(digest)
+
+
+class SearchService:
+    def __init__(self, hotspot_event_repository: HotspotEventRepository) -> None:
+        self._hotspot_event_repository = hotspot_event_repository
+
+    def search_events(self, query: str) -> list[HotspotEvent]:
+        needle = query.strip().casefold()
+        if not needle:
+            return []
+        matches = []
+        for event in self._hotspot_event_repository.list_all():
+            summary = (event.summary_zh or event.event_title).casefold()
+            if needle in event.event_title.casefold() or needle in summary:
+                matches.append(event)
+        return matches
+
+
+class FeedbackService:
+    def __init__(self, feedback_repository: FeedbackRepository) -> None:
+        self._feedback_repository = feedback_repository
+
+    def submit_feedback(
+        self,
+        *,
+        target_type: str,
+        target_id: str,
+        feedback_type: str,
+        comment: str | None = None,
+        created_at: datetime | None = None,
+    ) -> FeedbackRecord:
+        feedback = FeedbackRecord(
+            id=f"feedback-{uuid4().hex[:12]}",
+            target_type=target_type,
+            target_id=target_id,
+            feedback_type=feedback_type,
+            comment=comment,
+            created_at=created_at or datetime.now(tz=UTC),
+        )
+        return self._feedback_repository.create(feedback)
 
 
 def _filter_enabled(items: Sequence[Any], enabled: bool | None) -> list[Any]:

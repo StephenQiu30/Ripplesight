@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -99,3 +99,24 @@ class HotspotEvent:
     source_count: int
     evidence_links: tuple[EvidenceLink, ...] = field(default_factory=tuple)
     source_types: tuple[SourceType, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True, slots=True)
+class DailyDigest:
+    id: str
+    digest_date: date
+    title: str
+    highlights: tuple[str, ...]
+    event_ids: tuple[str, ...]
+    generated_at: datetime
+    delivery_status: str
+
+
+@dataclass(frozen=True, slots=True)
+class FeedbackRecord:
+    id: str
+    target_type: str
+    target_id: str
+    feedback_type: str
+    comment: str | None
+    created_at: datetime

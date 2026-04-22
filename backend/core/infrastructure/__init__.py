@@ -1,5 +1,7 @@
 """Infrastructure layer for external adapters and persistence."""
 from .memory import (
+    InMemoryDailyDigestRepository,
+    InMemoryFeedbackRepository,
     InMemoryHotspotEventRepository,
     InMemoryKeywordRuleRepository,
     InMemoryMonitoredAccountRepository,
@@ -7,6 +9,8 @@ from .memory import (
 )
 
 __all__ = [
+    "InMemoryDailyDigestRepository",
+    "InMemoryFeedbackRepository",
     "InMemoryHotspotEventRepository",
     "InMemoryKeywordRuleRepository",
     "InMemoryMonitoredAccountRepository",

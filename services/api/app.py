@@ -5,8 +5,10 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException, Request
 
 from .errors import http_exception_handler, unexpected_exception_handler
+from .routes.digests import router as digests_router
 from .routes.events import router as events_router
 from .routes.governance import router as governance_router
+from .routes.search_feedback import router as search_feedback_router
 
 
 def create_app() -> FastAPI:
@@ -23,6 +25,8 @@ def create_app() -> FastAPI:
     app.add_exception_handler(Exception, unexpected_exception_handler)
     app.include_router(governance_router)
     app.include_router(events_router)
+    app.include_router(digests_router)
+    app.include_router(search_feedback_router)
     return app
 
 
