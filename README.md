@@ -48,8 +48,7 @@ pip install -e .
 在仓库根目录直接执行：
 
 ```bash
-cp infra/env/.env.example infra/env/.env
-docker compose --profile app up -d --build
+cp infra/env/.env.example infra/env/.env && docker compose --profile app up -d --build
 ```
 
 - 核心入口：`http://127.0.0.1:3000`
@@ -60,8 +59,7 @@ docker compose --profile app up -d --build
 同样在仓库根目录执行：
 
 ```bash
-cp infra/env/.env.example infra/env/.env
-docker compose --profile app --profile jobs up -d --build
+cp infra/env/.env.example infra/env/.env && docker compose --profile app --profile jobs up -d --build
 ```
 
 - 包含 `worker`、`beat`、`redis`、`postgres`，用于异步任务链路/后台调度验证。

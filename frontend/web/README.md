@@ -23,8 +23,7 @@ npm run dev
 在仓库根目录执行：
 
 ```bash
-cp infra/env/.env.example infra/env/.env
-docker compose --profile app up -d --build
+cp infra/env/.env.example infra/env/.env && docker compose --profile app up -d --build
 ```
 
 启动后访问：`http://127.0.0.1:3000/events`
