@@ -8,6 +8,7 @@
 - [ ] `docs/research/market-research.md` 存在
 - [ ] `docs/engineering/tech-spec.md` 存在
 - [ ] `docs/engineering/acceptance.md` 存在
+- [ ] `AGENTS.md` 存在
 - [ ] 原综合文档不再与上述文档并列作为主事实源
 
 ## 2. 产品需求验收
@@ -19,6 +20,12 @@
 - [ ] PRD 明确非目标
 - [ ] PRD 明确功能分组与优先级
 - [ ] PRD 明确成功指标
+- [ ] PRD 分拆后的入口页与子文档可相互追踪且覆盖完整章节
+- [ ] `docs/product/prd/01-goals-and-positioning.md` 存在
+- [ ] `docs/product/prd/02-scope-and-non-scope.md` 存在
+- [ ] `docs/product/prd/03-features-by-phase-p0-p1.md` 存在
+- [ ] `docs/product/prd/04-success-metrics.md` 存在
+- [ ] `docs/product/prd/05-risks-and-assumptions.md` 存在
 
 ## 3. 计划文档验收
 
@@ -74,23 +81,28 @@
 
 ### 阶段 1
 
-- [ ] 文档体系冻结
-- [ ] OpenAPI 契约基线存在
-- [ ] 范围和边界冻结
+- [ ] 文档体系冻结（[docs/product/prd.md](../product/prd.md) 与 [docs/README.md](../README.md)）
+- [ ] 产品定位与目标用户可追溯：[01-目标与定位](../product/prd/01-goals-and-positioning.md)
+- [ ] 范围与非目标明确：[02-范围与非目标](../product/prd/02-scope-and-non-scope.md)
+- [ ] OpenAPI 契约基线存在且未因本轮变更新增接口：[contracts/openapi/openapi.yaml](../../contracts/openapi/openapi.yaml)
+- [ ] 新增字段/API 改动追溯到主链路文档与验收：见 [AGENTS.md](../../AGENTS.md)
 
 ### 阶段 2
 
-- [ ] 多源采集与标准化设计明确
-- [ ] `RawContentItem` 统一结构明确
+- [x] 来源治理与采集边界在 PRD 一期范围内： [02-范围与非目标](../product/prd/02-scope-and-non-scope.md)
+- [x] `RawContentItem` 标准化与来源追溯可验证：[03-分阶段功能需求（P0/P1）](../product/prd/03-features-by-phase-p0-p1.md)
 
 ### 阶段 3
 
-- [ ] 去重、聚类、评分规则定义明确
+- [x] 去重、聚类、评分规则在 MVP 一阶段可追溯：[03-分阶段功能需求（P0/P1）](../product/prd/03-features-by-phase-p0-p1.md)
+- [x] X 不能单独决定总榜并经过标准化→去重→聚类→评分： [03-分阶段功能需求（P0/P1）](../product/prd/03-features-by-phase-p0-p1.md)、[03-分阶段功能需求（P0/P1）-范围约束](../product/prd/02-scope-and-non-scope.md)
 
 ### 阶段 4
 
-- [ ] 日报生成与邮件链路定义明确
+- [ ] 日报生成、中文摘要与邮件投递路径可追溯：[03-分阶段功能需求（P0/P1）](../product/prd/03-features-by-phase-p0-p1.md)
+- [ ] 邮件状态可追踪：[04-成功指标](../product/prd/04-success-metrics.md) 与 [03-分阶段功能需求（P0/P1）](../product/prd/03-features-by-phase-p0-p1.md)
 
 ### 阶段 5
 
-- [ ] 控制台热点、详情、搜索与来源追踪链路定义明确
+- [ ] 控制台热点榜、事件详情、来源追踪可追溯：[03-分阶段功能需求（P0/P1）](../product/prd/03-features-by-phase-p0-p1.md)
+- [ ] 搜索与反馈闭环可追溯：[03-分阶段功能需求（P0/P1）](../product/prd/03-features-by-phase-p0-p1.md)

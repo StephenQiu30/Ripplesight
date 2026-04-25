@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from uuid import uuid4
 from typing import Any
 
 from backend.core.application.protocols import (
     DailyDigestRepository,
+    DigestDeliveryGateway,
     FeedbackRepository,
     HotspotEventRepository,
+    RawContentItemRepository,
     KeywordRuleRepository,
     MonitoredAccountRepository,
     SourceConfigRepository,
@@ -16,11 +19,13 @@ from backend.core.application.protocols import (
 from backend.core.domain.hotspot_rules import cluster_raw_content
 from backend.core.domain.models import (
     DailyDigest,
+    DeliveryReceipt,
     FeedbackRecord,
     HotspotEvent,
     KeywordRule,
     MonitoredAccount,
     RawContentItem,
+    RenderedDigestEmail,
     SourceConfig,
 )
 
@@ -51,9 +56,11 @@ class HotspotDiscoveryService:
         self,
         source_repository: SourceConfigRepository,
         hotspot_event_repository: HotspotEventRepository | None = None,
+        raw_content_repository: RawContentItemRepository | None = None,
     ) -> None:
         self._source_repository = source_repository
         self._hotspot_event_repository = hotspot_event_repository
+        self._raw_content_repository = raw_content_repository
 
     def normalize_items(
         self,
@@ -84,6 +91,29 @@ class HotspotDiscoveryService:
                 )
             )
         return normalized
+
+    def collect_raw_items(
+        self,
+        records_by_source: Mapping[str, Iterable[Mapping[str, Any]]],
+        *,
+        ingested_at: datetime | None = None,
+    ) -> list[RawContentItem]:
+        active_sources = {item.id: item for item in self._source_repository.list_all() if item.enabled}
+        collected: list[RawContentItem] = []
+        for source_id, records in records_by_source.items():
+            if source_id not in active_sources:
+                continue
+            try:
+                normalized = self.normalize_items(source_id, records, ingested_at=ingested_at)
+            except Exception:
+                # Downstream discovery should degrade on source-level failures
+                # and continue with available sources.
+                continue
+            collected.extend(normalized)
+
+        if self._raw_content_repository is not None:
+            self._raw_content_repository.save_all(collected)
+        return collected
 
     def build_hotspot_events(self, items: Sequence[RawContentItem]) -> list[HotspotEvent]:
         events = cluster_raw_content(items)
@@ -159,6 +189,59 @@ class FeedbackService:
             created_at=created_at or datetime.now(tz=UTC),
         )
         return self._feedback_repository.create(feedback)
+
+
+class DigestRenderService:
+    def __init__(self, hotspot_event_repository: HotspotEventRepository) -> None:
+        self._hotspot_event_repository = hotspot_event_repository
+
+    def render_digest_email(self, digest: DailyDigest, *, recipient: str) -> RenderedDigestEmail:
+        events = {event.id: event for event in self._hotspot_event_repository.list_all()}
+        lines = [digest.title, "", "今日摘要："]
+        for index, highlight in enumerate(digest.highlights, start=1):
+            lines.append(f"{index}. {highlight}")
+        if digest.event_ids:
+            lines.append("")
+            lines.append("事件详情：")
+        for event_id in digest.event_ids:
+            event = events.get(event_id)
+            if event is None:
+                continue
+            lines.append(f"- {event.event_title} | score={event.score}")
+        return RenderedDigestEmail(
+            digest_id=digest.id,
+            digest_date=digest.digest_date,
+            recipient=recipient,
+            subject=f"[AI Hotspot Radar] {digest.title}",
+            body="\n".join(lines),
+        )
+
+
+class DigestDeliveryWorkflowService:
+    def __init__(
+        self,
+        digest_service: DigestService,
+        digest_repository: DailyDigestRepository,
+        digest_render_service: DigestRenderService,
+        delivery_gateway: DigestDeliveryGateway,
+    ) -> None:
+        self._digest_service = digest_service
+        self._digest_repository = digest_repository
+        self._digest_render_service = digest_render_service
+        self._delivery_gateway = delivery_gateway
+
+    def generate_and_deliver(self, *, recipient: str, today: date | None = None) -> tuple[DailyDigest, DeliveryReceipt]:
+        digest = self._digest_service.get_today_digest(today=today)
+        rendered = self._digest_render_service.render_digest_email(digest, recipient=recipient)
+        try:
+            receipt = self._delivery_gateway.send(rendered)
+        except Exception:
+            failed = replace(digest, delivery_status="failed")
+            self._digest_repository.save(failed)
+            raise
+        delivered = replace(digest, delivery_status=receipt.status)
+        self._digest_repository.save(delivered)
+        return delivered, receipt
 
 
 def _filter_enabled(items: Sequence[Any], enabled: bool | None) -> list[Any]:

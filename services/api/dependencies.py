@@ -12,6 +12,7 @@ from backend.core.application import (
 from backend.core.infrastructure import (
     InMemoryDailyDigestRepository,
     InMemoryFeedbackRepository,
+    InMemoryRawContentItemRepository,
     InMemoryHotspotEventRepository,
     InMemoryKeywordRuleRepository,
     InMemoryMonitoredAccountRepository,
@@ -47,16 +48,21 @@ def get_hotspot_event_repository() -> InMemoryHotspotEventRepository:
 
 
 @lru_cache(maxsize=1)
+def get_raw_content_repository() -> InMemoryRawContentItemRepository:
+    return InMemoryRawContentItemRepository()
+
+
+@lru_cache(maxsize=1)
 def get_hotspot_service() -> HotspotDiscoveryService:
     repository = get_hotspot_event_repository()
+    raw_content_repository = get_raw_content_repository()
     service = HotspotDiscoveryService(
         source_repository=get_source_repository(),
         hotspot_event_repository=repository,
+        raw_content_repository=raw_content_repository,
     )
-    raw_items = []
     ingested_at = default_ingested_at()
-    for source_id, records in build_raw_records().items():
-        raw_items.extend(service.normalize_items(source_id, records, ingested_at=ingested_at))
+    raw_items = service.collect_raw_items(build_raw_records(), ingested_at=ingested_at)
     service.build_hotspot_events(raw_items)
     return service
 

@@ -5,6 +5,7 @@
 ## 阅读顺序
 
 1. [产品需求文档（PRD）](./product/prd.md)
+   - 包含入口与分拆子文档：`prd/01-goals-and-positioning.md`、`prd/02-scope-and-non-scope.md`、`prd/03-features-by-phase-p0-p1.md`、`prd/04-success-metrics.md`、`prd/05-risks-and-assumptions.md`
 2. [项目执行计划（Plan）](./product/plan.md)
 3. [市场调研与竞品分析](./research/market-research.md)
 4. [技术方案（Tech Spec）](./engineering/tech-spec.md)

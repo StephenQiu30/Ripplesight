@@ -118,13 +118,19 @@
 - M4：日报生成与邮件闭环可用
 - M5：控制台浏览与搜索可用
 
-## 6. OpenSpec 执行计划
+## 6. OpenSpec 执行计划（MVP 全链路）
 
 ### 6.1 执行入口
 
-- 对应 OpenSpec 变更：`codify-requirements-baseline`
-- 本次执行以以下文档作为主事实源：
-  - `docs/product/prd.md`
+- 对应 OpenSpec 变更：`mvp-fullchain-execution-2026-04-25`
+- 本轮目标：按 MVP 第一阶段闭环补齐能力定义与验收映射（监听/聚合/评分/日报/邮件/控制台基础读链路）。
+- 主事实源文档：
+  - `docs/product/prd.md`（入口）
+  - `docs/product/prd/01-goals-and-positioning.md`
+  - `docs/product/prd/02-scope-and-non-scope.md`
+  - `docs/product/prd/03-features-by-phase-p0-p1.md`
+  - `docs/product/prd/04-success-metrics.md`
+  - `docs/product/prd/05-risks-and-assumptions.md`
   - `docs/product/plan.md`
   - `docs/research/market-research.md`
   - `docs/engineering/tech-spec.md`
@@ -132,33 +138,35 @@
   - `contracts/openapi/openapi.yaml`
 - `docs/requirements-analysis.md` 仅作为归档导航入口，不再直接作为规格沉淀来源
 
-### 6.2 能力拆分
+### 6.2 能力交付映射（第一阶段）
 
-- `source-governance`
-  - 管理来源配置、X 关键词规则、重点账号与来源边界
-- `hotspot-discovery`
-  - 管理采集标准化、去重、聚类、评分与证据链保留
-- `digest-delivery`
-  - 管理中文摘要、日报编排、邮件投递与投递状态
-- `operator-console`
-  - 管理热点榜、详情、来源追踪、搜索筛选与反馈闭环
+- `source-governance`：
+  - [x] 范围边界与来源治理来源于 [02-范围与非目标](./prd/02-scope-and-non-scope.md)。
+  - [x] 与 X 接入约束来自 [02-范围与非目标](./prd/02-scope-and-non-scope.md) 与 [Tech Spec X 实现章节](../engineering/tech-spec.md#9-x-数据源专项实现)。
+- `hotspot-discovery`：
+  - [x] 核心流程来源于 [03-分阶段功能需求（P0/P1）](./prd/03-features-by-phase-p0-p1.md)。
+  - [x] 证据链与降噪要求来自 [risk 与成功指标](./prd/05-risks-and-assumptions.md)。
+- `digest-delivery`：
+  - [x] 日报与邮件路径来源于 [03-分阶段功能需求（P0/P1）](./prd/03-features-by-phase-p0-p1.md)。
+  - [x] 质量目标来源于 [04-成功指标](./prd/04-success-metrics.md)。
+- `operator-console`：
+  - [x] 浏览、详情与搜索要求来源于 [03-分阶段功能需求（P0/P1）](./prd/03-features-by-phase-p0-p1.md)。
 
-### 6.3 推荐执行顺序
+### 6.3 执行顺序
 
-1. 发布 OpenSpec 主规格基线，确保后续开发以能力规格为主，而不是反复翻阅散落文档
-2. 对齐 OpenAPI 契约与核心数据模型命名，避免前后端在实现阶段再次解释字段语义
-3. 优先实现 `source-governance` 与基础采集链路，保证来源配置和启停能力先成立
-4. 实现 `hotspot-discovery`，完成标准化、去重、聚类、评分和证据链主流程
-5. 实现 `digest-delivery`，完成中文摘要、日报生成、邮件发送与状态记录
-6. 实现 `operator-console`，完成热点榜、详情、来源追踪、搜索筛选与反馈提交
-7. 按验收标准逐项验证后归档 OpenSpec 变更，再进入下一轮细化变更
+1. 完成 OpenSpec 四类 artifact：proposal、design、specs、tasks（本轮 change）。
+2. 同步 `plan.md` 与 `acceptance.md` 阶段交付/验收点到 PRD 子文档条目。
+3. 仅保留现有 API 边界内实现，推进控制台基础读链路、日报、邮件链路闭环验收。
+4. 用 `openspec validate` 与回归测试确认本轮可交付边界不阻塞。
 
-### 6.4 本轮分析结论
+### 6.4 当前执行进展（2026-04-25）
 
-- 当前文档体系整体一致，MVP 范围、技术选型、X 接入边界和日报/控制台双交付方向没有明显冲突
-- 当前最适合的实施路径不是直接写代码，而是先将需求基线固化为 OpenSpec 主规格
-- 仍需后续补充的关键细节包括：
-  - 热点评分的具体因子和权重规则
-  - 原始内容、摘要和证据元数据的保留周期
-  - 日报调度时间、失败重试策略和稳定性指标
-  - 控制台是否需要 MVP 级别的访问控制
+- 已完成并归档的 OpenSpec 变更：
+  - `2026-04-22-codify-requirements-baseline`
+  - `2026-04-22-bootstrap-backend-core-skeleton`
+  - `2026-04-22-add-read-only-api-assembly`
+  - `2026-04-22-add-digest-search-feedback-flows`
+  - `2026-04-22-add-worker-digest-delivery`
+  - `2026-04-25-mvp-fullchain-execution-2026-04-25`
+- 2026-04-25 阶段2实现：`2026-04-25-mvp-stage2-implementation-2026-04-25`（已完成并归档）
+- 2026-04-25 阶段3实现：`2026-04-25-mvp-stage3-implementation-2026-04-25`（已完成并归档）

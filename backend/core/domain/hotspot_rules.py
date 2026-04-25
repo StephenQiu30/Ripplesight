@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from collections import defaultdict
 from typing import Iterable
 
 from .models import EvidenceLink, HotspotEvent, RawContentItem, SourceType
@@ -18,6 +17,26 @@ SOURCE_TYPE_WEIGHTS: dict[SourceType, float] = {
 }
 
 _NON_WORD_PATTERN = re.compile(r"[^a-z0-9]+")
+_STOP_WORDS = {
+    "a",
+    "an",
+    "and",
+    "as",
+    "at",
+    "by",
+    "for",
+    "from",
+    "in",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "to",
+    "the",
+    "with",
+}
+_TITLE_SIMILARITY_THRESHOLD = 0.7
 
 
 def normalize_text(value: str) -> str:
@@ -25,18 +44,27 @@ def normalize_text(value: str) -> str:
 
 
 def derive_event_key(title: str) -> str:
-    key = normalize_text(title)
-    return key or "untitled-event"
+    words = list(_tokenize_title(title))
+    if not words:
+        return "untitled-event"
+    return "-".join(sorted(set(words))[:8])
+
+
+def _tokenize_title(value: str) -> tuple[str, ...]:
+    key = normalize_text(value).split("-")
+    tokens = [item for item in key if item and item not in _STOP_WORDS]
+    return tuple(tokens)
 
 
 def score_hotspot_event(event: HotspotEvent) -> float:
     unique_types = set(event.source_types)
+    if unique_types == {SourceType.X}:
+        x_base = sum(SOURCE_TYPE_WEIGHTS.get(source_type, 1.0) for source_type in unique_types)
+        return round(min(x_base * 0.4, 0.9), 3)
+
     base = sum(SOURCE_TYPE_WEIGHTS.get(source_type, 1.0) for source_type in unique_types)
     evidence_bonus = min(len(event.evidence_links) * 0.15, 0.75)
     score = base + evidence_bonus
-
-    if unique_types == {SourceType.X}:
-        return round(min(score * 0.35, 0.9), 3)
 
     return round(score, 3)
 
@@ -50,12 +78,23 @@ def rank_hotspot_events(events: Iterable[HotspotEvent]) -> list[HotspotEvent]:
 
 
 def cluster_raw_content(items: Iterable[RawContentItem]) -> list[HotspotEvent]:
-    grouped_items: dict[str, list[RawContentItem]] = defaultdict(list)
+    grouped_items: list[tuple[str, tuple[str, ...], list[RawContentItem]]] = []
     for item in items:
-        grouped_items[derive_event_key(item.title)].append(item)
+        item_key = derive_event_key(item.title)
+        item_tokens = _tokenize_title(item.title)
+        merged = False
+
+        for index, (event_key, key_tokens, grouped) in enumerate(grouped_items):
+            if _is_near_duplicate(item_tokens, key_tokens):
+                grouped.append(item)
+                merged = True
+                break
+
+        if not merged:
+            grouped_items.append((item_key, item_tokens, [item]))
 
     events: list[HotspotEvent] = []
-    for event_key, grouped in grouped_items.items():
+    for event_key, _, grouped in grouped_items:
         ordered = sorted(grouped, key=lambda item: item.published_at)
         primary_item = max(ordered, key=lambda item: (len(item.title), item.published_at.timestamp()))
         evidence_links = _build_evidence_links(ordered)
@@ -77,6 +116,26 @@ def cluster_raw_content(items: Iterable[RawContentItem]) -> list[HotspotEvent]:
         events.append(_with_score(event))
 
     return rank_hotspot_events(events)
+
+
+def _is_near_duplicate(left: tuple[str, ...], right: tuple[str, ...]) -> bool:
+    if not left and not right:
+        return True
+    if not left or not right:
+        return False
+    if left == right:
+        return True
+
+    left_set = set(left)
+    right_set = set(right)
+    overlap = len(left_set & right_set)
+    if overlap < 2:
+        return False
+
+    smaller = min(len(left_set), len(right_set))
+    if smaller == 0:
+        return False
+    return (overlap / smaller) >= _TITLE_SIMILARITY_THRESHOLD
 
 
 def _build_evidence_links(items: Iterable[RawContentItem]) -> tuple[EvidenceLink, ...]:

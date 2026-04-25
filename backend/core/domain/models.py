@@ -120,3 +120,19 @@ class FeedbackRecord:
     feedback_type: str
     comment: str | None
     created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class RenderedDigestEmail:
+    digest_id: str
+    digest_date: date
+    recipient: str
+    subject: str
+    body: str
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryReceipt:
+    message_id: str
+    status: str
+    delivered_at: datetime

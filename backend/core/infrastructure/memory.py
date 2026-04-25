@@ -1,8 +1,20 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import UTC, datetime
+from uuid import uuid4
 
-from backend.core.domain.models import DailyDigest, FeedbackRecord, HotspotEvent, KeywordRule, MonitoredAccount, SourceConfig
+from backend.core.domain.models import (
+    DailyDigest,
+    DeliveryReceipt,
+    FeedbackRecord,
+    HotspotEvent,
+    RawContentItem,
+    KeywordRule,
+    MonitoredAccount,
+    RenderedDigestEmail,
+    SourceConfig,
+)
 
 
 class InMemorySourceConfigRepository:
@@ -46,6 +58,17 @@ class InMemoryHotspotEventRepository:
         self._items = list(events)
 
 
+class InMemoryRawContentItemRepository:
+    def __init__(self, items: Sequence[RawContentItem] | None = None) -> None:
+        self._items = list(items or ())
+
+    def list_all(self) -> Sequence[RawContentItem]:
+        return tuple(self._items)
+
+    def save_all(self, items: Sequence[RawContentItem]) -> None:
+        self._items = list(items)
+
+
 class InMemoryDailyDigestRepository:
     def __init__(self, items: Sequence[DailyDigest] | None = None) -> None:
         self._items = {item.digest_date.isoformat(): item for item in items or ()}
@@ -68,3 +91,19 @@ class InMemoryFeedbackRepository:
 
     def list_all(self) -> Sequence[FeedbackRecord]:
         return tuple(self._items)
+
+
+class InMemoryDigestDeliveryGateway:
+    def __init__(self, should_fail: bool = False) -> None:
+        self._should_fail = should_fail
+        self.sent_emails: list[RenderedDigestEmail] = []
+
+    def send(self, email: RenderedDigestEmail) -> DeliveryReceipt:
+        if self._should_fail:
+            raise RuntimeError("Simulated delivery failure")
+        self.sent_emails.append(email)
+        return DeliveryReceipt(
+            message_id=f"msg-{uuid4().hex[:12]}",
+            status="delivered",
+            delivered_at=datetime.now(tz=UTC),
+        )

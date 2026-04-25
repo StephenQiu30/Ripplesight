@@ -1,30 +1,51 @@
 services:
   api:
-    image: python:3.12-slim
+    build:
+      context: ..
+      dockerfile: infra/python/Dockerfile
     working_dir: /workspace
-    command: ["sh", "-lc", "echo 'api scaffold placeholder'; sleep infinity"]
+    command: ["uvicorn", "services.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
     env_file:
       - ./env/.env.example
+    environment:
+      PYTHONPATH: /workspace
     volumes:
-      - ../services:/workspace/services
-      - ../backend:/workspace/backend
-      - ../contracts:/workspace/contracts
+      - ..:/workspace
+    ports:
+      - "8000:8000"
     depends_on:
       - postgres
       - redis
 
   worker:
-    image: python:3.12-slim
+    build:
+      context: ..
+      dockerfile: infra/python/Dockerfile
     working_dir: /workspace
-    command: ["sh", "-lc", "echo 'worker scaffold placeholder'; sleep infinity"]
+    command: ["celery", "-A", "services.worker.app:celery_app", "worker", "--loglevel=INFO"]
     env_file:
       - ./env/.env.example
+    environment:
+      PYTHONPATH: /workspace
     volumes:
-      - ../services:/workspace/services
-      - ../backend:/workspace/backend
-      - ../contracts:/workspace/contracts
+      - ..:/workspace
     depends_on:
       - postgres
+      - redis
+
+  beat:
+    build:
+      context: ..
+      dockerfile: infra/python/Dockerfile
+    working_dir: /workspace
+    command: ["celery", "-A", "services.worker.app:celery_app", "beat", "--loglevel=INFO"]
+    env_file:
+      - ./env/.env.example
+    environment:
+      PYTHONPATH: /workspace
+    volumes:
+      - ..:/workspace
+    depends_on:
       - redis
 
   web:
@@ -34,8 +55,7 @@ services:
     env_file:
       - ./env/.env.example
     volumes:
-      - ../frontend:/workspace/frontend
-      - ../contracts:/workspace/contracts
+      - ..:/workspace
 
   postgres:
     image: postgres:16-alpine
