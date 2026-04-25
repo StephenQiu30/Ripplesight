@@ -69,7 +69,7 @@ def _load_digest_hotspots(session: Session, report_date: date) -> list[Hotspot]:
         select(Hotspot)
         .join(AiAnalysis, AiAnalysis.hotspot_id == Hotspot.id)
         .options(selectinload(Hotspot.source), selectinload(Hotspot.keyword), selectinload(Hotspot.ai_analysis))
-        .where(Hotspot.fetched_at >= start, Hotspot.fetched_at < end)
+        .where(Hotspot.fetched_at >= start, Hotspot.fetched_at < end, Hotspot.status == "active")
         .order_by(importance_rank.desc(), AiAnalysis.relevance_score.desc(), Hotspot.fetched_at.desc())
         .limit(MAX_DIGEST_ITEMS)
     )

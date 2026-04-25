@@ -11,6 +11,7 @@ from apps.api.app.api.routes.health import router as health_router
 from apps.api.app.api.routes.hotspots import router as hotspots_router
 from apps.api.app.api.routes.keywords import router as keywords_router
 from apps.api.app.api.routes.notifications import router as notifications_router
+from apps.api.app.api.routes.search import router as search_router
 from apps.api.app.api.routes.settings import router as settings_router
 from apps.api.app.api.routes.sources import router as sources_router
 from apps.api.app.db.init_schema import initialize_database
@@ -51,6 +52,7 @@ def create_app() -> FastAPI:
     app.include_router(check_runs_router)
     app.include_router(daily_reports_router)
     app.include_router(notifications_router)
+    app.include_router(search_router)
     app.include_router(settings_router)
     return app
 

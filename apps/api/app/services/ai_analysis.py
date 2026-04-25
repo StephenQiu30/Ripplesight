@@ -36,11 +36,72 @@ def analyze_hotspot(hotspot: Hotspot, keyword: Keyword | None) -> AnalysisResult
     return _fallback_analysis(hotspot, keyword)
 
 
+def expand_keyword_queries(keyword: Keyword) -> list[str]:
+    base_query = keyword.query_template or keyword.keyword
+    if settings.openai_api_key and settings.openai_model:
+        try:
+            return _expand_with_model(keyword, base_query)
+        except Exception:  # noqa: BLE001
+            return _fallback_queries(keyword, base_query)
+    return _fallback_queries(keyword, base_query)
+
+
+def _expand_with_model(keyword: Keyword, base_query: str) -> list[str]:
+    payload = {
+        "model": settings.openai_model,
+        "messages": [
+            {"role": "system", "content": "You expand hotspot monitoring keywords into concise search queries."},
+            {
+                "role": "user",
+                "content": (
+                    "Return strict JSON with key queries as an array of 2 to 5 short search queries. "
+                    f"Keyword: {keyword.keyword}\nTemplate: {base_query}"
+                ),
+            },
+        ],
+        "temperature": 0.2,
+    }
+    headers = {"Authorization": f"Bearer {settings.openai_api_key}", "Content-Type": "application/json"}
+    base_url = (settings.openai_base_url or "https://api.openai.com/v1").rstrip("/")
+    response = httpx.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=20)
+    response.raise_for_status()
+    raw = response.json()
+    content = raw["choices"][0]["message"]["content"]
+    parsed = _parse_model_json(content)
+    queries = [str(item).strip() for item in parsed.get("queries", []) if str(item).strip()]
+    return _dedupe_queries([base_query, *queries])[:5]
+
+
+def _fallback_queries(keyword: Keyword, base_query: str) -> list[str]:
+    return _dedupe_queries(
+        [
+            base_query,
+            f"{keyword.keyword} AI",
+            f"{keyword.keyword} news",
+            f"{keyword.keyword} launch",
+            f"{keyword.keyword} update",
+        ]
+    )[:5]
+
+
+def _dedupe_queries(queries: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for query in queries:
+        normalized = query.strip()
+        key = normalized.lower()
+        if normalized and key not in seen:
+            seen.add(key)
+            result.append(normalized)
+    return result
+
+
 def _analyze_with_model(hotspot: Hotspot, keyword: Keyword | None) -> AnalysisResult:
     prompt = (
         "Analyze this hotspot candidate. Return strict JSON with keys: "
         "is_real, relevance_score, relevance_reason, keyword_mentioned, importance, summary. "
-        "importance must be low, medium, or high. relevance_score is 0-100.\n\n"
+        "importance must be low, medium, or high. relevance_score is 0-100. "
+        "summary and relevance_reason must be written in Chinese.\n\n"
         f"Keyword: {keyword.keyword if keyword else ''}\n"
         f"Title: {hotspot.title}\n"
         f"Snippet: {hotspot.snippet or ''}\n"
@@ -82,7 +143,7 @@ def _fallback_analysis(hotspot: Hotspot, keyword: Keyword | None) -> AnalysisRes
     return AnalysisResult(
         is_real=True,
         relevance_score=score,
-        relevance_reason="Local fallback analysis based on keyword mention.",
+        relevance_reason="本地降级分析：根据标题和摘要中是否包含关键词判断相关性。",
         keyword_mentioned=mentioned,
         importance=importance,
         summary=hotspot.snippet or hotspot.title,

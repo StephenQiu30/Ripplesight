@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     openai_model: str | None = None
     relevance_threshold: float = 50.0
     source_fetch_limit: int = 20
+    x_api_bearer_token: str | None = None
+    bing_search_api_key: str | None = None
     scheduler_enabled: bool = False
     check_interval_minutes: int = 60
     daily_digest_enabled: bool = False

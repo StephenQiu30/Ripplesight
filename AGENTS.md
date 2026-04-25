@@ -10,13 +10,19 @@
 - API 契约由新 FastAPI 实现自动生成；旧 `contracts/openapi` 不再是实现约束。
 - 验收口径以 `docs/engineering/acceptance.md` 为准。
 - 具体执行任务以 `docs/plans/` 下的 PLAN 文件为准。
+- 鱼皮 MVP 迁移范围以 `docs/plans/10-yupi-hot-monitor-mvp-plan.md` 为准。
 
 ## 2. 产品实现方向
 
 - 第一阶段定位为“可自部署、可配置关键词的 AI 热点监控工具”，不是重型舆情平台。
-- 功能实现优先参考鱼皮 `yupi-hot-monitor` 的 MVP 能力：关键词管理、多源抓取、AI 分析、热点列表、筛选排序、邮件通知、手动触发和定时触发。
+- 功能实现优先参考鱼皮 `yupi-hot-monitor` 的 MVP 能力：关键词管理、多源抓取、AI 查询扩展、真假识别、相关性分析、热点列表、筛选排序、全网搜索、邮件通知、手动触发和定时触发。
 - 参考鱼皮项目的功能闭环，不复制其技术栈；本仓库使用 `Next.js + TypeScript` 前端、`Python + FastAPI` 后端、`PostgreSQL` 数据库、`SQLAlchemy 2.0` ORM、`SMTP` 邮件。
-- P0 必须围绕可运行闭环：配置关键词 -> 抓取多源内容 -> AI 判断相关性/真实性 -> 生成热点 -> 展示与筛选 -> 可选邮件通知。
+- P0 必须围绕可运行闭环：配置关键词 -> 抓取多源内容 -> AI 查询扩展 -> AI 判断相关性/真实性 -> 生成热点 -> 阈值过滤 -> 事件邮件通知 -> AI 日报邮件。
+- 鱼皮 MVP 迁移只迁移功能闭环，不迁移技术栈；继续使用 `Python + FastAPI + PostgreSQL + SQLAlchemy + Next.js`。
+- 第一阶段数据源范围为 RSS、Hacker News、X/Twitter、Bing、Bilibili、Sogou-style；新增来源必须走统一 adapter 和 `Candidate` 输出。
+- X/Twitter 必须使用官方 X API v2 Recent Search，通过 `X_API_BEARER_TOKEN` 注入凭据；不得引入页面爬取作为默认实现。
+- 低于 `RELEVANCE_THRESHOLD` 的热点必须标记为 `filtered`，不得发送事件邮件，不得进入 AI 日报。
+- 达到 `RELEVANCE_THRESHOLD` 的热点标记为 `active`，允许进入热点流、事件邮件和 AI 日报。
 - P0 不做多租户、复杂权限、计费、复杂工作流、向量库、复杂队列治理和企业级数据平台。
 
 ## 3. 改动规范
@@ -46,6 +52,7 @@
 - PostgreSQL 默认使用用户本机已有实例；不要为 P0 默认开发链路重新创建 Docker PostgreSQL 环境。
 - 邮件未配置时系统仍必须可运行，只是不发送邮件。
 - X/Twitter 未配置时系统仍必须可运行，只跳过该来源。
+- Bing 未配置时系统仍必须可运行，只跳过该来源。
 - 单个数据源失败不能中断整个热点检查任务。
 - 手动触发和定时触发都必须走同一条业务编排链路。
 

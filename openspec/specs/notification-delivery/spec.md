@@ -19,3 +19,9 @@ The system shall send SMTP email notifications when configured and always record
 - **WHEN** SMTP config is missing
 - **THEN** the system skips email sending
 - **AND** records a skipped notification without failing the check run
+
+#### Scenario: Daily digest notification
+
+- **WHEN** a daily digest email is sent or skipped
+- **THEN** the system records a notification linked to the daily report
+- **AND** does not require a hotspot id for that notification

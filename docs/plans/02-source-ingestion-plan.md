@@ -2,12 +2,12 @@
 
 ## 目标
 
-实现多来源抓取和统一标准化输入。
+实现多来源抓取和统一标准化输入，并按鱼皮 `yupi-hot-monitor` MVP 对齐多平台信息源。
 
 ## 范围
 
 - 新建 `sources` 表。
-- 支持至少两个来源返回热点候选。
+- 支持 RSS、Hacker News、X/Twitter、Bing、Bilibili、Sogou-style 返回热点候选。
 - 支持来源启停。
 - 单个来源失败不影响整体任务。
 
@@ -25,11 +25,15 @@
 
 - P0 优先实现公开、低门槛来源。
 - X/Twitter 为可选来源，未配置凭据时跳过。
+- Bing 为可选来源，未配置凭据时跳过。
+- Bilibili 和 Sogou-style 为 best-effort 来源，失败时只记录错误。
 - 每个来源输出统一候选字段：标题、URL、作者、发布时间、摘要片段、原始 payload。
 
 ## 验收标准
 
 - 至少两个来源可被调用。
+- X/Twitter 未配置 `X_API_BEARER_TOKEN` 时跳过且不中断任务。
+- Bing 未配置 `BING_SEARCH_API_KEY` 时跳过且不中断任务。
 - 来源失败会记录错误，但任务继续。
 - 禁用来源不会被调用。
 - 候选内容能进入统一标准化流程。

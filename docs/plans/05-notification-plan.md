@@ -2,12 +2,13 @@
 
 ## 目标
 
-实现 SMTP 邮件通知和通知状态记录。
+实现 SMTP 热点事件邮件、AI 日报邮件和通知状态记录。
 
 ## 范围
 
 - 新建 `notifications` 表。
-- 使用 SMTP 发送邮件。
+- 使用 SMTP 发送热点事件邮件。
+- 使用 SMTP 发送 AI 日报邮件。
 - SMTP 未配置时跳过邮件发送，但主流程继续。
 - 记录发送成功、失败、跳过状态。
 
@@ -15,6 +16,7 @@
 
 - `id`
 - `hotspot_id`
+- `daily_report_id`
 - `channel`
 - `recipient`
 - `status`
@@ -28,6 +30,8 @@
 - SMTP 配置缺失时任务继续，并记录 skipped。
 - SMTP 发送失败时记录 error_message。
 - 邮件内容包含标题、摘要、来源链接和相关性理由。
+- 低相关 `filtered` 热点不发送事件邮件。
+- AI 日报发送记录必须关联 `daily_report_id`。
 
 ## 非目标
 
