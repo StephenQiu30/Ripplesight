@@ -1,0 +1,17 @@
+services:
+  api:
+    env_file:
+      - ./infra/env/.env
+  worker:
+    env_file:
+      - ./infra/env/.env
+    profiles:
+      - jobs
+  beat:
+    env_file:
+      - ./infra/env/.env
+    profiles:
+      - jobs
+  web:
+    env_file:
+      - ./infra/env/.env

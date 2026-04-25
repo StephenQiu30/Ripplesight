@@ -23,7 +23,7 @@ npm run dev
 在仓库根目录执行：
 
 ```bash
-cp infra/env/.env.example infra/env/.env && docker compose up -d --build
+docker compose up -d --build
 ```
 
 启动后访问：`http://127.0.0.1:3000/events`
@@ -42,6 +42,13 @@ curl -fsS http://127.0.0.1:3000/search
 
 - `NEXT_PUBLIC_API_BASE_URL`：服务端请求基地址，默认 `http://localhost:8000`
 - 本地开发可直接访问 `http://localhost:3000/events`，页面会将 `/api/*` 走 Next 重写到后端。
+
+生产环境（需注入外部配置）可在根目录执行：
+
+```bash
+cp infra/env/.env.example infra/env/.env
+docker compose -f docker-compose.yml -f docker-compose.production.yml up -d --build
+```
 
 ## OpenAPI 生成链路
 
