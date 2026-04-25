@@ -171,3 +171,15 @@
   - `2026-04-25-mvp-fullchain-execution-2026-04-25`
 - 2026-04-25 阶段2实现：`2026-04-25-mvp-stage2-implementation-2026-04-25`（已完成并归档）
 - 2026-04-25 阶段3实现：`2026-04-25-mvp-stage3-implementation-2026-04-25`（已完成并归档）
+
+### 6.5 阶段5 实施切片（对齐新变更）
+
+- 对应 OpenSpec 变更：`mvp-stage5-console-openapi-client-2026-04-25`
+- 目标：将运营控制台读链路前端化并引入 OpenAPI 可复现客户端
+- 交付项：
+  - 固定 `frontend/web` 为 Next.js + TypeScript 控制台工程（列表/详情/搜索/反馈/配置只读）
+  - 建立 `api:gen` / `api:check` / `api:lint` 并在 CI/本地变更链路上同步执行
+  - `/events`、`/events/{id}`、`/search`、`/config` 与 `/digest` 均可访问并与 OpenAPI 契约对齐
+- 依赖验收映射：
+  - `docs/engineering/acceptance.md` 阶段5项更新为“生成链路可追溯 + 页面闭环可验收”
+  - [operator-console] 规范继续沿用 `openspec/specs/operator-console` 与本次变更中的 Delta spec

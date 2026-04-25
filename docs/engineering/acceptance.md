@@ -106,3 +106,5 @@
 
 - [ ] 控制台热点榜、事件详情、来源追踪可追溯：[03-分阶段功能需求（P0/P1）](../product/prd/03-features-by-phase-p0-p1.md)
 - [ ] 搜索与反馈闭环可追溯：[03-分阶段功能需求（P0/P1）](../product/prd/03-features-by-phase-p0-p1.md)
+- [ ] 运营控制台任务与文档可追溯：`docs/product/plan.md` 与 `openspec/changes/mvp-stage5-console-openapi-client-2026-04-25/tasks.md` 中阶段5条目一致
+- [ ] OpenAPI 客户端生成链路可复现：`frontend/web` 需通过 `npm run api:gen`、`api:check`、`api:lint` 验证生成文件一致性

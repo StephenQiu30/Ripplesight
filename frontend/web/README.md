@@ -1,15 +1,38 @@
-# Web Frontend
+# AI Hotspot Console (Frontend)
 
-该目录保留给 `Next.js + TypeScript` 控制台。
+该目录用于 Stage 5 运营控制台 MVP（仅读链路）。
 
-第一阶段目标：
+## 技术栈
 
-- 今日热点榜
-- 热点详情
-- 来源追踪
-- 关键词搜索与筛选
+- Next.js 14 + App Router
+- TypeScript
+- Tailwind CSS
+- OpenAPI 接口类型自动生成：`@umijs/openapi`（`generateService`）
 
-约束：
+## 快速开始
 
-- 前端数据结构必须与 OpenAPI 契约保持一致
-- 不在前端实现后端的聚类、评分和来源治理逻辑
+```bash
+cd frontend/web
+npm install
+npm run api:gen
+npm run dev
+```
+
+### 环境变量
+
+- `NEXT_PUBLIC_API_BASE_URL`：服务端请求基地址，默认 `http://localhost:8000`
+- 本地开发可直接访问 `http://localhost:3000/events`，页面会将 `/api/*` 走 Next 重写到后端。
+
+## OpenAPI 生成链路
+
+- `npm run api:gen`：基于 `contracts/openapi/openapi.yaml` 生成 `src/openapi/*`。
+- `npm run api:check`：重新生成并检查文件是否落盘一致（防止接口文件未同步）。
+- `npm run api:lint`：`api:gen + api:check` 的链路入口，建议每次 `openapi.yaml` 变更后执行。
+
+## 页面结构
+
+- `/events`：热点榜单（支持 `topic`、`source_type`、分页）
+- `/events/[id]`：事件详情（展示证据链 + 反馈）
+- `/search`：关键词搜索
+- `/digest`：今日日报摘要
+- `/config`：来源配置 / X 关键词 / X 账号（只读）

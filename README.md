@@ -4,7 +4,7 @@
 
 项目采用分层架构（`FastAPI + Celery + 共享领域层`）进行搭建，围绕“监听 AI 热点 -> 形成可验证事件 -> 生成日报 -> 邮件闭环”打通全链路。
 
-当前已完成：阶段 1~4 文档冻结与实现闭环（日报生成、中文摘要、证据链接、邮件状态追踪）。
+当前已完成：阶段 1~4 文档冻结与实现闭环（日报生成、中文摘要、证据链接、邮件状态追踪），并完成 Stage 5 控制台基础读链路（列表/详情/搜索/反馈/配置）。
 
 ## 目录说明
 
@@ -48,6 +48,15 @@ pip install -e .
 - API 服务：运行 `services/api/app.py` 对应的 FastAPI 应用（按项目启动脚本或 `uvicorn` 方式）
 - Worker：运行 `services/worker/app.py` 与 `services/worker/tasks.py` 入口的 Celery 配置
 
+### 前端控制台（Stage 5）
+
+```bash
+cd frontend/web
+npm install
+npm run api:gen
+npm run dev
+```
+
 ### 测试与验收
 
 - 单元测试：
@@ -69,7 +78,7 @@ openspec validate --specs --json
 - 阶段 2：来源采集与标准化打通 ✅
 - 阶段 3：事件聚合与评分闭环 ✅
 - 阶段 4：日报生成与邮件闭环 ✅（中文摘要/证据链路 + 降级发送 + 交付状态）
-- 阶段 5：控制台/搜索闭环（规划中）
+- 阶段 5：控制台/搜索闭环（可运行，`frontend/web` 已接入 `@umijs/openapi`）
 
 ## 开发约束
 
