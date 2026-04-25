@@ -1,25 +1,78 @@
 # ai-hotspot-radar
 
-`ai-hotspot-radar` 是一个面向内部团队的 AI 热点监测与日报平台项目骨架。
+`ai-hotspot-radar` 是一个面向内部团队的 AI 热点监测与日报平台 MVP。
 
-当前阶段只完成两类交付：
+项目采用分层架构（`FastAPI + Celery + 共享领域层`）进行搭建，围绕“监听 AI 热点 -> 形成可验证事件 -> 生成日报 -> 邮件闭环”打通全链路。
 
-- 规范化项目目录
-- 可直接指导后续实现的需求与市场调研文档
+当前已完成：阶段 1~4 文档冻结与实现闭环（日报生成、中文摘要、证据链接、邮件状态追踪）。
 
 ## 目录说明
 
-- `docs/`：需求分析、市场调研、架构说明
-- `services/api/`：`FastAPI` HTTP 服务启动与装配层
-- `services/worker/`：`Celery` worker 与定时任务启动入口
-- `backend/core/`：后端共享领域代码，按分层模块化组织
-- `frontend/web/`：`Next.js + TypeScript` 控制台
-- `contracts/openapi/`：OpenAPI 契约基线
-- `infra/`：`Docker Compose`、环境变量模板与部署占位
-- `scripts/`：非业务型脚本
+- `backend/core/`：领域/应用服务层（分层设计，供 API 与 Worker 共用）
+- `services/api/`：`FastAPI` 服务与路由、依赖、序列化
+- `services/worker/`：`Celery` worker 与定时任务入口
+- `contracts/`：OpenAPI 契约基线
+- `docs/`：产品、计划、技术、验收与市场文档（主事实源）
+- `infra/`：部署相关配置（`docker-compose` 等）
+- `scripts/`：日常脚本
 
-## 当前约束
+## 文档入口（主事实源）
 
-- 第一阶段不补全具体业务实现，不提前引入未经确认的依赖。
-- 所有后续实现必须遵守 `docs/requirements-analysis.md` 中的工程规范与边界。
-- 接口设计遵循 `OpenAPI First`，避免先写代码再反向补契约。
+文档体系采用“主入口 + 分拆子文件”的方式，优先以这些文件为准：
+
+- [产品需求（PRD）总入口](./docs/product/prd.md)
+  - `docs/product/prd/01-goals-and-positioning.md`
+  - `docs/product/prd/02-scope-and-non-scope.md`
+  - `docs/product/prd/03-features-by-phase-p0-p1.md`
+  - `docs/product/prd/04-success-metrics.md`
+  - `docs/product/prd/05-risks-and-assumptions.md`
+- [项目计划](./docs/product/plan.md)
+- [技术方案](./docs/engineering/tech-spec.md)
+- [验收标准](./docs/engineering/acceptance.md)
+- [文档导航](./docs/README.md)
+
+`docs/requirements-analysis.md` 保持归档性质，不再作为主事实源继续扩展。
+
+## 开发与验证
+
+### 环境准备
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+### 本地运行建议
+
+- API 服务：运行 `services/api/app.py` 对应的 FastAPI 应用（按项目启动脚本或 `uvicorn` 方式）
+- Worker：运行 `services/worker/app.py` 与 `services/worker/tasks.py` 入口的 Celery 配置
+
+### 测试与验收
+
+- 单元测试：
+
+```bash
+.venv/bin/python -m unittest discover -s tests
+```
+
+- OpenSpec 校验：
+
+```bash
+openspec validate --json
+openspec validate --specs --json
+```
+
+## 实施状态
+
+- 阶段 1：文档体系与范围冻结 ✅
+- 阶段 2：来源采集与标准化打通 ✅
+- 阶段 3：事件聚合与评分闭环 ✅
+- 阶段 4：日报生成与邮件闭环 ✅（中文摘要/证据链路 + 降级发送 + 交付状态）
+- 阶段 5：控制台/搜索闭环（规划中）
+
+## 开发约束
+
+- 所有实现变更应先能追溯到 PRD 对应条目和 Acceptance 阶段项。
+- OpenAPI 为契约基线，新增/变更字段需联动更新文档与验收。
+- 避免一次性重构，优先“可运行 + 可回滚”的小步迭代。
