@@ -1,0 +1,102 @@
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from typing import Any
+
+import httpx
+
+from apps.api.app.core.settings import settings
+from apps.api.app.models.hotspot import Hotspot
+from apps.api.app.models.keyword import Keyword
+
+
+@dataclass(slots=True)
+class AnalysisResult:
+    is_real: bool | None
+    relevance_score: float
+    relevance_reason: str
+    keyword_mentioned: bool
+    importance: str
+    summary: str
+    model_name: str
+    raw_response: dict[str, Any]
+    used_fallback: bool = False
+
+
+def analyze_hotspot(hotspot: Hotspot, keyword: Keyword | None) -> AnalysisResult:
+    if settings.openai_api_key and settings.openai_model:
+        try:
+            return _analyze_with_model(hotspot, keyword)
+        except Exception as exc:  # noqa: BLE001
+            fallback = _fallback_analysis(hotspot, keyword)
+            fallback.raw_response = {"provider": "fallback", "reason": str(exc)}
+            fallback.used_fallback = True
+            return fallback
+    return _fallback_analysis(hotspot, keyword)
+
+
+def _analyze_with_model(hotspot: Hotspot, keyword: Keyword | None) -> AnalysisResult:
+    prompt = (
+        "Analyze this hotspot candidate. Return strict JSON with keys: "
+        "is_real, relevance_score, relevance_reason, keyword_mentioned, importance, summary. "
+        "importance must be low, medium, or high. relevance_score is 0-100.\n\n"
+        f"Keyword: {keyword.keyword if keyword else ''}\n"
+        f"Title: {hotspot.title}\n"
+        f"Snippet: {hotspot.snippet or ''}\n"
+        f"URL: {hotspot.url}"
+    )
+    payload = {
+        "model": settings.openai_model,
+        "messages": [
+            {"role": "system", "content": "You are a precise news relevance analyst."},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.1,
+    }
+    headers = {"Authorization": f"Bearer {settings.openai_api_key}", "Content-Type": "application/json"}
+    response = httpx.post(f"{settings.openai_base_url.rstrip('/')}/chat/completions", headers=headers, json=payload, timeout=30)
+    response.raise_for_status()
+    raw = response.json()
+    content = raw["choices"][0]["message"]["content"]
+    parsed = _parse_model_json(content)
+    return AnalysisResult(
+        is_real=parsed.get("is_real"),
+        relevance_score=float(parsed.get("relevance_score", 0)),
+        relevance_reason=str(parsed.get("relevance_reason") or ""),
+        keyword_mentioned=bool(parsed.get("keyword_mentioned")),
+        importance=str(parsed.get("importance") or "medium"),
+        summary=str(parsed.get("summary") or hotspot.snippet or hotspot.title),
+        model_name=settings.openai_model or "unknown",
+        raw_response=raw,
+    )
+
+
+def _fallback_analysis(hotspot: Hotspot, keyword: Keyword | None) -> AnalysisResult:
+    text = f"{hotspot.title} {hotspot.snippet or ''}".lower()
+    keyword_text = (keyword.keyword if keyword else "").lower()
+    mentioned = bool(keyword_text and keyword_text in text)
+    score = 80.0 if mentioned else 45.0
+    importance = "high" if score >= 80 else "medium" if score >= 50 else "low"
+    return AnalysisResult(
+        is_real=True,
+        relevance_score=score,
+        relevance_reason="Local fallback analysis based on keyword mention.",
+        keyword_mentioned=mentioned,
+        importance=importance,
+        summary=hotspot.snippet or hotspot.title,
+        model_name=settings.openai_model or "local-fallback",
+        raw_response={"provider": "fallback"},
+        used_fallback=not (settings.openai_api_key and settings.openai_model),
+    )
+
+
+def _parse_model_json(content: str) -> dict[str, Any]:
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        start = content.find("{")
+        end = content.rfind("}")
+        if start >= 0 and end > start:
+            return json.loads(content[start : end + 1])
+        raise

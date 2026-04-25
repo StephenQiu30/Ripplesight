@@ -7,13 +7,13 @@
 
 ## 2. Backend MVP
 
-- [ ] Implement SQLAlchemy session management and repositories.
-- [ ] Implement keyword CRUD and enable/disable APIs.
-- [ ] Implement source configuration APIs and RSS/Hacker News ingestion adapters.
-- [ ] Implement AI analysis service with OpenAI-compatible API and fallback behavior.
-- [ ] Implement hotspot persistence, deduplication, list, detail, filter, and sort APIs.
-- [ ] Implement SMTP notification delivery with success, failure, and skipped records.
-- [ ] Implement manual check-run API and lightweight API-internal scheduled loop.
+- [x] Implement SQLAlchemy session management and repositories.
+- [x] Implement keyword CRUD and enable/disable APIs.
+- [x] Implement source configuration APIs and RSS/Hacker News ingestion adapters.
+- [x] Implement AI analysis service with OpenAI-compatible API and fallback behavior.
+- [x] Implement hotspot persistence, deduplication, list, detail, filter, and sort APIs.
+- [x] Implement SMTP notification delivery with success, failure, and skipped records.
+- [x] Implement manual check-run API and lightweight API-internal scheduled loop.
 
 ## 3. Console MVP
 
