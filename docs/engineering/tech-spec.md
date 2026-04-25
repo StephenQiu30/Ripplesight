@@ -20,7 +20,7 @@
 | AI | OpenAI 兼容模型 API |
 | 邮件 | `SMTP` |
 | 定时任务 | P0 轻量调度，后续再评估 Celery/Redis |
-| 部署 | `Docker Compose` |
+| 部署 | 本机 PostgreSQL + 本地进程；Docker Compose 仅作为可选 API/Web 容器启动方式 |
 
 该阶段不引入 schema 迁移工具。`sql/001_init_schema.sql` 是数据库表结构事实源，空库启动时优先执行该 SQL 文件创建表；SQLAlchemy models 必须与 SQL 文件保持一致。`Base.metadata.create_all()` 仅作为开发兜底，不作为主要 schema 事实源。
 
@@ -35,7 +35,7 @@
 - `sql`
   - PostgreSQL 建表 SQL，保存 P0 全部表结构
 - `infra`
-  - Docker Compose、环境变量模板、PostgreSQL 配置
+  - 环境变量模板、本机 PostgreSQL 连接说明、Docker 可选配置
 - `docs/plans`
   - 可执行任务计划，后续实现必须按计划文件推进
 

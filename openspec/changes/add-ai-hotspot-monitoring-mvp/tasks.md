@@ -25,9 +25,9 @@
 
 ## 4. Acceptance
 
-- [ ] Verify empty PostgreSQL initializes from `sql/001_init_schema.sql`.
-- [ ] Verify SQLAlchemy can create and read a keyword.
-- [ ] Verify RSS and Hacker News both produce normalized candidates.
-- [ ] Verify duplicate `(source_id, url)` hotspots are not inserted twice.
-- [ ] Verify SMTP missing config does not stop the pipeline.
-- [ ] Verify manual and scheduled checks share the same orchestration path.
+- [x] Verify empty PostgreSQL initializes from `sql/001_init_schema.sql`.
+- [x] Verify SQLAlchemy can create and read a keyword.
+- [x] Verify RSS and Hacker News both produce normalized candidates.
+- [x] Verify duplicate `(source_id, url)` hotspots are not inserted twice.
+- [x] Verify SMTP missing config does not stop the pipeline.
+- [x] Verify manual and scheduled checks share the same orchestration path.

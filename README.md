@@ -13,7 +13,7 @@
 - Schema 管理：`sql/*.sql` + `SQLAlchemy 2.0` models（无迁移）
 - 邮件：`SMTP`
 - AI：OpenAI 兼容模型 API
-- 部署：`Docker Compose`
+- 部署：本机 PostgreSQL + 本地进程；Docker Compose 仅作为可选的 API/Web 容器启动方式
 
 ## 新目录说明
 
@@ -21,7 +21,7 @@
 - `apps/web/`：Next.js 控制台
 - `packages/core/`：轻量共享常量、类型或规则说明
 - `sql/`：PostgreSQL 表结构 SQL，当前以 `001_init_schema.sql` 为事实源
-- `infra/`：Docker、环境变量和部署配置
+- `infra/`：环境变量、Docker 可选配置和部署配置
 - `docs/plans/`：拆分后的执行计划
 - `docs/product/`：PRD 与产品事实源
 - `docs/engineering/`：技术方案与验收标准
@@ -57,23 +57,42 @@ npm run api:dev
 npm run web:dev
 ```
 
-Docker 启动：
+数据库连接：
 
 ```bash
 cp infra/env/.env.example infra/env/.env
-npm run docker:up
 ```
 
-数据库重置（删除历史内容后重建）：
+然后把 `infra/env/.env` 中的 `DATABASE_URL` 改成你本机 PostgreSQL 的连接串，例如：
 
 ```bash
-npm run db:reset
+DATABASE_URL=postgresql+psycopg://你的用户:你的密码@localhost:5432/ai_hotspot_radar
+```
+
+本机 PostgreSQL 可以使用你已经创建的 `root` 角色；真实密码只写入本地 `infra/env/.env`，不要提交到 GitHub。
+
+数据库初始化：
+
+```bash
+npm run db:init
+```
+
+如果需要重置数据库，直接在本机 PostgreSQL 中删除并重建 `ai_hotspot_radar` 数据库，再执行：
+
+```bash
+npm run db:init
+```
+
+可选 Docker 启动 API/Web：
+
+```bash
+npm run docker:up
 ```
 
 数据库表结构：
 
 - 表结构事实源位于 `sql/001_init_schema.sql`。
-- API 启动时会执行该 SQL 文件初始化空 PostgreSQL。
+- API 启动时会执行该 SQL 文件初始化本机 PostgreSQL 中的空数据库。
 - SQLAlchemy models 只负责运行时访问数据库，必须与 SQL 文件保持一致。
 
 ## 当前状态
@@ -81,4 +100,4 @@ npm run db:reset
 - 已移除旧实现结构。
 - 已建立新项目骨架。
 - 已写入 `docs/plans/` 执行计划。
-- 尚未实现完整业务闭环；后续按计划文件逐步实现。
+- 后端与控制台 MVP 已按 OpenSpec 计划推进，后续继续按计划文件小步完善。

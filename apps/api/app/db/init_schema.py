@@ -40,3 +40,7 @@ def create_schema_from_models_for_dev() -> None:
 
     engine = create_engine(settings.database_url, pool_pre_ping=True)
     Base.metadata.create_all(bind=engine)
+
+
+if __name__ == "__main__":
+    initialize_database()

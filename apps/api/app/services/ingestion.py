@@ -59,7 +59,7 @@ def _fetch_rss(source: Source, keyword: Keyword) -> list[Candidate]:
         snippet = _xml_text(item, "description") or _xml_text(item, "summary")
         author = _xml_text(item, "author") or _xml_text(item, "{http://purl.org/dc/elements/1.1/}creator")
         published = _parse_datetime(_xml_text(item, "pubDate") or _xml_text(item, "published") or _xml_text(item, "updated"))
-        if not title or not link or not _matches_keyword(keyword, title, snippet):
+        if not title or not link:
             continue
         candidates.append(
             Candidate(
@@ -88,7 +88,7 @@ def _fetch_hacker_news(source: Source, keyword: Keyword) -> list[Candidate]:
                 title = item.get("title")
                 url = item.get("url") or f"https://news.ycombinator.com/item?id={story_id}"
                 snippet = item.get("text")
-                if not title or not url or not _matches_keyword(keyword, title, snippet):
+                if not title or not url:
                     continue
                 candidates.append(
                     Candidate(
@@ -105,12 +105,6 @@ def _fetch_hacker_news(source: Source, keyword: Keyword) -> list[Candidate]:
             return candidates
     except Exception as exc:  # noqa: BLE001
         raise SourceIngestionError(f"Hacker News fetch failed for {source.name}: {exc}") from exc
-
-
-def _matches_keyword(keyword: Keyword, title: str, snippet: str | None) -> bool:
-    needle = keyword.keyword.lower()
-    text = f"{title} {snippet or ''}".lower()
-    return needle in text
 
 
 def _xml_text(item: ElementTree.Element, tag: str) -> str | None:

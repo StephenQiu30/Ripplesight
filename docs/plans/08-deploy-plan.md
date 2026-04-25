@@ -2,11 +2,12 @@
 
 ## 目标
 
-提供自部署运行说明和 Docker Compose 环境。
+提供基于本机 PostgreSQL 的自部署运行说明；Docker Compose 只作为 API/Web 可选启动方式。
 
 ## 范围
 
-- API、Web、PostgreSQL 三个服务。
+- API、Web 服务。
+- PostgreSQL 使用用户本机已有实例，不由项目重新创建数据库容器。
 - 环境变量模板。
 - 数据库初始化步骤。
 - 数据库初始化与清理步骤。
@@ -16,9 +17,10 @@
 
 1. 复制 `infra/env/.env.example` 为 `infra/env/.env`。
 2. 填写 PostgreSQL、模型 API、SMTP 配置。
-3. 执行 Docker Compose 启动。
-4. 启动后检测并初始化表结构；如需重置数据库，可清空 `postgres_data` 数据卷后重启。
-5. 打开控制台配置关键词。
+3. 在本机 PostgreSQL 中创建空数据库。
+4. 启动 API，或执行 `npm run db:init` 初始化表结构。
+5. 可选执行 Docker Compose 启动 API/Web；容器会连接宿主机 PostgreSQL。
+6. 打开控制台配置关键词。
 
 ## 验收标准
 
@@ -26,6 +28,7 @@
 - API 健康检查可访问。
 - Web 控制台可访问。
 - SMTP 未配置时系统仍可运行。
+- 项目默认不启动新的 PostgreSQL 容器。
 
 ## 非目标
 

@@ -10,7 +10,7 @@
 - 建立 `apps/web` Next.js 控制台。
 - 建立 PostgreSQL 与 SQLAlchemy 基础（无迁移）。
 - 建立 `sql/001_init_schema.sql` 作为数据库表结构事实源。
-- 建立 Docker Compose 和环境变量模板。
+- 建立环境变量模板；Docker Compose 仅保留 API/Web 可选启动，不再管理 PostgreSQL。
 - 确认空数据库启动初始化路径可创建必要表结构。
 
 ## 实现步骤
@@ -19,7 +19,7 @@
 2. 初始化 Next.js 应用入口。
 3. 配置 PostgreSQL 连接环境变量。
 4. 配置 SQLAlchemy Base、P0 models 和无迁移初始化入口，启动时执行 `sql/001_init_schema.sql`。
-5. 配置 Docker Compose 启动 API、Web、PostgreSQL。
+5. 配置本机 PostgreSQL 连接；Docker Compose 可选启动 API、Web 并连接宿主机 PostgreSQL。
 6. 删除或忽略旧实现路径，不做兼容层。
 
 ## 验收标准
@@ -27,6 +27,7 @@
 - `GET /api/health` 返回 `{"status":"ok"}`。
 - 空 PostgreSQL 可以连接。
 - 能从空 PostgreSQL 通过 `sql/001_init_schema.sql` 直接完成首轮表结构初始化。
+- 默认不创建 Docker PostgreSQL 容器。
 - 项目不依赖旧 `backend/core`、`services/api`、`services/worker`。
 
 ## 非目标
