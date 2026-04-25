@@ -45,9 +45,10 @@ pip install -e .
 
 ### 一键启动（推荐）
 
+在仓库根目录直接执行：
+
 ```bash
-cd infra
-cp env/.env.example .env
+cp infra/env/.env.example infra/env/.env
 docker compose --profile app up -d --build
 ```
 
@@ -56,9 +57,10 @@ docker compose --profile app up -d --build
 
 ### 全量服务（可选）
 
+同样在仓库根目录执行：
+
 ```bash
-cd infra
-cp env/.env.example .env
+cp infra/env/.env.example infra/env/.env
 docker compose --profile app --profile jobs up -d --build
 ```
 

@@ -20,9 +20,10 @@ npm run dev
 
 ### 一键启动（联调主路径）
 
+在仓库根目录执行：
+
 ```bash
-cd infra
-cp env/.env.example .env
+cp infra/env/.env.example infra/env/.env
 docker compose --profile app up -d --build
 ```
 
