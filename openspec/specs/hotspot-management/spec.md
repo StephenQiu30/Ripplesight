@@ -6,7 +6,7 @@ Define how detected hotspots are stored, deduplicated, queried, and reviewed.
 
 ### Requirement: Hotspot storage and retrieval
 
-The system shall store deduplicated hotspots and expose list and detail APIs with filtering and sorting.
+The system SHALL store deduplicated hotspots and expose list and detail APIs with filtering and sorting.
 
 #### Scenario: Duplicate source URL
 

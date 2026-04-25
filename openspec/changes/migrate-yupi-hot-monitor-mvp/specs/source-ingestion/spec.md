@@ -2,6 +2,8 @@
 
 ### Requirement: Multi-source ingestion
 
+The system SHALL support the Yupi MVP source set while isolating individual source failures.
+
 #### Scenario: Yupi MVP source set
 
 - **WHEN** a check run starts

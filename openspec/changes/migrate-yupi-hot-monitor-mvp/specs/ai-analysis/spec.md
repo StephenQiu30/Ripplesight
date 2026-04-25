@@ -2,6 +2,8 @@
 
 ### Requirement: Candidate AI analysis
 
+The system SHALL expand keyword queries and apply relevance-threshold semantics when analyzing hotspot candidates.
+
 #### Scenario: Query expansion
 
 - **WHEN** a keyword is used for hotspot monitoring

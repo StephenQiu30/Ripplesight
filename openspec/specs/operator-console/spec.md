@@ -6,7 +6,7 @@ Define the operator-facing console for configuring monitoring and reviewing resu
 
 ### Requirement: Operator console
 
-The system shall provide a Next.js console for managing keywords and observing sources, hotspots, check runs, notifications, and settings.
+The system SHALL provide a Next.js console for managing keywords and observing sources, hotspots, check runs, notifications, and settings.
 
 #### Scenario: Manage keyword from console
 

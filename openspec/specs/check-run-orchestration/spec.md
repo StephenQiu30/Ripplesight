@@ -6,7 +6,7 @@ Define how manual and scheduled hotspot checks share a single reliable workflow.
 
 ### Requirement: Shared check-run pipeline
 
-The system shall use one orchestration path for manual and scheduled hotspot checks.
+The system SHALL use one orchestration path for manual and scheduled hotspot checks.
 
 #### Scenario: Manual trigger
 

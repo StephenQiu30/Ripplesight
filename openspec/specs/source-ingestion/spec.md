@@ -6,7 +6,7 @@ Define how external sources produce normalized hotspot candidates without blocki
 
 ### Requirement: Multi-source ingestion
 
-The system shall fetch normalized hotspot candidates from at least RSS and Hacker News sources.
+The system SHALL fetch normalized hotspot candidates from at least RSS and Hacker News sources.
 
 #### Scenario: Enabled source produces candidates
 

@@ -6,7 +6,7 @@ Define how SMTP notification delivery behaves and how delivery status is recorde
 
 ### Requirement: SMTP notification records
 
-The system shall send SMTP email notifications when configured and always record notification status.
+The system SHALL send SMTP email notifications when configured and always record notification status.
 
 #### Scenario: SMTP configured
 

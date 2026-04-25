@@ -6,7 +6,7 @@ Define how operators configure and manage monitored keywords.
 
 ### Requirement: Keyword CRUD
 
-The system shall allow operators to create, list, update, delete, enable, and disable monitored keywords.
+The system SHALL allow operators to create, list, update, delete, enable, and disable monitored keywords.
 
 #### Scenario: Create keyword
 

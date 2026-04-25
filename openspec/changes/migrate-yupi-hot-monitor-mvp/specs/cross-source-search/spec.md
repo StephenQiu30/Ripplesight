@@ -2,7 +2,7 @@
 
 ### Requirement: Immediate cross-source search
 
-The system shall provide an API to search multiple sources immediately for one query and return analyzed results.
+The system SHALL provide an API to search multiple sources immediately for one query and return analyzed results.
 
 #### Scenario: Search query
 

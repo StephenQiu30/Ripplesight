@@ -2,6 +2,8 @@
 
 ### Requirement: SMTP notification records
 
+The system SHALL send event email only for active hotspots and avoid event email for filtered hotspots.
+
 #### Scenario: Active-only event email
 
 - **WHEN** a newly analyzed hotspot is below the relevance threshold

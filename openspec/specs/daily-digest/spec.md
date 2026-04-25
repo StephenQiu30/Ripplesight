@@ -6,7 +6,7 @@ Define how analyzed hotspots are summarized into a daily AI digest and delivered
 
 ### Requirement: Daily digest generation
 
-The system shall generate one AI daily digest report for a selected date from analyzed hotspots.
+The system SHALL generate one AI daily digest report for a selected date from analyzed hotspots.
 
 #### Scenario: Generate report with hotspots
 
@@ -27,7 +27,7 @@ The system shall generate one AI daily digest report for a selected date from an
 
 ### Requirement: Daily digest email delivery
 
-The system shall send a daily digest by SMTP when configured and record delivery status.
+The system SHALL send a daily digest by SMTP when configured and record delivery status.
 
 #### Scenario: SMTP configured
 
@@ -43,7 +43,7 @@ The system shall send a daily digest by SMTP when configured and record delivery
 
 ### Requirement: Daily digest retrieval
 
-The system shall expose list and detail APIs for generated daily reports.
+The system SHALL expose list and detail APIs for generated daily reports.
 
 #### Scenario: List reports
 

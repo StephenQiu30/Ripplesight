@@ -6,7 +6,7 @@ Define how AI analysis evaluates hotspot candidates and records explainable resu
 
 ### Requirement: Candidate AI analysis
 
-The system shall analyze selected candidates and store truthfulness, relevance, keyword mention, importance, summary, and model metadata.
+The system SHALL analyze selected candidates and store truthfulness, relevance, keyword mention, importance, summary, and model metadata.
 
 #### Scenario: AI configured
 
