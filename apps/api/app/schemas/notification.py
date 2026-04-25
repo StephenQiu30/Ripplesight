@@ -10,6 +10,7 @@ class NotificationRead(BaseModel):
 
     id: int
     hotspot_id: int | None
+    daily_report_id: int | None
     channel: str
     recipient: str | None
     status: str

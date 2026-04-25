@@ -95,6 +95,22 @@ npm run docker:up
 - API 启动时会执行该 SQL 文件初始化本机 PostgreSQL 中的空数据库。
 - SQLAlchemy models 只负责运行时访问数据库，必须与 SQL 文件保持一致。
 
+## 后端能力
+
+- 热点检查：`POST /api/check-runs`
+- 热点列表：`GET /api/hotspots`
+- 单条热点邮件通知：SMTP 配置存在时自动发送
+- AI 日报生成：`POST /api/daily-reports`
+- AI 日报发送：`POST /api/daily-reports/{report_id}/send`
+- AI 日报列表：`GET /api/daily-reports`
+
+AI 日报默认不自动发送；如需简单定时发送昨日日报，可在本地 `.env` 中开启：
+
+```bash
+DAILY_DIGEST_ENABLED=true
+DAILY_DIGEST_HOUR=8
+```
+
 ## 当前状态
 
 - 已移除旧实现结构。

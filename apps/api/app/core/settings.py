@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     source_fetch_limit: int = 20
     scheduler_enabled: bool = False
     check_interval_minutes: int = 60
+    daily_digest_enabled: bool = False
+    daily_digest_hour: int = 8
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_username: str | None = None

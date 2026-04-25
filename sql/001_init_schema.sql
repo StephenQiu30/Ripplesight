@@ -54,9 +54,23 @@ CREATE TABLE IF NOT EXISTS ai_analyses (
     CONSTRAINT ck_ai_analyses_relevance_score CHECK (relevance_score >= 0 AND relevance_score <= 100)
 );
 
+CREATE TABLE IF NOT EXISTS daily_reports (
+    id BIGSERIAL PRIMARY KEY,
+    report_date DATE NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'generated',
+    subject TEXT NOT NULL,
+    summary TEXT,
+    content TEXT NOT NULL,
+    hotspot_count INTEGER NOT NULL DEFAULT 0,
+    sent_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS notifications (
     id BIGSERIAL PRIMARY KEY,
     hotspot_id BIGINT REFERENCES hotspots(id) ON DELETE SET NULL,
+    daily_report_id BIGINT REFERENCES daily_reports(id) ON DELETE SET NULL,
     channel TEXT NOT NULL DEFAULT 'email',
     recipient TEXT,
     status TEXT NOT NULL DEFAULT 'pending',
@@ -65,6 +79,8 @@ CREATE TABLE IF NOT EXISTS notifications (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS daily_report_id BIGINT REFERENCES daily_reports(id) ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS check_runs (
     id BIGSERIAL PRIMARY KEY,
@@ -98,7 +114,10 @@ CREATE INDEX IF NOT EXISTS ix_hotspots_fetched_at ON hotspots(fetched_at);
 CREATE INDEX IF NOT EXISTS ix_hotspots_status ON hotspots(status);
 CREATE INDEX IF NOT EXISTS ix_ai_analyses_relevance_score ON ai_analyses(relevance_score);
 CREATE INDEX IF NOT EXISTS ix_ai_analyses_importance ON ai_analyses(importance);
+CREATE INDEX IF NOT EXISTS ix_daily_reports_report_date ON daily_reports(report_date);
+CREATE INDEX IF NOT EXISTS ix_daily_reports_status ON daily_reports(status);
 CREATE INDEX IF NOT EXISTS ix_notifications_status ON notifications(status);
 CREATE INDEX IF NOT EXISTS ix_notifications_hotspot_id ON notifications(hotspot_id);
+CREATE INDEX IF NOT EXISTS ix_notifications_daily_report_id ON notifications(daily_report_id);
 CREATE INDEX IF NOT EXISTS ix_check_runs_status ON check_runs(status);
 CREATE INDEX IF NOT EXISTS ix_check_runs_started_at ON check_runs(started_at);

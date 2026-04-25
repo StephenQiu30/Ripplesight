@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.app.core.settings import settings
 from apps.api.app.models.ai_analysis import AiAnalysis
+from apps.api.app.models.daily_report import DailyReport
 from apps.api.app.models.hotspot import Hotspot
 from apps.api.app.models.notification import Notification
 
@@ -23,6 +24,26 @@ def notify_hotspot(session: Session, hotspot: Hotspot, analysis: AiAnalysis) -> 
 
     try:
         _send_email(hotspot, analysis)
+        notification.status = "sent"
+        notification.sent_at = datetime.now(timezone.utc)
+    except Exception as exc:  # noqa: BLE001
+        notification.status = "failed"
+        notification.error_message = str(exc)
+    session.add(notification)
+    return notification
+
+
+def notify_daily_report(session: Session, report: DailyReport) -> Notification:
+    recipient = settings.smtp_to_email
+    notification = Notification(daily_report_id=report.id, channel="email", recipient=recipient)
+    if not _smtp_configured():
+        notification.status = "skipped"
+        notification.error_message = "SMTP is not configured."
+        session.add(notification)
+        return notification
+
+    try:
+        _send_daily_report_email(report)
         notification.status = "sent"
         notification.sent_at = datetime.now(timezone.utc)
     except Exception as exc:  # noqa: BLE001
@@ -55,6 +76,20 @@ def _send_email(hotspot: Hotspot, analysis: AiAnalysis) -> None:
             ]
         )
     )
+    with smtplib.SMTP(settings.smtp_host or "", settings.smtp_port, timeout=20) as smtp:
+        if settings.smtp_use_tls:
+            smtp.starttls()
+        if settings.smtp_username and settings.smtp_password:
+            smtp.login(settings.smtp_username, settings.smtp_password)
+        smtp.send_message(message)
+
+
+def _send_daily_report_email(report: DailyReport) -> None:
+    message = EmailMessage()
+    message["Subject"] = report.subject
+    message["From"] = settings.smtp_from_email or ""
+    message["To"] = settings.smtp_to_email or ""
+    message.set_content(report.content)
     with smtplib.SMTP(settings.smtp_host or "", settings.smtp_port, timeout=20) as smtp:
         if settings.smtp_use_tls:
             smtp.starttls()
