@@ -18,6 +18,26 @@ npm run api:gen
 npm run dev
 ```
 
+### 一键启动（联调主路径）
+
+```bash
+cd infra
+cp env/.env.example .env
+docker compose --profile app up -d --build
+```
+
+启动后访问：`http://127.0.0.1:3000/events`
+
+对应容器环境已设置 `NEXT_PUBLIC_API_BASE_URL=http://api:8000`，前端会通过容器内 DNS 访问后端。
+
+### 验收命令
+
+```bash
+curl -fsS http://127.0.0.1:8000/api/events?page=1&page_size=1
+curl -fsS http://127.0.0.1:3000/events
+curl -fsS http://127.0.0.1:3000/search
+```
+
 ### 环境变量
 
 - `NEXT_PUBLIC_API_BASE_URL`：服务端请求基地址，默认 `http://localhost:8000`

@@ -43,12 +43,29 @@ source .venv/bin/activate
 pip install -e .
 ```
 
+### 一键启动（推荐）
+
+```bash
+cd infra
+cp env/.env.example .env
+docker compose --profile app up -d --build
+```
+
+- 核心入口：`http://127.0.0.1:3000`
+- API 访问：`curl -fsS http://127.0.0.1:8000/api/events?page=1&page_size=1`
+
+### 全量服务（可选）
+
+```bash
+cd infra
+cp env/.env.example .env
+docker compose --profile app --profile jobs up -d --build
+```
+
+- 包含 `worker`、`beat`、`redis`、`postgres`，用于异步任务链路/后台调度验证。
+- 全量启动后如只验证主链路，可使用 `docker compose --profile app up -d --build` 启动。
+
 ### 本地运行建议
-
-- API 服务：运行 `services/api/app.py` 对应的 FastAPI 应用（按项目启动脚本或 `uvicorn` 方式）
-- Worker：运行 `services/worker/app.py` 与 `services/worker/tasks.py` 入口的 Celery 配置
-
-### 前端控制台（Stage 5）
 
 ```bash
 cd frontend/web
@@ -56,6 +73,9 @@ npm install
 npm run api:gen
 npm run dev
 ```
+
+- API 服务：运行 `services/api/app.py` 对应的 FastAPI 应用（按项目启动脚本或 `uvicorn` 方式）
+- Worker：运行 `services/worker/app.py` 与 `services/worker/tasks.py` 入口的 Celery 配置
 
 ### 测试与验收
 

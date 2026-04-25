@@ -1,5 +1,7 @@
 services:
   api:
+    profiles:
+      - app
     build:
       context: ..
       dockerfile: infra/python/Dockerfile
@@ -9,15 +11,12 @@ services:
       - ./env/.env.example
     environment:
       PYTHONPATH: /workspace
-    volumes:
-      - ..:/workspace
     ports:
       - "8000:8000"
-    depends_on:
-      - postgres
-      - redis
 
   worker:
+    profiles:
+      - jobs
     build:
       context: ..
       dockerfile: infra/python/Dockerfile
@@ -27,13 +26,13 @@ services:
       - ./env/.env.example
     environment:
       PYTHONPATH: /workspace
-    volumes:
-      - ..:/workspace
     depends_on:
       - postgres
       - redis
 
   beat:
+    profiles:
+      - jobs
     build:
       context: ..
       dockerfile: infra/python/Dockerfile
@@ -43,21 +42,25 @@ services:
       - ./env/.env.example
     environment:
       PYTHONPATH: /workspace
-    volumes:
-      - ..:/workspace
     depends_on:
       - redis
 
   web:
-    image: node:22-alpine
-    working_dir: /workspace
-    command: ["sh", "-lc", "echo 'web scaffold placeholder'; sleep infinity"]
+    profiles:
+      - app
+    build:
+      context: ..
+      dockerfile: infra/node/Dockerfile
+    depends_on:
+      - api
     env_file:
       - ./env/.env.example
-    volumes:
-      - ..:/workspace
+    ports:
+      - "3000:3000"
 
   postgres:
+    profiles:
+      - jobs
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: ai_hotspot_radar
@@ -69,6 +72,8 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   redis:
+    profiles:
+      - jobs
     image: redis:7-alpine
     ports:
       - "6379:6379"
