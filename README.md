@@ -48,7 +48,7 @@ pip install -e .
 在仓库根目录直接执行：
 
 ```bash
-cp infra/env/.env.example infra/env/.env && docker compose --profile app up -d --build
+docker compose up -d --build
 ```
 
 - 核心入口：`http://127.0.0.1:3000`
@@ -59,11 +59,25 @@ cp infra/env/.env.example infra/env/.env && docker compose --profile app up -d -
 同样在仓库根目录执行：
 
 ```bash
-cp infra/env/.env.example infra/env/.env && docker compose --profile app --profile jobs up -d --build
+docker compose --profile jobs up -d --build
 ```
 
 - 包含 `worker`、`beat`、`redis`、`postgres`，用于异步任务链路/后台调度验证。
-- 全量启动后如只验证主链路，可使用 `docker compose --profile app up -d --build` 启动。
+- 全量启动后如只验证主链路，可使用 `docker compose up -d --build` 启动。
+
+### 生产环境启动（带环境变量注入）
+
+```bash
+cp infra/env/.env.example infra/env/.env
+docker compose -f docker-compose.yml -f docker-compose.production.yml up -d --build
+```
+
+如需同时启动异步链路（worker + beat + redis + postgres）：
+
+```bash
+cp infra/env/.env.example infra/env/.env
+docker compose -f docker-compose.yml -f docker-compose.production.yml --profile jobs up -d --build
+```
 
 ### 本地运行建议
 

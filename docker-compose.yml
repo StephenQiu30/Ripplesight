@@ -1,7 +1,5 @@
 services:
   api:
-    profiles:
-      - app
     build:
       context: .
       dockerfile: infra/python/Dockerfile
@@ -9,7 +7,8 @@ services:
     command: ["uvicorn", "services.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
     env_file:
       - ./infra/env/.env.example
-      - ./infra/env/.env
+      - path: ./infra/env/.env
+        required: false
     environment:
       PYTHONPATH: /workspace
     ports:
@@ -25,7 +24,8 @@ services:
     command: ["celery", "-A", "services.worker.app:celery_app", "worker", "--loglevel=INFO"]
     env_file:
       - ./infra/env/.env.example
-      - ./infra/env/.env
+      - path: ./infra/env/.env
+        required: false
     environment:
       PYTHONPATH: /workspace
     depends_on:
@@ -42,15 +42,14 @@ services:
     command: ["celery", "-A", "services.worker.app:celery_app", "beat", "--loglevel=INFO"]
     env_file:
       - ./infra/env/.env.example
-      - ./infra/env/.env
+      - path: ./infra/env/.env
+        required: false
     environment:
       PYTHONPATH: /workspace
     depends_on:
       - redis
 
   web:
-    profiles:
-      - app
     build:
       context: .
       dockerfile: infra/node/Dockerfile
@@ -58,6 +57,8 @@ services:
       - api
     env_file:
       - ./infra/env/.env.example
+      - path: ./infra/env/.env
+        required: false
     ports:
       - "3000:3000"
 
