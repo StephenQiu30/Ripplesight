@@ -2,14 +2,17 @@
 
 本目录是 `ai-hotspot-radar` 的标准中文产品文档套件，面向产品与研发联合使用。
 
+当前项目从零重建，旧实现、旧目录结构、旧数据库结构、旧 OpenAPI 契约和旧示例数据均不保留。
+
 ## 阅读顺序
 
 1. [产品需求文档（PRD）](./product/prd.md)
    - 包含入口与分拆子文档：`prd/01-goals-and-positioning.md`、`prd/02-scope-and-non-scope.md`、`prd/03-features-by-phase-p0-p1.md`、`prd/04-success-metrics.md`、`prd/05-risks-and-assumptions.md`
-2. [项目执行计划（Plan）](./product/plan.md)
-3. [市场调研与竞品分析](./research/market-research.md)
-4. [技术方案（Tech Spec）](./engineering/tech-spec.md)
-5. [验收标准（Acceptance）](./engineering/acceptance.md)
+2. [项目执行计划导航（Plan）](./product/plan.md)
+3. [拆分执行计划](./plans/00-foundation-plan.md)
+4. [市场调研与竞品分析](./research/market-research.md)
+5. [技术方案（Tech Spec）](./engineering/tech-spec.md)
+6. [验收标准（Acceptance）](./engineering/acceptance.md)
 
 ## 文档职责
 
@@ -20,8 +23,12 @@
   - 读者：产品、研发、项目负责人。
 
 - [Plan](./product/plan.md)
-  - 用途：定义怎么推进、分几个阶段做、每阶段产出什么。
+  - 用途：作为执行计划导航，指向 `docs/plans/` 下的任务文件。
   - 读者：产品、研发、项目负责人。
+
+- [Plans](./plans/00-foundation-plan.md)
+  - 用途：定义每个可执行任务的目标、范围、实现步骤和验收标准。
+  - 读者：研发、测试、项目负责人。
 
 ### 研究文档
 
@@ -42,5 +49,7 @@
 ## 当前状态
 
 - 本套文档已经替代原综合文档成为主事实源。
+- 新实现以 `docs/plans/` 为执行依据。
+- 旧实现、旧数据库和旧契约不作为后续实现约束。
 - 原始综合文档已归档至 [archive/requirements-analysis.md](./archive/requirements-analysis.md)。
 - 后续新增内容应优先更新职责对应的文档，不再回到综合文档继续扩写。

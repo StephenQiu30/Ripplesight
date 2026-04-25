@@ -1,17 +1,12 @@
 FROM python:3.12-slim
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PYTHONPATH=/workspace
-
 WORKDIR /workspace
 
-COPY pyproject.toml README.md /workspace/
-COPY backend /workspace/backend
-COPY services /workspace/services
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/workspace
 
-RUN python -m pip install --upgrade pip setuptools wheel && \
-    python -m pip install -e .
+COPY pyproject.toml ./
+COPY . .
 
-CMD ["python", "-V"]
+RUN pip install --no-cache-dir -e .

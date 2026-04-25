@@ -1,110 +1,49 @@
-# AI 热点平台验收标准
+# AI 热点监控工具验收标准
 
-## 1. 文档结构验收
+本验收标准对应从零重建后的轻量 MVP，不验收旧实现兼容性、旧数据库迁移或旧 OpenAPI 契约兼容性。
 
-- [ ] `docs/README.md` 存在并可作为导航页
-- [ ] `docs/product/prd.md` 存在
-- [ ] `docs/product/plan.md` 存在
-- [ ] `docs/research/market-research.md` 存在
-- [ ] `docs/engineering/tech-spec.md` 存在
-- [ ] `docs/engineering/acceptance.md` 存在
-- [ ] `AGENTS.md` 存在
-- [ ] 原综合文档不再与上述文档并列作为主事实源
+## 1. 基础结构验收
 
-## 2. 产品需求验收
+- [ ] 仓库不再依赖旧 `backend/core`、`services/api`、`services/worker` 实现。
+- [ ] FastAPI 后端入口位于 `apps/api`。
+- [ ] Next.js 控制台位于 `apps/web`。
+- [ ] PostgreSQL 是唯一 P0 数据库。
+- [ ] 项目不包含旧数据迁移步骤。
 
-- [ ] PRD 明确产品定位
-- [ ] PRD 明确目标用户
-- [ ] PRD 明确核心场景
-- [ ] PRD 明确本期范围
-- [ ] PRD 明确非目标
-- [ ] PRD 明确功能分组与优先级
-- [ ] PRD 明确成功指标
-- [ ] PRD 分拆后的入口页与子文档可相互追踪且覆盖完整章节
-- [ ] `docs/product/prd/01-goals-and-positioning.md` 存在
-- [ ] `docs/product/prd/02-scope-and-non-scope.md` 存在
-- [ ] `docs/product/prd/03-features-by-phase-p0-p1.md` 存在
-- [ ] `docs/product/prd/04-success-metrics.md` 存在
-- [ ] `docs/product/prd/05-risks-and-assumptions.md` 存在
+## 2. 数据库验收
 
-## 3. 计划文档验收
+- [ ] 空 PostgreSQL 可启动并初始化新的业务表。
+- [ ] 无需 Alembic：可通过清空数据库后重建结构。
+- [ ] 数据模型包含 keywords、sources、hotspots、ai_analyses、notifications、check_runs、settings。
+- [ ] 敏感配置不写入数据库。
 
-- [ ] Plan 明确阶段划分
-- [ ] 每阶段包含目标、输入、输出、完成标准、主要风险
-- [ ] 计划可以直接用于排期讨论
-- [ ] 计划中的阶段顺序与产品目标一致
+## 3. MVP 功能验收
 
-## 4. 市场调研验收
+- [ ] 可以创建、更新、删除、启停关键词。
+- [ ] 至少两个来源可以返回热点候选。
+- [ ] 单个来源失败不会中断整体热点检查。
+- [ ] 同一 URL + 来源组合不能重复入库。
+- [ ] AI 分析结果包含真实性、相关性分数、相关性理由、关键词是否命中、重要性和摘要。
+- [ ] 热点可按关键词、来源、重要性、时间范围筛选。
+- [ ] 热点可按时间、相关性或重要性排序。
+- [ ] 可手动触发热点检查。
+- [ ] 可简单定时触发热点检查。
+- [ ] SMTP 配置存在时可以发送邮件通知。
+- [ ] SMTP 配置缺失时系统仍可运行，只跳过邮件发送。
 
-- [ ] Market Research 明确赛道现状
-- [ ] Market Research 包含竞品分类与对比
-- [ ] Market Research 说明为什么纳入某些来源
-- [ ] Market Research 说明为什么当前不纳入某些来源
-- [ ] Market Research 明确本项目差异化定位
+## 4. 控制台验收
 
-## 5. 技术方案验收
+- [ ] 控制台可以查看关键词列表。
+- [ ] 控制台可以查看热点列表和详情。
+- [ ] 控制台可以查看来源链接。
+- [ ] 控制台可以查看任务执行状态。
+- [ ] 控制台可以查看通知发送状态。
 
-- [ ] Tech Spec 明确已确认技术选型
-- [ ] Tech Spec 不把核心技术路线留给实现者二次选择
-- [ ] Tech Spec 明确系统架构与数据流
-- [ ] Tech Spec 明确目录职责
-- [ ] Tech Spec 明确核心数据模型
-- [ ] Tech Spec 明确 API 边界
-- [ ] Tech Spec 明确非功能性要求
+## 5. 非目标验收
 
-## 6. X 专项设计验收
-
-- [ ] 明确仅使用官方 X API
-- [ ] 明确关键词搜索链路
-- [ ] 明确重点账号监测链路
-- [ ] 明确趋势词监测链路
-- [ ] 明确 `Recent Search` 默认 7 天窗口
-- [ ] 明确 `Filtered Stream` 的职责
-- [ ] 明确 X 不能单独决定热点总榜
-- [ ] 明确进入总榜前需经过标准化、去重、降噪、聚类、评分、摘要、证据回链
-
-## 7. 一致性验收
-
-- [ ] PRD、Plan、Market Research、Tech Spec、Acceptance 中的产品定位一致
-- [ ] 技术选型在所有文档中保持一致
-- [ ] X 接入方式在所有文档中保持一致
-- [ ] MVP 边界在所有文档中保持一致
-- [ ] 不存在“产品文档说做、技术文档说不做”的冲突
-
-## 8. 执行可落地验收
-
-- [ ] 研发仅阅读 `PRD + Tech Spec + Acceptance` 即可进入详细设计
-- [ ] 产品仅阅读 `README + PRD + Plan + Market Research` 即可完成范围确认与阶段评审
-- [ ] 文档已足够支撑后续实现，不需要再次决定核心路线
-
-## 9. 阶段性交付验收
-
-### 阶段 1
-
-- [ ] 文档体系冻结（[docs/product/prd.md](../product/prd.md) 与 [docs/README.md](../README.md)）
-- [ ] 产品定位与目标用户可追溯：[01-目标与定位](../product/prd/01-goals-and-positioning.md)
-- [ ] 范围与非目标明确：[02-范围与非目标](../product/prd/02-scope-and-non-scope.md)
-- [ ] OpenAPI 契约基线存在且未因本轮变更新增接口：[contracts/openapi/openapi.yaml](../../contracts/openapi/openapi.yaml)
-- [ ] 新增字段/API 改动追溯到主链路文档与验收：见 [AGENTS.md](../../AGENTS.md)
-
-### 阶段 2
-
-- [x] 来源治理与采集边界在 PRD 一期范围内： [02-范围与非目标](../product/prd/02-scope-and-non-scope.md)
-- [x] `RawContentItem` 标准化与来源追溯可验证：[03-分阶段功能需求（P0/P1）](../product/prd/03-features-by-phase-p0-p1.md)
-
-### 阶段 3
-
-- [x] 去重、聚类、评分规则在 MVP 一阶段可追溯：[03-分阶段功能需求（P0/P1）](../product/prd/03-features-by-phase-p0-p1.md)
-- [x] X 不能单独决定总榜并经过标准化→去重→聚类→评分： [03-分阶段功能需求（P0/P1）](../product/prd/03-features-by-phase-p0-p1.md)、[03-分阶段功能需求（P0/P1）-范围约束](../product/prd/02-scope-and-non-scope.md)
-
-### 阶段 4
-
-- [x] 日报生成、中文摘要与邮件投递路径可追溯：[03-分阶段功能需求（P0/P1）](../product/prd/03-features-by-phase-p0-p1.md)
-- [x] 邮件状态可追踪：[04-成功指标](../product/prd/04-success-metrics.md) 与 [03-分阶段功能需求（P0/P1）](../product/prd/03-features-by-phase-p0-p1.md)
-
-### 阶段 5
-
-- [ ] 控制台热点榜、事件详情、来源追踪可追溯：[03-分阶段功能需求（P0/P1）](../product/prd/03-features-by-phase-p0-p1.md)
-- [ ] 搜索与反馈闭环可追溯：[03-分阶段功能需求（P0/P1）](../product/prd/03-features-by-phase-p0-p1.md)
-- [ ] 运营控制台任务与文档可追溯：`docs/product/plan.md` 与 `openspec/changes/mvp-stage5-console-openapi-client-2026-04-25/tasks.md` 中阶段5条目一致
-- [ ] OpenAPI 客户端生成链路可复现：`frontend/web` 需通过 `npm run api:gen`、`api:check`、`api:lint` 验证生成文件一致性
+- [ ] P0 不引入多租户。
+- [ ] P0 不引入复杂权限。
+- [ ] P0 不引入计费。
+- [ ] P0 不引入向量库。
+- [ ] P0 不强制依赖 Celery/Redis。
+- [ ] P0 不兼容旧表结构、旧内存仓库或旧 bootstrap 示例数据。
