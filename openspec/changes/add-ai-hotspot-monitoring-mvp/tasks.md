@@ -17,11 +17,11 @@
 
 ## 3. Console MVP
 
-- [ ] Implement keyword management page.
-- [ ] Implement sources and settings pages.
-- [ ] Implement hotspot list/detail pages with filters and sorting.
-- [ ] Implement check-run and notification status pages.
-- [ ] Wire console actions to FastAPI endpoints.
+- [x] Implement keyword management page.
+- [x] Implement sources and settings pages.
+- [x] Implement hotspot list/detail pages with filters and sorting.
+- [x] Implement check-run and notification status pages.
+- [x] Wire console actions to FastAPI endpoints.
 
 ## 4. Acceptance
 

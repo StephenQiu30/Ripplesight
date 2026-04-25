@@ -36,7 +36,7 @@ def list_hotspots(
     if published_to is not None:
         stmt = stmt.where(Hotspot.published_at <= published_to)
     if importance:
-        stmt = stmt.join(AiAnalysis, AiAnalysis.hotspot_id == Hotspot.id).where(AiAnalysis.importance == importance)
+        stmt = stmt.where(Hotspot.ai_analysis.has(AiAnalysis.importance == importance))
     stmt = _apply_sort(stmt, sort).limit(limit).offset(offset)
     items = list(session.scalars(stmt).unique())
     return {"items": [HotspotRead.model_validate(item).model_dump(mode="json") for item in items], "limit": limit, "offset": offset}

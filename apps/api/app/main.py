@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.app.api.routes.check_runs import router as check_runs_router
 from apps.api.app.api.routes.health import router as health_router
@@ -31,6 +32,16 @@ def create_app() -> FastAPI:
         version="0.1.0",
         description="Rebuilt FastAPI backend for the self-hosted AI hotspot monitoring MVP.",
         lifespan=lifespan,
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
     app.include_router(health_router)
     app.include_router(keywords_router)

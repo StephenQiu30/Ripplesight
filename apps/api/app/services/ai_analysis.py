@@ -55,7 +55,8 @@ def _analyze_with_model(hotspot: Hotspot, keyword: Keyword | None) -> AnalysisRe
         "temperature": 0.1,
     }
     headers = {"Authorization": f"Bearer {settings.openai_api_key}", "Content-Type": "application/json"}
-    response = httpx.post(f"{settings.openai_base_url.rstrip('/')}/chat/completions", headers=headers, json=payload, timeout=30)
+    base_url = (settings.openai_base_url or "https://api.openai.com/v1").rstrip("/")
+    response = httpx.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=30)
     response.raise_for_status()
     raw = response.json()
     content = raw["choices"][0]["message"]["content"]
