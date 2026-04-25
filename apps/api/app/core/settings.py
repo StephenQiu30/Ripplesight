@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     app_name: str = "ai-hotspot-radar"
     app_timezone: str = "Asia/Shanghai"
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/ai_hotspot_radar"
+    database_init_retries: int = 10
+    database_init_retry_seconds: float = 1.0
 
 
 settings = Settings()

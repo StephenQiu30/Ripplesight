@@ -10,16 +10,17 @@
 - 后端：`Python + FastAPI`
 - 数据库：`PostgreSQL`
 - ORM：`SQLAlchemy 2.0`
-- Schema 管理：`SQLAlchemy create_all` + 直接重建数据库（无迁移）
+- Schema 管理：`sql/*.sql` + `SQLAlchemy 2.0` models（无迁移）
 - 邮件：`SMTP`
 - AI：OpenAI 兼容模型 API
 - 部署：`Docker Compose`
 
 ## 新目录说明
 
-- `apps/api/`：FastAPI 后端（含数据库模型与初始化/重建入口）
+- `apps/api/`：FastAPI 后端（含 SQLAlchemy models 与初始化入口）
 - `apps/web/`：Next.js 控制台
 - `packages/core/`：轻量共享常量、类型或规则说明
+- `sql/`：PostgreSQL 表结构 SQL，当前以 `001_init_schema.sql` 为事实源
 - `infra/`：Docker、环境变量和部署配置
 - `docs/plans/`：拆分后的执行计划
 - `docs/product/`：PRD 与产品事实源
@@ -68,6 +69,12 @@ npm run docker:up
 ```bash
 npm run db:reset
 ```
+
+数据库表结构：
+
+- 表结构事实源位于 `sql/001_init_schema.sql`。
+- API 启动时会执行该 SQL 文件初始化空 PostgreSQL。
+- SQLAlchemy models 只负责运行时访问数据库，必须与 SQL 文件保持一致。
 
 ## 当前状态
 

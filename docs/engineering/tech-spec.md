@@ -16,13 +16,13 @@
 | 后端 | `Python + FastAPI` |
 | 数据库 | `PostgreSQL` |
 | ORM | `SQLAlchemy 2.0` |
-| Schema 管理 | `SQLAlchemy create_all` + 直接 `DROP/CREATE` 重建（无迁移） |
+| Schema 管理 | `sql/*.sql` + `SQLAlchemy 2.0` models（无迁移） |
 | AI | OpenAI 兼容模型 API |
 | 邮件 | `SMTP` |
 | 定时任务 | P0 轻量调度，后续再评估 Celery/Redis |
 | 部署 | `Docker Compose` |
 
-该阶段不引入 schema 迁移工具。空库启动时通过数据库初始化路径创建表；需要重置时通过清空数据库后重建结构，不做旧数据兼容。
+该阶段不引入 schema 迁移工具。`sql/001_init_schema.sql` 是数据库表结构事实源，空库启动时优先执行该 SQL 文件创建表；SQLAlchemy models 必须与 SQL 文件保持一致。`Base.metadata.create_all()` 仅作为开发兜底，不作为主要 schema 事实源。
 
 ## 3. 新目录职责
 
@@ -32,6 +32,8 @@
   - Next.js 控制台
 - `packages/core`
   - 轻量共享常量、类型或规则说明，不承载旧复杂分层
+- `sql`
+  - PostgreSQL 建表 SQL，保存 P0 全部表结构
 - `infra`
   - Docker Compose、环境变量模板、PostgreSQL 配置
 - `docs/plans`

@@ -23,6 +23,7 @@
 - 支持关键词管理、多源抓取、AI 分析、热点展示、SMTP 邮件通知、手动触发和简单定时触发。
 - PostgreSQL 作为唯一数据库。
 - SQLAlchemy 作为 ORM。
+- `sql/001_init_schema.sql` 作为数据库表结构事实源。
 - 不使用 Alembic 或迁移文件，采用重建库策略。
 
 ## 执行约束

@@ -12,8 +12,9 @@
 
 ## 2. 数据库验收
 
-- [ ] 空 PostgreSQL 可启动并初始化新的业务表。
-- [ ] 无需 Alembic：可通过清空数据库后重建结构。
+- [ ] 空 PostgreSQL 可通过 `sql/001_init_schema.sql` 初始化新的业务表。
+- [ ] 无需 Alembic：`sql/` 保存表结构事实源，可通过清空数据库后重建结构。
+- [ ] SQLAlchemy models 与 `sql/001_init_schema.sql` 字段和约束保持一致。
 - [ ] 数据模型包含 keywords、sources、hotspots、ai_analyses、notifications、check_runs、settings。
 - [ ] 敏感配置不写入数据库。
 
