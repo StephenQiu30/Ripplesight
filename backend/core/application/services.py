@@ -195,24 +195,68 @@ class DigestRenderService:
     def __init__(self, hotspot_event_repository: HotspotEventRepository) -> None:
         self._hotspot_event_repository = hotspot_event_repository
 
-    def render_digest_email(self, digest: DailyDigest, *, recipient: str) -> RenderedDigestEmail:
+    def render_digest_email(self, digest: DailyDigest, *, recipient: str) -> tuple[RenderedDigestEmail, bool]:
         events = {event.id: event for event in self._hotspot_event_repository.list_all()}
         lines = [digest.title, "", "今日摘要："]
         for index, highlight in enumerate(digest.highlights, start=1):
             lines.append(f"{index}. {highlight}")
+
+        has_degraded_event = False
         if digest.event_ids:
             lines.append("")
-            lines.append("事件详情：")
-        for event_id in digest.event_ids:
-            event = events.get(event_id)
-            if event is None:
-                continue
-            lines.append(f"- {event.event_title} | score={event.score}")
+            lines.append("事件详情（按中文摘要）：")
+        for index, event_id in enumerate(digest.event_ids, start=1):
+            try:
+                lines.append(self._render_event_line(event_id, events, index))
+            except Exception:
+                has_degraded_event = True
+                lines.append(f"{index}. 事件读取失败（事件 ID: {event_id}）")
+                lines.append("   - 降级说明：该事件在邮件渲染阶段异常，已跳过该事件明细")
+
+        if not digest.event_ids and not digest.highlights:
+            lines.append("")
+            lines.append("本次无可渲染事件，今日摘要为空。")
+
+        body = "\n".join(lines)
+        return (
+            RenderedDigestEmail(
+                digest_id=digest.id,
+                digest_date=digest.digest_date,
+                recipient=recipient,
+                subject=f"[AI Hotspot Radar] {digest.title}",
+                body=body,
+            ),
+            has_degraded_event,
+        )
+
+    def _render_event_line(self, event_id: str, events: Mapping[str, Any], index: int) -> str:
+        event = events[event_id]
+        summary = event.summary_zh or _build_summary_line(event)
+        links = _format_evidence_links(event.evidence_links)
+        return "\n".join(
+            (
+                f"{index}. {event.event_title} | score={event.score}",
+                f"   摘要：{summary}",
+                f"   来源：",
+                *(f"     - {line}" for line in links),
+            )
+        )
+
+    def _build_fallback_email(self, digest: DailyDigest, *, recipient: str, reason: str) -> RenderedDigestEmail:
+        lines = [
+            digest.title,
+            "",
+            "今日摘要：",
+            "1. 今日日报正文构建失败，已降级为最小化摘要",
+            "",
+            f"降级说明：{reason}",
+            "请联系平台管理员检查事件证据链或重试任务。",
+        ]
         return RenderedDigestEmail(
             digest_id=digest.id,
             digest_date=digest.digest_date,
             recipient=recipient,
-            subject=f"[AI Hotspot Radar] {digest.title}",
+            subject=f"[AI Hotspot Radar] {digest.title}（降级版）",
             body="\n".join(lines),
         )
 
@@ -232,16 +276,51 @@ class DigestDeliveryWorkflowService:
 
     def generate_and_deliver(self, *, recipient: str, today: date | None = None) -> tuple[DailyDigest, DeliveryReceipt]:
         digest = self._digest_service.get_today_digest(today=today)
-        rendered = self._digest_render_service.render_digest_email(digest, recipient=recipient)
+        try:
+            rendered, partially_rendered = self._digest_render_service.render_digest_email(digest, recipient=recipient)
+        except Exception as error:
+            rendered = self._digest_render_service._build_fallback_email(
+                digest,
+                recipient=recipient,
+                reason=f"render_failure:{type(error).__name__}: {error}",
+            )
+            partial_digest = replace(digest, delivery_status="partial")
+            self._digest_repository.save(partial_digest)
+            try:
+                receipt = self._delivery_gateway.send(rendered)
+            except Exception:
+                failed = replace(digest, delivery_status="failed")
+                self._digest_repository.save(failed)
+                raise
+            delivered = replace(partial_digest, delivery_status="partial")
+            self._digest_repository.save(delivered)
+            return delivered, receipt
         try:
             receipt = self._delivery_gateway.send(rendered)
         except Exception:
             failed = replace(digest, delivery_status="failed")
             self._digest_repository.save(failed)
             raise
-        delivered = replace(digest, delivery_status=receipt.status)
+        final_status = "partial" if partially_rendered else receipt.status
+        delivered = replace(digest, delivery_status=final_status)
         self._digest_repository.save(delivered)
         return delivered, receipt
+
+
+def _format_evidence_links(evidence_links: Sequence[Any]) -> tuple[str, ...]:
+    if not evidence_links:
+        return ("暂无来源链接，建议从事件详情页补充核验。",)
+    lines: list[str] = []
+    for item in evidence_links:
+        lines.append(f"{item.source_name}：{item.url}")
+    return tuple(lines)
+
+
+def _build_summary_line(event: Any) -> str:
+    if not event.topic_tags:
+        return f"{event.event_title}（缺少摘要，保留标题）"
+    topic = ", ".join(event.topic_tags)
+    return f"{event.event_title}，关注主题：{topic}"
 
 
 def _filter_enabled(items: Sequence[Any], enabled: bool | None) -> list[Any]:

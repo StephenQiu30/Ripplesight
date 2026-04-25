@@ -46,6 +46,16 @@ class ApiRoutesTestCase(unittest.TestCase):
         self.assertEqual(event_id, payload["id"])
         self.assertIn("summary_zh", payload)
 
+    def test_get_today_digest(self) -> None:
+        response = self.client.get("/api/digests/today")
+        payload = response.json()
+
+        self.assertEqual(200, response.status_code)
+        self.assertIn("delivery_status", payload)
+        self.assertEqual("assembled", payload["delivery_status"])
+        self.assertIn("event_ids", payload)
+        self.assertIsInstance(payload["event_ids"], list)
+
     def test_missing_event_returns_contract_error_shape(self) -> None:
         response = self.client.get("/api/events/does-not-exist")
         payload = response.json()

@@ -99,8 +99,8 @@
 
 ### 阶段 4
 
-- [ ] 日报生成、中文摘要与邮件投递路径可追溯：[03-分阶段功能需求（P0/P1）](../product/prd/03-features-by-phase-p0-p1.md)
-- [ ] 邮件状态可追踪：[04-成功指标](../product/prd/04-success-metrics.md) 与 [03-分阶段功能需求（P0/P1）](../product/prd/03-features-by-phase-p0-p1.md)
+- [x] 日报生成、中文摘要与邮件投递路径可追溯：[03-分阶段功能需求（P0/P1）](../product/prd/03-features-by-phase-p0-p1.md)
+- [x] 邮件状态可追踪：[04-成功指标](../product/prd/04-success-metrics.md) 与 [03-分阶段功能需求（P0/P1）](../product/prd/03-features-by-phase-p0-p1.md)
 
 ### 阶段 5
 
