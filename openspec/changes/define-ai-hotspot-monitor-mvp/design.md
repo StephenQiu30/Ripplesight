@@ -1,6 +1,6 @@
 ## Overview
 
-This change migrates the Yupi MVP behavior into the current stack. The implementation stays intentionally lightweight and adapter-driven.
+This change defines the project-owned MVP behavior in the current stack. The implementation stays intentionally lightweight and adapter-driven.
 
 ## Source Adapters
 
@@ -11,7 +11,7 @@ All adapters return the existing `Candidate` shape. Adapter failures raise `Sour
 - `x_twitter`: X API v2 Recent Search using `X_API_BEARER_TOKEN`.
 - `bing`: Bing Web Search API when `BING_SEARCH_API_KEY` is configured.
 - `bilibili`: public search endpoint best-effort adapter.
-- `sogou`: public search best-effort adapter used as the stable Weibo/Sogou MVP option.
+- `sogou`: public search best-effort adapter used as the stable Sogou-style option.
 
 ## Query Expansion
 
@@ -29,7 +29,6 @@ Only `active` hotspots trigger event email and appear in daily digests.
 
 ## Non-goals
 
-- No technology migration to Express/React/Prisma/SQLite.
 - No queue/Redis/Celery.
 - No authentication/multi-user scope.
 - No complex frontend work in this change.

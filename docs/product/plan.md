@@ -16,13 +16,15 @@
 8. [07-console-plan.md](../plans/07-console-plan.md)
 9. [08-deploy-plan.md](../plans/08-deploy-plan.md)
 10. [09-acceptance-plan.md](../plans/09-acceptance-plan.md)
-11. [10-yupi-hot-monitor-mvp-plan.md](../plans/10-yupi-hot-monitor-mvp-plan.md)
+11. [10-ai-hotspot-monitor-mvp-plan.md](../plans/10-ai-hotspot-monitor-mvp-plan.md)
+12. [11-backend-hotspot-detection-reports-plan.md](../plans/11-backend-hotspot-detection-reports-plan.md)
 
 ## 总体目标
 
 - 完成可自部署 AI 热点监控 MVP。
 - 支持关键词管理、多源抓取、AI 查询扩展、AI 分析、热点展示、全网搜索、SMTP 事件邮件、AI 日报邮件、手动触发和简单定时触发。
-- 功能闭环对齐鱼皮 `yupi-hot-monitor` MVP，但不复制其技术栈。
+- 当前执行重点为后端检测、即时搜索、日报/周报闭环；MVP 阶段暂不将控制台作为实现重点。
+- 功能闭环围绕本项目 AI 热点监控 MVP 自主设计。
 - PostgreSQL 作为唯一数据库。
 - SQLAlchemy 作为 ORM。
 - `sql/001_init_schema.sql` 作为数据库表结构事实源。

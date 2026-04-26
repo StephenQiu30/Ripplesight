@@ -1,8 +1,8 @@
 ## Why
 
-The project already has a basic hotspot monitoring loop, but it does not yet match the MVP capability set expected from Yupi's `yupi-hot-monitor`: broader information sources, AI query expansion, relevance filtering, and a unified search path.
+The project already has a basic hotspot monitoring loop, but it needs a clearer MVP capability set: broader information sources, AI query expansion, relevance filtering, and a unified search path.
 
-This change migrates the Yupi MVP feature loop into the current `Python + FastAPI + PostgreSQL + SQLAlchemy + Next.js` stack without copying the original Node/Prisma/SQLite implementation.
+This change defines the project-owned MVP feature loop in the current `Python + FastAPI + PostgreSQL + SQLAlchemy + Next.js` stack.
 
 ## What Changes
 
@@ -10,8 +10,8 @@ This change migrates the Yupi MVP feature loop into the current `Python + FastAP
 - Add AI query expansion so each keyword can produce multiple related source queries.
 - Filter low-relevance hotspots using `RELEVANCE_THRESHOLD`.
 - Keep low-relevance records as `filtered`, but only notify and include `active` hotspots in daily digests.
-- Add a lightweight `/api/search` endpoint for Yupi-style immediate cross-source search.
-- Update documentation and AGENTS rules to define the Yupi MVP migration boundary.
+- Add a lightweight `/api/search` endpoint for immediate cross-source search.
+- Update documentation and AGENTS rules to define the MVP feature boundary.
 
 ## Capabilities
 

@@ -10,19 +10,23 @@
 - API 契约由新 FastAPI 实现自动生成；旧 `contracts/openapi` 不再是实现约束。
 - 验收口径以 `docs/engineering/acceptance.md` 为准。
 - 具体执行任务以 `docs/plans/` 下的 PLAN 文件为准。
-- 鱼皮 MVP 迁移范围以 `docs/plans/10-yupi-hot-monitor-mvp-plan.md` 为准。
+- AI 热点监控 MVP 功能范围以 `docs/plans/10-ai-hotspot-monitor-mvp-plan.md` 为准。
+- 当前后端检测、即时搜索、日报/周报任务以 `docs/plans/11-backend-hotspot-detection-reports-plan.md` 为准。
 
 ## 2. 产品实现方向
 
 - 第一阶段定位为“可自部署、可配置关键词的 AI 热点监控工具”，不是重型舆情平台。
-- 功能实现优先参考鱼皮 `yupi-hot-monitor` 的 MVP 能力：关键词管理、多源抓取、AI 查询扩展、真假识别、相关性分析、热点列表、筛选排序、全网搜索、邮件通知、手动触发和定时触发。
-- 参考鱼皮项目的功能闭环，不复制其技术栈；本仓库使用 `Next.js + TypeScript` 前端、`Python + FastAPI` 后端、`PostgreSQL` 数据库、`SQLAlchemy 2.0` ORM、`SMTP` 邮件。
+- 功能实现围绕本项目轻量 MVP 能力：关键词管理、多源抓取、AI 查询扩展、真假识别、相关性分析、热点列表、筛选排序、全网搜索、邮件通知、手动触发和定时触发。
+- 本项目自主设计功能闭环；本仓库使用 `Next.js + TypeScript` 前端、`Python + FastAPI` 后端、`PostgreSQL` 数据库、`SQLAlchemy 2.0` ORM、`SMTP` 邮件。
 - P0 必须围绕可运行闭环：配置关键词 -> 抓取多源内容 -> AI 查询扩展 -> AI 判断相关性/真实性 -> 生成热点 -> 阈值过滤 -> 事件邮件通知 -> AI 日报邮件。
-- 鱼皮 MVP 迁移只迁移功能闭环，不迁移技术栈；继续使用 `Python + FastAPI + PostgreSQL + SQLAlchemy + Next.js`。
+- MVP 功能闭环继续使用 `Python + FastAPI + PostgreSQL + SQLAlchemy + Next.js`。
 - 第一阶段数据源范围为 RSS、Hacker News、X/Twitter、Bing、Bilibili、Sogou-style；新增来源必须走统一 adapter 和 `Candidate` 输出。
 - X/Twitter 必须使用官方 X API v2 Recent Search，通过 `X_API_BEARER_TOKEN` 注入凭据；不得引入页面爬取作为默认实现。
 - 低于 `RELEVANCE_THRESHOLD` 的热点必须标记为 `filtered`，不得发送事件邮件，不得进入 AI 日报。
 - 达到 `RELEVANCE_THRESHOLD` 的热点标记为 `active`，允许进入热点流、事件邮件和 AI 日报。
+- 当前 MVP 阶段暂不实现控制台功能，优先跑通后端 AI 热点检测、即时搜索、日报/周报生成。
+- 日报/周报生成采用模板优先，AI 只作为可选增强；AI 未配置或失败时必须使用本地模板降级。
+- `/api/daily-reports` 后续直接移除，不做兼容别名；报告 API 统一收敛到 `/api/reports`。
 - P0 不做多租户、复杂权限、计费、复杂工作流、向量库、复杂队列治理和企业级数据平台。
 
 ## 3. 改动规范
@@ -55,6 +59,7 @@
 - Bing 未配置时系统仍必须可运行，只跳过该来源。
 - 单个数据源失败不能中断整个热点检查任务。
 - 手动触发和定时触发都必须走同一条业务编排链路。
+- 日报/周报可通过 API 手动触发；定时触发复用轻量 scheduler，不引入 Celery、Redis、向量库或复杂任务平台。
 
 ## 6. 代码与测试
 
@@ -66,5 +71,5 @@
 
 - 评审时优先看“是否可运行、是否可配置、是否可回滚、失败是否可追踪”，其次看设计优雅性。
 - 能用简单配置解决的问题，不引入复杂平台能力。
-- 能参考鱼皮项目 MVP 功能闭环直接落地的问题，不提前抽象为企业级平台。
+- 能围绕本项目 MVP 功能闭环直接落地的问题，不提前抽象为企业级平台。
 - 能通过 PostgreSQL + SQLAlchemy + FastAPI 直接完成的能力，不引入 Prisma、SQLite、Celery、Redis 或旧 OpenAPI 约束。

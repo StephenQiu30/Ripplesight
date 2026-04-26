@@ -112,7 +112,7 @@ DAILY_DIGEST_ENABLED=true
 DAILY_DIGEST_HOUR=8
 ```
 
-参考鱼皮 `yupi-hot-monitor` 的 MVP 功能闭环，本项目后端支持 RSS、Hacker News、X/Twitter、Bing、Bilibili、Sogou-style 多源 adapter。X/Twitter 使用官方 X API v2 Recent Search，需要配置：
+当前后端支持 RSS、Hacker News、X/Twitter、Bing、Bilibili、Sogou-style 多源 adapter。X/Twitter 使用官方 X API v2 Recent Search，需要配置：
 
 ```bash
 X_API_BEARER_TOKEN=你的XBearerToken

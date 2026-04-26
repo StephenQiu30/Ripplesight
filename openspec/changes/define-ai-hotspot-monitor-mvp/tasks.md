@@ -1,7 +1,7 @@
 ## 1. OpenSpec
 
 - [x] Archive completed `add-ai-daily-digest` after syncing specs.
-- [x] Create Yupi MVP migration proposal, design, specs, and tasks.
+- [x] Create MVP feature proposal, design, specs, and tasks.
 
 ## 2. Source ingestion
 
@@ -10,7 +10,7 @@
 - [x] Add Bing Search adapter.
 - [x] Add Bilibili search adapter.
 - [x] Add Sogou-style search adapter.
-- [x] Seed default Yupi MVP source definitions.
+- [x] Seed default MVP source definitions.
 
 ## 3. Relevance and notification behavior
 
@@ -26,6 +26,6 @@
 
 ## 5. Documentation
 
-- [x] Update AGENTS with Yupi MVP migration rules.
+- [x] Update AGENTS with MVP feature boundary rules.
 - [x] Update README environment variables and usage.
 - [x] Update PRD, tech spec, and acceptance docs.

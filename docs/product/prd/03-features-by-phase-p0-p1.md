@@ -47,7 +47,7 @@
 #### P0（本轮必须）
 
 - 关键词配置、编辑、删除和启停
-- 按鱼皮 MVP 迁移 RSS、Hacker News、X/Twitter、Bing、Bilibili、Sogou-style 来源
+- 支持 RSS、Hacker News、X/Twitter、Bing、Bilibili、Sogou-style 来源
 - URL + 来源维度去重
 - AI 查询扩展
 - AI 真实性判断、相关性评分、相关性理由、关键词是否命中、重要性和摘要

@@ -1,10 +1,10 @@
-# 10 Yupi Hot Monitor MVP Migration Plan
+# 10 AI Hotspot Monitor MVP Plan
 
 ## 目标
 
-将鱼皮 `yupi-hot-monitor` 的 MVP 功能闭环迁移到本项目当前技术栈中。
+定义并完善本项目轻量 AI 热点监控 MVP 的核心功能闭环。
 
-本项目不复制鱼皮项目的 `Express + React + Prisma + SQLite` 技术栈，而是继续使用 `Python + FastAPI + PostgreSQL + SQLAlchemy + Next.js`。
+本项目使用 `Python + FastAPI + PostgreSQL + SQLAlchemy + Next.js`，优先保证可自部署、可配置、可追踪和可验收。
 
 ## 范围
 
@@ -19,7 +19,7 @@
 
 ## 数据源
 
-P0 迁移以下来源能力：
+P0 选定以下来源能力：
 
 - RSS
 - Hacker News
@@ -56,7 +56,6 @@ P0 迁移以下来源能力：
 
 ## 非目标
 
-- 不迁移鱼皮项目技术栈。
 - 不引入 Redis、Celery、复杂队列或向量库。
 - 不做多用户、多租户、权限或计费。
 - 不把页面爬取作为 X/Twitter 默认实现。

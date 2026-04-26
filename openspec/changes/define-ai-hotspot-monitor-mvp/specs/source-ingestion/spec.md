@@ -2,9 +2,9 @@
 
 ### Requirement: Multi-source ingestion
 
-The system SHALL support the Yupi MVP source set while isolating individual source failures.
+The system SHALL support the MVP source set while isolating individual source failures.
 
-#### Scenario: Yupi MVP source set
+#### Scenario: MVP source set
 
 - **WHEN** a check run starts
 - **THEN** the system can fetch normalized candidates from RSS, Hacker News, X/Twitter, Bing, Bilibili, and Sogou-style sources

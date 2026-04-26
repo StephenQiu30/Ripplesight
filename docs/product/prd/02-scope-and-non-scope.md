@@ -5,7 +5,7 @@
 ### 3.1 本期范围（MVP）
 
 - 关键词配置、编辑、删除和启停
-- 多来源抓取关键词相关内容，第一阶段按鱼皮 MVP 迁移 RSS、Hacker News、X/Twitter、Bing、Bilibili、Sogou-style 来源
+- 多来源抓取关键词相关内容，第一阶段支持 RSS、Hacker News、X/Twitter、Bing、Bilibili、Sogou-style 来源
 - AI 查询扩展、真实性判断、相关性评分、重要性判断和摘要
 - 热点列表、详情、来源追踪、筛选排序
 - 手动触发热点检查
@@ -30,7 +30,7 @@
 
 - X/Twitter 是可选来源之一，未配置凭据时必须自动跳过
 - 优先接入公开、低门槛、可自部署用户容易配置的来源
-- 第一阶段参考鱼皮项目的来源思路：X/Twitter、Bing、Hacker News、RSS、Bilibili、Sogou-style 公开搜索类来源
+- 第一阶段选定的数据源范围：X/Twitter、Bing、Hacker News、RSS、Bilibili、Sogou-style 公开搜索类来源
 - 单个来源失败不能中断整个热点检查任务
 - 不保存完整第三方正文，优先保存标题、摘要、链接、来源、发布时间和必要统计字段
 

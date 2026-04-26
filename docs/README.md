@@ -10,7 +10,7 @@
    - 包含入口与分拆子文档：`prd/01-goals-and-positioning.md`、`prd/02-scope-and-non-scope.md`、`prd/03-features-by-phase-p0-p1.md`、`prd/04-success-metrics.md`、`prd/05-risks-and-assumptions.md`
 2. [项目执行计划导航（Plan）](./product/plan.md)
 3. [拆分执行计划](./plans/00-foundation-plan.md)
-   - 鱼皮 MVP 迁移计划见 [10-yupi-hot-monitor-mvp-plan.md](./plans/10-yupi-hot-monitor-mvp-plan.md)
+   - AI 热点监控 MVP 计划见 [10-ai-hotspot-monitor-mvp-plan.md](./plans/10-ai-hotspot-monitor-mvp-plan.md)
 4. [市场调研与竞品分析](./research/market-research.md)
 5. [技术方案（Tech Spec）](./engineering/tech-spec.md)
 6. [验收标准（Acceptance）](./engineering/acceptance.md)
@@ -31,8 +31,8 @@
   - 用途：定义每个可执行任务的目标、范围、实现步骤和验收标准。
   - 读者：研发、测试、项目负责人。
 
-- [Yupi Hot Monitor MVP Plan](./plans/10-yupi-hot-monitor-mvp-plan.md)
-  - 用途：记录参考鱼皮 `yupi-hot-monitor` 的 MVP 功能迁移边界、来源范围和验收标准。
+- [AI Hotspot Monitor MVP Plan](./plans/10-ai-hotspot-monitor-mvp-plan.md)
+  - 用途：记录本项目 AI 热点监控 MVP 功能边界、来源范围和验收标准。
   - 读者：产品、研发、测试、项目负责人。
 
 ### 研究文档
