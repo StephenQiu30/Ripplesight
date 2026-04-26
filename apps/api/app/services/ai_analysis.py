@@ -46,6 +46,10 @@ def expand_keyword_queries(keyword: Keyword) -> list[str]:
     return _fallback_queries(keyword, base_query)
 
 
+def is_analysis_active(result: AnalysisResult) -> bool:
+    return result.relevance_score >= settings.relevance_threshold and result.is_real is not False
+
+
 def _expand_with_model(keyword: Keyword, base_query: str) -> list[str]:
     payload = {
         "model": settings.openai_model,

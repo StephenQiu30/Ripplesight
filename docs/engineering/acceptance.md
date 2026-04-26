@@ -15,7 +15,7 @@
 - [ ] 空 PostgreSQL 可通过 `sql/001_init_schema.sql` 初始化新的业务表。
 - [ ] 无需 Alembic：`sql/` 保存表结构事实源，可通过清空数据库后重建结构。
 - [ ] SQLAlchemy models 与 `sql/001_init_schema.sql` 字段和约束保持一致。
-- [ ] 数据模型包含 keywords、sources、hotspots、ai_analyses、notifications、check_runs、daily_reports、settings。
+- [ ] 数据模型包含 keywords、sources、hotspots、ai_analyses、notifications、check_runs、reports、settings。
 - [ ] 敏感配置不写入数据库。
 
 ## 3. MVP 功能验收
@@ -28,19 +28,22 @@
 - [ ] 同一 URL + 来源组合不能重复入库。
 - [ ] AI 分析结果包含真实性、相关性分数、相关性理由、关键词是否命中、重要性和摘要。
 - [ ] AI 查询扩展能为关键词生成 2-5 个查询词。
-- [ ] 低于 `RELEVANCE_THRESHOLD` 的热点标记为 `filtered`，且不发送事件邮件、不进入日报。
-- [ ] 达到 `RELEVANCE_THRESHOLD` 的热点标记为 `active`，可发送事件邮件并进入日报。
+- [ ] 低于 `RELEVANCE_THRESHOLD` 或被 AI 判定为不真实的热点标记为 `filtered`，且不发送事件邮件、不进入日报/周报。
+- [ ] 达到 `RELEVANCE_THRESHOLD` 且 `is_real is not False` 的热点标记为 `active`，可发送事件邮件并进入日报/周报。
 - [ ] 热点可按关键词、来源、重要性、时间范围筛选。
 - [ ] 热点可按时间、相关性或重要性排序。
 - [ ] 可手动触发热点检查。
 - [ ] 可简单定时触发热点检查。
 - [ ] SMTP 配置存在时可以发送邮件通知。
 - [ ] SMTP 配置缺失时系统仍可运行，只跳过邮件发送。
-- [ ] 可以按日期生成 AI 日报。
-- [ ] AI 日报可以通过 SMTP 发送，并记录通知状态。
+- [ ] 可以通过 `/api/reports` 生成 AI 日报和周报。
+- [ ] AI 日报/周报可以通过 SMTP 发送，并记录通知状态；SMTP 缺失时记录为 `skipped`。
+- [ ] `/api/daily-reports` 不再注册，不保留兼容别名。
 - [ ] 可以通过 `/api/search` 执行即时全网搜索。
 
 ## 4. 控制台验收
+
+本阶段暂不实现控制台功能，以下条目作为后续阶段验收范围。
 
 - [ ] 控制台可以查看关键词列表。
 - [ ] 控制台可以查看热点列表和详情。

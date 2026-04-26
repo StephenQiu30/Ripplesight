@@ -2,14 +2,19 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from apps.api.app.core.settings import settings
 from apps.api.app.db.session import SessionLocal
-from apps.api.app.services.daily_digest import generate_and_send_daily_report
 from apps.api.app.services.check_runner import run_hotspot_check
+from apps.api.app.services.reports import (
+    generate_and_send_report,
+    previous_daily_period_start,
+    previous_weekly_period_start,
+)
 
-_last_digest_date = None
+_last_daily_report_date = None
+_last_weekly_report_start = None
 
 
 async def scheduler_loop() -> None:
@@ -35,19 +40,35 @@ async def stop_scheduler(task: asyncio.Task | None) -> None:
 def _run_scheduled_check() -> None:
     with SessionLocal() as session:
         run_hotspot_check(session, trigger_type="scheduled")
-        _maybe_run_daily_digest(session)
+        _maybe_run_daily_report(session)
+        _maybe_run_weekly_report(session)
 
 
-def _maybe_run_daily_digest(session) -> None:
-    global _last_digest_date
-    if not settings.daily_digest_enabled:
+def _maybe_run_daily_report(session) -> None:
+    global _last_daily_report_date
+    if not settings.daily_report_enabled:
         return
     now = datetime.now(timezone.utc)
-    if now.hour < settings.daily_digest_hour:
+    if now.hour < settings.daily_report_hour:
         return
-    report_date = now.date() - timedelta(days=1)
-    if _last_digest_date == report_date:
+    report_date = previous_daily_period_start(now)
+    if _last_daily_report_date == report_date:
         return
-    generate_and_send_daily_report(session, report_date=report_date)
+    generate_and_send_report(session, report_type="daily", period_start=report_date)
     session.commit()
-    _last_digest_date = report_date
+    _last_daily_report_date = report_date
+
+
+def _maybe_run_weekly_report(session) -> None:
+    global _last_weekly_report_start
+    if not settings.weekly_report_enabled:
+        return
+    now = datetime.now(timezone.utc)
+    if now.isoweekday() < settings.weekly_report_weekday or now.hour < settings.weekly_report_hour:
+        return
+    report_start = previous_weekly_period_start(now)
+    if _last_weekly_report_start == report_start:
+        return
+    generate_and_send_report(session, report_type="weekly", period_start=report_start)
+    session.commit()
+    _last_weekly_report_start = report_start

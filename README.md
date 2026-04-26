@@ -101,15 +101,18 @@ npm run docker:up
 - 热点列表：`GET /api/hotspots`
 - 全网搜索：`POST /api/search`
 - 单条热点邮件通知：SMTP 配置存在时自动发送
-- AI 日报生成：`POST /api/daily-reports`
-- AI 日报发送：`POST /api/daily-reports/{report_id}/send`
-- AI 日报列表：`GET /api/daily-reports`
+- AI 日报/周报生成：`POST /api/reports`
+- AI 日报/周报发送：`POST /api/reports/{report_id}/send`
+- AI 日报/周报列表：`GET /api/reports`
 
-AI 日报默认不自动发送；如需简单定时发送昨日日报，可在本地 `.env` 中开启：
+AI 日报/周报默认不自动发送；如需简单定时发送报告，可在本地 `.env` 中开启：
 
 ```bash
-DAILY_DIGEST_ENABLED=true
-DAILY_DIGEST_HOUR=8
+DAILY_REPORT_ENABLED=true
+DAILY_REPORT_HOUR=8
+WEEKLY_REPORT_ENABLED=true
+WEEKLY_REPORT_WEEKDAY=1
+WEEKLY_REPORT_HOUR=8
 ```
 
 当前后端支持 RSS、Hacker News、X/Twitter、Bing、Bilibili、Sogou-style 多源 adapter。X/Twitter 使用官方 X API v2 Recent Search，需要配置：
@@ -124,7 +127,7 @@ Bing 搜索源需要配置：
 BING_SEARCH_API_KEY=你的BingSearchKey
 ```
 
-低于 `RELEVANCE_THRESHOLD` 的热点会保留为 `filtered`，但不会发送事件邮件，也不会进入 AI 日报。
+低于 `RELEVANCE_THRESHOLD` 或被 AI 判定为不真实的热点会保留为 `filtered`，但不会发送事件邮件，也不会进入 AI 日报/周报。
 
 ## 当前状态
 

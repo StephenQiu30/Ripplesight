@@ -8,9 +8,9 @@ from sqlalchemy.orm import Session
 
 from apps.api.app.core.settings import settings
 from apps.api.app.models.ai_analysis import AiAnalysis
-from apps.api.app.models.daily_report import DailyReport
 from apps.api.app.models.hotspot import Hotspot
 from apps.api.app.models.notification import Notification
+from apps.api.app.models.report import Report
 
 
 def notify_hotspot(session: Session, hotspot: Hotspot, analysis: AiAnalysis) -> Notification:
@@ -33,9 +33,9 @@ def notify_hotspot(session: Session, hotspot: Hotspot, analysis: AiAnalysis) -> 
     return notification
 
 
-def notify_daily_report(session: Session, report: DailyReport) -> Notification:
+def notify_report(session: Session, report: Report) -> Notification:
     recipient = settings.smtp_to_email
-    notification = Notification(daily_report_id=report.id, channel="email", recipient=recipient)
+    notification = Notification(report_id=report.id, channel="email", recipient=recipient)
     if not _smtp_configured():
         notification.status = "skipped"
         notification.error_message = "SMTP is not configured."
@@ -43,7 +43,7 @@ def notify_daily_report(session: Session, report: DailyReport) -> Notification:
         return notification
 
     try:
-        _send_daily_report_email(report)
+        _send_report_email(report)
         notification.status = "sent"
         notification.sent_at = datetime.now(timezone.utc)
     except Exception as exc:  # noqa: BLE001
@@ -84,7 +84,7 @@ def _send_email(hotspot: Hotspot, analysis: AiAnalysis) -> None:
         smtp.send_message(message)
 
 
-def _send_daily_report_email(report: DailyReport) -> None:
+def _send_report_email(report: Report) -> None:
     message = EmailMessage()
     message["Subject"] = report.subject
     message["From"] = settings.smtp_from_email or ""

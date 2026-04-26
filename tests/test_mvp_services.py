@@ -1,15 +1,21 @@
 from __future__ import annotations
 
 import unittest
+from datetime import date, datetime, timezone
+from unittest.mock import patch
 
 from apps.api.app.core.settings import settings
+from apps.api.app.main import create_app
 from apps.api.app.models.ai_analysis import AiAnalysis
 from apps.api.app.models.hotspot import Hotspot
 from apps.api.app.models.keyword import Keyword
+from apps.api.app.models.report import Report
 from apps.api.app.models.source import Source
-from apps.api.app.services.ai_analysis import analyze_hotspot, expand_keyword_queries
-from apps.api.app.services.ingestion import SourceIngestionError, fetch_candidates
-from apps.api.app.services.notification import notify_hotspot
+from apps.api.app.services.ai_analysis import AnalysisResult, analyze_hotspot, expand_keyword_queries, is_analysis_active
+from apps.api.app.services.ingestion import Candidate, SourceIngestionError, fetch_candidates
+from apps.api.app.services.notification import notify_hotspot, notify_report
+from apps.api.app.services.reports import previous_weekly_period_start, report_period
+from apps.api.app.services.search import search_sources
 
 
 class CollectingSession:
@@ -18,6 +24,11 @@ class CollectingSession:
 
     def add(self, item: object) -> None:
         self.added.append(item)
+
+
+class ReadOnlySession:
+    def add(self, item: object) -> None:
+        raise AssertionError(f"search_sources must not persist {item!r}")
 
 
 class SettingsPatchMixin:
@@ -79,6 +90,21 @@ class MvpServiceTests(SettingsPatchMixin, unittest.TestCase):
         self.assertLess(result.relevance_score, settings.relevance_threshold)
         self.assertEqual(result.importance, "low")
 
+    def test_false_analysis_is_not_active_even_above_threshold(self) -> None:
+        self.patch_settings(relevance_threshold=50.0)
+        result = AnalysisResult(
+            is_real=False,
+            relevance_score=95,
+            relevance_reason="来源不可信。",
+            keyword_mentioned=True,
+            importance="high",
+            summary="疑似虚假信息。",
+            model_name="test",
+            raw_response={},
+        )
+
+        self.assertFalse(is_analysis_active(result))
+
     def test_optional_x_and_bing_sources_skip_without_credentials(self) -> None:
         self.patch_settings(x_api_bearer_token=None, bing_search_api_key=None)
         keyword = Keyword(id=1, keyword="AI", query_template=None, enabled=True, priority=0)
@@ -112,6 +138,72 @@ class MvpServiceTests(SettingsPatchMixin, unittest.TestCase):
         self.assertEqual(notification.status, "skipped")
         self.assertEqual(notification.error_message, "SMTP is not configured.")
         self.assertEqual(session.added, [notification])
+
+    def test_report_smtp_missing_records_skipped_notification(self) -> None:
+        self.patch_settings(smtp_host=None, smtp_from_email=None, smtp_to_email=None)
+        session = CollectingSession()
+        report = Report(
+            id=30,
+            report_type="daily",
+            period_start=datetime(2026, 4, 25, tzinfo=timezone.utc),
+            period_end=datetime(2026, 4, 26, tzinfo=timezone.utc),
+            subject="AI 热点日报",
+            summary="本期摘要",
+            content="# AI 热点日报",
+            hotspot_count=0,
+        )
+
+        notification = notify_report(session, report)  # type: ignore[arg-type]
+
+        self.assertEqual(notification.status, "skipped")
+        self.assertEqual(notification.error_message, "SMTP is not configured.")
+        self.assertEqual(notification.report_id, 30)
+        self.assertEqual(session.added, [notification])
+
+    def test_search_initializes_sources_and_does_not_persist_hotspots(self) -> None:
+        self.patch_settings(openai_api_key=None, openai_model=None, relevance_threshold=50.0)
+        source = Source(id=1, name="Hacker News", source_type="hacker_news", enabled=True, config={})
+        candidate = Candidate(
+            title="OpenAI ships agent search",
+            url="https://example.com/agent-search",
+            source_id=1,
+            keyword_id=None,
+            author="alice",
+            published_at=datetime(2026, 4, 25, tzinfo=timezone.utc),
+            snippet="OpenAI agent search tooling launched.",
+            raw_payload={"id": "1"},
+        )
+        with (
+            patch("apps.api.app.services.search.ensure_default_sources") as ensure_defaults,
+            patch("apps.api.app.services.search._load_search_sources", return_value=[source]),
+            patch("apps.api.app.services.search.expand_keyword_queries", return_value=["OpenAI agent"]),
+            patch("apps.api.app.services.search.fetch_candidates", return_value=[candidate]),
+        ):
+            result = search_sources(ReadOnlySession(), "OpenAI agent")
+
+        ensure_defaults.assert_called_once()
+        self.assertEqual(len(result.items), 1)
+        self.assertEqual(result.items[0].status, "active")
+        self.assertEqual(result.errors, [])
+
+    def test_report_period_supports_daily_and_weekly_defaults(self) -> None:
+        daily_start, daily_end = report_period("daily", period_start=date(2026, 4, 25))
+        weekly_start, weekly_end = report_period("weekly", period_start=date(2026, 4, 26))
+
+        self.assertEqual(daily_start, datetime(2026, 4, 25, tzinfo=timezone.utc))
+        self.assertEqual(daily_end, datetime(2026, 4, 26, tzinfo=timezone.utc))
+        self.assertEqual(weekly_start, datetime(2026, 4, 20, tzinfo=timezone.utc))
+        self.assertEqual(weekly_end, datetime(2026, 4, 27, tzinfo=timezone.utc))
+        self.assertEqual(previous_weekly_period_start(datetime(2026, 4, 26, tzinfo=timezone.utc)), date(2026, 4, 13))
+
+    def test_reports_routes_registered_and_daily_reports_removed(self) -> None:
+        paths = {route.path for route in create_app().routes}
+
+        self.assertIn("/api/reports", paths)
+        self.assertIn("/api/reports/{report_id}", paths)
+        self.assertIn("/api/reports/{report_id}/send", paths)
+        self.assertNotIn("/api/daily-reports", paths)
+        self.assertNotIn("/api/daily-reports/{report_id}/send", paths)
 
 
 if __name__ == "__main__":

@@ -3,16 +3,17 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from apps.api.app.core.settings import settings
 from apps.api.app.models.hotspot import Hotspot
 from apps.api.app.models.keyword import Keyword
 from apps.api.app.models.source import Source
 from apps.api.app.schemas.search import SearchRead, SearchResultRead
-from apps.api.app.services.ai_analysis import analyze_hotspot, expand_keyword_queries
+from apps.api.app.services.ai_analysis import analyze_hotspot, expand_keyword_queries, is_analysis_active
+from apps.api.app.services.check_runner import ensure_default_sources
 from apps.api.app.services.ingestion import SourceIngestionError, fetch_candidates
 
 
 def search_sources(session: Session, query: str, source_types: list[str] | None = None, limit: int = 20) -> SearchRead:
+    ensure_default_sources(session)
     keyword = Keyword(keyword=query, query_template=query, enabled=True)
     sources = _load_search_sources(session, source_types)
     errors: list[str] = []
@@ -41,7 +42,7 @@ def search_sources(session: Session, query: str, source_types: list[str] | None 
                     raw_payload=candidate.raw_payload,
                 )
                 analysis = analyze_hotspot(hotspot, keyword)
-                status = "active" if analysis.relevance_score >= settings.relevance_threshold else "filtered"
+                status = "active" if is_analysis_active(analysis) else "filtered"
                 items.append(
                     SearchResultRead(
                         title=candidate.title,

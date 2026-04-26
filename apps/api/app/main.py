@@ -6,11 +6,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.app.api.routes.check_runs import router as check_runs_router
-from apps.api.app.api.routes.daily_reports import router as daily_reports_router
 from apps.api.app.api.routes.health import router as health_router
 from apps.api.app.api.routes.hotspots import router as hotspots_router
 from apps.api.app.api.routes.keywords import router as keywords_router
 from apps.api.app.api.routes.notifications import router as notifications_router
+from apps.api.app.api.routes.reports import router as reports_router
 from apps.api.app.api.routes.search import router as search_router
 from apps.api.app.api.routes.settings import router as settings_router
 from apps.api.app.api.routes.sources import router as sources_router
@@ -50,7 +50,7 @@ def create_app() -> FastAPI:
     app.include_router(sources_router)
     app.include_router(hotspots_router)
     app.include_router(check_runs_router)
-    app.include_router(daily_reports_router)
+    app.include_router(reports_router)
     app.include_router(notifications_router)
     app.include_router(search_router)
     app.include_router(settings_router)

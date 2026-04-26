@@ -12,7 +12,7 @@ from apps.api.app.models.check_run import CheckRun
 from apps.api.app.models.hotspot import Hotspot
 from apps.api.app.models.keyword import Keyword
 from apps.api.app.models.source import Source
-from apps.api.app.services.ai_analysis import analyze_hotspot, expand_keyword_queries
+from apps.api.app.services.ai_analysis import analyze_hotspot, expand_keyword_queries, is_analysis_active
 from apps.api.app.services.ingestion import SourceIngestionError, fetch_candidates
 from apps.api.app.services.notification import notify_hotspot
 
@@ -48,7 +48,7 @@ def run_hotspot_check(session: Session, trigger_type: str = "manual") -> CheckRu
                     if hotspot is None:
                         continue
                     analysis_result = analyze_hotspot(hotspot, keyword)
-                    hotspot.status = "active" if analysis_result.relevance_score >= settings.relevance_threshold else "filtered"
+                    hotspot.status = "active" if is_analysis_active(analysis_result) else "filtered"
                     analysis = AiAnalysis(
                         hotspot_id=hotspot.id,
                         is_real=analysis_result.is_real,
@@ -82,7 +82,7 @@ def ensure_default_sources(session: Session) -> None:
     existing_names = set(session.scalars(select(Source.name)))
     defaults = [
         Source(name="Default RSS", source_type="rss", enabled=True, config={"url": "https://hnrss.org/frontpage", "limit": settings.source_fetch_limit}),
-        Source(name="Hacker News", source_type="hacker_news", enabled=True, config={"endpoint": "topstories", "limit": settings.source_fetch_limit}),
+        Source(name="Hacker News", source_type="hacker_news", enabled=True, config={"limit": settings.source_fetch_limit}),
         Source(name="X/Twitter", source_type="x_twitter", enabled=False, config={"limit": settings.source_fetch_limit}),
         Source(name="Bing", source_type="bing", enabled=False, config={"limit": settings.source_fetch_limit, "mkt": "zh-CN"}),
         Source(name="Bilibili", source_type="bilibili", enabled=False, config={"limit": settings.source_fetch_limit}),

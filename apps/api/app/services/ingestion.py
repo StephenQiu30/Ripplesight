@@ -14,6 +14,7 @@ from apps.api.app.models.source import Source
 
 DEFAULT_RSS_URL = "https://hnrss.org/frontpage"
 HN_BASE_URL = "https://hacker-news.firebaseio.com/v0"
+HN_SEARCH_URL = "https://hn.algolia.com/api/v1/search"
 X_SEARCH_URL = "https://api.x.com/2/tweets/search/recent"
 BING_SEARCH_URL = "https://api.bing.microsoft.com/v7.0/search"
 BILIBILI_SEARCH_URL = "https://api.bilibili.com/x/web-interface/search/type"
@@ -91,6 +92,38 @@ def _fetch_rss(source: Source, keyword: Keyword, query: str) -> list[Candidate]:
 
 def _fetch_hacker_news(source: Source, keyword: Keyword, query: str) -> list[Candidate]:
     limit = int(source.config.get("limit") or settings.source_fetch_limit)
+    if source.config.get("frontpage") is True:
+        return _fetch_hacker_news_frontpage(source, keyword, query, limit)
+    params = {"query": query, "tags": "story", "hitsPerPage": limit}
+    try:
+        response = httpx.get(HN_SEARCH_URL, params=params, timeout=15)
+        response.raise_for_status()
+        payload = response.json()
+    except Exception as exc:  # noqa: BLE001
+        raise SourceIngestionError(f"Hacker News fetch failed for {source.name}: {exc}") from exc
+    candidates: list[Candidate] = []
+    for item in payload.get("hits", [])[:limit]:
+        story_id = item.get("objectID")
+        title = item.get("title") or item.get("story_title")
+        url = item.get("url") or item.get("story_url") or f"https://news.ycombinator.com/item?id={story_id}"
+        if not title or not url:
+            continue
+        candidates.append(
+            Candidate(
+                title=title,
+                url=url,
+                source_id=source.id,
+                keyword_id=keyword.id,
+                author=item.get("author"),
+                published_at=_parse_datetime(item.get("created_at")),
+                snippet=_strip_html(item.get("story_text") or item.get("comment_text")),
+                raw_payload={"source_type": "hacker_news", "id": story_id, "points": item.get("points"), "query": query, "item": item},
+            )
+        )
+    return candidates
+
+
+def _fetch_hacker_news_frontpage(source: Source, keyword: Keyword, query: str, limit: int) -> list[Candidate]:
     endpoint = str(source.config.get("endpoint") or "topstories")
     try:
         with httpx.Client(timeout=15) as client:

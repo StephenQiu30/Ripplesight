@@ -21,8 +21,11 @@ class Settings(BaseSettings):
     bing_search_api_key: str | None = None
     scheduler_enabled: bool = False
     check_interval_minutes: int = 60
-    daily_digest_enabled: bool = False
-    daily_digest_hour: int = 8
+    daily_report_enabled: bool = False
+    daily_report_hour: int = 8
+    weekly_report_enabled: bool = False
+    weekly_report_weekday: int = 1
+    weekly_report_hour: int = 8
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_username: str | None = None
