@@ -12,6 +12,7 @@
 - 具体执行任务以 `docs/plans/` 下的 PLAN 文件为准。
 - AI 热点监控 MVP 功能范围以 `docs/plans/10-ai-hotspot-monitor-mvp-plan.md` 为准。
 - 当前后端检测、即时搜索、日报/周报任务以 `docs/plans/11-backend-hotspot-detection-reports-plan.md` 为准。
+- 当前 SaaS 前端平台任务以 `docs/plans/12-saas-frontend-platform-plan.md` 为准。
 
 ## 2. 产品实现方向
 
@@ -24,7 +25,9 @@
 - X/Twitter 必须使用官方 X API v2 Recent Search，通过 `X_API_BEARER_TOKEN` 注入凭据；不得引入页面爬取作为默认实现。
 - 低于 `RELEVANCE_THRESHOLD` 的热点必须标记为 `filtered`，不得发送事件邮件，不得进入 AI 日报。
 - 达到 `RELEVANCE_THRESHOLD` 的热点标记为 `active`，允许进入热点流、事件邮件和 AI 日报。
-- 当前 MVP 阶段暂不实现控制台功能，优先跑通后端 AI 热点检测、即时搜索、日报/周报生成。
+- 后端检测、即时搜索、日报/周报生成阶段已完成后，当前阶段允许实现单用户私有部署 SaaS 前端平台。
+- SaaS 前端首版以用户自己直接使用为目标，不实现多用户、租户隔离、真实登录认证、真实计费或 Stripe。
+- SaaS 前端产品形态为 `/` 官网首页、`/pricing` 定价占位页、`/app` 工作台。
 - 日报/周报生成采用模板优先，AI 只作为可选增强；AI 未配置或失败时必须使用本地模板降级。
 - `/api/daily-reports` 后续直接移除，不做兼容别名；报告 API 统一收敛到 `/api/reports`。
 - P0 不做多租户、复杂权限、计费、复杂工作流、向量库、复杂队列治理和企业级数据平台。
@@ -41,7 +44,7 @@
 ## 4. 架构底线
 
 - `apps/api` 承载 FastAPI 后端入口、路由、依赖注入、数据库访问和任务触发入口。
-- `apps/web` 承载 Next.js 控制台。
+- `apps/web` 承载 Next.js SaaS 前端平台。
 - `packages/core` 承载跨应用共享的轻量类型、常量或文档化规则；不得重新引入旧 `backend/core` 分层。
 - `sql/` 是数据库表结构事实源；`apps/api` 的 SQLAlchemy models 必须与 `sql/001_init_schema.sql` 保持一致。
 - `migrations` 已废弃，不引入数据库迁移工具；数据库初始化优先执行 `sql/001_init_schema.sql`，重置时通过清空数据库重建。
