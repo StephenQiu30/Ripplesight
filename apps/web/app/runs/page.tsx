@@ -1,10 +1,5 @@
-import { ConsoleLayout } from "../../src/components/ConsoleLayout";
-import { RunsClient } from "../../src/components/RunsClient";
+import { redirect } from "next/navigation";
 
 export default function RunsPage() {
-  return (
-    <ConsoleLayout title="任务">
-      <RunsClient />
-    </ConsoleLayout>
-  );
+  redirect("/app/runs");
 }

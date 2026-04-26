@@ -1,13 +1,23 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { api, Setting } from "../lib/api";
+import { Save } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
+import { api, Setting } from "@/lib/api";
 
 export function SettingsClient() {
   const [items, setItems] = useState<Setting[]>([]);
-  const [key, setKey] = useState("daily_digest");
+  const [key, setKey] = useState("daily_report");
   const [value, setValue] = useState('{"enabled":true}');
   const [description, setDescription] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
@@ -15,36 +25,78 @@ export function SettingsClient() {
   }
 
   useEffect(() => {
-    load().catch((err) => setError(err.message));
+    load().catch((err) => setError(err.message)).finally(() => setLoading(false));
   }, []);
 
   async function saveSetting(event: FormEvent) {
     event.preventDefault();
-    await api<Setting>(`/api/settings/${key}`, {
-      method: "PUT",
-      body: JSON.stringify({ value: JSON.parse(value || "{}"), description: description || null }),
-    });
-    await load();
+    setSaving(true);
+    setError(null);
+    try {
+      await api<Setting>(`/api/settings/${key}`, {
+        method: "PUT",
+        body: JSON.stringify({ value: JSON.parse(value || "{}"), description: description || null }),
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保存设置失败，请检查 JSON。");
+    } finally {
+      setSaving(false);
+    }
   }
+
+  if (loading) return <Skeleton className="h-80" />;
 
   return (
     <div className="grid gap-4">
-      <form className="grid gap-3 rounded-lg border border-slate-300 bg-white p-3 md:grid-cols-[1fr_2fr_1fr_88px]" onSubmit={saveSetting}>
-        <input className="min-h-10 rounded-md border border-slate-300 px-3" value={key} onChange={(event) => setKey(event.target.value)} placeholder="key" required />
-        <input className="min-h-10 rounded-md border border-slate-300 px-3" value={value} onChange={(event) => setValue(event.target.value)} placeholder="JSON value" />
-        <input className="min-h-10 rounded-md border border-slate-300 px-3" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="描述" />
-        <button className="min-h-10 rounded-md border border-teal-700 bg-teal-700 px-4 text-white" type="submit">保存</button>
-      </form>
-      {error ? <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-700">{error}</p> : null}
-      <div className="overflow-hidden rounded-lg border border-slate-300 bg-white">
-        {items.map((item) => (
-          <div className="grid gap-3 border-t border-slate-200 p-3 first:border-t-0 md:grid-cols-[1fr_2fr_1fr]" key={item.key}>
-            <strong>{item.key}</strong>
-            <code className="truncate text-xs text-slate-500">{JSON.stringify(item.value)}</code>
-            <span>{item.description || "-"}</span>
-          </div>
-        ))}
-      </div>
+      <Card>
+        <CardContent className="pt-5">
+          <form className="grid gap-3 lg:grid-cols-[1fr_2fr_1fr_auto]" onSubmit={saveSetting}>
+            <div className="grid gap-2">
+              <Label htmlFor="setting-key">Key</Label>
+              <Input id="setting-key" onChange={(event) => setKey(event.target.value)} required value={key} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="setting-value">JSON value</Label>
+              <Textarea className="min-h-11 lg:min-h-11" id="setting-value" onChange={(event) => setValue(event.target.value)} value={value} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="setting-desc">描述</Label>
+              <Input id="setting-desc" onChange={(event) => setDescription(event.target.value)} value={description} />
+            </div>
+            <div className="flex items-end">
+              <Button className="w-full" disabled={saving} type="submit">
+                {saving ? "保存中" : "保存"}
+                <Save className="h-4 w-4" />
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+      {error ? <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p> : null}
+      <Card>
+        {items.length === 0 ? <p className="p-6 text-sm text-muted-foreground">暂无设置。</p> : null}
+        {items.length > 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Key</TableHead>
+                <TableHead>Value</TableHead>
+                <TableHead>描述</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((item) => (
+                <TableRow key={item.key}>
+                  <TableCell className="font-semibold">{item.key}</TableCell>
+                  <TableCell className="max-w-md truncate font-mono text-xs text-muted-foreground">{JSON.stringify(item.value)}</TableCell>
+                  <TableCell>{item.description || "-"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : null}
+      </Card>
     </div>
   );
 }

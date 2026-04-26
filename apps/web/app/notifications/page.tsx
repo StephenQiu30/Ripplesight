@@ -1,10 +1,5 @@
-import { ConsoleLayout } from "../../src/components/ConsoleLayout";
-import { NotificationsClient } from "../../src/components/NotificationsClient";
+import { redirect } from "next/navigation";
 
 export default function NotificationsPage() {
-  return (
-    <ConsoleLayout title="通知">
-      <NotificationsClient />
-    </ConsoleLayout>
-  );
+  redirect("/app/notifications");
 }

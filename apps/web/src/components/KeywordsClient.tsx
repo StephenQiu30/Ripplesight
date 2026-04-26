@@ -1,13 +1,24 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { api, Keyword } from "../lib/api";
+import { Plus, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { api, Keyword } from "@/lib/api";
 
 export function KeywordsClient() {
   const [items, setItems] = useState<Keyword[]>([]);
   const [keyword, setKeyword] = useState("");
   const [queryTemplate, setQueryTemplate] = useState("");
   const [priority, setPriority] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
@@ -15,63 +26,121 @@ export function KeywordsClient() {
   }
 
   useEffect(() => {
-    load().catch((err) => setError(err.message));
+    load().catch((err) => setError(err.message)).finally(() => setLoading(false));
   }, []);
 
   async function createKeyword(event: FormEvent) {
     event.preventDefault();
-    await api<Keyword>("/api/keywords", {
-      method: "POST",
-      body: JSON.stringify({ keyword, query_template: queryTemplate || null, enabled: true, priority }),
-    });
-    setKeyword("");
-    setQueryTemplate("");
-    setPriority(0);
-    await load();
+    setSaving(true);
+    setError(null);
+    try {
+      await api<Keyword>("/api/keywords", {
+        method: "POST",
+        body: JSON.stringify({ keyword, query_template: queryTemplate || null, enabled: true, priority }),
+      });
+      setKeyword("");
+      setQueryTemplate("");
+      setPriority(0);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "新增关键词失败");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function toggleKeyword(id: number) {
-    await api<Keyword>(`/api/keywords/${id}/toggle`, { method: "POST" });
-    await load();
+    setBusyId(id);
+    setError(null);
+    try {
+      await api<Keyword>(`/api/keywords/${id}/toggle`, { method: "POST" });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "切换关键词失败");
+    } finally {
+      setBusyId(null);
+    }
   }
 
   async function deleteKeyword(id: number) {
-    await api<void>(`/api/keywords/${id}`, { method: "DELETE" });
-    await load();
+    setBusyId(id);
+    setError(null);
+    try {
+      await api<void>(`/api/keywords/${id}`, { method: "DELETE" });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "删除关键词失败");
+    } finally {
+      setBusyId(null);
+    }
   }
+
+  if (loading) return <Skeleton className="h-80" />;
 
   return (
     <div className="grid gap-4">
-      <form className="grid gap-3 rounded-lg border border-slate-300 bg-white p-3 md:grid-cols-[1fr_1fr_120px_88px]" onSubmit={createKeyword}>
-        <input className="min-h-10 rounded-md border border-slate-300 px-3" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="关键词" required />
-        <input className="min-h-10 rounded-md border border-slate-300 px-3" value={queryTemplate} onChange={(event) => setQueryTemplate(event.target.value)} placeholder="查询模板" />
-        <input className="min-h-10 rounded-md border border-slate-300 px-3" type="number" value={priority} onChange={(event) => setPriority(Number(event.target.value))} aria-label="优先级" />
-        <button className="min-h-10 rounded-md border border-teal-700 bg-teal-700 px-4 text-white" type="submit">新增</button>
-      </form>
-      {error ? <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-700">{error}</p> : null}
-      <div className="overflow-hidden rounded-lg border border-slate-300 bg-white">
-        <div className="grid gap-3 bg-slate-50 p-3 text-sm font-bold text-slate-500 md:grid-cols-[1.2fr_1.2fr_.6fr_1fr]">
-          <span>关键词</span>
-          <span>模板</span>
-          <span>状态</span>
-          <span>操作</span>
-        </div>
-        {items.map((item) => (
-          <div className="grid gap-3 border-t border-slate-200 p-3 md:grid-cols-[1.2fr_1.2fr_.6fr_1fr]" key={item.id}>
-            <strong>{item.keyword}</strong>
-            <span>{item.query_template || "-"}</span>
-            <span className={item.enabled ? "w-fit rounded-full bg-emerald-50 px-2 py-1 text-xs text-emerald-700" : "w-fit rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-500"}>{item.enabled ? "启用" : "停用"}</span>
-            <span className="flex gap-2">
-              <button className="rounded-md border border-slate-300 px-3 py-1" type="button" onClick={() => toggleKeyword(item.id)}>
-                切换
-              </button>
-              <button className="rounded-md border border-slate-300 px-3 py-1" type="button" onClick={() => deleteKeyword(item.id)}>
-                删除
-              </button>
-            </span>
-          </div>
-        ))}
-      </div>
+      <Card>
+        <CardContent className="pt-5">
+          <form className="grid gap-3 lg:grid-cols-[1fr_1fr_140px_auto]" onSubmit={createKeyword}>
+            <div className="grid gap-2">
+              <Label htmlFor="keyword">关键词</Label>
+              <Input id="keyword" onChange={(event) => setKeyword(event.target.value)} placeholder="例如 OpenAI" required value={keyword} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="query-template">查询模板</Label>
+              <Input id="query-template" onChange={(event) => setQueryTemplate(event.target.value)} placeholder="可选" value={queryTemplate} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="priority">优先级</Label>
+              <Input id="priority" onChange={(event) => setPriority(Number(event.target.value))} type="number" value={priority} />
+            </div>
+            <div className="flex items-end">
+              <Button className="w-full" disabled={saving} type="submit">
+                {saving ? "新增中" : "新增"}
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+      {error ? <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p> : null}
+      <Card>
+        {items.length === 0 ? <p className="p-6 text-sm text-muted-foreground">暂无关键词。</p> : null}
+        {items.length > 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>关键词</TableHead>
+                <TableHead>模板</TableHead>
+                <TableHead>优先级</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead className="text-right">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell className="font-semibold">{item.keyword}</TableCell>
+                  <TableCell className="max-w-xs truncate text-muted-foreground">{item.query_template || "-"}</TableCell>
+                  <TableCell>{item.priority}</TableCell>
+                  <TableCell><Badge variant={item.enabled ? "success" : "muted"}>{item.enabled ? "启用" : "停用"}</Badge></TableCell>
+                  <TableCell>
+                    <div className="flex justify-end gap-2">
+                      <Button disabled={busyId === item.id} onClick={() => toggleKeyword(item.id)} size="sm" type="button" variant="secondary">
+                        {busyId === item.id ? "处理中" : "切换"}
+                      </Button>
+                      <Button disabled={busyId === item.id} onClick={() => deleteKeyword(item.id)} size="sm" type="button" variant="destructive">
+                        <Trash2 className="h-4 w-4" />
+                        删除
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : null}
+      </Card>
     </div>
   );
 }

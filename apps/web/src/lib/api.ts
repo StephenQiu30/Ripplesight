@@ -70,10 +70,50 @@ export type CheckRun = {
 export type Notification = {
   id: number;
   hotspot_id: number | null;
+  report_id: number | null;
   channel: string;
   recipient: string | null;
   status: string;
   error_message: string | null;
+  sent_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SearchResult = {
+  title: string;
+  url: string;
+  source_id: number;
+  source_name: string;
+  source_type: string;
+  author: string | null;
+  published_at: string | null;
+  snippet: string | null;
+  relevance_score: number;
+  relevance_reason: string;
+  keyword_mentioned: boolean;
+  importance: string;
+  summary: string;
+  status: string;
+  raw_payload: Record<string, unknown>;
+};
+
+export type SearchResponse = {
+  query: string;
+  items: SearchResult[];
+  errors: string[];
+};
+
+export type Report = {
+  id: number;
+  report_type: "daily" | "weekly" | string;
+  period_start: string;
+  period_end: string;
+  status: string;
+  subject: string;
+  summary: string | null;
+  content: string;
+  hotspot_count: number;
   sent_at: string | null;
   created_at: string;
   updated_at: string;
@@ -120,4 +160,12 @@ export function formatDate(value: string | null | undefined): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+export function statusTone(status: string): "success" | "warning" | "muted" | "destructive" | "default" {
+  if (["active", "completed", "sent", "generated"].includes(status)) return "success";
+  if (["running", "skipped", "filtered"].includes(status)) return "warning";
+  if (["failed", "error"].includes(status)) return "destructive";
+  if (["pending", "new"].includes(status)) return "muted";
+  return "default";
 }

@@ -1,10 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, CheckRun, formatDate, Page } from "../lib/api";
+import { Play } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { api, CheckRun, formatDate, Page, statusTone } from "@/lib/api";
 
 export function RunsClient() {
   const [items, setItems] = useState<CheckRun[]>([]);
+  const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -14,7 +21,7 @@ export function RunsClient() {
   }
 
   useEffect(() => {
-    load().catch((err) => setError(err.message));
+    load().catch((err) => setError(err.message)).finally(() => setLoading(false));
   }, []);
 
   async function triggerRun() {
@@ -30,30 +37,46 @@ export function RunsClient() {
     }
   }
 
+  if (loading) return <Skeleton className="h-80" />;
+
   return (
     <div className="grid gap-4">
-      <button className="w-fit rounded-md border border-teal-700 bg-teal-700 px-4 py-2 text-white disabled:opacity-60" type="button" onClick={triggerRun} disabled={running}>
-        {running ? "运行中" : "手动检查"}
-      </button>
-      {error ? <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-700">{error}</p> : null}
-      <div className="overflow-hidden rounded-lg border border-slate-300 bg-white">
-        <div className="grid gap-3 bg-slate-50 p-3 text-sm font-bold text-slate-500 md:grid-cols-5">
-          <span>触发</span>
-          <span>状态</span>
-          <span>成功</span>
-          <span>失败</span>
-          <span>开始</span>
-        </div>
-        {items.map((item) => (
-          <div className="grid gap-3 border-t border-slate-200 p-3 md:grid-cols-5" key={item.id}>
-            <span>{item.trigger_type}</span>
-            <span className={item.status === "completed" ? "w-fit rounded-full bg-emerald-50 px-2 py-1 text-xs text-emerald-700" : "w-fit rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700"}>{item.status}</span>
-            <span>{item.success_count}</span>
-            <span>{item.failure_count}</span>
-            <span>{formatDate(item.started_at)}</span>
-          </div>
-        ))}
+      <div>
+        <Button disabled={running} onClick={triggerRun} type="button">
+          {running ? "运行中" : "手动检查"}
+          <Play className="h-4 w-4" />
+        </Button>
       </div>
+      {error ? <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p> : null}
+      <Card>
+        {items.length === 0 ? <p className="p-6 text-sm text-muted-foreground">暂无任务记录。</p> : null}
+        {items.length > 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>触发</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead>成功</TableHead>
+                <TableHead>失败</TableHead>
+                <TableHead>开始</TableHead>
+                <TableHead>结束</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell>{item.trigger_type}</TableCell>
+                  <TableCell><Badge variant={statusTone(item.status)}>{item.status}</Badge></TableCell>
+                  <TableCell>{item.success_count}</TableCell>
+                  <TableCell>{item.failure_count}</TableCell>
+                  <TableCell>{formatDate(item.started_at)}</TableCell>
+                  <TableCell>{formatDate(item.finished_at)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : null}
+      </Card>
     </div>
   );
 }

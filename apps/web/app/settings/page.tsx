@@ -1,10 +1,5 @@
-import { ConsoleLayout } from "../../src/components/ConsoleLayout";
-import { SettingsClient } from "../../src/components/SettingsClient";
+import { redirect } from "next/navigation";
 
 export default function SettingsPage() {
-  return (
-    <ConsoleLayout title="设置">
-      <SettingsClient />
-    </ConsoleLayout>
-  );
+  redirect("/app/settings");
 }

@@ -1,10 +1,5 @@
-import { ConsoleLayout } from "../../src/components/ConsoleLayout";
-import { HotspotsClient } from "../../src/components/HotspotsClient";
+import { redirect } from "next/navigation";
 
 export default function HotspotsPage() {
-  return (
-    <ConsoleLayout title="热点">
-      <HotspotsClient />
-    </ConsoleLayout>
-  );
+  redirect("/app/hotspots");
 }

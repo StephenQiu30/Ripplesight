@@ -1,3 +1,5 @@
+## ADDED Requirements
+
 ### Requirement: Accessible enterprise UI
 
 The frontend SHALL meet basic accessibility and responsive UX requirements for a professional SaaS interface.
@@ -18,4 +20,3 @@ The frontend SHALL meet basic accessibility and responsive UX requirements for a
 - **WHEN** icons are used in UI controls
 - **THEN** they come from a consistent SVG icon set
 - **AND** emoji are not used as UI icons
-

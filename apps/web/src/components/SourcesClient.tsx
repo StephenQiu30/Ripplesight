@@ -1,13 +1,27 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { api, Source } from "../lib/api";
+import { Plus } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { api, Source } from "@/lib/api";
+
+const sourceTypes = ["rss", "hacker_news", "x_twitter", "bing", "bilibili", "sogou"];
 
 export function SourcesClient() {
   const [items, setItems] = useState<Source[]>([]);
   const [name, setName] = useState("");
   const [sourceType, setSourceType] = useState("rss");
   const [config, setConfig] = useState('{"url":"https://hnrss.org/frontpage","limit":20}');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
@@ -15,56 +29,105 @@ export function SourcesClient() {
   }
 
   useEffect(() => {
-    load().catch((err) => setError(err.message));
+    load().catch((err) => setError(err.message)).finally(() => setLoading(false));
   }, []);
 
   async function createSource(event: FormEvent) {
     event.preventDefault();
-    await api<Source>("/api/sources", {
-      method: "POST",
-      body: JSON.stringify({ name, source_type: sourceType, enabled: true, config: JSON.parse(config || "{}") }),
-    });
-    setName("");
-    await load();
+    setSaving(true);
+    setError(null);
+    try {
+      await api<Source>("/api/sources", {
+        method: "POST",
+        body: JSON.stringify({ name, source_type: sourceType, enabled: true, config: JSON.parse(config || "{}") }),
+      });
+      setName("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "新增来源失败，请检查 JSON 配置。");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function toggleSource(id: number) {
-    await api<Source>(`/api/sources/${id}/toggle`, { method: "POST" });
-    await load();
+    setBusyId(id);
+    setError(null);
+    try {
+      await api<Source>(`/api/sources/${id}/toggle`, { method: "POST" });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "切换来源失败");
+    } finally {
+      setBusyId(null);
+    }
   }
+
+  if (loading) return <Skeleton className="h-80" />;
 
   return (
     <div className="grid gap-4">
-      <form className="grid gap-3 rounded-lg border border-slate-300 bg-white p-3 md:grid-cols-[1fr_160px_2fr_88px]" onSubmit={createSource}>
-        <input className="min-h-10 rounded-md border border-slate-300 px-3" value={name} onChange={(event) => setName(event.target.value)} placeholder="来源名称" required />
-        <select className="min-h-10 rounded-md border border-slate-300 px-3" value={sourceType} onChange={(event) => setSourceType(event.target.value)}>
-          <option value="rss">RSS</option>
-          <option value="hacker_news">Hacker News</option>
-        </select>
-        <input className="min-h-10 rounded-md border border-slate-300 px-3" value={config} onChange={(event) => setConfig(event.target.value)} placeholder="JSON 配置" />
-        <button className="min-h-10 rounded-md border border-teal-700 bg-teal-700 px-4 text-white" type="submit">新增</button>
-      </form>
-      {error ? <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-700">{error}</p> : null}
-      <div className="overflow-hidden rounded-lg border border-slate-300 bg-white">
-        <div className="grid gap-3 bg-slate-50 p-3 text-sm font-bold text-slate-500 md:grid-cols-[1fr_1fr_2fr_.6fr_.7fr]">
-          <span>名称</span>
-          <span>类型</span>
-          <span>配置</span>
-          <span>状态</span>
-          <span>操作</span>
-        </div>
-        {items.map((item) => (
-          <div className="grid gap-3 border-t border-slate-200 p-3 md:grid-cols-[1fr_1fr_2fr_.6fr_.7fr]" key={item.id}>
-            <strong>{item.name}</strong>
-            <span>{item.source_type}</span>
-            <code className="truncate text-xs text-slate-500">{JSON.stringify(item.config)}</code>
-            <span className={item.enabled ? "w-fit rounded-full bg-emerald-50 px-2 py-1 text-xs text-emerald-700" : "w-fit rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-500"}>{item.enabled ? "启用" : "停用"}</span>
-            <button className="rounded-md border border-slate-300 px-3 py-1" type="button" onClick={() => toggleSource(item.id)}>
-              切换
-            </button>
-          </div>
-        ))}
-      </div>
+      <Card>
+        <CardContent className="pt-5">
+          <form className="grid gap-3 xl:grid-cols-[1fr_180px_2fr_auto]" onSubmit={createSource}>
+            <div className="grid gap-2">
+              <Label htmlFor="source-name">来源名称</Label>
+              <Input id="source-name" onChange={(event) => setName(event.target.value)} placeholder="例如 Hacker News Search" required value={name} />
+            </div>
+            <div className="grid gap-2">
+              <Label>来源类型</Label>
+              <Select onValueChange={setSourceType} value={sourceType}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {sourceTypes.map((type) => <SelectItem key={type} value={type}>{type}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="source-config">JSON 配置</Label>
+              <Input id="source-config" onChange={(event) => setConfig(event.target.value)} value={config} />
+            </div>
+            <div className="flex items-end">
+              <Button className="w-full" disabled={saving} type="submit">
+                {saving ? "新增中" : "新增"}
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+      {error ? <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p> : null}
+      <Card>
+        {items.length === 0 ? <p className="p-6 text-sm text-muted-foreground">暂无来源。</p> : null}
+        {items.length > 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>名称</TableHead>
+                <TableHead>类型</TableHead>
+                <TableHead>配置</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead className="text-right">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell className="font-semibold">{item.name}</TableCell>
+                  <TableCell>{item.source_type}</TableCell>
+                  <TableCell className="max-w-xs truncate font-mono text-xs text-muted-foreground">{JSON.stringify(item.config)}</TableCell>
+                  <TableCell><Badge variant={item.enabled ? "success" : "muted"}>{item.enabled ? "启用" : "停用"}</Badge></TableCell>
+                  <TableCell className="text-right">
+                    <Button disabled={busyId === item.id} onClick={() => toggleSource(item.id)} size="sm" type="button" variant="secondary">
+                      {busyId === item.id ? "处理中" : "切换"}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : null}
+      </Card>
     </div>
   );
 }

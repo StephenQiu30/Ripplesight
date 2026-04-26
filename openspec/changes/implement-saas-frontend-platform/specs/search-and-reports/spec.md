@@ -1,3 +1,5 @@
+## ADDED Requirements
+
 ### Requirement: Search and reports
 
 The workspace SHALL expose immediate search and daily/weekly reports through current backend APIs.
@@ -18,4 +20,3 @@ The workspace SHALL expose immediate search and daily/weekly reports through cur
 
 - **WHEN** frontend code and rendered workspace text are inspected
 - **THEN** `/api/daily-reports` is absent
-

@@ -1,3 +1,5 @@
+## ADDED Requirements
+
 ### Requirement: Product website pages
 
 The frontend SHALL provide product-facing pages that make the private-deployable SaaS platform understandable before entering the workspace.
@@ -12,4 +14,3 @@ The frontend SHALL provide product-facing pages that make the private-deployable
 - **WHEN** a user opens `/pricing`
 - **THEN** they see plan-style pricing placeholders
 - **AND** no real payment or Stripe flow is started
-

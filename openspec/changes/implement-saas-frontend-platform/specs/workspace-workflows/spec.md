@@ -1,3 +1,5 @@
+## ADDED Requirements
+
 ### Requirement: Core workspace workflows
 
 The workspace SHALL support the AI hotspot monitoring workflows backed by the current FastAPI API.
@@ -17,4 +19,3 @@ The workspace SHALL support the AI hotspot monitoring workflows backed by the cu
 - **WHEN** a user opens the run page
 - **THEN** they can trigger a manual check run
 - **AND** they can inspect recent run status
-

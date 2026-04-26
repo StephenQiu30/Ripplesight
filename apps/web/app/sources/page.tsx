@@ -1,10 +1,5 @@
-import { ConsoleLayout } from "../../src/components/ConsoleLayout";
-import { SourcesClient } from "../../src/components/SourcesClient";
+import { redirect } from "next/navigation";
 
 export default function SourcesPage() {
-  return (
-    <ConsoleLayout title="来源">
-      <SourcesClient />
-    </ConsoleLayout>
-  );
+  redirect("/app/sources");
 }
