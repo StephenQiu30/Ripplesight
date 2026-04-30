@@ -6,6 +6,12 @@
 
 本阶段只规划和实现前端产品体验，不改变后端数据模型，不新增后端认证、租户、计费或权限能力。后端 API 继续以 FastAPI 当前 OpenAPI 为准，报告能力统一使用 `/api/reports`，不恢复 `/api/daily-reports`。
 
+## Current Status
+
+- 已实现：官网首页、定价占位页、`/app` 工作台，以及热点、搜索、关键词、来源、任务、报告、通知、设置页面。
+- 已实现：前端统一调用当前后端 API，报告使用 `/api/reports`，即时搜索使用 `/api/search`。
+- 需后续验收：真实后端连接、真实凭据场景、桌面与移动端浏览器走查。
+
 ## Goals
 
 - 使用 `Next.js 14 + TypeScript + Tailwind CSS + Radix UI primitives` 开发前端。
@@ -118,8 +124,8 @@
 ## Verification
 
 - 文档检查：
-  - `docs/plans/12-saas-frontend-platform-plan.md` 存在。
-  - `docs/product/plan.md` 引用本计划。
+  - `docs/plans/12-SaaS前端平台计划.md` 存在。
+  - `docs/product/执行计划导航.md` 引用本计划。
   - `AGENTS.md` 明确当前阶段允许实现 SaaS 前端。
   - 本计划明确不做多用户、租户、真实认证和真实计费。
   - 本计划明确不恢复 `/api/daily-reports`。
@@ -129,4 +135,3 @@
   - 使用 `agent-browser` 验证 `/`、`/pricing`、`/app`、`/app/search`、`/app/reports`。
   - 验证移动端无横向溢出，按钮和表单不重叠。
   - 验证页面不出现 `/api/daily-reports`。
-

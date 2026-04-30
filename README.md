@@ -29,12 +29,12 @@
 ## 文档入口
 
 - [协作规范](./AGENTS.md)
-- [文档导航](./docs/README.md)
-- [产品需求](./docs/product/prd.md)
-- [执行计划导航](./docs/product/plan.md)
-- [技术方案](./docs/engineering/tech-spec.md)
-- [验收标准](./docs/engineering/acceptance.md)
-- [执行计划](./docs/plans/00-foundation-plan.md)
+- [文档导航](./docs/文档说明.md)
+- [产品需求](./docs/product/产品需求文档.md)
+- [执行计划导航](./docs/product/执行计划导航.md)
+- [技术方案](./docs/engineering/技术方案.md)
+- [验收标准](./docs/engineering/验收标准.md)
+- [执行计划](./docs/plans/00-基础工程计划.md)
 
 ## 本地开发
 

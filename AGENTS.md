@@ -1,36 +1,42 @@
 # AGENTS
 
-本文件定义本仓库文档、实现和协作约束。当前阶段以“从零重建轻量 MVP、开源自部署、可配置关键词的 AI 热点监控工具”为最高优先级。
+本文件定义本仓库文档、实现和协作约束。当前阶段以“轻量 MVP、开源自部署、可配置关键词的 AI 热点监控工具”为最高优先级。
 
 ## 1. 文档主事实源
 
-- 产品需求与范围以 `docs/product/prd.md` 及其子文件为准。
-- 执行计划以 `docs/product/plan.md` 为准。
-- 技术约束以 `docs/engineering/tech-spec.md` 为准。
+- 产品需求与范围以 `docs/product/产品需求文档.md` 及其子文件为准。
+- 执行计划以 `docs/product/执行计划导航.md` 为准。
+- 技术约束以 `docs/engineering/技术方案.md` 为准。
 - API 契约由新 FastAPI 实现自动生成；旧 `contracts/openapi` 不再是实现约束。
-- 验收口径以 `docs/engineering/acceptance.md` 为准。
+- 验收口径以 `docs/engineering/验收标准.md` 为准。
 - 具体执行任务以 `docs/plans/` 下的 PLAN 文件为准。
-- AI 热点监控 MVP 功能范围以 `docs/plans/10-ai-hotspot-monitor-mvp-plan.md` 为准。
-- 当前后端检测、即时搜索、日报/周报任务以 `docs/plans/11-backend-hotspot-detection-reports-plan.md` 为准。
-- 当前 SaaS 前端平台任务以 `docs/plans/12-saas-frontend-platform-plan.md` 为准。
+- AI 热点监控 MVP 功能范围以 `docs/plans/10-AI热点监控MVP计划.md` 为准。
+- 当前后端检测、即时搜索、日报/周报任务以 `docs/plans/11-后端热点检测与报告计划.md` 为准。
+- 当前 SaaS 前端平台任务以 `docs/plans/12-SaaS前端平台计划.md` 为准。
 
 ## 2. 产品实现方向
 
 - 第一阶段定位为“可自部署、可配置关键词的 AI 热点监控工具”，不是重型舆情平台。
-- 功能实现围绕本项目轻量 MVP 能力：关键词管理、多源抓取、AI 查询扩展、真假识别、相关性分析、热点列表、筛选排序、全网搜索、邮件通知、手动触发和定时触发。
+- 功能实现围绕本项目轻量 MVP 能力：关键词管理、多源抓取、AI 查询扩展、真假识别、相关性分析、热点列表、筛选排序、即时搜索、邮件通知、日报/周报、手动触发和定时触发。
 - 本项目自主设计功能闭环；本仓库使用 `Next.js + TypeScript` 前端、`Python + FastAPI` 后端、`PostgreSQL` 数据库、`SQLAlchemy 2.0` ORM、`SMTP` 邮件。
-- P0 必须围绕可运行闭环：配置关键词 -> 抓取多源内容 -> AI 查询扩展 -> AI 判断相关性/真实性 -> 生成热点 -> 阈值过滤 -> 事件邮件通知 -> AI 日报邮件。
+- P0 必须围绕可运行闭环：配置关键词 -> 手动或定时触发 -> AI 查询扩展 -> 抓取多源内容 -> 去重入库 -> AI 判断相关性/真实性 -> 阈值过滤 -> 热点展示/即时搜索 -> 事件邮件通知 -> 日报/周报。
 - MVP 功能闭环继续使用 `Python + FastAPI + PostgreSQL + SQLAlchemy + Next.js`。
 - 第一阶段数据源范围为 RSS、Hacker News、X/Twitter、Bing、Bilibili、Sogou-style；新增来源必须走统一 adapter 和 `Candidate` 输出。
 - X/Twitter 必须使用官方 X API v2 Recent Search，通过 `X_API_BEARER_TOKEN` 注入凭据；不得引入页面爬取作为默认实现。
-- 低于 `RELEVANCE_THRESHOLD` 的热点必须标记为 `filtered`，不得发送事件邮件，不得进入 AI 日报。
-- 达到 `RELEVANCE_THRESHOLD` 的热点标记为 `active`，允许进入热点流、事件邮件和 AI 日报。
+- 低于 `RELEVANCE_THRESHOLD` 或被判定为不真实的热点必须标记为 `filtered`，不得发送事件邮件，不得进入日报/周报。
+- 达到 `RELEVANCE_THRESHOLD` 且 `is_real is not False` 的热点标记为 `active`，允许进入热点流、事件邮件和日报/周报。
 - 后端检测、即时搜索、日报/周报生成阶段已完成后，当前阶段允许实现单用户私有部署 SaaS 前端平台。
 - SaaS 前端首版以用户自己直接使用为目标，不实现多用户、租户隔离、真实登录认证、真实计费或 Stripe。
 - SaaS 前端产品形态为 `/` 官网首页、`/pricing` 定价占位页、`/app` 工作台。
-- 日报/周报生成采用模板优先，AI 只作为可选增强；AI 未配置或失败时必须使用本地模板降级。
-- `/api/daily-reports` 后续直接移除，不做兼容别名；报告 API 统一收敛到 `/api/reports`。
-- P0 不做多租户、复杂权限、计费、复杂工作流、向量库、复杂队列治理和企业级数据平台。
+- 日报/周报生成采用本地 Markdown 模板作为 P0 必需能力；AI 只作为后续可选增强，不作为当前验收前提。
+- `/api/daily-reports` 已移除，不做兼容别名；报告 API 统一收敛到 `/api/reports`。
+- P0 不做多租户、复杂权限、计费、复杂工作流、实时推送、向量库、复杂队列治理和企业级数据平台。
+
+## 2.1 当前实现状态口径
+
+- 已实现并可用现有自动化验证的能力：基础目录结构、SQL schema、关键词/来源/热点/任务/通知/报告模型、AI 查询扩展降级、AI 分析降级、阈值过滤、`/api/search`、`/api/reports`、SMTP 缺失降级、SaaS 前端页面骨架和主要工作台页面。
+- 需配置真实凭据或外部服务后验收的能力：X/Twitter Recent Search、Bing Search、SMTP 真实发送、OpenAI 兼容模型真实调用。
+- 暂不进入 P0 的能力：真实登录认证、多用户/多租户、真实计费、实时推送、Agent/Skill 自动化、复杂通知策略、复杂报告模板系统、向量检索和独立任务队列平台。
 
 ## 3. 改动规范
 
