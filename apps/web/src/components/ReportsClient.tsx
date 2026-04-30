@@ -68,7 +68,7 @@ export function ReportsClient() {
     <div className="grid gap-4">
       <Card>
         <CardContent className="pt-5">
-          <form className="grid gap-3 lg:grid-cols-[180px_200px_160px_auto]" onSubmit={createReport}>
+          <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-[180px_200px_160px_max-content]" onSubmit={createReport}>
             <div className="grid gap-2">
               <Label>类型</Label>
               <Select onValueChange={(value) => setReportType(value as "daily" | "weekly")} value={reportType}>
@@ -94,7 +94,7 @@ export function ReportsClient() {
               </Select>
             </div>
             <div className="flex items-end">
-              <Button className="w-full" disabled={creating} type="submit">
+              <Button className="w-full xl:w-auto" disabled={creating} type="submit">
                 {creating ? "生成中" : "生成报告"}
                 <FileText className="h-4 w-4" />
               </Button>

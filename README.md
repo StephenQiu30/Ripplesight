@@ -71,6 +71,26 @@ DATABASE_URL=postgresql+psycopg://你的用户:你的密码@localhost:5432/ai_ho
 
 本机 PostgreSQL 可以使用你已经创建的 `root` 角色；真实密码只写入本地 `infra/env/.env`，不要提交到 GitHub。
 
+需要填写的环境变量如下。可选项不使用时保持为空，系统会自动降级或跳过对应能力：
+
+| 变量 | 是否必填 | 用途 | 你需要填写 |
+| --- | --- | --- | --- |
+| `DATABASE_URL` | 必填 | 连接本机 PostgreSQL | PostgreSQL 用户、密码、主机、端口和数据库名 |
+| `OPENAI_API_KEY` | 可选 | 启用模型查询扩展与热点分析 | OpenAI 兼容模型 API Key |
+| `OPENAI_BASE_URL` | 可选 | OpenAI 兼容接口地址 | 例如 `https://api.openai.com/v1` 或你的代理地址 |
+| `OPENAI_MODEL` | 可选 | 模型名称 | 例如 `gpt-4o-mini` 或你实际使用的模型 |
+| `X_API_BEARER_TOKEN` | 可选 | 启用 X/Twitter Recent Search | X API v2 Bearer Token |
+| `BING_SEARCH_API_KEY` | 可选 | 启用 Bing Search 来源 | Bing Search API Key |
+| `SMTP_HOST` | 可选 | 启用事件邮件和报告邮件 | SMTP 服务器地址 |
+| `SMTP_PORT` | 可选 | SMTP 端口 | 通常是 `587` |
+| `SMTP_USERNAME` | 可选 | SMTP 登录用户 | SMTP 用户名 |
+| `SMTP_PASSWORD` | 可选 | SMTP 登录密码 | SMTP 密码或应用专用密码 |
+| `SMTP_FROM_EMAIL` | 可选 | 邮件发件人 | 发件邮箱 |
+| `SMTP_TO_EMAIL` | 可选 | 邮件收件人 | 收件邮箱 |
+| `NEXT_PUBLIC_API_BASE_URL` | 本地前端必填 | 前端访问后端 API | 本地默认 `http://localhost:8000` |
+
+`infra/env/.env.example` 和 `infra/env/.env` 已保留占位注释。为了避免占位文本被当成真实密钥，可选密钥变量默认保持空值。
+
 数据库初始化：
 
 ```bash
@@ -101,11 +121,11 @@ npm run docker:up
 - 热点列表：`GET /api/hotspots`
 - 全网搜索：`POST /api/search`
 - 单条热点邮件通知：SMTP 配置存在时自动发送
-- AI 日报/周报生成：`POST /api/reports`
-- AI 日报/周报发送：`POST /api/reports/{report_id}/send`
-- AI 日报/周报列表：`GET /api/reports`
+- 日报/周报生成：`POST /api/reports`
+- 日报/周报发送：`POST /api/reports/{report_id}/send`
+- 日报/周报列表：`GET /api/reports`
 
-AI 日报/周报默认不自动发送；如需简单定时发送报告，可在本地 `.env` 中开启：
+日报/周报默认不自动发送；如需简单定时发送报告，可在本地 `.env` 中开启：
 
 ```bash
 DAILY_REPORT_ENABLED=true
@@ -127,7 +147,7 @@ Bing 搜索源需要配置：
 BING_SEARCH_API_KEY=你的BingSearchKey
 ```
 
-低于 `RELEVANCE_THRESHOLD` 或被 AI 判定为不真实的热点会保留为 `filtered`，但不会发送事件邮件，也不会进入 AI 日报/周报。
+低于 `RELEVANCE_THRESHOLD` 或被 AI 判定为不真实的热点会保留为 `filtered`，但不会发送事件邮件，也不会进入日报/周报。
 
 ## 当前状态
 

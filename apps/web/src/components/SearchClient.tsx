@@ -55,7 +55,7 @@ export function SearchClient() {
           <CardDescription>用于快速判断一个主题是否值得纳入关键词监控。</CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="grid gap-3 lg:grid-cols-[1fr_200px_140px_auto]" onSubmit={submitSearch}>
+          <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_200px_140px_max-content]" onSubmit={submitSearch}>
             <div className="grid gap-2">
               <Label htmlFor="search-query">查询</Label>
               <Input id="search-query" onChange={(event) => setQuery(event.target.value)} placeholder="例如 AI agent workflow" required value={query} />
@@ -74,7 +74,7 @@ export function SearchClient() {
               <Input id="search-limit" max={100} min={1} onChange={(event) => setLimit(Number(event.target.value))} type="number" value={limit} />
             </div>
             <div className="flex items-end">
-              <Button className="w-full" disabled={searching} type="submit">
+              <Button className="w-full xl:w-auto" disabled={searching} type="submit">
                 {searching ? "搜索中" : "搜索"}
                 <Search className="h-4 w-4" />
               </Button>

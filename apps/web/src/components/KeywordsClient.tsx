@@ -81,7 +81,7 @@ export function KeywordsClient() {
     <div className="grid gap-4">
       <Card>
         <CardContent className="pt-5">
-          <form className="grid gap-3 lg:grid-cols-[1fr_1fr_140px_auto]" onSubmit={createKeyword}>
+          <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_140px_max-content]" onSubmit={createKeyword}>
             <div className="grid gap-2">
               <Label htmlFor="keyword">关键词</Label>
               <Input id="keyword" onChange={(event) => setKeyword(event.target.value)} placeholder="例如 OpenAI" required value={keyword} />
@@ -95,7 +95,7 @@ export function KeywordsClient() {
               <Input id="priority" onChange={(event) => setPriority(Number(event.target.value))} type="number" value={priority} />
             </div>
             <div className="flex items-end">
-              <Button className="w-full" disabled={saving} type="submit">
+              <Button className="w-full xl:w-auto" disabled={saving} type="submit">
                 {saving ? "新增中" : "新增"}
                 <Plus className="h-4 w-4" />
               </Button>

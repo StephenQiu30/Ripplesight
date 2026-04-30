@@ -62,6 +62,8 @@
 
 - 依赖与凭据仅允许通过环境变量注入。
 - 环境变量只保留必要配置：PostgreSQL 连接、模型 API Key、可选 X/Twitter Key、SMTP 配置和服务端口。
+- 任何需要 API Key、Token、SMTP 密码或模型凭据的功能，都必须先在 `infra/env/.env.example` 和本地 `infra/env/.env` 中以安全占位注释登记；实际值只填写到本地 `.env`，不得提交真实密钥。
+- 可选凭据默认值必须保持为空，不能用非空假值占位，避免系统误判为已配置并触发真实外部调用。
 - PostgreSQL 默认使用用户本机已有实例；不要为 P0 默认开发链路重新创建 Docker PostgreSQL 环境。
 - 邮件未配置时系统仍必须可运行，只是不发送邮件。
 - X/Twitter 未配置时系统仍必须可运行，只跳过该来源。

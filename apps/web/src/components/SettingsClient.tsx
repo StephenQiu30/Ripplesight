@@ -51,7 +51,7 @@ export function SettingsClient() {
     <div className="grid gap-4">
       <Card>
         <CardContent className="pt-5">
-          <form className="grid gap-3 lg:grid-cols-[1fr_2fr_1fr_auto]" onSubmit={saveSetting}>
+          <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)_max-content]" onSubmit={saveSetting}>
             <div className="grid gap-2">
               <Label htmlFor="setting-key">Key</Label>
               <Input id="setting-key" onChange={(event) => setKey(event.target.value)} required value={key} />
@@ -65,7 +65,7 @@ export function SettingsClient() {
               <Input id="setting-desc" onChange={(event) => setDescription(event.target.value)} value={description} />
             </div>
             <div className="flex items-end">
-              <Button className="w-full" disabled={saving} type="submit">
+              <Button className="w-full xl:w-auto" disabled={saving} type="submit">
                 {saving ? "保存中" : "保存"}
                 <Save className="h-4 w-4" />
               </Button>

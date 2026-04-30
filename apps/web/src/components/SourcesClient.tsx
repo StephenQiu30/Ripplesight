@@ -69,7 +69,7 @@ export function SourcesClient() {
     <div className="grid gap-4">
       <Card>
         <CardContent className="pt-5">
-          <form className="grid gap-3 xl:grid-cols-[1fr_180px_2fr_auto]" onSubmit={createSource}>
+          <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_180px_minmax(0,2fr)_max-content]" onSubmit={createSource}>
             <div className="grid gap-2">
               <Label htmlFor="source-name">来源名称</Label>
               <Input id="source-name" onChange={(event) => setName(event.target.value)} placeholder="例如 Hacker News Search" required value={name} />
@@ -88,7 +88,7 @@ export function SourcesClient() {
               <Input id="source-config" onChange={(event) => setConfig(event.target.value)} value={config} />
             </div>
             <div className="flex items-end">
-              <Button className="w-full" disabled={saving} type="submit">
+              <Button className="w-full xl:w-auto" disabled={saving} type="submit">
                 {saving ? "新增中" : "新增"}
                 <Plus className="h-4 w-4" />
               </Button>
