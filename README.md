@@ -136,6 +136,21 @@ cp .env.example .env
 npm run docker:up
 ```
 
+生产环境部署（独立发布）：
+
+```bash
+# 生产环境启动（将 Nginx 暴露到 80）
+npm run docker:up:prod
+
+# 下线
+npm run docker:down:prod
+```
+
+说明：
+
+- 本地开发继续复用当前 `docker-compose.yml` 的默认流程（`npm run docker:up`）。
+- 生产环境在部署时叠加 `docker-compose.prod.yml`，可与系统统一配置（例如外部数据库/域名策略）分离，不影响开发环境。
+
 数据库表结构：
 
 - 表结构事实源位于 `sql/001_init_schema.sql`。
