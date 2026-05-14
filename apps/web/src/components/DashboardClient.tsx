@@ -42,18 +42,18 @@ export function DashboardClient() {
     return (
       <div className="grid gap-4">
         <div className="grid gap-4 md:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, index) => <Skeleton className="h-32" key={index} />)}
+          {Array.from({ length: 4 }).map((_, index) => <Skeleton className="h-32 ios-shell-card" key={index} />)}
         </div>
-        <Skeleton className="h-96" />
+        <Skeleton className="h-96 ios-shell-card" />
       </div>
     );
   }
 
   return (
     <div className="grid gap-5">
-      {error ? <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p> : null}
+      {error ? <p className="ios-card-muted border-destructive/35 bg-destructive/10 border p-3 text-sm text-destructive" role="alert">{error}</p> : null}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={Radar} label="最近热点" value={hotspots.length.toString()} helper={`${activeCount} active / ${filteredCount} filtered`} />
+              <MetricCard icon={Radar} label="最近热点" value={hotspots.length.toString()} helper={`${activeCount} 活动 / ${filteredCount} 已过滤`} />
         <MetricCard icon={Workflow} label="最近任务" value={lastRun?.status || "无记录"} helper={lastRun ? `${lastRun.success_count} 成功 / ${lastRun.failure_count} 失败` : "尚未触发检测"} />
         <MetricCard icon={FileText} label="报告" value={reports.length.toString()} helper={reports[0]?.subject || "暂无报告"} />
         <MetricCard icon={Bell} label="通知" value={notifications.length.toString()} helper={notifications[0]?.status || "暂无通知"} />
@@ -80,7 +80,7 @@ export function DashboardClient() {
               >
                 <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0">
-                    <p className="truncate font-bold text-slate-950 group-hover:text-primary">{item.title}</p>
+                  <p className="truncate font-bold text-foreground group-hover:text-primary">{item.title}</p>
                     <p className="mt-1 line-clamp-2 text-sm leading-6 text-muted-foreground">{item.ai_analysis?.summary || item.snippet || item.url}</p>
                   </div>
                   <Badge variant={statusTone(item.status)}>{item.status}</Badge>

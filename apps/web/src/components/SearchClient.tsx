@@ -49,7 +49,7 @@ export function SearchClient() {
 
   return (
     <div className="grid gap-5">
-      <Card>
+      <Card className="ios-shell-card">
         <CardHeader>
           <CardTitle>搜索主题</CardTitle>
           <CardDescription>用于快速判断一个主题是否值得纳入关键词监控。</CardDescription>
@@ -83,7 +83,11 @@ export function SearchClient() {
         </CardContent>
       </Card>
 
-      {error ? <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p> : null}
+      {error ? (
+        <p className="ios-card-muted border-destructive/35 bg-destructive/10 border p-3 text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
 
       {result ? (
         <div className="grid gap-4">
