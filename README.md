@@ -151,6 +151,42 @@ npm run docker:down:prod
 - 本地开发继续复用当前 `docker-compose.yml` 的默认流程（`npm run docker:up`）。
 - 生产环境在部署时叠加 `docker-compose.prod.yml`，可与系统统一配置（例如外部数据库/域名策略）分离，不影响开发环境。
 
+生产覆盖文件包含的能力：
+
+- API、Web 两个业务服务
+- 内置 PostgreSQL（`postgres`）与 Redis（`redis`）服务（并带健康检查与持久化卷）
+- 服务健康检查与 `depends_on` 启动顺序
+- `web` 对外端口由 `WEB_PUBLISHED_PORT` 控制（生产建议设置为 `80`）
+
+生产部署建议：
+
+1. 先确认 `.env` 内至少设置：
+
+- `DATABASE_URL`（可省略时会自动回退到 `postgres://postgres:postgres@postgres:5432/ai_hotspot_radar`）
+- `REDIS_URL`（可省略时会自动回退到 `redis://redis:6379/0`）
+- `POSTGRES_USER` / `POSTGRES_PASSWORD`（如需修改容器内数据库账户）
+- `WEB_PUBLISHED_PORT`（生产建议设为 `80`）
+- `JWT_SECRET_KEY`
+- GitHub OAuth 与邮件相关凭证（如有需要）
+
+2. 启动：
+
+```bash
+npm run docker:up:prod
+```
+
+3. 查看日志：
+
+```bash
+npm run docker:logs
+```
+
+生产环境如需精准查看生产栈日志：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f
+```
+
 数据库表结构：
 
 - 表结构事实源位于 `sql/001_init_schema.sql`。
