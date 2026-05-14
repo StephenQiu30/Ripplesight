@@ -6,6 +6,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from xml.etree.ElementTree import fromstring as parse_xml
 
+from fastapi.testclient import TestClient
+
 from apps.api.app.core.settings import settings
 from apps.api.app.main import create_app
 from apps.api.app.models.ai_analysis import AiAnalysis
@@ -301,6 +303,54 @@ class MvpServiceTests(SettingsPatchMixin, unittest.TestCase):
         self.assertEqual(_normalize_url("mailto:test@example.com"), "mailto:test@example.com")
         self.assertEqual(_normalize_url("relative/path"), "relative/path")
         self.assertEqual(_normalize_url("https://example.com:443/News/?utm_source=1&Q=2"), "https://example.com/news?q=2")
+
+    def test_rate_limit_middleware_blocks_excessive_requests(self) -> None:
+        self.patch_settings(rate_limit_per_minute=2)
+        app = create_app()
+        with TestClient(app) as client:
+            responses = [client.get("/api/health") for _ in range(3)]
+        statuses = [response.status_code for response in responses]
+        self.assertEqual(statuses[:2], [200, 200])
+        self.assertEqual(statuses[2], 429)
+        self.assertEqual(responses[2].json()["error"]["code"], "rate_limit")
+
+    def test_analytics_endpoints_return_aggregated_data(self) -> None:
+        app = create_app()
+        trend = [{"date": "2026-05-01", "total_count": 3, "active_count": 2, "filtered_count": 1}]
+        sources = [
+            {
+                "source_id": 1,
+                "source_name": "Hacker News",
+                "hotspot_count": 3,
+                "active_count": 2,
+                "filtered_count": 1,
+            }
+        ]
+        sentiment = {"high": 2, "medium": 1, "low": 0}
+        with (
+            patch("apps.api.app.api.routes.analytics.analytics_service.get_trend", return_value=trend),
+            patch("apps.api.app.api.routes.analytics.analytics_service.get_top_sources", return_value=sources),
+            patch("apps.api.app.api.routes.analytics.analytics_service.get_sentiment", return_value=sentiment),
+            TestClient(app) as client,
+        ):
+            trend_response = client.get("/api/analytics/trend?days=7")
+            source_response = client.get("/api/analytics/sources?days=7&limit=5")
+            sentiment_response = client.get("/api/analytics/sentiment?days=7")
+
+        self.assertEqual(trend_response.status_code, 200)
+        self.assertEqual(source_response.status_code, 200)
+        self.assertEqual(sentiment_response.status_code, 200)
+        self.assertEqual(trend_response.json()["points"][0]["active_count"], 2)
+        self.assertEqual(source_response.json()["items"][0]["hotspot_count"], 3)
+        self.assertEqual(sentiment_response.json()["total"], 3)
+
+    def test_error_response_is_structured_and_hides_stacktrace(self) -> None:
+        with TestClient(create_app()) as client:
+            resp = client.get("/api/notifications?limit=0")
+        self.assertEqual(resp.status_code, 422)
+        payload = resp.json()
+        self.assertEqual(payload["error"]["code"], "validation_error")
+        self.assertEqual(payload["error"]["message"], "请求参数校验失败。")
 
     def test_run_hotspot_check_records_failure_when_keywords_or_sources_missing(self) -> None:
         session = FakeSessionForRun()

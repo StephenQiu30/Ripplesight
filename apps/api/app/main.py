@@ -10,11 +10,15 @@ from apps.api.app.api.routes.health import router as health_router
 from apps.api.app.api.routes.hotspots import router as hotspots_router
 from apps.api.app.api.routes.keywords import router as keywords_router
 from apps.api.app.api.routes.notifications import router as notifications_router
+from apps.api.app.api.routes.analytics import router as analytics_router
 from apps.api.app.api.routes.reports import router as reports_router
 from apps.api.app.api.routes.search import router as search_router
 from apps.api.app.api.routes.settings import router as settings_router
 from apps.api.app.api.routes.sources import router as sources_router
 from apps.api.app.api.routes.rss import router as rss_router
+from apps.api.app.core.errors import register_error_handlers
+from apps.api.app.core.middleware import RateLimitMiddleware, RequestAuditMiddleware
+from apps.api.app.core.settings import settings
 from apps.api.app.db.init_schema import initialize_database
 from apps.api.app.services.scheduler import start_scheduler, stop_scheduler
 
@@ -36,6 +40,9 @@ def create_app() -> FastAPI:
         description="Rebuilt FastAPI backend for the self-hosted AI hotspot monitoring MVP.",
         lifespan=lifespan,
     )
+    register_error_handlers(app)
+    app.add_middleware(RequestAuditMiddleware)
+    app.add_middleware(RateLimitMiddleware, requests_per_minute=settings.rate_limit_per_minute)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -52,6 +59,7 @@ def create_app() -> FastAPI:
     app.include_router(hotspots_router)
     app.include_router(check_runs_router)
     app.include_router(reports_router)
+    app.include_router(analytics_router)
     app.include_router(notifications_router)
     app.include_router(rss_router)
     app.include_router(search_router)

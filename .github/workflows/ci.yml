@@ -1,0 +1,60 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    name: backend-tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ai_hotspot_radar
+          POSTGRES_USER: ai_user
+          POSTGRES_PASSWORD: ai_pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ai_user -d ai_hotspot_radar"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+      - name: Run backend tests
+        env:
+          DATABASE_URL: postgresql+psycopg://ai_user:ai_pass@localhost:5432/ai_hotspot_radar
+          APP_ENV: test
+          RATE_LIMIT_PER_MINUTE: 120
+        run: python -m unittest tests/test_mvp_services.py
+
+  web:
+    name: web-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm install
+      - name: Run web checks
+        working-directory: apps/web
+        run: |
+          npm run build
+          npm run typecheck

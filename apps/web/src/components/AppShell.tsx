@@ -12,6 +12,7 @@ import {
   Search,
   Settings,
   Sparkles,
+  TrendingUp,
   Tags,
   Workflow,
 } from "lucide-react";
@@ -27,6 +28,7 @@ const navItems = [
   { href: "/app/runs", label: "任务", icon: Workflow },
   { href: "/app/reports", label: "报告", icon: FileText },
   { href: "/app/notifications", label: "通知", icon: Bell },
+  { href: "/app/analytics", label: "趋势", icon: TrendingUp },
   { href: "/app/settings", label: "设置", icon: Settings },
 ];
 

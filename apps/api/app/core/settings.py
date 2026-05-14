@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     ai_provider: str = "openai"
     relevance_threshold: float = 50.0
     source_fetch_limit: int = 20
+    rate_limit_per_minute: int = 120
     x_api_bearer_token: str | None = None
     bing_search_api_key: str | None = None
     scheduler_enabled: bool = False

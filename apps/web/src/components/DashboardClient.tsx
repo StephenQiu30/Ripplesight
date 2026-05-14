@@ -97,6 +97,7 @@ export function DashboardClient() {
               { href: "/app/runs", label: "手动触发热点检测" },
               { href: "/app/reports", label: "生成日报或周报" },
               { href: "/app/keywords", label: "维护监控关键词" },
+              { href: "/app/analytics", label: "查看趋势图" },
             ].map((item) => (
               <Button asChild className="justify-between" key={item.href} variant="secondary">
                 <Link href={item.href}>

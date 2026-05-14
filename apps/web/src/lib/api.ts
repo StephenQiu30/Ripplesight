@@ -1,4 +1,6 @@
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+const configuredBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+const trimmedBase = configuredBase === "/" ? "" : configuredBase.endsWith("/") ? configuredBase.slice(0, -1) : configuredBase;
+export const API_BASE_URL = trimmedBase === "" ? "" : trimmedBase;
 
 export type Keyword = {
   id: number;
@@ -117,6 +119,43 @@ export type Report = {
   sent_at: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type AnalyticsTrendPoint = {
+  date: string;
+  total_count: number;
+  active_count: number;
+  filtered_count: number;
+};
+
+export type AnalyticsTrendResponse = {
+  period_days: number;
+  points: AnalyticsTrendPoint[];
+};
+
+export type AnalyticsSourceStat = {
+  source_id: number;
+  source_name: string;
+  hotspot_count: number;
+  active_count: number;
+  filtered_count: number;
+};
+
+export type AnalyticsSourceResponse = {
+  period_days: number;
+  limit: number;
+  items: AnalyticsSourceStat[];
+};
+
+export type AnalyticsSentimentPoint = {
+  importance: string;
+  count: number;
+};
+
+export type AnalyticsSentimentResponse = {
+  period_days: number;
+  total: number;
+  by_importance: AnalyticsSentimentPoint[];
 };
 
 export type Setting = {
