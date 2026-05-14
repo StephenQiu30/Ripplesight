@@ -40,8 +40,7 @@ def user_rss(
     token: str | None = None,
     session: Session = Depends(get_session),
 ) -> Response:
-    _ = user_id
     if settings.rss_access_token and token != settings.rss_access_token:
         raise HTTPException(status_code=403, detail="RSS token invalid.")
-    content = rss_service.generate_ai_summary_feed(session=session, limit=limit)
+    content = rss_service.generate_user_feed(session=session, user_id=user_id, limit=limit)
     return Response(content=content, media_type="application/xml")

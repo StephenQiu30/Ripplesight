@@ -20,6 +20,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
     provider_name = "openai-compatible"
 
     def _api_key_and_url(self, provider_key: str) -> tuple[str, str, str]:
+        provider_key = (provider_key or settings.ai_provider).strip().lower()
         if provider_key == "deepseek":
             return settings.deepseek_api_key or "", settings.deepseek_base_url, settings.deepseek_model or "deepseek-chat"
         if provider_key == "gemini":
@@ -29,6 +30,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
     def _base_url(self, provider_key: str | None = None) -> str:
         if provider_key is None:
             provider_key = settings.ai_provider
+        provider_key = (provider_key or settings.ai_provider).strip().lower()
         return (self._api_key_and_url(provider_key)[1] or "https://api.openai.com/v1").rstrip("/")
 
     def expand_queries(self, keyword: Keyword, base_query: str) -> list[str]:

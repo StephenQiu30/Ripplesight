@@ -33,8 +33,10 @@ def run_hotspot_check(session: Session, trigger_type: str = "manual") -> CheckRu
 
     if not keywords:
         errors.append("No enabled keywords.")
+        failure_count += 1
     if not sources:
         errors.append("No enabled sources.")
+        failure_count += 1
 
     seen_urls: set[tuple[int, str]] = set()
 
@@ -51,7 +53,7 @@ def run_hotspot_check(session: Session, trigger_type: str = "manual") -> CheckRu
                     candidate.url = _normalize_url(candidate.url)
                     if not candidate.url:
                         continue
-                    seen_key = (source.id, candidate.url.lower())
+                    seen_key = (source.id, candidate.url)
                     if seen_key in seen_urls:
                         continue
                     seen_urls.add(seen_key)
@@ -147,14 +149,23 @@ def _normalize_url(url: str) -> str:
     if parsed.scheme and not parsed.netloc and parsed.scheme not in {"http", "https"}:
         return source
 
-    params = [(key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=True) if not key.startswith("utm_")]
-    cleaned_query = urlencode(params)
+    params = []
+    for key, value in parse_qsl(parsed.query, keep_blank_values=True):
+        key_lower = key.lower()
+        if key_lower.startswith("utm_") or key_lower in {"fbclid", "yclid", "gclid", "ref", "referer", "source"}:
+            continue
+        params.append((key_lower, value))
+    cleaned_query = urlencode(sorted(params))
     netloc = parsed.netloc.lower()
+    if netloc.endswith(":80"):
+        netloc = netloc[:-3]
+    if netloc.endswith(":443"):
+        netloc = netloc[:-4]
     scheme = parsed.scheme.lower() or "https"
     if not netloc and source.startswith("//"):
         # Preserve protocol-relative URLs.
         return source
-    path = parsed.path.rstrip("/") or "/"
+    path = (parsed.path or "/").rstrip("/").lower() or "/"
     return urlunparse((scheme, netloc, path, parsed.params, cleaned_query, ""))
 
 

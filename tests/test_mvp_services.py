@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from datetime import date, datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import patch
 from xml.etree.ElementTree import fromstring as parse_xml
 
@@ -13,12 +14,17 @@ from apps.api.app.models.keyword import Keyword
 from apps.api.app.models.report import Report
 from apps.api.app.models.source import Source
 from apps.api.app.services.ai_analysis import AnalysisResult, analyze_hotspot, expand_keyword_queries, is_analysis_active
+from apps.api.app.services.ai.providers.openai import OpenAICompatibleProvider
 from apps.api.app.services.ingestion import Candidate, SourceIngestionError, fetch_candidates
 from apps.api.app.services.notification import notify_hotspot, notify_report
 from apps.api.app.services.check_runner import _normalize_url
+from apps.api.app.services.check_runner import run_hotspot_check
+from apps.api.app.services.scheduler import _maybe_run_weekly_report
+import apps.api.app.services.scheduler as scheduler_module
 from apps.api.app.services.reports import previous_weekly_period_start, report_period
-from apps.api.app.services.search import search_sources
+from apps.api.app.services.search import search_sources, _load_search_sources
 from apps.api.app.services.providers import get_provider_class
+from sqlalchemy.dialects import postgresql
 
 
 class CollectingSession:
@@ -32,6 +38,27 @@ class CollectingSession:
 class ReadOnlySession:
     def add(self, item: object) -> None:
         raise AssertionError(f"search_sources must not persist {item!r}")
+
+
+class FakeSessionForRun:
+    def __init__(self) -> None:
+        self.added: list[object] = []
+        self.refreshed: list[object] = []
+
+    def scalars(self, *_args: object, **_kwargs: object) -> list[object]:
+        return []
+
+    def add(self, item: object) -> None:
+        self.added.append(item)
+
+    def flush(self) -> None:
+        return None
+
+    def commit(self) -> None:
+        return None
+
+    def refresh(self, obj: object) -> None:
+        self.refreshed.append(obj)
 
 
 class SettingsPatchMixin:
@@ -242,11 +269,75 @@ class MvpServiceTests(SettingsPatchMixin, unittest.TestCase):
         self.assertIn("/rss/keyword/{keyword_name}", paths)
         self.assertIn("/rss/user/{user_id}", paths)
 
+    def test_openai_provider_normalizes_case_insensitive_keys(self) -> None:
+        self.patch_settings(
+            ai_provider="deepsEek",
+            deepseek_api_key="deepseek-key",
+            deepseek_base_url="https://api.deepseek.com/v1",
+            gemini_api_key="gemini-key",
+            gemini_base_url="https://generativelanguage.googleapis.com",
+            openai_api_key="openai-key",
+            openai_base_url="https://api.openai.com/v1",
+        )
+        provider = OpenAICompatibleProvider()
+
+        self.assertEqual(provider._resolve_model("DEEPSEEK"), "deepseek-chat")
+        self.assertEqual(provider._resolve_model("Gemini"), settings.gemini_model or "gemini-pro")
+        self.assertEqual(provider._base_url("DEEPSEEK"), "https://api.deepseek.com/v1")
+        self.assertEqual(provider._api_key_and_url("GEMINI")[0], "gemini-key")
+
     def test_check_runner_normalize_url_removes_tracking_params_and_preserves_non_http(self) -> None:
         normalized = _normalize_url("https://example.com/news/abc/?utm_source=qq&q=1")
         self.assertEqual(normalized, "https://example.com/news/abc?q=1")
         self.assertEqual(_normalize_url("mailto:test@example.com"), "mailto:test@example.com")
         self.assertEqual(_normalize_url("relative/path"), "relative/path")
+        self.assertEqual(_normalize_url("https://example.com:443/News/?utm_source=1&Q=2"), "https://example.com/news?q=2")
+
+    def test_run_hotspot_check_records_failure_when_keywords_or_sources_missing(self) -> None:
+        session = FakeSessionForRun()
+        check_run = run_hotspot_check(session, trigger_type="manual")
+
+        self.assertEqual(check_run.status, "completed_with_errors")
+        self.assertEqual(check_run.failure_count, 2)
+        self.assertIsNotNone(check_run.error_summary)
+        self.assertIn("No enabled keywords.", check_run.error_summary or "")
+        self.assertIn("No enabled sources.", check_run.error_summary or "")
+
+    def test_weekly_report_only_runs_on_target_day_and_hour(self) -> None:
+        scheduler_module._last_weekly_report_start = None
+        collected = SimpleNamespace(calls=[])
+
+        class Session:
+            def commit(self) -> None:
+                collected.calls.append("commit")
+
+        class FixedDateTime:
+            @classmethod
+            def now(cls, tz: object = None) -> datetime:
+                return datetime(2026, 4, 25, 10, 30, tzinfo=timezone.utc)
+
+        self.patch_settings(weekly_report_enabled=True, weekly_report_weekday=6, weekly_report_hour=9)
+        with (
+            patch("apps.api.app.services.scheduler.datetime", FixedDateTime),
+            patch("apps.api.app.services.scheduler.generate_and_send_report", lambda *args, **kwargs: collected.calls.append("send")),
+        ):
+            _maybe_run_weekly_report(Session())
+
+        self.assertIn("send", collected.calls)
+        self.assertIn("commit", collected.calls)
+
+    def test_load_search_sources_normalizes_source_type_alias(self) -> None:
+        class Session:
+            def __init__(self) -> None:
+                self.statement_text: str = ""
+
+            def scalars(self, stmt: object) -> list[object]:
+                self.statement_text = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+                return []
+
+        session = Session()
+        _load_search_sources(session, ["x-twitter"])
+        self.assertIn("x_twitter", session.statement_text)
 
     def test_ai_analysis_falls_back_when_provider_call_fails(self) -> None:
         self.patch_settings(

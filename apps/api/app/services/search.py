@@ -10,6 +10,7 @@ from apps.api.app.schemas.search import SearchRead, SearchResultRead
 from apps.api.app.services.ai_analysis import analyze_hotspot, expand_keyword_queries, is_analysis_active
 from apps.api.app.services.check_runner import ensure_default_sources
 from apps.api.app.services.ingestion import SourceIngestionError, fetch_candidates
+from apps.api.app.services.providers import normalize_source_type
 
 
 def search_sources(session: Session, query: str, source_types: list[str] | None = None, limit: int = 20) -> SearchRead:
@@ -70,7 +71,7 @@ def search_sources(session: Session, query: str, source_types: list[str] | None 
 def _load_search_sources(session: Session, source_types: list[str] | None) -> list[Source]:
     stmt = select(Source).where(Source.enabled.is_(True)).order_by(Source.id)
     if source_types:
-        normalized = [source_type.lower() for source_type in source_types]
+        normalized = [normalize_source_type(source_type) for source_type in source_types]
         stmt = stmt.where(Source.source_type.in_(normalized))
     return list(session.scalars(stmt))
 

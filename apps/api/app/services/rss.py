@@ -49,6 +49,23 @@ def generate_ai_summary_feed(session: Session, limit: int = 20) -> str:
     return _render_feed("AI 摘要", report.summary or "AI日报", analysis)
 
 
+def generate_user_feed(session: Session, user_id: int, limit: int = 50) -> str:
+    stmt = (
+        select(Hotspot)
+        .where(Hotspot.keyword_id == user_id, Hotspot.status == "active")
+        .order_by(Hotspot.fetched_at.desc())
+        .limit(limit)
+    )
+    hotspots = list(session.scalars(stmt))
+    if not hotspots:
+        return _render_feed(
+            f"用户 RSS: {user_id}",
+            f"用户 {user_id} 还未产生可订阅热点",
+            [],
+        )
+    return _render_feed(f"用户 RSS: {user_id}", f"用户 {user_id} 关键词相关热点", hotspots)
+
+
 def _load_top_hotspots(session: Session, limit: int) -> list[Hotspot]:
     stmt = (
         select(Hotspot)

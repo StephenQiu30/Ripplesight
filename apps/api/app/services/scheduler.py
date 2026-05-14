@@ -64,7 +64,7 @@ def _maybe_run_weekly_report(session) -> None:
     if not settings.weekly_report_enabled:
         return
     now = datetime.now(timezone.utc)
-    if now.isoweekday() < settings.weekly_report_weekday or now.hour < settings.weekly_report_hour:
+    if now.isoweekday() != settings.weekly_report_weekday or now.hour < settings.weekly_report_hour:
         return
     report_start = previous_weekly_period_start(now)
     if _last_weekly_report_start == report_start:
