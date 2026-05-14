@@ -1,19 +1,18 @@
 ## Purpose
 
 Define how detected hotspots are stored, deduplicated, queried, and reviewed.
-
 ## Requirements
-
 ### Requirement: Hotspot storage and retrieval
 
-The system SHALL store deduplicated hotspots and expose list and detail APIs with filtering and sorting.
+The system SHALL store analyzed hotspot status as active or filtered according to the configured relevance threshold.
 
-#### Scenario: Duplicate source URL
+#### Scenario: Filtered hotspot status
 
-- **WHEN** a candidate has the same `source_id` and `url` as an existing hotspot
-- **THEN** the system does not insert a duplicate hotspot
+- **WHEN** a newly analyzed hotspot is below the relevance threshold
+- **THEN** the system stores or updates it with status `filtered`
 
-#### Scenario: Filter hotspot list
+#### Scenario: Active hotspot status
 
-- **WHEN** an operator filters by keyword, source, importance, or time range
-- **THEN** the API returns matching hotspots with pagination
+- **WHEN** a newly analyzed hotspot meets the relevance threshold
+- **THEN** the system stores or updates it with status `active`
+

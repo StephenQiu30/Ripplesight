@@ -1,21 +1,25 @@
 ## Purpose
 
 Define how external sources produce normalized hotspot candidates without blocking the full check run.
-
 ## Requirements
-
 ### Requirement: Multi-source ingestion
 
-The system SHALL fetch normalized hotspot candidates from at least RSS and Hacker News sources.
+The system SHALL support the MVP source set while isolating individual source failures.
 
-#### Scenario: Enabled source produces candidates
+#### Scenario: MVP source set
 
-- **WHEN** a check run starts with an enabled source
-- **THEN** the source adapter returns normalized candidate records
-- **AND** each candidate includes title, URL, source, optional author, optional published time, snippet, and raw payload
+- **WHEN** a check run starts
+- **THEN** the system can fetch normalized candidates from RSS, Hacker News, X/Twitter, Bing, Bilibili, and Sogou-style sources
 
-#### Scenario: Source failure is isolated
+#### Scenario: X token missing
 
-- **WHEN** one source fails
-- **THEN** the check run records the failure
-- **AND** continues processing other enabled sources
+- **WHEN** an enabled X/Twitter source runs without `X_API_BEARER_TOKEN`
+- **THEN** the source failure is recorded
+- **AND** the check run continues processing other sources
+
+#### Scenario: Best-effort public source failure
+
+- **WHEN** Bilibili or Sogou public search fails
+- **THEN** the source failure is isolated
+- **AND** other sources continue
+

@@ -8,6 +8,7 @@ from xml.etree.ElementTree import fromstring as parse_xml
 
 from fastapi.testclient import TestClient
 
+from apps.api.app.core.middleware import reset_request_metrics
 from apps.api.app.core.settings import settings
 from apps.api.app.main import create_app
 from apps.api.app.models.ai_analysis import AiAnalysis
@@ -313,6 +314,50 @@ class MvpServiceTests(SettingsPatchMixin, unittest.TestCase):
         self.assertEqual(statuses[:2], [200, 200])
         self.assertEqual(statuses[2], 429)
         self.assertEqual(responses[2].json()["error"]["code"], "rate_limit")
+
+    def test_rate_limit_middleware_uses_forwarded_for(self) -> None:
+        self.patch_settings(rate_limit_per_minute=1)
+        app = create_app()
+        with TestClient(app) as client:
+            first = client.get("/api/health", headers={"X-Forwarded-For": "203.0.113.17"})
+            second = client.get("/api/health", headers={"X-Forwarded-For": "203.0.113.17"})
+            third = client.get("/api/health", headers={"X-Forwarded-For": "198.51.100.9"})
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 429)
+        self.assertEqual(second.json()["error"]["code"], "rate_limit")
+        self.assertEqual(third.status_code, 200)
+
+    def test_ops_metrics_includes_request_and_status_counters(self) -> None:
+        reset_request_metrics()
+        app = create_app()
+        with TestClient(app) as client:
+            first = client.get("/api/health")
+            metrics_resp = client.get("/api/ops/metrics")
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(metrics_resp.status_code, 200)
+        metrics = metrics_resp.json()["metrics"]
+        self.assertEqual(metrics["total_requests"], 1)
+        self.assertIn("200", metrics["status_buckets"])
+        self.assertEqual(metrics["status_buckets"]["200"], 1)
+        self.assertEqual(metrics["status_by_class"]["2xx"], 1)
+
+    def test_ops_metrics_counts_rate_limit_blocks(self) -> None:
+        reset_request_metrics()
+        self.patch_settings(rate_limit_per_minute=1)
+        app = create_app()
+        with TestClient(app) as client:
+            first = client.get("/api/health", headers={"X-Forwarded-For": "192.0.2.9"})
+            second = client.get("/api/health", headers={"X-Forwarded-For": "192.0.2.9"})
+            metrics_resp = client.get("/api/ops/metrics")
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 429)
+        self.assertEqual(metrics_resp.status_code, 200)
+        metrics = metrics_resp.json()["metrics"]
+        self.assertEqual(metrics["status_buckets"]["429"], 1)
+        self.assertEqual(metrics["rate_limit_exceeded_total"], 1)
+        self.assertGreaterEqual(metrics["active_rate_limit_clients"], 1)
 
     def test_analytics_endpoints_return_aggregated_data(self) -> None:
         app = create_app()

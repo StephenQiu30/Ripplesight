@@ -1,27 +1,20 @@
 ## Purpose
 
 Define how SMTP notification delivery behaves and how delivery status is recorded.
-
 ## Requirements
-
 ### Requirement: SMTP notification records
 
-The system SHALL send SMTP email notifications when configured and always record notification status.
-
-#### Scenario: SMTP configured
-
-- **WHEN** a qualifying hotspot is produced and SMTP config exists
-- **THEN** the system sends an email containing title, summary, source link, and relevance reason
-- **AND** records a successful notification
+The system SHALL record SMTP delivery status for reports without blocking report generation.
 
 #### Scenario: SMTP missing
 
-- **WHEN** SMTP config is missing
-- **THEN** the system skips email sending
-- **AND** records a skipped notification without failing the check run
+- **WHEN** a report send is requested without SMTP configuration
+- **THEN** a notification record is created with status `skipped`
+- **AND** the report remains available
 
-#### Scenario: Daily digest notification
+#### Scenario: SMTP failure
 
-- **WHEN** a daily digest email is sent or skipped
-- **THEN** the system records a notification linked to the daily report
-- **AND** does not require a hotspot id for that notification
+- **WHEN** SMTP sending fails
+- **THEN** a notification record is created with status `failed`
+- **AND** the error message is recorded
+

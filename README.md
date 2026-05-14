@@ -60,6 +60,12 @@ npm run web:dev
 - Python、Node 不要求虚拟环境，使用系统可执行环境直接运行。
 - PostgreSQL/Redis 使用本机 Homebrew 安装的服务（默认 `localhost`）；不要在仓库内再次创建数据库容器。
 
+运行环境边界（开发约束）：
+
+- Python 默认通过系统解释器运行，不要求 `venv`/虚拟环境。
+- Node 命令默认通过系统 `npm` 执行，不要求 pnpm/pnpm workspace 隔离或仓库级包管理隔离。
+- PostgreSQL 与 Redis 默认使用本机 Homebrew 实例，数据库初始化与服务验证以本机实例为准；Docker 仅作为可选部署。
+
 数据库连接：
 
 ```bash

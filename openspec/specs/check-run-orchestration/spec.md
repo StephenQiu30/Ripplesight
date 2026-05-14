@@ -1,20 +1,18 @@
 ## Purpose
 
 Define how manual and scheduled hotspot checks share a single reliable workflow.
-
 ## Requirements
-
 ### Requirement: Shared check-run pipeline
 
-The system SHALL use one orchestration path for manual and scheduled hotspot checks.
+The scheduler SHALL optionally generate daily and weekly reports using the same backend report service.
 
-#### Scenario: Manual trigger
+#### Scenario: Daily scheduled report
 
-- **WHEN** an operator calls the manual check-run API
-- **THEN** the system creates a `check_runs` record
-- **AND** executes the source, AI, hotspot, and notification workflow
+- **WHEN** daily report scheduling is enabled and the configured hour has passed
+- **THEN** the scheduler generates and sends yesterday's daily report once
 
-#### Scenario: Scheduled trigger
+#### Scenario: Weekly scheduled report
 
-- **WHEN** the lightweight scheduler interval elapses
-- **THEN** the system invokes the same workflow with trigger type `scheduled`
+- **WHEN** weekly report scheduling is enabled and the configured weekday/hour has passed
+- **THEN** the scheduler generates and sends the previous complete ISO week report once
+

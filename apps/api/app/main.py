@@ -16,6 +16,7 @@ from apps.api.app.api.routes.search import router as search_router
 from apps.api.app.api.routes.settings import router as settings_router
 from apps.api.app.api.routes.sources import router as sources_router
 from apps.api.app.api.routes.rss import router as rss_router
+from apps.api.app.api.routes.ops import router as ops_router
 from apps.api.app.core.errors import register_error_handlers
 from apps.api.app.core.middleware import RateLimitMiddleware, RequestAuditMiddleware
 from apps.api.app.core.settings import settings
@@ -64,6 +65,7 @@ def create_app() -> FastAPI:
     app.include_router(rss_router)
     app.include_router(search_router)
     app.include_router(settings_router)
+    app.include_router(ops_router)
     return app
 
 
