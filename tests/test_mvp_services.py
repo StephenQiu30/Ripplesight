@@ -16,6 +16,7 @@ from apps.api.app.services.ingestion import Candidate, SourceIngestionError, fet
 from apps.api.app.services.notification import notify_hotspot, notify_report
 from apps.api.app.services.reports import previous_weekly_period_start, report_period
 from apps.api.app.services.search import search_sources
+from apps.api.app.services.providers import get_provider_class
 
 
 class CollectingSession:
@@ -116,6 +117,32 @@ class MvpServiceTests(SettingsPatchMixin, unittest.TestCase):
 
         with self.assertRaisesRegex(SourceIngestionError, "BING_SEARCH_API_KEY"):
             fetch_candidates(bing_source, keyword)
+
+    def test_provider_registry_has_default_adapters(self) -> None:
+        self.assertEqual(get_provider_class("rss").source_type, "rss")
+        self.assertEqual(get_provider_class("hacker-news").source_type, "hacker_news")
+        self.assertEqual(get_provider_class("x-twitter").source_type, "x_twitter")
+        self.assertEqual(get_provider_class("bili").source_type, "bilibili")
+        self.assertEqual(get_provider_class("weibo_sogou").source_type, "sogou")
+
+    def test_fetch_candidates_uses_registered_provider_implementation(self) -> None:
+        source = Source(id=10, name="Mock RSS", source_type="rss", enabled=True, config={"url": "https://example.com/rss"})
+        keyword = Keyword(id=5, keyword="AI", query_template=None, enabled=True, priority=0)
+        expected_candidate = Candidate(
+            title="test title",
+            url="https://example.com/news/1",
+            source_id=10,
+            keyword_id=5,
+            author="alice",
+            published_at=None,
+            snippet="test",
+            raw_payload={"source_type": "rss"},
+        )
+
+        with patch("apps.api.app.services.providers.rss._fetch_rss", return_value=[expected_candidate]):
+            candidates = fetch_candidates(source, keyword)
+
+        self.assertEqual(candidates, [expected_candidate])
 
     def test_smtp_missing_records_skipped_notification(self) -> None:
         self.patch_settings(smtp_host=None, smtp_from_email=None, smtp_to_email=None)
