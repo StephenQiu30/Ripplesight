@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     smtp_to_email: str | None = None
     smtp_use_tls: bool = True
     rss_access_token: str | None = None
+    public_base_url: str = "http://localhost:8000"
 
 
 settings = Settings()

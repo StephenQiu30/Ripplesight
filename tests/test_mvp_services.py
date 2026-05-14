@@ -23,6 +23,7 @@ from apps.api.app.services.scheduler import _maybe_run_weekly_report
 import apps.api.app.services.scheduler as scheduler_module
 from apps.api.app.services.reports import previous_weekly_period_start, report_period
 from apps.api.app.services.search import search_sources, _load_search_sources
+from apps.api.app.services import rss as rss_service
 from apps.api.app.services.providers import get_provider_class
 from sqlalchemy.dialects import postgresql
 
@@ -59,6 +60,14 @@ class FakeSessionForRun:
 
     def refresh(self, obj: object) -> None:
         self.refreshed.append(obj)
+
+
+class FakeSessionForScalar:
+    def __init__(self, report: Report | None = None) -> None:
+        self._report = report
+
+    def scalar(self, _statement: object) -> Report | None:
+        return self._report
 
 
 class SettingsPatchMixin:
@@ -396,6 +405,26 @@ class MvpServiceTests(SettingsPatchMixin, unittest.TestCase):
 
         self.assertEqual(root.tag, "rss")
         self.assertEqual(root.findtext("channel/title"), "测试")
+
+    def test_ai_summary_rss_link_uses_absolute_url(self) -> None:
+        report = Report(
+            id=88,
+            report_type="daily",
+            period_start=datetime(2026, 4, 25, tzinfo=timezone.utc),
+            period_end=datetime(2026, 4, 26, tzinfo=timezone.utc),
+            status="generated",
+            subject="AI 热点日报",
+            summary="本期摘要",
+            content="# AI 热点日报",
+            hotspot_count=0,
+        )
+        session = FakeSessionForScalar(report=report)
+        xml_content = rss_service.generate_ai_summary_feed(session, base_url="https://news.example.com")
+        root = parse_xml(xml_content)
+
+        links = root.findall("channel/item/link")
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0].text, "https://news.example.com/api/reports/88")
 
 
 if __name__ == "__main__":

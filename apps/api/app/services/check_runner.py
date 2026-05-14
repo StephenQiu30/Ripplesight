@@ -85,7 +85,10 @@ def run_hotspot_check(session: Session, trigger_type: str = "manual") -> CheckRu
                     session.add(analysis)
                     session.flush()
                     if hotspot.status == "active":
-                        notify_hotspot(session, hotspot, analysis)
+                        notification = notify_hotspot(session, hotspot, analysis)
+                        if notification.status == "failed":
+                            failure_count += 1
+                            errors.append(f"Notification failed for hotspot {hotspot.id}.")
                     success_count += 1
                     if analysis_result.used_fallback:
                         errors.append(f"AI fallback used for hotspot {hotspot.id}.")

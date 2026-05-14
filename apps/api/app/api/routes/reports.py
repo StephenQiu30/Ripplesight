@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
@@ -8,7 +10,7 @@ from sqlalchemy.orm import Session
 from apps.api.app.db.session import get_session
 from apps.api.app.models.report import Report
 from apps.api.app.schemas.report import ReportCreate, ReportRead
-from apps.api.app.services.reports import generate_report, send_report, report_to_html
+from apps.api.app.services.reports import ReportType, generate_report, send_report, report_to_html
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -36,7 +38,7 @@ def send_existing_report(report_id: int, session: Session = Depends(get_session)
 
 @router.get("", response_model=dict)
 def list_reports(
-    report_type: str | None = None,
+    report_type: ReportType | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     session: Session = Depends(get_session),

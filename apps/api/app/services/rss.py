@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.app.models.hotspot import Hotspot
 from apps.api.app.models.keyword import Keyword
+from apps.api.app.core.settings import settings
 
 from apps.api.app.models.ai_analysis import AiAnalysis
 from apps.api.app.models.report import Report
@@ -31,14 +32,15 @@ def generate_keyword_feed(session: Session, keyword_name: str, limit: int = 50) 
     return _render_feed(f"关键词: {keyword.keyword}", f"{keyword.keyword} 关键词热点", list(session.scalars(stmt)))
 
 
-def generate_ai_summary_feed(session: Session, limit: int = 20) -> str:
+def generate_ai_summary_feed(session: Session, limit: int = 20, base_url: str | None = None) -> str:
     report = session.scalar(select(Report).order_by(Report.period_start.desc(), Report.id.desc()).limit(1))
     if report is None:
         return _render_feed("AI 摘要", "暂无 AI 摘要", [])
+    base = (base_url or settings.public_base_url).rstrip("/")
     analysis = [
         {
             "title": report.subject,
-            "url": f"/api/reports/{report.id}",
+            "url": f"{base}/api/reports/{report.id}",
             "published_at": report.created_at,
             "summary": report.summary or "",
             "analysis": "AI日报",
