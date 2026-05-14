@@ -21,7 +21,7 @@
 - `apps/web/`：Next.js 控制台
 - `packages/core/`：轻量共享常量、类型或规则说明
 - `sql/`：PostgreSQL 表结构 SQL，当前以 `001_init_schema.sql` 为事实源
-- 根目录环境变量与部署配置（`/.env*`、`Dockerfile.*`、`docker-compose.yml`、`nginx.conf`）
+- 根目录环境变量与部署配置（`/.env*`、`Dockerfile.*`、`docker-compose.yml`）
 - `docs/plans/`：拆分后的执行计划
 - `docs/product/`：PRD 与产品事实源
 - `docs/engineering/`：技术方案与验收标准
@@ -127,7 +127,7 @@ npm run db:init
 npm run docker:up
 ```
 
-开发/预发/生产的差异直接在 `.env` 中控制（例如 `APP_ENV`、`NGINX_HTTP_PORT`、`DATABASE_URL`、`WEB_BASE_URL`）：
+开发/预发/生产的差异直接在 `.env` 中控制（例如 `APP_ENV`、`DATABASE_URL`、`WEB_BASE_URL`）：
 
 ```bash
 # 首次部署
@@ -139,7 +139,7 @@ npm run docker:up
 生产环境部署（独立发布）：
 
 ```bash
-# 生产环境启动（将 Nginx 暴露到 80）
+# 生产环境启动（直接将 Web 暴露到 80）
 npm run docker:up:prod
 
 # 下线
