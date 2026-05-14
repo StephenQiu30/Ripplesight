@@ -21,7 +21,7 @@
 - `apps/web/`：Next.js 控制台
 - `packages/core/`：轻量共享常量、类型或规则说明
 - `sql/`：PostgreSQL 表结构 SQL，当前以 `001_init_schema.sql` 为事实源
-- `infra/`：环境变量、Docker 可选配置和部署配置
+- 根目录环境变量与部署配置（`/.env*`、`Dockerfile.*`、`docker-compose.yml`、`nginx.conf`）
 - `docs/plans/`：拆分后的执行计划
 - `docs/product/`：PRD 与产品事实源
 - `docs/engineering/`：技术方案与验收标准
@@ -69,10 +69,10 @@ npm run web:dev
 数据库连接：
 
 ```bash
-cp infra/env/.env.example infra/env/.env
+cp .env.example .env
 ```
 
-然后把 `infra/env/.env` 中 `DATABASE_URL` 改成你本机 PostgreSQL 的连接串，例如：
+然后把 `.env` 中 `DATABASE_URL` 改成你本机 PostgreSQL 的连接串，例如：
 
 ```bash
 DATABASE_URL=postgresql+psycopg://你的用户:你的密码@localhost:5432/ai_hotspot_radar
@@ -87,7 +87,7 @@ brew services start postgresql
 brew services start redis
 ```
 
-本机 PostgreSQL 可以使用你已经创建的 `root` 角色；Redis 不需要创建额外实例；真实密码只写入本地 `infra/env/.env`，不要提交到 GitHub。
+本机 PostgreSQL 可以使用你已经创建的 `root` 角色；Redis 不需要创建额外实例；真实密码只写入本地 `.env`，不要提交到 GitHub。
 
 需要填写的环境变量如下。可选项不使用时保持为空，系统会自动降级或跳过对应能力：
 
@@ -107,7 +107,7 @@ brew services start redis
 | `SMTP_TO_EMAIL` | 可选 | 邮件收件人 | 收件邮箱 |
 | `NEXT_PUBLIC_API_BASE_URL` | 本地前端必填 | 前端访问后端 API | 本地默认 `http://localhost:8000` |
 
-`infra/env/.env.example` 和 `infra/env/.env` 已保留占位注释。为了避免占位文本被当成真实密钥，可选密钥变量默认保持空值。
+`.env.example` 和本地 `.env` 已保留占位注释。为了避免占位文本被当成真实密钥，可选密钥变量默认保持空值。
 
 数据库初始化：
 

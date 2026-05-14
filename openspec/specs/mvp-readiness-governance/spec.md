@@ -37,8 +37,8 @@ The project SHALL document every required API key, token, SMTP secret, and model
 
 #### Scenario: New credential-backed feature is planned
 - **WHEN** a feature requires an API key, token, SMTP password, or model credential
-- **THEN** `infra/env/.env.example` includes the variable with a safe placeholder comment
-- **AND** local `infra/env/.env` includes the same variable name for developer configuration
+- **THEN** `.env.example` includes the variable with a safe placeholder comment
+- **AND** local `.env` includes the same variable name for developer configuration
 
 #### Scenario: Optional credential is not configured
 - **WHEN** a credential-backed feature is optional
@@ -48,4 +48,3 @@ The project SHALL document every required API key, token, SMTP secret, and model
 #### Scenario: User-facing setup is documented
 - **WHEN** a credential-backed feature is added or changed
 - **THEN** `README.md` lists the variable, whether it is required, and what the user must fill in
-

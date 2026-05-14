@@ -7,7 +7,7 @@
 - [x] Build GitHub auth API routes and integrate with router security policy.
   - [x] Add `apps/api/app/api/routes/auth.py`（`/api/auth/github/login`、`/api/auth/github/callback`、`/api/auth/me`）。
   - [x] Wire `auth_router` and protect existing routes with `get_current_user` dependency.
-  - [x] Expose env config in `apps/api/app/core/settings.py` and `infra/env/.env.example`（GitHub + JWT + web base）。
+  - [x] Expose env config in `apps/api/app/core/settings.py` and `.env.example`（GitHub + JWT + web base）。
 - [x] Implement frontend auth flow and guards.
   - [x] Extend `apps/web/src/lib/api.ts`：token 管理 + 登录 API + `/api/auth/me` 调用能力。
   - [x] Add login page `/login` and callback page `/auth/github/callback`.
