@@ -827,6 +827,49 @@ class MvpServiceTests(SettingsPatchMixin, unittest.TestCase):
 
         self.assertTrue(check_runner_should_enhance(evidence, hotness_score=95.0, langgraph_enabled=settings.ai_use_langgraph))
 
+    def test_langgraph_success_records_enhance_decision(self) -> None:
+        class EnhancedProvider(BaseLLMProvider):
+            provider_name = "enhanced"
+
+            def expand_queries(self, keyword: Keyword, base_query: str) -> list[str]:
+                return [base_query]
+
+            def analyze(self, hotspot: Hotspot, keyword: Keyword | None) -> LLMResult:
+                return LLMResult(
+                    is_real=True,
+                    relevance_score=92,
+                    relevance_reason="enhanced ok",
+                    keyword_mentioned=True,
+                    importance="high",
+                    summary="enhanced summary",
+                    model_name="enhanced",
+                    raw_response={"provider": "enhanced"},
+                    used_fallback=False,
+                    prompt_name="analysis",
+                    provider="enhanced",
+                )
+
+        self.patch_settings(ai_use_langgraph=True, ai_langgraph_timeout_seconds=10)
+        provider = EnhancedProvider()
+        orchestrator = LangGraphOrchestrator(provider)
+
+        result, decision = orchestrator.analyze(
+            Hotspot(
+                id=89,
+                title="AI 高价值热点",
+                url="https://example.com/high-value",
+                source_id=1,
+                keyword_id=1,
+                snippet="AI 高价值热点",
+                raw_payload={},
+            ),
+            Keyword(id=1, keyword="AI", query_template=None, enabled=True, priority=0),
+        )
+
+        self.assertEqual(result.raw_response["enhance_path"], "enhanced")
+        self.assertEqual(result.raw_response["enhance_decision"]["path"], "langgraph")
+        self.assertEqual(decision.decision["enhance_decision"]["status"], "success")
+
     def test_langgraph_timeout_falls_back_to_chain(self) -> None:
         class SlowProvider(BaseLLMProvider):
             provider_name = "slow"
