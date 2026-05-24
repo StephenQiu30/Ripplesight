@@ -1,5 +1,8 @@
 services:
   api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
     env_file:
       - ./.env
     environment:
@@ -24,6 +27,9 @@ services:
       start_period: 15s
 
   web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
     env_file:
       - ./.env
     environment:
