@@ -86,12 +86,56 @@ def parse_oauth_state_token(token: str) -> None:
     verify_signed_token(token, expected_type="github_oauth_state")
 
 
+_PASSWORD_HASH_ALGORITHM = "pbkdf2_sha256"
+_PASSWORD_HASH_ITERATIONS = 260_000
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("ascii"),
+        _PASSWORD_HASH_ITERATIONS,
+    ).hex()
+    return f"{_PASSWORD_HASH_ALGORITHM}${_PASSWORD_HASH_ITERATIONS}${salt}${digest}"
+
+
+def verify_password(password: str, password_hash: str | None) -> bool:
+    if not password_hash:
+        return False
+    try:
+        algorithm, iterations_raw, salt, expected_digest = password_hash.split("$", 3)
+        iterations = int(iterations_raw)
+    except ValueError:
+        return False
+    if algorithm != _PASSWORD_HASH_ALGORITHM or iterations <= 0:
+        return False
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("ascii"),
+        iterations,
+    ).hex()
+    return hmac.compare_digest(digest, expected_digest)
+
+
+def _user_login_identifier(user: User) -> str:
+    if user.email:
+        return user.email
+    if user.github_login:
+        return user.github_login
+    if user.platform_provider and user.platform_openid:
+        return f"{user.platform_provider}:{user.platform_openid}"
+    return str(user.id)
+
+
 def issue_session_token(user: User) -> str:
     return issue_signed_token(
         {
             "type": "session",
             "sub": str(user.id),
-            "login": user.github_login,
+            "login": _user_login_identifier(user),
         },
         ttl_seconds=settings.jwt_session_expire_days * 24 * 60 * 60,
     )

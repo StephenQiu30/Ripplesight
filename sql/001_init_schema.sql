@@ -106,16 +106,28 @@ CREATE TABLE IF NOT EXISTS settings (
 
 CREATE TABLE IF NOT EXISTS users (
     id BIGSERIAL PRIMARY KEY,
-    github_id BIGINT NOT NULL UNIQUE,
-    github_login TEXT NOT NULL,
+    github_id BIGINT UNIQUE,
+    github_login TEXT,
     github_name TEXT,
-    email TEXT,
+    email TEXT UNIQUE,
+    password_hash TEXT,
+    display_name TEXT,
+    platform_provider TEXT,
+    platform_openid TEXT,
     avatar_url TEXT,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     last_login_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_users_platform_identity UNIQUE (platform_provider, platform_openid)
 );
+
+ALTER TABLE users ALTER COLUMN github_id DROP NOT NULL;
+ALTER TABLE users ALTER COLUMN github_login DROP NOT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS platform_provider TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS platform_openid TEXT;
 
 CREATE INDEX IF NOT EXISTS ix_keywords_enabled ON keywords(enabled);
 CREATE INDEX IF NOT EXISTS ix_keywords_priority ON keywords(priority);
@@ -136,4 +148,9 @@ CREATE INDEX IF NOT EXISTS ix_notifications_report_id ON notifications(report_id
 CREATE INDEX IF NOT EXISTS ix_check_runs_status ON check_runs(status);
 CREATE INDEX IF NOT EXISTS ix_check_runs_started_at ON check_runs(started_at);
 CREATE INDEX IF NOT EXISTS ix_users_github_id ON users(github_id);
+CREATE INDEX IF NOT EXISTS ix_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS ix_users_platform_identity ON users(platform_provider, platform_openid);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_users_email ON users(email) WHERE email IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_users_platform_identity ON users(platform_provider, platform_openid)
+    WHERE platform_provider IS NOT NULL AND platform_openid IS NOT NULL;
 CREATE INDEX IF NOT EXISTS ix_users_is_active ON users(is_active);
