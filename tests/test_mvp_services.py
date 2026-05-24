@@ -786,6 +786,33 @@ class MvpServiceTests(SettingsPatchMixin, unittest.TestCase):
 
         self.assertEqual(result.ai_orchestrator_decision, "langchain")
 
+    def test_expand_keyword_queries_uses_langchain_orchestrator(self) -> None:
+        provider = build_provider("fallback")
+        keyword = Keyword(id=1, keyword="AI agent", query_template=None, enabled=True, priority=0)
+
+        class SpyOrchestrator:
+            def __init__(self) -> None:
+                self.called = False
+
+            def expand_queries(self, target_keyword: Keyword, base_query: str):
+                self.called = True
+                self.assert_keyword = target_keyword
+                self.assert_query = base_query
+                return ["AI agent", "AI agent trend"], SimpleNamespace(decision={"path": "langchain"}, trace_id="trace-expand")
+
+        spy = SpyOrchestrator()
+        with (
+            patch("server.app.services.ai_analysis._select_provider", return_value=provider),
+            patch("server.app.services.ai_analysis.build_orchestrator", return_value=spy) as build_spy,
+        ):
+            queries = expand_keyword_queries(keyword)
+
+        self.assertEqual(queries, ["AI agent", "AI agent trend"])
+        self.assertTrue(spy.called)
+        self.assertIs(spy.assert_keyword, keyword)
+        self.assertEqual(spy.assert_query, "AI agent")
+        build_spy.assert_called_once_with(provider, use_langgraph=False)
+
     def test_langgraph_trigger_routes_to_graph(self) -> None:
         self.patch_settings(ai_use_langgraph=True)
         evidence = SourceEvidence(
