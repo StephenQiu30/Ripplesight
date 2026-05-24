@@ -50,6 +50,8 @@ class OpenAICompatibleProvider(BaseLLMProvider):
             provider_key=provider_key,
         )
         parsed = self._parse_model_json(response.get("content", "{}"))
+        quick_understanding = _string_list(parsed.get("quick_understanding"))
+        topic_ideas = _topic_idea_list(parsed.get("topic_ideas"))
         return LLMResult(
             is_real=parsed.get("is_real"),
             relevance_score=self.clamp_score(float(parsed.get("relevance_score", 0))),
@@ -59,6 +61,8 @@ class OpenAICompatibleProvider(BaseLLMProvider):
             summary=str(parsed.get("summary") or hotspot.snippet or hotspot.title),
             model_name=parsed.get("model", self._resolve_model(provider_key)),
             raw_response=response,
+            quick_understanding=quick_understanding,
+            topic_ideas=topic_ideas,
             used_fallback=False,
             prompt_name=response.get("prompt_name", "analysis"),
             token_usage=dict(
@@ -92,9 +96,12 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         else:
             user_prompt = (
                 "Analyze this hotspot candidate. Return strict JSON with keys: "
-                "is_real, relevance_score, relevance_reason, keyword_mentioned, importance, summary, model. "
+                "is_real, relevance_score, relevance_reason, keyword_mentioned, importance, summary, "
+                "quick_understanding, topic_ideas, model. "
                 "importance must be low, medium, or high. relevance_score is 0-100. "
-                "summary and relevance_reason must be written in Chinese.\n\n"
+                "summary, relevance_reason and quick_understanding must be written in Chinese. "
+                "quick_understanding is 2 to 4 short strings. "
+                "topic_ideas is 2 to 5 objects with title, angle, format and rationale in Chinese.\n\n"
                 f"Keyword: {keyword.keyword if keyword else ''}\n"
                 f"Title: {title}\n"
                 f"Snippet: {snippet}\n"
@@ -150,3 +157,33 @@ class OpenAICompatibleProvider(BaseLLMProvider):
             if start < 0 or end < 0 or end <= start:
                 raise
             return json.loads(content[start : end + 1])
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _topic_idea_list(value: object) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    ideas: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or "").strip()
+        angle = str(item.get("angle") or "").strip()
+        format_name = str(item.get("format") or "").strip()
+        rationale = str(item.get("rationale") or "").strip()
+        if not title:
+            continue
+        ideas.append(
+            {
+                "title": title,
+                "angle": angle,
+                "format": format_name,
+                "rationale": rationale,
+            }
+        )
+    return ideas
