@@ -9,6 +9,7 @@
 | A2 LLM Provider 异常策略与可观测 | [docs/product/prd/06-LLM供应商切换与可观测性补齐PRD.md](./product/prd/06-LLM供应商切换与可观测性补齐PRD.md) | [docs/plans/13-LLM供应商切换与容错计划.md](./plans/13-LLM供应商切换与容错计划.md) | `settings` 增加 `AI_PROVIDER_ERROR_STRATEGY` 与 `AI_FALLBACK_PROVIDER`；`ai_analysis` 支持 fallback/skip/error 分支；日志事件 `ai_provider_selection`、`ai_provider_fallback`、`ai_provider_skip`；`tests/test_mvp_services.py` 覆盖关键路径。 |
 | A4 聚类版本化回溯 | [docs/product/prd/07-热点聚类去重与版本化回溯PRD.md](./product/prd/07-热点聚类去重与版本化回溯PRD.md) | [docs/plans/14-热点聚类与回溯查询计划.md](./plans/14-热点聚类与回溯查询计划.md) | `run_hotspot_check` 写入 `cluster_id` / `cluster_version` / `clustered_at`；新增 `/api/hotspots/cluster/{cluster_id}`、`/api/hotspots/{id}/cluster-history`；单测覆盖版本递增与查询。 |
 | A8 RBAC 最小权限 | [docs/product/prd/08-安全增强-RBAC与权限治理PRD.md](./product/prd/08-安全增强-RBAC与权限治理PRD.md) | [docs/plans/15-安全增强与RBAC计划.md](./plans/15-安全增强与RBAC计划.md) | `users.role` 持久化、`require_permission()` 依赖、关键路由接入；`tests/test_mvp_services.py` 覆盖 viewer/admin 权限边界。 |
+| 16 任务编排与执行序列 | [docs/product/prd/00-企业级AI热点监控平台PRD.md](./product/prd/00-企业级AI热点监控平台PRD.md) | [docs/plans/16-企业级P0任务编排.md](./plans/16-企业级P0任务编排.md) | A2/A4/A8 复核结果归并为批次任务 B/C 执行清单，避免与功能缺口重复定义。 |
 
 ## 仍需补齐的企业级 P0 缺口
 
