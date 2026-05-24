@@ -38,4 +38,6 @@ jobs:
           DATABASE_URL: postgresql+psycopg://ai_user:ai_pass@localhost:5432/ai_hotspot_radar
           APP_ENV: test
           RATE_LIMIT_PER_MINUTE: 120
-        run: PYTHONPATH=. python -m unittest tests.test_mvp_services
+        run: |
+          PYTHONPATH=. python -m unittest tests.test_mvp_services
+          PYTHONPATH=. python -m unittest tests.test_ai_provider_acceptance
