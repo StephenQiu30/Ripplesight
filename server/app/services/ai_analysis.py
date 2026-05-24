@@ -200,7 +200,19 @@ def expand_keyword_queries(keyword: Keyword) -> list[str]:
     provider = _select_provider()
     base_query = keyword.query_template or keyword.keyword
     try:
-        return _dedupe_queries(provider.expand_queries(keyword, base_query))[:5]
+        # Query expansion is part of the LangChain default path, so it goes through the
+        # orchestrator for the same trace/fallback boundary as hotspot analysis.
+        orchestrator = build_orchestrator(provider, use_langgraph=False)
+        queries, decision = orchestrator.expand_queries(keyword, base_query)
+        logger.info(
+            "ai_query_expand_orchestrated",
+            extra={
+                "provider": provider.provider_name,
+                "decision": decision.decision.get("ai_orchestrator_decision") or decision.decision.get("path"),
+                "trace_id": decision.trace_id,
+            },
+        )
+        return _dedupe_queries(queries)[:5]
     except Exception:  # noqa: BLE001
         if _normalize_strategy(settings.ai_provider_error_strategy) == "error":
             raise
