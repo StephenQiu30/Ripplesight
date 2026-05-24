@@ -139,6 +139,7 @@ class LangGraphOrchestrator(AIOrchestrator):
 
 
 def build_orchestrator(provider: BaseLLMProvider, *, use_langgraph: bool = False) -> AIOrchestrator:
-    if use_langgraph and app_settings.AI_USE_LANGGRAPH:
+    """Build orchestrator by explicit caller request and feature flag."""
+    if use_langgraph and app_settings.ai_use_langgraph:
         return LangGraphOrchestrator(provider)
     return AIOrchestrator(provider)

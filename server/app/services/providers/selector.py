@@ -18,11 +18,14 @@ def _to_float(value: object, *, default: float = 100.0) -> float:
 
 
 def _ensure_health_fields(source: Source) -> dict[str, object]:
-    payload = source.config if isinstance(source.config, dict) else {}
-    if not isinstance(payload, dict):
+    """Ensure source.config and health buckets exist so selector logic is side-effect safe."""
+    if isinstance(source.config, dict):
+        payload = source.config
+    else:
         payload = {}
         source.config = payload
-    health = payload.get("health") if isinstance(payload.get("health"), dict) else {}
+
+    health = payload.get("health")
     if not isinstance(health, dict):
         health = {}
         payload["health"] = health

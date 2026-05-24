@@ -43,7 +43,7 @@ from server.app.services.search import _should_enhance_analysis as search_should
 from server.app.services.search import _load_search_sources, search_sources
 from server.app.services import rss as rss_service
 from server.app.services.providers import get_provider_class
-from server.app.services.providers.selector import mark_source_success, select_sources
+from server.app.services.providers.selector import mark_source_success, mark_source_failure, select_sources
 from server.app.services.hotspot_scoring import compute_hotness_score
 from server.app.services.source_trust import SourceEvidence, collect_source_evidence
 from server.app.schemas.ai_analysis import AiAnalysisRead
