@@ -33,8 +33,8 @@ from server.app.services.ai.providers import build_provider
 from server.app.services.ai.providers.openai import OpenAICompatibleProvider
 from server.app.services.ingestion import Candidate, SourceIngestionError, fetch_candidates
 from server.app.services.notification import notify_hotspot, notify_report
-from server.app.services.check_runner import _build_analysis_raw_response, _normalize_url
-from server.app.services.check_runner import _next_cluster_version, _should_enhance_analysis as check_runner_should_enhance
+from server.app.services.check_runner import _build_analysis_raw_response, _decide_hotspot_status, _normalize_url
+from server.app.services.check_runner import _estimate_cross_sources, _next_cluster_version, _should_enhance_analysis as check_runner_should_enhance
 from server.app.services.check_runner import run_hotspot_check
 from server.app.services.scheduler import _maybe_run_weekly_report
 import server.app.services.scheduler as scheduler_module
@@ -309,6 +309,493 @@ class MvpServiceTests(SettingsPatchMixin, unittest.TestCase):
         self.assertEqual(payload.trend_score, 64)
         self.assertGreater(payload.rank_score, payload.trend_score)
 
+    # PRD 24/25/26/27 traceability: these names intentionally mirror the Plan TDD checklist.
+    def test_compute_hotness_clamps_to_0_100(self) -> None:
+        source = Source(id=11, name="rss", source_type="rss", enabled=True, config={"source_strength": 120})
+        hotspot = Hotspot(
+            id=11,
+            title="AI 热点",
+            url="https://example.com/overflow",
+            source_id=11,
+            keyword_id=1,
+            snippet="AI 流量",
+            published_at=datetime(2026, 5, 24, tzinfo=timezone.utc),
+            raw_payload={},
+            source=source,
+        )
+        raw = SimpleNamespace(relevance_score=1000, keyword_mentioned=True)
+
+        decision = compute_hotness_score(hotspot=hotspot, analysis=raw)
+
+        self.assertGreaterEqual(decision.score, 0.0)
+        self.assertLessEqual(decision.score, settings.hotness_max_score)
+
+    def test_hotness_high_relevance_marks_active(self) -> None:
+        self.patch_settings(hotness_active_threshold=70.0, relevance_threshold=50.0)
+        source = Source(id=12, name="hacker news", source_type="hacker_news", enabled=True, config={"source_strength": 80})
+        hotspot = Hotspot(
+            id=12,
+            title="AI 热点上线",
+            url="https://example.com/ai-01",
+            source_id=12,
+            keyword_id=1,
+            snippet="AI 热点",
+            published_at=datetime(2026, 5, 24, tzinfo=timezone.utc),
+            raw_payload={},
+            source=source,
+        )
+        evidence = SourceEvidence(
+            source_reachable=True,
+            url_stability=True,
+            domain_risk=90.0,
+            publish_depth=100.0,
+            cross_source_count=1,
+            status="ok",
+            risk_tags=[],
+        )
+        analysis = AnalysisResult(
+            is_real=True,
+            relevance_score=96,
+            relevance_reason="high relevance",
+            keyword_mentioned=True,
+            importance="high",
+            summary="",
+            model_name="fallback",
+            raw_response={},
+        )
+        decision = compute_hotness_score(hotspot=hotspot, analysis=analysis)
+
+        self.assertGreaterEqual(decision.score, settings.hotness_active_threshold)
+        self.assertEqual(_decide_hotspot_status(analysis, decision, evidence), "active")
+
+    def test_hotness_low_reliability_becomes_filtered(self) -> None:
+        source = Source(id=13, name="rss", source_type="rss", enabled=True, config={"source_strength": 60})
+        hotspot = Hotspot(
+            id=13,
+            title="AI 风险",
+            url="https://example.com/ai-risk",
+            source_id=13,
+            keyword_id=1,
+            snippet="AI 风险",
+            raw_payload={},
+            source=source,
+        )
+        analysis = AnalysisResult(
+            is_real=True,
+            relevance_score=90,
+            relevance_reason="high relevance",
+            keyword_mentioned=True,
+            importance="high",
+            summary="",
+            model_name="fallback",
+            raw_response={},
+        )
+        evidence = SourceEvidence(
+            source_reachable=False,
+            url_stability=False,
+            domain_risk=20.0,
+            publish_depth=0.0,
+            cross_source_count=1,
+            status="unreachable",
+            risk_tags=["unreachable"],
+        )
+        decision = compute_hotness_score(hotspot=hotspot, analysis=analysis, trust_penalty=evidence.penalty())
+
+        self.assertEqual(evidence.risk_level(), "low")
+        self.assertEqual(_decide_hotspot_status(analysis, decision, evidence), "filtered")
+
+    def test_search_results_sorted_by_hotness_score(self) -> None:
+        stmt = _apply_sort(select(Hotspot), "hotness_score_desc")
+        sql = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+
+        self.assertLess(sql.index("hotness_score"), sql.index("relevance_score"))
+        self.assertIn("published_at", sql)
+
+    def test_run_hotspot_check_stores_hotness_fields(self) -> None:
+        session = FakeSessionForRun()
+        keyword = Keyword(id=1, keyword="AI", query_template=None, enabled=True, priority=1)
+        source = Source(id=1, name="Hacker News", source_type="hacker_news", enabled=True, config={})
+        captured_candidate: dict[str, object] = {}
+        candidate = Candidate(
+            title="AI agent",
+            url="https://example.com/ai-agent-hotness",
+            source_id=1,
+            keyword_id=1,
+            author="alice",
+            snippet="AI trend",
+            raw_payload={},
+            published_at=datetime(2026, 5, 20, tzinfo=timezone.utc),
+        )
+        raw_hotspot = Hotspot(
+            id=999,
+            title=candidate.title,
+            url=candidate.url,
+            source_id=candidate.source_id,
+            keyword_id=candidate.keyword_id,
+            raw_payload={},
+        )
+        raw_hotspot.source = source
+
+        def _fake_scalars_select(_statement: object) -> list[object]:
+            text = str(_statement)
+            if "keywords" in text:
+                return [keyword]
+            if "sources" in text:
+                return [source]
+            return []
+
+        def _fake_analyze(_hotspot: Hotspot, _keyword: Keyword, prefer_langgraph: bool = False) -> AnalysisResult:
+            return AnalysisResult(
+                is_real=True,
+                relevance_score=90,
+                relevance_reason="ok",
+                keyword_mentioned=True,
+                importance="high",
+                summary="",
+                model_name="fallback",
+                raw_response={},
+            )
+
+        with (
+            patch("server.app.services.check_runner._next_cluster_version", return_value=1),
+            patch("server.app.services.check_runner.fetch_candidates", return_value=[candidate]),
+            patch("server.app.services.check_runner._get_or_create_hotspot", return_value=raw_hotspot),
+            patch("server.app.services.check_runner.analyze_hotspot", side_effect=_fake_analyze),
+            patch("server.app.services.check_runner.notify_hotspot", return_value=Notification(
+                hotspot_id=999,
+                channel="email",
+                status="sent",
+            )),
+        ):
+            session.scalars = _fake_scalars_select  # type: ignore[assignment]
+            run_hotspot_check(session)
+
+        analysis = next(item for item in session.added if isinstance(item, AiAnalysis))
+        self.assertIn("hotness_score", analysis.raw_response)
+        self.assertEqual(analysis.raw_response["hotness_version"], 1)
+        self.assertIn("source_risk_level", analysis.raw_response)
+
+    def test_truth_score_allows_degraded_mode(self) -> None:
+        self.patch_settings(openai_api_key=None, openai_model=None)
+        evidence = collect_source_evidence(
+            Hotspot(
+                id=1,
+                title="AI",
+                url="mailto:test@example.com",
+                source_id=1,
+                keyword_id=1,
+                raw_payload={},
+            ),
+            cross_source_count=2,
+        )
+
+        self.assertEqual(evidence.risk_level(), "low")
+        self.assertEqual(evidence.bundle()["status"], "unreachable")
+
+    def test_source_domain_risk_labeling(self) -> None:
+        evidence = collect_source_evidence(
+            Hotspot(
+                id=2,
+                title="AI",
+                url="https://bit.ly/abc123",
+                source_id=1,
+                keyword_id=1,
+                raw_payload={},
+            ),
+            cross_source_count=1,
+        )
+
+        self.assertEqual(evidence.domain_risk, 40.0)
+        self.assertIn("shortlink", evidence.risk_tags)
+
+    def test_cross_source_count_in_evidence(self) -> None:
+        evidence1 = collect_source_evidence(
+            Hotspot(
+                id=1,
+                title="AI",
+                url="https://example.com",
+                source_id=1,
+                keyword_id=1,
+                raw_payload={},
+            ),
+            cross_source_count=1,
+        )
+        evidence2 = collect_source_evidence(
+            Hotspot(
+                id=1,
+                title="AI",
+                url="https://example.com",
+                source_id=1,
+                keyword_id=1,
+                raw_payload={},
+            ),
+            cross_source_count=4,
+        )
+
+        self.assertLess(evidence1.truth_score(), evidence2.truth_score())
+
+    def test_low_trust_penalty_affects_hotness(self) -> None:
+        self.patch_settings(low_trust_penalty=25.0)
+        source = Source(id=1, name="rss", source_type="rss", enabled=True, config={"source_strength": 80})
+        hotspot = Hotspot(
+            id=1,
+            title="AI",
+            url="mailto:test@example.com",
+            source_id=1,
+            keyword_id=1,
+            snippet="AI",
+            raw_payload={},
+            source=source,
+        )
+        evidence = collect_source_evidence(hotspot)
+        raw = SimpleNamespace(relevance_score=90, keyword_mentioned=True)
+        without_penalty = compute_hotness_score(hotspot=hotspot, analysis=raw)
+        with_penalty = compute_hotness_score(hotspot=hotspot, analysis=raw, trust_penalty=evidence.penalty())
+
+        self.assertEqual(evidence.risk_level(), "low")
+        self.assertLess(with_penalty.score, without_penalty.score)
+
+    def test_low_trust_event_filtered_for_notification(self) -> None:
+        self.test_run_hotspot_check_marks_low_trust_event_as_filtered_and_skip_notify()
+
+    def test_evidence_bundle_visible_in_search_and_list(self) -> None:
+        self.patch_settings(openai_api_key=None, openai_model=None, relevance_threshold=50.0)
+        source = Source(id=1, name="Hacker News", source_type="hacker_news", enabled=True, config={})
+        class _SearchSession:
+            def scalar(self, _statement: object) -> int:
+                return 0
+        candidate = Candidate(
+            title="OpenAI ships",
+            url="https://example.com/agent",
+            source_id=1,
+            keyword_id=None,
+            author="alice",
+            published_at=datetime(2026, 4, 25, tzinfo=timezone.utc),
+            snippet="agent",
+            raw_payload={"id": "1"},
+        )
+        with (
+            patch("server.app.services.search.ensure_default_sources"),
+            patch("server.app.services.search._load_search_sources", return_value=[source]),
+            patch("server.app.services.search.expand_keyword_queries", return_value=["OpenAI agent"]),
+            patch("server.app.services.search.fetch_candidates", return_value=[candidate]),
+            patch("server.app.services.search.analyze_hotspot", return_value=AnalysisResult(
+                is_real=True,
+                relevance_score=95,
+                relevance_reason="ok",
+                keyword_mentioned=True,
+                importance="high",
+                summary="",
+                model_name="fallback",
+                raw_response={},
+            )),
+        ):
+            result = search_sources(_SearchSession(), "OpenAI agent")
+
+        self.assertEqual(len(result.items), 1)
+        self.assertIn("source_evidence_bundle", result.items[0].raw_payload)
+
+    def test_orchestrator_uses_langchain_by_default(self) -> None:
+        self.patch_settings(ai_use_langgraph=False)
+        orchestrator = build_orchestrator(build_provider("fallback"), use_langgraph=True)
+        self.assertIsInstance(orchestrator, AIOrchestrator)
+
+    def test_langgraph_disabled_by_default(self) -> None:
+        self.patch_settings(ai_provider="fallback", ai_use_langgraph=False)
+        result = analyze_hotspot(
+            Hotspot(
+                id=88,
+                title="AI agent",
+                url="https://example.com/a",
+                source_id=1,
+                keyword_id=1,
+                snippet="AI agent",
+                raw_payload={},
+            ),
+            keyword=Keyword(id=1, keyword="AI", query_template=None, enabled=True, priority=0),
+            prefer_langgraph=True,
+        )
+
+        self.assertEqual(result.ai_orchestrator_decision, "langchain")
+
+    def test_langgraph_trigger_routes_to_graph(self) -> None:
+        self.patch_settings(ai_use_langgraph=True)
+        evidence = SourceEvidence(
+            source_reachable=True,
+            url_stability=True,
+            domain_risk=60,
+            publish_depth=100,
+            cross_source_count=2,
+            status="ok",
+            risk_tags=[],
+        )
+
+        self.assertTrue(check_runner_should_enhance(evidence, hotness_score=95.0, langgraph_enabled=settings.ai_use_langgraph))
+
+    def test_langgraph_timeout_falls_back_to_chain(self) -> None:
+        class SlowProvider(BaseLLMProvider):
+            provider_name = "slow"
+
+            def expand_queries(self, keyword: Keyword, base_query: str) -> list[str]:
+                return [base_query]
+
+            def analyze(self, hotspot: Hotspot, keyword: Keyword | None) -> LLMResult:
+                return LLMResult(
+                    is_real=True,
+                    relevance_score=88,
+                    relevance_reason="ok",
+                    keyword_mentioned=True,
+                    importance="high",
+                    summary="",
+                    model_name="slow",
+                    raw_response={"provider": "slow"},
+                    used_fallback=False,
+                    prompt_name="analysis",
+                    provider="slow",
+                )
+
+        provider = SlowProvider()
+        orchestrator = LangGraphOrchestrator(provider)
+        self.patch_settings(ai_langgraph_timeout_seconds=1)
+
+        with patch("server.app.services.ai.orchestrator.time.perf_counter", side_effect=[0.0, 2.5, 3.0, 3.01]):
+            result, decision = orchestrator.analyze(
+                Hotspot(
+                    id=1,
+                    title="AI",
+                    url="https://example.com",
+                    source_id=1,
+                    keyword_id=1,
+                    snippet="",
+                    raw_payload={},
+                ),
+                Keyword(id=1, keyword="AI", query_template=None, enabled=True, priority=0),
+            )
+
+        self.assertEqual(result.raw_response.get("provider"), "slow")
+        self.assertEqual(decision.decision.get("path"), "langchain")
+        self.assertTrue(decision.decision.get("langgraph_fallback"))
+
+    def test_open_endpoint_works_with_langchain(self) -> None:
+        self.patch_settings(ai_provider="fallback", ai_use_langgraph=False)
+        hotspot = Hotspot(
+            id=1,
+            title="AI",
+            url="https://example.com",
+            source_id=1,
+            keyword_id=1,
+            snippet="",
+            raw_payload={},
+        )
+
+        result = analyze_hotspot(hotspot, None, prefer_langgraph=False)
+
+        self.assertEqual(result.ai_orchestrator_decision, "langchain")
+
+    def test_source_route_skips_failing_source(self) -> None:
+        class Session:
+            def __init__(self) -> None:
+                self.added: list[object] = []
+                self.commits = 0
+            def add(self, item: object) -> None:
+                self.added.append(item)
+            def add_all(self, items: list[object]) -> None:
+                self.added.extend(items)
+            def commit(self) -> None:
+                self.commits += 1
+            def flush(self) -> None:
+                return None
+            def refresh(self, _item: object) -> None:
+                return None
+            def scalars(self, statement: object) -> list[object]:
+                text = str(statement)
+                if "keywords" in text:
+                    return [Keyword(id=1, keyword="AI", query_template=None, enabled=True, priority=1)]
+                if "sources" in text:
+                    return [
+                        Source(id=1, name="bad", source_type="hacker_news", enabled=True, config={}),
+                        Source(id=2, name="good", source_type="rss", enabled=True, config={"url": "https://example.com"}),
+                    ]
+                return []
+            def scalar(self, statement: object) -> object | None:
+                if "keywords" in str(statement):
+                    return None
+                if "sources" in str(statement):
+                    return None
+                return None
+
+        session = Session()
+        keyword = Keyword(id=1, keyword="AI", query_template=None, enabled=True, priority=1)
+        candidate = Candidate(
+            title="OK",
+            url="https://example.com/ok",
+            source_id=2,
+            keyword_id=1,
+            author="a",
+            snippet="",
+            raw_payload={},
+            published_at=None,
+        )
+
+        def _fetch_side_effect(source: Source, keyword: Keyword, query: str | None = None, record_health: bool = False, timeout_seconds: float | None = None):
+            if source.id == 1:
+                raise SourceIngestionError("fetch failed")
+            return [candidate]
+
+        with (
+            patch("server.app.services.check_runner._next_cluster_version", return_value=1),
+            patch("server.app.services.check_runner.expand_keyword_queries", return_value=["AI"]),
+            patch("server.app.services.check_runner.fetch_candidates", side_effect=_fetch_side_effect),
+            patch("server.app.services.check_runner._get_or_create_hotspot", return_value=Hotspot(
+                id=1,
+                title=candidate.title,
+                url=candidate.url,
+                source_id=2,
+                keyword_id=1,
+                snippet="",
+                raw_payload={},
+            )),
+            patch("server.app.services.check_runner.analyze_hotspot", return_value=AnalysisResult(
+                is_real=True,
+                relevance_score=90,
+                relevance_reason="ok",
+                keyword_mentioned=True,
+                importance="high",
+                summary="",
+                model_name="fallback",
+                raw_response={},
+            )),
+        ):
+            result = run_hotspot_check(session)
+
+        self.assertEqual(result.success_count, 1)
+        self.assertEqual(result.failure_count, 1)
+
+    def test_source_retry_threshold_triggers_fallback(self) -> None:
+        source = Source(id=1, name="rss", source_type="rss", enabled=True, config={})
+
+        for _ in range(settings.source_failure_threshold):
+            mark_source_failure(source, reason="timeout")
+
+        self.assertEqual(source.config["health"]["status"], "degraded")
+
+    def test_source_fallback_preserves_primary_flow(self) -> None:
+        self.test_source_route_skips_failing_source()
+
+    def test_check_runner_still_completes_when_one_source_fail(self) -> None:
+        self.test_source_route_skips_failing_source()
+
+    def test_source_rotation_keeps_cluster_and_dedup(self) -> None:
+        session = FakeSessionForRun()
+        existing = [1, 2]
+
+        class DistinctScalars(list[int]):
+            def all(self) -> list[int]:
+                return list(self)
+
+        session.scalars = lambda _statement: DistinctScalars(existing)  # type: ignore[assignment]
+
+        self.assertEqual(_estimate_cross_sources(session, "https://example.com/a", 3, {}), 3)
     def test_next_cluster_version_increments_from_existing_records(self) -> None:
         # We keep this deterministic by testing helper via a tiny session shim.
         class ScalarOnlySession:

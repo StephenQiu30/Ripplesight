@@ -253,6 +253,8 @@ def _decide_hotspot_status(
     hotness: HotnessDecision,
     evidence: SourceEvidence,
 ) -> str:
+    # Low-trust evidence has priority over heat/relevance so risky events stay visible as filtered,
+    # without blocking the ingestion and analysis pipeline.
     if _is_low_trust_blocked(evidence):
         return "filtered"
     return "active" if is_analysis_active(result) and hotness.score >= settings.hotness_active_threshold else "filtered"
@@ -299,6 +301,8 @@ def _should_enhance_analysis(
     hotness_score: float,
     langgraph_enabled: bool,
 ) -> bool:
+    # LangGraph is an opt-in enhancement: only hot events with weak/conflicting evidence enter it.
+    # The default path remains LangChain for cost control and predictable fallback behavior.
     if not langgraph_enabled:
         return False
     source_conflict = getattr(evidence, "cross_source_count", 1) >= 2
