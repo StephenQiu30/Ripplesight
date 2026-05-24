@@ -26,6 +26,20 @@ class RepositoryGovernanceTest(unittest.TestCase):
         self.assertIn("Swagger/OpenAPI", readme)
         self.assertIn("python3 -m unittest discover -s tests -p 'test_repository_governance.py'", readme)
 
+    def test_no_apps_directory_as_backend_entry(self):
+        apps_dir = ROOT / "apps"
+        self.assertFalse(
+            apps_dir.exists(),
+            "检测到遗留的 apps 目录，后端交付应使用 server 作为唯一后端入口",
+        )
+
+    def test_docs_declare_server_as_only_backend_entry(self):
+        docs_readme = self.read_text("docs/README.md")
+
+        self.assertIn("server", docs_readme)
+        self.assertIn("后端服务入口", docs_readme)
+        self.assertIn("apps", docs_readme)
+
 
 if __name__ == "__main__":
     unittest.main()
