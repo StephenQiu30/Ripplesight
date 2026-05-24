@@ -31,4 +31,3 @@ downstream:
 - `B3-告警演练结论.md`
 - `C1-运维手册补充.md`
 - `C2-阈值与变更SOP.md`
-- `hotspot-42-53-验收证据包.md`

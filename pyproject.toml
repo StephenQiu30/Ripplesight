@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [tool.fastapi]
-entrypoint = "server.app.main:app"
+entrypoint = "apps.api.app.main:app"
 
 [tool.setuptools.packages.find]
-include = ["server*", "packages*"]
+include = ["apps*", "packages*"]
