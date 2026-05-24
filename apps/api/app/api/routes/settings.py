@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from apps.api.app.db.session import get_session
+from apps.api.app.core.security import require_permission
 from apps.api.app.models.setting import Setting
 from apps.api.app.schemas.setting import SettingRead, SettingUpsert
 
@@ -16,7 +17,7 @@ def list_settings(session: Session = Depends(get_session)) -> list[Setting]:
     return list(session.scalars(select(Setting).order_by(Setting.key)))
 
 
-@router.put("/{key}", response_model=SettingRead)
+@router.put("/{key}", response_model=SettingRead, dependencies=[Depends(require_permission("settings.manage"))])
 def upsert_setting(key: str, payload: SettingUpsert, session: Session = Depends(get_session)) -> Setting:
     setting = session.get(Setting, key)
     if setting is None:

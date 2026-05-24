@@ -50,6 +50,7 @@ class AuthContractTests(unittest.TestCase):
         self.assertIn("ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name", schema_sql)
         self.assertIn("ALTER TABLE users ADD COLUMN IF NOT EXISTS platform_provider", schema_sql)
         self.assertIn("ALTER TABLE users ADD COLUMN IF NOT EXISTS platform_openid", schema_sql)
+        self.assertIn("ALTER TABLE users ADD COLUMN IF NOT EXISTS role", schema_sql)
 
     def test_openapi_exposes_email_password_miniapp_and_refresh_contracts(self) -> None:
         openapi = create_app().openapi()
@@ -95,6 +96,7 @@ class AuthContractTests(unittest.TestCase):
         self.assertTrue(hasattr(User, "display_name"))
         self.assertTrue(hasattr(User, "platform_provider"))
         self.assertTrue(hasattr(User, "platform_openid"))
+        self.assertTrue(hasattr(User, "role"))
 
         email_user = SimpleNamespace(
             id=10,
@@ -140,6 +142,8 @@ class AuthContractTests(unittest.TestCase):
         self.assertEqual(email_read.display_name, "内容创作者")
         self.assertEqual(miniapp_read.platform_provider, "wechat")
         self.assertEqual(miniapp_read.platform_openid, "openid-123")
+        self.assertIsNone(email_read.role)
+        self.assertIsNone(miniapp_read.role)
 
     def test_email_registration_creates_user_with_hashed_password_and_token(self) -> None:
         session = FakeAuthSession()

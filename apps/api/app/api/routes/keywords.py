@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from apps.api.app.db.session import get_session
+from apps.api.app.core.security import require_permission
 from apps.api.app.models.keyword import Keyword
 from apps.api.app.schemas.keyword import KeywordCreate, KeywordRead, KeywordUpdate
 
@@ -17,7 +18,7 @@ def list_keywords(session: Session = Depends(get_session)) -> list[Keyword]:
     return list(session.scalars(select(Keyword).order_by(Keyword.priority.desc(), Keyword.id)))
 
 
-@router.post("", response_model=KeywordRead, status_code=201)
+@router.post("", response_model=KeywordRead, status_code=201, dependencies=[Depends(require_permission("keyword.manage"))])
 def create_keyword(payload: KeywordCreate, session: Session = Depends(get_session)) -> Keyword:
     keyword = Keyword(**payload.model_dump())
     session.add(keyword)
@@ -30,7 +31,7 @@ def create_keyword(payload: KeywordCreate, session: Session = Depends(get_sessio
     return keyword
 
 
-@router.patch("/{keyword_id}", response_model=KeywordRead)
+@router.patch("/{keyword_id}", response_model=KeywordRead, dependencies=[Depends(require_permission("keyword.manage"))])
 def update_keyword(keyword_id: int, payload: KeywordUpdate, session: Session = Depends(get_session)) -> Keyword:
     keyword = _get_keyword(session, keyword_id)
     for key, value in payload.model_dump(exclude_unset=True).items():
@@ -44,14 +45,14 @@ def update_keyword(keyword_id: int, payload: KeywordUpdate, session: Session = D
     return keyword
 
 
-@router.delete("/{keyword_id}", status_code=204)
+@router.delete("/{keyword_id}", status_code=204, dependencies=[Depends(require_permission("keyword.manage"))])
 def delete_keyword(keyword_id: int, session: Session = Depends(get_session)) -> None:
     keyword = _get_keyword(session, keyword_id)
     session.delete(keyword)
     session.commit()
 
 
-@router.post("/{keyword_id}/toggle", response_model=KeywordRead)
+@router.post("/{keyword_id}/toggle", response_model=KeywordRead, dependencies=[Depends(require_permission("keyword.manage"))])
 def toggle_keyword(keyword_id: int, session: Session = Depends(get_session)) -> Keyword:
     keyword = _get_keyword(session, keyword_id)
     keyword.enabled = not keyword.enabled

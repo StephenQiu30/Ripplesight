@@ -5,7 +5,7 @@ import hashlib
 import hmac
 import json
 from datetime import datetime, timezone
-from typing import Any, cast
+from typing import Any, Callable, cast
 import secrets
 
 from fastapi import Depends, Header, HTTPException, status
@@ -15,6 +15,29 @@ from sqlalchemy.orm import Session
 from apps.api.app.core.settings import settings
 from apps.api.app.db.session import get_session
 from apps.api.app.models.user import User
+
+
+Permission = str
+
+_ROLE_PERMISSIONS: dict[str, set[str]] = {
+    "keyword.manage": {"admin"},
+    "source.manage": {"admin"},
+    "settings.manage": {"admin"},
+    "checkRun.manage": {"admin"},
+    "report.manage": {"admin"},
+    "task.manage": {"admin"},
+    "readOnly": {"admin", "viewer"},
+}
+
+
+def _normalize_role(role: str | None) -> str:
+    normalized = (role or "").strip().lower()
+    return normalized or "admin"
+
+
+def _is_role_permitted(permission: str, role: str) -> bool:
+    allowed = _ROLE_PERMISSIONS.get(permission, {"admin"})
+    return role in allowed
 
 
 def _b64url_encode(payload: str) -> str:
@@ -171,3 +194,16 @@ def get_current_user(
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive.")
     return user
+
+
+def require_permission(permission: Permission) -> Callable[[User], User]:
+    if permission not in _ROLE_PERMISSIONS:
+        raise ValueError(f"Undefined permission: {permission}")
+
+    def dependency(user: User = Depends(get_current_user)) -> User:
+        role = _normalize_role(user.role)
+        if not _is_role_permitted(permission, role):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions.")
+        return user
+
+    return dependency

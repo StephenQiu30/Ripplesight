@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     oauth_state_ttl_seconds: int = 300
     web_base_url: str = "http://localhost:3000"
     ai_provider: str = "openai"
+    ai_provider_error_strategy: str = "fallback"
+    ai_fallback_provider: str = "fallback"
     relevance_threshold: float = 50.0
     source_fetch_limit: int = 20
     rate_limit_per_minute: int = 120

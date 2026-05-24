@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from apps.api.app.db.session import get_session
+from apps.api.app.core.security import require_permission
 from apps.api.app.models.check_run import CheckRun
 from apps.api.app.schemas.check_run import CheckRunCreate, CheckRunRead
 from apps.api.app.services.check_runner import run_hotspot_check
@@ -12,7 +13,7 @@ from apps.api.app.services.check_runner import run_hotspot_check
 router = APIRouter(prefix="/api/check-runs", tags=["check-runs"])
 
 
-@router.post("", response_model=CheckRunRead, status_code=201)
+@router.post("", response_model=CheckRunRead, status_code=201, dependencies=[Depends(require_permission("checkRun.manage"))])
 def create_check_run(payload: CheckRunCreate, session: Session = Depends(get_session)) -> CheckRun:
     return run_hotspot_check(session, trigger_type=payload.trigger_type)
 

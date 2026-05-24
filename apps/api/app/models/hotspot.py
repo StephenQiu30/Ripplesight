@@ -45,6 +45,18 @@ class Hotspot(Base):
         return str(value) if value else None
 
     @property
+    def cluster_version(self) -> int | None:
+        if not isinstance(self.raw_payload, dict):
+            return None
+        version = self.raw_payload.get("cluster_version")
+        if version is None:
+            return None
+        try:
+            return int(version)
+        except (TypeError, ValueError):
+            return None
+
+    @property
     def trend_score(self) -> float:
         if not isinstance(self.raw_payload, dict):
             return 0.0

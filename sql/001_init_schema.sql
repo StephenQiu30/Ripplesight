@@ -128,6 +128,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS platform_provider TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS platform_openid TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT;
 
 CREATE INDEX IF NOT EXISTS ix_keywords_enabled ON keywords(enabled);
 CREATE INDEX IF NOT EXISTS ix_keywords_priority ON keywords(priority);

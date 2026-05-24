@@ -15,18 +15,23 @@ from apps.api.app.core.middleware import reset_request_metrics
 from apps.api.app.core.settings import settings
 from apps.api.app.main import create_app
 from apps.api.app.db.session import SessionLocal
+from apps.api.app.db.session import get_session
 from apps.api.app.models.ai_analysis import AiAnalysis
+from apps.api.app.models.notification import Notification
 from apps.api.app.models.hotspot import Hotspot
 from apps.api.app.models.keyword import Keyword
 from apps.api.app.models.user import User
 from apps.api.app.models.report import Report
 from apps.api.app.models.source import Source
+from apps.api.app.core.security import get_current_user
+from apps.api.app.api.routes.hotspots import get_hotspot_cluster, get_hotspot_cluster_history
 from apps.api.app.services.ai_analysis import AnalysisResult, analyze_hotspot, expand_keyword_queries, is_analysis_active
 from apps.api.app.services.ai.providers.openai import OpenAICompatibleProvider
 from apps.api.app.services.ingestion import Candidate, SourceIngestionError, fetch_candidates
 from apps.api.app.services.notification import notify_hotspot, notify_report
 from apps.api.app.services.check_runner import _normalize_url
 from apps.api.app.services.check_runner import run_hotspot_check
+from apps.api.app.services.check_runner import _next_cluster_version
 from apps.api.app.services.scheduler import _maybe_run_weekly_report
 import apps.api.app.services.scheduler as scheduler_module
 from apps.api.app.services.reports import previous_weekly_period_start, report_period
@@ -80,6 +85,61 @@ class FakeSessionForScalar:
         return self._report
 
 
+class FakeSessionForCluster:
+    def __init__(self, *, scalars_results: list[list[object]], scalar_results: list[int | Hotspot | None]) -> None:
+        self.scalars_results = list(scalars_results)
+        self.scalar_results = list(scalar_results)
+
+    def scalars(self, *_args: object, **_kwargs: object) -> list[object]:
+        if not self.scalars_results:
+            return []
+        items = self.scalars_results.pop(0)
+
+        class _ScalarsResult(list[object]):
+            def unique(self) -> "_ScalarsResult":
+                return self
+
+        return _ScalarsResult(items)
+
+    def scalar(self, _statement: object) -> int | Hotspot | None:
+        if not self.scalar_results:
+            return None
+        return self.scalar_results.pop(0)
+
+
+class FakeSessionForPermissions:
+    def __init__(self) -> None:
+        self.added: list[object] = []
+        self.committed = False
+
+    def add(self, item: object) -> None:
+        if hasattr(item, "id") and getattr(item, "id") is None:
+            setattr(item, "id", 1000)
+        now = datetime.now(tz=timezone.utc)
+        for field_name in ("created_at", "updated_at", "fetched_at"):
+            if hasattr(item, field_name) and getattr(item, field_name) is None:
+                setattr(item, field_name, now)
+        self.added.append(item)
+
+    def add_all(self, items: list[object]) -> None:
+        self.added.extend(items)
+
+    def commit(self) -> None:
+        self.committed = True
+
+    def refresh(self, _item: object) -> None:
+        return None
+
+    def scalars(self, _statement: object) -> list[object]:
+        return []
+
+    def scalar(self, _statement: object) -> None:
+        return None
+
+    def rollback(self) -> None:
+        return None
+
+
 class SettingsPatchMixin:
     def patch_settings(self, **values: object) -> None:
         originals = {key: getattr(settings, key) for key in values}
@@ -104,6 +164,19 @@ class SettingsPatchMixin:
                 db.refresh(user)
             token = issue_session_token(user)
             return {"Authorization": f"Bearer {token}"}
+
+    def _app_with_user(self, role: str, session_override: object | None = None):
+        app = create_app()
+        user = User(
+            id=10001,
+            github_id=987654321,
+            github_login="role-user",
+            is_active=True,
+            role=role,
+        )
+        app.dependency_overrides[get_current_user] = lambda: user
+        app.dependency_overrides[get_session] = lambda: session_override or FakeSessionForPermissions()
+        return app
 
 
 class MvpServiceTests(SettingsPatchMixin, unittest.TestCase):
@@ -227,6 +300,178 @@ class MvpServiceTests(SettingsPatchMixin, unittest.TestCase):
         self.assertEqual(payload.cluster_id, "cluster-ai-agent")
         self.assertEqual(payload.trend_score, 64)
         self.assertGreater(payload.rank_score, payload.trend_score)
+
+    def test_next_cluster_version_increments_from_existing_records(self) -> None:
+        # We keep this deterministic by testing helper via a tiny session shim.
+        class ScalarOnlySession:
+            def __init__(self, value: int) -> None:
+                self._value = value
+
+            def scalar(self, _statement: object) -> int:
+                return self._value
+
+        self.assertEqual(_next_cluster_version(ScalarOnlySession(3), "cluster-ai"), 4)
+
+    def test_run_hotspot_check_stores_cluster_metadata(self) -> None:
+        session = FakeSessionForRun()
+        keyword = Keyword(id=1, keyword="AI", query_template=None, enabled=True, priority=1)
+        source = Source(id=1, name="Hacker News", source_type="hacker_news", enabled=True, config={})
+        captured_candidate: dict[str, object] = {}
+        raw_hotspot = Hotspot(
+            id=55,
+            title="AI agent",
+            url="https://example.com/ai-agent",
+            source_id=1,
+            keyword_id=1,
+            raw_payload={},
+        )
+
+        def _fake_scalars_select(_statement: object) -> list[object]:
+            text = str(_statement)
+            if "keywords" in text:
+                return [keyword]
+            if "sources" in text:
+                return [source]
+            return []
+
+        session.scalars = _fake_scalars_select  # type: ignore[method-assign]
+
+        candidate = Candidate(
+            title="AI agent",
+            url="https://example.com/ai-agent",
+            source_id=1,
+            keyword_id=1,
+            author="alice",
+            snippet="AI trend",
+            raw_payload={},
+            published_at=None,
+        )
+
+        def _capture_create(_session: object, candidate: object) -> Hotspot:
+            captured_candidate["candidate"] = candidate
+            return raw_hotspot
+
+        def _fake_analyze(_hotspot: Hotspot, _keyword: Keyword) -> AnalysisResult:
+            return AnalysisResult(
+                is_real=True,
+                relevance_score=80,
+                relevance_reason="ok",
+                keyword_mentioned=True,
+                importance="high",
+                summary="",
+                model_name="fallback",
+                raw_response={},
+            )
+
+        with (
+            patch("apps.api.app.services.check_runner._next_cluster_version", return_value=2),
+            patch("apps.api.app.services.check_runner.fetch_candidates", return_value=[candidate]),
+            patch("apps.api.app.services.check_runner._get_or_create_hotspot", side_effect=_capture_create),
+            patch("apps.api.app.services.check_runner.analyze_hotspot", side_effect=_fake_analyze),
+            patch("apps.api.app.services.check_runner.notify_hotspot", return_value=Notification(
+                hotspot_id=55,
+                channel="email",
+                status="sent",
+            )),
+        ):
+            session.scalars = _fake_scalars_select  # type: ignore[assignment]
+            check_run = run_hotspot_check(session)
+
+        candidate_payload = captured_candidate["candidate"].raw_payload  # type: ignore[union-attr]
+        self.assertIsInstance(candidate_payload.get("cluster_id"), str)
+        self.assertEqual(len(str(candidate_payload.get("cluster_id"))), 36)
+        self.assertEqual(candidate_payload.get("cluster_version"), 2)
+        self.assertIn("clustered_at", candidate_payload)
+        self.assertEqual(check_run.success_count, 1)
+
+    def test_get_hotspot_cluster_route_reads_clustered_items(self) -> None:
+        now = datetime.now(tz=timezone.utc)
+        hotspot_a = Hotspot(
+            id=1,
+            title="A",
+            url="https://example.com/a",
+            source_id=1,
+            keyword_id=1,
+            raw_payload={"cluster_id": "cluster-1", "cluster_version": 1},
+            status="active",
+            fetched_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        hotspot_b = Hotspot(
+            id=2,
+            title="B",
+            url="https://example.com/b",
+            source_id=1,
+            keyword_id=1,
+            raw_payload={"cluster_id": "cluster-1", "cluster_version": 2},
+            status="active",
+            fetched_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        cluster_session = FakeSessionForCluster(scalars_results=[[hotspot_a, hotspot_b]], scalar_results=[2])
+
+        response = get_hotspot_cluster("cluster-1", limit=50, offset=0, session=cluster_session)
+
+        self.assertEqual(response.cluster_id, "cluster-1")
+        self.assertEqual(response.cluster_size, 2)
+        self.assertEqual(response.items[0].cluster_version, 1)
+        self.assertEqual(response.items[1].cluster_version, 2)
+
+    def test_get_hotspot_cluster_history_uses_hotspot_cluster(self) -> None:
+        now = datetime.now(tz=timezone.utc)
+        hotspot = Hotspot(
+            id=3,
+            title="C",
+            url="https://example.com/c",
+            source_id=1,
+            keyword_id=1,
+            raw_payload={"cluster_id": "cluster-1", "cluster_version": 5},
+            status="active",
+            fetched_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        items = [hotspot]
+        history_session = FakeSessionForCluster(
+            scalars_results=[items],
+            scalar_results=[hotspot, 1],
+        )
+
+        response = get_hotspot_cluster_history(3, session=history_session)
+
+        self.assertEqual(response.cluster_id, "cluster-1")
+        self.assertEqual(response.cluster_size, 1)
+        self.assertEqual(response.items[0].id, 3)
+
+    def test_viewer_forbidden_to_create_admin_only_resources(self) -> None:
+        fake_session = FakeSessionForPermissions()
+        app = self._app_with_user("viewer", fake_session)
+        payload = {
+            "keyword": "AI",
+            "query_template": None,
+            "enabled": True,
+            "priority": 0,
+        }
+        with TestClient(app) as client:
+            response = client.post("/api/keywords", json=payload)
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_can_create_admin_only_resource(self) -> None:
+        fake_session = FakeSessionForPermissions()
+        app = self._app_with_user("admin", fake_session)
+        payload = {
+            "keyword": "AI",
+            "query_template": None,
+            "enabled": True,
+            "priority": 0,
+        }
+        with TestClient(app) as client:
+            response = client.post("/api/keywords", json=payload)
+
+        self.assertEqual(response.status_code, 201)
 
     def test_hotspot_sort_contract_supports_rank_and_trend_desc(self) -> None:
         rank_stmt = _apply_sort(select(Hotspot), "rank_score_desc")

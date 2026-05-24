@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from apps.api.app.db.session import get_session
+from apps.api.app.core.security import require_permission
 from apps.api.app.models.source import Source
 from apps.api.app.schemas.source import SourceCreate, SourceRead, SourceUpdate
 
@@ -17,7 +18,7 @@ def list_sources(session: Session = Depends(get_session)) -> list[Source]:
     return list(session.scalars(select(Source).order_by(Source.id)))
 
 
-@router.post("", response_model=SourceRead, status_code=201)
+@router.post("", response_model=SourceRead, status_code=201, dependencies=[Depends(require_permission("source.manage"))])
 def create_source(payload: SourceCreate, session: Session = Depends(get_session)) -> Source:
     source = Source(**payload.model_dump())
     session.add(source)
@@ -30,7 +31,7 @@ def create_source(payload: SourceCreate, session: Session = Depends(get_session)
     return source
 
 
-@router.patch("/{source_id}", response_model=SourceRead)
+@router.patch("/{source_id}", response_model=SourceRead, dependencies=[Depends(require_permission("source.manage"))])
 def update_source(source_id: int, payload: SourceUpdate, session: Session = Depends(get_session)) -> Source:
     source = _get_source(session, source_id)
     for key, value in payload.model_dump(exclude_unset=True).items():
@@ -44,14 +45,14 @@ def update_source(source_id: int, payload: SourceUpdate, session: Session = Depe
     return source
 
 
-@router.delete("/{source_id}", status_code=204)
+@router.delete("/{source_id}", status_code=204, dependencies=[Depends(require_permission("source.manage"))])
 def delete_source(source_id: int, session: Session = Depends(get_session)) -> None:
     source = _get_source(session, source_id)
     session.delete(source)
     session.commit()
 
 
-@router.post("/{source_id}/toggle", response_model=SourceRead)
+@router.post("/{source_id}/toggle", response_model=SourceRead, dependencies=[Depends(require_permission("source.manage"))])
 def toggle_source(source_id: int, session: Session = Depends(get_session)) -> Source:
     source = _get_source(session, source_id)
     source.enabled = not source.enabled

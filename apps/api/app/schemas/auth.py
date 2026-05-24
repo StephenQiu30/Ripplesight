@@ -12,6 +12,7 @@ class UserRead(BaseModel):
     github_login: str | None = None
     github_name: str | None
     email: str | None
+    role: str | None = None
     display_name: str | None = None
     platform_provider: str | None = None
     platform_openid: str | None = None

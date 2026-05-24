@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from apps.api.app.db.session import get_session
+from apps.api.app.core.security import require_permission
 from apps.api.app.models.report import Report
 from apps.api.app.schemas.report import ReportCreate, ReportRead
 from apps.api.app.services.reports import ReportType, generate_report, send_report, report_to_html
@@ -15,7 +16,7 @@ from apps.api.app.services.reports import ReportType, generate_report, send_repo
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 
-@router.post("", response_model=ReportRead, status_code=201)
+@router.post("", response_model=ReportRead, status_code=201, dependencies=[Depends(require_permission("report.manage"))])
 def create_report(payload: ReportCreate, session: Session = Depends(get_session)) -> Report:
     report = generate_report(session, report_type=payload.report_type, period_start=payload.period_start)
     if payload.send:
@@ -25,7 +26,7 @@ def create_report(payload: ReportCreate, session: Session = Depends(get_session)
     return report
 
 
-@router.post("/{report_id}/send", response_model=ReportRead)
+@router.post("/{report_id}/send", response_model=ReportRead, dependencies=[Depends(require_permission("report.manage"))])
 def send_existing_report(report_id: int, session: Session = Depends(get_session)) -> Report:
     report = session.get(Report, report_id)
     if report is None:

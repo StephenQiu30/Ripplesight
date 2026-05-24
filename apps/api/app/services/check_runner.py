@@ -4,9 +4,10 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse, urlencode, parse_qsl, urlunparse
 from uuid import uuid5, NAMESPACE_URL
 
-from sqlalchemy import select
+from sqlalchemy import Integer, cast, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import func
 
 from apps.api.app.core.settings import settings
 from apps.api.app.models.ai_analysis import AiAnalysis
@@ -57,7 +58,10 @@ def run_hotspot_check(session: Session, trigger_type: str = "manual") -> CheckRu
                     if seen_key in seen_urls:
                         continue
                     seen_urls.add(seen_key)
-                    candidate.raw_payload["cluster_id"] = _cluster_id(candidate)
+                    cluster_id = _cluster_id(candidate)
+                    candidate.raw_payload["cluster_id"] = cluster_id
+                    candidate.raw_payload["cluster_version"] = _next_cluster_version(session, cluster_id)
+                    candidate.raw_payload["clustered_at"] = datetime.now(timezone.utc).isoformat()
                     try:
                         hotspot = _get_or_create_hotspot(session, candidate=candidate)
                     except IntegrityError:
@@ -178,3 +182,17 @@ def _cluster_id(candidate) -> str:
     title = (candidate.title or "").strip().lower()
     normalized = " ".join(title.split()[:12]) if title else "untitled"
     return str(uuid5(NAMESPACE_URL, normalized))
+
+
+def _next_cluster_version(session: Session, cluster_id: str) -> int:
+    if not cluster_id:
+        return 1
+    max_version = session.scalar(
+        select(
+            func.coalesce(
+                func.max(cast(Hotspot.raw_payload["cluster_version"].astext, Integer)),
+                0,
+            )
+        ).where(Hotspot.raw_payload["cluster_id"].as_string() == cluster_id)
+    )
+    return (int(max_version) if max_version is not None else 0) + 1

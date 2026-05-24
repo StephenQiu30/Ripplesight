@@ -24,6 +24,7 @@ class HotspotRead(BaseModel):
     fetched_at: datetime
     status: str
     cluster_id: str | None = None
+    cluster_version: int | None = None
     rank_score: float = 0
     trend_score: float = 0
     raw_payload: dict[str, Any]
@@ -32,3 +33,9 @@ class HotspotRead(BaseModel):
     source: SourceRead | None = None
     keyword: KeywordRead | None = None
     ai_analysis: AiAnalysisRead | None = None
+
+
+class HotspotClusterResponse(BaseModel):
+    cluster_id: str
+    cluster_size: int
+    items: list[HotspotRead]

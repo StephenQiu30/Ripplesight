@@ -27,6 +27,7 @@ class User(Base):
     display_name: Mapped[str | None] = mapped_column(Text)
     platform_provider: Mapped[str | None] = mapped_column(Text)
     platform_openid: Mapped[str | None] = mapped_column(Text)
+    role: Mapped[str | None] = mapped_column(Text)
     avatar_url: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
