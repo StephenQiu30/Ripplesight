@@ -78,6 +78,8 @@ def run_hotspot_check(session: Session, trigger_type: str = "manual") -> CheckRu
                         raw_response={
                             "provider": analysis_result.provider,
                             **analysis_result.raw_response,
+                            "quick_understanding": analysis_result.quick_understanding,
+                            "topic_ideas": analysis_result.topic_ideas,
                             "token_usage": analysis_result.token_usage,
                             "prompt_name": analysis_result.prompt_name,
                         },

@@ -11,16 +11,115 @@ from datetime import datetime, timezone
 
 from apps.api.app.core.security import (
     get_current_user,
+    hash_password,
     issue_github_oauth_state_token,
     issue_session_token,
     parse_oauth_state_token,
+    verify_password,
 )
 from apps.api.app.core.settings import settings
 from apps.api.app.db.session import get_session
 from apps.api.app.models.user import User
-from apps.api.app.schemas.auth import AuthResponse, GitHubAuthInitResponse, UserRead
+from apps.api.app.schemas.auth import (
+    AuthResponse,
+    EmailLoginRequest,
+    EmailRegisterRequest,
+    GitHubAuthInitResponse,
+    MiniappLoginRequest,
+    TokenRefreshResponse,
+    UserRead,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+def _normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def _normalize_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _auth_response_for(user: User) -> AuthResponse:
+    return AuthResponse(access_token=issue_session_token(user), user=user)
+
+
+@router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
+def register_with_email(payload: EmailRegisterRequest, session: Session = Depends(get_session)) -> AuthResponse:
+    email = _normalize_email(payload.email)
+    if "@" not in email:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="A valid email is required.")
+
+    existing_user = session.scalar(select(User).where(User.email == email))
+    if existing_user is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email is already registered.")
+
+    user = User(
+        email=email,
+        password_hash=hash_password(payload.password),
+        display_name=_normalize_optional_text(payload.display_name) or email.split("@", 1)[0],
+        is_active=True,
+        last_login_at=datetime.now(tz=timezone.utc),
+    )
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return _auth_response_for(user)
+
+
+@router.post("/login", response_model=AuthResponse)
+def login_with_email(payload: EmailLoginRequest, session: Session = Depends(get_session)) -> AuthResponse:
+    email = _normalize_email(payload.email)
+    user = session.scalar(select(User).where(User.email == email))
+    if user is None or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password.")
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User is inactive.")
+
+    user.last_login_at = datetime.now(tz=timezone.utc)
+    session.commit()
+    session.refresh(user)
+    return _auth_response_for(user)
+
+
+@router.post("/miniapp/login", response_model=AuthResponse)
+def login_with_miniapp(payload: MiniappLoginRequest, session: Session = Depends(get_session)) -> AuthResponse:
+    provider = payload.provider.strip().lower()
+    openid = payload.openid.strip()
+    if not provider or not openid:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Miniapp provider and openid are required.")
+
+    user = session.scalar(
+        select(User).where(
+            User.platform_provider == provider,
+            User.platform_openid == openid,
+        )
+    )
+    if user is None:
+        user = User(
+            platform_provider=provider,
+            platform_openid=openid,
+            display_name=_normalize_optional_text(payload.display_name) or "小程序用户",
+            avatar_url=_normalize_optional_text(payload.avatar_url),
+            is_active=True,
+            last_login_at=datetime.now(tz=timezone.utc),
+        )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        return _auth_response_for(user)
+
+    user.display_name = _normalize_optional_text(payload.display_name) or user.display_name
+    user.avatar_url = _normalize_optional_text(payload.avatar_url) or user.avatar_url
+    user.is_active = True
+    user.last_login_at = datetime.now(tz=timezone.utc)
+    session.commit()
+    session.refresh(user)
+    return _auth_response_for(user)
 
 
 @router.get("/github/login", response_model=GitHubAuthInitResponse)
@@ -159,5 +258,9 @@ def auth_me(user: User = Depends(get_current_user)) -> User:
 
 @router.get("/token", response_model=AuthResponse, response_model_exclude_none=True)
 def auth_token_exchange(user: User = Depends(get_current_user)) -> AuthResponse:
-    token = issue_session_token(user)
-    return AuthResponse(access_token=token, user=user)
+    return _auth_response_for(user)
+
+
+@router.post("/token/refresh", response_model=TokenRefreshResponse, response_model_exclude_none=True)
+def refresh_auth_token(user: User = Depends(get_current_user)) -> TokenRefreshResponse:
+    return TokenRefreshResponse(access_token=issue_session_token(user), user=user)

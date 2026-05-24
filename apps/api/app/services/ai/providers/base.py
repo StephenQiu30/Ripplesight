@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -19,6 +19,8 @@ class LLMResult:
     summary: str
     model_name: str
     raw_response: dict[str, Any]
+    quick_understanding: list[str] = field(default_factory=list)
+    topic_ideas: list[dict[str, str]] = field(default_factory=list)
     used_fallback: bool = False
     prompt_name: str | None = None
     token_usage: dict[str, int] | None = None

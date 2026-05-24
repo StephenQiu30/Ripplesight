@@ -32,3 +32,32 @@ class AiAnalysis(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     hotspot: Mapped[Hotspot] = relationship(back_populates="ai_analysis")
+
+    @property
+    def quick_understanding(self) -> list[str]:
+        value = self.raw_response.get("quick_understanding") if isinstance(self.raw_response, dict) else None
+        if not isinstance(value, list):
+            return []
+        return [str(item) for item in value if str(item).strip()]
+
+    @property
+    def topic_ideas(self) -> list[dict[str, str]]:
+        value = self.raw_response.get("topic_ideas") if isinstance(self.raw_response, dict) else None
+        if not isinstance(value, list):
+            return []
+        ideas: list[dict[str, str]] = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            title = str(item.get("title") or "").strip()
+            if not title:
+                continue
+            ideas.append(
+                {
+                    "title": title,
+                    "angle": str(item.get("angle") or "").strip(),
+                    "format": str(item.get("format") or "").strip(),
+                    "rationale": str(item.get("rationale") or "").strip(),
+                }
+            )
+        return ideas

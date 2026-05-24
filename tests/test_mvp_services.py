@@ -33,6 +33,9 @@ from apps.api.app.services.reports import previous_weekly_period_start, report_p
 from apps.api.app.services.search import search_sources, _load_search_sources
 from apps.api.app.services import rss as rss_service
 from apps.api.app.services.providers import get_provider_class
+from apps.api.app.schemas.ai_analysis import AiAnalysisRead
+from apps.api.app.schemas.hotspot import HotspotRead
+from apps.api.app.api.routes.hotspots import _apply_sort
 
 
 class CollectingSession:
@@ -135,6 +138,106 @@ class MvpServiceTests(SettingsPatchMixin, unittest.TestCase):
         self.assertEqual(result.importance, "high")
         self.assertTrue(result.used_fallback)
 
+    def test_fallback_analysis_returns_quick_understanding_and_topic_ideas(self) -> None:
+        self.patch_settings(openai_api_key=None, openai_model=None)
+        keyword = Keyword(id=1, keyword="AI agent", query_template=None, enabled=True, priority=0)
+        hotspot = Hotspot(
+            id=12,
+            title="AI agent workflows become a creator trend",
+            url="https://example.com/agent-workflows",
+            source_id=1,
+            keyword_id=1,
+            snippet="Creators are explaining how agent workflows change daily production.",
+            raw_payload={},
+        )
+
+        result = analyze_hotspot(hotspot, keyword)
+
+        self.assertGreaterEqual(len(result.quick_understanding), 2)
+        self.assertGreaterEqual(len(result.topic_ideas), 2)
+        self.assertIn("title", result.topic_ideas[0])
+        self.assertIn("angle", result.topic_ideas[0])
+        self.assertIn("format", result.topic_ideas[0])
+        self.assertIn("rationale", result.topic_ideas[0])
+
+    def test_ai_analysis_read_exposes_creator_understanding_fields_from_raw_response(self) -> None:
+        created_at = datetime.now(tz=timezone.utc)
+        analysis = AiAnalysis(
+            id=1,
+            hotspot_id=12,
+            is_real=True,
+            relevance_score=82,
+            relevance_reason="与创作者工具高度相关。",
+            keyword_mentioned=True,
+            importance="high",
+            summary="AI agent 工作流成为创作者热点。",
+            model_name="fallback",
+            raw_response={
+                "quick_understanding": ["一句话看懂", "为什么重要"],
+                "topic_ideas": [
+                    {
+                        "title": "AI agent 工作流怎么用",
+                        "angle": "实操教程",
+                        "format": "图文",
+                        "rationale": "创作者可直接复用为选题。",
+                    }
+                ],
+            },
+            created_at=created_at,
+            updated_at=created_at,
+        )
+
+        payload = AiAnalysisRead.model_validate(analysis)
+
+        self.assertEqual(payload.quick_understanding, ["一句话看懂", "为什么重要"])
+        self.assertEqual(payload.topic_ideas[0].title, "AI agent 工作流怎么用")
+
+    def test_hotspot_read_exposes_ranking_trend_and_cluster_fields(self) -> None:
+        created_at = datetime.now(tz=timezone.utc)
+        hotspot = Hotspot(
+            id=13,
+            title="AI agent trend",
+            url="https://example.com/agent-trend",
+            source_id=1,
+            keyword_id=1,
+            snippet="AI agent trend details.",
+            status="active",
+            raw_payload={"cluster_id": "cluster-ai-agent", "trend_score": 64},
+            fetched_at=created_at,
+            created_at=created_at,
+            updated_at=created_at,
+        )
+        hotspot.ai_analysis = AiAnalysis(  # type: ignore[assignment]
+            id=2,
+            hotspot_id=13,
+            is_real=True,
+            relevance_score=90,
+            relevance_reason="高相关。",
+            keyword_mentioned=True,
+            importance="high",
+            summary="摘要",
+            model_name="fallback",
+            raw_response={},
+            created_at=created_at,
+            updated_at=created_at,
+        )
+
+        payload = HotspotRead.model_validate(hotspot)
+
+        self.assertEqual(payload.cluster_id, "cluster-ai-agent")
+        self.assertEqual(payload.trend_score, 64)
+        self.assertGreater(payload.rank_score, payload.trend_score)
+
+    def test_hotspot_sort_contract_supports_rank_and_trend_desc(self) -> None:
+        rank_stmt = _apply_sort(select(Hotspot), "rank_score_desc")
+        trend_stmt = _apply_sort(select(Hotspot), "trend_score_desc")
+
+        rank_sql = str(rank_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        trend_sql = str(trend_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+
+        self.assertIn("relevance_score", rank_sql)
+        self.assertIn("trend_score", trend_sql)
+
     def test_fallback_analysis_marks_missing_keyword_below_threshold(self) -> None:
         self.patch_settings(openai_api_key=None, openai_model=None, relevance_threshold=50.0)
         keyword = Keyword(id=1, keyword="OpenAI", query_template=None, enabled=True, priority=0)
@@ -183,10 +286,50 @@ class MvpServiceTests(SettingsPatchMixin, unittest.TestCase):
 
     def test_provider_registry_has_default_adapters(self) -> None:
         self.assertEqual(get_provider_class("rss").source_type, "rss")
+        self.assertEqual(get_provider_class("github-trending").source_type, "github_trending")
         self.assertEqual(get_provider_class("hacker-news").source_type, "hacker_news")
         self.assertEqual(get_provider_class("x-twitter").source_type, "x_twitter")
         self.assertEqual(get_provider_class("bili").source_type, "bilibili")
         self.assertEqual(get_provider_class("weibo_sogou").source_type, "sogou")
+
+    def test_github_trending_provider_normalizes_repository_search_results(self) -> None:
+        from apps.api.app.services.providers.github_trending import _fetch_github_trending
+
+        payload = {
+            "items": [
+                {
+                    "id": 123,
+                    "full_name": "openai/agents",
+                    "html_url": "https://github.com/openai/agents",
+                    "description": "Build agentic applications.",
+                    "stargazers_count": 42000,
+                    "forks_count": 1200,
+                    "language": "TypeScript",
+                    "pushed_at": "2026-05-24T08:00:00Z",
+                    "owner": {"login": "openai"},
+                    "topics": ["ai", "agents"],
+                }
+            ]
+        }
+        response = SimpleNamespace(
+            raise_for_status=lambda: None,
+            json=lambda: payload,
+        )
+
+        with patch("apps.api.app.services.providers.github_trending.httpx.get", return_value=response) as request:
+            candidates = _fetch_github_trending({"limit": 5, "language": "TypeScript"}, 9, 3, "AI agent")
+
+        request.assert_called_once()
+        params = request.call_args.kwargs["params"]
+        self.assertIn("AI agent", params["q"])
+        self.assertIn("language:TypeScript", params["q"])
+        self.assertEqual(candidates[0].title, "openai/agents")
+        self.assertEqual(candidates[0].url, "https://github.com/openai/agents")
+        self.assertEqual(candidates[0].author, "openai")
+        self.assertEqual(candidates[0].source_id, 9)
+        self.assertEqual(candidates[0].keyword_id, 3)
+        self.assertEqual(candidates[0].raw_payload["source_type"], "github_trending")
+        self.assertEqual(candidates[0].raw_payload["stars"], 42000)
 
     def test_fetch_candidates_uses_registered_provider_implementation(self) -> None:
         source = Source(id=10, name="Mock RSS", source_type="rss", enabled=True, config={"url": "https://example.com/rss"})
