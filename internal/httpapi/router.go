@@ -14,6 +14,7 @@ import (
 	"github.com/StephenQiu30/hotkey-server/internal/keyword"
 	"github.com/StephenQiu30/hotkey-server/internal/openapi"
 	"github.com/StephenQiu30/hotkey-server/internal/rbac"
+	"github.com/StephenQiu30/hotkey-server/internal/realtime"
 	"github.com/StephenQiu30/hotkey-server/internal/redisinfra"
 	"github.com/StephenQiu30/hotkey-server/internal/report"
 	"github.com/StephenQiu30/hotkey-server/internal/serviceboundary"
@@ -50,11 +51,20 @@ func NewRouterWithServices(keywordService *keyword.Service, sourceService *sourc
 	billingService := billing.NewService()
 	workQueueService := workqueue.NewService()
 	serviceBoundaryService := serviceboundary.NewService()
+	realtimeService := realtime.NewService(eventService, realtime.Options{MaxEventsPerWindow: 1})
+	if err := realtimeService.RegisterSource(realtime.Source{
+		ID:         "openai-realtime",
+		Token:      "demo-realtime-token",
+		Enabled:    true,
+		LowLatency: true,
+	}); err != nil {
+		panic(err)
+	}
 
-	return newRouter(keywordService, sourceService, contentService, eventService, trustService, hotspotService, reportService, redisInfraService, adminAPIService, tenantService, rbacService, billingService, workQueueService, serviceBoundaryService)
+	return newRouter(keywordService, sourceService, contentService, eventService, trustService, hotspotService, reportService, redisInfraService, adminAPIService, tenantService, rbacService, billingService, workQueueService, serviceBoundaryService, realtimeService)
 }
 
-func newRouter(keywordService *keyword.Service, sourceService *source.Service, contentService *content.Service, eventService *event.Service, trustService *trust.Service, hotspotService *hotspot.Service, reportService *report.Service, redisInfraService *redisinfra.Service, adminAPIService *adminapi.Service, tenantService *tenant.Service, rbacService *rbac.Service, billingService *billing.Service, workQueueService *workqueue.Service, serviceBoundaryService *serviceboundary.Service) *gin.Engine {
+func newRouter(keywordService *keyword.Service, sourceService *source.Service, contentService *content.Service, eventService *event.Service, trustService *trust.Service, hotspotService *hotspot.Service, reportService *report.Service, redisInfraService *redisinfra.Service, adminAPIService *adminapi.Service, tenantService *tenant.Service, rbacService *rbac.Service, billingService *billing.Service, workQueueService *workqueue.Service, serviceBoundaryService *serviceboundary.Service, realtimeService *realtime.Service) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.GET("/healthz", handleHealth)
@@ -68,6 +78,7 @@ func newRouter(keywordService *keyword.Service, sourceService *source.Service, c
 	router.POST("/api/v1/admin/source-items", ingestSourceItem(contentService))
 	router.GET("/api/v1/admin/event-clusters", listEventClusters(eventService))
 	router.POST("/api/v1/admin/event-candidates", upsertEventCandidate(eventService))
+	router.POST("/api/v1/realtime/events", acceptRealtimeEvent(realtimeService))
 	router.POST("/api/v1/admin/event-evidence", addEventEvidence(trustService))
 	router.POST("/api/v1/admin/events/:id/ai-summary", setEventAISummary(trustService))
 	router.GET("/api/v1/admin/task-runs", listAdminTaskRuns(adminAPIService))
@@ -147,6 +158,16 @@ type eventCandidateRequest struct {
 	SourceItemID string    `json:"sourceItemId"`
 	Title        string    `json:"title"`
 	ContentHash  string    `json:"contentHash"`
+	Vector       []float64 `json:"vector"`
+}
+
+type realtimeEventRequest struct {
+	SourceID     string    `json:"sourceId"`
+	Token        string    `json:"token"`
+	SourceItemID string    `json:"sourceItemId"`
+	Title        string    `json:"title"`
+	ContentHash  string    `json:"contentHash"`
+	ReceivedAt   time.Time `json:"receivedAt"`
 	Vector       []float64 `json:"vector"`
 }
 
@@ -356,6 +377,30 @@ func upsertEventCandidate(service *event.Service) gin.HandlerFunc {
 			status = http.StatusCreated
 		}
 		c.JSON(status, match)
+	}
+}
+
+func acceptRealtimeEvent(service *realtime.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req realtimeEventRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_request", "request body must be valid JSON")
+			return
+		}
+		result, err := service.AcceptPush(realtime.PushInput{
+			SourceID:     req.SourceID,
+			Token:        req.Token,
+			SourceItemID: req.SourceItemID,
+			Title:        req.Title,
+			ContentHash:  req.ContentHash,
+			ReceivedAt:   req.ReceivedAt,
+			Vector:       req.Vector,
+		})
+		if err != nil {
+			writeRealtimeError(c, result, err)
+			return
+		}
+		c.JSON(http.StatusAccepted, result)
 	}
 }
 
@@ -915,6 +960,25 @@ func writeEventError(c *gin.Context, err error) {
 		writeError(c, http.StatusBadRequest, "invalid_event_candidate", "event candidate is missing required fields")
 	default:
 		writeError(c, http.StatusInternalServerError, "internal_error", "unexpected event error")
+	}
+}
+
+func writeRealtimeError(c *gin.Context, result realtime.PushResult, err error) {
+	switch {
+	case errors.Is(err, realtime.ErrRateLimited):
+		c.JSON(http.StatusTooManyRequests, result)
+	case errors.Is(err, realtime.ErrCircuitOpen):
+		c.JSON(http.StatusServiceUnavailable, result)
+	case errors.Is(err, realtime.ErrInvalidPush):
+		writeError(c, http.StatusBadRequest, "invalid_realtime_push", "realtime event is missing required fields")
+	case errors.Is(err, realtime.ErrUnauthorizedSource):
+		writeError(c, http.StatusUnauthorized, "unauthorized_realtime_source", "realtime source token is invalid")
+	case errors.Is(err, realtime.ErrSourceNotFound):
+		writeError(c, http.StatusNotFound, "realtime_source_not_found", "realtime source was not found")
+	case errors.Is(err, realtime.ErrSourceDisabled):
+		writeError(c, http.StatusForbidden, "realtime_source_disabled", "realtime source is disabled")
+	default:
+		writeError(c, http.StatusInternalServerError, "internal_error", "unexpected realtime error")
 	}
 }
 

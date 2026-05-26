@@ -169,6 +169,14 @@ func Spec() SpecDocument {
 					Responses:   createdObjectResponse("Event candidate clustered"),
 				},
 			},
+			"/api/v1/realtime/events": {
+				Post: Operation{
+					Summary:     "Accept authorized realtime event push with rate limiting and fallback",
+					OperationID: "acceptRealtimeEvent",
+					Tags:        []string{"event", "realtime"},
+					Responses:   acceptedObjectResponse("Realtime event accepted or degraded to fallback queue"),
+				},
+			},
 			"/api/v1/admin/event-clusters": {
 				Get: Operation{
 					Summary:     "List candidate event clusters",
