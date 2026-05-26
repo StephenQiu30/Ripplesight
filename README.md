@@ -13,6 +13,7 @@
 ## 目标技术栈
 
 - Go
+- Gin HTTP framework
 - PostgreSQL
 - pgvector
 - Redis
@@ -41,12 +42,27 @@ docs/plans/N-能力名称实现计划.md
 
 ## 本地验证
 
-当前阶段尚未引入 Go 运行时代码。提交前至少执行：
+提交前至少执行：
 
 ```bash
 git status --short
 git diff --check
 find docs/product/prd docs/plans -maxdepth 1 -type f | sort -V
+go test ./...
 ```
 
-实现 Go 服务后，应补充 `go test ./...`、OpenAPI 导出和端侧客户端生成验证。
+OpenAPI 可通过启动服务后访问 `/openapi.json` 导出；涉及接口变更时还需要补充端侧客户端生成验证。
+
+## 本地启动
+
+```bash
+HOTKEY_HTTP_ADDR=127.0.0.1:18080 go run ./cmd/server
+curl http://127.0.0.1:18080/healthz
+curl http://127.0.0.1:18080/openapi.json
+```
+
+默认配置：
+
+- `HOTKEY_HTTP_ADDR=:8080`
+- `HOTKEY_DATABASE_URL=postgres://hotkey:hotkey@localhost:5432/hotkey?sslmode=disable`
+- `HOTKEY_REDIS_URL=redis://localhost:6379/0`
