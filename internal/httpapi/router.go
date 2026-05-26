@@ -19,6 +19,7 @@ import (
 	"github.com/StephenQiu30/hotkey-server/internal/source"
 	"github.com/StephenQiu30/hotkey-server/internal/tenant"
 	"github.com/StephenQiu30/hotkey-server/internal/trust"
+	"github.com/StephenQiu30/hotkey-server/internal/workqueue"
 	"github.com/gin-gonic/gin"
 )
 
@@ -46,11 +47,12 @@ func NewRouterWithServices(keywordService *keyword.Service, sourceService *sourc
 	tenantService := tenant.NewService()
 	rbacService := rbac.NewService()
 	billingService := billing.NewService()
+	workQueueService := workqueue.NewService()
 
-	return newRouter(keywordService, sourceService, contentService, eventService, trustService, hotspotService, reportService, redisInfraService, adminAPIService, tenantService, rbacService, billingService)
+	return newRouter(keywordService, sourceService, contentService, eventService, trustService, hotspotService, reportService, redisInfraService, adminAPIService, tenantService, rbacService, billingService, workQueueService)
 }
 
-func newRouter(keywordService *keyword.Service, sourceService *source.Service, contentService *content.Service, eventService *event.Service, trustService *trust.Service, hotspotService *hotspot.Service, reportService *report.Service, redisInfraService *redisinfra.Service, adminAPIService *adminapi.Service, tenantService *tenant.Service, rbacService *rbac.Service, billingService *billing.Service) *gin.Engine {
+func newRouter(keywordService *keyword.Service, sourceService *source.Service, contentService *content.Service, eventService *event.Service, trustService *trust.Service, hotspotService *hotspot.Service, reportService *report.Service, redisInfraService *redisinfra.Service, adminAPIService *adminapi.Service, tenantService *tenant.Service, rbacService *rbac.Service, billingService *billing.Service, workQueueService *workqueue.Service) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.GET("/healthz", handleHealth)
@@ -92,6 +94,10 @@ func newRouter(keywordService *keyword.Service, sourceService *source.Service, c
 	router.POST("/api/v1/refresh-queue", enqueueRefresh(redisInfraService))
 	router.GET("/api/v1/admin/refresh-queue", listRefreshQueue(redisInfraService))
 	router.GET("/api/v1/admin/redis/health", getRedisHealth(redisInfraService))
+	router.GET("/api/v1/admin/work-queue/jobs", listWorkQueueJobs(workQueueService))
+	router.POST("/api/v1/admin/work-queue/jobs", enqueueWorkQueueJob(workQueueService))
+	router.POST("/api/v1/admin/work-queue/run", runWorkQueue(workQueueService))
+	router.GET("/api/v1/admin/work-queue/compensations", listWorkQueueCompensations(workQueueService))
 	router.POST("/api/v1/keywords/follow", followKeyword(keywordService))
 	router.POST("/api/v1/keywords/block", blockKeyword(keywordService))
 	router.POST("/api/v1/keywords/additional", addUserKeyword(keywordService))
@@ -200,6 +206,11 @@ type billingPlanRequest struct {
 type billingUsageRequest struct {
 	Metric string `json:"metric"`
 	Amount int    `json:"amount"`
+}
+
+type runWorkQueueRequest struct {
+	Workers int `json:"workers"`
+	MaxJobs int `json:"maxJobs"`
 }
 
 type userKeywordRequest struct {
@@ -653,6 +664,43 @@ func recordTenantUsage(service *billing.Service) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusAccepted, result)
+	}
+}
+
+func listWorkQueueJobs(service *workqueue.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"jobs": service.ListPendingJobs()})
+	}
+}
+
+func enqueueWorkQueueJob(service *workqueue.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req workqueue.JobInput
+		if err := c.ShouldBindJSON(&req); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_request", "request body must be valid JSON")
+			return
+		}
+		c.JSON(http.StatusCreated, service.Enqueue(req))
+	}
+}
+
+func runWorkQueue(service *workqueue.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req runWorkQueueRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_request", "request body must be valid JSON")
+			return
+		}
+		c.JSON(http.StatusOK, service.RunWorkerPool(workqueue.WorkerPoolConfig{
+			Workers: req.Workers,
+			MaxJobs: req.MaxJobs,
+		}))
+	}
+}
+
+func listWorkQueueCompensations(service *workqueue.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"compensations": service.ListCompensations()})
 	}
 }
 

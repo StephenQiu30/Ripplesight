@@ -393,6 +393,36 @@ func Spec() SpecDocument {
 					Responses:   okObjectResponse("Redis health"),
 				},
 			},
+			"/api/v1/admin/work-queue/jobs": {
+				Get: Operation{
+					Summary:     "List pending work queue jobs",
+					OperationID: "listWorkQueueJobs",
+					Tags:        []string{"queue"},
+					Responses:   okObjectResponse("Work queue job list"),
+				},
+				Post: Operation{
+					Summary:     "Enqueue prioritized async job",
+					OperationID: "enqueueWorkQueueJob",
+					Tags:        []string{"queue"},
+					Responses:   createdObjectResponse("Work queue job enqueued"),
+				},
+			},
+			"/api/v1/admin/work-queue/run": {
+				Post: Operation{
+					Summary:     "Run worker pool for pending jobs",
+					OperationID: "runWorkQueue",
+					Tags:        []string{"queue"},
+					Responses:   okObjectResponse("Worker pool result"),
+				},
+			},
+			"/api/v1/admin/work-queue/compensations": {
+				Get: Operation{
+					Summary:     "List failed job compensations",
+					OperationID: "listWorkQueueCompensations",
+					Tags:        []string{"queue"},
+					Responses:   okObjectResponse("Compensation list"),
+				},
+			},
 			"/api/v1/keywords/follow": {
 				Post: Operation{
 					Summary:     "Follow keyword for a user",
