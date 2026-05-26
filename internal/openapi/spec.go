@@ -209,6 +209,30 @@ func Spec() SpecDocument {
 					Responses:   acceptedObjectResponse("Daily report generation accepted"),
 				},
 			},
+			"/api/v1/admin/tenants": {
+				Post: Operation{
+					Summary:     "Create tenant organization space",
+					OperationID: "createTenant",
+					Tags:        []string{"tenant"},
+					Responses:   createdObjectResponse("Tenant created"),
+				},
+			},
+			"/api/v1/admin/tenants/{id}/members": {
+				Post: Operation{
+					Summary:     "Add user membership to a tenant",
+					OperationID: "addTenantMember",
+					Tags:        []string{"tenant"},
+					Responses:   createdObjectResponse("Tenant member added"),
+				},
+			},
+			"/api/v1/users/{id}/tenants": {
+				Get: Operation{
+					Summary:     "List tenant spaces for a user",
+					OperationID: "listUserTenants",
+					Tags:        []string{"tenant"},
+					Responses:   okObjectResponse("User tenant list"),
+				},
+			},
 			"/api/v1/events/{id}/evidence": {
 				Get: Operation{
 					Summary:     "Get event evidence detail",
@@ -247,6 +271,14 @@ func Spec() SpecDocument {
 					OperationID: "getUserDailyReport",
 					Tags:        []string{"report"},
 					Responses:   okObjectResponse("User daily report"),
+				},
+			},
+			"/api/v1/tenants/{id}/reports/daily": {
+				Get: Operation{
+					Summary:     "Get tenant-scoped daily report",
+					OperationID: "getTenantDailyReport",
+					Tags:        []string{"tenant", "report"},
+					Responses:   okObjectResponse("Tenant daily report"),
 				},
 			},
 			"/api/v1/refresh-queue": {
