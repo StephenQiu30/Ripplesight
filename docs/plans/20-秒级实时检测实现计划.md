@@ -49,7 +49,7 @@ downstream:
 
 ## 4. TDD 与验证
 
-- 文档任务：运行 `python3 -m unittest discover -s tests -p 'test_repository_governance.py'`，或补充新的仓库治理测试。
+- 文档任务：运行 CI 中的文档编号与旧运行时缺失检查，或补充新的仓库治理检查。
 - Go 实现任务：运行 `go test ./...`。
 - OpenAPI 任务：运行项目定义的 OpenAPI 导出命令，并检查生成文件。
 - 数据库任务：运行 schema 初始化和最小读写测试。
