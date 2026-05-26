@@ -67,7 +67,13 @@ func newRouter(keywordService *keyword.Service, sourceService *source.Service, c
 	router.GET("/api/v1/admin/task-runs", listAdminTaskRuns(adminAPIService))
 	router.POST("/api/v1/admin/reports/daily", triggerAdminDailyReport(reportService, adminAPIService))
 	router.POST("/api/v1/admin/tenants", createTenant(tenantService))
+	router.GET("/api/v1/admin/tenants", listTenants(tenantService))
 	router.POST("/api/v1/admin/tenants/:id/members", addTenantMember(tenantService))
+	router.GET("/api/v1/admin/tenants/:id/keywords", listTenantKeywords(keywordService))
+	router.POST("/api/v1/admin/tenants/:id/keywords", createTenantKeyword(keywordService))
+	router.GET("/api/v1/admin/tenants/:id/sources", listTenantSources(sourceService))
+	router.POST("/api/v1/admin/tenants/:id/sources", createTenantSource(sourceService))
+	router.PATCH("/api/v1/admin/tenants/:id/sources/:sourceId", updateTenantSource(sourceService))
 	router.POST("/api/v1/admin/tenants/:id/roles", grantTenantRole(rbacService))
 	router.POST("/api/v1/admin/tenants/:id/authorize", authorizeTenantAction(rbacService))
 	router.GET("/api/v1/admin/tenants/:id/audit-logs", listTenantAuditLogs(rbacService))
@@ -456,6 +462,12 @@ func createTenant(service *tenant.Service) gin.HandlerFunc {
 	}
 }
 
+func listTenants(service *tenant.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"tenants": service.ListTenants()})
+	}
+}
+
 func addTenantMember(service *tenant.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req tenantMemberRequest
@@ -478,6 +490,73 @@ func addTenantMember(service *tenant.Service) gin.HandlerFunc {
 func listUserTenants(service *tenant.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"tenants": service.ListUserTenants(c.Param("id"))})
+	}
+}
+
+func listTenantKeywords(service *keyword.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"keywords": service.ListPlatformKeywordsByTenant(c.Param("id"))})
+	}
+}
+
+func createTenantKeyword(service *keyword.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req createKeywordRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_request", "request body must be valid JSON")
+			return
+		}
+		created, err := service.CreatePlatformKeyword(keyword.CreatePlatformKeywordInput{
+			TenantID: c.Param("id"),
+			Term:     req.Term,
+			Category: req.Category,
+		})
+		if err != nil {
+			writeKeywordError(c, err)
+			return
+		}
+		c.JSON(http.StatusCreated, created)
+	}
+}
+
+func listTenantSources(service *source.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"sources": service.ListSourcesByTenant(c.Param("id"))})
+	}
+}
+
+func createTenantSource(service *source.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req source.Source
+		if err := c.ShouldBindJSON(&req); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_request", "request body must be valid JSON")
+			return
+		}
+		req.TenantID = c.Param("id")
+		if err := service.RegisterSource(req); err != nil {
+			writeSourceError(c, err)
+			return
+		}
+		c.JSON(http.StatusCreated, req)
+	}
+}
+
+func updateTenantSource(service *source.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req updateSourceRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_request", "request body must be valid JSON")
+			return
+		}
+		updated, err := service.UpdateTenantSourceConfig(c.Param("id"), c.Param("sourceId"), source.UpdateSourceConfigInput{
+			Enabled:          req.Enabled,
+			RateLimitPerHour: req.RateLimitPerHour,
+		})
+		if err != nil {
+			writeSourceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, updated)
 	}
 }
 

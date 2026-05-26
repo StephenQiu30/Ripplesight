@@ -210,6 +210,12 @@ func Spec() SpecDocument {
 				},
 			},
 			"/api/v1/admin/tenants": {
+				Get: Operation{
+					Summary:     "List tenant organization spaces",
+					OperationID: "listTenants",
+					Tags:        []string{"tenant"},
+					Responses:   okObjectResponse("Tenant list"),
+				},
 				Post: Operation{
 					Summary:     "Create tenant organization space",
 					OperationID: "createTenant",
@@ -223,6 +229,42 @@ func Spec() SpecDocument {
 					OperationID: "addTenantMember",
 					Tags:        []string{"tenant"},
 					Responses:   createdObjectResponse("Tenant member added"),
+				},
+			},
+			"/api/v1/admin/tenants/{id}/keywords": {
+				Get: Operation{
+					Summary:     "List tenant-scoped keywords",
+					OperationID: "listTenantKeywords",
+					Tags:        []string{"tenant", "keyword"},
+					Responses:   okObjectResponse("Tenant keyword list"),
+				},
+				Post: Operation{
+					Summary:     "Create tenant-scoped keyword",
+					OperationID: "createTenantKeyword",
+					Tags:        []string{"tenant", "keyword"},
+					Responses:   createdObjectResponse("Tenant keyword created"),
+				},
+			},
+			"/api/v1/admin/tenants/{id}/sources": {
+				Get: Operation{
+					Summary:     "List tenant-scoped sources",
+					OperationID: "listTenantSources",
+					Tags:        []string{"tenant", "source"},
+					Responses:   okObjectResponse("Tenant source list"),
+				},
+				Post: Operation{
+					Summary:     "Create tenant-scoped source",
+					OperationID: "createTenantSource",
+					Tags:        []string{"tenant", "source"},
+					Responses:   createdObjectResponse("Tenant source created"),
+				},
+			},
+			"/api/v1/admin/tenants/{id}/sources/{sourceId}": {
+				Patch: Operation{
+					Summary:     "Update tenant-scoped source",
+					OperationID: "updateTenantSource",
+					Tags:        []string{"tenant", "source"},
+					Responses:   okObjectResponse("Tenant source updated"),
 				},
 			},
 			"/api/v1/admin/tenants/{id}/roles": {

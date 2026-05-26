@@ -124,6 +124,20 @@ func (s *Service) ListUserTenants(userID string) []Tenant {
 	return result
 }
 
+func (s *Service) ListTenants() []Tenant {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	result := make([]Tenant, 0, len(s.tenants))
+	for _, tenant := range s.tenants {
+		result = append(result, tenant)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Slug < result[j].Slug
+	})
+	return result
+}
+
 func normalizeRole(role string) string {
 	switch strings.TrimSpace(role) {
 	case RoleOwner:
