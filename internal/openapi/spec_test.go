@@ -96,3 +96,16 @@ func TestSpecContainsHotspotEndpoints(t *testing.T) {
 		}
 	}
 }
+
+func TestSpecContainsReportEndpoints(t *testing.T) {
+	spec := Spec()
+
+	for _, path := range []string{
+		"/api/v1/reports/daily",
+		"/api/v1/users/{id}/reports/daily",
+	} {
+		if _, ok := spec.Paths[path]; !ok {
+			t.Fatalf("paths missing %s", path)
+		}
+	}
+}

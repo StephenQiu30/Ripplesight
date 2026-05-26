@@ -85,6 +85,8 @@ curl http://127.0.0.1:18080/openapi.json
 - `GET /api/v1/events/{id}/evidence`
 - `GET /api/v1/hotspots`
 - `GET /api/v1/hotspots/{id}`
+- `GET /api/v1/reports/daily?date=YYYY-MM-DD`
+- `GET /api/v1/users/{id}/reports/daily?date=YYYY-MM-DD&keywords=OpenAI,model`
 - `POST /api/v1/keywords/follow`
 - `POST /api/v1/keywords/block`
 - `POST /api/v1/keywords/additional`
@@ -101,3 +103,5 @@ curl http://127.0.0.1:18080/openapi.json
 当前可信度能力先使用进程内证据链仓储锁定事实证据、传播证据和 AI 引用契约；低可信传播源只贡献热度，不能生成事实分，AI 总结必须携带来源引用。
 
 当前热点能力先使用进程内热点仓储锁定列表与详情契约；列表支持关键词、地区、语言、最低可信度和 `heat` / `trust` / `relevance` 排序，详情返回关联内容、证据摘要、相似度和风险标签。
+
+当前日报能力先使用进程内日报生成器锁定平台日报和用户关注日报契约；日报条目必须回链事件簇和证据 ID，默认 `date` 为昨日。

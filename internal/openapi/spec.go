@@ -191,6 +191,22 @@ func Spec() SpecDocument {
 					Responses:   okObjectResponse("Hotspot detail"),
 				},
 			},
+			"/api/v1/reports/daily": {
+				Get: Operation{
+					Summary:     "Get platform daily report",
+					OperationID: "getPlatformDailyReport",
+					Tags:        []string{"report"},
+					Responses:   okObjectResponse("Platform daily report"),
+				},
+			},
+			"/api/v1/users/{id}/reports/daily": {
+				Get: Operation{
+					Summary:     "Get user keyword daily report",
+					OperationID: "getUserDailyReport",
+					Tags:        []string{"report"},
+					Responses:   okObjectResponse("User daily report"),
+				},
+			},
 			"/api/v1/keywords/follow": {
 				Post: Operation{
 					Summary:     "Follow keyword for a user",

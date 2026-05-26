@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/StephenQiu30/hotkey-server/internal/content"
@@ -10,6 +11,7 @@ import (
 	"github.com/StephenQiu30/hotkey-server/internal/hotspot"
 	"github.com/StephenQiu30/hotkey-server/internal/keyword"
 	"github.com/StephenQiu30/hotkey-server/internal/openapi"
+	"github.com/StephenQiu30/hotkey-server/internal/report"
 	"github.com/StephenQiu30/hotkey-server/internal/source"
 	"github.com/StephenQiu30/hotkey-server/internal/trust"
 	"github.com/gin-gonic/gin"
@@ -33,11 +35,12 @@ func NewRouterWithServices(keywordService *keyword.Service, sourceService *sourc
 	}
 	trustService := trust.NewService()
 	hotspotService := hotspot.NewService()
+	reportService := report.NewService()
 
-	return newRouter(keywordService, sourceService, contentService, eventService, trustService, hotspotService)
+	return newRouter(keywordService, sourceService, contentService, eventService, trustService, hotspotService, reportService)
 }
 
-func newRouter(keywordService *keyword.Service, sourceService *source.Service, contentService *content.Service, eventService *event.Service, trustService *trust.Service, hotspotService *hotspot.Service) *gin.Engine {
+func newRouter(keywordService *keyword.Service, sourceService *source.Service, contentService *content.Service, eventService *event.Service, trustService *trust.Service, hotspotService *hotspot.Service, reportService *report.Service) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.GET("/healthz", handleHealth)
@@ -56,6 +59,8 @@ func newRouter(keywordService *keyword.Service, sourceService *source.Service, c
 	router.GET("/api/v1/events/:id/evidence", getEventEvidence(trustService))
 	router.GET("/api/v1/hotspots", listHotspots(hotspotService))
 	router.GET("/api/v1/hotspots/:id", getHotspotDetail(hotspotService))
+	router.GET("/api/v1/reports/daily", getPlatformDailyReport(reportService))
+	router.GET("/api/v1/users/:id/reports/daily", getUserDailyReport(reportService))
 	router.POST("/api/v1/keywords/follow", followKeyword(keywordService))
 	router.POST("/api/v1/keywords/block", blockKeyword(keywordService))
 	router.POST("/api/v1/keywords/additional", addUserKeyword(keywordService))
@@ -337,6 +342,36 @@ func getHotspotDetail(service *hotspot.Service) gin.HandlerFunc {
 	}
 }
 
+func getPlatformDailyReport(service *report.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		reportDate, ok := parseReportDate(c)
+		if !ok {
+			return
+		}
+		daily, err := service.GeneratePlatformDailyReport(reportDate, defaultReportHotspots())
+		if err != nil {
+			writeReportError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, daily)
+	}
+}
+
+func getUserDailyReport(service *report.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		reportDate, ok := parseReportDate(c)
+		if !ok {
+			return
+		}
+		daily, err := service.GenerateUserDailyReport(reportDate, c.Param("id"), splitCSV(c.Query("keywords")), defaultReportHotspots())
+		if err != nil {
+			writeReportError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, daily)
+	}
+}
+
 func followKeyword(service *keyword.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		handleUserKeywordMutation(c, service.FollowKeyword)
@@ -392,6 +427,15 @@ func writeKeywordError(c *gin.Context, err error) {
 	}
 }
 
+func writeReportError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, report.ErrMissingEvidenceLink):
+		writeError(c, http.StatusBadRequest, "missing_evidence_link", "daily report item must link to event evidence")
+	default:
+		writeError(c, http.StatusInternalServerError, "internal_error", "unexpected report error")
+	}
+}
+
 func writeHotspotError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, hotspot.ErrHotspotNotFound):
@@ -443,6 +487,19 @@ func writeSourceError(c *gin.Context, err error) {
 	}
 }
 
+func parseReportDate(c *gin.Context) (time.Time, bool) {
+	value := c.Query("date")
+	if value == "" {
+		value = time.Now().UTC().AddDate(0, 0, -1).Format("2006-01-02")
+	}
+	parsed, err := time.Parse("2006-01-02", value)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, "invalid_report_date", "date must use YYYY-MM-DD")
+		return time.Time{}, false
+	}
+	return parsed, true
+}
+
 func parsePositiveInt(value string) int {
 	var result int
 	for _, ch := range value {
@@ -452,6 +509,42 @@ func parsePositiveInt(value string) int {
 		result = result*10 + int(ch-'0')
 	}
 	return result
+}
+
+func splitCSV(value string) []string {
+	if value == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
+func defaultReportHotspots() []report.HotspotSnapshot {
+	return []report.HotspotSnapshot{
+		{
+			EventID:     "cluster_openai_reasoning",
+			Title:       "OpenAI releases new reasoning model",
+			Keywords:    []string{"OpenAI", "model", "reasoning"},
+			HeatScore:   88,
+			TrustScore:  95,
+			EvidenceIDs: []string{"item_1", "item_2"},
+		},
+		{
+			EventID:     "cluster_ai_safety_report",
+			Title:       "Anthropic publishes AI safety report",
+			Keywords:    []string{"Anthropic", "safety", "AI"},
+			HeatScore:   64,
+			TrustScore:  90,
+			EvidenceIDs: []string{"item_3"},
+		},
+	}
 }
 
 func writeError(c *gin.Context, status int, code string, message string) {
