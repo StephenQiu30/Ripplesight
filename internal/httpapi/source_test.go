@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/StephenQiu30/hotkey-server/internal/content"
 	"github.com/StephenQiu30/hotkey-server/internal/keyword"
 	"github.com/StephenQiu30/hotkey-server/internal/source"
 	"github.com/gin-gonic/gin"
@@ -14,7 +15,7 @@ import (
 
 func TestAdminSourceEndpointsListAndUpdateSource(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	router := NewRouterWithServices(keyword.NewService(), source.NewService())
+	router := NewRouterWithServices(keyword.NewService(), source.NewService(), content.NewService())
 
 	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/admin/sources", nil)
 	listRec := httptest.NewRecorder()
@@ -58,7 +59,7 @@ func TestAdminSourceEndpointsListAndUpdateSource(t *testing.T) {
 
 func TestAdminSourceEndpointRejectsInvalidThrottle(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	router := NewRouterWithServices(keyword.NewService(), source.NewService())
+	router := NewRouterWithServices(keyword.NewService(), source.NewService(), content.NewService())
 
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/sources/arxiv-ai", bytes.NewBufferString(`{"rateLimitPerHour":0}`))
 	req.Header.Set("Content-Type", "application/json")

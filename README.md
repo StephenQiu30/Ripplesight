@@ -78,6 +78,8 @@ curl http://127.0.0.1:18080/openapi.json
 - `PATCH /api/v1/admin/sources/{id}`
 - `GET /api/v1/admin/source-items`
 - `POST /api/v1/admin/source-items`
+- `POST /api/v1/admin/event-candidates`
+- `GET /api/v1/admin/event-clusters`
 - `POST /api/v1/keywords/follow`
 - `POST /api/v1/keywords/block`
 - `POST /api/v1/keywords/additional`
@@ -88,3 +90,5 @@ curl http://127.0.0.1:18080/openapi.json
 当前来源能力先使用进程内来源注册表锁定合规字段、启停与限流契约；默认内置 `arxiv-ai` 作为国外事实源、`github-trending-ai` 作为传播源，不包含绕过授权、抓取真实 token 或规避平台限制的采集逻辑。
 
 当前内容能力先使用进程内 SourceItem 仓储锁定标准化与去重契约；会保留原始 URL、来源、发布时间、抓取时间、内容 hash 和原始元数据，并按 canonical URL、内容 hash、标题时间窗口去重。
+
+当前相似聚合能力先使用进程内事件簇仓储锁定 pgvector 契约；向量可用时使用余弦相似度归簇，向量不可用时退回 hash/标题规则聚合，并在响应中展示 `matchMethod` 与 `similarity`。

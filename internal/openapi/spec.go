@@ -135,6 +135,22 @@ func Spec() SpecDocument {
 					Responses:   createdObjectResponse("Source item ingested"),
 				},
 			},
+			"/api/v1/admin/event-candidates": {
+				Post: Operation{
+					Summary:     "Upsert source item into a candidate event cluster",
+					OperationID: "upsertEventCandidate",
+					Tags:        []string{"event"},
+					Responses:   createdObjectResponse("Event candidate clustered"),
+				},
+			},
+			"/api/v1/admin/event-clusters": {
+				Get: Operation{
+					Summary:     "List candidate event clusters",
+					OperationID: "listEventClusters",
+					Tags:        []string{"event"},
+					Responses:   okObjectResponse("Event cluster list"),
+				},
+			},
 			"/api/v1/keywords/follow": {
 				Post: Operation{
 					Summary:     "Follow keyword for a user",

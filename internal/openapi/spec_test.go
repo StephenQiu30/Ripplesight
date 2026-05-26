@@ -56,3 +56,16 @@ func TestSpecContainsSourceItemEndpoints(t *testing.T) {
 		t.Fatalf("paths missing /api/v1/admin/source-items")
 	}
 }
+
+func TestSpecContainsEventClusterEndpoints(t *testing.T) {
+	spec := Spec()
+
+	for _, path := range []string{
+		"/api/v1/admin/event-candidates",
+		"/api/v1/admin/event-clusters",
+	} {
+		if _, ok := spec.Paths[path]; !ok {
+			t.Fatalf("paths missing %s", path)
+		}
+	}
+}

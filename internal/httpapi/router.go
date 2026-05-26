@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/StephenQiu30/hotkey-server/internal/content"
+	"github.com/StephenQiu30/hotkey-server/internal/event"
 	"github.com/StephenQiu30/hotkey-server/internal/keyword"
 	"github.com/StephenQiu30/hotkey-server/internal/openapi"
 	"github.com/StephenQiu30/hotkey-server/internal/source"
@@ -13,19 +14,26 @@ import (
 )
 
 func NewRouter() *gin.Engine {
-	return NewRouterWithServices(keyword.NewService(), source.NewService(), content.NewService())
+	return NewRouterWithServices(keyword.NewService(), source.NewService(), content.NewService(), event.NewService(event.Options{VectorEnabled: true}))
 }
 
 func NewRouterWithKeywordService(keywordService *keyword.Service) *gin.Engine {
-	return NewRouterWithServices(keywordService, source.NewService(), content.NewService())
+	return NewRouterWithServices(keywordService, source.NewService(), content.NewService(), event.NewService(event.Options{VectorEnabled: true}))
 }
 
-func NewRouterWithServices(keywordService *keyword.Service, sourceService *source.Service, contentServices ...*content.Service) *gin.Engine {
-	contentService := content.NewService()
-	if len(contentServices) > 0 && contentServices[0] != nil {
-		contentService = contentServices[0]
+func NewRouterWithServices(keywordService *keyword.Service, sourceService *source.Service, contentService *content.Service, eventServices ...*event.Service) *gin.Engine {
+	if contentService == nil {
+		contentService = content.NewService()
+	}
+	eventService := event.NewService(event.Options{VectorEnabled: true})
+	if len(eventServices) > 0 && eventServices[0] != nil {
+		eventService = eventServices[0]
 	}
 
+	return newRouter(keywordService, sourceService, contentService, eventService)
+}
+
+func newRouter(keywordService *keyword.Service, sourceService *source.Service, contentService *content.Service, eventService *event.Service) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.GET("/healthz", handleHealth)
@@ -37,6 +45,8 @@ func NewRouterWithServices(keywordService *keyword.Service, sourceService *sourc
 	router.PATCH("/api/v1/admin/sources/:id", updateSource(sourceService))
 	router.GET("/api/v1/admin/source-items", listSourceItems(contentService))
 	router.POST("/api/v1/admin/source-items", ingestSourceItem(contentService))
+	router.GET("/api/v1/admin/event-clusters", listEventClusters(eventService))
+	router.POST("/api/v1/admin/event-candidates", upsertEventCandidate(eventService))
 	router.POST("/api/v1/keywords/follow", followKeyword(keywordService))
 	router.POST("/api/v1/keywords/block", blockKeyword(keywordService))
 	router.POST("/api/v1/keywords/additional", addUserKeyword(keywordService))
@@ -77,6 +87,13 @@ type ingestSourceItemRequest struct {
 	PublishedAt time.Time         `json:"publishedAt"`
 	FetchedAt   time.Time         `json:"fetchedAt"`
 	RawMetadata map[string]string `json:"rawMetadata"`
+}
+
+type eventCandidateRequest struct {
+	SourceItemID string    `json:"sourceItemId"`
+	Title        string    `json:"title"`
+	ContentHash  string    `json:"contentHash"`
+	Vector       []float64 `json:"vector"`
 }
 
 type userKeywordRequest struct {
@@ -191,6 +208,37 @@ func ingestSourceItem(service *content.Service) gin.HandlerFunc {
 	}
 }
 
+func listEventClusters(service *event.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"clusters": service.ListClusters()})
+	}
+}
+
+func upsertEventCandidate(service *event.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req eventCandidateRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_request", "request body must be valid JSON")
+			return
+		}
+		match, err := service.UpsertCandidate(event.CandidateInput{
+			SourceItemID: req.SourceItemID,
+			Title:        req.Title,
+			ContentHash:  req.ContentHash,
+			Vector:       req.Vector,
+		})
+		if err != nil {
+			writeEventError(c, err)
+			return
+		}
+		status := http.StatusOK
+		if match.MatchMethod == event.MatchMethodSeed {
+			status = http.StatusCreated
+		}
+		c.JSON(status, match)
+	}
+}
+
 func followKeyword(service *keyword.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		handleUserKeywordMutation(c, service.FollowKeyword)
@@ -243,6 +291,15 @@ func writeKeywordError(c *gin.Context, err error) {
 		writeError(c, http.StatusNotFound, "keyword_not_found", "keyword was not found")
 	default:
 		writeError(c, http.StatusInternalServerError, "internal_error", "unexpected keyword error")
+	}
+}
+
+func writeEventError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, event.ErrInvalidCandidate):
+		writeError(c, http.StatusBadRequest, "invalid_event_candidate", "event candidate is missing required fields")
+	default:
+		writeError(c, http.StatusInternalServerError, "internal_error", "unexpected event error")
 	}
 }
 
