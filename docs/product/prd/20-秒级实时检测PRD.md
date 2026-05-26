@@ -1,42 +1,42 @@
 ---
 layer: PRD
-doc_no: "41"
+doc_no: "20"
 audience:
   - PM
   - Tech-Lead
   - Dev
   - QA
-feature_area: "area:queue"
-purpose: "引入复杂消息队列、Worker 池、任务优先级、任务分片和失败补偿。"
-canonical_path: "docs/product/prd/41-复杂消息队列与Worker池PRD.md"
+feature_area: "area:realtime"
+purpose: "支持实时流、Webhook 或授权平台推送，实现秒级或近秒级热点检测。"
+canonical_path: "docs/product/prd/20-秒级实时检测PRD.md"
 status: approved
 version: "1.0.0"
 owner: "StephenQiu30"
 inputs:
   - docs/engineering/1-Go后端重建与开源仓库治理设计.md
 outputs:
-  - 复杂消息队列与Worker池需求边界
-  - 复杂消息队列与Worker池验收标准
+  - 秒级实时检测需求边界
+  - 秒级实时检测验收标准
 triggers:
-  - "复杂消息队列与Worker池范围变更"
+  - "秒级实时检测范围变更"
   - "对应 issue 拆分或合并"
 downstream:
-  - docs/plans/41-复杂消息队列与Worker池实现计划.md
+  - docs/plans/20-秒级实时检测实现计划.md
 ---
 
-# 41-复杂消息队列与Worker池 PRD
+# 20-秒级实时检测 PRD
 
 ## 1. 背景
 
-本 PRD 属于 HotKey Go 后端全面重构的新编号体系，阶段为 **P2 商业化与规模化能力**。旧 FastAPI 实现、旧编号计划和一次性中间记录不作为本需求事实源。
+本 PRD 属于 HotKey Go 后端全面重构的新编号体系，阶段为 **P3 高级实时与事件图谱**。旧 FastAPI 实现、旧编号计划和一次性中间记录不作为本需求事实源。
 
 ## 2. 目标
 
-引入复杂消息队列、Worker 池、任务优先级、任务分片和失败补偿。
+支持实时流、Webhook 或授权平台推送，实现秒级或近秒级热点检测。
 
 ## 3. 范围
 
-- 围绕 `复杂消息队列与Worker池` 定义后端能力、数据边界、API 影响和验收口径。
+- 围绕 `秒级实时检测` 定义后端能力、数据边界、API 影响和验收口径。
 - 与同编号 Plan 配对推进，实施前不得绕过本文档。
 - 变更必须同步 GitHub issue、Linear issue 和 OpenAPI 影响说明。
 
@@ -54,7 +54,7 @@ downstream:
 
 ## 6. 验收标准
 
-- 采集、分析、日报任务可异步执行，失败可重试和补偿。
+- 授权实时源可低延迟进入事件候选，并具备限流、熔断和降级。
 - PRD 与 Plan 编号一致。
 - 对应 GitHub/Linear issue 负责人明确。
 - 无占位标记或未定稿提示。

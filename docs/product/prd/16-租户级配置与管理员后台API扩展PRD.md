@@ -1,42 +1,42 @@
 ---
 layer: PRD
-doc_no: "61"
+doc_no: "16"
 audience:
   - PM
   - Tech-Lead
   - Dev
   - QA
-feature_area: "area:event"
-purpose: "从事件簇升级为完整事件图谱，支持跨语言事件归并。"
-canonical_path: "docs/product/prd/61-完整事件图谱与跨语言归并PRD.md"
+feature_area: "area:tenant area:api"
+purpose: "扩展租户级关键词、来源、日报和权限边界管理 API。"
+canonical_path: "docs/product/prd/16-租户级配置与管理员后台API扩展PRD.md"
 status: approved
 version: "1.0.0"
 owner: "StephenQiu30"
 inputs:
   - docs/engineering/1-Go后端重建与开源仓库治理设计.md
 outputs:
-  - 完整事件图谱与跨语言归并需求边界
-  - 完整事件图谱与跨语言归并验收标准
+  - 租户级配置与管理员后台API扩展需求边界
+  - 租户级配置与管理员后台API扩展验收标准
 triggers:
-  - "完整事件图谱与跨语言归并范围变更"
+  - "租户级配置与管理员后台API扩展范围变更"
   - "对应 issue 拆分或合并"
 downstream:
-  - docs/plans/61-完整事件图谱与跨语言归并实现计划.md
+  - docs/plans/16-租户级配置与管理员后台API扩展实现计划.md
 ---
 
-# 61-完整事件图谱与跨语言归并 PRD
+# 16-租户级配置与管理员后台API扩展 PRD
 
 ## 1. 背景
 
-本 PRD 属于 HotKey Go 后端全面重构的新编号体系，阶段为 **P3 高级实时与事件图谱**。旧 FastAPI 实现、旧编号计划和一次性中间记录不作为本需求事实源。
+本 PRD 属于 HotKey Go 后端全面重构的新编号体系，阶段为 **P1 平台化能力**。旧 FastAPI 实现、旧编号计划和一次性中间记录不作为本需求事实源。
 
 ## 2. 目标
 
-从事件簇升级为完整事件图谱，支持跨语言事件归并。
+扩展租户级关键词、来源、日报和权限边界管理 API。
 
 ## 3. 范围
 
-- 围绕 `完整事件图谱与跨语言归并` 定义后端能力、数据边界、API 影响和验收口径。
+- 围绕 `租户级配置与管理员后台API扩展` 定义后端能力、数据边界、API 影响和验收口径。
 - 与同编号 Plan 配对推进，实施前不得绕过本文档。
 - 变更必须同步 GitHub issue、Linear issue 和 OpenAPI 影响说明。
 
@@ -54,7 +54,7 @@ downstream:
 
 ## 6. 验收标准
 
-- 同一事件的中英文内容可归并，事件之间可表达演化、引用和冲突关系。
+- 租户管理员可管理本租户资源，平台管理员可跨租户治理。
 - PRD 与 Plan 编号一致。
 - 对应 GitHub/Linear issue 负责人明确。
 - 无占位标记或未定稿提示。

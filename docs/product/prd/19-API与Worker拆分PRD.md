@@ -1,42 +1,42 @@
 ---
 layer: PRD
-doc_no: "62"
+doc_no: "19"
 audience:
   - PM
   - Tech-Lead
   - Dev
   - QA
-feature_area: "area:event area:trust"
-purpose: "分析事件传播路径，处理事实源冲突和多源争议。"
-canonical_path: "docs/product/prd/62-传播路径与事实冲突仲裁PRD.md"
+feature_area: "area:infra area:queue"
+purpose: "将模块化单体中的任务边界准备为可拆分 Worker 或独立服务。"
+canonical_path: "docs/product/prd/19-API与Worker拆分PRD.md"
 status: approved
 version: "1.0.0"
 owner: "StephenQiu30"
 inputs:
   - docs/engineering/1-Go后端重建与开源仓库治理设计.md
 outputs:
-  - 传播路径与事实冲突仲裁需求边界
-  - 传播路径与事实冲突仲裁验收标准
+  - API与Worker拆分需求边界
+  - API与Worker拆分验收标准
 triggers:
-  - "传播路径与事实冲突仲裁范围变更"
+  - "API与Worker拆分范围变更"
   - "对应 issue 拆分或合并"
 downstream:
-  - docs/plans/62-传播路径与事实冲突仲裁实现计划.md
+  - docs/plans/19-API与Worker拆分实现计划.md
 ---
 
-# 62-传播路径与事实冲突仲裁 PRD
+# 19-API与Worker拆分 PRD
 
 ## 1. 背景
 
-本 PRD 属于 HotKey Go 后端全面重构的新编号体系，阶段为 **P3 高级实时与事件图谱**。旧 FastAPI 实现、旧编号计划和一次性中间记录不作为本需求事实源。
+本 PRD 属于 HotKey Go 后端全面重构的新编号体系，阶段为 **P2 商业化与规模化能力**。旧 FastAPI 实现、旧编号计划和一次性中间记录不作为本需求事实源。
 
 ## 2. 目标
 
-分析事件传播路径，处理事实源冲突和多源争议。
+将模块化单体中的任务边界准备为可拆分 Worker 或独立服务。
 
 ## 3. 范围
 
-- 围绕 `传播路径与事实冲突仲裁` 定义后端能力、数据边界、API 影响和验收口径。
+- 围绕 `API与Worker拆分` 定义后端能力、数据边界、API 影响和验收口径。
 - 与同编号 Plan 配对推进，实施前不得绕过本文档。
 - 变更必须同步 GitHub issue、Linear issue 和 OpenAPI 影响说明。
 
@@ -54,7 +54,7 @@ downstream:
 
 ## 6. 验收标准
 
-- 可展示传播路径，多事实源冲突时有仲裁状态和解释。
+- API 与 Worker 可独立扩展，任务消息契约明确。
 - PRD 与 Plan 编号一致。
 - 对应 GitHub/Linear issue 负责人明确。
 - 无占位标记或未定稿提示。

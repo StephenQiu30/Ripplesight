@@ -1,42 +1,42 @@
 ---
 layer: PRD
-doc_no: "40"
+doc_no: "15"
 audience:
   - PM
   - Tech-Lead
   - Dev
   - QA
-feature_area: "area:billing"
-purpose: "实现计费、套餐、额度、用量记录和账单基础能力。"
-canonical_path: "docs/product/prd/40-计费套餐额度与用量统计PRD.md"
+feature_area: "area:rbac"
+purpose: "实现角色、权限、策略绑定和关键操作审计。"
+canonical_path: "docs/product/prd/15-复杂RBAC与审计日志PRD.md"
 status: approved
 version: "1.0.0"
 owner: "StephenQiu30"
 inputs:
   - docs/engineering/1-Go后端重建与开源仓库治理设计.md
 outputs:
-  - 计费套餐额度与用量统计需求边界
-  - 计费套餐额度与用量统计验收标准
+  - 复杂RBAC与审计日志需求边界
+  - 复杂RBAC与审计日志验收标准
 triggers:
-  - "计费套餐额度与用量统计范围变更"
+  - "复杂RBAC与审计日志范围变更"
   - "对应 issue 拆分或合并"
 downstream:
-  - docs/plans/40-计费套餐额度与用量统计实现计划.md
+  - docs/plans/15-复杂RBAC与审计日志实现计划.md
 ---
 
-# 40-计费套餐额度与用量统计 PRD
+# 15-复杂RBAC与审计日志 PRD
 
 ## 1. 背景
 
-本 PRD 属于 HotKey Go 后端全面重构的新编号体系，阶段为 **P2 商业化与规模化能力**。旧 FastAPI 实现、旧编号计划和一次性中间记录不作为本需求事实源。
+本 PRD 属于 HotKey Go 后端全面重构的新编号体系，阶段为 **P1 平台化能力**。旧 FastAPI 实现、旧编号计划和一次性中间记录不作为本需求事实源。
 
 ## 2. 目标
 
-实现计费、套餐、额度、用量记录和账单基础能力。
+实现角色、权限、策略绑定和关键操作审计。
 
 ## 3. 范围
 
-- 围绕 `计费套餐额度与用量统计` 定义后端能力、数据边界、API 影响和验收口径。
+- 围绕 `复杂RBAC与审计日志` 定义后端能力、数据边界、API 影响和验收口径。
 - 与同编号 Plan 配对推进，实施前不得绕过本文档。
 - 变更必须同步 GitHub issue、Linear issue 和 OpenAPI 影响说明。
 
@@ -54,7 +54,7 @@ downstream:
 
 ## 6. 验收标准
 
-- 用量可按租户统计，套餐额度可限制采集、刷新和 AI 调用。
+- 管理员权限边界清晰，关键配置变更可审计。
 - PRD 与 Plan 编号一致。
 - 对应 GitHub/Linear issue 负责人明确。
 - 无占位标记或未定稿提示。

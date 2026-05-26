@@ -1,40 +1,40 @@
 ---
 layer: Plan
-doc_no: "42"
+doc_no: "18"
 audience:
   - Tech-Lead
   - Dev
   - QA
   - Ops
-feature_area: "area:infra area:queue"
-purpose: "将 `API与Worker拆分` PRD 拆成可执行任务、验证命令和回滚边界。"
-canonical_path: "docs/plans/42-API与Worker拆分实现计划.md"
+feature_area: "area:queue"
+purpose: "将 `复杂消息队列与Worker池` PRD 拆成可执行任务、验证命令和回滚边界。"
+canonical_path: "docs/plans/18-复杂消息队列与Worker池实现计划.md"
 status: approved
 version: "1.0.0"
 owner: "StephenQiu30"
 inputs:
-  - docs/product/prd/42-API与Worker拆分PRD.md
+  - docs/product/prd/18-复杂消息队列与Worker池PRD.md
   - docs/engineering/1-Go后端重建与开源仓库治理设计.md
 outputs:
-  - API与Worker拆分实现任务
-  - API与Worker拆分验证证据
+  - 复杂消息队列与Worker池实现任务
+  - 复杂消息队列与Worker池验证证据
 triggers:
-  - "docs/product/prd/42-API与Worker拆分PRD.md 变更"
+  - "docs/product/prd/18-复杂消息队列与Worker池PRD.md 变更"
   - "对应 GitHub 或 Linear issue 状态变更"
 downstream:
   - docs/acceptance/README.md
 ---
 
-# 42-API与Worker拆分 实现计划
+# 18-复杂消息队列与Worker池 实现计划
 
 ## 1. 目标
 
-将模块化单体中的任务边界准备为可拆分 Worker 或独立服务。
+引入复杂消息队列、Worker 池、任务优先级、任务分片和失败补偿。
 
 ## 2. 文件清单
 
-- PRD：`docs/product/prd/42-API与Worker拆分PRD.md`
-- Plan：`docs/plans/42-API与Worker拆分实现计划.md`
+- PRD：`docs/product/prd/18-复杂消息队列与Worker池PRD.md`
+- Plan：`docs/plans/18-复杂消息队列与Worker池实现计划.md`
 - 设计输入：`docs/engineering/1-Go后端重建与开源仓库治理设计.md`
 - 验收输出：后续按任务结果写入 `docs/acceptance/`
 
@@ -69,7 +69,7 @@ downstream:
 
 ## 7. 验收标准
 
-- API 与 Worker 可独立扩展，任务消息契约明确。
+- 采集、分析、日报任务可异步执行，失败可重试和补偿。
 - 本任务不引用旧 FastAPI 编号文档作为事实源。
 - GitHub 与 Linear issue 均指定负责人。
 - 工作区不保留一次性中间产物。

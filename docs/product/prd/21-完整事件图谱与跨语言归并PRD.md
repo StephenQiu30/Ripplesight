@@ -6,37 +6,37 @@ audience:
   - Tech-Lead
   - Dev
   - QA
-feature_area: "area:rbac"
-purpose: "实现角色、权限、策略绑定和关键操作审计。"
-canonical_path: "docs/product/prd/21-复杂RBAC与审计日志PRD.md"
+feature_area: "area:event"
+purpose: "从事件簇升级为完整事件图谱，支持跨语言事件归并。"
+canonical_path: "docs/product/prd/21-完整事件图谱与跨语言归并PRD.md"
 status: approved
 version: "1.0.0"
 owner: "StephenQiu30"
 inputs:
   - docs/engineering/1-Go后端重建与开源仓库治理设计.md
 outputs:
-  - 复杂RBAC与审计日志需求边界
-  - 复杂RBAC与审计日志验收标准
+  - 完整事件图谱与跨语言归并需求边界
+  - 完整事件图谱与跨语言归并验收标准
 triggers:
-  - "复杂RBAC与审计日志范围变更"
+  - "完整事件图谱与跨语言归并范围变更"
   - "对应 issue 拆分或合并"
 downstream:
-  - docs/plans/21-复杂RBAC与审计日志实现计划.md
+  - docs/plans/21-完整事件图谱与跨语言归并实现计划.md
 ---
 
-# 21-复杂RBAC与审计日志 PRD
+# 21-完整事件图谱与跨语言归并 PRD
 
 ## 1. 背景
 
-本 PRD 属于 HotKey Go 后端全面重构的新编号体系，阶段为 **P1 平台化能力**。旧 FastAPI 实现、旧编号计划和一次性中间记录不作为本需求事实源。
+本 PRD 属于 HotKey Go 后端全面重构的新编号体系，阶段为 **P3 高级实时与事件图谱**。旧 FastAPI 实现、旧编号计划和一次性中间记录不作为本需求事实源。
 
 ## 2. 目标
 
-实现角色、权限、策略绑定和关键操作审计。
+从事件簇升级为完整事件图谱，支持跨语言事件归并。
 
 ## 3. 范围
 
-- 围绕 `复杂RBAC与审计日志` 定义后端能力、数据边界、API 影响和验收口径。
+- 围绕 `完整事件图谱与跨语言归并` 定义后端能力、数据边界、API 影响和验收口径。
 - 与同编号 Plan 配对推进，实施前不得绕过本文档。
 - 变更必须同步 GitHub issue、Linear issue 和 OpenAPI 影响说明。
 
@@ -54,7 +54,7 @@ downstream:
 
 ## 6. 验收标准
 
-- 管理员权限边界清晰，关键配置变更可审计。
+- 同一事件的中英文内容可归并，事件之间可表达演化、引用和冲突关系。
 - PRD 与 Plan 编号一致。
 - 对应 GitHub/Linear issue 负责人明确。
 - 无占位标记或未定稿提示。

@@ -1,40 +1,40 @@
 ---
 layer: Plan
-doc_no: "40"
+doc_no: "19"
 audience:
   - Tech-Lead
   - Dev
   - QA
   - Ops
-feature_area: "area:billing"
-purpose: "将 `计费套餐额度与用量统计` PRD 拆成可执行任务、验证命令和回滚边界。"
-canonical_path: "docs/plans/40-计费套餐额度与用量统计实现计划.md"
+feature_area: "area:infra area:queue"
+purpose: "将 `API与Worker拆分` PRD 拆成可执行任务、验证命令和回滚边界。"
+canonical_path: "docs/plans/19-API与Worker拆分实现计划.md"
 status: approved
 version: "1.0.0"
 owner: "StephenQiu30"
 inputs:
-  - docs/product/prd/40-计费套餐额度与用量统计PRD.md
+  - docs/product/prd/19-API与Worker拆分PRD.md
   - docs/engineering/1-Go后端重建与开源仓库治理设计.md
 outputs:
-  - 计费套餐额度与用量统计实现任务
-  - 计费套餐额度与用量统计验证证据
+  - API与Worker拆分实现任务
+  - API与Worker拆分验证证据
 triggers:
-  - "docs/product/prd/40-计费套餐额度与用量统计PRD.md 变更"
+  - "docs/product/prd/19-API与Worker拆分PRD.md 变更"
   - "对应 GitHub 或 Linear issue 状态变更"
 downstream:
   - docs/acceptance/README.md
 ---
 
-# 40-计费套餐额度与用量统计 实现计划
+# 19-API与Worker拆分 实现计划
 
 ## 1. 目标
 
-实现计费、套餐、额度、用量记录和账单基础能力。
+将模块化单体中的任务边界准备为可拆分 Worker 或独立服务。
 
 ## 2. 文件清单
 
-- PRD：`docs/product/prd/40-计费套餐额度与用量统计PRD.md`
-- Plan：`docs/plans/40-计费套餐额度与用量统计实现计划.md`
+- PRD：`docs/product/prd/19-API与Worker拆分PRD.md`
+- Plan：`docs/plans/19-API与Worker拆分实现计划.md`
 - 设计输入：`docs/engineering/1-Go后端重建与开源仓库治理设计.md`
 - 验收输出：后续按任务结果写入 `docs/acceptance/`
 
@@ -69,7 +69,7 @@ downstream:
 
 ## 7. 验收标准
 
-- 用量可按租户统计，套餐额度可限制采集、刷新和 AI 调用。
+- API 与 Worker 可独立扩展，任务消息契约明确。
 - 本任务不引用旧 FastAPI 编号文档作为事实源。
 - GitHub 与 Linear issue 均指定负责人。
 - 工作区不保留一次性中间产物。

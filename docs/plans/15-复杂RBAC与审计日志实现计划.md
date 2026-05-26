@@ -1,46 +1,46 @@
 ---
 layer: Plan
-doc_no: "60"
+doc_no: "15"
 audience:
   - Tech-Lead
   - Dev
   - QA
   - Ops
-feature_area: "area:realtime"
-purpose: "将 `秒级实时检测` PRD 拆成可执行任务、验证命令和回滚边界。"
-canonical_path: "docs/plans/60-秒级实时检测实现计划.md"
+feature_area: "area:rbac"
+purpose: "将 `复杂RBAC与审计日志` PRD 拆成可执行任务、验证命令和回滚边界。"
+canonical_path: "docs/plans/15-复杂RBAC与审计日志实现计划.md"
 status: approved
 version: "1.0.0"
 owner: "StephenQiu30"
 inputs:
-  - docs/product/prd/60-秒级实时检测PRD.md
+  - docs/product/prd/15-复杂RBAC与审计日志PRD.md
   - docs/engineering/1-Go后端重建与开源仓库治理设计.md
 outputs:
-  - 秒级实时检测实现任务
-  - 秒级实时检测验证证据
+  - 复杂RBAC与审计日志实现任务
+  - 复杂RBAC与审计日志验证证据
 triggers:
-  - "docs/product/prd/60-秒级实时检测PRD.md 变更"
+  - "docs/product/prd/15-复杂RBAC与审计日志PRD.md 变更"
   - "对应 GitHub 或 Linear issue 状态变更"
 downstream:
   - docs/acceptance/README.md
 ---
 
-# 60-秒级实时检测 实现计划
+# 15-复杂RBAC与审计日志 实现计划
 
 ## 1. 目标
 
-支持实时流、Webhook 或授权平台推送，实现秒级或近秒级热点检测。
+实现角色、权限、策略绑定和关键操作审计。
 
 ## 2. 文件清单
 
-- PRD：`docs/product/prd/60-秒级实时检测PRD.md`
-- Plan：`docs/plans/60-秒级实时检测实现计划.md`
+- PRD：`docs/product/prd/15-复杂RBAC与审计日志PRD.md`
+- Plan：`docs/plans/15-复杂RBAC与审计日志实现计划.md`
 - 设计输入：`docs/engineering/1-Go后端重建与开源仓库治理设计.md`
 - 验收输出：后续按任务结果写入 `docs/acceptance/`
 
 ## 3. 任务拆解
 
-1. 阅读 PRD 和工程设计，确认本任务属于 **P3 高级实时与事件图谱**。
+1. 阅读 PRD 和工程设计，确认本任务属于 **P1 平台化能力**。
 2. 写失败测试或文档结构检查，先锁定验收边界。
 3. 实现最小可用改动，不夹带其他编号任务。
 4. 导出或更新 OpenAPI，并记录端侧影响。
@@ -69,7 +69,7 @@ downstream:
 
 ## 7. 验收标准
 
-- 授权实时源可低延迟进入事件候选，并具备限流、熔断和降级。
+- 管理员权限边界清晰，关键配置变更可审计。
 - 本任务不引用旧 FastAPI 编号文档作为事实源。
 - GitHub 与 Linear issue 均指定负责人。
 - 工作区不保留一次性中间产物。

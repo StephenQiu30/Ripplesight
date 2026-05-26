@@ -1,42 +1,42 @@
 ---
 layer: PRD
-doc_no: "42"
+doc_no: "14"
 audience:
   - PM
   - Tech-Lead
   - Dev
   - QA
-feature_area: "area:infra area:queue"
-purpose: "将模块化单体中的任务边界准备为可拆分 Worker 或独立服务。"
-canonical_path: "docs/product/prd/42-API与Worker拆分PRD.md"
+feature_area: "area:tenant"
+purpose: "支持租户、组织、成员关系、项目空间和租户级资源隔离。"
+canonical_path: "docs/product/prd/14-多租户与组织空间PRD.md"
 status: approved
 version: "1.0.0"
 owner: "StephenQiu30"
 inputs:
   - docs/engineering/1-Go后端重建与开源仓库治理设计.md
 outputs:
-  - API与Worker拆分需求边界
-  - API与Worker拆分验收标准
+  - 多租户与组织空间需求边界
+  - 多租户与组织空间验收标准
 triggers:
-  - "API与Worker拆分范围变更"
+  - "多租户与组织空间范围变更"
   - "对应 issue 拆分或合并"
 downstream:
-  - docs/plans/42-API与Worker拆分实现计划.md
+  - docs/plans/14-多租户与组织空间实现计划.md
 ---
 
-# 42-API与Worker拆分 PRD
+# 14-多租户与组织空间 PRD
 
 ## 1. 背景
 
-本 PRD 属于 HotKey Go 后端全面重构的新编号体系，阶段为 **P2 商业化与规模化能力**。旧 FastAPI 实现、旧编号计划和一次性中间记录不作为本需求事实源。
+本 PRD 属于 HotKey Go 后端全面重构的新编号体系，阶段为 **P1 平台化能力**。旧 FastAPI 实现、旧编号计划和一次性中间记录不作为本需求事实源。
 
 ## 2. 目标
 
-将模块化单体中的任务边界准备为可拆分 Worker 或独立服务。
+支持租户、组织、成员关系、项目空间和租户级资源隔离。
 
 ## 3. 范围
 
-- 围绕 `API与Worker拆分` 定义后端能力、数据边界、API 影响和验收口径。
+- 围绕 `多租户与组织空间` 定义后端能力、数据边界、API 影响和验收口径。
 - 与同编号 Plan 配对推进，实施前不得绕过本文档。
 - 变更必须同步 GitHub issue、Linear issue 和 OpenAPI 影响说明。
 
@@ -54,7 +54,7 @@ downstream:
 
 ## 6. 验收标准
 
-- API 与 Worker 可独立扩展，任务消息契约明确。
+- 用户可属于多个租户，关键词、来源、日报可按租户隔离。
 - PRD 与 Plan 编号一致。
 - 对应 GitHub/Linear issue 负责人明确。
 - 无占位标记或未定稿提示。
