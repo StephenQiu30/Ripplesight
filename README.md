@@ -82,6 +82,7 @@ curl http://127.0.0.1:18080/openapi.json
 - `GET /api/v1/admin/event-clusters`
 - `POST /api/v1/admin/event-evidence`
 - `POST /api/v1/admin/events/{id}/ai-summary`
+- `POST /api/v1/realtime/events`
 - `GET /api/v1/admin/task-runs`
 - `POST /api/v1/admin/reports/daily`
 - `POST /api/v1/admin/tenants`
@@ -147,5 +148,7 @@ curl http://127.0.0.1:18080/openapi.json
 当前复杂消息队列能力先使用进程内优先级队列和 Worker 池锁定任务契约；采集、分析、日报任务可异步排队，支持优先级、失败重试和补偿记录，后续可替换为真实 MQ。
 
 当前 API 与 Worker 拆分能力先使用进程内服务边界拓扑锁定拆分契约；API 服务是 OpenAPI 事实源，Worker 服务只消费任务消息，任务消息必须包含 `id`、`type`、`tenantId`、`priority`、`payload` 和 `maxAttempts`。
+
+当前秒级实时检测能力先使用授权实时推送接口锁定低延迟入候选契约；实时源必须携带已登记 token，推送会进入事件候选聚合，并具备窗口限流、熔断和降级队列。
 
 OpenAPI 已声明 `BearerAuth` 鉴权方案和统一结构化错误响应；小程序端应从 `/openapi.json` 生成客户端，不手写后端 API 类型。
