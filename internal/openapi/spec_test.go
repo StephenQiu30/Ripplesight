@@ -185,3 +185,24 @@ func TestSpecContainsAdminAPIContract(t *testing.T) {
 		t.Fatalf("admin task runs missing 401 response")
 	}
 }
+
+func TestSpecContainsTenantContract(t *testing.T) {
+	spec := Spec()
+
+	for _, path := range []string{
+		"/api/v1/admin/tenants",
+		"/api/v1/admin/tenants/{id}/members",
+		"/api/v1/users/{id}/tenants",
+		"/api/v1/tenants/{id}/reports/daily",
+	} {
+		if _, ok := spec.Paths[path]; !ok {
+			t.Fatalf("tenant contract missing %s", path)
+		}
+	}
+	if _, ok := spec.Paths["/api/v1/admin/tenants"].Post.Responses["201"]; !ok {
+		t.Fatalf("tenant create missing 201 response")
+	}
+	if _, ok := spec.Paths["/api/v1/users/{id}/tenants"].Get.Responses["401"]; !ok {
+		t.Fatalf("user tenant list missing 401 response")
+	}
+}
