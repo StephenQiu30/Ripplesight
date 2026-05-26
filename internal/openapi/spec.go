@@ -28,10 +28,23 @@ type PathItem struct {
 	Patch Operation `json:"patch,omitempty"`
 }
 
+type Components struct {
+	SecuritySchemes map[string]SecurityScheme `json:"securitySchemes,omitempty"`
+}
+
+type SecurityScheme struct {
+	Type         string `json:"type"`
+	Scheme       string `json:"scheme,omitempty"`
+	BearerFormat string `json:"bearerFormat,omitempty"`
+	Description  string `json:"description,omitempty"`
+}
+
 type SpecDocument struct {
-	OpenAPI string              `json:"openapi"`
-	Info    Info                `json:"info"`
-	Paths   map[string]PathItem `json:"paths"`
+	OpenAPI    string                `json:"openapi"`
+	Info       Info                  `json:"info"`
+	Paths      map[string]PathItem   `json:"paths"`
+	Components Components            `json:"components,omitempty"`
+	Security   []map[string][]string `json:"security,omitempty"`
 }
 
 func Spec() SpecDocument {
@@ -40,6 +53,19 @@ func Spec() SpecDocument {
 		Info: Info{
 			Title:   "HotKey Server API",
 			Version: "0.1.0",
+		},
+		Components: Components{
+			SecuritySchemes: map[string]SecurityScheme{
+				"BearerAuth": {
+					Type:         "http",
+					Scheme:       "bearer",
+					BearerFormat: "JWT",
+					Description:  "小程序和管理端调用受保护接口时使用 Authorization: Bearer <token>。",
+				},
+			},
+		},
+		Security: []map[string][]string{
+			{"BearerAuth": {}},
 		},
 		Paths: map[string]PathItem{
 			"/healthz": {
@@ -271,6 +297,7 @@ func okObjectResponse(description string) map[string]Response {
 	return map[string]Response{
 		"200": objectResponse(description),
 		"400": errorResponse(),
+		"401": errorResponse(),
 	}
 }
 
@@ -278,6 +305,7 @@ func createdObjectResponse(description string) map[string]Response {
 	return map[string]Response{
 		"201": objectResponse(description),
 		"400": errorResponse(),
+		"401": errorResponse(),
 	}
 }
 

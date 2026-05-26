@@ -1,6 +1,9 @@
 package openapi
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestSpecContainsFoundationEndpoints(t *testing.T) {
 	spec := Spec()
@@ -121,5 +124,39 @@ func TestSpecContainsRedisInfraEndpoints(t *testing.T) {
 		if _, ok := spec.Paths[path]; !ok {
 			t.Fatalf("paths missing %s", path)
 		}
+	}
+}
+
+func TestSpecContainsMiniappClientContract(t *testing.T) {
+	spec := Spec()
+
+	for _, path := range []string{
+		"/api/v1/hotspots",
+		"/api/v1/hotspots/{id}",
+		"/api/v1/keywords/preferences",
+		"/api/v1/reports/daily",
+		"/api/v1/users/{id}/reports/daily",
+		"/api/v1/refresh-queue",
+	} {
+		if _, ok := spec.Paths[path]; !ok {
+			t.Fatalf("miniapp contract missing %s", path)
+		}
+	}
+	if spec.Components.SecuritySchemes["BearerAuth"].Type != "http" {
+		t.Fatalf("BearerAuth security scheme missing")
+	}
+	if len(spec.Security) == 0 || spec.Security[0]["BearerAuth"] == nil {
+		t.Fatalf("global BearerAuth requirement missing: %#v", spec.Security)
+	}
+	if _, ok := spec.Paths["/api/v1/hotspots"].Get.Responses["401"]; !ok {
+		t.Fatalf("hotspot list missing 401 response")
+	}
+
+	encoded, err := json.Marshal(spec)
+	if err != nil {
+		t.Fatalf("marshal OpenAPI spec: %v", err)
+	}
+	if !json.Valid(encoded) {
+		t.Fatalf("OpenAPI spec JSON is invalid")
 	}
 }
