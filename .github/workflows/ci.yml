@@ -28,6 +28,14 @@ jobs:
         run: |
           test ! -d server
           test ! -d tests
+          test ! -d scripts
+          test ! -d sql
+          test ! -d packages
+          test ! -d deploy
+          test ! -d openspec/changes
+          test ! -d openspec/specs
+          test ! -f .env.example
+          test ! -f package.json
           test ! -f pyproject.toml
           test ! -f Dockerfile.api
           test ! -f docker-compose.yml

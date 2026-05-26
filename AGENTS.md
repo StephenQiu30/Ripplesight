@@ -150,7 +150,7 @@ hotkey-server 是跨仓库 AGENTS.md 主规范源。通用工程规范、OpenAPI
 6. 多个 PR 需要合并时，应按用户指定顺序逐个合并；每合并一个 PR 后都要重新检查后续 PR 的冲突、CI 和合并状态。
 7. PR 合并后应同步本地分支状态，并执行必要的仓库健康检查，确认没有合并后遗留的工作区污染或格式问题。
 8. 功能 PR 描述必须包含 Test-first Evidence、Tests added、Commands run、Result、Agent Usage 和 Reviewer Checklist；Reviewer 应先审 `test:` commit，再审 `impl:` commit。
-9. CI 必须包含完整测试入口，至少运行仓库结构检查、Markdown 空白检查和 `npm test`；项目增加真实单元、集成、UI、快照或性能测试后，应把对应命令接入 `npm test` 或 CI 明确步骤。
+9. CI 必须包含当前阶段可执行的完整验证入口。Go 后端重建前至少运行仓库结构检查、Markdown 空白检查、文档编号检查和旧运行时缺失检查；项目增加 Go 代码、OpenAPI 导出、端侧生成或真实单元/集成测试后，应把 `go test ./...`、OpenAPI 导出校验和对应生成验证接入 CI。
 
 ## PR 模板要求
 
