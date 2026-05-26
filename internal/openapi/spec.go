@@ -423,6 +423,14 @@ func Spec() SpecDocument {
 					Responses:   okObjectResponse("Compensation list"),
 				},
 			},
+			"/api/v1/admin/service-boundaries": {
+				Get: Operation{
+					Summary:     "Get API and Worker service split boundaries",
+					OperationID: "getServiceBoundaries",
+					Tags:        []string{"infra"},
+					Responses:   okObjectResponse("Service boundary topology and task message contract"),
+				},
+			},
 			"/api/v1/keywords/follow": {
 				Post: Operation{
 					Summary:     "Follow keyword for a user",

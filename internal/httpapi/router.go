@@ -16,6 +16,7 @@ import (
 	"github.com/StephenQiu30/hotkey-server/internal/rbac"
 	"github.com/StephenQiu30/hotkey-server/internal/redisinfra"
 	"github.com/StephenQiu30/hotkey-server/internal/report"
+	"github.com/StephenQiu30/hotkey-server/internal/serviceboundary"
 	"github.com/StephenQiu30/hotkey-server/internal/source"
 	"github.com/StephenQiu30/hotkey-server/internal/tenant"
 	"github.com/StephenQiu30/hotkey-server/internal/trust"
@@ -48,11 +49,12 @@ func NewRouterWithServices(keywordService *keyword.Service, sourceService *sourc
 	rbacService := rbac.NewService()
 	billingService := billing.NewService()
 	workQueueService := workqueue.NewService()
+	serviceBoundaryService := serviceboundary.NewService()
 
-	return newRouter(keywordService, sourceService, contentService, eventService, trustService, hotspotService, reportService, redisInfraService, adminAPIService, tenantService, rbacService, billingService, workQueueService)
+	return newRouter(keywordService, sourceService, contentService, eventService, trustService, hotspotService, reportService, redisInfraService, adminAPIService, tenantService, rbacService, billingService, workQueueService, serviceBoundaryService)
 }
 
-func newRouter(keywordService *keyword.Service, sourceService *source.Service, contentService *content.Service, eventService *event.Service, trustService *trust.Service, hotspotService *hotspot.Service, reportService *report.Service, redisInfraService *redisinfra.Service, adminAPIService *adminapi.Service, tenantService *tenant.Service, rbacService *rbac.Service, billingService *billing.Service, workQueueService *workqueue.Service) *gin.Engine {
+func newRouter(keywordService *keyword.Service, sourceService *source.Service, contentService *content.Service, eventService *event.Service, trustService *trust.Service, hotspotService *hotspot.Service, reportService *report.Service, redisInfraService *redisinfra.Service, adminAPIService *adminapi.Service, tenantService *tenant.Service, rbacService *rbac.Service, billingService *billing.Service, workQueueService *workqueue.Service, serviceBoundaryService *serviceboundary.Service) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.GET("/healthz", handleHealth)
@@ -98,6 +100,7 @@ func newRouter(keywordService *keyword.Service, sourceService *source.Service, c
 	router.POST("/api/v1/admin/work-queue/jobs", enqueueWorkQueueJob(workQueueService))
 	router.POST("/api/v1/admin/work-queue/run", runWorkQueue(workQueueService))
 	router.GET("/api/v1/admin/work-queue/compensations", listWorkQueueCompensations(workQueueService))
+	router.GET("/api/v1/admin/service-boundaries", getServiceBoundaries(serviceBoundaryService))
 	router.POST("/api/v1/keywords/follow", followKeyword(keywordService))
 	router.POST("/api/v1/keywords/block", blockKeyword(keywordService))
 	router.POST("/api/v1/keywords/additional", addUserKeyword(keywordService))
@@ -701,6 +704,15 @@ func runWorkQueue(service *workqueue.Service) gin.HandlerFunc {
 func listWorkQueueCompensations(service *workqueue.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"compensations": service.ListCompensations()})
+	}
+}
+
+func getServiceBoundaries(service *serviceboundary.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"topology":            service.Topology(),
+			"taskMessageContract": service.TaskMessageContract(),
+		})
 	}
 }
 
