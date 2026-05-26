@@ -109,3 +109,17 @@ func TestSpecContainsReportEndpoints(t *testing.T) {
 		}
 	}
 }
+
+func TestSpecContainsRedisInfraEndpoints(t *testing.T) {
+	spec := Spec()
+
+	for _, path := range []string{
+		"/api/v1/refresh-queue",
+		"/api/v1/admin/refresh-queue",
+		"/api/v1/admin/redis/health",
+	} {
+		if _, ok := spec.Paths[path]; !ok {
+			t.Fatalf("paths missing %s", path)
+		}
+	}
+}

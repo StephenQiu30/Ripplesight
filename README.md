@@ -87,6 +87,9 @@ curl http://127.0.0.1:18080/openapi.json
 - `GET /api/v1/hotspots/{id}`
 - `GET /api/v1/reports/daily?date=YYYY-MM-DD`
 - `GET /api/v1/users/{id}/reports/daily?date=YYYY-MM-DD&keywords=OpenAI,model`
+- `POST /api/v1/refresh-queue`
+- `GET /api/v1/admin/refresh-queue`
+- `GET /api/v1/admin/redis/health`
 - `POST /api/v1/keywords/follow`
 - `POST /api/v1/keywords/block`
 - `POST /api/v1/keywords/additional`
@@ -105,3 +108,5 @@ curl http://127.0.0.1:18080/openapi.json
 当前热点能力先使用进程内热点仓储锁定列表与详情契约；列表支持关键词、地区、语言、最低可信度和 `heat` / `trust` / `relevance` 排序，详情返回关联内容、证据摘要、相似度和风险标签。
 
 当前日报能力先使用进程内日报生成器锁定平台日报和用户关注日报契约；日报条目必须回链事件簇和证据 ID，默认 `date` 为昨日。
+
+当前 Redis 基础能力先使用进程内实现锁定任务锁、手动刷新限流、刷新队列、短期去重和降级读契约；后续可替换为真实 Redis 客户端。

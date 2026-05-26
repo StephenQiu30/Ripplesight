@@ -11,6 +11,7 @@ import (
 	"github.com/StephenQiu30/hotkey-server/internal/hotspot"
 	"github.com/StephenQiu30/hotkey-server/internal/keyword"
 	"github.com/StephenQiu30/hotkey-server/internal/openapi"
+	"github.com/StephenQiu30/hotkey-server/internal/redisinfra"
 	"github.com/StephenQiu30/hotkey-server/internal/report"
 	"github.com/StephenQiu30/hotkey-server/internal/source"
 	"github.com/StephenQiu30/hotkey-server/internal/trust"
@@ -36,11 +37,12 @@ func NewRouterWithServices(keywordService *keyword.Service, sourceService *sourc
 	trustService := trust.NewService()
 	hotspotService := hotspot.NewService()
 	reportService := report.NewService()
+	redisInfraService := redisinfra.NewService()
 
-	return newRouter(keywordService, sourceService, contentService, eventService, trustService, hotspotService, reportService)
+	return newRouter(keywordService, sourceService, contentService, eventService, trustService, hotspotService, reportService, redisInfraService)
 }
 
-func newRouter(keywordService *keyword.Service, sourceService *source.Service, contentService *content.Service, eventService *event.Service, trustService *trust.Service, hotspotService *hotspot.Service, reportService *report.Service) *gin.Engine {
+func newRouter(keywordService *keyword.Service, sourceService *source.Service, contentService *content.Service, eventService *event.Service, trustService *trust.Service, hotspotService *hotspot.Service, reportService *report.Service, redisInfraService *redisinfra.Service) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.GET("/healthz", handleHealth)
@@ -61,6 +63,9 @@ func newRouter(keywordService *keyword.Service, sourceService *source.Service, c
 	router.GET("/api/v1/hotspots/:id", getHotspotDetail(hotspotService))
 	router.GET("/api/v1/reports/daily", getPlatformDailyReport(reportService))
 	router.GET("/api/v1/users/:id/reports/daily", getUserDailyReport(reportService))
+	router.POST("/api/v1/refresh-queue", enqueueRefresh(redisInfraService))
+	router.GET("/api/v1/admin/refresh-queue", listRefreshQueue(redisInfraService))
+	router.GET("/api/v1/admin/redis/health", getRedisHealth(redisInfraService))
 	router.POST("/api/v1/keywords/follow", followKeyword(keywordService))
 	router.POST("/api/v1/keywords/block", blockKeyword(keywordService))
 	router.POST("/api/v1/keywords/additional", addUserKeyword(keywordService))
@@ -125,6 +130,12 @@ type eventEvidenceRequest struct {
 type aiSummaryRequest struct {
 	Summary     string   `json:"summary"`
 	CitationIDs []string `json:"citationIds"`
+}
+
+type refreshQueueRequest struct {
+	UserID string `json:"userId"`
+	Scope  string `json:"scope"`
+	Target string `json:"target"`
 }
 
 type userKeywordRequest struct {
@@ -372,6 +383,42 @@ func getUserDailyReport(service *report.Service) gin.HandlerFunc {
 	}
 }
 
+func enqueueRefresh(service *redisinfra.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req refreshQueueRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_request", "request body must be valid JSON")
+			return
+		}
+		result, err := service.EnqueueRefresh(redisinfra.RefreshRequest{
+			UserID: req.UserID,
+			Scope:  req.Scope,
+			Target: req.Target,
+		})
+		if err != nil {
+			writeRedisInfraError(c, err)
+			return
+		}
+		if !result.Accepted {
+			c.JSON(http.StatusTooManyRequests, result)
+			return
+		}
+		c.JSON(http.StatusAccepted, result)
+	}
+}
+
+func listRefreshQueue(service *redisinfra.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"queue": service.ListRefreshQueue()})
+	}
+}
+
+func getRedisHealth(service *redisinfra.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, service.Health())
+	}
+}
+
 func followKeyword(service *keyword.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		handleUserKeywordMutation(c, service.FollowKeyword)
@@ -424,6 +471,15 @@ func writeKeywordError(c *gin.Context, err error) {
 		writeError(c, http.StatusNotFound, "keyword_not_found", "keyword was not found")
 	default:
 		writeError(c, http.StatusInternalServerError, "internal_error", "unexpected keyword error")
+	}
+}
+
+func writeRedisInfraError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, redisinfra.ErrInvalidRedisInfraRequest):
+		writeError(c, http.StatusBadRequest, "invalid_redis_infra_request", "redis infra request is invalid")
+	default:
+		writeError(c, http.StatusInternalServerError, "internal_error", "unexpected redis infra error")
 	}
 }
 

@@ -207,6 +207,30 @@ func Spec() SpecDocument {
 					Responses:   okObjectResponse("User daily report"),
 				},
 			},
+			"/api/v1/refresh-queue": {
+				Post: Operation{
+					Summary:     "Enqueue a manual refresh request with rate limiting",
+					OperationID: "enqueueRefresh",
+					Tags:        []string{"redis"},
+					Responses:   createdObjectResponse("Refresh request queued"),
+				},
+			},
+			"/api/v1/admin/refresh-queue": {
+				Get: Operation{
+					Summary:     "List pending refresh queue items",
+					OperationID: "listRefreshQueue",
+					Tags:        []string{"redis"},
+					Responses:   okObjectResponse("Refresh queue list"),
+				},
+			},
+			"/api/v1/admin/redis/health": {
+				Get: Operation{
+					Summary:     "Get Redis infrastructure health",
+					OperationID: "getRedisHealth",
+					Tags:        []string{"redis"},
+					Responses:   okObjectResponse("Redis health"),
+				},
+			},
 			"/api/v1/keywords/follow": {
 				Post: Operation{
 					Summary:     "Follow keyword for a user",
