@@ -95,6 +95,9 @@ curl http://127.0.0.1:18080/openapi.json
 - `POST /api/v1/admin/tenants/{id}/roles`
 - `POST /api/v1/admin/tenants/{id}/authorize`
 - `GET /api/v1/admin/tenants/{id}/audit-logs`
+- `POST /api/v1/admin/tenants/{id}/billing/plan`
+- `GET /api/v1/admin/tenants/{id}/billing/usage`
+- `POST /api/v1/admin/tenants/{id}/billing/usage`
 - `GET /api/v1/users/{id}/tenants`
 - `GET /api/v1/events/{id}/evidence`
 - `GET /api/v1/hotspots`
@@ -133,5 +136,7 @@ curl http://127.0.0.1:18080/openapi.json
 当前 RBAC 与审计能力先使用进程内角色绑定、权限判定和审计事件锁定平台化契约；租户内 `owner`、`admin`、`viewer` 具备不同管理边界，关键角色和配置变更需要写入租户审计日志。
 
 当前租户级管理员 API 扩展允许平台管理员列出租户，租户管理员通过租户路径管理本租户关键词、来源和日报入口；跨租户治理仍通过平台管理接口和 RBAC/审计契约约束。
+
+当前计费能力先使用进程内套餐、额度和用量记录锁定商业化契约；用量可按租户统计，套餐额度可限制采集、刷新和 AI 调用，超限时返回 `402`。
 
 OpenAPI 已声明 `BearerAuth` 鉴权方案和统一结构化错误响应；小程序端应从 `/openapi.json` 生成客户端，不手写后端 API 类型。
