@@ -527,6 +527,82 @@ func Spec() SpecDocument {
 					Responses:   okObjectResponse("User keyword preferences"),
 				},
 			},
+			"/api/v1/internal/workflow/status": {
+				Post: Operation{
+					Summary:     "Report n8n workflow execution status",
+					OperationID: "reportWorkflowStatus",
+					Tags:        []string{"internal", "n8n"},
+					Responses: map[string]Response{
+						"200": {
+							Description: "Workflow status recorded",
+							Content: map[string]MediaType{
+								"application/json": {
+									Schema: map[string]any{
+										"type": "object",
+										"properties": map[string]any{
+											"ok":               map[string]any{"type": "boolean"},
+											"tenantId":         map[string]any{"type": "string"},
+											"executionId":      map[string]any{"type": "string"},
+											"recordId":         map[string]any{"type": "string"},
+											"idempotentReplay": map[string]any{"type": "boolean"},
+										},
+										"required": []string{"ok", "tenantId", "executionId", "recordId", "idempotentReplay"},
+									},
+								},
+							},
+						},
+						"400": errorResponse(),
+						"401": errorResponse(),
+					},
+				},
+			},
+			"/api/v1/internal/ingest/contents": {
+				Post: Operation{
+					Summary:     "Batch ingest content items from n8n workflows",
+					OperationID: "batchIngestContents",
+					Tags:        []string{"internal", "n8n", "content"},
+					Responses: map[string]Response{
+						"202": {
+							Description: "Batch ingest accepted",
+							Content: map[string]MediaType{
+								"application/json": {
+									Schema: map[string]any{
+										"type": "object",
+										"properties": map[string]any{
+											"ok":         map[string]any{"type": "boolean"},
+											"tenantId":   map[string]any{"type": "string"},
+											"accepted":   map[string]any{"type": "integer"},
+											"created":    map[string]any{"type": "integer"},
+											"duplicated": map[string]any{"type": "integer"},
+											"rejected":   map[string]any{"type": "integer"},
+											"runId":      map[string]any{"type": "string"},
+										},
+										"required": []string{"ok", "tenantId", "accepted", "created", "duplicated", "rejected", "runId"},
+									},
+								},
+							},
+						},
+						"400": errorResponse(),
+						"401": errorResponse(),
+					},
+				},
+			},
+			"/api/v1/internal/daily/candidates": {
+				Get: Operation{
+					Summary:     "List daily report candidates for n8n workflow",
+					OperationID: "listDailyCandidates",
+					Tags:        []string{"internal", "n8n", "report"},
+					Responses:   okObjectResponse("Daily candidate list"),
+				},
+			},
+			"/api/v1/internal/daily/reports": {
+				Post: Operation{
+					Summary:     "Save daily report from n8n workflow",
+					OperationID: "saveDailyReport",
+					Tags:        []string{"internal", "n8n", "report"},
+					Responses:   createdObjectResponse("Daily report saved"),
+				},
+			},
 		},
 	}
 }

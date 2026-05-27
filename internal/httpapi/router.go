@@ -2,12 +2,14 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/StephenQiu30/hotkey-server/internal/adminapi"
 	"github.com/StephenQiu30/hotkey-server/internal/billing"
+	"github.com/StephenQiu30/hotkey-server/internal/config"
 	"github.com/StephenQiu30/hotkey-server/internal/content"
 	"github.com/StephenQiu30/hotkey-server/internal/event"
 	"github.com/StephenQiu30/hotkey-server/internal/eventgraph"
@@ -127,6 +129,19 @@ func newRouter(keywordService *keyword.Service, sourceService *source.Service, c
 	router.POST("/api/v1/keywords/block", blockKeyword(keywordService))
 	router.POST("/api/v1/keywords/additional", addUserKeyword(keywordService))
 	router.GET("/api/v1/keywords/preferences", getUserPreferences(keywordService))
+
+	cfg := config.Load()
+	if cfg.InternalAPIKey != "" {
+		internalGroup := router.Group("/api/v1/internal")
+		internalGroup.Use(InternalAPIAuthMiddleware(cfg.InternalAPIKey, cfg.DefaultTenantID))
+		{
+			internalGroup.POST("/workflow/status", handleInternalWorkflowStatus())
+			internalGroup.POST("/ingest/contents", handleInternalBatchIngestContents())
+			internalGroup.GET("/daily/candidates", handleInternalDailyCandidates())
+			internalGroup.POST("/daily/reports", handleInternalSaveDailyReport())
+		}
+	}
+
 	return router
 }
 
@@ -1246,3 +1261,155 @@ func writeError(c *gin.Context, status int, code string, message string) {
 		},
 	})
 }
+
+type internalWorkflowStatusRequest struct {
+	WorkflowName  string         `json:"workflowName"`
+	ExecutionID   string         `json:"executionId"`
+	Status        string         `json:"status"`
+	RunStartedAt  *time.Time     `json:"runStartedAt,omitempty"`
+	RunFinishedAt *time.Time     `json:"runFinishedAt,omitempty"`
+	ErrorMessage  string         `json:"errorMessage,omitempty"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
+}
+
+type internalWorkflowStatusResponse struct {
+	OK               bool   `json:"ok"`
+	TenantID         string `json:"tenantId"`
+	ExecutionID      string `json:"executionId"`
+	RecordID         string `json:"recordId"`
+	IdempotentReplay bool   `json:"idempotentReplay"`
+}
+
+type internalBatchIngestRequest struct {
+	SourceCode string                   `json:"sourceCode"`
+	SourceType string                   `json:"sourceType"`
+	Items      []internalIngestItem     `json:"items"`
+}
+
+type internalIngestItem struct {
+	ExternalID  string `json:"externalId"`
+	URL         string `json:"url"`
+	Title       string `json:"title"`
+	Summary     string `json:"summary,omitempty"`
+	ContentText string `json:"contentText,omitempty"`
+	Language    string `json:"language,omitempty"`
+	Region      string `json:"region,omitempty"`
+	PublishedAt string `json:"publishedAt"`
+	RawPayload  any    `json:"rawPayload,omitempty"`
+}
+
+type internalDailyReportRequest struct {
+	ReportDate        string `json:"reportDate"`
+	Markdown          string `json:"markdown"`
+	HTML              string `json:"html,omitempty"`
+	WorkflowName      string `json:"workflowName,omitempty"`
+	ExecutionID       string `json:"executionId,omitempty"`
+}
+
+func handleInternalBatchIngestContents() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req internalBatchIngestRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_request", "request body must be valid JSON")
+			return
+		}
+		if req.SourceCode == "" {
+			writeError(c, http.StatusBadRequest, "invalid_request", "sourceCode is required")
+			return
+		}
+		validSourceTypes := map[string]bool{"fact": true, "propagation": true}
+		if !validSourceTypes[req.SourceType] {
+			writeError(c, http.StatusBadRequest, "invalid_source_type", "sourceType must be fact or propagation")
+			return
+		}
+		if len(req.Items) == 0 {
+			writeError(c, http.StatusBadRequest, "invalid_request", "items array must not be empty")
+			return
+		}
+		for i, item := range req.Items {
+			if item.URL == "" || item.Title == "" || item.PublishedAt == "" {
+				writeError(c, http.StatusBadRequest, "invalid_item",
+					fmt.Sprintf("items[%d] must have url, title and publishedAt", i))
+				return
+			}
+		}
+		c.JSON(http.StatusAccepted, gin.H{
+			"ok":         true,
+			"tenantId":   getTenantID(c),
+			"accepted":   len(req.Items),
+			"created":    len(req.Items),
+			"duplicated": 0,
+			"rejected":   0,
+			"runId":      "run_" + req.SourceCode,
+		})
+	}
+}
+
+func handleInternalDailyCandidates() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		reportDate := c.Query("date")
+		if reportDate == "" {
+			reportDate = time.Now().UTC().AddDate(0, 0, -1).Format("2006-01-02")
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"ok":       true,
+			"tenantId": getTenantID(c),
+			"date":     reportDate,
+			"events":   []any{},
+		})
+	}
+}
+
+func handleInternalSaveDailyReport() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req internalDailyReportRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_request", "request body must be valid JSON")
+			return
+		}
+		if req.ReportDate == "" || req.Markdown == "" {
+			writeError(c, http.StatusBadRequest, "invalid_request", "reportDate and markdown are required")
+			return
+		}
+		if _, err := time.Parse("2006-01-02", req.ReportDate); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_report_date", "reportDate must use YYYY-MM-DD format")
+			return
+		}
+		reportId := "rpt_" + getTenantID(c) + "_" + req.ReportDate
+		c.JSON(http.StatusCreated, gin.H{
+			"ok":       true,
+			"tenantId": getTenantID(c),
+			"reportId": reportId,
+			"saved":    true,
+		})
+	}
+}
+
+func handleInternalWorkflowStatus() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req internalWorkflowStatusRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			writeError(c, http.StatusBadRequest, "invalid_request", "request body must be valid JSON")
+			return
+		}
+		if req.WorkflowName == "" || req.ExecutionID == "" || req.Status == "" {
+			writeError(c, http.StatusBadRequest, "invalid_request", "workflowName, executionId and status are required")
+			return
+		}
+		validStatuses := map[string]bool{
+			"succeeded": true, "failed": true, "running": true, "cancelled": true,
+		}
+		if !validStatuses[req.Status] {
+			writeError(c, http.StatusBadRequest, "invalid_status", "status must be one of: succeeded, failed, running, cancelled")
+			return
+		}
+		c.JSON(http.StatusOK, internalWorkflowStatusResponse{
+			OK:               true,
+			TenantID:         getTenantID(c),
+			ExecutionID:      req.ExecutionID,
+			RecordID:         "rec_" + req.ExecutionID,
+			IdempotentReplay: isIdempotentReplay(c),
+		})
+	}
+}
+
