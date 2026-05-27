@@ -1,0 +1,208 @@
+{
+  "name": "daily_ai_hotspot_email_digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.HOTKEY_SERVER_URL || 'http://localhost:8080'}}/api/v1/internal/daily/candidates?date={{ $now.minus({days: 1}).toFormat('yyyy-MM-dd') }}",
+        "options": {},
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-HotKey-Internal-Key",
+              "value": "={{$env.HOTKEY_INTERNAL_API_KEY}}"
+            },
+            {
+              "name": "X-HotKey-Tenant-ID",
+              "value": "={{$env.HOTKEY_DEFAULT_TENANT_ID || 'tenant-default'}}"
+            }
+          ]
+        }
+      },
+      "id": "get-candidates",
+      "name": "Get Daily Candidates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const candidates = $input.first().json.events || [];\nconst date = $input.first().json.date;\n\n// Generate Markdown\nlet markdown = `# AI Hotspot Daily Report - ${date}\\n\\n`;\nmarkdown += `## Today's Hotspots\\n\\n`;\n\nif (candidates.length === 0) {\n  markdown += 'No significant hotspots detected today.\\n';\n} else {\n  candidates.forEach((event, i) => {\n    markdown += `### ${i + 1}. ${event.title}\\n`;\n    markdown += `- Heat: ${event.heatScore || 'N/A'}\\n`;\n    markdown += `- Trust: ${event.trustScore || 'N/A'}\\n`;\n    if (event.keywords) markdown += `- Keywords: ${event.keywords.join(', ')}\\n`;\n    markdown += `\\n`;\n  });\n}\n\n// Generate HTML\nlet html = `<h1>AI Hotspot Daily Report - ${date}</h1>`;\nhtml += `<h2>Today's Hotspots</h2>`;\n\nif (candidates.length === 0) {\n  html += '<p>No significant hotspots detected today.</p>';\n} else {\n  html += '<ol>';\n  candidates.forEach(event => {\n    html += `<li><strong>${event.title}</strong> (Heat: ${event.heatScore || 'N/A'}, Trust: ${event.trustScore || 'N/A'})</li>`;\n  });\n  html += '</ol>';\n}\n\nreturn [{\n  json: {\n    date,\n    markdown,\n    html,\n    candidates\n  }\n}];"
+      },
+      "id": "generate-report",
+      "name": "Generate Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.HOTKEY_SERVER_URL || 'http://localhost:8080'}}/api/v1/internal/daily/reports",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"reportDate\": \"{{ $json.date }}\",\n  \"markdown\": {{ JSON.stringify($json.markdown) }},\n  \"html\": {{ JSON.stringify($json.html) }},\n  \"workflowName\": \"daily_ai_hotspot_email_digest\",\n  \"executionId\": \"{{ $runId }}\"\n}",
+        "options": {},
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-HotKey-Internal-Key",
+              "value": "={{$env.HOTKEY_INTERNAL_API_KEY}}"
+            },
+            {
+              "name": "X-HotKey-Tenant-ID",
+              "value": "={{$env.HOTKEY_DEFAULT_TENANT_ID || 'tenant-default'}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ $runId }}-daily-report"
+            }
+          ]
+        }
+      },
+      "id": "save-report",
+      "name": "Save Daily Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{$env.SMTP_FROM || 'HotKey <no-reply@example.com>'}}",
+        "toEmail": "={{$env.DAILY_REPORT_RECIPIENTS || 'admin@example.com'}}",
+        "subject": "=AI Hotspot Daily Report - {{ $now.minus({days: 1}).toFormat('yyyy-MM-dd') }}",
+        "html": "={{ $('Generate Report').first().json.html }}",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1130, 300],
+      "credentials": {
+        "smtp": {
+          "id": "hotkey-smtp",
+          "name": "HotKey SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{$env.HOTKEY_SERVER_URL || 'http://localhost:8080'}}/api/v1/internal/workflow/status",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"workflowName\": \"daily_ai_hotspot_email_digest\",\n  \"executionId\": \"{{ $runId }}\",\n  \"status\": \"succeeded\",\n  \"runStartedAt\": \"{{ $now.toISO() }}\"\n}",
+        "options": {},
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-HotKey-Internal-Key",
+              "value": "={{$env.HOTKEY_INTERNAL_API_KEY}}"
+            },
+            {
+              "name": "X-HotKey-Tenant-ID",
+              "value": "={{$env.HOTKEY_DEFAULT_TENANT_ID || 'tenant-default'}}"
+            },
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ $runId }}-status"
+            }
+          ]
+        }
+      },
+      "id": "report-success",
+      "name": "Report Success",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1350, 300]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Daily Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Daily Candidates": {
+      "main": [
+        [
+          {
+            "node": "Generate Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Report": {
+      "main": [
+        [
+          {
+            "node": "Save Daily Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Daily Report": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email": {
+      "main": [
+        [
+          {
+            "node": "Report Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "hotkey",
+      "id": "1"
+    },
+    {
+      "name": "daily-report",
+      "id": "4"
+    }
+  ]
+}
