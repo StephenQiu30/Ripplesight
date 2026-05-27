@@ -532,7 +532,28 @@ func Spec() SpecDocument {
 					Summary:     "Report n8n workflow execution status",
 					OperationID: "reportWorkflowStatus",
 					Tags:        []string{"internal", "n8n"},
-					Responses:   okObjectResponse("Workflow status recorded"),
+					Responses: map[string]Response{
+						"200": {
+							Description: "Workflow status recorded",
+							Content: map[string]MediaType{
+								"application/json": {
+									Schema: map[string]any{
+										"type": "object",
+										"properties": map[string]any{
+											"ok":               map[string]any{"type": "boolean"},
+											"tenantId":         map[string]any{"type": "string"},
+											"executionId":      map[string]any{"type": "string"},
+											"recordId":         map[string]any{"type": "string"},
+											"idempotentReplay": map[string]any{"type": "boolean"},
+										},
+										"required": []string{"ok", "tenantId", "executionId", "recordId", "idempotentReplay"},
+									},
+								},
+							},
+						},
+						"400": errorResponse(),
+						"401": errorResponse(),
+					},
 				},
 			},
 			"/api/v1/internal/ingest/contents": {
@@ -540,7 +561,30 @@ func Spec() SpecDocument {
 					Summary:     "Batch ingest content items from n8n workflows",
 					OperationID: "batchIngestContents",
 					Tags:        []string{"internal", "n8n", "content"},
-					Responses:   acceptedObjectResponse("Batch ingest accepted"),
+					Responses: map[string]Response{
+						"202": {
+							Description: "Batch ingest accepted",
+							Content: map[string]MediaType{
+								"application/json": {
+									Schema: map[string]any{
+										"type": "object",
+										"properties": map[string]any{
+											"ok":         map[string]any{"type": "boolean"},
+											"tenantId":   map[string]any{"type": "string"},
+											"accepted":   map[string]any{"type": "integer"},
+											"created":    map[string]any{"type": "integer"},
+											"duplicated": map[string]any{"type": "integer"},
+											"rejected":   map[string]any{"type": "integer"},
+											"runId":      map[string]any{"type": "string"},
+										},
+										"required": []string{"ok", "tenantId", "accepted", "created", "duplicated", "rejected", "runId"},
+									},
+								},
+							},
+						},
+						"400": errorResponse(),
+						"401": errorResponse(),
+					},
 				},
 			},
 			"/api/v1/internal/daily/candidates": {
