@@ -43,6 +43,7 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("max_concurrent_agents: 4", front_matter)
         self.assertIn('git clone --depth 1 "$SOURCE_REPO_URL" .', front_matter)
         self.assertIn("approval_policy: never", front_matter)
+        self.assertIn("read_timeout_ms: 30000", front_matter)
         self.assertIn("{{ issue.identifier }}", body)
         self.assertIn("hotkey-server", body)
         self.assertIn("## Status map", body)
@@ -100,6 +101,10 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("Test-first Evidence", push_skill)
         self.assertNotIn("make -C elixir all", push_skill)
         self.assertNotIn("mix pr_body.check", push_skill)
+
+    def test_legacy_codex_agent_roles_are_not_committed(self):
+        legacy_agents_dir = ROOT / ".codex" / "agents"
+        self.assertEqual(list(legacy_agents_dir.glob("*.toml")), [])
 
 
 if __name__ == "__main__":

@@ -29,6 +29,7 @@ codex:
   command: codex --config shell_environment_policy.inherit=all app-server
   approval_policy: never
   thread_sandbox: workspace-write
+  read_timeout_ms: 30000
   turn_sandbox_policy:
     type: workspaceWrite
 ---
