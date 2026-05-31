@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	transporthttp "github.com/StephenQiu30/hotkey-server/internal/transport/http"
@@ -131,6 +132,14 @@ func jsonStringAt(t *testing.T, body []byte, path string) string {
 	}
 	var current any = decoded
 	for _, key := range bytes.Split([]byte(path), []byte(".")) {
+		if index, err := strconv.Atoi(string(key)); err == nil {
+			array, ok := current.([]any)
+			if !ok || index < 0 || index >= len(array) {
+				return ""
+			}
+			current = array[index]
+			continue
+		}
 		object, ok := current.(map[string]any)
 		if !ok {
 			return ""
