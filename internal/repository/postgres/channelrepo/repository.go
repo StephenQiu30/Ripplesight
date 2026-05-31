@@ -31,7 +31,7 @@ FROM channels`
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var channels []servicechannel.Channel
 	for rows.Next() {
 		channel, err := scanChannel(rows)
@@ -123,7 +123,7 @@ ORDER BY s.created_at ASC, c.id ASC`
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var subscriptions []servicechannel.Subscription
 	for rows.Next() {
 		var subscription servicechannel.Subscription
@@ -187,7 +187,7 @@ ORDER BY created_at ASC, id ASC`
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var keywords []servicechannel.Keyword
 	for rows.Next() {
 		keyword, err := scanKeyword(rows)

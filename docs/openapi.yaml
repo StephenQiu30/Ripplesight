@@ -254,6 +254,16 @@ paths:
       responses:
         "201":
           description: Channel created.
+        "409":
+          description: Channel slug already exists.
+          content:
+            application/json:
+              examples:
+                duplicate:
+                  value:
+                    error:
+                      code: already_exists
+                      message: already exists
   /api/v1/admin/channels/{channelID}:
     patch:
       summary: Update a channel or set channel status.

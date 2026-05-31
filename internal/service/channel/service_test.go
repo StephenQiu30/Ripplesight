@@ -93,6 +93,21 @@ func TestServiceSubscriptionsKeywordsAndPreferences(t *testing.T) {
 	if _, err := svc.UpdateChannelStatus(ctx, servicechannel.UpdateChannelStatusInput{ChannelID: custom.ID, Status: servicechannel.ChannelStatusActive}); !errors.Is(err, servicechannel.ErrNotFound) {
 		t.Fatalf("expected deleted channel to be not found, got %v", err)
 	}
+	channels, err := svc.ListChannels(ctx, servicechannel.ListChannelsInput{})
+	if err != nil {
+		t.Fatalf("list channels after delete: %v", err)
+	}
+	for _, channel := range channels {
+		if channel.ID == "" || channel.ID == custom.ID {
+			t.Fatalf("expected deleted channel to be absent without zero-value rows, got %#v", channels)
+		}
+	}
+	if _, err := svc.CreateChannel(ctx, servicechannel.CreateChannelInput{
+		Name: "Duplicate slug",
+		Slug: defaults[1].Slug,
+	}); !errors.Is(err, servicechannel.ErrAlreadyExists) {
+		t.Fatalf("expected duplicate slug to return already exists, got %v", err)
+	}
 }
 
 func boolPtr(value bool) *bool {

@@ -45,7 +45,10 @@ func (r *MemoryRepository) ListChannels(_ context.Context, activeOnly bool) ([]C
 	defer r.mu.RUnlock()
 	var channels []Channel
 	for _, id := range r.channelOrder {
-		channel := r.channels[id]
+		channel, exists := r.channels[id]
+		if !exists {
+			continue
+		}
 		if activeOnly && channel.Status != ChannelStatusActive {
 			continue
 		}
@@ -67,6 +70,14 @@ func (r *MemoryRepository) ChannelByID(_ context.Context, channelID string) (Cha
 func (r *MemoryRepository) CreateChannel(_ context.Context, channel Channel) (Channel, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if _, exists := r.channels[channel.ID]; exists {
+		return Channel{}, ErrAlreadyExists
+	}
+	for _, existing := range r.channels {
+		if existing.Slug == channel.Slug {
+			return Channel{}, ErrAlreadyExists
+		}
+	}
 	r.channels[channel.ID] = channel
 	r.channelOrder = append(r.channelOrder, channel.ID)
 	return channel, nil
@@ -89,6 +100,12 @@ func (r *MemoryRepository) DeleteChannel(_ context.Context, channelID string) er
 		return sql.ErrNoRows
 	}
 	delete(r.channels, channelID)
+	for i, id := range r.channelOrder {
+		if id == channelID {
+			r.channelOrder = append(r.channelOrder[:i], r.channelOrder[i+1:]...)
+			break
+		}
+	}
 	for userID := range r.subscriptions {
 		delete(r.subscriptions[userID], channelID)
 	}
@@ -132,7 +149,11 @@ func (r *MemoryRepository) ListSubscriptions(_ context.Context, userID string) (
 		if !exists {
 			continue
 		}
-		subscription.Channel = r.channels[channelID]
+		channel, exists := r.channels[channelID]
+		if !exists {
+			continue
+		}
+		subscription.Channel = channel
 		subscriptions = append(subscriptions, subscription)
 	}
 	return subscriptions, nil

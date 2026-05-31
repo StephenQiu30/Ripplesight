@@ -101,6 +101,15 @@ func TestChannelSubscriptionKeywordAndPreferenceHTTPFlow(t *testing.T) {
 	if deleteChannel.Code != http.StatusNoContent {
 		t.Fatalf("expected admin channel delete 204, got %d with body %s", deleteChannel.Code, deleteChannel.Body.String())
 	}
+
+	duplicateChannel := postJSONWithBearer(t, router, "/api/v1/admin/channels", adminToken, map[string]any{
+		"name": "Duplicate",
+		"slug": "ai-products",
+	})
+	if duplicateChannel.Code != http.StatusConflict {
+		t.Fatalf("expected duplicate admin channel create 409, got %d with body %s", duplicateChannel.Code, duplicateChannel.Body.String())
+	}
+	assertJSONField(t, duplicateChannel.Body.Bytes(), "error.code", "already_exists")
 }
 
 func transportRouterForTest() http.Handler {
