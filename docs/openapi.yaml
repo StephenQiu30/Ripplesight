@@ -20,6 +20,10 @@ paths:
       responses:
         "201":
           description: User created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
         "409":
           description: Duplicate email.
           content:
@@ -42,6 +46,10 @@ paths:
       responses:
         "200":
           description: Access and refresh tokens.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
         "401":
           description: Uniform credential failure.
           content:
@@ -63,7 +71,11 @@ paths:
               $ref: "#/components/schemas/RefreshRequest"
       responses:
         "200":
-          description: New access token.
+          description: New access and refresh tokens.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
         "401":
           description: Refresh token is invalid, revoked, or expired.
   /api/v1/auth/logout:
@@ -86,6 +98,10 @@ paths:
       responses:
         "200":
           description: Current authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
         "401":
           description: Missing or invalid access token.
 components:
@@ -112,4 +128,57 @@ components:
         - refreshToken
       properties:
         refreshToken:
+          type: string
+    Session:
+      type: object
+      required:
+        - accessToken
+        - refreshToken
+        - expiresAt
+        - user
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        user:
+          $ref: "#/components/schemas/User"
+    UserResponse:
+      type: object
+      required:
+        - user
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+    User:
+      type: object
+      required:
+        - id
+        - email
+        - role
+        - status
+        - timezone
+        - dailySendAt
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum:
+            - user
+            - admin
+        status:
+          type: string
+          enum:
+            - active
+            - disabled
+        timezone:
+          type: string
+        dailySendAt:
           type: string

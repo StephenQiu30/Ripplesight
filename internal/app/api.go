@@ -17,11 +17,14 @@ type API struct {
 }
 
 func NewAPI(cfg config.Config, logger *slog.Logger) *API {
-	authService := serviceauth.NewService(serviceauth.NewMemoryRepository(), serviceauth.Config{
+	authService, err := serviceauth.NewService(serviceauth.NewMemoryRepository(), serviceauth.Config{
 		AccessTokenSecret: cfg.AuthTokenSecret,
 		AccessTokenTTL:    cfg.AccessTokenTTL,
 		RefreshTokenTTL:   cfg.RefreshTokenTTL,
 	})
+	if err != nil {
+		panic(err)
+	}
 	return &API{
 		server: &http.Server{
 			Addr:              cfg.HTTPAddr,

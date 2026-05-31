@@ -2,6 +2,7 @@ package http_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -73,9 +74,13 @@ func TestAuthHTTPFlowAndAdminDenial(t *testing.T) {
 	if jsonStringAt(t, refresh.Body.Bytes(), "accessToken") == "" {
 		t.Fatalf("expected access token in refresh response: %s", refresh.Body.String())
 	}
+	rotatedRefreshToken := jsonStringAt(t, refresh.Body.Bytes(), "refreshToken")
+	if rotatedRefreshToken == "" || rotatedRefreshToken == refreshToken {
+		t.Fatalf("expected rotated refresh token in refresh response: %s", refresh.Body.String())
+	}
 
 	logout := postJSON(t, router, "/api/v1/auth/logout", map[string]string{
-		"refreshToken": refreshToken,
+		"refreshToken": rotatedRefreshToken,
 	})
 	if logout.Code != http.StatusNoContent {
 		t.Fatalf("expected logout 204, got %d with body %s", logout.Code, logout.Body.String())
@@ -95,7 +100,7 @@ func postJSON(t *testing.T, handler http.Handler, path string, body any) *httpte
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(payload))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, path, bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -103,7 +108,7 @@ func postJSON(t *testing.T, handler http.Handler, path string, body any) *httpte
 }
 
 func getWithBearer(handler http.Handler, path string, token string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, path, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)

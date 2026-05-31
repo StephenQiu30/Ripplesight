@@ -78,6 +78,13 @@ func TestLoginUsesUniformCredentialFailureAndIssuesRefreshToken(t *testing.T) {
 	}
 }
 
+func TestNewServiceRejectsEmptyAccessTokenSecret(t *testing.T) {
+	_, err := auth.NewService(auth.NewMemoryRepository(), auth.Config{})
+	if err == nil {
+		t.Fatal("expected empty access token secret to fail")
+	}
+}
+
 func TestRefreshRejectsRevokedAndExpiredTokens(t *testing.T) {
 	service := newTestService(t)
 	ctx := context.Background()
@@ -103,11 +110,18 @@ func TestRefreshRejectsRevokedAndExpiredTokens(t *testing.T) {
 	if refreshed.AccessToken == "" {
 		t.Fatal("expected refreshed access token")
 	}
-
-	if err := service.Logout(ctx, session.RefreshToken); err != nil {
-		t.Fatalf("logout returned error: %v", err)
+	if refreshed.RefreshToken == "" || refreshed.RefreshToken == session.RefreshToken {
+		t.Fatal("expected refresh to rotate the refresh token")
 	}
 	_, err = service.Refresh(ctx, session.RefreshToken)
+	if !errors.Is(err, auth.ErrInvalidRefreshToken) {
+		t.Fatalf("expected rotated refresh token to reject replay, got %v", err)
+	}
+
+	if err := service.Logout(ctx, refreshed.RefreshToken); err != nil {
+		t.Fatalf("logout returned error: %v", err)
+	}
+	_, err = service.Refresh(ctx, refreshed.RefreshToken)
 	if !errors.Is(err, auth.ErrInvalidRefreshToken) {
 		t.Fatalf("expected revoked refresh token to fail, got %v", err)
 	}
@@ -140,9 +154,13 @@ func newTestService(t *testing.T) *auth.Service {
 
 func newTestServiceWithTTL(t *testing.T, refreshTTL time.Duration) *auth.Service {
 	t.Helper()
-	return auth.NewService(auth.NewMemoryRepository(), auth.Config{
+	service, err := auth.NewService(auth.NewMemoryRepository(), auth.Config{
 		AccessTokenSecret: "unit-test-secret",
 		AccessTokenTTL:    15 * time.Minute,
 		RefreshTokenTTL:   refreshTTL,
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return service
 }

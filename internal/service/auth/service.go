@@ -72,9 +72,9 @@ type Service struct {
 	now  func() time.Time
 }
 
-func NewService(repo Repository, cfg Config) *Service {
-	if cfg.AccessTokenSecret == "" {
-		cfg.AccessTokenSecret = "hotkey-dev-secret"
+func NewService(repo Repository, cfg Config) (*Service, error) {
+	if strings.TrimSpace(cfg.AccessTokenSecret) == "" {
+		return nil, errors.New("access token secret is required")
 	}
 	if cfg.AccessTokenTTL == 0 {
 		cfg.AccessTokenTTL = 15 * time.Minute
@@ -82,7 +82,7 @@ func NewService(repo Repository, cfg Config) *Service {
 	if cfg.RefreshTokenTTL == 0 {
 		cfg.RefreshTokenTTL = 30 * 24 * time.Hour
 	}
-	return &Service{repo: repo, cfg: cfg, now: time.Now}
+	return &Service{repo: repo, cfg: cfg, now: time.Now}, nil
 }
 
 func (s *Service) Register(ctx context.Context, input RegisterInput) (user.User, error) {
@@ -99,7 +99,10 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (user.User,
 		return user.User{}, fmt.Errorf("hash password: %w", err)
 	}
 	now := s.now().UTC()
-	created := user.NewEmailUser(newID("usr"), email, string(hash), now)
+	created, err := user.NewEmailUser(newID("usr"), email, string(hash), now)
+	if err != nil {
+		return user.User{}, err
+	}
 	created, err = s.repo.CreateUser(ctx, created)
 	if err != nil {
 		if errors.Is(err, ErrEmailAlreadyExists) {
@@ -138,11 +141,10 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (Session, er
 	if err != nil || found.Status != user.StatusActive {
 		return Session{}, ErrInvalidRefreshToken
 	}
-	accessToken, expiresAt, err := s.issueAccessToken(found)
-	if err != nil {
+	if err := s.repo.RevokeRefreshToken(ctx, stored.TokenHash, s.now().UTC()); err != nil {
 		return Session{}, err
 	}
-	return Session{User: found, AccessToken: accessToken, RefreshToken: refreshToken, ExpiresAt: expiresAt}, nil
+	return s.issueSession(ctx, found)
 }
 
 func (s *Service) Logout(ctx context.Context, refreshToken string) error {

@@ -8,7 +8,12 @@ import (
 )
 
 func NewRouter() *gin.Engine {
-	authService := serviceauth.NewService(serviceauth.NewMemoryRepository(), serviceauth.Config{})
+	authService, err := serviceauth.NewService(serviceauth.NewMemoryRepository(), serviceauth.Config{
+		AccessTokenSecret: "test-router-secret",
+	})
+	if err != nil {
+		panic(err)
+	}
 	return NewRouterWithAuth(authService)
 }
 

@@ -75,11 +75,7 @@ func (h *Handler) Refresh(c *gin.Context) {
 		writeError(c, http.StatusUnauthorized, "invalid_refresh_token", "invalid refresh token")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"accessToken": session.AccessToken,
-		"expiresAt":   session.ExpiresAt,
-		"user":        userResponse(session.User),
-	})
+	writeSession(c, session)
 }
 
 func (h *Handler) Logout(c *gin.Context) {

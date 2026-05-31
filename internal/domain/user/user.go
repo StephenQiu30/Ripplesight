@@ -43,10 +43,14 @@ func NormalizeEmail(email string) (string, error) {
 	return normalized, nil
 }
 
-func NewEmailUser(id string, email string, passwordHash string, now time.Time) User {
+func NewEmailUser(id string, email string, passwordHash string, now time.Time) (User, error) {
+	normalized, err := NormalizeEmail(email)
+	if err != nil {
+		return User{}, err
+	}
 	return User{
 		ID:           id,
-		Email:        email,
+		Email:        normalized,
 		PasswordHash: passwordHash,
 		Role:         RoleUser,
 		Status:       StatusActive,
@@ -54,5 +58,5 @@ func NewEmailUser(id string, email string, passwordHash string, now time.Time) U
 		DailySendAt:  "08:30",
 		CreatedAt:    now,
 		UpdatedAt:    now,
-	}
+	}, nil
 }

@@ -40,6 +40,11 @@ class AuthContractTest(unittest.TestCase):
             self.assertIn(path, spec)
 
         self.assertIn("bearerAuth:", spec)
+        self.assertIn("Session:", spec)
+        self.assertIn("UserResponse:", spec)
+        self.assertIn("User:", spec)
+        self.assertIn('$ref: "#/components/schemas/Session"', spec)
+        self.assertIn('$ref: "#/components/schemas/UserResponse"', spec)
         self.assertIn("email_already_exists", spec)
         self.assertIn("invalid_credentials", spec)
 
