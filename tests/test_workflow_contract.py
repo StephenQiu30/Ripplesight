@@ -7,6 +7,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / "WORKFLOW.md"
 PRD_DIR = ROOT / "docs" / "product" / "prd"
 PLAN_DIR = ROOT / "docs" / "plans"
+LAND_SKILL = ROOT / ".codex" / "skills" / "land" / "SKILL.md"
+LAND_WATCH = ROOT / ".codex" / "skills" / "land" / "land_watch.py"
 
 
 def numbered_markdown_files(path):
@@ -65,6 +67,21 @@ class WorkflowContractTest(unittest.TestCase):
         expected = list(range(1, len(prds) + 1))
         self.assertEqual([number for number, _ in prds], expected)
         self.assertEqual([number for number, _ in plans], expected)
+
+    def test_land_skill_is_available_for_merging_state(self):
+        self.assertTrue(LAND_SKILL.exists())
+        self.assertTrue(LAND_WATCH.exists())
+
+        skill = LAND_SKILL.read_text(encoding="utf-8")
+        watch = LAND_WATCH.read_text(encoding="utf-8")
+
+        self.assertIn("name: land", skill)
+        self.assertIn("gh pr view --json number", skill)
+        self.assertIn("gh pr checks --watch", skill)
+        self.assertIn("gh pr merge --squash", skill)
+        self.assertIn("python3 .codex/skills/land/land_watch.py", skill)
+        self.assertIn("async def get_pr_info", watch)
+        self.assertIn("async def get_check_runs", watch)
 
 
 if __name__ == "__main__":
