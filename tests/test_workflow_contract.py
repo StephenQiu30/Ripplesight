@@ -23,9 +23,18 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertRegex(front_matter, re.compile(r"terminal_states:\n(\s+- .+\n)+"))
         self.assertIn("- Merging", front_matter)
         self.assertIn("- Rework", front_matter)
+        self.assertIn("interval_ms: 5000", front_matter)
+        self.assertIn('git clone --depth 1 "$SOURCE_REPO_URL" .', front_matter)
         self.assertIn("approval_policy: never", front_matter)
         self.assertIn("{{ issue.identifier }}", body)
         self.assertIn("hotkey-server", body)
+        self.assertIn("## Status map", body)
+        self.assertIn("## Step 0: Determine current ticket state and route", body)
+        self.assertIn('update_issue(..., state: "In Progress")', body)
+        self.assertIn("## Codex Workpad", body)
+        self.assertIn("PR feedback sweep protocol", body)
+        self.assertIn("Completion bar before Human Review", body)
+        self.assertIn(".codex/skills/land/SKILL.md", body)
 
 
 if __name__ == "__main__":
