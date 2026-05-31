@@ -7,6 +7,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / "WORKFLOW.md"
 PRD_DIR = ROOT / "docs" / "product" / "prd"
 PLAN_DIR = ROOT / "docs" / "plans"
+SYMPHONY_SKILLS_DIR = ROOT / ".codex" / "skills"
+REQUIRED_SYMPHONY_SKILLS = ("commit", "debug", "land", "linear", "pull", "push")
 LAND_SKILL = ROOT / ".codex" / "skills" / "land" / "SKILL.md"
 LAND_WATCH = ROOT / ".codex" / "skills" / "land" / "land_watch.py"
 
@@ -82,6 +84,22 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("python3 .codex/skills/land/land_watch.py", skill)
         self.assertIn("async def get_pr_info", watch)
         self.assertIn("async def get_check_runs", watch)
+
+    def test_required_symphony_skills_are_available(self):
+        for skill_name in REQUIRED_SYMPHONY_SKILLS:
+            with self.subTest(skill=skill_name):
+                skill_file = SYMPHONY_SKILLS_DIR / skill_name / "SKILL.md"
+                self.assertTrue(skill_file.exists())
+                skill = skill_file.read_text(encoding="utf-8")
+                self.assertIn(f"name: {skill_name}", skill)
+
+        push_skill = (SYMPHONY_SKILLS_DIR / "push" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("make test", push_skill)
+        self.assertIn("Test-first Evidence", push_skill)
+        self.assertNotIn("make -C elixir all", push_skill)
+        self.assertNotIn("mix pr_body.check", push_skill)
 
 
 if __name__ == "__main__":
