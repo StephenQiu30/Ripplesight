@@ -23,7 +23,7 @@ hooks:
   after_create: |
     git clone --depth 1 "$SOURCE_REPO_URL" .
 agent:
-  max_concurrent_agents: 2
+  max_concurrent_agents: 4
   max_turns: 20
 codex:
   command: codex --config shell_environment_policy.inherit=all app-server

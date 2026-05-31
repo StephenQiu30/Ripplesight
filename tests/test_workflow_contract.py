@@ -24,6 +24,7 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("- Merging", front_matter)
         self.assertIn("- Rework", front_matter)
         self.assertIn("interval_ms: 5000", front_matter)
+        self.assertIn("max_concurrent_agents: 4", front_matter)
         self.assertIn('git clone --depth 1 "$SOURCE_REPO_URL" .', front_matter)
         self.assertIn("approval_policy: never", front_matter)
         self.assertIn("{{ issue.identifier }}", body)
