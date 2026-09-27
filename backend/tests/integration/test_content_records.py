@@ -905,6 +905,10 @@ def test_detail_reads_annotation_status_by_readable_version_and_current_topic_ru
                 {"topic": topic_id, "rule": rule, "owner": owner_id, "now": now},
             )
         session.execute(
+            text("UPDATE jobs SET configuration_ref = :ref WHERE id IN (:first, :second)"),
+            {"ref": f"topic:{topic_id}", "first": first_job_id, "second": second_job_id},
+        )
+        session.execute(
             text(
                 "INSERT INTO ai_calls "
                 "(id, owner_id, purpose, provider, model, prompt_version, input_fingerprint, "
@@ -978,6 +982,18 @@ def test_detail_reads_annotation_status_by_readable_version_and_current_topic_ru
         next(item["relevant"] for item in body["annotations"] if item["topic_rule_version"] == 2)
         is None
     )
+    current = content_client.get(
+        "/api/contents", params={"topic_id": str(topic_id), "analysis_state": "pending"}
+    )
+    assert current.status_code == 200, current.json()
+    assert [item["id"] for item in current.json()["items"]] == [str(second.id)]
+    assert current.json()["items"][0]["analysis_state"] == "pending"
+    assert (
+        content_client.get(
+            "/api/contents", params={"topic_id": str(topic_id), "analysis_state": "valid"}
+        ).json()["items"]
+        == []
+    )
     with factory() as session:
         with pytest.raises(ApplicationError, match="resource_not_found"):
             ContentService(session).get_content(owner_id=uuid4(), content_id=second.id)
@@ -993,6 +1009,146 @@ def test_detail_reads_annotation_status_by_readable_version_and_current_topic_ru
     assert {item["content_version_id"] for item in refreshed.json()["annotations"]} == {
         str(current_version.id)
     }
+
+
+def test_content_list_filters_bind_cursor_and_label_discovery_time(
+    content_client: TestClient,
+) -> None:
+    owner_id = _initialize(content_client)
+    connection_id, policy_id, retention_id, first_job_id, second_job_id = _seed_context(
+        content_client, owner_id
+    )
+    now = datetime.now(UTC).replace(microsecond=0)
+    topic_id = uuid4()
+    factory = content_client.app.state.session_factory
+    with factory.begin() as session:
+        session.execute(
+            text(
+                "INSERT INTO monitor_topics "
+                "(id, owner_id, name, status, readiness_status, "
+                "current_version, created_at, updated_at) "
+                "VALUES (:topic, :owner, '列表主题', 'active', 'ready', 1, :now, :now)"
+            ),
+            {"topic": topic_id, "owner": owner_id, "now": now},
+        )
+        session.execute(
+            text(
+                "INSERT INTO monitor_topic_versions "
+                "(topic_id, version, created_by, match_any, match_all, exclude, created_at) "
+                "VALUES (:topic, 1, :owner, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, :now)"
+            ),
+            {"topic": topic_id, "owner": owner_id, "now": now},
+        )
+        session.execute(
+            text("UPDATE jobs SET configuration_ref = :ref WHERE id IN (:first, :second)"),
+            {"ref": f"topic:{topic_id}", "first": first_job_id, "second": second_job_id},
+        )
+    with factory() as session:
+        service = ContentService(session)
+        dated = service.persist_post(
+            owner_id=owner_id,
+            command=_command(
+                owner_id=owner_id,
+                connection_id=connection_id,
+                policy_id=policy_id,
+                retention_id=retention_id,
+                job_id=first_job_id,
+                operation_id=uuid4(),
+                observed_at=now - timedelta(minutes=2),
+                external_id="dated",
+            ),
+        )
+        discovered = service.persist_post(
+            owner_id=owner_id,
+            command=_command(
+                owner_id=owner_id,
+                connection_id=connection_id,
+                policy_id=policy_id,
+                retention_id=retention_id,
+                job_id=second_job_id,
+                operation_id=uuid4(),
+                observed_at=now - timedelta(minutes=1),
+                external_id="discovered",
+                extra_fields={"published_at": None},
+            ),
+        )
+
+    page = content_client.get(
+        "/api/contents", params={"topic_id": str(topic_id), "source_key": "x", "limit": 1}
+    )
+    assert page.status_code == 200, page.json()
+    assert len(page.json()["items"]) == 1
+    assert page.json()["next_cursor"]
+    second = content_client.get(
+        "/api/contents",
+        params={
+            "topic_id": str(topic_id),
+            "source_key": "x",
+            "limit": 1,
+            "cursor": page.json()["next_cursor"],
+        },
+    )
+    assert second.status_code == 200, second.json()
+    assert {item["id"] for item in page.json()["items"] + second.json()["items"]} == {
+        str(dated.id),
+        str(discovered.id),
+    }
+    assert second.json()["next_cursor"] is None
+    assert (
+        content_client.get(
+            "/api/contents",
+            params={"source_key": "x", "cursor": page.json()["next_cursor"]},
+        ).status_code
+        == 422
+    )
+    with factory() as session, pytest.raises(ApplicationError, match="invalid_content_cursor"):
+        ContentService(session).list_contents(
+            owner_id=uuid4(), cursor=page.json()["next_cursor"], limit=20
+        )
+    with factory() as session, pytest.raises(ApplicationError, match="resource_not_found"):
+        ContentService(session).list_contents(
+            owner_id=uuid4(), cursor=None, limit=20, topic_id=topic_id
+        )
+
+    window = content_client.get(
+        "/api/contents",
+        params={
+            "topic_id": str(topic_id),
+            "starts_at": (now - timedelta(minutes=3)).isoformat(),
+            "ends_at": now.isoformat(),
+        },
+    )
+    assert window.status_code == 200, window.json()
+    assert [item["id"] for item in window.json()["items"]] == [str(discovered.id)]
+    assert window.json()["items"][0]["timeline_basis"] == "first_observed_at"
+    assert window.json()["items"][0]["latest_observation"]["metrics"]["comment_count"] is None
+    assert (
+        content_client.get("/api/contents", params={"source_key": "bilibili"}).json()["items"] == []
+    )
+    assert (
+        content_client.get(
+            "/api/contents", params={"topic_id": str(topic_id), "analysis_state": "missing"}
+        ).status_code
+        == 200
+    )
+    assert (
+        content_client.get("/api/contents", params={"analysis_state": "missing"}).status_code == 422
+    )
+    assert (
+        content_client.get("/api/contents", params={"starts_at": now.isoformat()}).status_code
+        == 422
+    )
+    assert (
+        content_client.get(
+            "/api/contents",
+            params={
+                "starts_at": (now - timedelta(days=32)).isoformat(),
+                "ends_at": now.isoformat(),
+            },
+        ).status_code
+        == 422
+    )
+    assert content_client.get("/api/contents", params={"topic_id": str(uuid4())}).status_code == 404
 
 
 @pytest.mark.parametrize(

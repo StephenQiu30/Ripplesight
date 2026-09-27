@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from analysis.models import ContentAnnotation
-from analysis.schemas import ContentAnnotationReadView
+from analysis.schemas import AnnotationResultState, ContentAnnotationReadView
 
 
 def load_content_annotations_in_transaction(
@@ -36,3 +36,32 @@ def load_content_annotations_in_transaction(
         )
     ).all()
     return [ContentAnnotationReadView.model_validate(row) for row in rows]
+
+
+def load_current_annotation_states_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    topic_id: UUID,
+    topic_rule_version: int,
+    prompt_version: str,
+    content_version_ids: set[UUID],
+) -> dict[UUID, tuple[AnnotationResultState, bool | None]]:
+    """Project only the selected topic's current rule and prompt for visible versions."""
+    if not session.in_transaction():
+        raise RuntimeError("annotation reads require the caller's transaction")
+    if not content_version_ids:
+        return {}
+    rows = session.scalars(
+        select(ContentAnnotation).where(
+            ContentAnnotation.owner_id == owner_id,
+            ContentAnnotation.topic_id == topic_id,
+            ContentAnnotation.topic_rule_version == topic_rule_version,
+            ContentAnnotation.prompt_version == prompt_version,
+            ContentAnnotation.content_version_id.in_(content_version_ids),
+        )
+    ).all()
+    return {
+        row.content_version_id: (AnnotationResultState(row.result_state), row.relevant)
+        for row in rows
+    }

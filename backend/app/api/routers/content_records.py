@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Annotated, Any
+from datetime import datetime
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Response, status
@@ -35,20 +36,33 @@ _COMMON_READ_RESPONSES: dict[int | str, dict[str, Any]] = {
     response_model=PageView[ContentRecordSummaryView],
     status_code=status.HTTP_200_OK,
     summary="列出作品资料",
-    description="按当前 owner 列出具有可读观察的作品及当前来源状态; 读取不会触发来源请求。",
+    description=(
+        "按当前 owner 列出具有可读观察的作品; 可按来源、发现主题、时间窗与当前标注状态筛选。"
+        "时间窗使用发布时间, 缺失时回退首次发现时间; 读取不会触发来源或模型请求。"
+    ),
     responses=_COMMON_READ_RESPONSES,
 )
 def list_content_records(
     response: Response,
     service: ContentServiceDependency,
     identity: AuthenticatedIdentityDependency,
-    cursor: UUID | None = None,
+    cursor: Annotated[str | None, Query(max_length=512)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    topic_id: UUID | None = None,
+    source_key: Annotated[str | None, Query(pattern=r"^[a-z][a-z0-9_-]{0,63}$")] = None,
+    starts_at: datetime | None = None,
+    ends_at: datetime | None = None,
+    analysis_state: Literal["missing", "pending", "failed", "invalid", "valid"] | None = None,
 ) -> PageView[ContentRecordSummaryView]:
     items, next_cursor = service.list_contents(
         owner_id=identity.view.user.id,
         cursor=cursor,
         limit=limit,
+        topic_id=topic_id,
+        source_key=source_key,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        analysis_state=analysis_state,
     )
     response.headers["cache-control"] = "no-store"
     return PageView(items=items, next_cursor=next_cursor)

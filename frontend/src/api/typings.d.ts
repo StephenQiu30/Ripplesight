@@ -270,6 +270,15 @@ declare namespace HotKeyAPI {
     current_visibility: ContentVisibilityView | null;
     /** Discovery Count */
     discovery_count: number;
+    /** Timeline At */
+    timeline_at?: string | null;
+    /** Timeline Basis */
+    timeline_basis?: "published_at" | "first_observed_at" | null;
+    /** Analysis State */
+    analysis_state?:
+      "missing" | "pending" | "failed" | "invalid" | "valid" | null;
+    /** Analysis Relevant */
+    analysis_relevant?: boolean | null;
     /** Discoveries */
     discoveries: ContentDiscoveryView[];
     /** Version History */
@@ -301,6 +310,15 @@ declare namespace HotKeyAPI {
     current_visibility: ContentVisibilityView | null;
     /** Discovery Count */
     discovery_count: number;
+    /** Timeline At */
+    timeline_at?: string | null;
+    /** Timeline Basis */
+    timeline_basis?: "published_at" | "first_observed_at" | null;
+    /** Analysis State */
+    analysis_state?:
+      "missing" | "pending" | "failed" | "invalid" | "valid" | null;
+    /** Analysis Relevant */
+    analysis_relevant?: boolean | null;
   };
 
   type ContentRelationType = "quote" | "repost";
@@ -750,6 +768,12 @@ declare namespace HotKeyAPI {
   type listContentRecordsParams = {
     cursor?: string | null;
     limit?: number;
+    topic_id?: string | null;
+    source_key?: string | null;
+    starts_at?: string | null;
+    ends_at?: string | null;
+    analysis_state?:
+      "missing" | "pending" | "failed" | "invalid" | "valid" | null;
   };
 
   type listHotlistSnapshotsParams = {
