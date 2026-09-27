@@ -29,6 +29,9 @@ _RSS = """<?xml version="1.0" encoding="UTF-8"?>
 <guid>https://news.example.com/a</guid></item>
 <item><title>无日期</title><link>https://news.example.com/b</link></item>
 </channel></rss>"""
+_GOOGLE_NEWS_TEMPLATE = (
+    "https://news.google.com/rss/search?q={query}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+)
 
 
 def _allow(attempt: int) -> bool:
@@ -50,14 +53,17 @@ def test_rss_search_encodes_query_and_maps_entries() -> None:
 
     adapter = RssSourceAdapter(
         source_key="google_news",
-        feed_url_template="https://news.google.com/rss/search?q={query}&hl=zh-CN",
+        feed_url_template=_GOOGLE_NEWS_TEMPLATE,
         allowed_hosts=frozenset({"news.google.com"}),
         before_request=_allow,
         transport=httpx.MockTransport(handler),
     )
     page = adapter.fetch_page(_search("google_news"))
 
-    assert seen == ["https://news.google.com/rss/search?q=%E5%B0%8F%E7%B1%B3%20SU7&hl=zh-CN"]
+    assert seen == [
+        "https://news.google.com/rss/search?q=%E5%B0%8F%E7%B1%B3%20SU7"
+        "&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    ]
     assert page.state is SourcePageState.COMPLETE
     assert page.request_count == 1
     first, second = page.items
@@ -83,7 +89,7 @@ def test_rss_guid_fallback_is_normalized_and_title_is_not_identity() -> None:
     </channel></rss>"""
     adapter = RssSourceAdapter(
         source_key="google_news",
-        feed_url_template="https://news.google.com/rss/search?q={query}",
+        feed_url_template=_GOOGLE_NEWS_TEMPLATE,
         allowed_hosts=frozenset({"news.google.com"}),
         before_request=_allow,
         transport=httpx.MockTransport(lambda _: httpx.Response(200, text=feed)),
@@ -98,11 +104,73 @@ def test_rss_guid_fallback_is_normalized_and_title_is_not_identity() -> None:
     ]
 
 
+def test_google_news_requires_fixed_search_feed_and_refuses_redirects() -> None:
+    for template, hosts in (
+        ("https://news.google.com/rss/search?q={query}", frozenset({"news.google.com"})),
+        (_GOOGLE_NEWS_TEMPLATE, frozenset({"news.google.com", "example.com"})),
+    ):
+        with pytest.raises(ValueError, match="Google News"):
+            RssSourceAdapter(
+                source_key="google_news",
+                feed_url_template=template,
+                allowed_hosts=hosts,
+                before_request=_allow,
+            )
+
+    requested: list[str] = []
+
+    def redirect(request: httpx.Request) -> httpx.Response:
+        requested.append(str(request.url))
+        return httpx.Response(302, headers={"location": "/rss/search?q=other"})
+
+    adapter = RssSourceAdapter(
+        source_key="google_news",
+        feed_url_template=_GOOGLE_NEWS_TEMPLATE,
+        allowed_hosts=frozenset({"news.google.com"}),
+        before_request=_allow,
+        transport=httpx.MockTransport(redirect),
+    )
+    page = adapter.fetch_page(_search("google_news"))
+    assert page.state is SourcePageState.STOPPED
+    assert page.stop_reason is SourceStopReason.ACCESS_DENIED
+    assert page.request_count == 1
+    assert len(requested) == 1
+
+
+def test_google_news_keeps_nullable_fields_and_html_text() -> None:
+    feed = """<rss version="2.0"><channel><title>Google News</title>
+    <lastBuildDate>Sat, 26 Sep 2026 10:00:00 GMT</lastBuildDate>
+    <item><title>AI &lt;b&gt;发布&lt;/b&gt;</title><guid>native-1</guid>
+    <link>https://news.google.com/rss/articles/native-1</link>
+    <description>&lt;p&gt;AI &lt;i&gt;摘要&lt;/i&gt;&lt;/p&gt;</description></item>
+    <item><title>AI 无摘要</title><guid>native-2</guid>
+    <link>https://news.google.com/rss/articles/native-2</link></item>
+    </channel></rss>"""
+    adapter = RssSourceAdapter(
+        source_key="google_news",
+        feed_url_template=_GOOGLE_NEWS_TEMPLATE,
+        allowed_hosts=frozenset({"news.google.com"}),
+        before_request=_allow,
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, text=feed)),
+    )
+    page = adapter.fetch_page(_search("google_news"))
+    assert page.state is SourcePageState.COMPLETE
+    assert page.source_feed_updated_at == datetime(2026, 9, 26, 10, tzinfo=UTC)
+    assert page.observed_at > page.source_feed_updated_at
+    assert [(item.external_id, item.identity_basis) for item in page.items] == [
+        ("native-1", "guid"),
+        ("native-2", "guid"),
+    ]
+    assert (page.items[0].title, page.items[0].text) == ("AI 发布", "AI 摘要")
+    assert page.items[1].text is None
+    assert all(item.author_name is None and item.published_at is None for item in page.items)
+
+
 def test_rss_legitimate_empty_is_distinct_from_malformed_xml() -> None:
     def fetch(xml: str) -> object:
         adapter = RssSourceAdapter(
             source_key="google_news",
-            feed_url_template="https://news.google.com/rss/search?q={query}",
+            feed_url_template=_GOOGLE_NEWS_TEMPLATE,
             allowed_hosts=frozenset({"news.google.com"}),
             before_request=_allow,
             transport=httpx.MockTransport(lambda _: httpx.Response(200, text=xml)),

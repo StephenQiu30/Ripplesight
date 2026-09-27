@@ -1,6 +1,6 @@
 # HotKey BACKLOG
 
-更新日期：2026-09-27。状态：**Plan 001、002、007、031、033 技术交付完成；HN 手动真实采集与 Kafka 重投已验，定时同窗和连续72小时产品验收仍待 009；M1 四来源及六榜未全部验收**。Claude 在本机隔离 `hotkey_test` 验证 Plan 001 主题集成测试 15 passed、全量后端 765 passed/17 skipped；本机前端 52 passed、lint/typecheck/build 通过，运行 OpenAPI 重新生成客户端并修正两处说明文字。Plan 002 指定测试 106 passed、全量 743 passed/17 skipped；Plan 033 指定三份加同轮修复三份为 72 passed/6 skipped、全量 758 passed/17 skipped，均 0 failed。结果由用户提供，证据见 [Acceptance 002 的 EV-002](docs/acceptance/002-信息获取主链路验收.md)。任务、依赖、FR/NFR/AC覆盖和审计结论见 [Plan 001—057 索引](docs/plan/README.md)；产品边界见 [PRD 001 v5.0](docs/prd/001-热点舆情监控平台需求.md) 和 [Design 001 v4.0](docs/design/001-热点舆情监控平台总体设计.md)。旧里程碑Plan/TASK仅作来源映射，从Git追溯。
+更新日期：2026-09-27。状态：**Plan 001、002、007、031、033 技术交付完成；035 Google News 真实入库/重扫已验但原帖可打开未验；M1 四来源、六榜与连续 72 小时未全部验收**。早期 Claude/用户提供的 Plan 001/002/033 隔离库测试结果和后续逐卡证据见 [Acceptance 002](docs/acceptance/002-信息获取主链路验收.md)。任务、依赖、FR/NFR/AC 覆盖见 [Plan 001—057 索引](docs/plan/README.md)；产品边界见 [PRD 001](docs/prd/001-热点舆情监控平台需求.md) 和 [Design 001](docs/design/001-热点舆情监控平台总体设计.md)。旧里程碑 Plan/TASK 从 Git 追溯。
 
 执行方：Codex 实现、受控集成与代码自检；Claude 可参与规划/代码审查；用户负责本人账号、授权与产品决策。用户已要求每个任务结束后提交并推送 main。代码、受控、真实、产品为不同证据等级。
 
@@ -9,6 +9,8 @@ Plan 037 的 RSS 适配器和受控 Job 切片已在隔离 `main` 工作树验�
 Plan 004 只读覆盖 API 技术切片见 Acceptance 002 EV-002-016：按 owner/来源筛选到期窗，游标绑定筛选条件，批量核对 Job、内容、分析及预算；未确认尾段与请求账本缺口显式保留。隔离 PostgreSQL 17 受控场景及运行 OpenAPI 生成客户端已通过；代码提交 `f6f6b3e7` 的远端 backend/contract/frontend/runtime 均成功，backend **847 passed/8 skipped**。真实四词六榜到期窗与连续三天缺口尚未对账，Plan 004 `in_progress`，AC-002-006 不关闭。
 
 Plan 007 HN 搜索与重放见 Acceptance 002 EV-002-017：真实主题 API → Kafka → Worker 在隔离库查询 Algolia 2 页，观察 141 条、规则入库 111 条，可信尾页确认覆盖；抽样 HN 原帖可打开，重启 Worker 重投后内容、2 次请求和来源/全局各 2 次预算实耗不重复。隔离 PostgreSQL/Kafka 全量后端 **867 passed/13 skipped**，前端 **59 passed**、运行 OpenAPI 零漂移；Plan 007 按 HN 手动搜索范围 `completed`。定时同窗、HN 评论和 72 小时父级验收分别归 009/038，AC-002-002/004 与 M1 仍未通过。
+
+Plan 035 Google News 见 Acceptance 002 EV-002-018：真实主题 API → Kafka → Worker 成功两轮各入库 87 条，稳定内容身份仍 87，首次上游失败和两轮各一次请求使来源/全局预算各实扣 3；RSS 尾段保留部分覆盖。GUID/URL fallback 依据入库并经内容 API 可查，受控 Kafka 重投、版本、窗边界和 503 保留通过。抽样 Google News 条目在当前浏览器连接关闭，原帖可打开未验；Plan 035 `in_progress`，AC-002-002/004 与 M1 不关闭。
 
 Plan 005 的标注状态与重放技术切片已在隔离 `main` 工作树完成，PostgreSQL 17 全新库的后端全量回归为 **779 passed/17 skipped**，见 Acceptance 002 EV-002-010。旧开发库 3 条历史异常、真实 Codex 样本和远端门禁尚未在该证据中核对；Plan 005 保持 `in_progress`，产品验收不变。
 

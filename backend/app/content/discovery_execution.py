@@ -35,7 +35,7 @@ from jobs.services import (
 )
 from sources.adapters.hackernews import HackerNewsAdapter
 from sources.adapters.mediacrawler import MediaCrawlerAdapter
-from sources.adapters.rss import RssSourceAdapter
+from sources.adapters.rss import GOOGLE_NEWS_FEED_URL_TEMPLATE, RssSourceAdapter
 from sources.adapters.web_search import WebSearchAdapter
 from sources.contracts import (
     SearchRequest,
@@ -102,6 +102,11 @@ def build_search_adapter_factory(
             or allowed_hosts != frozenset({"127.0.0.1"})
         ):
             raise ValueError("rss_36kr requires the local RSSHub newsflashes endpoint")
+        if source_key == "google_news" and (
+            feed_url_template != GOOGLE_NEWS_FEED_URL_TEMPLATE
+            or allowed_hosts != frozenset({"news.google.com"})
+        ):
+            raise ValueError("Google News requires the fixed HTTPS search RSS endpoint")
         return lambda before_request, cancelled, max_requests, max_seconds: RssSourceAdapter(
             source_key=source_key,
             feed_url_template=feed_url_template,

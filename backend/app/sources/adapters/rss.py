@@ -29,6 +29,9 @@ from sources.contracts import (
 
 _QUERY_PLACEHOLDER = "{query}"
 _MAX_EXTERNAL_ID = 512
+GOOGLE_NEWS_FEED_URL_TEMPLATE = (
+    "https://news.google.com/rss/search?q={query}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+)
 
 
 def _external_id(entry: Any) -> tuple[str, Literal["guid", "url_fallback"]] | None:
@@ -103,7 +106,15 @@ class RssSourceAdapter(HttpSourceAdapter):
             or allowed_hosts != frozenset({"127.0.0.1"})
         ):
             raise ValueError("rss_36kr requires the local RSSHub newsflashes endpoint")
+        if source_key == "google_news" and (
+            feed_url_template != GOOGLE_NEWS_FEED_URL_TEMPLATE
+            or allowed_hosts != frozenset({"news.google.com"})
+        ):
+            raise ValueError("Google News requires the fixed HTTPS search RSS endpoint")
         self._template = feed_url_template
+
+    def _follow_redirects(self) -> bool:
+        return self.source_key != "google_news"
 
     def _fetch(self, request: SourceRequest) -> SourcePage:
         if request.capability is not SourceCapability.SEARCH or request.page_token is not None:

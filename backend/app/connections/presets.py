@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from types import MappingProxyType
 
 from connections.schemas import SourceExecutionPolicy, SourceQuietWindow
+from sources.adapters.rss import GOOGLE_NEWS_FEED_URL_TEMPLATE
 from sources.contracts import SourceCapability
 
 
@@ -104,6 +105,7 @@ _RSS_POST_FIELD_PURPOSES = MappingProxyType(
     {
         "object_type": "标记载荷为帖子",
         "external_id": "稳定识别订阅条目",
+        "identity_basis": "区分订阅条目原生 GUID 与规范 URL 回退身份",
         "canonical_url": "回溯订阅条目指向的原始页面",
         "author_name": "保存订阅条目提供的公开作者名称",
         "published_at": "保存订阅条目提供的发布时间",
@@ -303,9 +305,7 @@ GOOGLE_NEWS_PRESET = SourcePreset(
     source_key="google_news",
     config=MappingProxyType(
         {
-            "feed_url_template": (
-                "https://news.google.com/rss/search?q={query}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
-            ),
+            "feed_url_template": GOOGLE_NEWS_FEED_URL_TEMPLATE,
             "allowed_hosts": ("news.google.com",),
         }
     ),

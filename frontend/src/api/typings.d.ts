@@ -187,6 +187,8 @@ declare namespace HotKeyAPI {
     native_scope: string | null;
     /** External Id */
     external_id: string;
+    /** Identity Basis */
+    identity_basis: "guid" | "url_fallback" | null;
     latest_observation: ContentObservationView;
     current_visibility: ContentVisibilityView | null;
     /** Discovery Count */
@@ -210,6 +212,8 @@ declare namespace HotKeyAPI {
     native_scope: string | null;
     /** External Id */
     external_id: string;
+    /** Identity Basis */
+    identity_basis: "guid" | "url_fallback" | null;
     latest_observation: ContentObservationView;
     current_visibility: ContentVisibilityView | null;
     /** Discovery Count */

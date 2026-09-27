@@ -47,6 +47,10 @@ class ContentRecord(Base):
             name="content_records_native_scope_check",
         ),
         CheckConstraint("external_id <> ''", name="content_records_external_id_check"),
+        CheckConstraint(
+            "identity_basis IN ('guid', 'url_fallback')",
+            name="content_records_identity_basis_check",
+        ),
         Index("content_records_owner_id_idx", "owner_id", "id"),
     )
 
@@ -56,6 +60,7 @@ class ContentRecord(Base):
     object_type: Mapped[str] = mapped_column(String(16))
     native_scope: Mapped[str | None] = mapped_column(String(512))
     external_id: Mapped[str] = mapped_column(String(512))
+    identity_basis: Mapped[str | None] = mapped_column(String(16))
     created_at: Mapped[datetime]
 
 
