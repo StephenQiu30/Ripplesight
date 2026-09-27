@@ -23,11 +23,11 @@ depends_on: ["002", "005"]
 
 | SPEC | 文件与行为 |
 |---|---|
-| SPEC-040-JOB-001 | 修改 `backend/app/analysis/services.py`、`worker/scheduler.py`：扫描缺当前内容版本/主题规则/提示词版本的有效标注，以这些身份的确定性 operation ID 建 Job/Outbox。无效标注允许有界再尝试，连续无效转可查询失败，不能每30秒无限重排；每日分析预算由既有账本约束。 |
+| SPEC-040-JOB-001 | 修改 `backend/app/analysis/services.py`、`worker/scheduler.py`：扫描缺当前内容版本/主题规则/提示词版本的有效标注，以这些身份的确定性 operation ID 建 Job/Outbox。候选限当前主题版本选中的关键词来源，或同一内容版本的热榜条目明确记录当前主题 ID 命中；继续用当前规则复核正文，不把其他主题/版本的命中提升为本次资格。无效标注允许有界再尝试，连续无效转可查询失败，不能每30秒无限重排；每日分析预算由既有账本约束。 |
 | SPEC-040-DATA-001 | 复用 `pack_prompt_batches`、`analysis/schemas.py`、`analysis/prompts.py`；一批≤30条、序列化≤24000字符、正文≤1500字符、每帖评论≤50条。固定 content_version_ids 和实际评论样本/截断标记，旧 Job 不读取更新后的正文代替原输入。相关性、摘要/情感/观点一次结构化返回。 |
 | SPEC-040-SEC-001 | `ai/adapters/codex_app_server.py`、`worker/app.py` 复用 app-server/experimentalApi、单 Job 子进程、空工作目录和最小环境；600秒硬截止、取消回收、限流显式延后。模型不可发起付费请求；外部正文不能授权读取文件或使用其他工具。记录 ai_call_id 与用量，不输出正文/秘密到日志。 |
 
-- [ ] CHK-040-001 → JOB-001：`backend/tests/unit/test_scheduler.py`、新增 `backend/tests/integration/test_analysis_pipeline.py` 验证并发扫描只一单、已存在无效行可恢复、达到预算停止、重放不重复标注。
+- [ ] CHK-040-001 → JOB-001：`backend/tests/unit/test_scheduler.py`、`backend/tests/integration/test_analysis_pipeline.py` 验证并发扫描只一单、已存在无效行可恢复、达到预算停止、重放不重复标注；另以隔离 PostgreSQL 验证选中关键词来源、未选来源、同版本热榜主题命中与未命中不会串入彼此队列。
 - [x] CHK-040-002 → DATA-001：`backend/tests/unit/test_analysis_annotations.py` 验证30/31条、24000字符边界、多字节文字、50/51评论；`backend/tests/integration/test_analysis_pipeline.py` 验证受理后评论更新不改变旧 Job 输入，单条无效仍与有效结果隔离。
 - [x] CHK-040-003 → SEC-001：`backend/tests/unit/test_codex_app_server.py` 与真实受控子进程验证失败、取消、截止和孙进程回收、最小环境；提示注入按外部数据包裹。未对真实 Codex 模型发请求。
 - [ ] CHK-040-004 → AC-002-008：四关键词来源与六榜各一组真实命中，链路逐个记录入库→分析Job→ai_call→有效/失败结论；时效由 006/009 统一复算，不以单组样本关闭95%指标。

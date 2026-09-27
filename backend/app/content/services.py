@@ -41,6 +41,7 @@ from content.models import (
     ContentVersion,
     ContentVersionRelation,
     ContentVisibilityObservation,
+    HotlistEntryRecord,
     HotlistSnapshot,
 )
 from content.schemas import (
@@ -2680,8 +2681,10 @@ def load_post_versions_for_analysis_scan(
     session: Session,
     *,
     owner_id: UUID,
+    topic_id: UUID,
+    source_keys: tuple[str, ...],
 ) -> tuple[AnalysisPostContentView, ...]:
-    """Read observed post versions, including analysis backlog older than 72 hours."""
+    """Read selected search posts or versions from a matched hotlist observation."""
     if not session.in_transaction():
         raise RuntimeError("analysis content reads require the caller's transaction")
     occurred_at = case(
@@ -2707,6 +2710,33 @@ def load_post_versions_for_analysis_scan(
         .group_by(ContentObservation.content_version_id)
         .subquery()
     )
+    matched_hotlist_version = (
+        select(HotlistEntryRecord.snapshot_id)
+        .join(
+            HotlistSnapshot,
+            and_(
+                HotlistSnapshot.id == HotlistEntryRecord.snapshot_id,
+                HotlistSnapshot.owner_id == HotlistEntryRecord.owner_id,
+            ),
+        )
+        .join(
+            ContentObservation,
+            and_(
+                ContentObservation.owner_id == HotlistEntryRecord.owner_id,
+                ContentObservation.content_id == HotlistEntryRecord.content_id,
+                ContentObservation.job_id == HotlistSnapshot.job_id,
+            ),
+        )
+        .where(
+            HotlistEntryRecord.owner_id == owner_id,
+            HotlistEntryRecord.content_id == ContentVersion.content_id,
+            HotlistEntryRecord.matched_topic_ids.contains([str(topic_id)]),
+            HotlistSnapshot.source_key == ContentRecord.source_key,
+            ContentObservation.content_version_id == ContentVersion.id,
+        )
+        .correlate(ContentVersion, ContentRecord)
+        .exists()
+    )
     rows = session.execute(
         select(ContentVersion, ContentRecord)
         .join(recent_versions, recent_versions.c.content_version_id == ContentVersion.id)
@@ -2720,6 +2750,7 @@ def load_post_versions_for_analysis_scan(
         .where(
             ContentVersion.owner_id == owner_id,
             ContentRecord.object_type == "post",
+            or_(ContentRecord.source_key.in_(source_keys), matched_hotlist_version),
         )
         .order_by(recent_versions.c.occurred_at, ContentVersion.id)
     ).all()
