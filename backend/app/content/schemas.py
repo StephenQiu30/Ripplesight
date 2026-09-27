@@ -46,6 +46,8 @@ class HotlistSnapshotView(OutputModel):
     snapshot_id: UUID
     source_key: str
     observed_at: datetime
+    due_at: datetime
+    operation_id: UUID
     entry_count: int
     items: tuple[HotlistEntryView, ...]
     next_cursor: int | None

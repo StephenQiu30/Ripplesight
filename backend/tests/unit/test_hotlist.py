@@ -72,6 +72,40 @@ def test_empty_hotlist_is_a_real_zero_after_one_request() -> None:
     assert page.request_count == 1
 
 
+def test_malformed_feed_with_parseable_entry_is_not_a_successful_snapshot() -> None:
+    malformed = (
+        b'<rss version="2.0"><channel><title>Hot</title><item><title>A</title>'
+        b"<link>https://example.com/a</link></item><broken></channel></rss>"
+    )
+    adapter = RsshubHotlistAdapter(
+        source_key="hotlist_weibo",
+        feed_url="http://127.0.0.1:1200/weibo/search/hot",
+        allowed_hosts=frozenset({"127.0.0.1"}),
+        before_request=lambda _: True,
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, content=malformed)),
+    )
+    page = adapter.fetch_hotlist()
+    assert page.state is SourcePageState.STOPPED
+    assert page.stop_reason is SourceStopReason.PROTOCOL_ERROR
+    assert page.items == ()
+    assert page.request_count == 1
+
+
+def test_upstream_http_failure_is_not_an_empty_feed() -> None:
+    adapter = RsshubHotlistAdapter(
+        source_key="hotlist_weibo",
+        feed_url="http://127.0.0.1:1200/weibo/search/hot",
+        allowed_hosts=frozenset({"127.0.0.1"}),
+        before_request=lambda _: True,
+        transport=httpx.MockTransport(lambda _: httpx.Response(503)),
+    )
+    page = adapter.fetch_hotlist()
+    assert page.state is SourcePageState.STOPPED
+    assert page.stop_reason is SourceStopReason.UPSTREAM_ERROR
+    assert page.items == ()
+    assert page.request_count == 1
+
+
 def test_hotlist_content_uses_observation_time_even_with_feed_pubdate() -> None:
     entry = HotlistEntry(
         rank=1,
