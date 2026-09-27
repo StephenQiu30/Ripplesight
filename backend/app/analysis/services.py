@@ -764,6 +764,9 @@ class AnalysisService:
                     result_state=result.result_state.value,
                     error_code=result.error_code,
                     diagnostic_history=[],
+                    first_valid_at=(
+                        created_at if result.result_state is AnnotationResultState.VALID else None
+                    ),
                     created_at=created_at,
                     updated_at=created_at,
                 )
@@ -840,6 +843,8 @@ class AnalysisService:
             current.sentiment = result.sentiment.value if result.sentiment else None
             current.summary = result.summary
             current.viewpoints = list(result.viewpoints)
+            if result.result_state is AnnotationResultState.VALID:
+                current.first_valid_at = created_at
             current.updated_at = max(current.updated_at, created_at)
 
 

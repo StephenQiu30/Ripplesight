@@ -1316,6 +1316,7 @@ CREATE TABLE content_annotations (
     diagnostic_history JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (
         jsonb_typeof(diagnostic_history) = 'array'
     ),
+    first_valid_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL CHECK (created_at <= updated_at),
     CONSTRAINT content_annotations_owner_id_key UNIQUE (owner_id, id),
@@ -1373,6 +1374,9 @@ CREATE TABLE content_annotations (
                 )
             )
         )
+    ),
+    CONSTRAINT content_annotations_first_valid_at_check CHECK (
+        (result_state = 'valid') = (first_valid_at IS NOT NULL)
     )
 );
 
