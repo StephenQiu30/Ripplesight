@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from api.dependencies import AuthenticatedIdentityDependency, CollectionCoverageServiceDependency
 from core.schemas import ErrorView, PageView
-from jobs.schemas import CollectionCoverageView
+from jobs.schemas import CollectionCoverageMetricsView, CollectionCoverageView
 from sources.contracts import SourceCapability
 
 router = APIRouter(prefix="/collection-coverage", tags=["采集覆盖"])
@@ -18,6 +18,9 @@ _READ_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: {"model": ErrorView, "description": "到期窗口不存在或不可访问"},
     422: {"model": ErrorView, "description": "查询时间或游标无效"},
     500: {"model": ErrorView, "description": "服务内部异常"},
+}
+_METRICS_ERROR_RESPONSES = {
+    code: response for code, response in _READ_ERROR_RESPONSES.items() if code != 404
 }
 
 
@@ -69,6 +72,43 @@ def list_collection_coverage(
         raise HTTPException(status_code=422) from error
     response.headers["cache-control"] = "no-store"
     return PageView(items=list(items), next_cursor=next_cursor)
+
+
+@router.get(
+    "/metrics",
+    operation_id="getCollectionCoverageMetrics",
+    response_model=CollectionCoverageMetricsView,
+    status_code=status.HTTP_200_OK,
+    summary="复算逐来源采集时效与热榜桶",
+    description=(
+        "按当前可访问来源及 UTC 到期窗复算采集指标。"
+        "分析时效与热榜相位冻结尚无足够持久事实时显式标为未验证。"
+    ),
+    responses=_METRICS_ERROR_RESPONSES,
+)
+def get_collection_coverage_metrics(
+    response: Response,
+    service: CollectionCoverageServiceDependency,
+    identity: AuthenticatedIdentityDependency,
+    start: Annotated[datetime, Query(description="UTC 到期范围起点 (包含)")],
+    end: Annotated[datetime, Query(description="UTC 到期范围终点 (不包含); 最多 31 天")],
+    source_key: Annotated[str | None, Query(pattern=r"^[a-z][a-z0-9_-]{0,63}$")] = None,
+    capability: SourceCapability | None = None,
+    topic_id: UUID | None = None,
+) -> CollectionCoverageMetricsView:
+    try:
+        result = service.get_metrics(
+            owner_id=identity.view.user.id,
+            start=start,
+            end=end,
+            source_key=source_key,
+            capability=capability,
+            topic_id=topic_id,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422) from error
+    response.headers["cache-control"] = "no-store"
+    return result
 
 
 @router.get(

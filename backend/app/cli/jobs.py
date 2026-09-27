@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from typing import Annotated
+from uuid import UUID
 
 import typer
 from pydantic import ValidationError
@@ -14,6 +15,7 @@ from core.errors import ApplicationError
 from db.session import create_db_engine, create_session_factory
 from identity.models import IdentityUser
 from identity.services import IdentityService
+from jobs.coverage import CollectionCoverageQueryService
 from jobs.schemas import (
     BudgetMetric,
     BudgetPolicyInput,
@@ -22,8 +24,42 @@ from jobs.schemas import (
     CostClass,
 )
 from jobs.services import JobObservationService, ResourceBudgetService
+from sources.contracts import SourceCapability
 
 jobs_app = typer.Typer(no_args_is_help=True)
+
+
+@jobs_app.command("coverage-metrics")
+def coverage_metrics(
+    owner_id: Annotated[UUID, typer.Option(help="Owner whose visible sources are measured.")],
+    start: Annotated[str, typer.Option(help="UTC ISO 8601 due-window start (inclusive).")],
+    end: Annotated[str, typer.Option(help="UTC ISO 8601 due-window end (exclusive).")],
+    source_key: Annotated[str | None, typer.Option(help="Optional source key.")] = None,
+    capability: Annotated[
+        SourceCapability | None, typer.Option(help="Optional capability.")
+    ] = None,
+    topic_id: Annotated[UUID | None, typer.Option(help="Optional topic ID.")] = None,
+) -> None:
+    """Print the same owner-scoped metric DTO as GET /collection-coverage/metrics."""
+    start_at = _parse_utc_datetime(start, option="--start")
+    end_at = _parse_utc_datetime(end, option="--end")
+    engine = create_db_engine(get_settings())
+    try:
+        with create_session_factory(engine)() as session:
+            try:
+                result = CollectionCoverageQueryService(session).get_metrics(
+                    owner_id=owner_id,
+                    start=start_at,
+                    end=end_at,
+                    source_key=source_key,
+                    capability=capability,
+                    topic_id=topic_id,
+                )
+            except ValueError as error:
+                raise typer.BadParameter(str(error), param_hint="--start/--end") from error
+    finally:
+        engine.dispose()
+    typer.echo(json.dumps(result.model_dump(mode="json"), allow_nan=False, separators=(",", ":")))
 
 
 def _parse_utc_datetime(value: str, *, option: str) -> datetime:

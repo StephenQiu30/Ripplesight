@@ -1,6 +1,6 @@
 # HotKey BACKLOG
 
-更新日期：2026-09-27。状态：**Plan 001/002/007/008/031/033/036/039 技术交付完成；035 原帖、M1 72 小时与 Codex 尚未验收**。早期 Claude/用户提供的 Plan 001/002/033 隔离库测试结果和后续逐卡证据见 [Acceptance 002](docs/acceptance/002-信息获取主链路验收.md)。任务、依赖、FR/NFR/AC 覆盖见 [Plan 001—057 索引](docs/plan/README.md)；产品边界见 [PRD 001](docs/prd/001-热点舆情监控平台需求.md) 和 [Design 001](docs/design/001-热点舆情监控平台总体设计.md)。旧里程碑 Plan/TASK 从 Git 追溯。
+更新日期：2026-09-28。状态：**Plan 001/002/007/008/031/033/036/039 技术交付完成；035 原帖、M1 72 小时与 Codex 尚未验收**。早期 Claude/用户提供的 Plan 001/002/033 隔离库测试结果和后续逐卡证据见 [Acceptance 002](docs/acceptance/002-信息获取主链路验收.md)。任务、依赖、FR/NFR/AC 覆盖见 [Plan 001—057 索引](docs/plan/README.md)；产品边界见 [PRD 001](docs/prd/001-热点舆情监控平台需求.md) 和 [Design 001](docs/design/001-热点舆情监控平台总体设计.md)。旧里程碑 Plan/TASK 从 Git 追溯。
 
 执行方：Codex 实现、受控集成与代码自检；Claude 可参与规划/代码审查；用户负责本人账号、授权与产品决策。用户已要求每个任务结束后提交并推送 main。代码、受控、真实、产品为不同证据等级。
 
@@ -23,6 +23,8 @@ Plan 040 见 Acceptance 002 EV-002-023：旧积压扫描、冻结输入、一次
 Plan 038 见 Acceptance 002 EV-002-024—028：HN 评论参数已进入版本化预设，旧帖显式复采 API 及受控权限/预算/频次已实现；受控 HN 树和真实 PostgreSQL 验证旧根复扫新增回复，真实 Kafka 验证受控消息重投、预算与 offset 幂等。评论关系切片已分存帖子、根、直接父节点、回复目标，保留无正文父节点的身份与缺口状态，并防止按根限额时误分线程。新增关系列仅在全新库应用；存量库重建归 Plan051。Plan041 已提供显式复采按钮；独立逐根分页/尾段、真实旧帖新回复、真实 Worker 进程重启与真实十帖仍待验，本卡 `in_progress`。
 
 Plan 041 见 Acceptance 002 EV-002-029—032：评论只读 API 与详情页已按根/父节点关系分页展示，父节点缺失和来源尾段未确认显式提示，受控 PostgreSQL 与桌面/390px 浏览器核对。显式复采按钮和资格核对已实现，受控旧帖浏览器点击受理并在重入后显示频次禁用。标注详情已按主题、正文、规则和提示词版本区分当前与历史结果；作品列表按来源、主题、时间窗及当前标注状态筛选，缺发布时间回退首次发现，游标绑定筛选条件。`4ecced3d` 已推送 `main`，远端 backend/contract/frontend/runtime 四项成功，backend **939 passed、8 skipped**。真实 HN 产品阅读样本仍待验，本卡 `in_progress`。
+
+Plan 006 采集时效技术切片见 Acceptance 002 EV-002-033：owner 可见到期窗、完成/未完成 Job 的删失中位数、静默/来源限流排除与 143/144 热榜桶已由只读 API/CLI 和隔离 PostgreSQL 覆盖；运行 OpenAPI 生成客户端及本地门禁通过。分析需时起点/首次有效结论、Codex 实际限流排除、热榜窗口起点间隔/相位冻结及十来源真实 ID 复算仍待完成，当前响应明确标为未验；Plan006 `in_progress`，不可据此关闭 M1 指标。
 
 Plan 005 的标注状态与重放技术切片已在隔离 `main` 工作树完成，PostgreSQL 17 全新库的后端全量回归为 **779 passed/17 skipped**，见 Acceptance 002 EV-002-010。旧开发库 3 条历史异常、真实 Codex 样本和远端门禁尚未在该证据中核对；Plan 005 保持 `in_progress`，产品验收不变。
 
