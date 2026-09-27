@@ -4,6 +4,7 @@ import calendar
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
+from types import MappingProxyType
 from typing import Any, ClassVar
 from urllib.parse import urlsplit
 
@@ -17,6 +18,7 @@ from sources.adapters.http_source import (
     html_to_text,
     parse_timestamp,
 )
+from sources.adapters.web_targets import normalize_public_article_url
 from sources.contracts import (
     HotlistEntry,
     HotlistPage,
@@ -25,12 +27,23 @@ from sources.contracts import (
     SourceStopReason,
 )
 
+HOTLIST_ROUTES = MappingProxyType(
+    {
+        "hotlist_weibo": "/weibo/search/hot",
+        "hotlist_baidu": "/baidu/top",
+        "hotlist_zhihu": "/zhihu/hot",
+        "hotlist_bilibili": "/bilibili/popular/all",
+        "hotlist_36kr": "/36kr/hot-list",
+        "hotlist_thepaper": "/thepaper/featured",
+    }
+)
+
 
 class RsshubHotlistAdapter(HttpSourceAdapter):
     """Read one allowlisted local RSSHub ranking; feed order is the rank."""
 
     capabilities: ClassVar[frozenset[SourceCapability]] = frozenset({SourceCapability.HOTLIST})
-    adapter_version: ClassVar[str] = "rsshub-hotlist-v1"
+    adapter_version: ClassVar[str] = "rsshub-hotlist-v2"
 
     def __init__(
         self,
@@ -52,9 +65,11 @@ class RsshubHotlistAdapter(HttpSourceAdapter):
             or parsed.port != 1200
             or parsed.username is not None
             or parsed.password is not None
+            or parsed.path != HOTLIST_ROUTES.get(source_key)
+            or parsed.query
             or parsed.fragment
         ):
-            raise ValueError("RSSHub hotlist requires the local RSSHub endpoint")
+            raise ValueError("RSSHub hotlist requires its fixed route on the local endpoint")
         super().__init__(
             source_key=source_key,
             allowed_hosts=allowed_hosts,
@@ -76,8 +91,6 @@ class RsshubHotlistAdapter(HttpSourceAdapter):
             try:
                 parsed = feedparser.parse(self._get_bytes(self._feed_url))
                 if parsed.get("bozo") or not parsed.get("version"):
-                    raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
-                if len(parsed.entries) > 100:
                     raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
                 items = tuple(
                     self._entry(raw, rank) for rank, raw in enumerate(parsed.entries[:100], 1)
@@ -108,6 +121,7 @@ class RsshubHotlistAdapter(HttpSourceAdapter):
         url = raw.get("link")
         if not title or not isinstance(url, str):
             raise ValueError("RSSHub hotlist entry lacks title or URL")
+        normalize_public_article_url(url)
         summary = raw.get("summary")
         if not summary and raw.get("content"):
             summary = raw["content"][0].get("value")

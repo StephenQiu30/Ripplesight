@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -151,6 +152,55 @@ def _page(observed_at: datetime, *, entries: int = 0) -> HotlistPage:
         request_count=1,
         adapter_version="controlled-v1",
     )
+
+
+def _ranked_page(observed_at: datetime, items: tuple[HotlistEntry, ...]) -> HotlistPage:
+    return HotlistPage(
+        source_key="hotlist_weibo",
+        state=SourcePageState.COMPLETE,
+        items=items,
+        stop_reason=SourceStopReason.END_OF_RESULTS,
+        observed_at=observed_at,
+        request_count=1,
+        adapter_version="controlled-v1",
+    )
+
+
+def _add_active_topics(
+    runtime: HotlistRuntime, names_and_terms: tuple[tuple[str, str], ...]
+) -> tuple[UUID, ...]:
+    topic_ids = tuple(uuid4() for _ in names_and_terms)
+    with runtime.engine.begin() as connection:
+        for topic_id, (name, term) in zip(topic_ids, names_and_terms, strict=True):
+            connection.execute(
+                text(
+                    "INSERT INTO monitor_topics "
+                    "(id, owner_id, name, status, readiness_status, current_version, "
+                    "created_at, updated_at) VALUES "
+                    "(:id, :owner_id, :name, 'active', 'ready', 1, :now, :now)"
+                ),
+                {
+                    "id": topic_id,
+                    "owner_id": runtime.owner_id,
+                    "name": name,
+                    "now": runtime.due_at - timedelta(seconds=1),
+                },
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO monitor_topic_versions "
+                    "(topic_id, version, created_by, match_any, match_all, exclude, "
+                    "created_at) VALUES "
+                    "(:id, 1, :owner_id, CAST(:terms AS jsonb), '[]', '[]', :now)"
+                ),
+                {
+                    "id": topic_id,
+                    "owner_id": runtime.owner_id,
+                    "terms": json.dumps([term]),
+                    "now": runtime.due_at - timedelta(seconds=1),
+                },
+            )
+    return topic_ids
 
 
 class ControlledAdapter:
@@ -534,6 +584,7 @@ def test_empty_bucket_then_nonempty_bucket_keep_distinct_observations(
     assert latest.due_at == next_due
     assert latest.entry_count == 1
     assert latest.items[0].rank_change == "new"
+    assert (latest.items[0].previous_rank, latest.items[0].rank_delta) == (None, None)
 
 
 def test_failed_bucket_preserves_error_and_next_bucket_can_succeed(
@@ -613,6 +664,173 @@ def test_replayed_message_and_scan_do_not_duplicate_original_snapshot(
         )
 
 
+def test_hotlist_match_persists_one_content_for_two_topics_and_skips_unmatched(
+    runtime: HotlistRuntime,
+) -> None:
+    ai_topic, chip_topic = _add_active_topics(runtime, (("AI topic", "AI"), ("Chip topic", "chip")))
+    job_id = _accept(runtime, runtime.due_at)
+    page = _ranked_page(
+        runtime.due_at + timedelta(minutes=2),
+        (
+            HotlistEntry(
+                rank=1,
+                title="New AI chip",
+                url="https://example.com/chip",
+                summary=None,
+            ),
+            HotlistEntry(
+                rank=2,
+                title="daily bulletin",
+                url="https://example.com/daily",
+                summary=None,
+            ),
+        ),
+    )
+    renewed = _execute(runtime, job_id, page)
+    replayed, completion = _executor(runtime, page).execute(_message(runtime, job_id), renewed)
+    assert replayed == renewed
+    assert completion.status.value == "succeeded"
+
+    with runtime.engine.connect() as connection:
+        entries = connection.execute(
+            text(
+                "SELECT rank, content_id, matched_topic_names, matched_topic_ids "
+                "FROM hotlist_entries ORDER BY rank"
+            )
+        ).all()
+        records = connection.execute(
+            text("SELECT id, source_key, external_id FROM content_records")
+        ).all()
+        discoveries = connection.execute(
+            text("SELECT content_id, job_id FROM content_discoveries")
+        ).all()
+        observations = connection.execute(
+            text("SELECT content_id, job_id FROM content_observations")
+        ).all()
+        snapshots = connection.execute(
+            text("SELECT job_id, entry_count FROM hotlist_snapshots")
+        ).all()
+    assert len(entries) == 2
+    assert entries[0].rank == 1
+    assert set(entries[0].matched_topic_names) == {"AI topic", "Chip topic"}
+    assert set(entries[0].matched_topic_ids) == {str(ai_topic), str(chip_topic)}
+    assert (entries[1].rank, entries[1].content_id, entries[1].matched_topic_ids) == (2, None, [])
+    assert len(records) == len(discoveries) == len(observations) == 1
+    assert records[0].id == entries[0].content_id == discoveries[0].content_id
+    assert observations[0].content_id == records[0].id
+    assert discoveries[0].job_id == observations[0].job_id == job_id
+    assert (records[0].source_key, records[0].external_id) == (
+        "hotlist_weibo",
+        "https://example.com/chip",
+    )
+    assert snapshots == [(job_id, 2)]
+
+
+def test_repeated_url_keeps_feed_ranks_and_one_content_observation(
+    runtime: HotlistRuntime,
+) -> None:
+    _add_active_topics(runtime, (("AI topic", "AI"),))
+    job_id = _accept(runtime, runtime.due_at)
+    page = _ranked_page(
+        runtime.due_at + timedelta(minutes=2),
+        (
+            HotlistEntry(rank=1, title="AI first", url="https://example.com/story?item=3"),
+            HotlistEntry(
+                rank=2,
+                title="AI duplicate",
+                url="https://EXAMPLE.com/story?item=3&utm_source=feed#top",
+            ),
+        ),
+    )
+    _execute(runtime, job_id, page)
+    with runtime.engine.connect() as connection:
+        entries = connection.execute(
+            text("SELECT rank, content_id FROM hotlist_entries ORDER BY rank")
+        ).all()
+        records = connection.execute(text("SELECT count(*) FROM content_records")).scalar_one()
+        discoveries = connection.execute(
+            text("SELECT count(*) FROM content_discoveries")
+        ).scalar_one()
+        observations = connection.execute(
+            text("SELECT count(*) FROM content_observations")
+        ).scalar_one()
+    assert [row.rank for row in entries] == [1, 2]
+    assert entries[0].content_id == entries[1].content_id
+    assert records == discoveries == observations == 1
+
+
+def test_equivalent_hotlist_urls_keep_content_identity_and_previous_rank(
+    runtime: HotlistRuntime,
+) -> None:
+    _add_active_topics(runtime, (("AI topic", "AI"),))
+    first_job = _accept(runtime, runtime.due_at)
+    first_page = _ranked_page(
+        runtime.due_at + timedelta(minutes=2),
+        (
+            HotlistEntry(rank=1, title="Unrelated", url="https://example.com/other"),
+            HotlistEntry(
+                rank=2,
+                title="AI story",
+                url="https://example.com/article?article=7&utm_source=rss#top",
+            ),
+        ),
+    )
+    _execute(runtime, first_job, first_page)
+    next_due = runtime.due_at + timedelta(minutes=30)
+    second_job = _accept(runtime, next_due)
+    second_page = _ranked_page(
+        next_due + timedelta(minutes=2),
+        (
+            HotlistEntry(
+                rank=1,
+                title="AI story",
+                url="https://EXAMPLE.com/article?article=7",
+            ),
+            HotlistEntry(rank=2, title="Unrelated", url="https://example.com/other"),
+        ),
+    )
+    renewed = _execute(runtime, second_job, second_page)
+    replayed, completion = _executor(runtime, second_page).execute(
+        _message(runtime, second_job), renewed
+    )
+    assert replayed == renewed
+    assert completion.status.value == "succeeded"
+
+    with runtime.sessions() as session:
+        latest = HotlistService(session).get_latest(
+            owner_id=runtime.owner_id, source_key="hotlist_weibo"
+        )
+    assert (latest.due_at, latest.entry_count) == (next_due, 2)
+    assert (latest.items[0].rank, latest.items[0].rank_change) == (1, "up")
+    assert (latest.items[0].previous_rank, latest.items[0].rank_delta) == (2, 1)
+    assert latest.items[1].rank_change == "down"
+    assert (latest.items[1].previous_rank, latest.items[1].rank_delta) == (1, -1)
+
+    with runtime.engine.connect() as connection:
+        entries = connection.execute(
+            text(
+                "SELECT s.job_id, e.rank, e.content_id FROM hotlist_entries e "
+                "JOIN hotlist_snapshots s ON s.id=e.snapshot_id "
+                "WHERE e.content_id IS NOT NULL ORDER BY s.observed_at"
+            )
+        ).all()
+        records = connection.execute(text("SELECT id, external_id FROM content_records")).all()
+        discoveries = connection.execute(
+            text("SELECT content_id, job_id FROM content_discoveries ORDER BY job_id")
+        ).all()
+        observations = connection.execute(
+            text("SELECT content_id, job_id FROM content_observations ORDER BY job_id")
+        ).all()
+    assert [(item.job_id, item.rank) for item in entries] == [(first_job, 2), (second_job, 1)]
+    assert len(records) == 1
+    assert records[0].external_id == "https://example.com/article?article=7"
+    assert entries[0].content_id == entries[1].content_id == records[0].id
+    assert {item.job_id for item in discoveries} == {first_job, second_job}
+    assert {item.job_id for item in observations} == {first_job, second_job}
+    assert len(discoveries) == len(observations) == 2
+    assert {item.content_id for item in discoveries + observations} == {records[0].id}
+
+
 def test_late_previous_bucket_result_keeps_original_due_and_actual_observed_time(
     runtime: HotlistRuntime,
 ) -> None:
@@ -639,6 +857,7 @@ def test_late_previous_bucket_result_keeps_original_due_and_actual_observed_time
 def test_mid_entry_write_failure_rolls_back_snapshot_and_entries(
     runtime: HotlistRuntime, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _add_active_topics(runtime, (("Entry topic", "Entry"),))
     job_id = _accept(runtime, runtime.due_at)
     original = hotlist_module.HotlistEntryRecord
 
@@ -653,6 +872,13 @@ def test_mid_entry_write_failure_rolls_back_snapshot_and_entries(
     with runtime.engine.connect() as connection:
         assert connection.execute(text("SELECT count(*) FROM hotlist_snapshots")).scalar_one() == 0
         assert connection.execute(text("SELECT count(*) FROM hotlist_entries")).scalar_one() == 0
+        assert connection.execute(text("SELECT count(*) FROM content_records")).scalar_one() == 0
+        assert (
+            connection.execute(text("SELECT count(*) FROM content_discoveries")).scalar_one() == 0
+        )
+        assert (
+            connection.execute(text("SELECT count(*) FROM content_observations")).scalar_one() == 0
+        )
         assert (
             connection.execute(text("SELECT count(*) FROM resource_usage_attempts")).scalar_one()
             == 1

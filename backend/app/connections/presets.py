@@ -7,6 +7,7 @@ from types import MappingProxyType
 
 from connections.schemas import SourceExecutionPolicy, SourceQuietWindow
 from sources.adapters.rss import GOOGLE_NEWS_FEED_URL_TEMPLATE
+from sources.adapters.rsshub_hotlist import HOTLIST_ROUTES
 from sources.contracts import SourceCapability
 
 
@@ -152,17 +153,6 @@ _HOTLIST_FIELD_PURPOSES = MappingProxyType(
     }
 )
 
-_HOTLIST_ROUTES = MappingProxyType(
-    {
-        "hotlist_weibo": "/weibo/search/hot",
-        "hotlist_baidu": "/baidu/top",
-        "hotlist_zhihu": "/zhihu/hot",
-        "hotlist_bilibili": "/bilibili/popular/all",
-        "hotlist_36kr": "/36kr/hot-list",
-        "hotlist_thepaper": "/thepaper/featured",
-    }
-)
-
 
 def _hotlist_preset(source_key: str, route: str) -> SourcePreset:
     return SourcePreset(
@@ -179,7 +169,7 @@ def _hotlist_preset(source_key: str, route: str) -> SourcePreset:
         ),
         retention_days=90,
         component_name=f"collector.{source_key}",
-        component_version="rsshub-hotlist-v1",
+        component_version="rsshub-hotlist-v2",
         component_license="AGPL-3.0",
         component_cost_class="zero_price",
         component_terms_reference="https://docs.rsshub.app/",
@@ -209,7 +199,7 @@ def _hotlist_preset(source_key: str, route: str) -> SourcePreset:
 
 
 HOTLIST_PRESETS: Mapping[str, SourcePreset] = MappingProxyType(
-    {key: _hotlist_preset(key, route) for key, route in _HOTLIST_ROUTES.items()}
+    {key: _hotlist_preset(key, route) for key, route in HOTLIST_ROUTES.items()}
 )
 
 BILIBILI_PRESET = SourcePreset(

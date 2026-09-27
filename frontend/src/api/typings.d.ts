@@ -367,6 +367,10 @@ declare namespace HotKeyAPI {
     published_at: string | null;
     /** Content Id */
     content_id: string | null;
+    /** Previous Rank */
+    previous_rank: number | null;
+    /** Rank Delta */
+    rank_delta: number | null;
     /** Rank Change */
     rank_change: "new" | "up" | "down" | "same";
     /** Matched */

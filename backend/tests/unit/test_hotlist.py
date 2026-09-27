@@ -3,13 +3,14 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import httpx
+import pytest
 
 from content.hotlist import _post_payload, match_hotlist_topics, rank_change
 from core.config import Settings
 from main import create_app
 from monitors.services import ActiveHotlistTopic, normalize_monitor_rules
 from reports.services import ReportService
-from sources.adapters.rsshub_hotlist import RsshubHotlistAdapter
+from sources.adapters.rsshub_hotlist import HOTLIST_ROUTES, RsshubHotlistAdapter
 from sources.contracts import HotlistEntry, SourceCapability, SourcePageState, SourceStopReason
 from worker.scheduler import hotlist_operation_id
 
@@ -34,6 +35,57 @@ def test_rsshub_hotlist_preserves_rank_and_missing_publication_time() -> None:
     assert page.items[0].published_at is None
     assert page.items[1].published_at == datetime(2026, 9, 25, 8, tzinfo=UTC)
     assert page.request_count == 1
+
+
+@pytest.mark.parametrize("count", [100, 101])
+def test_rsshub_hotlist_retains_first_100_feed_positions(count: int) -> None:
+    entries = "".join(
+        f"<item><title>Rank {rank}</title><link>https://example.com/{rank}</link></item>"
+        for rank in range(1, count + 1)
+    )
+    feed = f'<rss version="2.0"><channel><title>Hot</title>{entries}</channel></rss>'
+    adapter = RsshubHotlistAdapter(
+        source_key="hotlist_weibo",
+        feed_url="http://127.0.0.1:1200/weibo/search/hot",
+        allowed_hosts=frozenset({"127.0.0.1"}),
+        before_request=lambda _: True,
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, text=feed)),
+    )
+    page = adapter.fetch_hotlist()
+    assert page.state is SourcePageState.COMPLETE
+    assert len(page.items) == 100
+    assert page.items[0].title == "Rank 1"
+    assert (page.items[-1].rank, page.items[-1].title) == (100, "Rank 100")
+
+
+@pytest.mark.parametrize(
+    ("source_key", "feed_url"),
+    [
+        ("hotlist_weibo", "http://127.0.0.1:1200/baidu/top"),
+        ("hotlist_weibo", "http://127.0.0.1:1200/weibo/search/hot?mode=other"),
+        ("hotlist_other", "http://127.0.0.1:1200/weibo/search/hot"),
+    ],
+)
+def test_rsshub_hotlist_requires_source_fixed_route(source_key: str, feed_url: str) -> None:
+    with pytest.raises(ValueError, match="fixed route"):
+        RsshubHotlistAdapter(
+            source_key=source_key,
+            feed_url=feed_url,
+            allowed_hosts=frozenset({"127.0.0.1"}),
+            before_request=lambda _: True,
+        )
+
+
+@pytest.mark.parametrize("source_key,route", tuple(HOTLIST_ROUTES.items()))
+def test_rsshub_hotlist_accepts_each_fixed_route(source_key: str, route: str) -> None:
+    adapter = RsshubHotlistAdapter(
+        source_key=source_key,
+        feed_url=f"http://127.0.0.1:1200{route}",
+        allowed_hosts=frozenset({"127.0.0.1"}),
+        before_request=lambda _: True,
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, content=FEED)),
+    )
+    assert adapter.fetch_hotlist().state is SourcePageState.COMPLETE
 
 
 def test_rsshub_hotlist_rejects_redirect_outside_local_allowlist() -> None:
