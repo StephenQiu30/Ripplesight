@@ -19,6 +19,13 @@ class AnnotationStatus(StrEnum):
     UNANALYZED = "unanalyzed"
 
 
+class AnnotationResultState(StrEnum):
+    PENDING = "pending"
+    FAILED = "failed"
+    INVALID = "invalid"
+    VALID = "valid"
+
+
 class WindowAnnotationCountView(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -138,23 +145,39 @@ class AnnotationWrite(BaseModel):
     viewpoints: tuple[str, ...] = Field(default=(), max_length=5)
     ai_call_id: UUID | None = None
     status: AnnotationStatus
+    result_state: AnnotationResultState
+    error_code: str | None = Field(default=None, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
 
     @model_validator(mode="after")
     def validate_status_fields(self) -> Self:
         if self.status is AnnotationStatus.ANNOTATED and (
-            self.relevant is None
-            or self.relevance_reason is None
-            or self.summary is None
+            self.result_state is not AnnotationResultState.VALID
+            or self.relevant is None
+            or not self.relevance_reason
+            or not self.relevance_reason.strip()
+            or not self.summary
+            or not self.summary.strip()
+            or self.ai_call_id is None
+            or self.error_code is not None
             or (self.relevant and self.sentiment is None)
             or (not self.relevant and self.sentiment is not None)
         ):
             raise ValueError("annotated rows require consistent structured output")
         if self.status is AnnotationStatus.UNANALYZED and (
-            self.relevant is not None
+            self.result_state is AnnotationResultState.VALID
+            or self.relevant is not None
             or self.relevance_reason is not None
             or self.sentiment is not None
             or self.summary is not None
             or self.viewpoints
         ):
             raise ValueError("unanalyzed rows cannot contain inferred output")
+        if self.result_state is AnnotationResultState.PENDING and (
+            self.ai_call_id is not None or self.error_code is not None
+        ):
+            raise ValueError("pending rows cannot claim an AI call or failure")
+        if self.result_state in {AnnotationResultState.FAILED, AnnotationResultState.INVALID} and (
+            self.ai_call_id is None or self.error_code is None
+        ):
+            raise ValueError("failed and invalid rows require an AI call and error code")
         return self

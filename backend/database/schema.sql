@@ -1259,7 +1259,15 @@ CREATE TABLE content_annotations (
     status VARCHAR(16) NOT NULL CHECK (
         status IN ('annotated', 'unanalyzed')
     ),
+    result_state VARCHAR(16) NOT NULL CHECK (
+        result_state IN ('pending', 'failed', 'invalid', 'valid')
+    ),
+    error_code VARCHAR(64),
+    diagnostic_history JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (
+        jsonb_typeof(diagnostic_history) = 'array'
+    ),
     created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL CHECK (created_at <= updated_at),
     CONSTRAINT content_annotations_owner_id_key UNIQUE (owner_id, id),
     CONSTRAINT content_annotations_owner_version_topic_rule_prompt_key
         UNIQUE (
@@ -1284,9 +1292,14 @@ CREATE TABLE content_annotations (
     CONSTRAINT content_annotations_output_status_check CHECK (
         (
             status = 'annotated'
+            AND result_state = 'valid'
             AND relevant IS NOT NULL
             AND relevance_reason IS NOT NULL
+            AND btrim(relevance_reason) <> ''
             AND summary IS NOT NULL
+            AND btrim(summary) <> ''
+            AND ai_call_id IS NOT NULL
+            AND error_code IS NULL
             AND (
                 (relevant AND sentiment IS NOT NULL)
                 OR (NOT relevant AND sentiment IS NULL)
@@ -1294,11 +1307,21 @@ CREATE TABLE content_annotations (
         )
         OR (
             status = 'unanalyzed'
+            AND result_state IN ('pending', 'failed', 'invalid')
             AND relevant IS NULL
             AND relevance_reason IS NULL
             AND sentiment IS NULL
             AND summary IS NULL
             AND viewpoints = '[]'::jsonb
+            AND (
+                (result_state = 'pending' AND ai_call_id IS NULL AND error_code IS NULL)
+                OR (
+                    result_state IN ('failed', 'invalid')
+                    AND ai_call_id IS NOT NULL
+                    AND error_code IS NOT NULL
+                    AND btrim(error_code) <> ''
+                )
+            )
         )
     )
 );

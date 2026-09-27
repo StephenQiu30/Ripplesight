@@ -625,15 +625,29 @@ def test_annotation_projection_separates_pending_failed_and_abnormal(
                     "now": now,
                 },
             )
+        call_id = uuid4()
+        session.execute(
+            text(
+                "INSERT INTO ai_calls "
+                "(id, owner_id, purpose, provider, model, prompt_version, "
+                "input_fingerprint, status, input_tokens, cached_input_tokens, "
+                "output_tokens, reasoning_output_tokens, duration_ms, created_at) VALUES "
+                "(:id, :owner_id, 'analysis.annotate', 'test', 'test-model', 'v1', "
+                ":fingerprint, 'succeeded', 0, 0, 0, 0, 0, :now)"
+            ),
+            {"id": call_id, "owner_id": owner_id, "fingerprint": b"a" * 32, "now": now},
+        )
         for index, status in ((0, "annotated"), (1, "unanalyzed")):
             session.execute(
                 text(
                     "INSERT INTO content_annotations "
                     "(id, owner_id, content_id, content_version_id, topic_id, "
                     "topic_rule_version, prompt_version, relevant, relevance_reason, "
-                    "summary, viewpoints, status, created_at) VALUES "
+                    "summary, viewpoints, ai_call_id, status, result_state, error_code, "
+                    "created_at, updated_at) VALUES "
                     "(:id, :owner_id, :content_id, :version_id, :topic_id, 1, 'v1', "
-                    ":relevant, :reason, :summary, '[]'::jsonb, :status, :now)"
+                    ":relevant, :reason, :summary, '[]'::jsonb, :call_id, :status, "
+                    ":result_state, :error_code, :now, :now)"
                 ),
                 {
                     "id": uuid4(),
@@ -644,7 +658,10 @@ def test_annotation_projection_separates_pending_failed_and_abnormal(
                     "relevant": False if status == "annotated" else None,
                     "reason": "not relevant" if status == "annotated" else None,
                     "summary": "no match" if status == "annotated" else None,
+                    "call_id": call_id,
                     "status": status,
+                    "result_state": "valid" if status == "annotated" else "invalid",
+                    "error_code": None if status == "annotated" else "analysis_output_missing",
                     "now": now,
                 },
             )

@@ -6,6 +6,8 @@
 
 Plan 037 已在当前 `main` 基线上完成 RSS 适配器阶段：36Kr 快讯入口、GUID/URL 身份、有限 Feed 缺口与空/失败边界通过单元及匹配 Schema 的隔离库全量回归（后端 **775 passed/13 skipped**、前端 **52 passed**、OpenAPI 无漂移），见 Acceptance 002 EV-002-008。定时 Job、真实 PostgreSQL/Kafka 重投、覆盖 API 与两次真实扫描还需把其他隔离工作树的依赖切片按范围合入后复验，Plan 037 保持 `in_progress`。
 
+Plan 005 的标注状态与重放技术切片已在隔离 `main` 工作树完成，PostgreSQL 17 全新库的后端全量回归为 **779 passed/17 skipped**，见 Acceptance 002 EV-002-010。旧开发库 3 条历史异常、真实 Codex 样本和远端门禁尚未在该证据中核对；Plan 005 保持 `in_progress`，产品验收不变。
+
 ## M1—M6 看板
 
 | Design/Epic与Issue | 交付范围 | 当前状态与证据 |
