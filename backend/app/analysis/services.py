@@ -555,10 +555,15 @@ class AnalysisService:
             raise RuntimeError("analysis scanning requires the caller's transaction")
         if now.tzinfo is None:
             raise ValueError("analysis scan time must be timezone-aware")
-        rule_version, rules = MonitorTopicService(
+        rule_version, rules, source_keys = MonitorTopicService(
             self._session
-        ).get_current_topic_rules_in_transaction(owner_id=owner_id, topic_id=topic_id)
-        candidates = load_post_versions_for_analysis_scan(self._session, owner_id=owner_id)
+        ).get_current_topic_rules_and_sources_in_transaction(owner_id=owner_id, topic_id=topic_id)
+        candidates = load_post_versions_for_analysis_scan(
+            self._session,
+            owner_id=owner_id,
+            topic_id=topic_id,
+            source_keys=source_keys,
+        )
         matched = tuple(
             item for item in candidates if evaluate_monitor_rules(rules, _post_text(item)).matched
         )

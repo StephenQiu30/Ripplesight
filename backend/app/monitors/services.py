@@ -719,21 +719,25 @@ class MonitorTopicService:
             exclude=version_row.exclude,
         )
 
-    def get_current_topic_rules_in_transaction(
+    def get_current_topic_rules_and_sources_in_transaction(
         self,
         *,
         owner_id: UUID,
         topic_id: UUID,
-    ) -> tuple[int, NormalizedMonitorRules]:
-        """Expose the current immutable rule snapshot without leaking monitor ORM models."""
+    ) -> tuple[int, NormalizedMonitorRules, tuple[str, ...]]:
+        """Expose the current rule and selected search sources without monitor ORM models."""
         if not self._session.in_transaction():
             raise RuntimeError("topic rules require the caller's transaction")
         topic = self._find_topic(owner_id=owner_id, topic_id=topic_id)
         version = self._find_version(topic)
-        return topic.current_version, normalize_monitor_rules(
-            match_any=version.match_any,
-            match_all=version.match_all,
-            exclude=version.exclude,
+        return (
+            topic.current_version,
+            normalize_monitor_rules(
+                match_any=version.match_any,
+                match_all=version.match_all,
+                exclude=version.exclude,
+            ),
+            tuple(version.source_keys),
         )
 
     def list_topics(

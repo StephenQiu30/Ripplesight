@@ -75,9 +75,10 @@ def analysis_case() -> Iterator[AnalysisCase]:
         session.execute(
             text(
                 "INSERT INTO monitor_topic_versions "
-                "(topic_id, version, created_by, match_any, match_all, exclude, created_at) "
+                "(topic_id, version, created_by, match_any, match_all, exclude, "
+                "source_keys, created_at) "
                 "VALUES (:topic, 1, :owner, '[\"HotKey\"]'::jsonb, '[]'::jsonb, "
-                "'[]'::jsonb, :now)"
+                "'[]'::jsonb, '[\"hackernews\"]'::jsonb, :now)"
             ),
             {"topic": topic_id, "owner": owner_id, "now": old},
         )
@@ -162,6 +163,16 @@ def analysis_case() -> Iterator[AnalysisCase]:
     finally:
         with sessions() as session, session.begin():
             session.execute(
+                text("DELETE FROM hotlist_entries WHERE owner_id = :owner"), {"owner": owner_id}
+            )
+            session.execute(
+                text("DELETE FROM hotlist_snapshots WHERE owner_id = :owner"), {"owner": owner_id}
+            )
+            session.execute(
+                text("DELETE FROM collection_due_windows WHERE owner_id = :owner"),
+                {"owner": owner_id},
+            )
+            session.execute(
                 text("DELETE FROM content_records WHERE owner_id = :owner"), {"owner": owner_id}
             )
             session.execute(text("DELETE FROM jobs WHERE owner_id = :owner"), {"owner": owner_id})
@@ -211,6 +222,210 @@ def _scan(case: AnalysisCase) -> tuple[UUID, ...]:
                 owner_id=case.owner_id, topic_id=case.topic_id, now=case.now
             )
         )
+
+
+def test_analysis_scan_uses_selected_source_or_exact_hotlist_topic_version(
+    analysis_case: AnalysisCase,
+) -> None:
+    case = analysis_case
+    old = case.now - timedelta(days=4)
+    with case.sessions() as session, session.begin():
+
+        def seed_job(
+            source_key: str, kind: str, capability: str, at: datetime
+        ) -> tuple[UUID, UUID]:
+            job_id, operation_id = uuid4(), uuid4()
+            session.execute(
+                text(
+                    "INSERT INTO jobs "
+                    "(id, owner_id, operation_id, kind, configuration_ref, "
+                    "configuration_version, source_key, source_capability, scope, "
+                    "request_fingerprint, created_at, updated_at) VALUES "
+                    "(:id, :owner, :operation, :kind, 'topic:seed', 1, :source, "
+                    ":capability, '{}'::jsonb, :fingerprint, :at, :at)"
+                ),
+                {
+                    "id": job_id,
+                    "owner": case.owner_id,
+                    "operation": operation_id,
+                    "kind": kind,
+                    "source": source_key,
+                    "capability": capability,
+                    "fingerprint": job_id.bytes * 2,
+                    "at": at,
+                },
+            )
+            return job_id, operation_id
+
+        def seed_post(
+            source_key: str,
+            job_id: UUID,
+            at: datetime,
+            *,
+            content_id: UUID | None = None,
+            existing: bool = False,
+        ) -> tuple[UUID, UUID]:
+            content_id = content_id or uuid4()
+            version_id = uuid4()
+            if not existing:
+                session.execute(
+                    text(
+                        "INSERT INTO content_records "
+                        "(id, owner_id, source_key, object_type, external_id, created_at) "
+                        "VALUES (:id, :owner, :source, 'post', :external_id, :at)"
+                    ),
+                    {
+                        "id": content_id,
+                        "owner": case.owner_id,
+                        "source": source_key,
+                        "external_id": content_id.hex,
+                        "at": at,
+                    },
+                )
+            session.execute(
+                text(
+                    "INSERT INTO content_versions "
+                    "(id, owner_id, content_id, fingerprint, text_scope, text_origin, "
+                    "title, body, created_at) VALUES "
+                    "(:id, :owner, :content, :fingerprint, 'full', 'source', "
+                    "'HotKey 讨论', '待分析正文', :at)"
+                ),
+                {
+                    "id": version_id,
+                    "owner": case.owner_id,
+                    "content": content_id,
+                    "fingerprint": version_id.bytes * 2,
+                    "at": at,
+                },
+            )
+            session.execute(
+                text(
+                    "INSERT INTO content_observations "
+                    "(id, owner_id, content_id, job_id, source_operation_id, "
+                    "content_version_id, observed_at, received_at) VALUES "
+                    "(:id, :owner, :content, :job, :operation, :version, :at, :at)"
+                ),
+                {
+                    "id": uuid4(),
+                    "owner": case.owner_id,
+                    "content": content_id,
+                    "job": job_id,
+                    "operation": uuid4(),
+                    "version": version_id,
+                    "at": at,
+                },
+            )
+            return content_id, version_id
+
+        def seed_hotlist_snapshot(
+            job_id: UUID,
+            operation_id: UUID,
+            at: datetime,
+            entries: tuple[tuple[UUID, list[str]], ...],
+        ) -> None:
+            snapshot_id = uuid4()
+            session.execute(
+                text(
+                    "INSERT INTO collection_due_windows "
+                    "(id, owner_id, schedule_key, source_key, capability, due_at, "
+                    "window_start, window_end, admission_state, operation_id, job_id, recorded_at) "
+                    "VALUES (:id, :owner, :schedule, 'hotlist_36kr', 'hotlist', :at, "
+                    ":start, :at, 'accepted', :operation, :job, :at)"
+                ),
+                {
+                    "id": uuid4(),
+                    "owner": case.owner_id,
+                    "schedule": uuid4(),
+                    "at": at,
+                    "start": at - timedelta(minutes=30),
+                    "operation": operation_id,
+                    "job": job_id,
+                },
+            )
+            session.execute(
+                text(
+                    "INSERT INTO hotlist_snapshots "
+                    "(id, owner_id, source_key, job_id, operation_id, observed_at, entry_count) "
+                    "VALUES (:id, :owner, 'hotlist_36kr', :job, :operation, :at, :count)"
+                ),
+                {
+                    "id": snapshot_id,
+                    "owner": case.owner_id,
+                    "job": job_id,
+                    "operation": operation_id,
+                    "at": at,
+                    "count": len(entries),
+                },
+            )
+            session.execute(
+                text(
+                    "INSERT INTO hotlist_entries "
+                    "(snapshot_id, owner_id, rank, title, url, content_id, matched_topic_ids) "
+                    "VALUES (:snapshot, :owner, :rank, 'HotKey 讨论', :url, :content, "
+                    "CAST(:matches AS jsonb))"
+                ),
+                [
+                    {
+                        "snapshot": snapshot_id,
+                        "owner": case.owner_id,
+                        "rank": rank,
+                        "url": f"https://example.com/{content_id}",
+                        "content": content_id,
+                        "matches": json.dumps(matches),
+                    }
+                    for rank, (content_id, matches) in enumerate(entries, 1)
+                ],
+            )
+
+        google_job_id, _ = seed_job("google_news", "keyword.search", "search", old)
+        _, google_version_id = seed_post("google_news", google_job_id, old)
+
+        matched_hotlist_content_id = uuid4()
+        hotlist_job_id, hotlist_operation_id = seed_job(
+            "hotlist_36kr", "source.hotlist", "hotlist", old
+        )
+        _, matched_version_id = seed_post(
+            "hotlist_36kr", hotlist_job_id, old, content_id=matched_hotlist_content_id
+        )
+        unmatched_content_id, unmatched_version_id = seed_post("hotlist_36kr", hotlist_job_id, old)
+        seed_hotlist_snapshot(
+            hotlist_job_id,
+            hotlist_operation_id,
+            old,
+            (
+                (matched_hotlist_content_id, [str(case.topic_id)]),
+                (unmatched_content_id, [str(uuid4())]),
+            ),
+        )
+        later = old + timedelta(minutes=30)
+        later_job_id, later_operation_id = seed_job(
+            "hotlist_36kr", "source.hotlist", "hotlist", later
+        )
+        _, later_version_id = seed_post(
+            "hotlist_36kr",
+            later_job_id,
+            later,
+            content_id=matched_hotlist_content_id,
+            existing=True,
+        )
+        seed_hotlist_snapshot(
+            later_job_id, later_operation_id, later, ((matched_hotlist_content_id, []),)
+        )
+
+    job_ids = _scan(case)
+    assert len(job_ids) == 1
+    with case.sessions() as session, session.begin():
+        scope = session.execute(
+            text("SELECT scope FROM jobs WHERE id = :id"), {"id": job_ids[0]}
+        ).scalar_one()
+    scoped_version_ids = set(json.loads(scope["content_version_ids"]))
+    assert scoped_version_ids == {
+        str(case.version_id),
+        str(matched_version_id),
+    }
+    assert not {google_version_id, unmatched_version_id, later_version_id} & {
+        UUID(item) for item in scoped_version_ids
+    }
 
 
 def _seed_ai_call(case: AnalysisCase, call_id: UUID) -> None:
