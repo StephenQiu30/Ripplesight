@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -35,7 +34,7 @@ from content.schemas import AnalysisPostContentView
 from content.services import (
     load_post_comments_for_analysis,
     load_post_versions_for_analysis,
-    load_recent_post_versions_for_analysis,
+    load_post_versions_for_analysis_scan,
 )
 from core.config import Settings
 from jobs.coverage import CollectionDueWindowService
@@ -62,6 +61,7 @@ _MAX_BODY_CHARACTERS = 1_500
 _MAX_COMMENTS_PER_POST = 50
 _MAX_COLLECTION_ANALYSIS_JOBS = 100
 _ANNOTATION_READ_BATCH_SIZE = 500
+_MAX_SCAN_BATCHES = 20
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,13 +76,21 @@ def analysis_operation_id(
     topic_rule_version: int,
     content_version_ids: Sequence[UUID],
     prompt_version: str,
+    retry_index: int = 0,
 ) -> UUID:
-    if topic_rule_version < 1 or not prompt_version or not content_version_ids:
+    if (
+        topic_rule_version < 1
+        or not prompt_version
+        or not content_version_ids
+        or retry_index not in (0, 1)
+    ):
         raise ValueError("analysis operation identity requires a rule, prompt and content")
     ordered_ids = sorted({str(content_version_id) for content_version_id in content_version_ids})
     if len(ordered_ids) != len(content_version_ids):
         raise ValueError("analysis operation content versions must be distinct")
     name = "\0".join((str(topic_id), str(topic_rule_version), prompt_version, *ordered_ids))
+    if retry_index:
+        name = f"{name}\0retry:{retry_index}"
     return uuid5(_ANALYSIS_OPERATION_NAMESPACE, name)
 
 
@@ -95,6 +103,10 @@ def pack_prompt_batches(
             update={
                 "body": item.body[:_MAX_BODY_CHARACTERS] if item.body is not None else None,
                 "comments": tuple(item.comments[:_MAX_COMMENTS_PER_POST]),
+                "body_truncated": item.body_truncated
+                or (item.body is not None and len(item.body) > _MAX_BODY_CHARACTERS),
+                "comments_truncated": item.comments_truncated
+                or len(item.comments) > _MAX_COMMENTS_PER_POST,
             }
         )
         for item in items
@@ -102,7 +114,12 @@ def pack_prompt_batches(
     base_batches: list[list[AnalysisPromptItem]] = []
     current: list[AnalysisPromptItem] = []
     for item in normalized:
-        without_comments = item.model_copy(update={"comments": ()})
+        without_comments = item.model_copy(
+            update={
+                "comments": (),
+                "comments_truncated": bool(item.comments) or item.comments_truncated,
+            }
+        )
         candidate = [*current, without_comments]
         if current and (
             len(candidate) > _MAX_BATCH_ITEMS
@@ -128,6 +145,7 @@ def _add_comments_within_limit(
     batch = list(base_batch)
     positions = [0] * len(batch)
     exhausted = [False] * len(batch)
+    truncated_by_budget = [False] * len(batch)
     while not all(exhausted):
         changed = False
         for index, item in enumerate(batch):
@@ -148,10 +166,20 @@ def _add_comments_within_limit(
             if prefix:
                 batch[index] = item.model_copy(update={"comments": (*item.comments, prefix)})
                 changed = True
+            truncated_by_budget[index] = True
             exhausted[index] = True
         if not changed:
             break
-    return tuple(batch)
+    return tuple(
+        item.model_copy(
+            update={
+                "comments_truncated": source_items[item.content_version_id].comments_truncated
+                or truncated_by_budget[index]
+                or positions[index] < len(source_items[item.content_version_id].comments)
+            }
+        )
+        for index, item in enumerate(batch)
+    )
 
 
 def _largest_comment_prefix(
@@ -179,7 +207,10 @@ def resolve_annotation_results(
     expected_content_version_ids: Sequence[UUID],
     raw_items: Sequence[Any],
     ai_call_id: UUID,
+    retry_index: int = 0,
 ) -> tuple[AnnotationWrite, ...]:
+    if retry_index not in (0, 1):
+        raise ValueError("analysis retry index must be zero or one")
     grouped: dict[UUID, list[Any]] = {}
     expected = set(expected_content_version_ids)
     for raw_item in raw_items:
@@ -228,8 +259,12 @@ def resolve_annotation_results(
                 content_version_id=content_version_id,
                 ai_call_id=ai_call_id,
                 status=AnnotationStatus.UNANALYZED,
-                result_state=AnnotationResultState.INVALID,
-                error_code=error_code,
+                result_state=(
+                    AnnotationResultState.FAILED
+                    if retry_index == 1
+                    else AnnotationResultState.INVALID
+                ),
+                error_code=("analysis_invalid_exhausted" if retry_index == 1 else error_code),
             )
         )
     return tuple(resolved)
@@ -239,13 +274,20 @@ def analysis_failure(error: AiCallError, *, now: datetime) -> JobExecutionFailur
     if now.tzinfo is None:
         raise ValueError("analysis failure time must be timezone-aware")
     if error.code is AiFailureCode.RATE_LIMITED:
+        budget_delayed = error.retry_at is not None
         return JobExecutionFailure(
             error_code="analysis_rate_limited",
             category=JobFailureCategory.RATE_LIMITED,
             occurred_at=now,
-            next_action="等待模型限流恢复后自动重试",
-            retry_at=now + timedelta(seconds=60),
-            max_attempts=3,
+            next_action=(
+                "等待每日分析预算窗口恢复后自动重试"
+                if budget_delayed
+                else "等待模型限流恢复后自动重试"
+            ),
+            retry_at=max(error.retry_at, now + timedelta(seconds=60))
+            if error.retry_at is not None
+            else now + timedelta(seconds=60),
+            max_attempts=100 if budget_delayed else 3,
         )
     category = (
         JobFailureCategory.INVALID_RESPONSE
@@ -516,34 +558,111 @@ class AnalysisService:
         rule_version, rules = MonitorTopicService(
             self._session
         ).get_current_topic_rules_in_transaction(owner_id=owner_id, topic_id=topic_id)
-        candidates = load_recent_post_versions_for_analysis(
-            self._session,
-            owner_id=owner_id,
-            since=now - timedelta(hours=72),
-        )
+        candidates = load_post_versions_for_analysis_scan(self._session, owner_id=owner_id)
         matched = tuple(
             item for item in candidates if evaluate_monitor_rules(rules, _post_text(item)).matched
         )
-        due = self._missing_posts(
-            owner_id=owner_id,
-            topic_id=topic_id,
-            topic_rule_version=rule_version,
-            posts=matched,
-        )
+        if not matched:
+            return ()
+        annotations: dict[UUID, str] = {}
+        for start in range(0, len(matched), _ANNOTATION_READ_BATCH_SIZE):
+            version_ids = tuple(
+                item.content_version_id
+                for item in matched[start : start + _ANNOTATION_READ_BATCH_SIZE]
+            )
+            annotations.update(
+                {
+                    row.content_version_id: row.result_state
+                    for row in self._session.scalars(
+                        select(ContentAnnotation).where(
+                            ContentAnnotation.owner_id == owner_id,
+                            ContentAnnotation.topic_id == topic_id,
+                            ContentAnnotation.topic_rule_version == rule_version,
+                            ContentAnnotation.prompt_version == ANALYSIS_PROMPT_VERSION,
+                            ContentAnnotation.content_version_id.in_(version_ids),
+                        )
+                    )
+                }
+            )
+        jobs_by_version: dict[UUID, list[tuple[JobStatus, int, bool]]] = {}
+        for job in CollectionDueWindowService(self._session).list_analysis_jobs_in_transaction(
+            owner_id=owner_id, topic_ids={topic_id}
+        ):
+            try:
+                scope = AnalysisJobScope.from_job_scope(job.scope)
+            except (TypeError, ValueError, ValidationError):
+                continue
+            if (
+                scope.topic_id != topic_id
+                or scope.topic_rule_version != rule_version
+                or scope.prompt_version != ANALYSIS_PROMPT_VERSION
+            ):
+                continue
+            for version_id in scope.content_version_ids:
+                jobs_by_version.setdefault(version_id, []).append(
+                    (job.status, scope.retry_index, scope.prompt_items is not None)
+                )
+
+        fresh: list[AnalysisPostContentView] = []
+        retry: list[AnalysisPostContentView] = []
+        terminal = {
+            JobStatus.SUCCEEDED,
+            JobStatus.PARTIALLY_SUCCEEDED,
+            JobStatus.FAILED,
+            JobStatus.CANCELLED,
+        }
+        for item in matched:
+            state = annotations.get(item.content_version_id)
+            attempts = jobs_by_version.get(item.content_version_id, [])
+            if state in {AnnotationResultState.VALID.value, AnnotationResultState.FAILED.value}:
+                continue
+            if state == AnnotationResultState.INVALID.value:
+                if any(index == 1 for _, index, _ in attempts) or any(
+                    status not in terminal for status, _, _ in attempts
+                ):
+                    continue
+                retry.append(item)
+            elif (
+                attempts
+                and all(status in terminal for status, _, _ in attempts)
+                and any(not frozen for _, _, frozen in attempts)
+                and not any(index == 1 for _, index, _ in attempts)
+            ):
+                # Old Jobs cannot recover their unfrozen comments. Admit a distinct
+                # replacement only after their terminal failure; never reinterpret them.
+                retry.append(item)
+            elif not attempts:
+                fresh.append(item)
+
+        due = tuple([*retry, *fresh])
+        if not due:
+            return ()
         comments = load_post_comments_for_analysis(
             self._session,
             owner_id=owner_id,
             post_content_ids={item.content_id for item in due},
+            limit_per_post=51,
         )
-        prompt_items = tuple(
-            _prompt_item(
-                item,
-                comments=tuple(comment.text for comment in comments.get(item.content_id, ())),
+        prompt_items = {
+            item.content_version_id: _prompt_item(
+                item, comments=tuple(comment.text for comment in comments.get(item.content_id, ()))
             )
             for item in due
-        )
+        }
         accepted: list[JobView] = []
-        for batch in pack_prompt_batches(prompt_items):
+        planned = [
+            (batch, 1)
+            for item in retry
+            for batch in pack_prompt_batches((prompt_items[item.content_version_id],))
+        ]
+        planned.extend(
+            (batch, 0)
+            for batch in pack_prompt_batches(
+                tuple(prompt_items[item.content_version_id] for item in fresh)
+            )
+        )
+        job_service = JobService(self._session, clock=lambda: now)
+        for batch, retry_index in planned[:_MAX_SCAN_BATCHES]:
             content_version_ids = tuple(
                 sorted((item.content_version_id for item in batch), key=str)
             )
@@ -552,9 +671,14 @@ class AnalysisService:
                 topic_rule_version=rule_version,
                 content_version_ids=content_version_ids,
                 prompt_version=ANALYSIS_PROMPT_VERSION,
+                retry_index=retry_index,
             )
+            if job_service.operation_exists_in_transaction(
+                owner_id=owner_id, kind="analysis.annotate", operation_id=operation_id
+            ):
+                continue
             accepted.append(
-                JobService(self._session, clock=lambda: now).accept_in_transaction(
+                job_service.accept_in_transaction(
                     owner_id=owner_id,
                     command=JobAcceptanceInput(
                         operation_id=operation_id,
@@ -563,15 +687,14 @@ class AnalysisService:
                             configuration_ref=f"topic:{topic_id}",
                             configuration_version=rule_version,
                         ),
-                        scope={
-                            "topic_id": str(topic_id),
-                            "topic_rule_version": rule_version,
-                            "prompt_version": ANALYSIS_PROMPT_VERSION,
-                            "content_version_ids": json.dumps(
-                                [str(item) for item in content_version_ids],
-                                separators=(",", ":"),
-                            ),
-                        },
+                        scope=AnalysisJobScope(
+                            topic_id=topic_id,
+                            topic_rule_version=rule_version,
+                            prompt_version=ANALYSIS_PROMPT_VERSION,
+                            content_version_ids=content_version_ids,
+                            prompt_items=batch,
+                            retry_index=retry_index,
+                        ).to_job_scope(),
                     ),
                 )
             )
@@ -719,25 +842,6 @@ class AnalysisService:
             current.viewpoints = list(result.viewpoints)
             current.updated_at = max(current.updated_at, created_at)
 
-    def _missing_posts(
-        self,
-        *,
-        owner_id: UUID,
-        topic_id: UUID,
-        topic_rule_version: int,
-        posts: Sequence[AnalysisPostContentView],
-    ) -> tuple[AnalysisPostContentView, ...]:
-        missing_ids = set(
-            self.missing_content_version_ids_in_transaction(
-                owner_id=owner_id,
-                topic_id=topic_id,
-                topic_rule_version=topic_rule_version,
-                prompt_version=ANALYSIS_PROMPT_VERSION,
-                content_version_ids=tuple(item.content_version_id for item in posts),
-            )
-        )
-        return tuple(item for item in posts if item.content_version_id in missing_ids)
-
 
 class AnalysisAnnotateExecutor:
     def __init__(
@@ -758,10 +862,17 @@ class AnalysisAnnotateExecutor:
                 completion=JobCompletion(status=JobStatus.SUCCEEDED),
                 processed_items=len(scope.content_version_ids),
             )
-        batches = pack_prompt_batches(items)
-        if len(batches) != 1:
+        if (
+            len(items) > _MAX_BATCH_ITEMS
+            or len(serialize_analysis_data(items)) > _MAX_SERIALIZED_CHARACTERS
+            or any(len(item.body or "") > _MAX_BODY_CHARACTERS for item in items)
+            or any(len(item.comments) > _MAX_COMMENTS_PER_POST for item in items)
+        ):
             raise self._configuration_failure("analysis_batch_scope_invalid")
-        client = create_ai_client(self._settings)
+        try:
+            client = create_ai_client(self._settings)
+        except AiCallError as error:
+            raise analysis_failure(error, now=self._clock()) from error
         try:
             try:
                 with self._sessions() as session:
@@ -771,7 +882,7 @@ class AnalysisAnnotateExecutor:
                         purpose="analysis.annotate",
                         prompt_version=scope.prompt_version,
                         prompt=build_analysis_prompt(
-                            items=batches[0],
+                            items=items,
                             match_any=rules.match_any,
                             match_all=rules.match_all,
                             exclude=rules.exclude,
@@ -817,8 +928,16 @@ class AnalysisAnnotateExecutor:
                             content_version_id=item.content_version_id,
                             ai_call_id=completion.call_id,
                             status=AnnotationStatus.UNANALYZED,
-                            result_state=AnnotationResultState.INVALID,
-                            error_code="analysis_output_envelope_invalid",
+                            result_state=(
+                                AnnotationResultState.FAILED
+                                if scope.retry_index == 1
+                                else AnnotationResultState.INVALID
+                            ),
+                            error_code=(
+                                "analysis_invalid_exhausted"
+                                if scope.retry_index == 1
+                                else "analysis_output_envelope_invalid"
+                            ),
                         )
                         for item in items
                     ),
@@ -834,6 +953,7 @@ class AnalysisAnnotateExecutor:
                 expected_content_version_ids=tuple(item.content_version_id for item in items),
                 raw_items=envelope.items,
                 ai_call_id=completion.call_id,
+                retry_index=scope.retry_index,
             )
             self._persist_results(message=message, scope=scope, posts=posts, results=results)
             invalid_count = sum(result.status is AnnotationStatus.UNANALYZED for result in results)
@@ -846,8 +966,12 @@ class AnalysisAnnotateExecutor:
                         error_code="analysis_items_invalid",
                         category=JobFailureCategory.INVALID_RESPONSE,
                         occurred_at=self._clock(),
-                        next_action="由分析补偿流程重试无效条目",
-                        manual_retry_allowed=False,
+                        next_action=(
+                            "检查最终无效条目的模型输出后人工处理"
+                            if scope.retry_index == 1
+                            else "由分析补偿流程重试无效条目"
+                        ),
+                        manual_retry_allowed=scope.retry_index == 1,
                     ),
                 )
             )
@@ -899,6 +1023,7 @@ class AnalysisAnnotateExecutor:
                 topic_rule_version=scope.topic_rule_version,
                 content_version_ids=scope.content_version_ids,
                 prompt_version=scope.prompt_version,
+                retry_index=scope.retry_index,
             )
             if (
                 configuration.owner_id != message.owner_id
@@ -912,6 +1037,8 @@ class AnalysisAnnotateExecutor:
                 or tuple(sorted(scope.content_version_ids, key=str)) != scope.content_version_ids
             ):
                 raise self._configuration_failure("analysis_scope_mismatch")
+            if scope.prompt_items is None:
+                raise self._configuration_failure("analysis_frozen_input_missing")
             rules = MonitorTopicService(session).get_topic_rules_in_transaction(
                 owner_id=message.owner_id,
                 topic_id=scope.topic_id,
@@ -932,21 +1059,19 @@ class AnalysisAnnotateExecutor:
             posts = {item.content_version_id: item for item in loaded_posts}
             if len(posts) != len(missing_ids):
                 raise self._configuration_failure("analysis_content_missing")
-            comments = load_post_comments_for_analysis(
-                session,
-                owner_id=message.owner_id,
-                post_content_ids={item.content_id for item in loaded_posts},
-            )
-            items = tuple(
-                _prompt_item(
-                    posts[content_version_id],
-                    comments=tuple(
-                        comment.text
-                        for comment in comments.get(posts[content_version_id].content_id, ())
-                    ),
-                )
-                for content_version_id in missing_ids
-            )
+            frozen = {item.content_version_id: item for item in scope.prompt_items}
+            items = tuple(frozen[content_version_id] for content_version_id in missing_ids)
+            for item in items:
+                post = posts[item.content_version_id]
+                frozen_body = post.body[:_MAX_BODY_CHARACTERS] if post.body is not None else None
+                if (
+                    item.content_id != post.content_id
+                    or item.title != post.title
+                    or item.body != frozen_body
+                    or item.body_truncated
+                    != (post.body is not None and len(post.body) > _MAX_BODY_CHARACTERS)
+                ):
+                    raise self._configuration_failure("analysis_frozen_content_mismatch")
         return scope, rules, posts, items
 
     def _configuration_failure(self, code: str) -> JobExecutionFailure:
@@ -973,5 +1098,7 @@ def _prompt_item(
         content_version_id=post.content_version_id,
         title=post.title,
         body=post.body[:_MAX_BODY_CHARACTERS] if post.body is not None else None,
-        comments=comments[:_MAX_COMMENTS_PER_POST],
+        comments=comments[: _MAX_COMMENTS_PER_POST + 1],
+        body_truncated=post.body is not None and len(post.body) > _MAX_BODY_CHARACTERS,
+        comments_truncated=len(comments) > _MAX_COMMENTS_PER_POST,
     )

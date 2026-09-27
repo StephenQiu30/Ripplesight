@@ -251,6 +251,7 @@ class Settings(BaseSettings):
             raise ValueError("Kafka max poll interval must leave margin after the job lease")
         return self
 
+    ai_enabled: bool = False
     ai_model: str = "gpt-5.6-luna"
     ai_command: str = "codex app-server"
     ai_timeout_seconds: int = Field(default=300, ge=1, le=900)

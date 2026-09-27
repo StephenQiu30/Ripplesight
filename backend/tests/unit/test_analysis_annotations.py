@@ -10,6 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from ai.schemas import AiCallError, AiCompletion, AiFailureCode, AiTokenUsage
+from ai.services import create_ai_client
 from analysis.models import ContentAnnotation
 from analysis.prompts import (
     ANALYSIS_OUTPUT_SCHEMA,
@@ -87,6 +88,40 @@ def test_batch_packing_enforces_item_body_and_serialized_character_limits() -> N
     assert all(len(serialize_analysis_data(batch)) <= 24_000 for batch in batches)
     assert all(len(item.body or "") <= 1_500 for batch in batches for item in batch)
     assert all(len(item.comments) <= 50 for batch in batches for item in batch)
+    assert all(item.body_truncated for batch in batches for item in batch)
+    assert all(item.comments_truncated for batch in batches for item in batch)
+
+
+def test_batch_packing_freezes_31_items_and_51_comments_with_multibyte_text() -> None:
+    items = tuple(_prompt_item(body="汉" * 1_501, comments=("评",) * 51) for _ in range(31))
+
+    batches = pack_prompt_batches(items)
+
+    assert sum(len(batch) for batch in batches) == 31
+    assert all(len(batch) <= 30 for batch in batches)
+    assert all(len(serialize_analysis_data(batch)) <= 24_000 for batch in batches)
+    assert all(len(item.body or "") == 1_500 for batch in batches for item in batch)
+    assert all(len(item.comments) <= 50 for batch in batches for item in batch)
+    assert all(
+        item.body_truncated and item.comments_truncated for batch in batches for item in batch
+    )
+
+
+def test_job_scope_round_trips_frozen_comment_sample_and_truncation() -> None:
+    item = pack_prompt_batches((_prompt_item(body="汉" * 1_501, comments=("评论",) * 51),))[0][0]
+    scope = AnalysisJobScope(
+        topic_id=uuid4(),
+        topic_rule_version=1,
+        prompt_version=ANALYSIS_PROMPT_VERSION,
+        content_version_ids=(item.content_version_id,),
+        prompt_items=(item,),
+    )
+
+    restored = AnalysisJobScope.from_job_scope(scope.to_job_scope())
+
+    assert restored.prompt_items == (item,)
+    assert restored.prompt_items[0].body_truncated
+    assert restored.prompt_items[0].comments_truncated
 
 
 def test_operation_id_is_stable_for_sorted_content_versions_and_prompt_version() -> None:
@@ -114,6 +149,13 @@ def test_operation_id_is_stable_for_sorted_content_versions_and_prompt_version()
 
     assert first == repeated
     assert first != changed
+    assert first != analysis_operation_id(
+        topic_id=topic_id,
+        topic_rule_version=4,
+        content_version_ids=version_ids,
+        prompt_version=ANALYSIS_PROMPT_VERSION,
+        retry_index=1,
+    )
 
 
 def test_invalid_or_missing_items_become_unanalyzed_without_discarding_valid_items() -> None:
@@ -305,6 +347,31 @@ def test_rate_limit_failure_uses_delayed_retry_policy() -> None:
     assert failure.error_code == "analysis_rate_limited"
     assert failure.retry_at == now + timedelta(seconds=60)
     assert failure.max_attempts == 3
+
+
+def test_budget_delay_waits_for_next_window_without_consuming_an_ai_call() -> None:
+    now = datetime(2026, 9, 27, 8, tzinfo=UTC)
+    retry_at = now + timedelta(days=1)
+
+    failure = analysis_failure(
+        AiCallError(AiFailureCode.RATE_LIMITED, retry_at=retry_at),
+        now=now,
+    )
+
+    assert failure.retry_at == retry_at
+    assert failure.max_attempts == 100
+
+
+def test_model_client_requires_explicit_included_usage_gate() -> None:
+    settings = Settings(database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test")
+
+    with pytest.raises(AiCallError) as disabled:
+        create_ai_client(settings)
+    assert disabled.value.code is AiFailureCode.UNAVAILABLE
+    enabled = settings.model_copy(update={"ai_enabled": True, "ai_command": "python paid.py"})
+    with pytest.raises(AiCallError) as invalid_command:
+        create_ai_client(enabled)
+    assert invalid_command.value.code is AiFailureCode.UNAVAILABLE
 
 
 def test_annotation_model_declares_owner_scoped_unique_and_foreign_keys() -> None:

@@ -24,6 +24,7 @@ from worker.scheduler import (
     collection_operation_id,
     collection_schedule_id,
     collection_window_start,
+    enqueue_due_analysis_in_transaction,
     run_scheduler_round,
 )
 
@@ -136,6 +137,26 @@ def test_scheduler_registers_collection_comments_and_analysis_scans() -> None:
         "reports",
         "knowledge",
         "notifications",
+    )
+
+
+def test_analysis_scan_does_not_admit_jobs_until_model_usage_is_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    monkeypatch.setattr("worker.scheduler.get_settings", lambda: SimpleNamespace(ai_enabled=False))
+
+    class SessionWithoutQueries:
+        @staticmethod
+        def in_transaction() -> bool:
+            return True
+
+    assert (
+        enqueue_due_analysis_in_transaction(
+            SessionWithoutQueries(), datetime(2026, 9, 27, tzinfo=UTC)
+        )
+        == 0
     )
 
 

@@ -2105,17 +2105,14 @@ class CommentScanService:
         )
 
 
-def load_recent_post_versions_for_analysis(
+def load_post_versions_for_analysis_scan(
     session: Session,
     *,
     owner_id: UUID,
-    since: datetime,
 ) -> tuple[AnalysisPostContentView, ...]:
-    """Read recent post versions without exposing content ORM models cross-domain."""
+    """Read observed post versions, including analysis backlog older than 72 hours."""
     if not session.in_transaction():
         raise RuntimeError("analysis content reads require the caller's transaction")
-    if since.tzinfo is None:
-        raise ValueError("analysis recency boundary must be timezone-aware")
     occurred_at = case(
         (ContentRecord.source_key == "bilibili", ContentObservation.observed_at),
         else_=func.coalesce(ContentObservation.published_at, ContentObservation.observed_at),
@@ -2135,7 +2132,6 @@ def load_recent_post_versions_for_analysis(
         .where(
             ContentObservation.owner_id == owner_id,
             ContentObservation.content_version_id.is_not(None),
-            occurred_at >= since,
         )
         .group_by(ContentObservation.content_version_id)
         .subquery()
@@ -2154,7 +2150,7 @@ def load_recent_post_versions_for_analysis(
             ContentVersion.owner_id == owner_id,
             ContentRecord.object_type == "post",
         )
-        .order_by(recent_versions.c.occurred_at.desc(), ContentVersion.id)
+        .order_by(recent_versions.c.occurred_at, ContentVersion.id)
     ).all()
     return tuple(_analysis_post_view(version, content) for version, content in rows)
 
@@ -2196,11 +2192,11 @@ def load_post_comments_for_analysis(
     post_content_ids: set[UUID],
     limit_per_post: int = 50,
 ) -> dict[UUID, tuple[AnalysisCommentContentView, ...]]:
-    """Return each post's newest text for at most 50 distinct comments."""
+    """Return newest comment text; callers may request one extra truncation sentinel."""
     if not session.in_transaction():
         raise RuntimeError("analysis comment reads require the caller's transaction")
-    if not 1 <= limit_per_post <= 50:
-        raise ValueError("analysis comment limit must be between 1 and 50")
+    if not 1 <= limit_per_post <= 51:
+        raise ValueError("analysis comment limit must be between 1 and 51")
     if not post_content_ids:
         return {}
 

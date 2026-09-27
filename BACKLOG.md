@@ -4,7 +4,7 @@
 
 执行方：Codex 实现、受控集成与代码自检；Claude 可参与规划/代码审查；用户负责本人账号、授权与产品决策。用户已要求每个任务结束后提交并推送 main。代码、受控、真实、产品为不同证据等级。
 
-Plan 037 的 RSS 适配器和受控 Job 切片已在隔离 `main` 工作树验证：固定快讯入口、GUID/URL 身份、Feed 更新时间与请求观察时间分开持久化；真实 PostgreSQL 验证重复命中、无匹配、合法空、503 后恢复及快讯/热榜独立预算，真实 Kafka 验证 Outbox 消息无 offset 提交后的重投幂等。全量后端 **823 passed/13 skipped**，见 Acceptance 002 EV-002-008/014。EV-002-015 另记录真实 36Kr 原帖与相隔 1869.549 秒的两次 Job 消费：两轮各 5 个相同 GUID、总内容记录 5 条、每轮观察各 5 条，来源/全局预算各实扣 2。Plan 037 按单来源范围 `completed`；其他来源和连续 72 小时仍待验证，AC-002-002/004 与 M1 不关闭。
+Plan 037 见 Acceptance 002 EV-002-008/014/015：36Kr 快讯固定入口、身份与时间字段、真实双轮原帖、PostgreSQL/Kafka 重放和预算已核对；单来源 `completed`，72 小时父级未通过。
 
 Plan 004 只读覆盖 API 技术切片见 Acceptance 002 EV-002-016：按 owner/来源筛选到期窗，游标绑定筛选条件，批量核对 Job、内容、分析及预算；未确认尾段与请求账本缺口显式保留。隔离 PostgreSQL 17 受控场景及运行 OpenAPI 生成客户端已通过；代码提交 `f6f6b3e7` 的远端 backend/contract/frontend/runtime 均成功，backend **847 passed/8 skipped**。真实四词六榜到期窗与连续三天缺口尚未对账，Plan 004 `in_progress`，AC-002-006 不关闭。
 
@@ -17,6 +17,8 @@ Plan 036 SearXNG 见 Acceptance 002 EV-002-019：真实两轮各入库 7、总�
 Plan 008 见 Acceptance 002 EV-002-020/021：六榜真实双轮、排名/命中和 Kafka 重放已核对；远端 backend **901 passed/8 skipped**，本卡 `completed`。
 
 Plan 039 见 Acceptance 002 EV-002-022：历史 API/页面读真实双轮快照，桌面及 390px 浏览器通过；本卡 `completed`，72 小时与 Codex 另验。
+
+Plan 040 见 Acceptance 002 EV-002-023：旧积压扫描、冻结评论输入、一次无效补偿和进程树回收已在隔离 PostgreSQL/受控子进程验证；默认关闭真实模型。Kafka 分析链、账户费用控制、十来源真实标注和 60 分钟比例未验，本卡 `in_progress`，AC-002-008 未通过。
 
 Plan 005 的标注状态与重放技术切片已在隔离 `main` 工作树完成，PostgreSQL 17 全新库的后端全量回归为 **779 passed/17 skipped**，见 Acceptance 002 EV-002-010。旧开发库 3 条历史异常、真实 Codex 样本和远端门禁尚未在该证据中核对；Plan 005 保持 `in_progress`，产品验收不变。
 

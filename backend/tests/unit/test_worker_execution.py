@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import signal
+import subprocess
+import sys
 import time
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -46,6 +48,36 @@ def _ignore_terminate_and_wait(started_path: str) -> None:
     Path(started_path).touch()
     while True:
         time.sleep(0.02)
+
+
+def _spawn_grandchild_and_wait(started_path: str, finished_path: str) -> None:
+    subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import pathlib,sys,time;time.sleep(.5);pathlib.Path(sys.argv[1]).touch()",
+            finished_path,
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    Path(started_path).touch()
+    while True:
+        time.sleep(0.02)
+
+
+def _spawn_grandchild_and_return(finished_path: str) -> str:
+    subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import pathlib, sys, time; time.sleep(0.5); pathlib.Path(sys.argv[1]).touch()",
+            finished_path,
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return "finished"
 
 
 def _raise_with_private_message() -> None:
@@ -152,6 +184,56 @@ def test_cancellation_kills_child_which_ignores_terminate(tmp_path: Path) -> Non
 
     assert result.outcome is JobProcessOutcome.CANCELLED
     assert started.exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX process groups are required")
+def test_cancellation_reaps_app_server_descendants(tmp_path: Path) -> None:
+    started = tmp_path / "started"
+    finished = tmp_path / "orphan-finished"
+
+    result = _supervisor().run(
+        _spawn_grandchild_and_wait,
+        (str(started), str(finished)),
+        cancellation_requested=lambda: started.exists(),
+        stopping=Event(),
+    )
+
+    time.sleep(0.7)
+    assert result.outcome is JobProcessOutcome.CANCELLED
+    assert not finished.exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX process groups are required")
+def test_hard_deadline_reaps_app_server_descendants(tmp_path: Path) -> None:
+    started = tmp_path / "started"
+    finished = tmp_path / "orphan-finished"
+
+    result = _supervisor(execution_timeout_seconds=0.1).run(
+        _spawn_grandchild_and_wait,
+        (str(started), str(finished)),
+        cancellation_requested=lambda: False,
+        stopping=Event(),
+    )
+
+    time.sleep(0.7)
+    assert result.outcome is JobProcessOutcome.TIMED_OUT
+    assert not finished.exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX process groups are required")
+def test_completed_job_reaps_descendants_left_by_handler(tmp_path: Path) -> None:
+    finished = tmp_path / "orphan-finished"
+
+    result = _supervisor().run(
+        _spawn_grandchild_and_return,
+        (str(finished),),
+        cancellation_requested=lambda: False,
+        stopping=Event(),
+    )
+
+    time.sleep(0.7)
+    assert result.outcome is JobProcessOutcome.COMPLETED
+    assert not finished.exists()
 
 
 @pytest.mark.parametrize(

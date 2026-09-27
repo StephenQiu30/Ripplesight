@@ -43,7 +43,9 @@ class AnalysisPromptItem(BaseModel):
     content_version_id: UUID
     title: str | None = Field(default=None, max_length=2_000)
     body: str | None = Field(default=None, max_length=100_000)
-    comments: tuple[str, ...] = Field(default=(), max_length=50)
+    comments: tuple[str, ...] = Field(default=(), max_length=51)
+    body_truncated: bool = False
+    comments_truncated: bool = False
 
     @model_validator(mode="after")
     def require_text(self) -> Self:
@@ -61,6 +63,8 @@ class AnalysisJobScope(BaseModel):
     topic_rule_version: int = Field(ge=1)
     prompt_version: str = Field(min_length=1, max_length=128)
     content_version_ids: tuple[UUID, ...] = Field(min_length=1, max_length=30)
+    prompt_items: tuple[AnalysisPromptItem, ...] | None = Field(default=None, max_length=30)
+    retry_index: int = Field(default=0, ge=0, le=1)
 
     @field_validator("content_version_ids")
     @classmethod
@@ -68,6 +72,34 @@ class AnalysisJobScope(BaseModel):
         if len(set(value)) != len(value):
             raise ValueError("analysis content versions must be distinct")
         return value
+
+    @model_validator(mode="after")
+    def validate_frozen_items(self) -> Self:
+        if self.prompt_items is not None and (
+            tuple(sorted(item.content_version_id for item in self.prompt_items))
+            != tuple(sorted(self.content_version_ids))
+            or any(len(item.comments) > 50 for item in self.prompt_items)
+        ):
+            raise ValueError("frozen analysis items must match the content version scope")
+        return self
+
+    def to_job_scope(self) -> dict[str, str | int]:
+        if self.prompt_items is None:
+            raise ValueError("new analysis jobs require frozen prompt items")
+        return {
+            "topic_id": str(self.topic_id),
+            "topic_rule_version": self.topic_rule_version,
+            "prompt_version": self.prompt_version,
+            "content_version_ids": json.dumps(
+                [str(item) for item in self.content_version_ids], separators=(",", ":")
+            ),
+            "prompt_items": json.dumps(
+                [item.model_dump(mode="json") for item in self.prompt_items],
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+            "retry_index": self.retry_index,
+        }
 
     @classmethod
     def from_job_scope(cls, scope: dict[str, str | int | bool | None]) -> AnalysisJobScope:
@@ -78,12 +110,21 @@ class AnalysisJobScope(BaseModel):
             content_version_ids = json.loads(encoded_ids)
         except json.JSONDecodeError as error:
             raise ValueError("analysis scope content_version_ids must be JSON") from error
+        encoded_items = scope.get("prompt_items")
+        if encoded_items is not None and not isinstance(encoded_items, str):
+            raise ValueError("analysis scope prompt_items must be JSON")
+        try:
+            prompt_items = json.loads(encoded_items) if encoded_items is not None else None
+        except json.JSONDecodeError as error:
+            raise ValueError("analysis scope prompt_items must be JSON") from error
         return cls.model_validate(
             {
                 "topic_id": scope.get("topic_id"),
                 "topic_rule_version": scope.get("topic_rule_version"),
                 "prompt_version": scope.get("prompt_version"),
                 "content_version_ids": content_version_ids,
+                "prompt_items": prompt_items,
+                "retry_index": scope.get("retry_index", 0),
             }
         )
 

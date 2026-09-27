@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import ast
 import multiprocessing
+import os
 import re
+import signal
 import time
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from enum import StrEnum
 from json import JSONDecodeError
@@ -124,16 +127,19 @@ class JobProcessSupervisor:
         execution_deadline = startup_deadline + execution_timeout
         ready = False
 
+        def stop_process() -> None:
+            self._stop_process(process, isolation_confirmed=ready)
+
         try:
             process.start()
             sender.close()
             while True:
                 if stopping.is_set():
-                    self._stop_process(process)
+                    stop_process()
                     raise JobProcessShutdownError
 
                 if cancellation_requested():
-                    self._stop_process(process)
+                    stop_process()
                     return IsolatedProcessResult(outcome=JobProcessOutcome.CANCELLED)
 
                 if receiver.poll(0):
@@ -142,24 +148,26 @@ class JobProcessSupervisor:
                     except EOFError as error:
                         raise JobProcessCrashedError("ChildExitedWithoutResult") from error
                     if not isinstance(message, _ChildMessage):
-                        self._stop_process(process)
+                        stop_process()
                         raise JobProcessCrashedError("InvalidChildMessage")
                     if message.kind == "ready":
-                        if time.monotonic() >= startup_deadline:
-                            self._stop_process(process)
+                        ready_at = time.monotonic()
+                        if ready_at >= startup_deadline:
+                            stop_process()
                             return IsolatedProcessResult(outcome=JobProcessOutcome.TIMED_OUT)
                         ready = True
+                        execution_deadline = ready_at + execution_timeout
                     elif message.kind == "result":
                         if time.monotonic() >= execution_deadline:
-                            self._stop_process(process)
+                            stop_process()
                             return IsolatedProcessResult(outcome=JobProcessOutcome.TIMED_OUT)
-                        self._stop_process(process)
+                        stop_process()
                         return IsolatedProcessResult(
                             outcome=JobProcessOutcome.COMPLETED,
                             value=message.value,
                         )
                     elif message.kind == "failed":
-                        self._stop_process(process)
+                        stop_process()
                         if (
                             message.exception_type is None
                             or message.error_code
@@ -186,7 +194,7 @@ class JobProcessSupervisor:
                             error_message=message.error_message,
                         )
                     else:
-                        self._stop_process(process)
+                        stop_process()
                         raise JobProcessCrashedError("InvalidChildMessage")
 
                 if process.exitcode is not None:
@@ -195,12 +203,12 @@ class JobProcessSupervisor:
                 now = time.monotonic()
                 deadline = execution_deadline if ready else startup_deadline
                 if now >= deadline:
-                    self._stop_process(process)
+                    stop_process()
                     return IsolatedProcessResult(outcome=JobProcessOutcome.TIMED_OUT)
                 receiver.poll(min(self._poll_interval_seconds, deadline - now))
         except BaseException:
             if process.pid is not None and process.is_alive():
-                self._stop_process(process)
+                stop_process()
             raise
         finally:
             receiver.close()
@@ -209,9 +217,26 @@ class JobProcessSupervisor:
                 process.join()
                 process.close()
 
-    def _stop_process(self, process: BaseProcess) -> None:
+    def _stop_process(self, process: BaseProcess, *, isolation_confirmed: bool = False) -> None:
         if process.pid is None:
             return
+        group_id: int | None = None
+        if os.name == "posix":
+            try:
+                candidate = os.getpgid(process.pid)
+            except ProcessLookupError:
+                if isolation_confirmed and process.pid != os.getpgrp():
+                    group_id = process.pid
+            else:
+                if candidate == process.pid and candidate != os.getpgrp():
+                    group_id = candidate
+        if group_id is not None:
+            with suppress(ProcessLookupError, PermissionError):
+                os.killpg(group_id, signal.SIGTERM)
+            process.join(self._terminate_grace_seconds)
+            # The Job child may exit while its app-server descendants remain.
+            with suppress(ProcessLookupError, PermissionError):
+                os.killpg(group_id, signal.SIGKILL)
         if process.is_alive():
             process.terminate()
             process.join(self._terminate_grace_seconds)
@@ -229,6 +254,8 @@ def _run_child(
     args: tuple[object, ...],
 ) -> None:
     try:
+        if os.name == "posix":
+            os.setsid()
         sender.send(_ChildMessage(kind="ready"))
         try:
             value = target(*args)
