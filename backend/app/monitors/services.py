@@ -22,6 +22,7 @@ from monitors.models import (
     FollowedAccountAlias,
     MonitorSchedule,
     MonitorTopic,
+    MonitorTopicStatusEvent,
     MonitorTopicVersion,
 )
 from monitors.schemas import (
@@ -578,6 +579,31 @@ class MonitorTopicService:
         self._session = session
         self._clock = clock or (lambda: datetime.now(UTC))
 
+    def _record_status_event(
+        self, *, topic: MonitorTopic, reason: str, occurred_at: datetime
+    ) -> None:
+        last_sequence = self._session.scalar(
+            select(MonitorTopicStatusEvent.event_sequence)
+            .where(
+                MonitorTopicStatusEvent.owner_id == topic.owner_id,
+                MonitorTopicStatusEvent.topic_id == topic.id,
+            )
+            .order_by(MonitorTopicStatusEvent.event_sequence.desc())
+            .limit(1)
+        )
+        self._session.add(
+            MonitorTopicStatusEvent(
+                id=uuid4(),
+                owner_id=topic.owner_id,
+                topic_id=topic.id,
+                event_sequence=(last_sequence or 0) + 1,
+                topic_rule_version=topic.current_version,
+                status=topic.status,
+                reason=reason,
+                occurred_at=occurred_at,
+            )
+        )
+
     def create_topic(
         self,
         *,
@@ -629,6 +655,7 @@ class MonitorTopicService:
             self._session.add(topic)
             self._session.flush()
             self._session.add(version)
+            self._record_status_event(topic=topic, reason="created", occurred_at=now)
             self._sync_search_schedules(
                 topic=topic, source_keys=source_keys, source_intervals=source_intervals, now=now
             )
@@ -791,6 +818,7 @@ class MonitorTopicService:
             self._session.add(clone)
             self._session.flush()
             self._session.add(clone_version)
+            self._record_status_event(topic=clone, reason="cloned", occurred_at=now)
             self._sync_search_schedules(
                 topic=clone, source_keys=source_keys, source_intervals=source_intervals, now=now
             )
@@ -888,6 +916,9 @@ class MonitorTopicService:
                 topic.name = name
                 if not source_keys and topic.status == MonitorTopicStatus.ACTIVE.value:
                     topic.status = MonitorTopicStatus.PAUSED.value
+                    self._record_status_event(
+                        topic=topic, reason="source_selection", occurred_at=now
+                    )
                 topic.readiness_status = (
                     MonitorTopicReadinessStatus.READY.value
                     if source_keys
@@ -922,6 +953,7 @@ class MonitorTopicService:
                 topic_id=topic_id,
                 for_update=True,
             )
+            previous_status = topic.status
             if topic.status == MonitorTopicStatus.ARCHIVED.value:
                 if target != MonitorTopicStatus.ARCHIVED:
                     raise ApplicationError("topic_archived")
@@ -949,6 +981,13 @@ class MonitorTopicService:
                 topic.updated_at = now
             if target in {MonitorTopicStatus.PAUSED, MonitorTopicStatus.ARCHIVED}:
                 self._set_schedules_enabled(topic=topic, enabled=False, now=now)
+            if topic.status != previous_status:
+                reason = {
+                    MonitorTopicStatus.ACTIVE: "resumed",
+                    MonitorTopicStatus.PAUSED: "paused",
+                    MonitorTopicStatus.ARCHIVED: "archived",
+                }[target]
+                self._record_status_event(topic=topic, reason=reason, occurred_at=now)
             version = self._find_version(topic)
             view = self._view(topic, version, source_keys=self._source_keys(topic))
         return view

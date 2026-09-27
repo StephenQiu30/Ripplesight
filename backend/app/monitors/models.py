@@ -208,6 +208,63 @@ class MonitorTopicVersion(Base):
     created_at: Mapped[datetime]
 
 
+class MonitorTopicStatusEvent(Base):
+    __tablename__ = "monitor_topic_status_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_id",
+            "topic_id",
+            "event_sequence",
+            name="monitor_topic_status_events_owner_topic_sequence_key",
+        ),
+        ForeignKeyConstraint(
+            ["owner_id", "topic_id"],
+            ["monitor_topics.owner_id", "monitor_topics.id"],
+            ondelete="CASCADE",
+            name="monitor_topic_status_events_owner_topic_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["topic_id", "topic_rule_version"],
+            ["monitor_topic_versions.topic_id", "monitor_topic_versions.version"],
+            ondelete="CASCADE",
+            deferrable=True,
+            initially="DEFERRED",
+            name="monitor_topic_status_events_rule_version_fkey",
+        ),
+        CheckConstraint(
+            "event_sequence >= 1",
+            name="monitor_topic_status_events_sequence_check",
+        ),
+        CheckConstraint(
+            "topic_rule_version >= 1",
+            name="monitor_topic_status_events_rule_version_check",
+        ),
+        CheckConstraint(
+            "(status = 'paused' AND reason IN "
+            "('created', 'cloned', 'paused', 'source_selection')) "
+            "OR (status = 'active' AND reason = 'resumed') "
+            "OR (status = 'archived' AND reason = 'archived')",
+            name="monitor_topic_status_events_status_reason_check",
+        ),
+        Index(
+            "monitor_topic_status_events_timeline_idx",
+            "owner_id",
+            "topic_id",
+            "occurred_at",
+            "event_sequence",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    owner_id: Mapped[UUID]
+    topic_id: Mapped[UUID]
+    event_sequence: Mapped[int] = mapped_column(Integer)
+    topic_rule_version: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16))
+    reason: Mapped[str] = mapped_column(String(32))
+    occurred_at: Mapped[datetime]
+
+
 class MonitorSchedule(Base):
     __tablename__ = "monitor_schedules"
     __table_args__ = (

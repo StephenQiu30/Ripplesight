@@ -47,6 +47,7 @@ from monitors.models import (
     FollowedAccountAlias,
     MonitorSchedule,
     MonitorTopic,
+    MonitorTopicStatusEvent,
     MonitorTopicVersion,
 )
 from notifications.models import NotificationDelivery, NotificationTarget
@@ -83,6 +84,7 @@ __all__ = [
     "KnowledgeExport",
     "MonitorSchedule",
     "MonitorTopic",
+    "MonitorTopicStatusEvent",
     "MonitorTopicVersion",
     "NotificationDelivery",
     "NotificationTarget",

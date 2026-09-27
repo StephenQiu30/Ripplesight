@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -40,7 +42,7 @@ _TRUNCATE = (
     "notification_targets, content_annotations, reports, "
     "monitor_schedules, outbox_messages, coverage_windows, "
     "jobs, followed_account_aliases, followed_accounts, "
-    "monitor_topic_versions, monitor_topics, "
+    "monitor_topic_status_events, monitor_topic_versions, monitor_topics, "
     "identity_sessions, identity_users"
 )
 
@@ -347,6 +349,15 @@ def test_active_topic_cannot_enable_a_new_source_without_budget(
     current = monitor_topic_client.get(location)
     assert current.json()["current_version"] == 1
     assert current.json()["source_keys"] == ["hackernews"]
+    with factory() as session:
+        events = session.execute(
+            text(
+                "SELECT status, reason FROM monitor_topic_status_events "
+                "WHERE topic_id = :topic_id ORDER BY event_sequence"
+            ),
+            {"topic_id": created.json()["id"]},
+        ).all()
+    assert events == [("paused", "created"), ("active", "resumed")]
 
 
 def test_name_only_edit_keeps_rule_version_and_owner_filter_hides_topic(
@@ -373,6 +384,13 @@ def test_name_only_edit_keeps_rule_version_and_owner_filter_hides_topic(
         assert (
             session.execute(
                 text("SELECT count(*) FROM monitor_topic_versions WHERE topic_id = :topic_id"),
+                {"topic_id": created.json()["id"]},
+            ).scalar_one()
+            == 1
+        )
+        assert (
+            session.execute(
+                text("SELECT count(*) FROM monitor_topic_status_events WHERE topic_id = :topic_id"),
                 {"topic_id": created.json()["id"]},
             ).scalar_one()
             == 1
@@ -469,6 +487,15 @@ def test_topic_list_clone_and_archive_keep_independent_history(
     assert cloned.json()["status"] == "paused"
     assert cloned.json()["current_version"] == 1
     assert cloned.json()["rules"] == created.json()["rules"]
+    with factory() as session:
+        clone_events = session.execute(
+            text(
+                "SELECT event_sequence, status, reason, topic_rule_version "
+                "FROM monitor_topic_status_events WHERE topic_id = :topic_id"
+            ),
+            {"topic_id": cloned.json()["id"]},
+        ).all()
+    assert clone_events == [(1, "paused", "cloned", 1)]
     first_page = monitor_topic_client.get("/api/topics?limit=1")
     assert first_page.status_code == 200
     assert len(first_page.json()["items"]) == 1
@@ -589,6 +616,93 @@ def test_topic_lifecycle_is_idempotent_and_resume_requires_ready_source(
     )
     assert resume_archived.status_code == 409
     assert resume_archived.json()["code"] == "topic_archived"
+    with factory() as session:
+        events = session.execute(
+            text(
+                "SELECT event_sequence, status, reason, topic_rule_version, occurred_at "
+                "FROM monitor_topic_status_events "
+                "WHERE topic_id = :topic_id ORDER BY event_sequence"
+            ),
+            {"topic_id": created.json()["id"]},
+        ).all()
+    assert [tuple(event[:4]) for event in events] == [
+        (1, "paused", "created", 1),
+        (2, "active", "resumed", 2),
+        (3, "paused", "paused", 2),
+        (4, "archived", "archived", 2),
+    ]
+    assert events[0].occurred_at == datetime.fromisoformat(created.json()["created_at"])
+    assert [event.occurred_at for event in events] == sorted(event.occurred_at for event in events)
+    separate_process = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import os
+import sys
+from sqlalchemy import create_engine, text
+
+engine = create_engine(os.environ["HOTKEY_TEST_DATABASE_URL"])
+with engine.connect() as connection:
+    states = connection.execute(
+        text("SELECT status FROM monitor_topic_status_events "
+             "WHERE topic_id = :topic_id ORDER BY event_sequence"),
+        {"topic_id": sys.argv[1]},
+    ).scalars().all()
+print(",".join(states))
+""",
+            created.json()["id"],
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert separate_process.stdout.strip() == "paused,active,paused,archived"
+
+
+def test_removing_all_sources_records_automatic_topic_pause(
+    monitor_topic_client: TestClient,
+) -> None:
+    _initialize(monitor_topic_client)
+    factory = monitor_topic_client.app.state.session_factory
+    with factory.begin() as session:
+        owner_id = session.execute(text("SELECT id FROM identity_users")).scalar_one()
+        SourcePresetService(session).apply_in_transaction(
+            owner_id=owner_id, preset=SOURCE_PRESETS["hackernews"]
+        )
+    created = monitor_topic_client.post(
+        "/api/topics",
+        headers=_csrf_headers(monitor_topic_client),
+        json={**_topic_payload(), "source_keys": ["hackernews"]},
+    )
+    assert created.status_code == 201, created.json()
+    location = created.headers["location"]
+    resumed = monitor_topic_client.post(
+        location + "/resume", headers=_csrf_headers(monitor_topic_client)
+    )
+    assert resumed.status_code == 200, resumed.json()
+    selected_none = monitor_topic_client.patch(
+        location,
+        headers=_csrf_headers(monitor_topic_client),
+        json={**_topic_payload(), "expected_version": 1, "source_keys": []},
+    )
+    assert selected_none.status_code == 200, selected_none.json()
+    assert selected_none.json()["status"] == "paused"
+    assert selected_none.json()["current_version"] == 2
+    with factory() as session:
+        events = session.execute(
+            text(
+                "SELECT event_sequence, status, reason, topic_rule_version "
+                "FROM monitor_topic_status_events WHERE topic_id = :topic_id "
+                "ORDER BY event_sequence"
+            ),
+            {"topic_id": created.json()["id"]},
+        ).all()
+    assert events == [
+        (1, "paused", "created", 1),
+        (2, "active", "resumed", 1),
+        (3, "paused", "source_selection", 2),
+    ]
 
 
 def test_topic_preview_is_local_explainable_and_side_effect_free(
