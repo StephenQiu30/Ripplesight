@@ -18,7 +18,7 @@ Plan 008 见 Acceptance 002 EV-002-020/021：六榜真实双轮、排名/命中�
 
 Plan 039 见 Acceptance 002 EV-002-022：历史 API/页面读真实双轮快照，桌面及 390px 浏览器通过；本卡 `completed`，72 小时与 Codex 另验。
 
-Plan 040 见 Acceptance 002 EV-002-023：旧积压扫描、冻结评论输入、一次无效补偿和进程树回收已在隔离 PostgreSQL/受控子进程验证；默认关闭真实模型。Kafka 分析链、账户费用控制、十来源真实标注和 60 分钟比例未验，本卡 `in_progress`，AC-002-008 未通过。
+Plan 040 见 Acceptance 002 EV-002-023：旧积压扫描、冻结输入、一次无效补偿、进程树回收及 Kafka 到 Worker 的关闭状态已验证；默认关闭真实模型。用户暂不发送真实模型请求；十来源真实标注和 60 分钟比例未验，本卡 `in_progress`，AC-002-008 未通过。
 
 Plan 005 的标注状态与重放技术切片已在隔离 `main` 工作树完成，PostgreSQL 17 全新库的后端全量回归为 **779 passed/17 skipped**，见 Acceptance 002 EV-002-010。旧开发库 3 条历史异常、真实 Codex 样本和远端门禁尚未在该证据中核对；Plan 005 保持 `in_progress`，产品验收不变。
 

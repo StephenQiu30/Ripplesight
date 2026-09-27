@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
+from confluent_kafka import Consumer, Producer
+from confluent_kafka.admin import AdminClient, NewTopic
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -23,6 +26,9 @@ from analysis.services import (
 from core.config import Settings
 from jobs.execution import JobExecutionFailure
 from jobs.schemas import JobAcceptedMessage
+from jobs.services import OutboxEnvelope
+from worker.app import create_job_message_handler
+from worker.messaging import process_message, publish_outbox
 
 
 @dataclass(frozen=True)
@@ -402,6 +408,80 @@ def test_terminal_legacy_job_without_frozen_input_gets_new_frozen_job(
 
     assert len(replacement) == 1 and replacement[0] != legacy_id
     assert _scan(case) == ()
+
+
+def test_analysis_outbox_crosses_kafka_and_worker_fails_closed_without_model(
+    analysis_case: AnalysisCase,
+) -> None:
+    bootstrap = os.getenv("HOTKEY_TEST_KAFKA_BOOTSTRAP_SERVERS")
+    if bootstrap is None:
+        pytest.skip("HOTKEY_TEST_KAFKA_BOOTSTRAP_SERVERS is required")
+    case = analysis_case
+    job_ids = _scan(case)
+    assert len(job_ids) == 1
+    with case.sessions() as session:
+        outbox = session.execute(
+            text(
+                "SELECT id, topic, message_key, event_type, payload "
+                "FROM outbox_messages WHERE aggregate_id = :job"
+            ),
+            {"job": job_ids[0]},
+        ).one()
+    topic = f"hotkey.tests.plan040.{uuid4().hex}"
+    admin = AdminClient({"bootstrap.servers": bootstrap})
+    producer = Producer({"bootstrap.servers": bootstrap})
+    consumer = Consumer(
+        {
+            "bootstrap.servers": bootstrap,
+            "group.id": f"hotkey-tests-plan040-{uuid4().hex}",
+            "enable.auto.commit": False,
+            "auto.offset.reset": "earliest",
+        }
+    )
+    try:
+        admin.create_topics([NewTopic(topic, 1, 1)])[topic].result(10)
+        consumer.subscribe([topic])
+        envelope = OutboxEnvelope(
+            message_id=outbox.id,
+            topic=outbox.topic,
+            message_key=outbox.message_key,
+            event_type=outbox.event_type,
+            schema_version=2,
+            payload=outbox.payload,
+        )
+        publish_outbox(producer, replace(envelope, topic=topic), timeout_seconds=10)
+        deadline = time.monotonic() + 15
+        message = None
+        while time.monotonic() < deadline and message is None:
+            message = consumer.poll(1.0)
+        assert message is not None and message.error() is None
+        executor = AnalysisAnnotateExecutor(
+            case.sessions,
+            Settings(database_url=os.environ["HOTKEY_TEST_DATABASE_URL"], ai_enabled=False),
+            clock=lambda: case.now,
+        )
+        handler = create_job_message_handler(
+            case.sessions,
+            {"analysis.annotate": lambda context: executor.execute(context.message).completion},
+            worker_id="plan040-kafka-test",
+            lease_seconds=60,
+            clock=lambda: case.now,
+        )
+        process_message(consumer, message, {topic: handler})
+        handler(message)  # Replayed delivery must not generate another execution.
+        with case.sessions() as session:
+            status, error_code = session.execute(
+                text("SELECT status, last_error_code FROM jobs WHERE id = :job"),
+                {"job": job_ids[0]},
+            ).one()
+            call_count = session.scalar(
+                text("SELECT count(*) FROM ai_calls WHERE owner_id = :owner"),
+                {"owner": case.owner_id},
+            )
+        assert (status, error_code, call_count) == ("failed", "analysis_unavailable", 0)
+    finally:
+        consumer.close()
+        admin.delete_topics([topic], operation_timeout=10)[topic].result(10)
 
 
 def _post(case: AnalysisCase):
