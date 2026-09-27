@@ -4,7 +4,7 @@
 
 执行方：Codex 实现、受控集成与代码自检；Claude 可参与规划/代码审查；用户负责本人账号、授权与产品决策。用户已要求每个任务结束后提交并推送 main。代码、受控、真实、产品为不同证据等级。
 
-Plan 037 的 RSS 适配器和受控 Job 切片已在隔离 `main` 工作树验证：固定快讯入口、GUID/URL 身份、Feed 更新时间与请求观察时间分开持久化；真实 PostgreSQL 验证重复命中、无匹配、合法空、503 后恢复及快讯/热榜独立预算，真实 Kafka 验证 Outbox 消息无 offset 提交后的重投幂等。全量后端 **823 passed/13 skipped**，见 Acceptance 002 EV-002-008/014。真实原帖命中、按有效节奏两次扫描及 Plan 004 覆盖 API 仍待逐项验证；Plan 037 保持 `in_progress`，不关闭 AC-002-002/004。
+Plan 037 的 RSS 适配器和受控 Job 切片已在隔离 `main` 工作树验证：固定快讯入口、GUID/URL 身份、Feed 更新时间与请求观察时间分开持久化；真实 PostgreSQL 验证重复命中、无匹配、合法空、503 后恢复及快讯/热榜独立预算，真实 Kafka 验证 Outbox 消息无 offset 提交后的重投幂等。全量后端 **823 passed/13 skipped**，见 Acceptance 002 EV-002-008/014。EV-002-015 另记录真实 36Kr 原帖与相隔 1869.549 秒的两次 Job 消费：两轮各 5 个相同 GUID、总内容记录 5 条、每轮观察各 5 条，来源/全局预算各实扣 2。Plan 037 按单来源范围 `completed`；Plan 004 覆盖 API、其他来源和连续 72 小时仍待验证，AC-002-002/004 与 M1 不关闭。
 
 Plan 005 的标注状态与重放技术切片已在隔离 `main` 工作树完成，PostgreSQL 17 全新库的后端全量回归为 **779 passed/17 skipped**，见 Acceptance 002 EV-002-010。旧开发库 3 条历史异常、真实 Codex 样本和远端门禁尚未在该证据中核对；Plan 005 保持 `in_progress`，产品验收不变。
 
