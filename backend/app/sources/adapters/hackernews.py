@@ -251,7 +251,7 @@ class HackerNewsAdapter(HttpSourceAdapter):
             if not isinstance(tree, dict) or _hn_id(tree.get("id")) != story_id:
                 raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
             flattened: list[SourceComment] = []
-            self._flatten(tree.get("children"), story_id, None, flattened)
+            self._flatten(tree.get("children"), story_id, None, None, True, flattened)
             self._comment_cache = tuple(flattened)
         page = self._comment_cache[offset : offset + request.page_size]
         next_offset = offset + len(page)
@@ -266,6 +266,8 @@ class HackerNewsAdapter(HttpSourceAdapter):
         children: object,
         story_id: str,
         parent_id: str | None,
+        root_id: str | None,
+        parent_available: bool,
         out: list[SourceComment],
     ) -> None:
         if children is None:
@@ -276,6 +278,12 @@ class HackerNewsAdapter(HttpSourceAdapter):
             if not isinstance(child, dict) or child.get("type") != "comment":
                 continue
             identifier = _hn_id(child.get("id"))
+            explicit_parent = child.get("parent_id")
+            if explicit_parent is not None and _hn_id(explicit_parent) != (parent_id or story_id):
+                raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
+            child_root_id = identifier if parent_id is None else root_id
+            if child_root_id is None:
+                raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
             text = html_to_text(child.get("text"))
             author = child.get("author") if isinstance(child.get("author"), str) else None
             if text is not None:
@@ -285,6 +293,15 @@ class HackerNewsAdapter(HttpSourceAdapter):
                         external_id=identifier,
                         post_external_id=story_id,
                         parent_comment_external_id=parent_id,
+                        root_comment_external_id=child_root_id,
+                        reply_target_comment_external_id=parent_id,
+                        parent_relation_status=(
+                            "root"
+                            if parent_id is None
+                            else "observed"
+                            if parent_available
+                            else "unavailable"
+                        ),
                         author_external_id=author or None,
                         author_name=author or None,
                         published_at=parse_timestamp(
@@ -295,4 +312,11 @@ class HackerNewsAdapter(HttpSourceAdapter):
                         canonical_url=_ITEM_URL.format(id=identifier),
                     )
                 )
-            self._flatten(child.get("children"), story_id, identifier, out)
+            self._flatten(
+                child.get("children"),
+                story_id,
+                identifier,
+                child_root_id,
+                text is not None,
+                out,
+            )

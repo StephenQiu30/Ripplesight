@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import IntegrityError
 
 from connections.schemas import SourceEntryPoint
 from connections.services import SourceConnectionService
@@ -1030,6 +1031,9 @@ def _seed_comment_context(
         "external_id": "评论身份",
         "post_external_id": "所属作品",
         "parent_comment_external_id": "父评论",
+        "root_comment_external_id": "线程根",
+        "reply_target_comment_external_id": "回复目标",
+        "parent_relation_status": "父节点可用状态",
         "canonical_url": "评论入口",
         "author_external_id": "公开作者身份",
         "author_name": "公开作者昵称",
@@ -1100,6 +1104,9 @@ def _comment_command(
     external_id: str,
     post_external_id: str | None,
     parent_comment_external_id: str | None = None,
+    root_comment_external_id: str | None = None,
+    reply_target_comment_external_id: str | None = None,
+    parent_relation_status: str | None = None,
     author_name: str | None = "楼主",
 ) -> PersistContentPostInput:
     observed_at = datetime.now(UTC) - timedelta(minutes=1)
@@ -1118,6 +1125,12 @@ def _comment_command(
         fields["post_external_id"] = post_external_id
     if parent_comment_external_id is not None:
         fields["parent_comment_external_id"] = parent_comment_external_id
+    if root_comment_external_id is not None:
+        fields["root_comment_external_id"] = root_comment_external_id
+    if reply_target_comment_external_id is not None:
+        fields["reply_target_comment_external_id"] = reply_target_comment_external_id
+    if parent_relation_status is not None:
+        fields["parent_relation_status"] = parent_relation_status
     return PersistContentPostInput(
         job_id=job_id,
         source_operation_id=uuid4(),
@@ -1219,3 +1232,89 @@ def test_comments_keep_post_and_parent_links_even_when_reply_arrives_first(
         persist(external_id="reply-1", post_external_id="post-other")
     with pytest.raises(ValueError, match="post_external_id"):
         persist(external_id="orphan", post_external_id=None)
+
+
+def test_comments_keep_root_reply_target_and_unavailable_parent_gap(
+    content_client: TestClient,
+) -> None:
+    owner_id = _initialize(content_client)
+    connection_id, *_ = _seed_context(content_client, owner_id)
+    policy_id, retention_id, job_id = _seed_comment_context(content_client, owner_id, connection_id)
+    factory = content_client.app.state.session_factory
+
+    def persist(**kwargs: object) -> None:
+        with factory() as session:
+            ContentService(session).persist_comment(
+                owner_id=owner_id,
+                command=_comment_command(
+                    owner_id=owner_id,
+                    connection_id=connection_id,
+                    policy_id=policy_id,
+                    retention_id=retention_id,
+                    job_id=job_id,
+                    post_external_id="post-9",
+                    **kwargs,  # type: ignore[arg-type]
+                ),
+            )
+
+    persist(
+        external_id="reply-1",
+        parent_comment_external_id="deleted-parent",
+        root_comment_external_id="root-1",
+        reply_target_comment_external_id="deleted-parent",
+        parent_relation_status="unavailable",
+    )
+    with factory() as session:
+        assert session.execute(
+            text(
+                "SELECT root.external_id, parent.external_id, target.external_id, "
+                "t.parent_relation_status FROM content_threads t "
+                "JOIN content_records child ON child.id = t.content_id "
+                "LEFT JOIN content_records root ON root.id = t.root_content_id "
+                "LEFT JOIN content_records parent ON parent.id = t.parent_content_id "
+                "LEFT JOIN content_records target ON target.id = t.reply_target_content_id "
+                "WHERE child.external_id = 'reply-1'"
+            )
+        ).one() == ("root-1", "deleted-parent", "deleted-parent", "unavailable")
+
+    persist(external_id="root-1", root_comment_external_id="root-1")
+    persist(
+        external_id="deleted-parent",
+        parent_comment_external_id="root-1",
+        root_comment_external_id="root-1",
+        reply_target_comment_external_id="root-1",
+        parent_relation_status="observed",
+    )
+    with factory() as session:
+        assert session.execute(
+            text(
+                "SELECT child.external_id, root.external_id, t.parent_relation_status "
+                "FROM content_threads t JOIN content_records child ON child.id = t.content_id "
+                "LEFT JOIN content_records root ON root.id = t.root_content_id "
+                "WHERE child.external_id IN ('root-1', 'reply-1') "
+                "ORDER BY child.external_id"
+            )
+        ).all() == [
+            ("reply-1", "root-1", "observed"),
+            ("root-1", "root-1", "root"),
+        ]
+
+    with pytest.raises(ValueError, match="thread"):
+        persist(
+            external_id="reply-1",
+            parent_comment_external_id="deleted-parent",
+            root_comment_external_id="different-root",
+            reply_target_comment_external_id="deleted-parent",
+            parent_relation_status="observed",
+        )
+
+    with pytest.raises(IntegrityError), factory.begin() as session:
+        session.execute(
+            text(
+                "UPDATE content_threads SET parent_relation_status = 'root' "
+                "WHERE owner_id = :owner_id AND content_id = "
+                "(SELECT id FROM content_records WHERE owner_id = :owner_id "
+                "AND external_id = 'reply-1')"
+            ),
+            {"owner_id": owner_id},
+        )

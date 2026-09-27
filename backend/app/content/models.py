@@ -389,7 +389,7 @@ class ContentObservation(Base):
 
 
 class ContentThread(Base):
-    """Links a comment to its post and, for replies, to its parent comment."""
+    """Preserves separate post, root, direct parent and reply-target identities."""
 
     __tablename__ = "content_threads"
     __table_args__ = (
@@ -406,14 +406,32 @@ class ContentThread(Base):
             name="content_threads_owner_post_fkey",
         ),
         ForeignKeyConstraint(
+            ["owner_id", "root_content_id"],
+            ["content_records.owner_id", "content_records.id"],
+            ondelete="CASCADE",
+            name="content_threads_owner_root_fkey",
+        ),
+        ForeignKeyConstraint(
             ["owner_id", "parent_content_id"],
             ["content_records.owner_id", "content_records.id"],
             ondelete="CASCADE",
             name="content_threads_owner_parent_fkey",
         ),
+        ForeignKeyConstraint(
+            ["owner_id", "reply_target_content_id"],
+            ["content_records.owner_id", "content_records.id"],
+            ondelete="CASCADE",
+            name="content_threads_owner_reply_target_fkey",
+        ),
         CheckConstraint(
             "content_id <> post_content_id "
-            "AND (parent_content_id IS NULL OR parent_content_id <> content_id)",
+            "AND (parent_content_id IS NULL OR parent_content_id <> content_id) "
+            "AND (reply_target_content_id IS NULL OR reply_target_content_id <> content_id) "
+            "AND ((parent_content_id IS NULL AND root_content_id IS NOT NULL "
+            "AND root_content_id = content_id AND reply_target_content_id IS NULL "
+            "AND parent_relation_status = 'root') OR (parent_content_id IS NOT NULL "
+            "AND (root_content_id IS NULL OR root_content_id <> content_id) "
+            "AND parent_relation_status IN ('observed', 'unavailable', 'unresolved')))",
             name="content_threads_distinct_check",
         ),
         Index("content_threads_post_idx", "owner_id", "post_content_id", "content_id"),
@@ -422,7 +440,10 @@ class ContentThread(Base):
     owner_id: Mapped[UUID] = mapped_column(primary_key=True)
     content_id: Mapped[UUID] = mapped_column(primary_key=True)
     post_content_id: Mapped[UUID]
+    root_content_id: Mapped[UUID | None]
     parent_content_id: Mapped[UUID | None]
+    reply_target_content_id: Mapped[UUID | None]
+    parent_relation_status: Mapped[str] = mapped_column(String(16))
     created_at: Mapped[datetime]
 
 

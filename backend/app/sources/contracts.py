@@ -335,6 +335,9 @@ class SourceComment(_ContractModel):
     external_id: str = Field(min_length=1, max_length=512)
     post_external_id: str = Field(min_length=1, max_length=512)
     parent_comment_external_id: str | None = Field(min_length=1, max_length=512)
+    root_comment_external_id: str | None = Field(default=None, min_length=1, max_length=512)
+    reply_target_comment_external_id: str | None = Field(default=None, min_length=1, max_length=512)
+    parent_relation_status: Literal["root", "observed", "unavailable", "unresolved"] = "unresolved"
     author_external_id: str | None = Field(min_length=1, max_length=512)
     published_at: datetime | None
     text: str | None = Field(max_length=_MAX_TEXT_LENGTH)
@@ -346,6 +349,8 @@ class SourceComment(_ContractModel):
         "external_id",
         "post_external_id",
         "parent_comment_external_id",
+        "root_comment_external_id",
+        "reply_target_comment_external_id",
         "author_external_id",
     )
     @classmethod
@@ -358,6 +363,23 @@ class SourceComment(_ContractModel):
         if value is not None and value.tzinfo is None:
             raise ValueError("published_at must be timezone-aware")
         return value
+
+    @model_validator(mode="after")
+    def validate_comment_relation(self) -> SourceComment:
+        if self.parent_comment_external_id is None:
+            if (
+                self.root_comment_external_id not in {None, self.external_id}
+                or self.reply_target_comment_external_id is not None
+                or self.parent_relation_status not in {"root", "unresolved"}
+            ):
+                raise ValueError("root comment has an invalid relation")
+        elif (
+            self.root_comment_external_id == self.external_id
+            or self.reply_target_comment_external_id == self.external_id
+            or self.parent_relation_status == "root"
+        ):
+            raise ValueError("reply has an invalid relation")
+        return self
 
 
 type SourceItem = Annotated[SourcePost | SourceComment, Field(discriminator="object_type")]

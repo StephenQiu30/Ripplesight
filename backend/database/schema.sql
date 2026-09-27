@@ -1200,7 +1200,10 @@ CREATE TABLE content_threads (
     owner_id UUID NOT NULL,
     content_id UUID NOT NULL,
     post_content_id UUID NOT NULL,
+    root_content_id UUID,
     parent_content_id UUID,
+    reply_target_content_id UUID,
+    parent_relation_status VARCHAR(16) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
     PRIMARY KEY (owner_id, content_id),
     CONSTRAINT content_threads_owner_content_fkey
@@ -1209,12 +1212,27 @@ CREATE TABLE content_threads (
     CONSTRAINT content_threads_owner_post_fkey
         FOREIGN KEY (owner_id, post_content_id)
         REFERENCES content_records (owner_id, id) ON DELETE CASCADE,
+    CONSTRAINT content_threads_owner_root_fkey
+        FOREIGN KEY (owner_id, root_content_id)
+        REFERENCES content_records (owner_id, id) ON DELETE CASCADE,
     CONSTRAINT content_threads_owner_parent_fkey
         FOREIGN KEY (owner_id, parent_content_id)
+        REFERENCES content_records (owner_id, id) ON DELETE CASCADE,
+    CONSTRAINT content_threads_owner_reply_target_fkey
+        FOREIGN KEY (owner_id, reply_target_content_id)
         REFERENCES content_records (owner_id, id) ON DELETE CASCADE,
     CONSTRAINT content_threads_distinct_check CHECK (
         content_id <> post_content_id
         AND (parent_content_id IS NULL OR parent_content_id <> content_id)
+        AND (reply_target_content_id IS NULL OR reply_target_content_id <> content_id)
+        AND (
+            (parent_content_id IS NULL AND root_content_id IS NOT NULL
+                AND root_content_id = content_id
+                AND reply_target_content_id IS NULL AND parent_relation_status = 'root')
+            OR (parent_content_id IS NOT NULL
+                AND (root_content_id IS NULL OR root_content_id <> content_id)
+                AND parent_relation_status IN ('observed', 'unavailable', 'unresolved'))
+        )
     )
 );
 

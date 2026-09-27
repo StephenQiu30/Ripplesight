@@ -133,8 +133,9 @@ def analysis_case() -> Iterator[AnalysisCase]:
         session.execute(
             text(
                 "INSERT INTO content_threads "
-                "(owner_id, content_id, post_content_id, created_at) "
-                "VALUES (:owner, :comment, :post, :now)"
+                "(owner_id, content_id, post_content_id, root_content_id, "
+                "parent_relation_status, created_at) "
+                "VALUES (:owner, :comment, :post, :comment, 'root', :now)"
             ),
             {"owner": owner_id, "comment": comment_id, "post": content_id, "now": old},
         )
