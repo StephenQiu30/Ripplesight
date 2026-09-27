@@ -32,3 +32,25 @@ export async function getContentRecord(
     ...(options || {}),
   });
 }
+
+/** 复采作品评论 对当前 owner 已入库且仍属于活跃主题的 HN 帖子受理一次有界评论复采。 POST /api/contents/${param0}/comment-runs */
+export async function runContentComments(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: HotKeyAPI.runContentCommentsParams,
+  body: HotKeyAPI.CommentManualRunInput,
+  options?: import("@/request").RequestOptions,
+) {
+  const { content_id: param0, ...queryParams } = params;
+  return request<HotKeyAPI.JobAcceptedView>(
+    `/api/contents/${param0}/comment-runs`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      params: { ...queryParams },
+      data: body,
+      ...(options || {}),
+    },
+  );
+}

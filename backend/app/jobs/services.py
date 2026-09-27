@@ -549,6 +549,33 @@ def load_recent_comment_job_targets_in_transaction(
     )
 
 
+def has_recent_comment_job_target_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    source_key: str,
+    post_external_id: str,
+    since: datetime,
+) -> bool:
+    """Check one owner's comment refresh cadence without exposing Job ORM."""
+    if not session.in_transaction() or since.utcoffset() is None:
+        raise RuntimeError("recent comment job reads require a transaction and aware time")
+    return (
+        session.scalar(
+            select(Job.id)
+            .where(
+                Job.owner_id == owner_id,
+                Job.kind == "source.comments",
+                Job.source_key == source_key,
+                Job.scope["post_external_id"].as_string() == post_external_id,
+                Job.created_at > since,
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
 def load_job_execution_configuration(
     session: Session,
     *,

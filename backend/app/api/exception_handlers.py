@@ -57,6 +57,13 @@ APPLICATION_ERRORS: Mapping[str, PublicError] = {
     "connection_version_conflict": PublicError(
         409, "connection_version_conflict", "连接版本已变更且需要重新验证"
     ),
+    "comments_not_ready": PublicError(409, "comments_not_ready", "当前作品或来源尚不支持评论复采"),
+    "comments_rate_limited": PublicError(
+        409, "comments_rate_limited", "此帖的评论复采间隔尚未结束"
+    ),
+    "comments_budget_exhausted": PublicError(
+        409, "comments_budget_exhausted", "当前来源或全局请求额度不足"
+    ),
     "csrf_invalid": PublicError(403, "csrf_invalid", "请求安全校验失败"),
     "database_unavailable": PublicError(503, "database_unavailable", "数据库暂不可用"),
     "identity_already_initialized": PublicError(

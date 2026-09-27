@@ -79,6 +79,10 @@ class HotlistSnapshotSummaryView(OutputModel):
     gap_count: int = Field(ge=0)
 
 
+class CommentManualRunInput(InputModel):
+    operation_id: UUID
+
+
 class CommentCollectionRunInput(InputModel):
     """Frozen input for accepting one bounded comments collection job."""
 

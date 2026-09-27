@@ -397,6 +397,32 @@ class ContentService:
         self._session = session
         self._clock = clock or (lambda: datetime.now(UTC))
 
+    def readable_post_for_comment_run_in_transaction(
+        self, *, owner_id: UUID, content_id: UUID, now: datetime
+    ) -> tuple[ContentRecord, ContentVersion | None]:
+        """Lock one owner-visible post while a comments Job is accepted."""
+        if not self._session.in_transaction() or now.utcoffset() is None:
+            raise RuntimeError("comment target lookup requires a transaction and aware time")
+        post = self._session.scalar(
+            select(ContentRecord)
+            .where(ContentRecord.owner_id == owner_id, ContentRecord.id == content_id)
+            .with_for_update()
+        )
+        if post is None:
+            raise ApplicationError("resource_not_found")
+        projected = self._readable_observations(
+            owner_id=owner_id, content_ids={content_id}, now=now
+        ).get(content_id)
+        if projected is None:
+            raise ApplicationError("resource_not_found")
+        observation, _ = projected
+        version = (
+            self._session.get(ContentVersion, observation.content_version_id)
+            if observation.content_version_id is not None
+            else None
+        )
+        return post, version
+
     def collection_counts_in_transaction(
         self, *, owner_id: UUID, job_ids: tuple[UUID, ...]
     ) -> tuple[CollectionContentCountView, ...]:

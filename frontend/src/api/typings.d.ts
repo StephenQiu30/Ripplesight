@@ -128,6 +128,11 @@ declare namespace HotKeyAPI {
 
   type CollectionScanKind = "new_scan" | "refresh" | "backfill";
 
+  type CommentManualRunInput = {
+    /** Operation Id */
+    operation_id: string;
+  };
+
   type ContentDiscoveryView = {
     /** Job Id */
     job_id: string;
@@ -959,6 +964,10 @@ declare namespace HotKeyAPI {
 
   type retryCollectionJobParams = {
     job_id: string;
+  };
+
+  type runContentCommentsParams = {
+    content_id: string;
   };
 
   type runMonitorTopicParams = {
