@@ -165,6 +165,64 @@ def test_old_hn_post_manual_comments_are_accepted_once(request: pytest.FixtureRe
         assert session.scalar(text("SELECT count(*) FROM outbox_messages")) == 2
 
 
+def test_comment_refresh_readiness_is_read_only_and_tracks_admission(
+    request: pytest.FixtureRequest,
+) -> None:
+    client: TestClient = request.getfixturevalue("_topic_client")
+    content_id = _seed_old_hn_post(client)
+    route = f"/api/contents/{content_id}/comment-run-readiness"
+    assert client.get(f"/api/contents/{uuid4()}/comment-run-readiness").status_code == 404
+    ready = client.get(route)
+    assert ready.status_code == 200, ready.json()
+    assert ready.json() == {"supported": True, "available": True, "reason": None}
+    with client.app.state.session_factory() as session:
+        assert session.scalar(text("SELECT count(*) FROM jobs WHERE kind = 'source.comments'")) == 0
+        with pytest.raises(ApplicationError, match="resource_not_found"):
+            CommentManualRunService(session).readiness(owner_id=uuid4(), content_id=content_id)
+    with client.app.state.session_factory.begin() as session:
+        session.execute(
+            text(
+                "UPDATE resource_budget_policies SET enabled = false "
+                "WHERE budget_key = 'source.hackernews.network.daily'"
+            )
+        )
+    assert client.get(route).json() == {
+        "supported": True,
+        "available": False,
+        "reason": "comments_budget_exhausted",
+    }
+    with client.app.state.session_factory.begin() as session:
+        session.execute(
+            text(
+                "UPDATE resource_budget_policies SET enabled = true "
+                "WHERE budget_key = 'source.hackernews.network.daily'"
+            )
+        )
+    accepted = client.post(
+        f"/api/contents/{content_id}/comment-runs",
+        headers=_csrf_headers(client),
+        json={"operation_id": str(uuid4())},
+    )
+    assert accepted.status_code == 202, accepted.json()
+    assert client.get(route).json() == {
+        "supported": True,
+        "available": False,
+        "reason": "comments_rate_limited",
+    }
+    with client.app.state.session_factory.begin() as session:
+        session.execute(
+            text(
+                "UPDATE source_access_policies SET enabled = false "
+                "WHERE source_key = 'hackernews' AND capability = 'comments'"
+            )
+        )
+    assert client.get(route).json() == {
+        "supported": False,
+        "available": False,
+        "reason": "comments_not_ready",
+    }
+
+
 def test_manual_comments_reject_unknown_content_and_frequency(
     request: pytest.FixtureRequest,
 ) -> None:

@@ -13,6 +13,7 @@ from api.dependencies import (
 )
 from content.schemas import (
     CommentManualRunInput,
+    CommentRunReadinessView,
     ContentCommentView,
     ContentRecordDetailView,
     ContentRecordSummaryView,
@@ -108,6 +109,29 @@ def list_content_comments(
     )
     response.headers["cache-control"] = "no-store"
     return PageView(items=items, next_cursor=next_cursor)
+
+
+@router.get(
+    "/{content_id}/comment-run-readiness",
+    operation_id="getContentCommentRunReadiness",
+    response_model=CommentRunReadinessView,
+    status_code=status.HTTP_200_OK,
+    summary="读取评论复采资格",
+    description="只读核对当前作品、来源、主题、预算与频次; 实际受理时重新核对。",
+    responses={
+        404: {"model": ErrorView, "description": "作品不存在或不可访问"},
+        **_COMMON_READ_RESPONSES,
+    },
+)
+def get_content_comment_run_readiness(
+    content_id: UUID,
+    response: Response,
+    service: CommentManualRunServiceDependency,
+    identity: AuthenticatedIdentityDependency,
+) -> CommentRunReadinessView:
+    readiness = service.readiness(owner_id=identity.view.user.id, content_id=content_id)
+    response.headers["cache-control"] = "no-store"
+    return readiness
 
 
 @router.post(

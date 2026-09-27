@@ -83,6 +83,14 @@ class CommentManualRunInput(InputModel):
     operation_id: UUID
 
 
+class CommentRunReadinessView(OutputModel):
+    supported: bool
+    available: bool
+    reason: (
+        Literal["comments_not_ready", "comments_budget_exhausted", "comments_rate_limited"] | None
+    )
+
+
 class CommentCollectionRunInput(InputModel):
     """Frozen input for accepting one bounded comments collection job."""
 

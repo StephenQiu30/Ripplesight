@@ -443,7 +443,7 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
         <ContentVersionSection version={observation.content_version ?? null} />
 
         {content.object_type === "post" ? (
-          <CommentThreadList postId={content.id} />
+          <CommentThreadList key={content.id} postId={content.id} />
         ) : null}
 
         <VersionHistory history={content.version_history} />
