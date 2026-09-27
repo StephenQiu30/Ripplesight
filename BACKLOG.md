@@ -24,7 +24,7 @@ Plan 038 见 Acceptance 002 EV-002-024—028：HN 评论参数已进入版本化
 
 Plan 041 见 Acceptance 002 EV-002-029—032：评论只读 API 与详情页已按根/父节点关系分页展示，父节点缺失和来源尾段未确认显式提示，受控 PostgreSQL 与桌面/390px 浏览器核对。显式复采按钮和资格核对已实现，受控旧帖浏览器点击受理并在重入后显示频次禁用。标注详情已按主题、正文、规则和提示词版本区分当前与历史结果；作品列表按来源、主题、时间窗及当前标注状态筛选，缺发布时间回退首次发现，游标绑定筛选条件。`4ecced3d` 已推送 `main`，远端 backend/contract/frontend/runtime 四项成功，backend **939 passed、8 skipped**。真实 HN 产品阅读样本仍待验，本卡 `in_progress`。
 
-Plan 006 采集时效技术切片见 Acceptance 002 EV-002-033：owner 可见到期窗、完成/未完成 Job 的删失中位数、静默/来源限流排除与 143/144 热榜桶已由只读 API/CLI 和隔离 PostgreSQL 覆盖；运行 OpenAPI 生成客户端及本地门禁通过。分析需时起点/首次有效结论、Codex 实际限流排除、热榜窗口起点间隔/相位冻结及十来源真实 ID 复算仍待完成，当前响应明确标为未验；Plan006 `in_progress`，不可据此关闭 M1 指标。
+Plan 006 采集时效技术切片见 Acceptance 002 EV-002-033：owner 可见到期窗、完成/未完成 Job 的删失中位数、静默/来源限流排除与 143/144 热榜桶已由只读 API/CLI 和隔离 PostgreSQL 覆盖；运行 OpenAPI 生成客户端及本地门禁通过。首个 `f0af4370` 的 CI backend 暴露配置读取错误，`03238329` 修复后远端 backend **945 passed、8 skipped**，contract/runtime 成功，前端工作流在 `f0af4370` 成功。分析需时起点/首次有效结论、Codex 实际限流排除、热榜窗口起点间隔/相位冻结及十来源真实 ID 复算仍待完成，当前响应明确标为未验；Plan006 `in_progress`，不可据此关闭 M1 指标。
 
 Plan 005 的标注状态与重放技术切片已在隔离 `main` 工作树完成，PostgreSQL 17 全新库的后端全量回归为 **779 passed/17 skipped**，见 Acceptance 002 EV-002-010。旧开发库 3 条历史异常、真实 Codex 样本和远端门禁尚未在该证据中核对；Plan 005 保持 `in_progress`，产品验收不变。
 
