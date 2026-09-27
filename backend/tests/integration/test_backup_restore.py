@@ -283,6 +283,7 @@ def test_candidate_backup_uses_real_snapshot_archive_and_minio_inventory(
     assert manifest.secrets_included is False
     assert set(table_counts) == {
         "ai_calls",
+        "collection_due_windows",
         "content_annotations",
         "coverage_windows",
         "content_discoveries",
