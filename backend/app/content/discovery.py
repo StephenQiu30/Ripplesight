@@ -592,6 +592,8 @@ class KeywordDiscoveryPageCommitService:
             "play_count": post.play_count,
             "danmaku_count": post.danmaku_count,
         }
+        if post.identity_basis is not None:
+            fields["identity_basis"] = post.identity_basis
         if post.canonical_url is not None:
             fields["canonical_url"] = post.canonical_url
         if post.author_external_id is not None:

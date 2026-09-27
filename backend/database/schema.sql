@@ -953,6 +953,8 @@ CREATE TABLE content_records (
     ),
     native_scope VARCHAR(512) CHECK (native_scope IS NULL OR native_scope <> ''),
     external_id VARCHAR(512) NOT NULL CHECK (external_id <> ''),
+    identity_basis VARCHAR(16) CONSTRAINT content_records_identity_basis_check
+        CHECK (identity_basis IN ('guid', 'url_fallback')),
     created_at TIMESTAMPTZ NOT NULL,
     CONSTRAINT content_records_owner_id_key UNIQUE (owner_id, id),
     CONSTRAINT content_records_source_identity_key

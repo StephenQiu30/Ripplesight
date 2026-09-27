@@ -87,6 +87,7 @@ _ALLOWED_FIELDS = frozenset(
     {
         "object_type",
         "external_id",
+        "identity_basis",
         "canonical_url",
         "author_external_id",
         "author_name",
@@ -574,6 +575,7 @@ class ContentService:
             object_type="post",
             native_scope=command.native_scope,
             external_id=external_id,
+            identity_basis=self._identity_basis(fields),
             observation_values=self._observation_values(fields),
             version_values=_content_version_values(fields),
             now=now,
@@ -764,6 +766,7 @@ class ContentService:
         observation_values: dict[str, object],
         version_values: _ContentVersionValues | None,
         now: datetime,
+        identity_basis: str | None = None,
     ) -> ContentRecordDetailView:
         job = load_content_job_context(
             self._session,
@@ -783,6 +786,7 @@ class ContentService:
             native_scope=native_scope,
             external_id=external_id,
             created_at=now,
+            identity_basis=identity_basis,
         )
         content_version = self._find_or_create_content_version(
             owner_id=owner_id,
@@ -1032,6 +1036,15 @@ class ContentService:
         return items, next_cursor
 
     @staticmethod
+    def _identity_basis(fields: Mapping[str, object]) -> str | None:
+        value = fields.get("identity_basis")
+        if value is None:
+            return None
+        if not isinstance(value, str) or value not in {"guid", "url_fallback"}:
+            raise ValueError("identity_basis must be guid or url_fallback")
+        return str(value)
+
+    @staticmethod
     def _observation_values(fields: Mapping[str, object]) -> dict[str, object]:
         published_at, published_at_fractional_digits = _optional_datetime_with_precision(
             fields, "published_at"
@@ -1055,6 +1068,7 @@ class ContentService:
         native_scope: str | None,
         external_id: str,
         created_at: datetime,
+        identity_basis: str | None = None,
     ) -> ContentRecord:
         content_id = uuid4()
         inserted_id = self._session.scalar(
@@ -1066,6 +1080,7 @@ class ContentService:
                 object_type=object_type,
                 native_scope=native_scope,
                 external_id=external_id,
+                identity_basis=identity_basis,
                 created_at=created_at,
             )
             .on_conflict_do_nothing(constraint="content_records_source_identity_key")
@@ -1079,6 +1094,7 @@ class ContentService:
                 object_type=object_type,
                 native_scope=native_scope,
                 external_id=external_id,
+                identity_basis=identity_basis,
                 created_at=created_at,
             )
         conditions = [
@@ -1095,6 +1111,11 @@ class ContentService:
         existing = self._session.scalar(select(ContentRecord).where(*conditions).with_for_update())
         if existing is None:
             raise RuntimeError("conflicting content identity is not visible")
+        if identity_basis is not None:
+            if existing.identity_basis is None:
+                existing.identity_basis = identity_basis
+            elif existing.identity_basis != identity_basis:
+                raise ValueError("conflicting content identity basis")
         return existing
 
     def _find_or_create_content_version(
@@ -1665,6 +1686,7 @@ class ContentService:
             object_type=content.object_type,
             native_scope=content.native_scope,
             external_id=content.external_id,
+            identity_basis=content.identity_basis,
             latest_observation=cls._observation_view(observation, content_version),
             current_visibility=current_visibility,
             discovery_count=discovery_count,

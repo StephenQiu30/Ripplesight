@@ -416,6 +416,7 @@ class ContentRecordSummaryView(OutputModel):
     object_type: Literal["post", "comment", "webpage"]
     native_scope: str | None
     external_id: str
+    identity_basis: Literal["guid", "url_fallback"] | None
     latest_observation: ContentObservationView
     current_visibility: ContentVisibilityView | None
     discovery_count: int = Field(ge=1)

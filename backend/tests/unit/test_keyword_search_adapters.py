@@ -407,16 +407,26 @@ def test_hn_search_rejects_redirect_outside_fixed_endpoints(redirect_to: str) ->
     assert len(seen) == 1
 
 
-def test_rss_factory_uses_connection_feed_template() -> None:
+def test_google_news_factory_requires_fixed_feed_template() -> None:
     adapter = _factory(
         "google_news",
-        feed_url_template="https://news.google.com/rss/search?q={query}",
+        feed_url_template=(
+            "https://news.google.com/rss/search?q={query}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+        ),
         allowed_hosts=("news.google.com",),
     )
 
     assert isinstance(adapter, RssSourceAdapter)
     assert adapter.source_key == "google_news"
-    assert adapter._template == "https://news.google.com/rss/search?q={query}"
+    assert adapter._template == (
+        "https://news.google.com/rss/search?q={query}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    )
+    with pytest.raises(ValueError, match="Google News"):
+        _factory(
+            "google_news",
+            feed_url_template="https://news.google.com/rss/search?q={query}",
+            allowed_hosts=("news.google.com",),
+        )
 
 
 def test_36kr_factory_requires_newsflashes_on_local_rsshub() -> None:
