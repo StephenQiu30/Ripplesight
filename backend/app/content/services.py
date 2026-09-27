@@ -33,11 +33,14 @@ from content.models import (
     ContentVersion,
     ContentVersionRelation,
     ContentVisibilityObservation,
+    HotlistSnapshot,
 )
 from content.schemas import (
     AnalysisCommentContentView,
     AnalysisPostContentView,
     CollectionContentCountView,
+    CollectionContentFactView,
+    CollectionSnapshotFactView,
     CommentCollectionRunInput,
     ContentDiscoveryView,
     ContentMetricView,
@@ -396,9 +399,27 @@ class ContentService:
     def collection_counts_in_transaction(
         self, *, owner_id: UUID, job_ids: tuple[UUID, ...]
     ) -> tuple[CollectionContentCountView, ...]:
-        """Count committed observations and first ingestion by stable source identity."""
+        """Preserve the existing count projection for callers that do not need content IDs."""
         if not self._session.in_transaction():
             raise RuntimeError("collection count reads require the caller's transaction")
+        return tuple(
+            CollectionContentCountView(
+                job_id=fact.job_id,
+                observation_count=fact.observation_count,
+                ingested_count=fact.ingested_count,
+                first_ingested_count=fact.first_ingested_count,
+                deduplicated_count=fact.deduplicated_count,
+                content_version_ids=fact.content_version_ids,
+            )
+            for fact in self.collection_facts_in_transaction(owner_id=owner_id, job_ids=job_ids)
+        )
+
+    def collection_facts_in_transaction(
+        self, *, owner_id: UUID, job_ids: tuple[UUID, ...]
+    ) -> tuple[CollectionContentFactView, ...]:
+        """Return per-Job observation facts and stable IDs in two owner-scoped reads."""
+        if not self._session.in_transaction():
+            raise RuntimeError("collection fact reads require the caller's transaction")
         if not job_ids:
             return ()
         observations = self._session.scalars(
@@ -407,6 +428,9 @@ class ContentService:
                 ContentObservation.job_id.in_(job_ids),
             )
         ).all()
+        by_job: dict[UUID, list[ContentObservation]] = {job_id: [] for job_id in job_ids}
+        for item in observations:
+            by_job[item.job_id].append(item)
         candidate_ids = {item.content_id for item in observations}
         first_by_content: dict[UUID, ContentObservation] = {}
         if candidate_ids:
@@ -423,27 +447,57 @@ class ContentService:
                     previous.id,
                 ):
                     first_by_content[item.content_id] = item
+        first_ingested_by_job = {job_id: 0 for job_id in job_ids}
+        for first in first_by_content.values():
+            if first.job_id in first_ingested_by_job:
+                first_ingested_by_job[first.job_id] += 1
         return tuple(
-            CollectionContentCountView(
+            CollectionContentFactView(
                 job_id=job_id,
-                observation_count=sum(item.job_id == job_id for item in observations),
-                ingested_count=len(
-                    {item.content_id for item in observations if item.job_id == job_id}
-                ),
-                first_ingested_count=sum(
-                    item.job_id == job_id for item in first_by_content.values()
-                ),
-                deduplicated_count=sum(item.job_id == job_id for item in observations)
-                - sum(item.job_id == job_id for item in first_by_content.values()),
+                observation_count=len(by_job[job_id]),
+                ingested_count=len({item.content_id for item in by_job[job_id]}),
+                first_ingested_count=first_ingested_by_job[job_id],
+                deduplicated_count=len(by_job[job_id]) - first_ingested_by_job[job_id],
                 content_version_ids=tuple(
                     sorted(
                         {
                             item.content_version_id
-                            for item in observations
-                            if item.job_id == job_id and item.content_version_id is not None
+                            for item in by_job[job_id]
+                            if item.content_version_id is not None
                         },
                         key=str,
                     )
+                ),
+                content_ids=tuple(sorted({item.content_id for item in by_job[job_id]}, key=str)),
+                analysis_targets_complete=all(
+                    item.content_version_id is not None for item in by_job[job_id]
+                ),
+            )
+            for job_id in job_ids
+        )
+
+    def collection_snapshot_facts_in_transaction(
+        self, *, owner_id: UUID, job_ids: tuple[UUID, ...]
+    ) -> tuple[CollectionSnapshotFactView, ...]:
+        """Return one observed hotlist snapshot per Job, preserving empty versus absent."""
+        if not self._session.in_transaction():
+            raise RuntimeError("collection snapshot reads require the caller's transaction")
+        if not job_ids:
+            return ()
+        snapshots = self._session.scalars(
+            select(HotlistSnapshot).where(
+                HotlistSnapshot.owner_id == owner_id,
+                HotlistSnapshot.job_id.in_(job_ids),
+            )
+        ).all()
+        by_job = {snapshot.job_id: snapshot for snapshot in snapshots}
+        return tuple(
+            CollectionSnapshotFactView(
+                job_id=job_id,
+                snapshot_id=by_job[job_id].id if job_id in by_job else None,
+                entry_count=by_job[job_id].entry_count if job_id in by_job else None,
+                observed_at=(
+                    by_job[job_id].observed_at.astimezone(UTC) if job_id in by_job else None
                 ),
             )
             for job_id in job_ids

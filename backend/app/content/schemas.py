@@ -29,6 +29,18 @@ class CollectionContentCountView(OutputModel):
     content_version_ids: tuple[UUID, ...]
 
 
+class CollectionContentFactView(CollectionContentCountView):
+    content_ids: tuple[UUID, ...]
+    analysis_targets_complete: bool
+
+
+class CollectionSnapshotFactView(OutputModel):
+    job_id: UUID
+    snapshot_id: UUID | None
+    entry_count: int | None = Field(ge=0)
+    observed_at: datetime | None
+
+
 class HotlistEntryView(OutputModel):
     rank: int
     title: str

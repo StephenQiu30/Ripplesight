@@ -15,6 +15,7 @@ from content.hotlist import HotlistService
 from content.services import ContentService
 from core.errors import DependencyUnavailableError
 from identity.services import AuthenticatedIdentity, IdentityService
+from jobs.coverage import CollectionCoverageQueryService
 from jobs.services import JobService
 from monitors.runs import MonitorTopicRunService
 from monitors.services import MonitorTopicService
@@ -57,6 +58,16 @@ def get_job_service(session: SessionDependency) -> JobService:
 
 
 JobServiceDependency = Annotated[JobService, Depends(get_job_service)]
+
+
+def get_collection_coverage_service(session: SessionDependency) -> CollectionCoverageQueryService:
+    return CollectionCoverageQueryService(session)
+
+
+CollectionCoverageServiceDependency = Annotated[
+    CollectionCoverageQueryService,
+    Depends(get_collection_coverage_service),
+]
 
 
 def get_webpage_collection_service(session: SessionDependency) -> WebPageCollectionService:

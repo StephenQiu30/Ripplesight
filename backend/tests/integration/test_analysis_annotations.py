@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import os
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
@@ -17,8 +19,8 @@ from content.schemas import AnalysisPostContentView
 
 
 @pytest.fixture
-def annotation_context() -> tuple[
-    sessionmaker[Session], UUID, UUID, AnalysisPostContentView, UUID, UUID, datetime
+def annotation_context() -> Iterator[
+    tuple[sessionmaker[Session], UUID, UUID, AnalysisPostContentView, UUID, UUID, datetime]
 ]:
     database_url = os.getenv("HOTKEY_TEST_DATABASE_URL")
     if database_url is None:
@@ -144,6 +146,88 @@ def _persist(
             results=(result,),
             created_at=at or now,
         )
+
+
+def test_collection_analysis_batch_uses_persisted_prompt_and_rejects_ambiguity(
+    annotation_context: tuple[
+        sessionmaker[Session], UUID, UUID, AnalysisPostContentView, UUID, UUID, datetime
+    ],
+) -> None:
+    sessions, owner_id, topic_id, post, _, valid_call_id, now = annotation_context
+    collection_job_id = uuid4()
+    with sessions() as session, session.begin():
+        session.execute(
+            text(
+                "INSERT INTO jobs (id, owner_id, operation_id, kind, configuration_ref, "
+                "configuration_version, source_key, source_capability, scope, "
+                "request_fingerprint, status, created_at, updated_at) VALUES "
+                "(:id, :owner, :operation, 'keyword.search', :ref, 1, 'bilibili', "
+                "'search', '{}'::jsonb, :fingerprint, 'queued', :now, :now)"
+            ),
+            {
+                "id": collection_job_id,
+                "owner": owner_id,
+                "operation": uuid4(),
+                "ref": f"topic:{topic_id}",
+                "fingerprint": b"c" * 32,
+                "now": now,
+            },
+        )
+    _persist(
+        annotation_context,
+        AnnotationWrite(
+            content_version_id=post.content_version_id,
+            ai_call_id=valid_call_id,
+            status=AnnotationStatus.ANNOTATED,
+            result_state=AnnotationResultState.VALID,
+            relevant=False,
+            relevance_reason="不同主题",
+            summary="内容讨论另一主题",
+        ),
+    )
+    targets = {collection_job_id: (topic_id, 1, (post.content_version_id,))}
+    with sessions() as session, session.begin():
+        counts = AnalysisService(session).collection_analysis_counts_in_transaction(
+            owner_id=owner_id, targets_by_job=targets
+        )
+        foreign = AnalysisService(session).collection_analysis_counts_in_transaction(
+            owner_id=uuid4(), targets_by_job=targets
+        )
+    count = counts[collection_job_id]
+    assert count is not None
+    assert count.annotated_count == 1
+    assert foreign[collection_job_id] is None
+
+    with sessions() as session, session.begin():
+        session.execute(
+            text(
+                "INSERT INTO jobs (id, owner_id, operation_id, kind, configuration_ref, "
+                "configuration_version, scope, request_fingerprint, status, created_at, "
+                "updated_at) VALUES (:id, :owner, :operation, 'analysis.annotate', :ref, "
+                "1, CAST(:scope AS jsonb), :fingerprint, 'queued', :now, :now)"
+            ),
+            {
+                "id": uuid4(),
+                "owner": owner_id,
+                "operation": uuid4(),
+                "ref": f"topic:{topic_id}",
+                "scope": json.dumps(
+                    {
+                        "topic_id": str(topic_id),
+                        "topic_rule_version": 1,
+                        "prompt_version": "v2",
+                        "content_version_ids": json.dumps([str(post.content_version_id)]),
+                    }
+                ),
+                "fingerprint": b"d" * 32,
+                "now": now,
+            },
+        )
+    with sessions() as session, session.begin():
+        ambiguous = AnalysisService(session).collection_analysis_counts_in_transaction(
+            owner_id=owner_id, targets_by_job=targets
+        )
+    assert ambiguous[collection_job_id] is None
 
 
 def test_concurrent_invalid_to_valid_keeps_audit_and_rejects_old_failure(

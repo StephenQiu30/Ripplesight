@@ -48,7 +48,11 @@ from jobs.schemas import (
     JobStatus,
     JobView,
 )
-from jobs.services import JobService, load_job_execution_configuration
+from jobs.services import (
+    JobService,
+    load_content_job_contexts,
+    load_job_execution_configuration,
+)
 from monitors.services import MonitorTopicService, NormalizedMonitorRules, evaluate_monitor_rules
 
 _ANALYSIS_OPERATION_NAMESPACE = UUID("16cfeef5-e41d-43a2-8212-4e21cc6f4c85")
@@ -56,6 +60,8 @@ _MAX_BATCH_ITEMS = 30
 _MAX_SERIALIZED_CHARACTERS = 24_000
 _MAX_BODY_CHARACTERS = 1_500
 _MAX_COMMENTS_PER_POST = 50
+_MAX_COLLECTION_ANALYSIS_JOBS = 100
+_ANNOTATION_READ_BATCH_SIZE = 500
 
 
 @dataclass(frozen=True, slots=True)
@@ -258,6 +264,163 @@ def analysis_failure(error: AiCallError, *, now: datetime) -> JobExecutionFailur
 class AnalysisService:
     def __init__(self, session: Session) -> None:
         self._session = session
+
+    def collection_analysis_counts_in_transaction(
+        self,
+        *,
+        owner_id: UUID,
+        targets_by_job: Mapping[UUID, tuple[UUID, int, tuple[UUID, ...]]],
+    ) -> dict[UUID, WindowAnnotationCountView | None]:
+        """Count frozen analysis targets for a bounded page of collection jobs.
+
+        A missing or conflicting prompt identity is unknown, not a pending zero.
+        Every target version must have a persisted annotation or analysis Job scope
+        identifying the same prompt version before its Job can be counted.
+        The caller must supply a complete, proven target set; an empty tuple is
+        treated as a confirmed zero only under that contract.
+        """
+        if not self._session.in_transaction():
+            raise RuntimeError("collection analysis reads require the caller's transaction")
+        if len(targets_by_job) > _MAX_COLLECTION_ANALYSIS_JOBS:
+            raise ValueError("collection analysis reads allow at most 100 jobs")
+        if not targets_by_job:
+            return {}
+
+        contexts = load_content_job_contexts(
+            self._session, owner_id=owner_id, job_ids=set(targets_by_job)
+        )
+        zero = WindowAnnotationCountView(
+            total_count=0,
+            annotated_count=0,
+            pending_count=0,
+            failed_count=0,
+            abnormal_count=0,
+        )
+        result: dict[UUID, WindowAnnotationCountView | None] = {
+            job_id: None for job_id in targets_by_job
+        }
+        known: dict[UUID, tuple[UUID, int, set[UUID]]] = {}
+        targets_by_scope: dict[tuple[UUID, int], set[UUID]] = {}
+        for job_id, (topic_id, rule_version, version_ids) in targets_by_job.items():
+            if len(set(version_ids)) != len(version_ids):
+                raise ValueError("collection analysis content versions must be distinct")
+            context = contexts.get(job_id)
+            if context is None or rule_version < 1:
+                continue
+            if context.configuration_ref.startswith("topic:") and (
+                context.configuration_ref != f"topic:{topic_id}"
+                or context.configuration_version != rule_version
+            ):
+                continue
+            if not version_ids:
+                result[job_id] = zero
+                continue
+            versions = set(version_ids)
+            known[job_id] = (topic_id, rule_version, versions)
+            targets_by_scope.setdefault((topic_id, rule_version), set()).update(versions)
+        if not known:
+            return result
+
+        prompt_by_target: dict[tuple[UUID, int, UUID], set[str]] = {}
+        annotation_states: dict[tuple[UUID, int, str, UUID], str] = {}
+        all_versions = sorted(
+            {version for versions in targets_by_scope.values() for version in versions},
+            key=str,
+        )
+        topic_ids = {topic_id for topic_id, _ in targets_by_scope}
+        rule_versions = {rule_version for _, rule_version in targets_by_scope}
+        for start in range(0, len(all_versions), _ANNOTATION_READ_BATCH_SIZE):
+            batch = all_versions[start : start + _ANNOTATION_READ_BATCH_SIZE]
+            rows = self._session.execute(
+                select(
+                    ContentAnnotation.topic_id,
+                    ContentAnnotation.topic_rule_version,
+                    ContentAnnotation.content_version_id,
+                    ContentAnnotation.prompt_version,
+                    ContentAnnotation.result_state,
+                ).where(
+                    ContentAnnotation.owner_id == owner_id,
+                    ContentAnnotation.topic_id.in_(topic_ids),
+                    ContentAnnotation.topic_rule_version.in_(rule_versions),
+                    ContentAnnotation.content_version_id.in_(batch),
+                )
+            ).all()
+            for topic_id, rule_version, version_id, prompt_version, state in rows:
+                if version_id not in targets_by_scope.get((topic_id, rule_version), ()):
+                    continue
+                prompt_by_target.setdefault((topic_id, rule_version, version_id), set()).add(
+                    prompt_version
+                )
+                annotation_states[(topic_id, rule_version, prompt_version, version_id)] = state
+
+        failed_targets: set[tuple[UUID, int, str, UUID]] = set()
+        invalid_scopes: set[tuple[UUID, int]] = set()
+        # The jobs domain owns its ORM; read its owner-scoped DTOs once for the page.
+        analysis_jobs = CollectionDueWindowService(self._session).list_analysis_jobs_in_transaction(
+            owner_id=owner_id, topic_ids=topic_ids
+        )
+        for job in analysis_jobs:
+            raw_topic = job.scope.get("topic_id")
+            raw_rule = job.scope.get("topic_rule_version")
+            if not isinstance(raw_rule, int) or isinstance(raw_rule, bool):
+                continue
+            try:
+                scope_key = (UUID(str(raw_topic)), raw_rule)
+            except ValueError:
+                continue
+            candidate_versions = targets_by_scope.get(scope_key)
+            if candidate_versions is None:
+                continue
+            try:
+                scope = AnalysisJobScope.from_job_scope(job.scope)
+            except (TypeError, ValueError, ValidationError):
+                invalid_scopes.add(scope_key)
+                continue
+            matched = candidate_versions.intersection(scope.content_version_ids)
+            for version_id in matched:
+                prompt_by_target.setdefault((*scope_key, version_id), set()).add(
+                    scope.prompt_version
+                )
+                if job.status in {
+                    JobStatus.FAILED,
+                    JobStatus.PARTIALLY_SUCCEEDED,
+                    JobStatus.CANCELLED,
+                }:
+                    failed_targets.add((*scope_key, scope.prompt_version, version_id))
+
+        for job_id, (topic_id, rule_version, versions) in known.items():
+            scope_key = (topic_id, rule_version)
+            if scope_key in invalid_scopes:
+                continue
+            prompts = {
+                prompt
+                for version_id in versions
+                for prompt in prompt_by_target.get((topic_id, rule_version, version_id), ())
+            }
+            if len(prompts) != 1 or any(
+                len(prompt_by_target.get((topic_id, rule_version, version_id), ())) != 1
+                for version_id in versions
+            ):
+                continue
+            prompt_version = prompts.pop()
+            annotated = abnormal = failed = 0
+            for version_id in versions:
+                target = (topic_id, rule_version, prompt_version, version_id)
+                state = annotation_states.get(target)
+                if state == AnnotationResultState.VALID.value:
+                    annotated += 1
+                elif state == AnnotationResultState.INVALID.value:
+                    abnormal += 1
+                elif state == AnnotationResultState.FAILED.value or target in failed_targets:
+                    failed += 1
+            result[job_id] = WindowAnnotationCountView(
+                total_count=len(versions),
+                annotated_count=annotated,
+                pending_count=len(versions) - annotated - abnormal - failed,
+                failed_count=failed,
+                abnormal_count=abnormal,
+            )
+        return result
 
     def window_annotation_counts_in_transaction(
         self,

@@ -33,6 +33,7 @@ from connections.schemas import (
     SourceConnectionStatus,
     SourceConnectionUpdateInput,
     SourceConnectionView,
+    SourceCurrentVersionView,
     SourceEntryPoint,
     SourceEntryPointView,
     SourceExecutionPolicy,
@@ -75,6 +76,22 @@ class AppliedHotlistPreset:
     connection_id: UUID
     connection_version: int
     active_since_at: datetime
+
+
+def list_current_source_connection_versions_in_transaction(
+    session: Session, *, owner_id: UUID
+) -> tuple[SourceCurrentVersionView, ...]:
+    if not session.in_transaction():
+        raise RuntimeError("source connection version scan requires the caller's transaction")
+    rows = session.execute(
+        select(SourceConnection.source_key, SourceConnection.current_version)
+        .where(SourceConnection.owner_id == owner_id)
+        .order_by(SourceConnection.source_key)
+    ).all()
+    return tuple(
+        SourceCurrentVersionView(source_key=source_key, current_version=current_version)
+        for source_key, current_version in rows
+    )
 
 
 def list_applied_hotlist_presets_in_transaction(
