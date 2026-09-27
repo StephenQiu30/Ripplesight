@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from connections.services import SourceConnectionService
 from content.collection import WebPageCollectionService
+from content.comments import CommentManualRunService
 from content.hotlist import HotlistService
 from content.services import ContentService
 from core.errors import DependencyUnavailableError
@@ -121,6 +122,15 @@ def get_content_service(session: SessionDependency) -> ContentService:
 
 
 ContentServiceDependency = Annotated[ContentService, Depends(get_content_service)]
+
+
+def get_comment_manual_run_service(session: SessionDependency) -> CommentManualRunService:
+    return CommentManualRunService(session)
+
+
+CommentManualRunServiceDependency = Annotated[
+    CommentManualRunService, Depends(get_comment_manual_run_service)
+]
 
 
 def get_hotlist_service(session: SessionDependency) -> HotlistService:

@@ -5,9 +5,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query, Response, status
 
-from api.dependencies import AuthenticatedIdentityDependency, ContentServiceDependency
-from content.schemas import ContentRecordDetailView, ContentRecordSummaryView
-from core.schemas import ErrorView, PageView
+from api.dependencies import (
+    AuthenticatedIdentityDependency,
+    CommentManualRunServiceDependency,
+    ContentServiceDependency,
+    CsrfProtectedIdentityDependency,
+)
+from content.schemas import CommentManualRunInput, ContentRecordDetailView, ContentRecordSummaryView
+from core.schemas import ErrorView, JobAcceptedView, PageView
 
 router = APIRouter(prefix="/contents", tags=["作品资料"])
 
@@ -64,3 +69,35 @@ def get_content_record(
     content = service.get_content(owner_id=identity.view.user.id, content_id=content_id)
     response.headers["cache-control"] = "no-store"
     return content
+
+
+@router.post(
+    "/{content_id}/comment-runs",
+    operation_id="runContentComments",
+    response_model=JobAcceptedView,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="复采作品评论",
+    description="对当前 owner 已入库且仍属于活跃主题的 HN 帖子受理一次有界评论复采。",
+    responses={
+        200: {"model": JobAcceptedView, "description": "同一操作标识的原 Job"},
+        401: {"model": ErrorView, "description": "会话无效或已过期"},
+        403: {"model": ErrorView, "description": "请求安全校验失败"},
+        404: {"model": ErrorView, "description": "作品不存在或不可访问"},
+        409: {"model": ErrorView, "description": "来源能力、频次或预算不允许复采"},
+        422: {"model": ErrorView, "description": "请求参数校验失败"},
+        500: {"model": ErrorView, "description": "服务内部异常"},
+    },
+)
+def run_content_comments(
+    content_id: UUID,
+    payload: CommentManualRunInput,
+    response: Response,
+    service: CommentManualRunServiceDependency,
+    identity: CsrfProtectedIdentityDependency,
+) -> JobAcceptedView:
+    result = service.run(owner_id=identity.view.user.id, content_id=content_id, command=payload)
+    if result.replayed:
+        response.status_code = status.HTTP_200_OK
+    response.headers["location"] = f"/api/jobs/{result.job_id}"
+    response.headers["cache-control"] = "no-store"
+    return JobAcceptedView(job_id=result.job_id, status="queued")

@@ -3,19 +3,28 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid5
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from connections.schemas import SourceEntryPoint
-from connections.services import require_source_connection_version
+from connections.services import (
+    load_applied_source_presets_in_transaction,
+    load_execution_policy_in_transaction,
+    require_source_connection_version,
+)
 from content.models import ContentDiscovery
-from content.schemas import CommentCollectionRunInput, PersistContentPostInput
+from content.schemas import (
+    CommentCollectionRunInput,
+    CommentManualRunInput,
+    PersistContentPostInput,
+)
 from content.services import ContentService
+from core.errors import ApplicationError
 from evidence.schemas import DataClass
-from evidence.services import SourceAccessPolicyService
+from evidence.services import SourceAccessPolicyService, load_source_access_readiness
 from jobs.cursor import CursorPageProgress, CursorPageRequest
 from jobs.execution import (
     CheckpointConflictError,
@@ -30,6 +39,8 @@ from jobs.schemas import (
     BudgetDecisionStatus,
     BudgetMetric,
     BudgetReservationInput,
+    BudgetScopeKind,
+    BudgetWindowUsageView,
     CoverageTerminalEvidence,
     CoverageWindowInput,
     CoverageWindowView,
@@ -45,8 +56,12 @@ from jobs.services import (
     CoverageWindowService,
     JobService,
     ResourceBudgetService,
+    has_recent_comment_job_target_in_transaction,
+    load_content_job_contexts,
     load_job_execution_configuration,
+    load_job_execution_configuration_by_operation,
 )
+from monitors.services import MonitorScheduleService, evaluate_monitor_rules
 from sources.contracts import (
     SourceCapability,
     SourceComment,
@@ -114,6 +129,172 @@ class CommentCollectionAcceptanceService:
         return JobService(self._session, clock=self._clock).accept(
             owner_id=owner_id,
             command=build_comment_job_acceptance(run),
+        )
+
+    def accept_job_in_transaction(
+        self, *, owner_id: UUID, run: CommentCollectionRunInput, manual_content_id: UUID
+    ) -> JobView:
+        if not self._session.in_transaction():
+            raise RuntimeError("comment acceptance requires the caller's transaction")
+        acceptance = build_comment_job_acceptance(run)
+        acceptance = acceptance.model_copy(
+            update={"scope": {**acceptance.scope, "manual_content_id": str(manual_content_id)}}
+        )
+        return JobService(self._session, clock=self._clock).accept_in_transaction(
+            owner_id=owner_id, command=acceptance
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class CommentManualRunResult:
+    job_id: UUID
+    replayed: bool
+
+
+class CommentManualRunService:
+    """Accept a visible HN post's comments refresh under one owner transaction."""
+
+    def __init__(self, session: Session, *, clock: Callable[[], datetime] | None = None) -> None:
+        self._session = session
+        self._clock = clock or (lambda: datetime.now(UTC))
+
+    def run(
+        self, *, owner_id: UUID, content_id: UUID, command: CommentManualRunInput
+    ) -> CommentManualRunResult:
+        now = self._clock()
+        if now.utcoffset() is None:
+            raise ValueError("manual comments time must be timezone-aware")
+        now = now.astimezone(UTC)
+        self._session.rollback()
+        with self._session.begin():
+            lock_key = int.from_bytes(command.operation_id.bytes[:8], "big", signed=True)
+            self._session.scalar(select(func.pg_advisory_xact_lock(lock_key)))
+            post, version = ContentService(
+                self._session
+            ).readable_post_for_comment_run_in_transaction(
+                owner_id=owner_id, content_id=content_id, now=now
+            )
+            if post.object_type != "post" or post.source_key != "hackernews":
+                raise ApplicationError("comments_not_ready")
+            if version is None:
+                raise ApplicationError("resource_not_found")
+            searchable_text = "\n".join(item for item in (version.title, version.body) if item)
+            previous = load_job_execution_configuration_by_operation(
+                self._session,
+                owner_id=owner_id,
+                kind="source.comments",
+                operation_id=command.operation_id,
+            )
+            if previous is not None:
+                if previous.scope.get("manual_content_id") != str(content_id):
+                    raise ApplicationError("idempotency_conflict")
+                return CommentManualRunResult(job_id=previous.job_id, replayed=True)
+
+            discovered_job_ids = tuple(
+                self._session.scalars(
+                    select(ContentDiscovery.job_id).where(
+                        ContentDiscovery.owner_id == owner_id,
+                        ContentDiscovery.content_id == content_id,
+                    )
+                )
+            )
+            discovered_topics = {
+                context.configuration_ref
+                for context in load_content_job_contexts(
+                    self._session, owner_id=owner_id, job_ids=set(discovered_job_ids)
+                ).values()
+                if context.configuration_ref.startswith("topic:")
+            }
+            topic = next(
+                (
+                    candidate
+                    for candidate in MonitorScheduleService(
+                        self._session
+                    ).list_active_topics_for_scanning_in_transaction()
+                    if candidate.owner_id == owner_id
+                    and post.source_key in candidate.source_keys
+                    and f"topic:{candidate.topic_id}" in discovered_topics
+                    and evaluate_monitor_rules(candidate.rules, searchable_text).matched
+                ),
+                None,
+            )
+            if topic is None:
+                raise ApplicationError("comments_not_ready")
+            preset = load_applied_source_presets_in_transaction(
+                self._session, owner_id=owner_id, source_keys=(post.source_key,)
+            ).get(post.source_key)
+            if (
+                preset is None
+                or SourceCapability.COMMENTS not in preset.capabilities
+                or preset.comment_scan_policy is None
+                or not load_source_access_readiness(self._session, owner_id=owner_id, now=now).get(
+                    (post.source_key, SourceCapability.COMMENTS), False
+                )
+            ):
+                raise ApplicationError("comments_not_ready")
+            policy = load_execution_policy_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                connection_id=preset.connection_id,
+                connection_version=preset.connection_version,
+            )
+            if not policy.enabled or policy.quiet_at(now):
+                raise ApplicationError("comments_not_ready")
+            budgets = ResourceBudgetService(self._session, clock=lambda: now).budget_usage_snapshot(
+                owner_id=owner_id
+            )
+            if not self._has_budget(budgets, post.source_key):
+                raise ApplicationError("comments_budget_exhausted")
+            scan = preset.comment_scan_policy
+            recent = has_recent_comment_job_target_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                source_key=post.source_key,
+                post_external_id=post.external_id,
+                since=now - timedelta(seconds=scan.refresh_interval_seconds),
+            )
+            if recent:
+                raise ApplicationError("comments_rate_limited")
+            run = CommentCollectionRunInput(
+                operation_id=command.operation_id,
+                configuration_ref=f"topic:{topic.topic_id}",
+                configuration_version=topic.topic_version,
+                source_key=post.source_key,
+                connection_id=preset.connection_id,
+                connection_version=preset.connection_version,
+                post_external_id=post.external_id,
+                entry_point=SourceEntryPoint.MANUAL,
+                starts_at=now - timedelta(seconds=scan.refresh_interval_seconds),
+                ends_at=now,
+                scheduled_for_at=now,
+                page_size=scan.page_size,
+                max_pages=scan.max_pages,
+                max_requests=scan.max_requests,
+                max_seconds=scan.max_seconds,
+                first_level_limit=scan.first_level_limit,
+                replies_per_thread_limit=scan.replies_per_thread_limit,
+            )
+            job = CommentCollectionAcceptanceService(
+                self._session, clock=lambda: now
+            ).accept_job_in_transaction(owner_id=owner_id, run=run, manual_content_id=content_id)
+            return CommentManualRunResult(job_id=job.id, replayed=False)
+
+    @staticmethod
+    def _has_budget(budgets: tuple[BudgetWindowUsageView, ...], source_key: str) -> bool:
+        relevant = [
+            item
+            for item in budgets
+            if item.metric is BudgetMetric.NETWORK_REQUEST
+            and (
+                item.scope_kind is BudgetScopeKind.GLOBAL
+                or (
+                    item.scope_kind is BudgetScopeKind.SOURCE and item.scope_reference == source_key
+                )
+            )
+        ]
+        return any(item.scope_kind is BudgetScopeKind.SOURCE for item in relevant) and all(
+            item.enabled and item.remaining_units is not None and item.remaining_units > 0
+            for item in relevant
         )
 
 
