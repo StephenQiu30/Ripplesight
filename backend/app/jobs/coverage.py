@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -31,6 +32,33 @@ from sources.contracts import SourceCapability
 
 class CollectionDueConflictError(ValueError):
     """The same scheduled instant has incompatible immutable facts or admission."""
+
+
+@dataclass(frozen=True, slots=True)
+class HotlistDueIdentity:
+    due_at: datetime
+    operation_id: UUID
+
+
+def load_hotlist_due_for_job_in_transaction(
+    session: Session, *, owner_id: UUID, job_id: UUID, source_key: str, operation_id: UUID
+) -> HotlistDueIdentity:
+    """Resolve the accepted bucket through the jobs domain without leaking its ORM model."""
+    if not session.in_transaction():
+        raise RuntimeError("hotlist due lookup requires the caller's transaction")
+    row = session.scalar(
+        select(CollectionDueWindow).where(
+            CollectionDueWindow.owner_id == owner_id,
+            CollectionDueWindow.job_id == job_id,
+            CollectionDueWindow.source_key == source_key,
+            CollectionDueWindow.capability == SourceCapability.HOTLIST.value,
+            CollectionDueWindow.operation_id == operation_id,
+            CollectionDueWindow.admission_state == DueAdmissionState.ACCEPTED.value,
+        )
+    )
+    if row is None:
+        raise ValueError("hotlist job is not linked to its accepted due bucket")
+    return HotlistDueIdentity(due_at=_as_utc(row.due_at), operation_id=operation_id)
 
 
 def _as_utc(value: datetime) -> datetime:

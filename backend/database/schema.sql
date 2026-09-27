@@ -866,6 +866,9 @@ CREATE TABLE collection_due_windows (
     recorded_at TIMESTAMPTZ NOT NULL,
     CONSTRAINT collection_due_windows_owner_schedule_due_key
         UNIQUE (owner_id, schedule_key, due_at),
+    CONSTRAINT collection_due_windows_owner_job_key UNIQUE (owner_id, job_id),
+    CONSTRAINT collection_due_windows_owner_job_source_operation_key
+        UNIQUE (owner_id, job_id, source_key, operation_id),
     CONSTRAINT collection_due_windows_owner_topic_fkey
         FOREIGN KEY (owner_id, topic_id)
         REFERENCES monitor_topics (owner_id, id) DEFERRABLE INITIALLY DEFERRED,
@@ -979,12 +982,19 @@ CREATE TABLE hotlist_snapshots (
     owner_id UUID NOT NULL,
     source_key VARCHAR(64) NOT NULL CHECK (source_key ~ '^[a-z][a-z0-9_-]{0,63}$'),
     job_id UUID NOT NULL,
+    operation_id UUID NOT NULL,
     observed_at TIMESTAMPTZ NOT NULL,
     entry_count INTEGER NOT NULL CHECK (entry_count >= 0 AND entry_count <= 100),
     CONSTRAINT hotlist_snapshots_owner_id_key UNIQUE (owner_id, id),
     CONSTRAINT hotlist_snapshots_owner_job_key UNIQUE (owner_id, job_id),
+    CONSTRAINT hotlist_snapshots_owner_source_operation_key
+        UNIQUE (owner_id, source_key, operation_id),
     CONSTRAINT hotlist_snapshots_owner_job_fkey FOREIGN KEY (owner_id, job_id)
-        REFERENCES jobs (owner_id, id) ON DELETE RESTRICT
+        REFERENCES jobs (owner_id, id) ON DELETE RESTRICT,
+    CONSTRAINT hotlist_snapshots_owner_due_identity_fkey
+        FOREIGN KEY (owner_id, job_id, source_key, operation_id)
+        REFERENCES collection_due_windows (owner_id, job_id, source_key, operation_id)
+        ON DELETE RESTRICT
 );
 
 CREATE INDEX hotlist_snapshots_latest_idx

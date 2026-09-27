@@ -578,6 +578,14 @@ class CollectionDueWindow(Base):
             "due_at",
             name="collection_due_windows_owner_schedule_due_key",
         ),
+        UniqueConstraint("owner_id", "job_id", name="collection_due_windows_owner_job_key"),
+        UniqueConstraint(
+            "owner_id",
+            "job_id",
+            "source_key",
+            "operation_id",
+            name="collection_due_windows_owner_job_source_operation_key",
+        ),
         ForeignKeyConstraint(
             ["owner_id", "topic_id"],
             ["monitor_topics.owner_id", "monitor_topics.id"],

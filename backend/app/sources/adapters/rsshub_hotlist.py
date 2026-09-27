@@ -75,7 +75,7 @@ class RsshubHotlistAdapter(HttpSourceAdapter):
             self._deadline = time.monotonic() + self._max_seconds
             try:
                 parsed = feedparser.parse(self._get_bytes(self._feed_url))
-                if parsed.get("bozo") and not parsed.get("entries"):
+                if parsed.get("bozo") or not parsed.get("version"):
                     raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
                 if len(parsed.entries) > 100:
                     raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)

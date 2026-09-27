@@ -257,6 +257,10 @@ declare namespace HotKeyAPI {
     source_key: string;
     /** Observed At */
     observed_at: string;
+    /** Due At */
+    due_at: string;
+    /** Operation Id */
+    operation_id: string;
     /** Entry Count */
     entry_count: number;
     /** Items */

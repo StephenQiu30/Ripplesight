@@ -96,11 +96,28 @@ class HotlistSnapshot(Base):
     __table_args__ = (
         UniqueConstraint("owner_id", "id", name="hotlist_snapshots_owner_id_key"),
         UniqueConstraint("owner_id", "job_id", name="hotlist_snapshots_owner_job_key"),
+        UniqueConstraint(
+            "owner_id",
+            "source_key",
+            "operation_id",
+            name="hotlist_snapshots_owner_source_operation_key",
+        ),
         ForeignKeyConstraint(
             ["owner_id", "job_id"],
             ["jobs.owner_id", "jobs.id"],
             ondelete="RESTRICT",
             name="hotlist_snapshots_owner_job_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["owner_id", "job_id", "source_key", "operation_id"],
+            [
+                "collection_due_windows.owner_id",
+                "collection_due_windows.job_id",
+                "collection_due_windows.source_key",
+                "collection_due_windows.operation_id",
+            ],
+            ondelete="RESTRICT",
+            name="hotlist_snapshots_owner_due_identity_fkey",
         ),
         CheckConstraint("source_key ~ '^[a-z][a-z0-9_-]{0,63}$'"),
         CheckConstraint("entry_count BETWEEN 0 AND 100"),
@@ -111,6 +128,7 @@ class HotlistSnapshot(Base):
     owner_id: Mapped[UUID]
     source_key: Mapped[str] = mapped_column(String(64))
     job_id: Mapped[UUID]
+    operation_id: Mapped[UUID]
     observed_at: Mapped[datetime]
     entry_count: Mapped[int]
 

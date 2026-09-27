@@ -26,6 +26,7 @@ from content.services import ContentService
 from core.errors import ApplicationError
 from evidence.schemas import DataClass
 from evidence.services import SourceAccessPolicyService
+from jobs.coverage import load_hotlist_due_for_job_in_transaction
 from jobs.execution import ExecutionLease, JobExecutionService, JobProgress
 from jobs.schemas import JobStage
 from jobs.services import ResourceBudgetService
@@ -126,8 +127,11 @@ class HotlistService:
         page: HotlistPage,
         meter: KeywordRequestMeter,
     ) -> ExecutionLease:
-        if page.source_key != source_key or page.state is not SourcePageState.COMPLETE:
-            raise ValueError("only a complete matching hotlist page may be saved")
+        if page.source_key != source_key or page.state not in {
+            SourcePageState.COMPLETE,
+            SourcePageState.EMPTY,
+        }:
+            raise ValueError("only a completed or empty matching hotlist page may be saved")
         self._session.rollback()
         with self._session.begin():
             execution = JobExecutionService(
@@ -143,7 +147,16 @@ class HotlistService:
                 )
             )
             if existing is not None:
+                if existing.operation_id != operation_id:
+                    raise ValueError("existing hotlist snapshot belongs to a different operation")
                 return current
+            load_hotlist_due_for_job_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                job_id=lease.job_id,
+                source_key=source_key,
+                operation_id=operation_id,
+            )
             require_source_connection_version(
                 self._session,
                 owner_id=owner_id,
@@ -166,6 +179,7 @@ class HotlistService:
                 owner_id=owner_id,
                 source_key=source_key,
                 job_id=lease.job_id,
+                operation_id=operation_id,
                 observed_at=page.observed_at,
                 entry_count=len(page.items),
             )
@@ -277,6 +291,13 @@ class HotlistService:
                 raise ApplicationError("resource_not_found")
             latest = snapshots[0]
             previous = snapshots[1] if len(snapshots) > 1 else None
+            due = load_hotlist_due_for_job_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                job_id=latest.job_id,
+                source_key=source_key,
+                operation_id=latest.operation_id,
+            )
             previous_ranks = (
                 {
                     row.url: row.rank
@@ -300,6 +321,8 @@ class HotlistService:
                 snapshot_id=latest.id,
                 source_key=source_key,
                 observed_at=latest.observed_at,
+                due_at=due.due_at,
+                operation_id=latest.operation_id,
                 entry_count=latest.entry_count,
                 items=tuple(
                     HotlistEntryView(
