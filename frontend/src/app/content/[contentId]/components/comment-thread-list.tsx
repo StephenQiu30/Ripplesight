@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ExternalLinkIcon, RotateCcwIcon } from "lucide-react";
 
 import { listContentComments } from "@/api/zuopinziliao";
+import { CommentRefreshAction } from "@/app/content/[contentId]/components/comment-refresh-action";
 import {
   formatMetric,
   formatTime,
@@ -367,6 +368,7 @@ export function CommentThreadList({ postId }: { postId: string }) {
       <p className="text-muted-foreground mt-2 text-sm leading-6">
         按线程根阅读本地仍可读的评论。父链缺口会保留；本地分页结束不代表来源尾段已核对。
       </p>
+      <CommentRefreshAction postId={postId} />
       <PageNotice
         state={page.state}
         onRetry={() => void page.reload()}

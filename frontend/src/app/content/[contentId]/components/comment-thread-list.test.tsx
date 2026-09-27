@@ -7,6 +7,10 @@ import {
   parentRelationLabel,
   replyContext,
 } from "./comment-thread-list";
+import {
+  CommentRefreshControls,
+  CommentRefreshOperation,
+} from "./comment-refresh-action";
 
 const observation: HotKeyAPI.ContentObservationView = {
   id: "ab15d0c1-0b72-4c3a-9e1b-0adf218d7d30",
@@ -49,6 +53,58 @@ const reply: HotKeyAPI.ContentCommentView = {
 };
 
 describe("comment thread reading", () => {
+  it("keeps a single operation ID through double click and retry", () => {
+    const operation = new CommentRefreshOperation(() => "fixed-operation-id");
+    expect(operation.begin()).toBe("fixed-operation-id");
+    expect(operation.begin()).toBeNull();
+    operation.finish(false);
+    expect(operation.begin()).toBe("fixed-operation-id");
+    operation.finish(true);
+    expect(operation.begin()).toBeNull();
+  });
+
+  it("only shows the refresh action when supported and disables limited requests", () => {
+    const unsupported = renderToStaticMarkup(
+      createElement(CommentRefreshControls, {
+        readiness: {
+          supported: false,
+          available: false,
+          reason: "comments_not_ready",
+        },
+        submitting: false,
+        message: null,
+        onRefresh: () => {},
+      }),
+    );
+    expect(unsupported).not.toContain("更新评论");
+
+    const limited = renderToStaticMarkup(
+      createElement(CommentRefreshControls, {
+        readiness: {
+          supported: true,
+          available: false,
+          reason: "comments_rate_limited",
+        },
+        submitting: false,
+        message: null,
+        onRefresh: () => {},
+      }),
+    );
+    expect(limited).toContain("disabled");
+    expect(limited).toContain("间隔期");
+
+    const pending = renderToStaticMarkup(
+      createElement(CommentRefreshControls, {
+        readiness: { supported: true, available: true, reason: null },
+        submitting: true,
+        message: null,
+        onRefresh: () => {},
+      }),
+    );
+    expect(pending).toContain("正在受理");
+    expect(pending).toContain("disabled");
+  });
+
   it("renders source text safely and keeps the missing-parent notice", () => {
     const html = renderToStaticMarkup(
       createElement(CommentCard, { comment: reply }),

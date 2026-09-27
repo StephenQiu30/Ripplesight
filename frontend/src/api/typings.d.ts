@@ -133,6 +133,19 @@ declare namespace HotKeyAPI {
     operation_id: string;
   };
 
+  type CommentRunReadinessView = {
+    /** Supported */
+    supported: boolean;
+    /** Available */
+    available: boolean;
+    /** Reason */
+    reason:
+      | "comments_not_ready"
+      | "comments_budget_exhausted"
+      | "comments_rate_limited"
+      | null;
+  };
+
   type ContentCommentView = {
     /** Content Id */
     content_id: string;
@@ -350,6 +363,10 @@ declare namespace HotKeyAPI {
 
   type getCollectionJobParams = {
     job_id: string;
+  };
+
+  type getContentCommentRunReadinessParams = {
+    content_id: string;
   };
 
   type getContentRecordParams = {

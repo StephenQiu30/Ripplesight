@@ -33,6 +33,23 @@ export async function getContentRecord(
   });
 }
 
+/** 读取评论复采资格 只读核对当前作品、来源、主题、预算与频次; 实际受理时重新核对。 GET /api/contents/${param0}/comment-run-readiness */
+export async function getContentCommentRunReadiness(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: HotKeyAPI.getContentCommentRunReadinessParams,
+  options?: import("@/request").RequestOptions,
+) {
+  const { content_id: param0, ...queryParams } = params;
+  return request<HotKeyAPI.CommentRunReadinessView>(
+    `/api/contents/${param0}/comment-run-readiness`,
+    {
+      method: "GET",
+      params: { ...queryParams },
+      ...(options || {}),
+    },
+  );
+}
+
 /** 复采作品评论 对当前 owner 已入库且仍属于活跃主题的 HN 帖子受理一次有界评论复采。 POST /api/contents/${param0}/comment-runs */
 export async function runContentComments(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
