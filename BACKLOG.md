@@ -18,7 +18,7 @@ Plan 008 见 Acceptance 002 EV-002-020/021：六榜真实双轮、排名/命中�
 
 Plan 039 见 Acceptance 002 EV-002-022：历史 API/页面读真实双轮快照，桌面及 390px 浏览器通过；本卡 `completed`，72 小时与 Codex 另验。
 
-Plan 040 见 Acceptance 002 EV-002-023：旧积压扫描、冻结输入、一次无效补偿、进程树回收及 Kafka 到 Worker 的关闭状态已验证；默认关闭真实模型。用户暂不发送真实模型请求；十来源真实标注和 60 分钟比例未验，本卡 `in_progress`，AC-002-008 未通过。
+Plan 040 见 Acceptance 002 EV-002-023/036：旧积压、冻结输入、一次无效补偿与关闭状态已验证；分析候选限主题已选关键词来源或同版本热榜主题命中，`e543cf0c` 远端 backend **949 passed/8 skipped**、contract/runtime 成功。用户暂不发送真实模型请求；十来源真实标注和 60 分钟比例未验，本卡 `in_progress`，AC-002-008 未通过。
 
 Plan 038 见 Acceptance 002 EV-002-024—028：HN 评论预设、旧帖显式复采、父链身份与缺口，以及隔离 PostgreSQL/Kafka 重投和预算均有受控证据；Plan041 已提供按钮。逐根真实分页、旧帖新回复、进程重启和十帖验收未完成，`in_progress`。
 
