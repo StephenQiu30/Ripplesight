@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ai.schemas import AiCallError, AiFailureCode
 from ai.services import AiService, create_ai_client
-from analysis.models import ContentAnnotation
+from analysis.models import AnalysisPromptActivation, ContentAnnotation
 from analysis.prompts import (
     ANALYSIS_OUTPUT_SCHEMA,
     ANALYSIS_PROMPT_VERSION,
@@ -306,6 +306,22 @@ def analysis_failure(error: AiCallError, *, now: datetime) -> JobExecutionFailur
 class AnalysisService:
     def __init__(self, session: Session) -> None:
         self._session = session
+
+    def record_prompt_activation_in_transaction(
+        self, *, prompt_version: str, activated_at: datetime
+    ) -> bool:
+        """Keep the first enabled scheduler start for this prompt version."""
+        if not self._session.in_transaction():
+            raise RuntimeError("prompt activation requires the caller's transaction")
+        if not 0 < len(prompt_version) <= 128 or activated_at.tzinfo is None:
+            raise ValueError("prompt activation requires a version and aware time")
+        inserted = self._session.scalar(
+            insert(AnalysisPromptActivation)
+            .values(prompt_version=prompt_version, activated_at=activated_at.astimezone(UTC))
+            .on_conflict_do_nothing(index_elements=["prompt_version"])
+            .returning(AnalysisPromptActivation.prompt_version)
+        )
+        return inserted is not None
 
     def collection_analysis_counts_in_transaction(
         self,

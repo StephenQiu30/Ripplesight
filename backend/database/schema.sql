@@ -852,6 +852,12 @@ CREATE TABLE ai_calls (
 
 CREATE INDEX ai_calls_owner_created_idx ON ai_calls (owner_id, created_at);
 
+CREATE TABLE analysis_prompt_activations (
+    prompt_version VARCHAR(128) PRIMARY KEY
+        CONSTRAINT analysis_prompt_activations_version_check CHECK (prompt_version <> ''),
+    activated_at TIMESTAMPTZ NOT NULL
+);
+
 CREATE TABLE coverage_windows (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
