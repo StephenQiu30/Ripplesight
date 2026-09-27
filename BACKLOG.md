@@ -24,7 +24,7 @@ Plan 038 见 Acceptance 002 EV-002-024—028：HN 评论预设、旧帖显式复
 
 Plan 041 见 Acceptance 002 EV-002-029—032：评论/作品列表和标注详情 API、页面、旧帖复采按钮经隔离库及桌面/390px 浏览器验证；`4ecced3d` 远端四项 CI 成功。真实 HN 阅读样本与 Codex 产品验收未完成，`in_progress`。
 
-Plan 006 采集时效技术切片见 Acceptance 002 EV-002-033：owner 可见到期窗、完成/未完成 Job 的删失中位数、静默/来源限流排除与 143/144 热榜桶已由只读 API/CLI 和隔离 PostgreSQL 覆盖；运行 OpenAPI 生成客户端及本地门禁通过。首个 `f0af4370` 的 CI backend 暴露配置读取错误，`03238329` 修复后远端 backend **945 passed、8 skipped**，contract/runtime 成功，前端工作流在 `f0af4370` 成功。EV-002-034 已将首次有效结论时间写入全新库 Schema 和分析服务，本地 **941 passed/13 skipped/1 deselected**；`456a3e54` 远端 backend **947 passed/8 skipped**、contract/runtime 成功。逐主题需分析起点、Codex 实际限流排除、热榜窗口起点间隔/相位冻结及十来源真实 ID 复算仍待完成，当前响应明确标为未验；Plan006 `in_progress`，不可据此关闭 M1 指标。
+Plan 006 见 Acceptance 002 EV-002-033—035：采集删失中位数、静默/来源限流排除与热榜预期桶已接入只读 API/CLI；首次有效标注时间和主题启用/暂停事件已在全新库持久化并经本地回归。逐主题需分析集合、Codex 限流样本、热榜间隔/相位冻结和十来源真实 ID 复算仍未完成；`analysis_status=not_computable`、`phase_verified=false`，Plan006/M1 继续 `in_progress`。
 
 Plan 005 的标注状态与重放技术切片已在隔离 `main` 工作树完成，PostgreSQL 17 全新库的后端全量回归为 **779 passed/17 skipped**，见 Acceptance 002 EV-002-010。旧开发库 3 条历史异常、真实 Codex 样本和远端门禁尚未在该证据中核对；Plan 005 保持 `in_progress`，产品验收不变。
 
