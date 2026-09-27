@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from confluent_kafka import Consumer, Producer
+from confluent_kafka import Consumer, KafkaError, Producer
 from confluent_kafka.admin import AdminClient, NewTopic
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
@@ -453,8 +453,18 @@ def test_analysis_outbox_crosses_kafka_and_worker_fails_closed_without_model(
         deadline = time.monotonic() + 15
         message = None
         while time.monotonic() < deadline and message is None:
-            message = consumer.poll(1.0)
-        assert message is not None and message.error() is None
+            candidate = consumer.poll(1.0)
+            if candidate is None:
+                continue
+            error = candidate.error()
+            if error is not None:
+                # Kafka may report a newly created topic as unknown until its
+                # metadata reaches this consumer, even after AdminClient acks.
+                if error.code() == KafkaError.UNKNOWN_TOPIC_OR_PART:
+                    continue
+                raise AssertionError(f"Kafka consumer error: {error.code()}")
+            message = candidate
+        assert message is not None
         executor = AnalysisAnnotateExecutor(
             case.sessions,
             Settings(database_url=os.environ["HOTKEY_TEST_DATABASE_URL"], ai_enabled=False),
