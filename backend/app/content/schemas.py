@@ -63,8 +63,20 @@ class HotlistSnapshotView(OutputModel):
     due_at: datetime
     operation_id: UUID
     entry_count: int
+    previous_snapshot_id: UUID | None
+    gap_count: int = Field(ge=0)
     items: tuple[HotlistEntryView, ...]
     next_cursor: int | None
+
+
+class HotlistSnapshotSummaryView(OutputModel):
+    snapshot_id: UUID
+    source_key: str
+    observed_at: datetime
+    due_at: datetime
+    entry_count: int = Field(ge=0, le=100)
+    previous_snapshot_id: UUID | None
+    gap_count: int = Field(ge=0)
 
 
 class CommentCollectionRunInput(InputModel):

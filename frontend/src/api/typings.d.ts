@@ -333,6 +333,13 @@ declare namespace HotKeyAPI {
     content_id: string;
   };
 
+  type getHistoricalHotlistSnapshotParams = {
+    source_key: string;
+    snapshot_id: string;
+    cursor?: number | null;
+    limit?: number;
+  };
+
   type getHotlistSnapshotParams = {
     source_key: string;
     cursor?: number | null;
@@ -379,6 +386,23 @@ declare namespace HotKeyAPI {
     matched_topic_names: string[];
   };
 
+  type HotlistSnapshotSummaryView = {
+    /** Snapshot Id */
+    snapshot_id: string;
+    /** Source Key */
+    source_key: string;
+    /** Observed At */
+    observed_at: string;
+    /** Due At */
+    due_at: string;
+    /** Entry Count */
+    entry_count: number;
+    /** Previous Snapshot Id */
+    previous_snapshot_id: string | null;
+    /** Gap Count */
+    gap_count: number;
+  };
+
   type HotlistSnapshotView = {
     /** Snapshot Id */
     snapshot_id: string;
@@ -392,6 +416,10 @@ declare namespace HotKeyAPI {
     operation_id: string;
     /** Entry Count */
     entry_count: number;
+    /** Previous Snapshot Id */
+    previous_snapshot_id: string | null;
+    /** Gap Count */
+    gap_count: number;
     /** Items */
     items: HotlistEntryView[];
     /** Next Cursor */
@@ -629,6 +657,12 @@ declare namespace HotKeyAPI {
     limit?: number;
   };
 
+  type listHotlistSnapshotsParams = {
+    source_key: string;
+    cursor?: string | null;
+    limit?: number;
+  };
+
   type listMonitorTopicsParams = {
     include_archived?: boolean;
     cursor?: string | null;
@@ -814,6 +848,13 @@ declare namespace HotKeyAPI {
   type PageViewContentRecordSummaryView_ = {
     /** Items */
     items: ContentRecordSummaryView[];
+    /** Next Cursor */
+    next_cursor: string | null;
+  };
+
+  type PageViewHotlistSnapshotSummaryView_ = {
+    /** Items */
+    items: HotlistSnapshotSummaryView[];
     /** Next Cursor */
     next_cursor: string | null;
   };

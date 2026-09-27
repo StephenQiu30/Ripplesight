@@ -90,6 +90,31 @@ def load_hotlist_due_for_job_in_transaction(
     return HotlistDueIdentity(due_at=_as_utc(row.due_at), operation_id=operation_id)
 
 
+def count_hotlist_gaps_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    source_key: str,
+    previous_due_at: datetime,
+    due_at: datetime,
+) -> int:
+    """Count recorded due buckets between consecutive successful snapshots."""
+    if not session.in_transaction():
+        raise RuntimeError("hotlist gap lookup requires the caller's transaction")
+    return (
+        session.scalar(
+            select(func.count(CollectionDueWindow.id)).where(
+                CollectionDueWindow.owner_id == owner_id,
+                CollectionDueWindow.source_key == source_key,
+                CollectionDueWindow.capability == SourceCapability.HOTLIST.value,
+                CollectionDueWindow.due_at > previous_due_at,
+                CollectionDueWindow.due_at < due_at,
+            )
+        )
+        or 0
+    )
+
+
 def _as_utc(value: datetime) -> datetime:
     if value.utcoffset() is None:
         raise ValueError("due window timestamps must be timezone-aware")

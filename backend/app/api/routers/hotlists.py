@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from typing import Annotated, Any
+from uuid import UUID
 
-from fastapi import APIRouter, Path, Query, Response, status
+from fastapi import APIRouter, HTTPException, Path, Query, Response, status
 
 from api.dependencies import AuthenticatedIdentityDependency, HotlistServiceDependency
-from content.schemas import HotlistSnapshotView, HotlistSourceView
+from content.schemas import HotlistSnapshotSummaryView, HotlistSnapshotView, HotlistSourceView
 from core.schemas import ErrorView, PageView
 
 router = APIRouter(prefix="/hotlists", tags=["热榜"])
@@ -34,6 +35,69 @@ def list_hotlist_sources(
     items = service.list_sources(owner_id=identity.view.user.id)
     response.headers["cache-control"] = "no-store"
     return PageView(items=items, next_cursor=None)
+
+
+@router.get(
+    "/{source_key}/snapshots",
+    operation_id="listHotlistSnapshots",
+    response_model=PageView[HotlistSnapshotSummaryView],
+    status_code=status.HTTP_200_OK,
+    summary="列出热榜历史快照",
+    description="按观察时间和快照 ID 倒序读取当前用户的持久快照。游标限定同一来源。",
+    responses={404: {"model": ErrorView, "description": "热榜来源未应用"}, **_READ_RESPONSES},
+)
+def list_hotlist_snapshots(
+    source_key: Annotated[
+        str, Path(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_-]{0,63}$")
+    ],
+    response: Response,
+    service: HotlistServiceDependency,
+    identity: AuthenticatedIdentityDependency,
+    cursor: UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> PageView[HotlistSnapshotSummaryView]:
+    try:
+        items, next_cursor = service.list_history(
+            owner_id=identity.view.user.id,
+            source_key=source_key,
+            cursor=cursor,
+            limit=limit,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422) from error
+    response.headers["cache-control"] = "no-store"
+    return PageView(items=list(items), next_cursor=next_cursor)
+
+
+@router.get(
+    "/{source_key}/snapshots/{snapshot_id}",
+    operation_id="getHistoricalHotlistSnapshot",
+    response_model=HotlistSnapshotView,
+    status_code=status.HTTP_200_OK,
+    summary="读取指定热榜历史快照",
+    description="固定快照 ID 按原始榜位分页。排名与同来源前一成功快照比较。",
+    responses={404: {"model": ErrorView, "description": "来源或快照不存在"}, **_READ_RESPONSES},
+)
+def get_historical_hotlist_snapshot(
+    source_key: Annotated[
+        str, Path(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_-]{0,63}$")
+    ],
+    snapshot_id: UUID,
+    response: Response,
+    service: HotlistServiceDependency,
+    identity: AuthenticatedIdentityDependency,
+    cursor: Annotated[int | None, Query(ge=1, le=100)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> HotlistSnapshotView:
+    snapshot = service.get_historical(
+        owner_id=identity.view.user.id,
+        source_key=source_key,
+        snapshot_id=snapshot_id,
+        cursor=cursor,
+        limit=limit,
+    )
+    response.headers["cache-control"] = "no-store"
+    return snapshot
 
 
 @router.get(
