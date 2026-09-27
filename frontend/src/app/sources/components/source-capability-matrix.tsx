@@ -1,13 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { RotateCcwIcon } from "lucide-react";
 
 import { listSourceCapabilities } from "@/api/laiyuannengli";
-import { BrandLockup } from "@/components/brand/brand-lockup";
-import { PageState } from "@/components/system/page-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -263,63 +260,55 @@ export function SourceCapabilityMatrix() {
 
   if (state.status === "error") {
     return (
-      <PageState
-        eyebrow="来源能力"
-        title="暂时无法读取来源状态"
-        description={
-          state.requestId
-            ? `${state.message} 请求编号：${state.requestId}`
-            : state.message
-        }
-        action={
-          <Button onClick={() => void reload()}>
+      <section aria-labelledby="source-capability-heading" className="mt-16">
+        <h2 id="source-capability-heading" className="text-2xl font-semibold">
+          来源能力
+        </h2>
+        <div className="bg-muted mt-6 rounded-2xl p-6">
+          <p role="alert" className="font-medium">
+            暂时无法读取来源状态
+          </p>
+          <p className="text-muted-foreground mt-2 text-sm">
+            {state.requestId
+              ? `${state.message} 请求编号：${state.requestId}`
+              : state.message}
+          </p>
+          <Button className="mt-5" onClick={() => void reload()}>
             <RotateCcwIcon data-icon="inline-start" />
             重新加载
           </Button>
-        }
-      />
+        </div>
+      </section>
     );
   }
 
   return (
-    <div className="bg-background min-h-screen">
-      <header className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-8 xl:px-16 2xl:px-0">
-        <BrandLockup href="/events" />
-        <Button asChild variant="ghost" size="navigation">
-          <Link href="/events">返回工作台</Link>
-        </Button>
-      </header>
+    <section aria-labelledby="source-capability-heading" className="mt-16">
+      <h2 id="source-capability-heading" className="text-2xl font-semibold">
+        来源能力
+      </h2>
+      <p className="text-muted-foreground mt-3 max-w-2xl text-sm leading-6">
+        按平台和入口查看已经持久验证的状态。官方声明、探测成功或旧连接记录都不会自动标记为可用。
+      </p>
 
-      <main className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16 xl:px-16 2xl:px-0">
-        <p className="text-muted-foreground font-mono text-xs tracking-wider uppercase">
-          Sources
-        </p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-          来源能力
-        </h1>
-        <p className="text-muted-foreground mt-4 max-w-2xl leading-7">
-          按平台、能力和入口查看已经持久验证的状态。官方声明、探测成功或旧连接记录都不会自动标记为可用。
-        </p>
-
-        {state.status === "loading" ? <LoadingMatrix /> : null}
-        {state.status === "ready" && state.platforms.length === 0 ? (
-          <section className="bg-muted mt-10 rounded-2xl px-6 py-12 text-center">
-            <h2 className="font-medium">暂无来源目录</h2>
-            <p className="text-muted-foreground mt-2 text-sm">
-              目录尚未加载，不代表平台返回空结果。
-            </p>
-          </section>
-        ) : null}
-        {state.status === "ready"
-          ? state.platforms.map((platform) => (
-              <PlatformSection
-                key={platform.source_key}
-                platform={platform}
-                onChanged={refresh}
-              />
-            ))
-          : null}
-      </main>
-    </div>
+      {state.status === "loading" ? <LoadingMatrix /> : null}
+      {state.status === "ready" && state.platforms.length === 0 ? (
+        <section className="bg-muted mt-10 rounded-2xl px-6 py-12 text-center">
+          <h2 className="font-medium">暂无来源目录</h2>
+          <p className="text-muted-foreground mt-2 text-sm">
+            目录尚未加载，不代表平台返回空结果。
+          </p>
+        </section>
+      ) : null}
+      {state.status === "ready"
+        ? state.platforms.map((platform) => (
+            <PlatformSection
+              key={platform.source_key}
+              platform={platform}
+              onChanged={refresh}
+            />
+          ))
+        : null}
+    </section>
   );
 }
