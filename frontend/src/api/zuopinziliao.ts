@@ -54,3 +54,24 @@ export async function runContentComments(
     },
   );
 }
+
+/** 分页读取作品评论 按线程根、指定根的各层回复或指定直接父节点读取本地可读评论。读取不会触发来源请求。 GET /api/contents/${param0}/comments */
+export async function listContentComments(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: HotKeyAPI.listContentCommentsParams,
+  options?: import("@/request").RequestOptions,
+) {
+  const { content_id: param0, ...queryParams } = params;
+  return request<HotKeyAPI.PageViewContentCommentView_>(
+    `/api/contents/${param0}/comments`,
+    {
+      method: "GET",
+      params: {
+        // limit has a default value: 20
+        limit: "20",
+        ...queryParams,
+      },
+      ...(options || {}),
+    },
+  );
+}

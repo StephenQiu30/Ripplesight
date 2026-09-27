@@ -22,6 +22,8 @@ Plan 040 见 Acceptance 002 EV-002-023：旧积压扫描、冻结输入、一次
 
 Plan 038 见 Acceptance 002 EV-002-024—028：HN 评论参数已进入版本化预设，旧帖显式复采 API 及受控权限/预算/频次已实现；受控 HN 树和真实 PostgreSQL 验证旧根复扫新增回复，真实 Kafka 验证受控消息重投、预算与 offset 幂等。评论关系切片已分存帖子、根、直接父节点、回复目标，保留无正文父节点的身份与缺口状态，并防止按根限额时误分线程。新增关系列仅在全新库应用；存量库重建归 Plan051。独立逐根分页/尾段、真实旧帖新回复、真实 Worker 进程重启、Plan041 按钮与真实十帖仍待验，本卡 `in_progress`。
 
+Plan 041 见 Acceptance 002 EV-002-029：评论只读 API 与详情页已按根/父节点关系分页展示，父节点缺失和来源尾段未确认显式提示，受控 PostgreSQL 与桌面/390px 浏览器核对。作品列表筛选、按主题和版本的分析结果、显式复采按钮及真实 HN 产品阅读样本仍待实现/验收，本卡 `in_progress`。
+
 Plan 005 的标注状态与重放技术切片已在隔离 `main` 工作树完成，PostgreSQL 17 全新库的后端全量回归为 **779 passed/17 skipped**，见 Acceptance 002 EV-002-010。旧开发库 3 条历史异常、真实 Codex 样本和远端门禁尚未在该证据中核对；Plan 005 保持 `in_progress`，产品验收不变。
 
 Plan 031 的主题手动运行 API、到期调度账本、Job/Outbox 同事务及页面入口已在独立工作树验证：隔离 PostgreSQL 17 全量后端与隔离 Kafka 合计 **801 passed/13 skipped**，另补的连接版本 operation ID 目标测试 17 passed；前端 **55 passed**、lint/typecheck/format/build 通过，桌面和 390px 窄屏真实浏览器展示部分受理并进入任务详情。HN 手动真实输入已由 007 联验；定时与 72 小时窗口由 009 汇合；Plan 031 技术状态为 `completed`，见 Acceptance 002 Plan 031 小节。

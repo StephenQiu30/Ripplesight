@@ -11,7 +11,12 @@ from api.dependencies import (
     ContentServiceDependency,
     CsrfProtectedIdentityDependency,
 )
-from content.schemas import CommentManualRunInput, ContentRecordDetailView, ContentRecordSummaryView
+from content.schemas import (
+    CommentManualRunInput,
+    ContentCommentView,
+    ContentRecordDetailView,
+    ContentRecordSummaryView,
+)
 from core.schemas import ErrorView, JobAcceptedView, PageView
 
 router = APIRouter(prefix="/contents", tags=["作品资料"])
@@ -69,6 +74,40 @@ def get_content_record(
     content = service.get_content(owner_id=identity.view.user.id, content_id=content_id)
     response.headers["cache-control"] = "no-store"
     return content
+
+
+@router.get(
+    "/{content_id}/comments",
+    operation_id="listContentComments",
+    response_model=PageView[ContentCommentView],
+    status_code=status.HTTP_200_OK,
+    summary="分页读取作品评论",
+    description="按线程根、指定根的各层回复或指定直接父节点读取本地可读评论。读取不会触发来源请求。",
+    responses={
+        404: {"model": ErrorView, "description": "作品或所选评论关系不存在或不可访问"},
+        **_COMMON_READ_RESPONSES,
+    },
+)
+def list_content_comments(
+    content_id: UUID,
+    response: Response,
+    service: ContentServiceDependency,
+    identity: AuthenticatedIdentityDependency,
+    root_id: UUID | None = None,
+    parent_id: UUID | None = None,
+    cursor: UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> PageView[ContentCommentView]:
+    items, next_cursor = service.list_comments(
+        owner_id=identity.view.user.id,
+        post_content_id=content_id,
+        root_id=root_id,
+        parent_id=parent_id,
+        cursor=cursor,
+        limit=limit,
+    )
+    response.headers["cache-control"] = "no-store"
+    return PageView(items=items, next_cursor=next_cursor)
 
 
 @router.post(

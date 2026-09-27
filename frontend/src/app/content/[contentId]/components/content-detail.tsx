@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeftIcon, ExternalLinkIcon, RotateCcwIcon } from "lucide-react";
 
 import { getContentRecord } from "@/api/zuopinziliao";
+import { CommentThreadList } from "@/app/content/[contentId]/components/comment-thread-list";
 import {
   contentOriginLabel,
   contentScopeLabel,
@@ -440,6 +441,10 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
         </section>
 
         <ContentVersionSection version={observation.content_version ?? null} />
+
+        {content.object_type === "post" ? (
+          <CommentThreadList postId={content.id} />
+        ) : null}
 
         <VersionHistory history={content.version_history} />
 

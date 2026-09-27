@@ -133,6 +133,24 @@ declare namespace HotKeyAPI {
     operation_id: string;
   };
 
+  type ContentCommentView = {
+    /** Content Id */
+    content_id: string;
+    /** External Id */
+    external_id: string | null;
+    /** Root Content Id */
+    root_content_id: string | null;
+    /** Parent Content Id */
+    parent_content_id: string | null;
+    /** Reply Target Content Id */
+    reply_target_content_id: string | null;
+    /** Parent Relation Status */
+    parent_relation_status: "root" | "observed" | "unavailable" | "unresolved";
+    latest_observation: ContentObservationView | null;
+    /** Has Replies */
+    has_replies: boolean;
+  };
+
   type ContentDiscoveryView = {
     /** Job Id */
     job_id: string;
@@ -657,6 +675,14 @@ declare namespace HotKeyAPI {
     limit?: number;
   };
 
+  type listContentCommentsParams = {
+    content_id: string;
+    root_id?: string | null;
+    parent_id?: string | null;
+    cursor?: string | null;
+    limit?: number;
+  };
+
   type listContentRecordsParams = {
     cursor?: string | null;
     limit?: number;
@@ -846,6 +872,13 @@ declare namespace HotKeyAPI {
   type PageViewCollectionCoverageView_ = {
     /** Items */
     items: CollectionCoverageView[];
+    /** Next Cursor */
+    next_cursor: string | null;
+  };
+
+  type PageViewContentCommentView_ = {
+    /** Items */
+    items: ContentCommentView[];
     /** Next Cursor */
     next_cursor: string | null;
   };
