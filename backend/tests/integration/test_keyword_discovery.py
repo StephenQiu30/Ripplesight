@@ -3,20 +3,29 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import time
 from collections.abc import Callable
+from contextlib import suppress
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from email.utils import format_datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
+from confluent_kafka import Consumer, Message, Producer
+from confluent_kafka.admin import AdminClient, NewTopic
 from sqlalchemy import Engine, create_engine, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from connections.presets import BILIBILI_PRESET
+from connections.presets import BILIBILI_PRESET, SOURCE_PRESETS
+from connections.services import SourcePresetService
 from content.discovery import (
     KeywordDiscoveryPageCommitService,
     KeywordRequestMeter,
     plan_keyword_discovery,
+    plan_single_keyword_discovery,
 )
 from content.discovery_execution import KeywordDiscoveryExecutor
 from content.models import ContentDiscovery, ContentRecord
@@ -26,6 +35,7 @@ from core.errors import ApplicationError
 from jobs.cursor import plan_cursor_request
 from jobs.execution import (
     CheckpointConflictError,
+    JobCompletion,
     JobExecutionFailure,
     JobExecutionService,
     MessageReference,
@@ -43,9 +53,10 @@ from jobs.schemas import (
     JobRetryScheduledMessage,
     JobStatus,
 )
-from jobs.services import JobService, ResourceBudgetService
+from jobs.services import JobService, OutboxService, ResourceBudgetService
 from monitors.services import MonitorTopicService, evaluate_monitor_rules
 from sources.adapters.mediacrawler import MediaCrawlerAdapter
+from sources.adapters.rss import RssSourceAdapter
 from sources.contracts import (
     CommentsRequest,
     SearchRequest,
@@ -56,6 +67,8 @@ from sources.contracts import (
     SourceSort,
     SourceStopReason,
 )
+from worker.app import JobExecutionContext, create_job_message_handler
+from worker.messaging import publish_outbox
 
 
 def test_job_execution_failure_allows_traceback_assignment() -> None:
@@ -504,6 +517,547 @@ def _accepted_message(engine: Engine, job_id: UUID) -> JobAcceptedMessage:
                 **outbox.payload,
             }
         )
+
+
+def test_36kr_feed_replay_keeps_source_time_and_separate_budget() -> None:
+    database_url = os.getenv("HOTKEY_TEST_DATABASE_URL")
+    if database_url is None:
+        pytest.skip("HOTKEY_TEST_DATABASE_URL is required for PostgreSQL integration tests")
+
+    engine = create_engine(database_url)
+    owner_id, topic_id = uuid4(), uuid4()
+    now = datetime.now(UTC).replace(microsecond=0)
+    feed_updated_at = now - timedelta(minutes=15)
+    published_at = now - timedelta(hours=1)
+    feed = (
+        "<rss version='2.0'><channel><title>36Kr</title>"
+        f"<lastBuildDate>{format_datetime(feed_updated_at, usegmt=True)}</lastBuildDate>"
+        "<item><title>AI 发布</title><guid>native-ai</guid>"
+        "<link>https://www.36kr.com/newsflashes/ai</link>"
+        f"<pubDate>{format_datetime(published_at, usegmt=True)}</pubDate>"
+        "<description>人工智能产品发布</description></item>"
+        "<item><title>daily 发布</title><guid>native-daily</guid>"
+        "<link>https://www.36kr.com/newsflashes/daily</link></item>"
+        "<item><title>AI 招聘发布</title><guid>native-excluded</guid>"
+        "<link>https://www.36kr.com/newsflashes/excluded</link></item>"
+        "</channel></rss>"
+    )
+    no_match = (
+        "<rss version='2.0'><channel><title>36Kr</title>"
+        "<item><title>daily 发布</title><guid>native-daily</guid>"
+        "<link>https://www.36kr.com/newsflashes/daily</link></item></channel></rss>"
+    )
+    empty = "<rss version='2.0'><channel><title>36Kr</title></channel></rss>"
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("TRUNCATE identity_users CASCADE"))
+        with Session(engine) as session, session.begin():
+            session.execute(
+                text(
+                    "INSERT INTO identity_users "
+                    "(id, username, password_hash, credential_version, created_at, updated_at) "
+                    "VALUES (:id, :username, 'test-only-hash', 1, :now, :now)"
+                ),
+                {"id": owner_id, "username": f"rss-36kr-{owner_id}", "now": now},
+            )
+            session.execute(
+                text(
+                    "INSERT INTO monitor_topics "
+                    "(id, owner_id, name, status, readiness_status, current_version, "
+                    "created_at, updated_at) VALUES "
+                    "(:id, :owner_id, '36Kr controlled feed', 'paused', "
+                    "'pending_source_selection', 1, :now, :now)"
+                ),
+                {"id": topic_id, "owner_id": owner_id, "now": now},
+            )
+            session.execute(
+                text(
+                    "INSERT INTO monitor_topic_versions "
+                    "(topic_id, version, created_by, match_any, match_all, exclude, created_at) "
+                    "VALUES (:id, 1, :owner_id, '[\"AI\"]', '[\"发布\"]', '[\"招聘\"]', :now)"
+                ),
+                {"id": topic_id, "owner_id": owner_id, "now": now},
+            )
+            presets = SourcePresetService(session, clock=lambda: now)
+            rss = presets.apply_in_transaction(owner_id=owner_id, preset=SOURCE_PRESETS["rss_36kr"])
+            presets.apply_in_transaction(owner_id=owner_id, preset=SOURCE_PRESETS["hotlist_36kr"])
+            ResourceBudgetService(session, clock=lambda: now).save_budget_policy_in_transaction(
+                owner_id=owner_id,
+                command=BudgetPolicyInput(
+                    budget_key="global.plan037.network.daily",
+                    metric=BudgetMetric.NETWORK_REQUEST,
+                    scope_kind=BudgetScopeKind.GLOBAL,
+                    scope_reference=None,
+                    limit_units=20,
+                    window_seconds=86_400,
+                    window_anchor_at=datetime(2026, 1, 1, tzinfo=UTC),
+                    enabled=True,
+                ),
+            )
+
+        job_ids: list[UUID] = []
+
+        def response_for(
+            feed_xml: str, seen_urls: list[str]
+        ) -> Callable[[httpx.Request], httpx.Response]:
+            def respond(request: httpx.Request) -> httpx.Response:
+                seen_urls.append(str(request.url))
+                return httpx.Response(200, text=feed_xml)
+
+            return respond
+
+        def adapter_for(feed_xml: str, seen_urls: list[str]) -> Callable[..., RssSourceAdapter]:
+            transport = httpx.MockTransport(response_for(feed_xml, seen_urls))
+
+            def make_adapter(
+                before: Callable[[int], bool],
+                cancelled: Callable[[], bool],
+                max_requests: int,
+                max_seconds: float,
+            ) -> RssSourceAdapter:
+                return RssSourceAdapter(
+                    source_key="rss_36kr",
+                    feed_url_template="http://127.0.0.1:1200/36kr/newsflashes",
+                    allowed_hosts=frozenset({"127.0.0.1"}),
+                    before_request=before,
+                    cancelled=cancelled,
+                    max_requests=max_requests,
+                    max_seconds=max_seconds,
+                    transport=transport,
+                )
+
+            return make_adapter
+
+        for xml in (feed, feed, no_match, empty):
+            run = KeywordDiscoveryRunInput(
+                run_id=uuid4(),
+                configuration_ref=f"topic:{topic_id}",
+                configuration_version=1,
+                source_key="rss_36kr",
+                connection_id=rss.connection_id,
+                connection_version=rss.connection_version,
+                primary_query="AI",
+                starts_at=now - timedelta(days=1),
+                ends_at=now,
+                page_size=20,
+                latest_max_pages=2,
+                latest_max_requests=2,
+                top_max_pages=1,
+                top_max_requests=1,
+                max_seconds=45,
+            )
+            with Session(engine) as session:
+                accepted = JobService(session, clock=lambda: now).accept(
+                    owner_id=owner_id, command=plan_single_keyword_discovery(run)
+                )
+            with Session(engine) as session:
+                lease = JobExecutionService(session, lease_seconds=60, clock=lambda: now).acquire(
+                    job_id=accepted.id, worker_id=f"rss-36kr-{len(job_ids)}"
+                )
+            urls: list[str] = []
+
+            renewed, completion = KeywordDiscoveryExecutor(
+                sessionmaker(bind=engine),
+                lease_seconds=60,
+                component_key="collector.rss_36kr",
+                adapter_factory=adapter_for(xml, urls),
+            ).execute(_accepted_message(engine, accepted.id), lease)
+            assert completion.status is JobStatus.PARTIALLY_SUCCEEDED
+            assert urls == ["http://127.0.0.1:1200/36kr/newsflashes"]
+            assert renewed.checkpoint_sequence == 1
+            assert (
+                renewed.checkpoint["collection.source_observed_at"] != feed_updated_at.isoformat()
+            )
+            assert renewed.checkpoint["collection.source_feed_updated_at"] == (
+                feed_updated_at.isoformat() if xml == feed else None
+            )
+            job_ids.append(accepted.id)
+
+        retry_run = run.model_copy(update={"run_id": uuid4()})
+        with Session(engine) as session:
+            retry_job = JobService(session, clock=lambda: now).accept(
+                owner_id=owner_id, command=plan_single_keyword_discovery(retry_run)
+            )
+        with Session(engine) as session:
+            first_lease = JobExecutionService(session, lease_seconds=60, clock=lambda: now).acquire(
+                job_id=retry_job.id, worker_id="rss-36kr-retry-first"
+            )
+        responses = [503, 200]
+        retry_urls: list[str] = []
+
+        def retry_response(request: httpx.Request) -> httpx.Response:
+            retry_urls.append(str(request.url))
+            return httpx.Response(responses.pop(0), text=feed)
+
+        def retry_adapter(
+            before: Callable[[int], bool],
+            cancelled: Callable[[], bool],
+            max_requests: int,
+            max_seconds: float,
+        ) -> RssSourceAdapter:
+            return RssSourceAdapter(
+                source_key="rss_36kr",
+                feed_url_template="http://127.0.0.1:1200/36kr/newsflashes",
+                allowed_hosts=frozenset({"127.0.0.1"}),
+                before_request=before,
+                cancelled=cancelled,
+                max_requests=max_requests,
+                max_seconds=max_seconds,
+                transport=httpx.MockTransport(retry_response),
+            )
+
+        with pytest.raises(JobExecutionFailure) as failure:
+            KeywordDiscoveryExecutor(
+                sessionmaker(bind=engine),
+                lease_seconds=60,
+                component_key="collector.rss_36kr",
+                adapter_factory=retry_adapter,
+            ).execute(_accepted_message(engine, retry_job.id), first_lease)
+        assert failure.value.error_code == "source_upstream_unavailable"
+        assert failure.value.retry_at is not None
+        with Session(engine) as session:
+            failed_job = session.get(Job, retry_job.id)
+            assert failed_job is not None
+            assert failed_job.checkpoint_sequence == 1
+            assert failed_job.checkpoint["collection.source_feed_updated_at"] is None
+            assert failed_job.requests_sent == 1
+            failed_coverage = session.scalar(
+                select(CoverageWindow).where(CoverageWindow.last_job_id == retry_job.id)
+            )
+            assert failed_coverage is not None
+            assert (failed_coverage.status, failed_coverage.stop_reason) == (
+                "partial",
+                "upstream_error",
+            )
+            failed_lease = replace(
+                first_lease,
+                checkpoint_sequence=failed_job.checkpoint_sequence,
+                checkpoint=dict(failed_job.checkpoint),
+            )
+        with Session(engine) as session:
+            JobExecutionService(session, lease_seconds=60).record_failure(
+                failed_lease,
+                message=MessageReference(uuid4(), "hotkey.jobs.accepted.v2", 0, 0),
+                failure=failure.value,
+            )
+        retry_at = failure.value.retry_at + timedelta(seconds=1)
+        with Session(engine) as session:
+            second_lease = JobExecutionService(
+                session, lease_seconds=60, clock=lambda: retry_at
+            ).acquire(job_id=retry_job.id, worker_id="rss-36kr-retry-second")
+        renewed, completion = KeywordDiscoveryExecutor(
+            sessionmaker(bind=engine),
+            lease_seconds=60,
+            component_key="collector.rss_36kr",
+            adapter_factory=retry_adapter,
+            clock=lambda: retry_at,
+        ).execute(_accepted_message(engine, retry_job.id), second_lease)
+        assert completion.status is JobStatus.PARTIALLY_SUCCEEDED
+        assert renewed.checkpoint_sequence == 2
+        assert (
+            renewed.checkpoint["collection.source_feed_updated_at"] == feed_updated_at.isoformat()
+        )
+        assert retry_urls == ["http://127.0.0.1:1200/36kr/newsflashes"] * 2
+
+        with Session(engine) as session:
+            records = session.scalars(
+                select(ContentRecord).where(ContentRecord.owner_id == owner_id)
+            ).all()
+            discoveries = session.scalars(
+                select(ContentDiscovery).where(ContentDiscovery.owner_id == owner_id)
+            ).all()
+            assert [(record.source_key, record.external_id) for record in records] == [
+                ("rss_36kr", "native-ai")
+            ]
+            assert len(discoveries) == 3
+            assert all(item.content_id == records[0].id for item in discoveries)
+            assert [session.get(Job, job_id).requests_sent for job_id in job_ids] == [1] * 4
+            assert [session.get(Job, job_id).items_saved for job_id in job_ids] == [1, 1, 0, 0]
+            assert [
+                session.get(Job, job_id).checkpoint["collection.observed_count"]
+                for job_id in job_ids
+            ] == [3, 3, 1, 0]
+            assert (
+                session.get(Job, retry_job.id).requests_sent,
+                session.get(Job, retry_job.id).items_saved,
+            ) == (2, 1)
+            assert (
+                session.execute(
+                    text("SELECT count(*) FROM content_observations WHERE owner_id = :owner_id"),
+                    {"owner_id": owner_id},
+                ).scalar_one()
+                == 3
+            )
+            assert (
+                session.execute(
+                    text(
+                        "SELECT count(*) FROM content_observations "
+                        "WHERE owner_id = :owner_id AND published_at = :published_at"
+                    ),
+                    {"owner_id": owner_id, "published_at": published_at},
+                ).scalar_one()
+                == 3
+            )
+            outcomes = session.execute(
+                text(
+                    "SELECT j.id, a.outcome FROM jobs j "
+                    "JOIN resource_usage_attempts a ON a.operation_id = j.operation_id "
+                    "WHERE j.owner_id = :owner_id"
+                ),
+                {"owner_id": owner_id},
+            ).all()
+            assert [outcome for job_id, outcome in outcomes if job_id == job_ids[2]] == [
+                "succeeded"
+            ]
+            assert [outcome for job_id, outcome in outcomes if job_id == job_ids[3]] == ["empty"]
+            assert sorted(outcome for job_id, outcome in outcomes if job_id == retry_job.id) == [
+                "failed",
+                "succeeded",
+            ]
+            budgets = session.execute(
+                text(
+                    "SELECT p.budget_key, w.used_units FROM resource_budget_windows w "
+                    "JOIN resource_budget_policies p ON p.id = w.budget_policy_id "
+                    "WHERE p.owner_id = :owner_id ORDER BY p.budget_key"
+                ),
+                {"owner_id": owner_id},
+            ).all()
+            assert budgets == [
+                ("global.plan037.network.daily", 6),
+                ("source.rss_36kr.network.daily", 6),
+            ]
+    finally:
+        with engine.begin() as connection:
+            connection.execute(text("SET CONSTRAINTS ALL DEFERRED"))
+            connection.execute(
+                text("DELETE FROM monitor_topic_versions WHERE topic_id = :id"),
+                {"id": topic_id},
+            )
+            connection.execute(
+                text("DELETE FROM monitor_topics WHERE id = :id"),
+                {"id": topic_id},
+            )
+            connection.execute(
+                text("DELETE FROM source_connection_versions WHERE owner_id = :id"),
+                {"id": owner_id},
+            )
+            connection.execute(
+                text("DELETE FROM content_records WHERE owner_id = :id"),
+                {"id": owner_id},
+            )
+            connection.execute(text("DELETE FROM identity_users WHERE id = :id"), {"id": owner_id})
+        engine.dispose()
+
+
+def test_36kr_kafka_redelivery_does_not_repeat_collection() -> None:
+    database_url = os.getenv("HOTKEY_TEST_DATABASE_URL")
+    bootstrap_servers = os.getenv("HOTKEY_TEST_KAFKA_BOOTSTRAP_SERVERS")
+    if database_url is None or bootstrap_servers is None:
+        pytest.skip("PostgreSQL and Kafka are required for 36Kr message redelivery")
+
+    engine = create_engine(database_url)
+    sessions = sessionmaker(bind=engine)
+    owner_id, topic_id = uuid4(), uuid4()
+    now = datetime.now(UTC).replace(microsecond=0)
+    kafka_topic = f"hotkey.tests.plan037.{uuid4().hex}"
+    group_id = f"hotkey-tests-plan037-{uuid4().hex}"
+    admin = AdminClient({"bootstrap.servers": bootstrap_servers})
+    producer = Producer({"bootstrap.servers": bootstrap_servers})
+    consumers: list[Consumer] = []
+    requested: list[str] = []
+    feed = (
+        "<rss version='2.0'><channel><title>36Kr</title>"
+        "<item><title>AI 发布</title><guid>kafka-native-ai</guid>"
+        "<link>https://www.36kr.com/newsflashes/kafka-ai</link></item>"
+        "</channel></rss>"
+    )
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("TRUNCATE identity_users CASCADE"))
+        with sessions.begin() as session:
+            session.execute(
+                text(
+                    "INSERT INTO identity_users "
+                    "(id, username, password_hash, credential_version, created_at, updated_at) "
+                    "VALUES (:id, :username, 'test-only-hash', 1, :now, :now)"
+                ),
+                {"id": owner_id, "username": f"rss-kafka-{owner_id}", "now": now},
+            )
+            session.execute(
+                text(
+                    "INSERT INTO monitor_topics "
+                    "(id, owner_id, name, status, readiness_status, current_version, "
+                    "created_at, updated_at) VALUES "
+                    "(:id, :owner_id, '36Kr Kafka replay', 'paused', "
+                    "'pending_source_selection', 1, :now, :now)"
+                ),
+                {"id": topic_id, "owner_id": owner_id, "now": now},
+            )
+            session.execute(
+                text(
+                    "INSERT INTO monitor_topic_versions "
+                    "(topic_id, version, created_by, match_any, match_all, exclude, created_at) "
+                    "VALUES (:id, 1, :owner_id, '[\"AI\"]', '[]', '[]', :now)"
+                ),
+                {"id": topic_id, "owner_id": owner_id, "now": now},
+            )
+            applied = SourcePresetService(session, clock=lambda: now).apply_in_transaction(
+                owner_id=owner_id, preset=SOURCE_PRESETS["rss_36kr"]
+            )
+            ResourceBudgetService(session, clock=lambda: now).save_budget_policy_in_transaction(
+                owner_id=owner_id,
+                command=BudgetPolicyInput(
+                    budget_key="global.plan037.kafka.daily",
+                    metric=BudgetMetric.NETWORK_REQUEST,
+                    scope_kind=BudgetScopeKind.GLOBAL,
+                    scope_reference=None,
+                    limit_units=10,
+                    window_seconds=86_400,
+                    window_anchor_at=datetime(2026, 1, 1, tzinfo=UTC),
+                    enabled=True,
+                ),
+            )
+            run = KeywordDiscoveryRunInput(
+                run_id=uuid4(),
+                configuration_ref=f"topic:{topic_id}",
+                configuration_version=1,
+                source_key="rss_36kr",
+                connection_id=applied.connection_id,
+                connection_version=applied.connection_version,
+                primary_query="AI",
+                starts_at=now - timedelta(days=1),
+                ends_at=now,
+                page_size=20,
+                latest_max_pages=1,
+                latest_max_requests=1,
+                top_max_pages=1,
+                top_max_requests=1,
+                max_seconds=45,
+            )
+            accepted = JobService(session, clock=lambda: now).accept_in_transaction(
+                owner_id=owner_id, command=plan_single_keyword_discovery(run)
+            )
+
+        admin.create_topics([NewTopic(kafka_topic, 1, 1)])[kafka_topic].result(10)
+
+        def new_consumer() -> Consumer:
+            consumer = Consumer(
+                {
+                    "bootstrap.servers": bootstrap_servers,
+                    "group.id": group_id,
+                    "enable.auto.commit": False,
+                    "auto.offset.reset": "earliest",
+                }
+            )
+            consumer.subscribe([kafka_topic])
+            consumers.append(consumer)
+            return consumer
+
+        def next_message(consumer: Consumer) -> Message:
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline:
+                message = consumer.poll(1.0)
+                if message is not None:
+                    assert message.error() is None
+                    return message
+            raise AssertionError("36Kr Kafka job message was not delivered")
+
+        with sessions() as session:
+            assert (
+                OutboxService(session).publish_pending(
+                    lambda envelope: publish_outbox(
+                        producer, replace(envelope, topic=kafka_topic), timeout_seconds=10
+                    )
+                )
+                == 1
+            )
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            requested.append(str(request.url))
+            return httpx.Response(200, text=feed)
+
+        executor = KeywordDiscoveryExecutor(
+            sessions,
+            lease_seconds=60,
+            component_key="collector.rss_36kr",
+            adapter_factory=lambda before, cancelled, max_requests, max_seconds: RssSourceAdapter(
+                source_key="rss_36kr",
+                feed_url_template="http://127.0.0.1:1200/36kr/newsflashes",
+                allowed_hosts=frozenset({"127.0.0.1"}),
+                before_request=before,
+                cancelled=cancelled,
+                max_requests=max_requests,
+                max_seconds=max_seconds,
+                transport=httpx.MockTransport(respond),
+            ),
+        )
+
+        def search(context: JobExecutionContext) -> JobCompletion:
+            context.lease, completion = executor.execute(context.message, context.lease)
+            return completion
+
+        handler = create_job_message_handler(
+            sessions,
+            {"keyword.search": search},
+            worker_id="rss-36kr-kafka-test",
+            lease_seconds=60,
+        )
+        first_consumer = new_consumer()
+        first = next_message(first_consumer)
+        handler(first)
+        first_consumer.close()  # Deliberately omit the offset commit.
+        second_consumer = new_consumer()
+        redelivered = next_message(second_consumer)
+        assert (redelivered.partition(), redelivered.offset()) == (
+            first.partition(),
+            first.offset(),
+        )
+        handler(redelivered)
+        second_consumer.commit(message=redelivered, asynchronous=False)
+        assert requested == ["http://127.0.0.1:1200/36kr/newsflashes"]
+        with sessions() as session:
+            job = session.get(Job, accepted.id)
+            assert job is not None
+            assert (job.status, job.requests_sent, job.items_saved) == (
+                "partially_succeeded",
+                1,
+                1,
+            )
+            assert (
+                session.scalar(
+                    select(text("count(*)"))
+                    .select_from(text("processed_messages"))
+                    .where(text("job_id = :job_id"))
+                    .params(job_id=accepted.id)
+                )
+                == 1
+            )
+            assert [
+                record.external_id
+                for record in session.scalars(
+                    select(ContentRecord).where(ContentRecord.owner_id == owner_id)
+                )
+            ] == ["kafka-native-ai"]
+    finally:
+        for consumer in consumers:
+            consumer.close()
+        with suppress(Exception):
+            admin.delete_topics([kafka_topic], operation_timeout=10)[kafka_topic].result(10)
+        with engine.begin() as connection:
+            connection.execute(text("SET CONSTRAINTS ALL DEFERRED"))
+            connection.execute(
+                text("DELETE FROM monitor_topic_versions WHERE topic_id = :id"), {"id": topic_id}
+            )
+            connection.execute(text("DELETE FROM monitor_topics WHERE id = :id"), {"id": topic_id})
+            connection.execute(
+                text("DELETE FROM source_connection_versions WHERE owner_id = :id"),
+                {"id": owner_id},
+            )
+            connection.execute(
+                text("DELETE FROM content_records WHERE owner_id = :id"), {"id": owner_id}
+            )
+            connection.execute(text("DELETE FROM identity_users WHERE id = :id"), {"id": owner_id})
+        engine.dispose()
 
 
 def test_pages_atomically_save_distinct_channel_discoveries_and_unverified_gap() -> None:
