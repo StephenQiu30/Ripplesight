@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 
+from analysis.prompts import ANALYSIS_PROMPT_VERSION
 from connections.schemas import SourceEntryPoint
 from connections.services import SourceConnectionService
 from content.schemas import (
@@ -842,6 +843,156 @@ def test_content_reads_enforce_owner_and_lifecycle_boundary(content_client: Test
     assert hidden.json()["code"] == "resource_not_found"
     assert listed.status_code == 200
     assert listed.json() == {"items": [], "next_cursor": None}
+
+
+def test_detail_reads_annotation_status_by_readable_version_and_current_topic_rule(
+    content_client: TestClient,
+) -> None:
+    owner_id = _initialize(content_client)
+    connection_id, policy_id, retention_id, first_job_id, second_job_id = _seed_context(
+        content_client, owner_id
+    )
+    now = datetime.now(UTC)
+    factory = content_client.app.state.session_factory
+    with factory() as session:
+        first = ContentService(session).persist_post(
+            owner_id=owner_id,
+            command=_command(
+                owner_id=owner_id,
+                connection_id=connection_id,
+                policy_id=policy_id,
+                retention_id=retention_id,
+                job_id=first_job_id,
+                operation_id=uuid4(),
+                observed_at=now - timedelta(minutes=2),
+                extra_fields={"text_scope": "full", "text_origin": "source", "body": "旧正文"},
+            ),
+        )
+        second = ContentService(session).persist_post(
+            owner_id=owner_id,
+            command=_command(
+                owner_id=owner_id,
+                connection_id=connection_id,
+                policy_id=policy_id,
+                retention_id=retention_id,
+                job_id=second_job_id,
+                operation_id=uuid4(),
+                observed_at=now - timedelta(minutes=1),
+                extra_fields={"text_scope": "full", "text_origin": "source", "body": "新正文"},
+            ),
+        )
+    old_version = first.latest_observation.content_version
+    current_version = second.latest_observation.content_version
+    assert old_version is not None and current_version is not None
+    topic_id, call_id = uuid4(), uuid4()
+    with factory.begin() as session:
+        session.execute(
+            text(
+                "INSERT INTO monitor_topics "
+                "(id, owner_id, name, status, readiness_status, current_version, "
+                "created_at, updated_at) "
+                "VALUES (:topic, :owner, '品牌召回', 'active', 'ready', 2, :now, :now)"
+            ),
+            {"topic": topic_id, "owner": owner_id, "now": now},
+        )
+        for rule in (1, 2):
+            session.execute(
+                text(
+                    "INSERT INTO monitor_topic_versions "
+                    "(topic_id, version, created_by, match_any, match_all, exclude, created_at) "
+                    "VALUES (:topic, :rule, :owner, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, :now)"
+                ),
+                {"topic": topic_id, "rule": rule, "owner": owner_id, "now": now},
+            )
+        session.execute(
+            text(
+                "INSERT INTO ai_calls "
+                "(id, owner_id, purpose, provider, model, prompt_version, input_fingerprint, "
+                "status, input_tokens, cached_input_tokens, output_tokens, "
+                "reasoning_output_tokens, "
+                "duration_ms, created_at) VALUES "
+                "(:id, :owner, 'analysis.annotate', 'test', 'test-model', :prompt, :fingerprint, "
+                "'succeeded', 0, 0, 0, 0, 0, :now)"
+            ),
+            {
+                "id": call_id,
+                "owner": owner_id,
+                "prompt": ANALYSIS_PROMPT_VERSION,
+                "fingerprint": call_id.bytes * 2,
+                "now": now,
+            },
+        )
+        for version_id, rule, state in (
+            (old_version.id, 1, "valid"),
+            (current_version.id, 1, "valid"),
+            (current_version.id, 2, "pending"),
+        ):
+            valid = state == "valid"
+            session.execute(
+                text(
+                    "INSERT INTO content_annotations "
+                    "(id, owner_id, content_id, content_version_id, topic_id, topic_rule_version, "
+                    "prompt_version, relevant, relevance_reason, sentiment, summary, ai_call_id, "
+                    "status, result_state, created_at, updated_at) VALUES "
+                    "(:id, :owner, :content, :version, :topic, :rule, :prompt, :relevant, "
+                    ":reason, :sentiment, :summary, :call, :status, :state, :now, :now)"
+                ),
+                {
+                    "id": uuid4(),
+                    "owner": owner_id,
+                    "content": second.id,
+                    "version": version_id,
+                    "topic": topic_id,
+                    "rule": rule,
+                    "prompt": ANALYSIS_PROMPT_VERSION,
+                    "relevant": True if valid else None,
+                    "reason": "受控理由" if valid else None,
+                    "sentiment": "neutral" if valid else None,
+                    "summary": "受控摘要" if valid else None,
+                    "call": call_id if valid else None,
+                    "status": "annotated" if valid else "unanalyzed",
+                    "state": state,
+                    "now": now,
+                },
+            )
+
+    detail = content_client.get(f"/api/contents/{second.id}")
+    assert detail.status_code == 200, detail.json()
+    body = detail.json()
+    assert body["analysis_topics"] == [
+        {
+            "topic_id": str(topic_id),
+            "topic_name": "品牌召回",
+            "current_rule_version": 2,
+        }
+    ]
+    assert {
+        (item["content_version_id"], item["topic_rule_version"], item["result_state"])
+        for item in body["annotations"]
+    } == {
+        (str(old_version.id), 1, "valid"),
+        (str(current_version.id), 1, "valid"),
+        (str(current_version.id), 2, "pending"),
+    }
+    assert (
+        next(item["relevant"] for item in body["annotations"] if item["topic_rule_version"] == 2)
+        is None
+    )
+    with factory() as session:
+        with pytest.raises(ApplicationError, match="resource_not_found"):
+            ContentService(session).get_content(owner_id=uuid4(), content_id=second.id)
+        LifecycleService(session).request_deletion(
+            owner_id=owner_id,
+            operation_id=uuid4(),
+            resource_type="content_observation",
+            resource_id=first.latest_observation.id,
+            reason=DeletionReason.USER_REQUEST,
+        )
+    refreshed = content_client.get(f"/api/contents/{second.id}")
+    assert refreshed.status_code == 200
+    assert {item["content_version_id"] for item in refreshed.json()["annotations"]} == {
+        str(current_version.id)
+    }
 
 
 @pytest.mark.parametrize(

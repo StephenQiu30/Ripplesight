@@ -8,6 +8,7 @@ from uuid import UUID
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
+from analysis.schemas import ContentAnnotationReadView
 from connections.schemas import SourceEntryPoint
 from core.schemas import InputModel, OutputModel
 from evidence.schemas import AdmittedSourcePayload, DataClass
@@ -450,10 +451,19 @@ class ContentRecordSummaryView(OutputModel):
     discovery_count: int = Field(ge=1)
 
 
+class ContentAnalysisTopicView(OutputModel):
+    topic_id: UUID
+    topic_name: str
+    current_rule_version: int = Field(ge=1)
+
+
 class ContentRecordDetailView(ContentRecordSummaryView):
     discoveries: list[ContentDiscoveryView]
     version_history: list[ContentVersionHistoryView]
     visibility_history: list[ContentVisibilityView]
+    analysis_topics: list[ContentAnalysisTopicView]
+    annotations: list[ContentAnnotationReadView]
+    analysis_prompt_version: str
 
 
 class ContentCommentView(OutputModel):

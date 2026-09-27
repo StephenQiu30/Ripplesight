@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeftIcon, ExternalLinkIcon, RotateCcwIcon } from "lucide-react";
 
 import { getContentRecord } from "@/api/zuopinziliao";
+import { AnnotationPanel } from "@/app/content/[contentId]/components/annotation-panel";
 import { CommentThreadList } from "@/app/content/[contentId]/components/comment-thread-list";
 import {
   contentOriginLabel,
@@ -442,8 +443,13 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
 
         <ContentVersionSection version={observation.content_version ?? null} />
 
+        <AnnotationPanel key={`annotation-${content.id}`} content={content} />
+
         {content.object_type === "post" ? (
-          <CommentThreadList key={content.id} postId={content.id} />
+          <CommentThreadList
+            key={`comments-${content.id}`}
+            postId={content.id}
+          />
         ) : null}
 
         <VersionHistory history={content.version_history} />
