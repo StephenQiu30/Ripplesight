@@ -46,6 +46,7 @@ from content.models import (
 )
 from content.schemas import (
     AnalysisCommentContentView,
+    AnalysisPostAvailabilityView,
     AnalysisPostContentView,
     CollectionContentCountView,
     CollectionContentFactView,
@@ -2755,6 +2756,76 @@ def load_post_versions_for_analysis_scan(
         .order_by(recent_versions.c.occurred_at, ContentVersion.id)
     ).all()
     return tuple(_analysis_post_view(version, content) for version, content in rows)
+
+
+def load_post_analysis_availability_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    topic_id: UUID,
+    content_version_id: UUID,
+) -> AnalysisPostAvailabilityView | None:
+    """Read exact-version receipt and topic-matched hotlist facts."""
+    if not session.in_transaction():
+        raise RuntimeError("analysis content reads require the caller's transaction")
+    row = session.execute(
+        select(ContentVersion, ContentRecord)
+        .join(
+            ContentRecord,
+            and_(
+                ContentRecord.owner_id == ContentVersion.owner_id,
+                ContentRecord.id == ContentVersion.content_id,
+            ),
+        )
+        .where(
+            ContentVersion.owner_id == owner_id,
+            ContentVersion.id == content_version_id,
+            ContentRecord.object_type == "post",
+        )
+    ).one_or_none()
+    if row is None:
+        return None
+    version, content = row
+    first_received_at = session.scalar(
+        select(func.min(ContentObservation.received_at)).where(
+            ContentObservation.owner_id == owner_id,
+            ContentObservation.content_id == content.id,
+            ContentObservation.content_version_id == content_version_id,
+        )
+    )
+    if first_received_at is None:
+        return None
+    first_hotlist_match_received_at = session.scalar(
+        select(func.min(ContentObservation.received_at))
+        .join(
+            HotlistSnapshot,
+            and_(
+                HotlistSnapshot.owner_id == ContentObservation.owner_id,
+                HotlistSnapshot.job_id == ContentObservation.job_id,
+                HotlistSnapshot.source_key == content.source_key,
+            ),
+        )
+        .join(
+            HotlistEntryRecord,
+            and_(
+                HotlistEntryRecord.owner_id == ContentObservation.owner_id,
+                HotlistEntryRecord.snapshot_id == HotlistSnapshot.id,
+                HotlistEntryRecord.content_id == ContentObservation.content_id,
+            ),
+        )
+        .where(
+            ContentObservation.owner_id == owner_id,
+            ContentObservation.content_id == content.id,
+            ContentObservation.content_version_id == content_version_id,
+            HotlistEntryRecord.matched_topic_ids.contains([str(topic_id)]),
+        )
+    )
+    return AnalysisPostAvailabilityView(
+        post=_analysis_post_view(version, content),
+        source_key=content.source_key,
+        first_received_at=first_received_at,
+        first_hotlist_match_received_at=first_hotlist_match_received_at,
+    )
 
 
 def load_post_versions_for_analysis(

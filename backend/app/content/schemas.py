@@ -490,6 +490,15 @@ class AnalysisPostContentView(OutputModel):
     body: str | None
 
 
+class AnalysisPostAvailabilityView(OutputModel):
+    """First received times for an exact post version and a topic-matched hotlist entry."""
+
+    post: AnalysisPostContentView
+    source_key: str
+    first_received_at: datetime
+    first_hotlist_match_received_at: datetime | None
+
+
 class AnalysisCommentContentView(OutputModel):
     """Latest immutable text for one comment attached to a post."""
 
