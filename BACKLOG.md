@@ -4,6 +4,8 @@
 
 执行方：Codex 实现与单元/架构自检；Claude 规划审查、代码审查、真实库全量测试和真实运行验证，仅在用户明确授权后提交/推送；用户负责本人账号、授权与产品决策。代码、受控、真实、产品为不同证据等级。
 
+Plan 037 已在当前 `main` 基线上完成 RSS 适配器阶段：36Kr 快讯入口、GUID/URL 身份、有限 Feed 缺口与空/失败边界通过单元及匹配 Schema 的隔离库全量回归（后端 **775 passed/13 skipped**、前端 **52 passed**、OpenAPI 无漂移），见 Acceptance 002 EV-002-008。定时 Job、真实 PostgreSQL/Kafka 重投、覆盖 API 与两次真实扫描还需把其他隔离工作树的依赖切片按范围合入后复验，Plan 037 保持 `in_progress`。
+
 ## M1—M6 看板
 
 | Design/Epic与Issue | 交付范围 | 当前状态与证据 |

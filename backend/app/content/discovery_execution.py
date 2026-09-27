@@ -93,6 +93,11 @@ def build_search_adapter_factory(
         if config.feed_url_template is None:
             raise ValueError("RSS adapter requires feed_url_template")
         feed_url_template = config.feed_url_template
+        if source_key == "rss_36kr" and (
+            feed_url_template != "http://127.0.0.1:1200/36kr/newsflashes"
+            or allowed_hosts != frozenset({"127.0.0.1"})
+        ):
+            raise ValueError("rss_36kr requires the local RSSHub newsflashes endpoint")
         return lambda before_request, cancelled, max_requests, max_seconds: RssSourceAdapter(
             source_key=source_key,
             feed_url_template=feed_url_template,

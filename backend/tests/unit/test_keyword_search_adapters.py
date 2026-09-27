@@ -52,6 +52,29 @@ def test_rss_factory_uses_connection_feed_template() -> None:
     assert adapter._template == "https://news.google.com/rss/search?q={query}"
 
 
+def test_36kr_factory_requires_newsflashes_on_local_rsshub() -> None:
+    adapter = _factory(
+        "rss_36kr",
+        feed_url_template="http://127.0.0.1:1200/36kr/newsflashes",
+        allowed_hosts=("127.0.0.1",),
+    )
+    assert isinstance(adapter, RssSourceAdapter)
+    assert adapter._template == "http://127.0.0.1:1200/36kr/newsflashes"
+
+    with pytest.raises(ValueError, match="newsflashes"):
+        _factory(
+            "rss_36kr",
+            feed_url_template="http://127.0.0.1:1200/36kr/hot-list",
+            allowed_hosts=("127.0.0.1",),
+        )
+    with pytest.raises(ValueError, match="local"):
+        _factory(
+            "rss_36kr",
+            feed_url_template="https://36kr.com/feed",
+            allowed_hosts=("36kr.com",),
+        )
+
+
 def test_web_search_factory_uses_connection_base_url_and_engines() -> None:
     adapter = _factory(
         "news_search",

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 
+from monitors.services import evaluate_monitor_rules, normalize_monitor_rules
 from sources.adapters.hackernews import HackerNewsAdapter
 from sources.adapters.rss import RssSourceAdapter
 from sources.adapters.web_search import WebSearchAdapter
@@ -66,9 +67,145 @@ def test_rss_search_encodes_query_and_maps_entries() -> None:
     assert first.author_name == "记者甲"
     assert first.published_at == datetime(2026, 9, 25, 8, tzinfo=UTC)
     assert first.canonical_url == "https://news.example.com/a"
-    assert second.external_id == "https://news.example.com/b"
+    assert second.external_id == "url:https://news.example.com/b"
+    assert second.identity_basis == "url_fallback"
     assert second.published_at is None
     assert adapter.fetch_page(_search("google_news")).request_count == 0
+
+
+def test_rss_guid_fallback_is_normalized_and_title_is_not_identity() -> None:
+    feed = """<rss version="2.0"><channel><title>news</title>
+    <item><title>Same</title><guid>native-a</guid><link>https://example.com/a</link></item>
+    <item><title>Same</title><guid>native-b</guid><link>https://example.com/b</link></item>
+    <item><title>Duplicate</title><guid>native-a</guid><link>https://example.com/c</link></item>
+    <item><title>Same</title><link>HTTPS://EXAMPLE.COM:443/c#section</link></item>
+    <item><title>Same</title><link>https://example.com/c</link></item>
+    </channel></rss>"""
+    adapter = RssSourceAdapter(
+        source_key="google_news",
+        feed_url_template="https://news.google.com/rss/search?q={query}",
+        allowed_hosts=frozenset({"news.google.com"}),
+        before_request=_allow,
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, text=feed)),
+    )
+    page = adapter.fetch_page(_search("google_news"))
+
+    assert page.state is SourcePageState.COMPLETE
+    assert [(item.external_id, item.identity_basis) for item in page.items] == [
+        ("native-a", "guid"),
+        ("native-b", "guid"),
+        ("url:https://example.com/c", "url_fallback"),
+    ]
+
+
+def test_rss_legitimate_empty_is_distinct_from_malformed_xml() -> None:
+    def fetch(xml: str) -> object:
+        adapter = RssSourceAdapter(
+            source_key="google_news",
+            feed_url_template="https://news.google.com/rss/search?q={query}",
+            allowed_hosts=frozenset({"news.google.com"}),
+            before_request=_allow,
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, text=xml)),
+        )
+        return adapter.fetch_page(_search("google_news"))
+
+    assert (
+        fetch("<rss version='2.0'><channel><title>empty</title></channel></rss>").state
+        is SourcePageState.EMPTY
+    )
+    assert (
+        fetch("<html><body>upstream error</body></html>").stop_reason
+        is SourceStopReason.PROTOCOL_ERROR
+    )
+    truncated = (
+        "<rss version='2.0'><channel><title>partial</title>"
+        "<item><title>AI first</title><guid>first</guid></item>"
+        "<item><title>AI unfinished"
+    )
+    assert fetch(truncated).stop_reason is SourceStopReason.PROTOCOL_ERROR
+
+
+def _36kr_adapter(feed: str, *, status: int = 200) -> RssSourceAdapter:
+    return RssSourceAdapter(
+        source_key="rss_36kr",
+        feed_url_template="http://127.0.0.1:1200/36kr/newsflashes",
+        allowed_hosts=frozenset({"127.0.0.1"}),
+        before_request=_allow,
+        transport=httpx.MockTransport(lambda request: httpx.Response(status, text=feed)),
+    )
+
+
+def test_36kr_feed_keeps_build_time_and_does_not_hide_page_truncation() -> None:
+    feed = """<rss version="2.0"><channel><title>36Kr</title>
+    <lastBuildDate>Sat, 26 Sep 2026 10:00:00 GMT</lastBuildDate>
+    <item><title>AI 发布</title><guid>native-1</guid>
+    <link>https://www.36kr.com/newsflashes/1</link>
+    <pubDate>Sat, 26 Sep 2026 09:00:00 GMT</pubDate>
+    <description>人工智能快讯</description><author>记者甲</author></item>
+    <item><title>AI 无时间</title><guid>native-2</guid>
+    <link>https://www.36kr.com/newsflashes/2</link></item>
+    <item><title>AI 第三条</title><guid>native-3</guid>
+    <link>https://www.36kr.com/newsflashes/3</link></item>
+    </channel></rss>"""
+    page = _36kr_adapter(feed).fetch_page(_search("rss_36kr", query="AI", page_size=2))
+
+    assert page.state is SourcePageState.PARTIAL
+    assert page.stop_reason is SourceStopReason.BUDGET_EXHAUSTED
+    assert page.request_count == 1
+    assert page.source_feed_updated_at == datetime(2026, 9, 26, 10, tzinfo=UTC)
+    assert page.observed_at > page.source_feed_updated_at
+    first, second = page.items
+    assert isinstance(first, SourcePost) and isinstance(second, SourcePost)
+    assert (first.external_id, first.identity_basis) == ("native-1", "guid")
+    assert first.published_at == datetime(2026, 9, 26, 9, tzinfo=UTC)
+    assert first.author_name == "记者甲"
+    assert first.text == "人工智能快讯"
+    assert first.text_scope == "truncated"
+    assert second.published_at is None and second.author_name is None
+
+
+def test_36kr_rules_match_title_and_summary_once_with_exclusion_priority() -> None:
+    feed = """<rss version="2.0"><channel><title>36Kr</title>
+    <item><title>daily update</title><guid>daily</guid>
+    <link>https://www.36kr.com/newsflashes/daily</link></item>
+    <item><title>AI AI 发布</title><guid>ai</guid>
+    <link>https://www.36kr.com/newsflashes/ai</link></item>
+    <item><title>新技术发布</title><guid>cn</guid>
+    <link>https://www.36kr.com/newsflashes/cn</link>
+    <description>人工智能产品落地</description></item>
+    <item><title>AI 发布招聘</title><guid>excluded</guid>
+    <link>https://www.36kr.com/newsflashes/excluded</link></item>
+    <item><title>AI 再次出现</title><guid>ai</guid>
+    <link>https://www.36kr.com/newsflashes/duplicate</link></item>
+    </channel></rss>"""
+    page = _36kr_adapter(feed).fetch_page(_search("rss_36kr", query="AI", page_size=20))
+    rules = normalize_monitor_rules(
+        match_any=["AI", "人工智能"], match_all=["发布"], exclude=["招聘"]
+    )
+    matches = [
+        item.external_id
+        for item in page.items
+        if evaluate_monitor_rules(
+            rules, "\n".join(part for part in (item.title, item.text) if part)
+        ).matched
+    ]
+
+    assert page.state is SourcePageState.COMPLETE
+    assert [item.external_id for item in page.items] == ["daily", "ai", "cn", "excluded"]
+    assert matches == ["ai", "cn"]
+
+
+def test_36kr_empty_feed_is_distinct_from_html_and_upstream_failure() -> None:
+    empty = "<rss version='2.0'><channel><title>empty</title></channel></rss>"
+    assert _36kr_adapter(empty).fetch_page(_search("rss_36kr")).state is SourcePageState.EMPTY
+    assert (
+        _36kr_adapter("<html>error</html>").fetch_page(_search("rss_36kr")).stop_reason
+        is SourceStopReason.PROTOCOL_ERROR
+    )
+    assert (
+        _36kr_adapter(empty, status=503).fetch_page(_search("rss_36kr")).stop_reason
+        is SourceStopReason.UPSTREAM_ERROR
+    )
 
 
 def test_rss_maps_http_failures_and_budget_to_stop_reasons() -> None:
