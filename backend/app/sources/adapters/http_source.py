@@ -182,6 +182,8 @@ class HttpSourceAdapter:
                     timeout=min(self._request_timeout, remaining),
                 ) as response:
                     if response.is_redirect:
+                        if not self._follow_redirects():
+                            raise SourceFailureError(SourceStopReason.ACCESS_DENIED)
                         location = response.headers.get("location")
                         if location is None or redirect_count >= _MAX_REDIRECTS:
                             raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
@@ -201,6 +203,9 @@ class HttpSourceAdapter:
                         if time.monotonic() >= self._deadline:
                             raise SourceFailureError(SourceStopReason.BUDGET_EXHAUSTED)
                     return bytes(content)
+
+    def _follow_redirects(self) -> bool:
+        return True
 
     def _authorize_request(self) -> float:
         if self._cancelled():

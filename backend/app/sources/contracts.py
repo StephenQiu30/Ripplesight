@@ -69,6 +69,30 @@ class _ContractModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
 
+class SourceTerminalEvidence(_ContractModel):
+    """Source-owned proof that a bounded, ordered query reached its true tail."""
+
+    starts_at: datetime
+    ends_at: datetime
+    sort_key: SourceSort
+    query_bounded: bool
+    sort_applied: bool
+    terminal_verified: bool
+
+    @field_validator("starts_at", "ends_at")
+    @classmethod
+    def require_utc(cls, value: datetime) -> datetime:
+        if value.utcoffset() != timedelta(0):
+            raise ValueError("source terminal bounds must be UTC")
+        return value
+
+    @model_validator(mode="after")
+    def require_forward_range(self) -> SourceTerminalEvidence:
+        if self.starts_at >= self.ends_at:
+            raise ValueError("source terminal range must be forward")
+        return self
+
+
 def _validate_identifier(value: str | None) -> str | None:
     if value is None:
         return None
@@ -363,6 +387,7 @@ class SourcePage(_ContractModel):
     request_count: int = Field(default=0, ge=0)
     adapter_version: str | None = Field(default=None, max_length=64)
     source_feed_updated_at: datetime | None = None
+    terminal_evidence: SourceTerminalEvidence | None = None
     retry_at: datetime | None = None
 
     @field_validator("retry_at", "source_feed_updated_at")
@@ -430,6 +455,11 @@ class SourcePage(_ContractModel):
             )
         if not valid:
             raise ValueError("source page fields do not match its state")
+        if self.terminal_evidence is not None and (
+            self.capability is not SourceCapability.SEARCH
+            or self.state not in {SourcePageState.COMPLETE, SourcePageState.EMPTY}
+        ):
+            raise ValueError("terminal evidence requires a terminal search page")
         return self
 
 

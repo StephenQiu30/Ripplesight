@@ -78,8 +78,12 @@ def build_search_adapter_factory(
             max_seconds=min(max_seconds, settings.mediacrawler_timeout_seconds),
         )
     if source_key == "hackernews":
-        if config.base_url is None:
-            raise ValueError("Hacker News adapter requires base_url")
+        if (
+            config.base_url is None
+            or str(config.base_url).rstrip("/") != "https://hn.algolia.com/api/v1"
+            or allowed_hosts != frozenset({"hn.algolia.com"})
+        ):
+            raise ValueError("Hacker News requires the fixed HTTPS Algolia endpoint")
         base_url = str(config.base_url)
         return lambda before_request, cancelled, max_requests, max_seconds: HackerNewsAdapter(
             base_url=base_url,
