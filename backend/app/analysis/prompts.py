@@ -56,6 +56,8 @@ def _data_item(item: AnalysisPromptItem) -> dict[str, object]:
         "title": item.title,
         "body": item.body,
         "comments": list(item.comments),
+        "body_truncated": item.body_truncated,
+        "comments_truncated": item.comments_truncated,
     }
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from enum import StrEnum
 from typing import Any
 from uuid import UUID
@@ -44,10 +45,16 @@ class AiCompletion(BaseModel):
 
 class AiCallError(Exception):
     def __init__(
-        self, code: AiFailureCode, detail: str = "", *, call_id: UUID | None = None
+        self,
+        code: AiFailureCode,
+        detail: str = "",
+        *,
+        call_id: UUID | None = None,
+        retry_at: datetime | None = None,
     ) -> None:
         super().__init__(code.value)
         self.code = code
         self.call_id = call_id
+        self.retry_at = retry_at
         # Upstream text may echo prompt content; keep it short and out of logs by default.
         self.detail = detail[:500]

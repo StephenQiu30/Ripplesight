@@ -637,6 +637,8 @@ def enqueue_due_analysis_in_transaction(session: Session, now: datetime) -> int:
         raise RuntimeError("analysis scan requires the caller's transaction")
     if now.tzinfo is None:
         raise ValueError("analysis scan time must be timezone-aware")
+    if not get_settings().ai_enabled:
+        return 0
     topics = MonitorScheduleService(session).list_active_topics_for_scanning_in_transaction()
     accepted = 0
     logger = structlog.get_logger("scheduler")

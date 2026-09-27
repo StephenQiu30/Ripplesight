@@ -5,6 +5,7 @@ import json
 import shlex
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Protocol
 from uuid import UUID, uuid4
 
@@ -54,7 +55,11 @@ class AiCompletionClient(Protocol):
 
 
 def create_ai_client(settings: Settings) -> AiCompletionClient:
+    if not settings.ai_enabled:
+        raise AiCallError(AiFailureCode.UNAVAILABLE, "analysis is disabled")
     command: Sequence[str] = shlex.split(settings.ai_command)
+    if len(command) != 2 or Path(command[0]).name != "codex" or command[1] != "app-server":
+        raise AiCallError(AiFailureCode.UNAVAILABLE, "analysis command is not Codex app-server")
     return CodexAppServerClient(
         model=settings.ai_model,
         command=command,
@@ -190,7 +195,11 @@ class AiService:
                     ),
                 )
                 if decision.status is BudgetDecisionStatus.DELAYED:
-                    raise AiCallError(AiFailureCode.RATE_LIMITED, "analysis budget is exhausted")
+                    raise AiCallError(
+                        AiFailureCode.RATE_LIMITED,
+                        "analysis budget is exhausted",
+                        retry_at=decision.retry_at,
+                    )
                 attempt = budget.begin_attempt_in_transaction(
                     owner_id=owner_id,
                     command=UsageAttemptInput(

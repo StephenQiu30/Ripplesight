@@ -140,6 +140,8 @@ def test_process_receives_only_minimal_environment(
     assert "--strict-config" in arguments
     assert "features.shell_tool=false" in arguments
     assert "features.unified_exec=false" in arguments
+    assert 'forced_login_method="chatgpt"' in arguments
+    assert 'model_provider="openai"' in arguments
     assert 'web_search="disabled"' in arguments
 
 

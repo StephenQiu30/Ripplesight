@@ -23,6 +23,8 @@ _BASE_INSTRUCTIONS = (
     "不要运行命令、不要读写文件、不要联网，直接给出符合输出格式的 JSON。"  # noqa: RUF001
 )
 _DISABLE_TOOL_CONFIG = (
+    'forced_login_method="chatgpt"',
+    'model_provider="openai"',
     "features.shell_tool=false",
     "features.unified_exec=false",
     "features.shell_snapshot=false",
