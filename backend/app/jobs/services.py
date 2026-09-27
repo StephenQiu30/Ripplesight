@@ -248,6 +248,8 @@ class CoverageWindowService:
         evidence: CoverageTerminalEvidence | None = None,
         job_progress: JobProgress | None = None,
         observed_items: int | None = None,
+        source_observed_at: datetime | None = None,
+        source_feed_updated_at: datetime | None = None,
     ) -> tuple[ExecutionLease, CoverageWindowView, CursorPageProgress]:
         """Commit a bounded cursor page and range progress in the caller's transaction."""
         expected = plan_cursor_request(
@@ -272,6 +274,21 @@ class CoverageWindowService:
             if type(previous) is not int or previous < 0:
                 raise CoverageWindowConflictError("invalid observed item checkpoint")
             progress.checkpoint["collection.observed_count"] = previous + observed_items
+        if source_observed_at is not None:
+            if source_observed_at.tzinfo is None:
+                raise ValueError("source observation time must be timezone-aware")
+            if source_feed_updated_at is not None and source_feed_updated_at.tzinfo is None:
+                raise ValueError("source feed update time must be timezone-aware")
+            progress.checkpoint["collection.source_observed_at"] = source_observed_at.astimezone(
+                UTC
+            ).isoformat()
+            progress.checkpoint["collection.source_feed_updated_at"] = (
+                source_feed_updated_at.astimezone(UTC).isoformat()
+                if source_feed_updated_at is not None
+                else None
+            )
+        elif source_feed_updated_at is not None:
+            raise ValueError("source feed update time requires a source observation")
         opened = self.begin_in_transaction(lease=lease, window=window)
         if opened.status == "confirmed":
             raise CoverageWindowConflictError("confirmed window cannot accept another page")

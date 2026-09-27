@@ -553,6 +553,8 @@ class KeywordDiscoveryPageCommitService:
                 stop_reason=page.stop_reason,
                 job_progress=JobProgress(stage=JobStage.SAVE, items_saved=saved_items),
                 observed_items=len(page.items),
+                source_observed_at=page.observed_at,
+                source_feed_updated_at=page.source_feed_updated_at,
             )
             if meter is not None:
                 meter.settle_page_in_transaction(
