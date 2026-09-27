@@ -66,6 +66,7 @@ from sources.contracts import (
     SourcePost,
     SourceSort,
     SourceStopReason,
+    SourceTerminalEvidence,
 )
 from worker.app import JobExecutionContext, create_job_message_handler
 from worker.messaging import publish_outbox
@@ -2056,6 +2057,82 @@ def test_pages_atomically_save_distinct_channel_discoveries_and_unverified_gap()
                 progress_coverage.page_count,
             ) == ("partial", "budget_exhausted", 1)
             assert session.get(Job, progress_job.id).items_saved == 1
+
+        with Session(engine) as session:
+            ResourceBudgetService(session, clock=lambda: late_at).save_budget_policy(
+                owner_id=owner_id,
+                command=budget_policy.model_copy(update={"limit_units": 100}),
+            )
+            verified_run = run.model_copy(
+                update={
+                    "run_id": uuid4(),
+                    "primary_query": "verified terminal",
+                    "latest_max_pages": 1,
+                    "latest_max_requests": 1,
+                }
+            )
+            verified_job = JobService(session, clock=lambda: late_at).accept(
+                owner_id=owner_id, command=plan_keyword_discovery(verified_run)[0]
+            )
+            verified_lease = JobExecutionService(
+                session, lease_seconds=60, clock=lambda: late_at
+            ).acquire(job_id=verified_job.id, worker_id="controlled-verified")
+
+        class VerifiedTerminalAdapter:
+            source_key = "x"
+            capabilities = frozenset({SourceCapability.SEARCH})
+
+            def __init__(self, before_request: Callable[[int], bool]) -> None:
+                self._before_request = before_request
+
+            def fetch_page(self, request: SearchRequest) -> SourcePage:
+                assert request.sort is SourceSort.LATEST
+                assert request.page_token is None
+                assert self._before_request(1)
+                return _page(
+                    late_at,
+                    SourcePageState.COMPLETE,
+                    (_post("verified-post", start + timedelta(minutes=8)),),
+                ).model_copy(
+                    update={
+                        "terminal_evidence": SourceTerminalEvidence(
+                            starts_at=request.starts_at,
+                            ends_at=request.ends_at,
+                            sort_key=request.sort,
+                            query_bounded=True,
+                            sort_applied=True,
+                            terminal_verified=True,
+                        )
+                    }
+                )
+
+        verified_renewed, verified_completion = KeywordDiscoveryExecutor(
+            sessionmaker(bind=engine),
+            lease_seconds=60,
+            component_key="collector.controlled",
+            adapter_factory=lambda before, _cancelled, _limit, _seconds: VerifiedTerminalAdapter(
+                before
+            ),
+            clock=lambda: late_at,
+        ).execute(_accepted_message(engine, verified_job.id), verified_lease)
+        assert verified_renewed.checkpoint_sequence == 1
+        assert verified_completion.status is JobStatus.SUCCEEDED
+        with Session(engine) as session:
+            verified_coverage = session.scalar(
+                select(CoverageWindow).where(
+                    CoverageWindow.owner_id == owner_id,
+                    CoverageWindow.target_hash
+                    == hashlib.sha256(
+                        f"{run.configuration_ref}\0verified terminal".encode()
+                    ).digest(),
+                )
+            )
+            assert verified_coverage is not None
+            assert (verified_coverage.status, verified_coverage.stop_reason) == (
+                "confirmed",
+                None,
+            )
+            assert session.get(Job, verified_job.id).items_saved == 1
     finally:
         with engine.begin() as connection:
             connection.execute(text("SET CONSTRAINTS ALL DEFERRED"))

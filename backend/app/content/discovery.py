@@ -35,6 +35,7 @@ from jobs.schemas import (
     BudgetMetric,
     BudgetReservationInput,
     CollectionScanKind,
+    CoverageTerminalEvidence,
     CoverageWindowInput,
     CoverageWindowView,
     JobAcceptanceInput,
@@ -555,6 +556,11 @@ class KeywordDiscoveryPageCommitService:
                 observed_items=len(page.items),
                 source_observed_at=page.observed_at,
                 source_feed_updated_at=page.source_feed_updated_at,
+                evidence=(
+                    CoverageTerminalEvidence.model_validate(page.terminal_evidence.model_dump())
+                    if page.terminal_evidence is not None
+                    else None
+                ),
             )
             if meter is not None:
                 meter.settle_page_in_transaction(
