@@ -1014,6 +1014,16 @@ class JobStatusView(BaseModel):
     failure: JobFailureView | None
     result_content_id: UUID | None
     retry_count: int = Field(ge=0)
+    collection_cycle_no: int = Field(ge=0)
+    collection_cycle_started_at: datetime | None
+    collection_cycle_requests_sent: int = Field(ge=0)
+    collection_cycle_pending: bool
+    latest_attempt_started_at: datetime | None
+    latest_attempt_finished_at: datetime | None
+    queue_wait_us: int | None = Field(ge=0)
+    attempt_elapsed_us: int | None = Field(ge=0)
+    total_elapsed_us: int | None = Field(ge=0)
+    collection_budget_remaining_us: int | None = Field(ge=0)
     next_run_at: datetime | None
     scheduled_for_at: datetime | None
     started_at: datetime | None

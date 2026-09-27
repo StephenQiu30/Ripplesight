@@ -336,6 +336,8 @@ def test_snapshot_reconciles_mutually_exclusive_tasks_and_separate_attempts(
                 text(
                     "UPDATE jobs SET status = :status, defer_reason = :defer_reason, "
                     "next_run_at = :next_run_at, started_at = :started_at, "
+                    "collection_cycle_no = :cycle_no, "
+                    "collection_cycle_started_at = :started_at, "
                     "completed_at = :completed_at, updated_at = :updated_at WHERE id = :job_id"
                 ),
                 {
@@ -343,6 +345,7 @@ def test_snapshot_reconciles_mutually_exclusive_tasks_and_separate_attempts(
                     "defer_reason": defer_reason,
                     "next_run_at": next_run_at,
                     "started_at": None if index < 2 else WINDOW_START + timedelta(seconds=1),
+                    "cycle_no": 0 if index < 2 else 1,
                     "completed_at": (WINDOW_START + timedelta(seconds=5) if terminal else None),
                     "updated_at": WINDOW_START + timedelta(seconds=5),
                     "job_id": job.id,
@@ -351,11 +354,12 @@ def test_snapshot_reconciles_mutually_exclusive_tasks_and_separate_attempts(
         connection.execute(
             text(
                 "INSERT INTO job_attempts "
-                "(id, job_id, lease_epoch, worker_id, started_at, lease_expires_at, "
+                "(id, job_id, lease_epoch, collection_cycle_no, worker_id, queued_at, "
+                "started_at, lease_expires_at, "
                 "finished_at, outcome) VALUES "
-                "(:first_id, :job_id, 1, 'worker-1', :started_at, :expires_at, "
+                "(:first_id, :job_id, 1, 1, 'worker-1', :started_at, :started_at, :expires_at, "
                 ":finished_at, 'expired'), "
-                "(:second_id, :job_id, 2, 'worker-2', :started_at, :expires_at, "
+                "(:second_id, :job_id, 2, 1, 'worker-2', :started_at, :started_at, :expires_at, "
                 ":finished_at, 'succeeded')"
             ),
             {

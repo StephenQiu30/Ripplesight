@@ -118,7 +118,7 @@ class KeywordRequestMeter:
         self._session.rollback()
         try:
             with self._session.begin():
-                request_sequence = execution.current_request_count_in_transaction(
+                request_counts = execution.current_request_counts_in_transaction(
                     self._lease,
                     owner_id=self._owner_id,
                     operation_id=self._operation_id,
@@ -146,13 +146,13 @@ class KeywordRequestMeter:
                     capability=self._capability,
                     data_class=DataClass.STRUCTURED,
                 )
-                if request_sequence >= self._max_requests:
+                if request_counts.collection_cycle >= self._max_requests:
                     return False
                 attempt_id = resource_attempt_id(
                     operation_id=self._operation_id,
                     component_key=self._component_key,
                     stage=self._stage,
-                    sequence=request_sequence + 1,
+                    sequence=request_counts.total + 1,
                 )
                 decision = budget.reserve_budget_in_transaction(
                     owner_id=self._owner_id,

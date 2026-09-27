@@ -281,7 +281,13 @@ class KeywordDiscoveryExecutor:
             ) from error
 
         assert configuration.started_at is not None
-        deadline_at = configuration.started_at + timedelta(seconds=max_seconds)
+        if configuration.collection_cycle_started_at is None:
+            raise self._failure(
+                "search_cycle_unavailable",
+                JobFailureCategory.CONFIGURATION_UNAVAILABLE,
+                "检查任务采集预算周期后重新提交",
+            )
+        deadline_at = configuration.collection_cycle_started_at + timedelta(seconds=max_seconds)
         with self._sessions() as session:
             execution = JobExecutionService(
                 session, lease_seconds=self._lease_seconds, clock=self._clock
@@ -466,11 +472,11 @@ class KeywordDiscoveryExecutor:
                         session.rollback()
                         try:
                             with session.begin():
-                                requests_sent = execution.current_request_count_in_transaction(
+                                requests_sent = execution.current_request_counts_in_transaction(
                                     lease,
                                     owner_id=configuration.owner_id,
                                     operation_id=configuration.operation_id,
-                                )
+                                ).collection_cycle
                         except JobLeaseUnavailableError:
                             if not self._stop_if_cancelled(
                                 session, execution=execution, lease=lease, window=window

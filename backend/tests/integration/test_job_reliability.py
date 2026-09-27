@@ -288,6 +288,181 @@ def test_lost_response_retry_returns_the_original_job_and_one_outbox(
     }
 
 
+def test_manual_retry_opens_budget_cycle_only_when_reacquired(
+    job_context: JobTestContext,
+) -> None:
+    with job_context.sessions() as session:
+        job = JobService(session).accept(owner_id=job_context.owner_id, command=_command())
+    first_at = job.created_at + timedelta(seconds=1)
+    with job_context.sessions() as session:
+        execution = JobExecutionService(session, lease_seconds=60, clock=lambda: first_at)
+        lease = execution.acquire(job_id=job.id, worker_id="cycle-first")
+        lease, allowed = execution.begin_request(lease)
+        assert allowed
+        execution.record_failure(
+            lease,
+            message=MessageReference(uuid4(), "hotkey.jobs.accepted.v2", 0, 101),
+            failure=JobExecutionFailure(
+                error_code="source_timeout",
+                category=JobFailureCategory.TRANSIENT,
+                occurred_at=first_at,
+                next_action="检查来源后人工重试",
+                manual_retry_allowed=True,
+            ),
+        )
+
+    retry_at = first_at + timedelta(minutes=2)
+    with job_context.sessions() as session:
+        service = JobService(session, clock=lambda: retry_at)
+        first = service.request_retry(owner_id=job_context.owner_id, job_id=job.id)
+        repeated = service.request_retry(owner_id=job_context.owner_id, job_id=job.id)
+    assert first == repeated
+    with job_context.engine.connect() as connection:
+        queued = connection.execute(
+            text(
+                "SELECT collection_cycle_no, collection_cycle_started_at, "
+                "collection_cycle_requests_sent, started_at FROM jobs WHERE id=:job"
+            ),
+            {"job": job.id},
+        ).one()
+    assert tuple(queued) == (1, first_at, 1, first_at)
+
+    next_at = retry_at + timedelta(minutes=1)
+    with job_context.sessions() as session:
+        execution = JobExecutionService(session, lease_seconds=60, clock=lambda: next_at)
+        renewed = execution.acquire(job_id=job.id, worker_id="cycle-second")
+        with pytest.raises(StaleExecutionLeaseError):
+            execution.begin_request(lease)
+        renewed, allowed = execution.begin_request(renewed)
+        assert allowed
+    with job_context.engine.connect() as connection:
+        current = connection.execute(
+            text(
+                "SELECT collection_cycle_no, collection_cycle_started_at, "
+                "collection_cycle_requests_sent, started_at, requests_sent "
+                "FROM jobs WHERE id=:job"
+            ),
+            {"job": job.id},
+        ).one()
+        attempts = connection.execute(
+            text(
+                "SELECT collection_cycle_no, started_at FROM job_attempts "
+                "WHERE job_id=:job ORDER BY lease_epoch"
+            ),
+            {"job": job.id},
+        ).all()
+        outbox_count = connection.execute(
+            text("SELECT count(*) FROM outbox_messages WHERE aggregate_id=:job"),
+            {"job": job.id},
+        ).scalar_one()
+    assert tuple(current) == (2, next_at, 1, first_at, 2)
+    assert attempts == [(1, first_at), (2, next_at)]
+    assert outbox_count == 2
+
+
+def test_concurrent_manual_retry_clicks_create_one_new_cycle_and_outbox(
+    job_context: JobTestContext,
+) -> None:
+    with job_context.sessions() as session:
+        job = JobService(session).accept(owner_id=job_context.owner_id, command=_command())
+    first_at = job.created_at + timedelta(seconds=1)
+    with job_context.sessions() as session:
+        execution = JobExecutionService(session, lease_seconds=60, clock=lambda: first_at)
+        lease = execution.acquire(job_id=job.id, worker_id="manual-first")
+        execution.record_failure(
+            lease,
+            message=MessageReference(uuid4(), "hotkey.jobs.accepted.v2", 0, 104),
+            failure=JobExecutionFailure(
+                error_code="source_timeout",
+                category=JobFailureCategory.TRANSIENT,
+                occurred_at=first_at,
+                next_action="检查来源后人工重试",
+                manual_retry_allowed=True,
+            ),
+        )
+
+    retry_at = first_at + timedelta(minutes=2)
+    barrier = Barrier(2)
+
+    def click_retry() -> tuple[int, bool]:
+        with job_context.sessions() as session:
+            barrier.wait(timeout=5)
+            view = JobService(session, clock=lambda: retry_at).request_retry(
+                owner_id=job_context.owner_id, job_id=job.id
+            )
+            return view.collection_cycle_no, view.collection_cycle_pending
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(click_retry)
+        second = executor.submit(click_retry)
+    assert first.result() == second.result() == (1, True)
+    with job_context.engine.connect() as connection:
+        outbox_count = connection.execute(
+            text("SELECT count(*) FROM outbox_messages WHERE aggregate_id=:job"),
+            {"job": job.id},
+        ).scalar_one()
+    assert outbox_count == 2
+
+    with job_context.sessions() as session:
+        lease = JobExecutionService(
+            session, lease_seconds=60, clock=lambda: retry_at + timedelta(minutes=1)
+        ).acquire(job_id=job.id, worker_id="manual-second")
+    assert lease.epoch == 2
+    with job_context.engine.connect() as connection:
+        cycle = connection.execute(
+            text("SELECT collection_cycle_no FROM jobs WHERE id=:job"), {"job": job.id}
+        ).scalar_one()
+    assert cycle == 2
+
+
+def test_manual_retry_transaction_rollback_keeps_failed_job_and_one_outbox(
+    job_context: JobTestContext,
+) -> None:
+    with job_context.sessions() as session:
+        job = JobService(session).accept(owner_id=job_context.owner_id, command=_command())
+    failed_at = job.created_at + timedelta(seconds=1)
+    with job_context.sessions() as session:
+        execution = JobExecutionService(session, lease_seconds=60, clock=lambda: failed_at)
+        lease = execution.acquire(job_id=job.id, worker_id="rollback-first")
+        execution.record_failure(
+            lease,
+            message=MessageReference(uuid4(), "hotkey.jobs.accepted.v2", 0, 105),
+            failure=JobExecutionFailure(
+                error_code="source_timeout",
+                category=JobFailureCategory.TRANSIENT,
+                occurred_at=failed_at,
+                next_action="检查来源后人工重试",
+                manual_retry_allowed=True,
+            ),
+        )
+
+    with job_context.sessions() as session:
+
+        def fail_after_flush(_: Session, __: object) -> None:
+            raise RuntimeError("injected retry transaction failure")
+
+        event.listen(session, "after_flush_postexec", fail_after_flush)
+        try:
+            with pytest.raises(RuntimeError, match="injected retry transaction failure"):
+                JobService(session, clock=lambda: failed_at + timedelta(minutes=2)).request_retry(
+                    owner_id=job_context.owner_id, job_id=job.id
+                )
+        finally:
+            event.remove(session, "after_flush_postexec", fail_after_flush)
+
+    with job_context.engine.connect() as connection:
+        row = connection.execute(
+            text("SELECT status, defer_reason, collection_cycle_no FROM jobs WHERE id=:job"),
+            {"job": job.id},
+        ).one()
+        outbox_count = connection.execute(
+            text("SELECT count(*) FROM outbox_messages WHERE aggregate_id=:job"),
+            {"job": job.id},
+        ).scalar_one()
+    assert tuple(row) == ("failed", None, 1)
+    assert outbox_count == 1
+
+
 def test_reliability_snapshot_uses_logical_start_and_durable_source_evidence(
     job_context: JobTestContext,
 ) -> None:
@@ -558,6 +733,17 @@ def test_transient_failure_retries_twice_then_fails_without_replay_duplicates(
             .scalars()
             .all()
         )
+        cycles = (
+            connection.execute(
+                text(
+                    "SELECT collection_cycle_no FROM job_attempts "
+                    "WHERE job_id=:job_id ORDER BY lease_epoch"
+                ),
+                {"job_id": job.id},
+            )
+            .scalars()
+            .all()
+        )
         counts = connection.execute(
             text(
                 "SELECT (SELECT count(*) FROM processed_messages WHERE job_id = :job_id), "
@@ -568,14 +754,70 @@ def test_transient_failure_retries_twice_then_fails_without_replay_duplicates(
 
     assert calls == [1, 2, 3]
     assert outcomes == ["delayed", "delayed", "failed"]
+    assert cycles == [1, 1, 1]
     assert tuple(counts) == (3, 3)
     assert status.status == "failed"
     assert status.retry_count == 2
     assert status.progress.requests_sent == 3
+    assert status.collection_cycle_no == 1
+    assert status.collection_cycle_requests_sent == 3
     assert status.next_run_at is None
     assert status.failure is not None
     assert status.failure.error_code == "source_timeout"
     assert status.failure.category == "transient"
+
+
+def test_rate_limited_requeue_keeps_original_collection_cycle(
+    job_context: JobTestContext,
+) -> None:
+    with job_context.sessions() as session:
+        job = JobService(session).accept(owner_id=job_context.owner_id, command=_command())
+    clock = [job.created_at + timedelta(seconds=1)]
+
+    def rate_limited(context: JobExecutionContext) -> None:
+        assert context.begin_request()
+        raise JobExecutionFailure(
+            error_code="source_rate_limited",
+            category=JobFailureCategory.RATE_LIMITED,
+            occurred_at=clock[0],
+            next_action="等待来源限流结束",
+            manual_retry_allowed=True,
+            retry_at=clock[0] + timedelta(seconds=1),
+            max_attempts=2,
+        )
+
+    handler = create_job_message_handler(
+        job_context.sessions,
+        {"monitor.collect": rate_limited},
+        worker_id="worker-rate-limited",
+        lease_seconds=60,
+        clock=lambda: clock[0],
+    )
+    handler(_stored_message(job_context, job_id=job.id, dispatch_sequence=1, offset=10))
+    clock[0] += timedelta(seconds=1)
+    handler(_stored_message(job_context, job_id=job.id, dispatch_sequence=2, offset=11))
+
+    with job_context.engine.connect() as connection:
+        job_row = connection.execute(
+            text(
+                "SELECT collection_cycle_no, collection_cycle_requests_sent, requests_sent "
+                "FROM jobs WHERE id=:job"
+            ),
+            {"job": job.id},
+        ).one()
+        attempts = (
+            connection.execute(
+                text(
+                    "SELECT collection_cycle_no FROM job_attempts "
+                    "WHERE job_id=:job ORDER BY lease_epoch"
+                ),
+                {"job": job.id},
+            )
+            .scalars()
+            .all()
+        )
+    assert tuple(job_row) == (1, 2, 2)
+    assert attempts == [1, 1]
 
 
 def test_permission_failure_is_terminal_and_never_switches_context(
@@ -897,21 +1139,22 @@ def test_expired_lease_recovers_checkpoint_and_fences_old_worker(
     with job_context.engine.connect() as connection:
         job_row = connection.execute(
             text(
-                "SELECT status, checkpoint_sequence, checkpoint, lease_owner "
+                "SELECT status, checkpoint_sequence, checkpoint, lease_owner, "
+                "collection_cycle_no "
                 "FROM jobs WHERE id = :id"
             ),
             {"id": job.id},
         ).one()
         attempts = connection.execute(
             text(
-                "SELECT lease_epoch, outcome FROM job_attempts "
+                "SELECT lease_epoch, outcome, collection_cycle_no FROM job_attempts "
                 "WHERE job_id = :id ORDER BY lease_epoch"
             ),
             {"id": job.id},
         ).all()
 
-    assert tuple(job_row) == ("succeeded", 2, {"page": 2}, None)
-    assert attempts == [(1, "expired"), (2, "succeeded")]
+    assert tuple(job_row) == ("succeeded", 2, {"page": 2}, None, 1)
+    assert attempts == [(1, "expired", 1), (2, "succeeded", 1)]
 
 
 def test_cancelled_inflight_response_is_saved_without_starting_next_request(

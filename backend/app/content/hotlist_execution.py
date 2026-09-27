@@ -65,7 +65,12 @@ class HotlistExecutor:
             category=category,
             occurred_at=self._clock(),
             next_action=action,
-            manual_retry_allowed=False,
+            manual_retry_allowed=category
+            in {
+                JobFailureCategory.TRANSIENT,
+                JobFailureCategory.RATE_LIMITED,
+                JobFailureCategory.INVALID_RESPONSE,
+            },
         )
 
     def execute(
@@ -124,7 +129,13 @@ class HotlistExecutor:
                 "检查来源预设及连接版本后重新提交",
             ) from error
 
-        deadline_at = configuration.started_at + timedelta(seconds=45)
+        if configuration.collection_cycle_started_at is None:
+            raise self._failure(
+                "hotlist_cycle_unavailable",
+                JobFailureCategory.CONFIGURATION_UNAVAILABLE,
+                "检查任务采集预算周期后重新提交",
+            )
+        deadline_at = configuration.collection_cycle_started_at + timedelta(seconds=45)
         with self._sessions() as session:
             execution = JobExecutionService(
                 session, lease_seconds=self._lease_seconds, clock=self._clock

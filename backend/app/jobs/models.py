@@ -451,6 +451,14 @@ class Job(Base):
         ),
         CheckConstraint("retry_count >= 0", name="jobs_retry_count_check"),
         CheckConstraint(
+            "(collection_cycle_no = 0 AND collection_cycle_started_at IS NULL "
+            "AND collection_cycle_requests_sent = 0) OR "
+            "(collection_cycle_no >= 1 AND collection_cycle_started_at IS NOT NULL "
+            "AND collection_cycle_requests_sent >= 0 "
+            "AND collection_cycle_requests_sent <= requests_sent)",
+            name="jobs_collection_cycle_check",
+        ),
+        CheckConstraint(
             "(last_error_code IS NULL AND last_error_category IS NULL AND "
             "last_error_at IS NULL AND next_action IS NULL) OR "
             "(last_error_code ~ '^[a-z][a-z0-9_.:-]{0,127}$' AND "
@@ -491,6 +499,11 @@ class Job(Base):
     cancel_deadline_at: Mapped[datetime | None]
     scheduled_for_at: Mapped[datetime | None]
     started_at: Mapped[datetime | None]
+    collection_cycle_no: Mapped[int] = mapped_column(BigInteger, server_default=text("0"))
+    collection_cycle_started_at: Mapped[datetime | None]
+    collection_cycle_requests_sent: Mapped[int] = mapped_column(
+        BigInteger, server_default=text("0")
+    )
     completed_at: Mapped[datetime | None]
     defer_reason: Mapped[str | None] = mapped_column(String(128))
     next_run_at: Mapped[datetime | None]
@@ -751,6 +764,8 @@ class JobAttempt(Base):
     __table_args__ = (
         UniqueConstraint("job_id", "lease_epoch", name="job_attempts_job_epoch_key"),
         CheckConstraint("lease_epoch >= 1", name="job_attempts_lease_epoch_check"),
+        CheckConstraint("collection_cycle_no >= 1", name="job_attempts_cycle_no_check"),
+        CheckConstraint("queued_at <= started_at", name="job_attempts_queue_wait_check"),
         CheckConstraint(
             "lease_expires_at > started_at",
             name="job_attempts_lease_expiry_check",
@@ -774,7 +789,9 @@ class JobAttempt(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True)
     job_id: Mapped[UUID] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"))
     lease_epoch: Mapped[int] = mapped_column(BigInteger)
+    collection_cycle_no: Mapped[int] = mapped_column(BigInteger)
     worker_id: Mapped[str] = mapped_column(String(128))
+    queued_at: Mapped[datetime]
     started_at: Mapped[datetime]
     lease_expires_at: Mapped[datetime]
     finished_at: Mapped[datetime | None]
