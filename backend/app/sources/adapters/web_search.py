@@ -5,7 +5,6 @@ import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import ClassVar
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 
@@ -15,7 +14,7 @@ from sources.adapters.http_source import (
     html_to_text,
     parse_timestamp,
 )
-from sources.adapters.web_targets import normalize_web_url
+from sources.adapters.web_targets import normalize_public_article_url
 from sources.contracts import (
     SearchRequest,
     SocialSourceCapability,
@@ -31,9 +30,6 @@ _MAX_PAGES = 5
 _BASE_URL = "http://127.0.0.1:8888"
 _SEARCH_URL = f"{_BASE_URL}/search"
 _ENGINE = "duckduckgo news"
-_TRACKING_PARAMETERS = frozenset(
-    {"utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "fbclid"}
-)
 
 
 def _published_at(value: object) -> datetime | None:
@@ -49,25 +45,12 @@ def _published_at(value: object) -> datetime | None:
 
 
 def _article_url(value: object) -> str | None:
-    if not isinstance(value, str) or len(value) > 2048:
+    if not isinstance(value, str):
         return None
     try:
-        host = urlsplit(value).hostname
-        if host is None:
-            return None
-        normalized = normalize_web_url(value, allowed_hosts=frozenset({host}))
+        return normalize_public_article_url(value)
     except ValueError:
         return None
-    parts = urlsplit(normalized)
-    query = urlencode(
-        [
-            (key, item)
-            for key, item in parse_qsl(parts.query, keep_blank_values=True)
-            if key.lower() not in _TRACKING_PARAMETERS
-        ]
-    )
-    article_url = urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))
-    return article_url if len(article_url) <= 2048 else None
 
 
 def _failure_details(payload: dict[str, object]) -> tuple[tuple[str, ...], str | None]:

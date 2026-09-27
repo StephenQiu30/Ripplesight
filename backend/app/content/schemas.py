@@ -49,6 +49,8 @@ class HotlistEntryView(OutputModel):
     heat: str | None
     published_at: datetime | None
     content_id: UUID | None
+    previous_rank: int | None = Field(ge=1, le=100)
+    rank_delta: int | None = Field(ge=-99, le=99)
     rank_change: Literal["new", "up", "down", "same"]
     matched: bool
     matched_topic_names: tuple[str, ...]

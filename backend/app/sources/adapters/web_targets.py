@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from ipaddress import ip_address
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+_TRACKING_PARAMETERS = frozenset(
+    {"utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "fbclid"}
+)
 
 
 def _canonical_host(value: str) -> str:
@@ -69,3 +73,25 @@ def normalize_web_url(url: str, *, allowed_hosts: frozenset[str]) -> str:
 
     path = parsed.path or "/"
     return urlunsplit((scheme, host, path, parsed.query, ""))
+
+
+def normalize_public_article_url(value: str) -> str:
+    """Keep semantic query fields while dropping only known tracking fields."""
+    if len(value) > 2048:
+        raise ValueError("article URL is too long")
+    host = urlsplit(value).hostname
+    if host is None:
+        raise ValueError("article URL has no host")
+    normalized = normalize_web_url(value, allowed_hosts=frozenset({host}))
+    parts = urlsplit(normalized)
+    query = urlencode(
+        [
+            (key, item)
+            for key, item in parse_qsl(parts.query, keep_blank_values=True)
+            if key.lower() not in _TRACKING_PARAMETERS
+        ]
+    )
+    article_url = urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))
+    if len(article_url) > 2048:
+        raise ValueError("article URL is too long")
+    return article_url

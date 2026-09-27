@@ -31,6 +31,7 @@ from jobs.execution import ExecutionLease, JobExecutionService, JobProgress
 from jobs.schemas import JobStage
 from jobs.services import ResourceBudgetService
 from monitors.services import ActiveHotlistTopic, MonitorScheduleService, evaluate_monitor_rules
+from sources.adapters.web_targets import normalize_public_article_url
 from sources.contracts import (
     HotlistEntry,
     HotlistPage,
@@ -69,6 +70,14 @@ def rank_change(rank: int, previous_rank: int | None) -> Literal["new", "up", "d
     return "same"
 
 
+def _rank_identity(url: str) -> str:
+    try:
+        return normalize_public_article_url(url)
+    except ValueError:
+        # Older snapshots may contain links admitted before public URL validation.
+        return url
+
+
 def match_hotlist_topics(
     entry: HotlistEntry, topics: Iterable[ActiveHotlistTopic]
 ) -> tuple[str, ...]:
@@ -83,19 +92,21 @@ def matching_hotlist_topics(
 
 
 def _post_payload(entry: HotlistEntry, source_key: str) -> dict[str, object]:
-    external_id = entry.url
+    canonical_url = normalize_public_article_url(entry.url)
+    external_id = canonical_url
     if len(external_id) > 512:
-        external_id = "sha256:" + hashlib.sha256(external_id.encode()).hexdigest()
+        external_id = "sha256:" + hashlib.sha256(canonical_url.encode()).hexdigest()
     post = SourcePost(
         source_key=source_key,
         external_id=external_id,
+        identity_basis="url_fallback",
         author_external_id=None,
         # Ranking is an observation; source publication time remains on the snapshot entry.
         published_at=None,
         text=entry.summary,
         text_scope="truncated" if entry.summary else None,
         title=entry.title,
-        canonical_url=entry.url,
+        canonical_url=canonical_url,
         like_count=None,
         comment_count=None,
         repost_count=None,
@@ -186,33 +197,37 @@ class HotlistService:
             self._session.add(snapshot)
             self._session.flush()
             content = ContentService(self._session, clock=self._clock)
+            matched_contents: dict[str, UUID] = {}
             for entry in page.items:
+                normalized_url = normalize_public_article_url(entry.url)
                 matches = matching_hotlist_topics(entry, topics)
                 names = tuple(topic.name for topic in matches)
                 content_id: UUID | None = None
                 if names:
-                    admitted = policy.admit_payload_in_transaction(
-                        owner_id=owner_id,
-                        source_key=source_key,
-                        capability=SourceCapability.HOTLIST,
-                        data_class=DataClass.STRUCTURED,
-                        collected_at=page.observed_at,
-                        payload=_post_payload(entry, source_key),
-                    )
-                    persisted = content.persist_post_in_transaction(
-                        owner_id=owner_id,
-                        command=PersistContentPostInput(
-                            job_id=lease.job_id,
-                            source_operation_id=uuid5(operation_id, entry.url),
-                            connection_id=connection_id,
-                            connection_version=connection_version,
-                            entry_point=SourceEntryPoint.SCHEDULED,
-                            component_name=f"collector.{source_key}",
-                            component_version=page.adapter_version,
-                            admission=admitted,
-                        ),
-                    )
-                    content_id = persisted.id
+                    content_id = matched_contents.get(normalized_url)
+                    if content_id is None:
+                        admitted = policy.admit_payload_in_transaction(
+                            owner_id=owner_id,
+                            source_key=source_key,
+                            capability=SourceCapability.HOTLIST,
+                            data_class=DataClass.STRUCTURED,
+                            collected_at=page.observed_at,
+                            payload=_post_payload(entry, source_key),
+                        )
+                        persisted = content.persist_post_in_transaction(
+                            owner_id=owner_id,
+                            command=PersistContentPostInput(
+                                job_id=lease.job_id,
+                                source_operation_id=uuid5(operation_id, normalized_url),
+                                connection_id=connection_id,
+                                connection_version=connection_version,
+                                entry_point=SourceEntryPoint.SCHEDULED,
+                                component_name=f"collector.{source_key}",
+                                component_version=page.adapter_version,
+                                admission=admitted,
+                            ),
+                        )
+                        content_id = matched_contents[normalized_url] = persisted.id
                 self._session.add(
                     HotlistEntryRecord(
                         snapshot_id=snapshot.id,
@@ -298,18 +313,14 @@ class HotlistService:
                 source_key=source_key,
                 operation_id=latest.operation_id,
             )
-            previous_ranks = (
-                {
-                    row.url: row.rank
-                    for row in self._session.scalars(
-                        select(HotlistEntryRecord).where(
-                            HotlistEntryRecord.snapshot_id == previous.id
-                        )
-                    )
-                }
-                if previous is not None
-                else {}
-            )
+            previous_ranks: dict[str, int] = {}
+            if previous is not None:
+                for row in self._session.scalars(
+                    select(HotlistEntryRecord)
+                    .where(HotlistEntryRecord.snapshot_id == previous.id)
+                    .order_by(HotlistEntryRecord.rank)
+                ):
+                    previous_ranks.setdefault(_rank_identity(row.url), row.rank)
             query = select(HotlistEntryRecord).where(HotlistEntryRecord.snapshot_id == latest.id)
             if cursor is not None:
                 query = query.where(HotlistEntryRecord.rank > cursor)
@@ -317,14 +328,10 @@ class HotlistService:
                 query.order_by(HotlistEntryRecord.rank).limit(limit + 1)
             ).all()
             selected = entries[:limit]
-            return HotlistSnapshotView(
-                snapshot_id=latest.id,
-                source_key=source_key,
-                observed_at=latest.observed_at,
-                due_at=due.due_at,
-                operation_id=latest.operation_id,
-                entry_count=latest.entry_count,
-                items=tuple(
+            item_views: list[HotlistEntryView] = []
+            for item in selected:
+                previous_rank = previous_ranks.get(_rank_identity(item.url))
+                item_views.append(
                     HotlistEntryView(
                         rank=item.rank,
                         title=item.title,
@@ -333,11 +340,20 @@ class HotlistService:
                         heat=item.heat,
                         published_at=item.published_at,
                         content_id=item.content_id,
-                        rank_change=rank_change(item.rank, previous_ranks.get(item.url)),
+                        previous_rank=previous_rank,
+                        rank_delta=previous_rank - item.rank if previous_rank is not None else None,
+                        rank_change=rank_change(item.rank, previous_rank),
                         matched=bool(item.matched_topic_names),
                         matched_topic_names=tuple(item.matched_topic_names),
                     )
-                    for item in selected
-                ),
+                )
+            return HotlistSnapshotView(
+                snapshot_id=latest.id,
+                source_key=source_key,
+                observed_at=latest.observed_at,
+                due_at=due.due_at,
+                operation_id=latest.operation_id,
+                entry_count=latest.entry_count,
+                items=tuple(item_views),
                 next_cursor=selected[-1].rank if len(entries) > limit else None,
             )
