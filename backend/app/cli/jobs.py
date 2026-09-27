@@ -43,11 +43,14 @@ def coverage_metrics(
     """Print the same owner-scoped metric DTO as GET /collection-coverage/metrics."""
     start_at = _parse_utc_datetime(start, option="--start")
     end_at = _parse_utc_datetime(end, option="--end")
-    engine = create_db_engine(get_settings())
+    settings = get_settings()
+    engine = create_db_engine(settings)
     try:
         with create_session_factory(engine)() as session:
             try:
-                result = CollectionCoverageQueryService(session).get_metrics(
+                result = CollectionCoverageQueryService(
+                    session, hotlist_interval_seconds=settings.hotlist_interval_seconds
+                ).get_metrics(
                     owner_id=owner_id,
                     start=start_at,
                     end=end_at,

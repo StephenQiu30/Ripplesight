@@ -21,10 +21,12 @@ _BOOTSTRAP_TOKEN = "coverage-metrics-isolated-bootstrap-token"
 
 
 @pytest.fixture
-def metrics_client() -> Iterator[tuple[TestClient, Engine, UUID]]:
+def metrics_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[TestClient, Engine, UUID]]:
     database_url = os.getenv("HOTKEY_TEST_DATABASE_URL")
     if database_url is None:
         pytest.skip("HOTKEY_TEST_DATABASE_URL is required")
+    # CI supplies an app-local Settings instance but no HOTKEY_DATABASE_URL.
+    monkeypatch.delenv("HOTKEY_DATABASE_URL", raising=False)
     engine = create_engine(database_url)
     with engine.begin() as connection:
         connection.execute(text("TRUNCATE identity_users CASCADE"))

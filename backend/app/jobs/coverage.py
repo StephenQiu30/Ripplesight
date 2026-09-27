@@ -500,8 +500,11 @@ class CollectionDueWindowService:
 class CollectionCoverageQueryService:
     """Read a bounded page of owner-visible due windows and their committed facts."""
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, *, hotlist_interval_seconds: int = 1800) -> None:
+        if not 600 <= hotlist_interval_seconds <= 86_400:
+            raise ValueError("hotlist interval is outside source schedule bounds")
         self._session = session
+        self._hotlist_interval_seconds = hotlist_interval_seconds
 
     def get_metrics(
         self,
@@ -517,7 +520,6 @@ class CollectionCoverageQueryService:
         """Read owner-visible due facts once and compute source timing without page loss."""
         from connections.services import list_applied_hotlist_presets_in_transaction
         from content.services import ContentService
-        from core.config import get_settings
         from jobs.metrics import (
             CollectionTimingSample,
             expected_hotlist_buckets,
@@ -621,7 +623,7 @@ class CollectionCoverageQueryService:
             )
             hotlist = None
             if kind == SourceCapability.HOTLIST.value:
-                interval = get_settings().hotlist_interval_seconds
+                interval = self._hotlist_interval_seconds
                 measured_end = min(end, cutoff + timedelta(microseconds=1))
                 expected = (
                     expected_hotlist_buckets(
