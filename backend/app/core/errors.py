@@ -25,6 +25,8 @@ ERROR_CATEGORIES: Mapping[str, ErrorCategory] = MappingProxyType(
         "invalid_connection_configuration": ErrorCategory.INVALID_INPUT,
         "invalid_comment_scope": ErrorCategory.INVALID_INPUT,
         "invalid_comment_cursor": ErrorCategory.INVALID_INPUT,
+        "invalid_content_filter": ErrorCategory.INVALID_INPUT,
+        "invalid_content_cursor": ErrorCategory.INVALID_INPUT,
         "connection_version_conflict": ErrorCategory.CONFLICT,
         "comments_not_ready": ErrorCategory.CONFLICT,
         "comments_rate_limited": ErrorCategory.CONFLICT,

@@ -2,7 +2,7 @@
 /* eslint-disable */
 import request from "@/request";
 
-/** 列出作品资料 按当前 owner 列出具有可读观察的作品及当前来源状态; 读取不会触发来源请求。 GET /api/contents */
+/** 列出作品资料 按当前 owner 列出具有可读观察的作品; 可按来源、发现主题、时间窗与当前标注状态筛选。时间窗使用发布时间, 缺失时回退首次发现时间; 读取不会触发来源或模型请求。 GET /api/contents */
 export async function listContentRecords(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: HotKeyAPI.listContentRecordsParams,
@@ -13,6 +13,7 @@ export async function listContentRecords(
     params: {
       // limit has a default value: 20
       limit: "20",
+
       ...params,
     },
     ...(options || {}),

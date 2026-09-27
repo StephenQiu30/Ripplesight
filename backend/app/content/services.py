@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from base64 import b64decode, urlsafe_b64encode
+from binascii import Error as Base64Error
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -16,8 +18,11 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
 from analysis.prompts import ANALYSIS_PROMPT_VERSION
-from analysis.reads import load_content_annotations_in_transaction
-from analysis.schemas import ContentAnnotationReadView
+from analysis.reads import (
+    load_content_annotations_in_transaction,
+    load_current_annotation_states_in_transaction,
+)
+from analysis.schemas import AnnotationResultState, ContentAnnotationReadView
 from connections.schemas import (
     ConnectionEvidenceOutcome,
     PersistedReadEvidenceInput,
@@ -1122,16 +1127,85 @@ class ContentService:
         self,
         *,
         owner_id: UUID,
-        cursor: UUID | None,
+        cursor: str | None,
         limit: int,
+        topic_id: UUID | None = None,
+        source_key: str | None = None,
+        starts_at: datetime | None = None,
+        ends_at: datetime | None = None,
+        analysis_state: str | None = None,
     ) -> tuple[list[ContentRecordSummaryView], str | None]:
         if not 1 <= limit <= 100:
             raise ValueError("limit must be between 1 and 100")
+        if (
+            (starts_at is None) != (ends_at is None)
+            or (
+                starts_at is not None
+                and ends_at is not None
+                and (
+                    starts_at.utcoffset() is None
+                    or ends_at.utcoffset() is None
+                    or not starts_at < ends_at <= starts_at + timedelta(days=31)
+                )
+            )
+            or (analysis_state is not None and topic_id is None)
+        ):
+            raise ApplicationError("invalid_content_filter")
+        fingerprint = hashlib.sha256(
+            json.dumps(
+                {
+                    "owner_id": str(owner_id),
+                    "topic_id": str(topic_id) if topic_id else None,
+                    "source_key": source_key,
+                    "starts_at": starts_at.astimezone(UTC).isoformat() if starts_at else None,
+                    "ends_at": ends_at.astimezone(UTC).isoformat() if ends_at else None,
+                    "analysis_state": analysis_state,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()[:24]
+        scan_cursor: UUID | None = None
+        if cursor is not None:
+            try:
+                decoded = json.loads(
+                    b64decode(cursor + "=" * (-len(cursor) % 4), altchars=b"-_", validate=True)
+                )
+                if (
+                    not isinstance(decoded, dict)
+                    or decoded.get("v") != 1
+                    or decoded.get("filter") != fingerprint
+                ):
+                    raise ValueError("cursor scope mismatch")
+                scan_cursor = UUID(decoded["id"])
+            except (
+                Base64Error,
+                UnicodeDecodeError,
+                json.JSONDecodeError,
+                KeyError,
+                TypeError,
+                ValueError,
+            ) as error:
+                raise ApplicationError("invalid_content_cursor") from error
         now = self._clock()
         self._session.rollback()
         with self._session.begin():
-            visible: list[tuple[ContentRecord, ContentObservation, set[UUID]]] = []
-            scan_cursor = cursor
+            topic_context = None
+            if topic_id is not None:
+                topic_context = load_content_topic_contexts_in_transaction(
+                    self._session, owner_id=owner_id, topic_ids={topic_id}
+                ).get(topic_id)
+                if topic_context is None:
+                    raise ApplicationError("resource_not_found")
+            visible: list[
+                tuple[
+                    ContentRecord,
+                    ContentObservation,
+                    list[ContentDiscovery],
+                    str | None,
+                    bool | None,
+                ]
+            ] = []
             batch_size = max(50, limit * 2)
             while len(visible) <= limit:
                 statement = (
@@ -1140,6 +1214,8 @@ class ContentService:
                     .order_by(ContentRecord.id)
                     .limit(batch_size)
                 )
+                if source_key is not None:
+                    statement = statement.where(ContentRecord.source_key == source_key)
                 if scan_cursor is not None:
                     statement = statement.where(ContentRecord.id > scan_cursor)
                 records = list(self._session.scalars(statement).all())
@@ -1151,27 +1227,85 @@ class ContentService:
                     content_ids={record.id for record in records},
                     now=now,
                 )
-                visible.extend(
-                    (record, projections[record.id][0], projections[record.id][1])
-                    for record in records
-                    if record.id in projections
+                discoveries = self._readable_discoveries(
+                    owner_id=owner_id,
+                    readable_jobs={content_id: item[1] for content_id, item in projections.items()},
                 )
+                topic_job_ids: set[UUID] = set()
+                if topic_id is not None:
+                    topic_job_ids = {
+                        discovery.job_id for items in discoveries.values() for discovery in items
+                    }
+                contexts = load_content_job_contexts(
+                    self._session, owner_id=owner_id, job_ids=topic_job_ids
+                )
+                annotation_states: dict[UUID, tuple[AnnotationResultState, bool | None]] = {}
+                if topic_id is not None and topic_context is not None:
+                    annotation_states = load_current_annotation_states_in_transaction(
+                        self._session,
+                        owner_id=owner_id,
+                        topic_id=topic_id,
+                        topic_rule_version=topic_context.current_version,
+                        prompt_version=ANALYSIS_PROMPT_VERSION,
+                        content_version_ids={
+                            item[0].content_version_id
+                            for item in projections.values()
+                            if item[0].content_version_id is not None
+                        },
+                    )
+                for record in records:
+                    projection = projections.get(record.id)
+                    if projection is None:
+                        continue
+                    observation = projection[0]
+                    content_discoveries = discoveries.get(record.id, [])
+                    if topic_id is not None and not any(
+                        (context := contexts.get(item.job_id)) is not None
+                        and context.configuration_ref == f"topic:{topic_id}"
+                        for item in content_discoveries
+                    ):
+                        continue
+                    first_discovered_at = min(
+                        (item.first_observed_at for item in content_discoveries), default=None
+                    )
+                    timeline_at = observation.published_at or first_discovered_at
+                    if (
+                        starts_at is not None
+                        and ends_at is not None
+                        and (timeline_at is None or not starts_at <= timeline_at < ends_at)
+                    ):
+                        continue
+                    result = (
+                        annotation_states.get(observation.content_version_id)
+                        if observation.content_version_id is not None
+                        else None
+                    )
+                    current_state = str(result[0]) if result is not None else "missing"
+                    if analysis_state is not None and current_state != analysis_state:
+                        continue
+                    visible.append(
+                        (
+                            record,
+                            observation,
+                            content_discoveries,
+                            current_state if topic_id is not None else None,
+                            result[1] if result is not None else None,
+                        )
+                    )
                 if len(records) < batch_size:
                     break
             has_more = len(visible) > limit
             page = visible[:limit]
-            discovery_counts = self._discovery_counts(
-                owner_id=owner_id,
-                readable_jobs={record.id: job_ids for record, _, job_ids in page},
-            )
             version_views = self._content_version_views(
                 owner_id=owner_id,
-                content_observations=[(content, observation) for content, observation, _ in page],
+                content_observations=[
+                    (content, observation) for content, observation, _, _, _ in page
+                ],
                 now=now,
             )
             current_visibility = self._current_visibility_views(
                 owner_id=owner_id,
-                content_ids={content.id for content, _, _ in page},
+                content_ids={content.id for content, _, _, _, _ in page},
             )
             items = [
                 self._summary_view(
@@ -1179,11 +1313,27 @@ class ContentService:
                     observation=observation,
                     content_version=self._selected_version_view(observation, version_views),
                     current_visibility=current_visibility.get(content.id),
-                    discovery_count=discovery_counts.get(content.id, 0),
+                    discovery_count=len(content_discoveries),
+                    first_discovered_at=min(
+                        (item.first_observed_at for item in content_discoveries), default=None
+                    ),
+                    analysis_state=current_state,
+                    analysis_relevant=relevant,
                 )
-                for content, observation, _ in page
+                for content, observation, content_discoveries, current_state, relevant in page
             ]
-            next_cursor = str(page[-1][0].id) if has_more else None
+            next_cursor = (
+                urlsafe_b64encode(
+                    json.dumps(
+                        {"v": 1, "id": str(page[-1][0].id), "filter": fingerprint},
+                        separators=(",", ":"),
+                    ).encode()
+                )
+                .decode()
+                .rstrip("=")
+                if has_more
+                else None
+            )
         return items, next_cursor
 
     def list_comments(
@@ -1808,25 +1958,27 @@ class ContentService:
             ).all()
         )
 
-    def _discovery_counts(
+    def _readable_discoveries(
         self,
         *,
         owner_id: UUID,
         readable_jobs: dict[UUID, set[UUID]],
-    ) -> dict[UUID, int]:
-        counts: dict[UUID, int] = {}
-        for content_id, job_ids in readable_jobs.items():
-            if not job_ids:
-                continue
-            count = self._session.scalar(
-                select(func.count(ContentDiscovery.id)).where(
-                    ContentDiscovery.owner_id == owner_id,
-                    ContentDiscovery.content_id == content_id,
-                    ContentDiscovery.job_id.in_(job_ids),
-                )
+    ) -> dict[UUID, list[ContentDiscovery]]:
+        all_job_ids = set().union(*readable_jobs.values()) if readable_jobs else set()
+        if not all_job_ids:
+            return {}
+        rows = self._session.scalars(
+            select(ContentDiscovery).where(
+                ContentDiscovery.owner_id == owner_id,
+                ContentDiscovery.content_id.in_(set(readable_jobs)),
+                ContentDiscovery.job_id.in_(all_job_ids),
             )
-            counts[content_id] = int(count or 0)
-        return counts
+        ).all()
+        grouped: dict[UUID, list[ContentDiscovery]] = {}
+        for row in rows:
+            if row.job_id in readable_jobs[row.content_id]:
+                grouped.setdefault(row.content_id, []).append(row)
+        return grouped
 
     def _content_version_views(
         self,
@@ -2005,7 +2157,11 @@ class ContentService:
         content_version: ContentVersionView | None,
         current_visibility: ContentVisibilityView | None,
         discovery_count: int,
+        first_discovered_at: datetime | None = None,
+        analysis_state: str | None = None,
+        analysis_relevant: bool | None = None,
     ) -> ContentRecordSummaryView:
+        timeline_at = observation.published_at or first_discovered_at
         return ContentRecordSummaryView(
             id=content.id,
             source_key=content.source_key,
@@ -2016,6 +2172,16 @@ class ContentService:
             latest_observation=cls._observation_view(observation, content_version),
             current_visibility=current_visibility,
             discovery_count=discovery_count,
+            timeline_at=timeline_at,
+            timeline_basis=(
+                "published_at"
+                if observation.published_at is not None
+                else "first_observed_at"
+                if first_discovered_at is not None
+                else None
+            ),
+            analysis_state=analysis_state,
+            analysis_relevant=analysis_relevant,
         )
 
     @classmethod
@@ -2050,6 +2216,7 @@ class ContentService:
             content_version=content_version,
             current_visibility=current_visibility,
             discovery_count=len(discovery_views),
+            first_discovered_at=min((item.first_observed_at for item in discoveries), default=None),
         )
         return ContentRecordDetailView(
             **summary.model_dump(),

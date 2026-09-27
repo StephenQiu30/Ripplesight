@@ -60,6 +60,10 @@ APPLICATION_ERRORS: Mapping[str, PublicError] = {
     "invalid_comment_cursor": PublicError(
         422, "invalid_comment_cursor", "评论分页游标不属于当前查询范围"
     ),
+    "invalid_content_filter": PublicError(422, "invalid_content_filter", "作品筛选条件无效"),
+    "invalid_content_cursor": PublicError(
+        422, "invalid_content_cursor", "作品分页游标不属于当前筛选条件"
+    ),
     "connection_version_conflict": PublicError(
         409, "connection_version_conflict", "连接版本已变更且需要重新验证"
     ),

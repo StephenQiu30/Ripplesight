@@ -2,10 +2,18 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { ArrowRightIcon, ExternalLinkIcon, RotateCcwIcon } from "lucide-react";
 
 import { listContentRecords } from "@/api/zuopinziliao";
+import { listMonitorTopics } from "@/api/jiankongzhuti";
+import { listSourceCapabilities } from "@/api/laiyuannengli";
 import {
   contentScopeLabel,
   contentScopeNotice,
@@ -20,6 +28,8 @@ import { WebPageCaptureForm } from "@/app/content/components/webpage-capture-for
 import { BrandLockup } from "@/components/brand/brand-lockup";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -39,6 +49,151 @@ type ContentListState =
       nextCursor: string | null;
     }
   | { status: "error"; message: string; requestId?: string };
+
+type AnalysisFilter =
+  "" | NonNullable<HotKeyAPI.listContentRecordsParams["analysis_state"]>;
+
+type ContentFilters = {
+  sourceKey: string;
+  topicId: string;
+  startDate: string;
+  endDate: string;
+  analysisState: AnalysisFilter;
+};
+
+const EMPTY_FILTERS: ContentFilters = {
+  sourceKey: "",
+  topicId: "",
+  startDate: "",
+  endDate: "",
+  analysisState: "",
+};
+
+type FilterOptions =
+  | { status: "loading" }
+  | {
+      status: "ready";
+      topics: HotKeyAPI.MonitorTopicView[];
+      sources: HotKeyAPI.SourcePlatformView[];
+    }
+  | { status: "error" };
+
+async function fetchFilterOptions(): Promise<
+  Extract<FilterOptions, { status: "ready" }>
+> {
+  const [sourcePage, topics] = await Promise.all([
+    listSourceCapabilities(),
+    (async () => {
+      const all: HotKeyAPI.MonitorTopicView[] = [];
+      let cursor: string | null = null;
+      do {
+        const page = await listMonitorTopics({
+          include_archived: true,
+          limit: 50,
+          ...(cursor ? { cursor } : {}),
+        });
+        all.push(...page.items);
+        cursor = page.next_cursor;
+      } while (cursor !== null);
+      return all;
+    })(),
+  ]);
+  return { status: "ready", sources: sourcePage.items, topics };
+}
+
+export function contentListParams(
+  filters: ContentFilters,
+  cursor?: string,
+): HotKeyAPI.listContentRecordsParams {
+  if (Boolean(filters.startDate) !== Boolean(filters.endDate)) {
+    throw new Error("请选择完整的开始和结束日期。");
+  }
+  let startsAt: string | undefined;
+  let endsAt: string | undefined;
+  if (filters.startDate && filters.endDate) {
+    const start = new Date(`${filters.startDate}T00:00:00+08:00`);
+    const end = new Date(`${filters.endDate}T00:00:00+08:00`);
+    end.setUTCDate(end.getUTCDate() + 1);
+    const days = (end.getTime() - start.getTime()) / 86_400_000;
+    if (
+      !Number.isFinite(start.getTime()) ||
+      !Number.isFinite(end.getTime()) ||
+      days <= 0 ||
+      days > 31
+    ) {
+      throw new Error("日期范围须按先后选择，且最多 31 天。");
+    }
+    startsAt = start.toISOString();
+    endsAt = end.toISOString();
+  }
+  if (filters.analysisState && !filters.topicId) {
+    throw new Error("先选择主题，再筛选标注状态。");
+  }
+  return {
+    limit: 20,
+    ...(cursor ? { cursor } : {}),
+    ...(filters.sourceKey ? { source_key: filters.sourceKey } : {}),
+    ...(filters.topicId ? { topic_id: filters.topicId } : {}),
+    ...(startsAt ? { starts_at: startsAt, ends_at: endsAt } : {}),
+    ...(filters.analysisState
+      ? {
+          analysis_state: filters.analysisState,
+        }
+      : {}),
+  };
+}
+
+const ANALYSIS_LABELS: Record<
+  Exclude<
+    NonNullable<HotKeyAPI.ContentRecordSummaryView["analysis_state"]>,
+    "valid"
+  >,
+  string
+> = {
+  missing: "暂无标注记录",
+  pending: "等待标注",
+  failed: "标注失败",
+  invalid: "标注无效",
+};
+
+export function ContentAnalysisStatus({
+  content,
+}: {
+  content: HotKeyAPI.ContentRecordSummaryView;
+}) {
+  if (content.analysis_state == null) return null;
+  const label =
+    content.analysis_state === "valid"
+      ? content.analysis_relevant
+        ? "相关"
+        : "不相关"
+      : ANALYSIS_LABELS[content.analysis_state];
+  return (
+    <Badge
+      variant={content.analysis_state === "valid" ? "secondary" : "outline"}
+    >
+      {label}
+    </Badge>
+  );
+}
+
+export function TimelineBasis({
+  content,
+}: {
+  content: HotKeyAPI.ContentRecordSummaryView;
+}) {
+  const label =
+    content.timeline_basis === "published_at"
+      ? "发布时间"
+      : content.timeline_basis === "first_observed_at"
+        ? "首次发现"
+        : "时间未知";
+  return (
+    <span>
+      {label}：{formatTime(content.timeline_at ?? null)}
+    </span>
+  );
+}
 
 function isInvalidSession(error: unknown): boolean {
   return error instanceof ApiRequestError && error.code === "invalid_session";
@@ -171,32 +326,59 @@ function LoadingContentList() {
 export function ContentList() {
   const router = useRouter();
   const [state, setState] = useState<ContentListState>({ status: "loading" });
+  const [options, setOptions] = useState<FilterOptions>({ status: "loading" });
+  const [draft, setDraft] = useState<ContentFilters>(EMPTY_FILTERS);
+  const [applied, setApplied] = useState<ContentFilters>(EMPTY_FILTERS);
+  const [filterError, setFilterError] = useState<string | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const requestGeneration = useRef(0);
 
-  const load = useCallback(async () => {
-    setState({ status: "loading" });
+  const loadOptions = useCallback(async () => {
+    setOptions({ status: "loading" });
     try {
-      const page = await listContentRecords({ limit: 20 });
-      setState({
-        status: "ready",
-        items: page.items,
-        nextCursor: page.next_cursor,
-      });
+      setOptions(await fetchFilterOptions());
     } catch (error) {
       if (isInvalidSession(error)) {
         router.replace("/login");
-        return;
+      } else {
+        setOptions({ status: "error" });
       }
-      setState(toErrorState(error));
     }
   }, [router]);
 
+  const load = useCallback(
+    async (filters: ContentFilters) => {
+      const generation = ++requestGeneration.current;
+      setState({ status: "loading" });
+      setIsLoadingMore(false);
+      setLoadMoreError(null);
+      try {
+        const page = await listContentRecords(contentListParams(filters));
+        if (generation !== requestGeneration.current) return;
+        setState({
+          status: "ready",
+          items: page.items,
+          nextCursor: page.next_cursor,
+        });
+      } catch (error) {
+        if (generation !== requestGeneration.current) return;
+        if (isInvalidSession(error)) {
+          router.replace("/login");
+          return;
+        }
+        setState(toErrorState(error));
+      }
+    },
+    [router],
+  );
+
   useEffect(() => {
-    let isCurrent = true;
-    void listContentRecords({ limit: 20 })
+    let active = true;
+    const generation = ++requestGeneration.current;
+    void listContentRecords(contentListParams(EMPTY_FILTERS))
       .then((page) => {
-        if (isCurrent) {
+        if (active && generation === requestGeneration.current) {
           setState({
             status: "ready",
             items: page.items,
@@ -205,19 +387,36 @@ export function ContentList() {
         }
       })
       .catch((error: unknown) => {
-        if (!isCurrent) {
-          return;
-        }
-        if (isInvalidSession(error)) {
-          router.replace("/login");
-        } else {
-          setState(toErrorState(error));
-        }
+        if (!active || generation !== requestGeneration.current) return;
+        if (isInvalidSession(error)) router.replace("/login");
+        else setState(toErrorState(error));
+      });
+    void fetchFilterOptions()
+      .then((value) => {
+        if (active) setOptions(value);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        if (isInvalidSession(error)) router.replace("/login");
+        else setOptions({ status: "error" });
       });
     return () => {
-      isCurrent = false;
+      active = false;
+      requestGeneration.current += 1;
     };
   }, [router]);
+
+  function applyFilters(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    try {
+      contentListParams(draft);
+      setFilterError(null);
+      setApplied(draft);
+      void load(draft);
+    } catch (error) {
+      setFilterError(error instanceof Error ? error.message : "筛选条件无效。");
+    }
+  }
 
   async function loadMore() {
     if (
@@ -229,17 +428,23 @@ export function ContentList() {
     }
     setIsLoadingMore(true);
     setLoadMoreError(null);
+    const generation = requestGeneration.current;
     try {
-      const page = await listContentRecords({
-        cursor: state.nextCursor,
-        limit: 20,
-      });
-      setState({
-        status: "ready",
-        items: [...state.items, ...page.items],
-        nextCursor: page.next_cursor,
-      });
+      const page = await listContentRecords(
+        contentListParams(applied, state.nextCursor),
+      );
+      if (generation !== requestGeneration.current) return;
+      setState((current) =>
+        current.status === "ready"
+          ? {
+              status: "ready",
+              items: [...current.items, ...page.items],
+              nextCursor: page.next_cursor,
+            }
+          : current,
+      );
     } catch (error) {
+      if (generation !== requestGeneration.current) return;
       if (isInvalidSession(error)) {
         router.replace("/login");
       } else {
@@ -250,7 +455,7 @@ export function ContentList() {
         );
       }
     } finally {
-      setIsLoadingMore(false);
+      if (generation === requestGeneration.current) setIsLoadingMore(false);
     }
   }
 
@@ -276,6 +481,154 @@ export function ContentList() {
 
         <WebPageCaptureForm />
 
+        <form
+          onSubmit={applyFilters}
+          aria-label="筛选作品资料"
+          className="bg-muted mt-8 rounded-2xl p-5 sm:p-6"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-medium">筛选已保存的作品</h2>
+              <p className="text-muted-foreground mt-1 text-xs leading-5">
+                日期按北京时间，结束日期包含当日；无发布时间时按首次发现时间筛选。
+              </p>
+            </div>
+            {options.status === "error" ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => void loadOptions()}
+              >
+                重试加载筛选项
+              </Button>
+            ) : null}
+          </div>
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="space-y-2">
+              <Label htmlFor="content-source">来源</Label>
+              <select
+                id="content-source"
+                value={draft.sourceKey}
+                onChange={(event) =>
+                  setDraft({ ...draft, sourceKey: event.target.value })
+                }
+                disabled={options.status !== "ready"}
+                className="border-input bg-background focus-visible:ring-ring h-10 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
+              >
+                <option value="">全部来源</option>
+                {options.status === "ready"
+                  ? options.sources.map((source) => (
+                      <option key={source.source_key} value={source.source_key}>
+                        {source.display_name}
+                      </option>
+                    ))
+                  : null}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="content-topic">主题</Label>
+              <select
+                id="content-topic"
+                value={draft.topicId}
+                onChange={(event) =>
+                  setDraft({
+                    ...draft,
+                    topicId: event.target.value,
+                    analysisState: "",
+                  })
+                }
+                disabled={options.status !== "ready"}
+                className="border-input bg-background focus-visible:ring-ring h-10 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
+              >
+                <option value="">全部主题</option>
+                {options.status === "ready"
+                  ? options.topics.map((topic) => (
+                      <option key={topic.id} value={topic.id}>
+                        {topic.name}
+                        {topic.status === "archived" ? "（已归档）" : ""}
+                      </option>
+                    ))
+                  : null}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="content-start-date">开始日期</Label>
+              <Input
+                id="content-start-date"
+                type="date"
+                value={draft.startDate}
+                onChange={(event) =>
+                  setDraft({ ...draft, startDate: event.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="content-end-date">结束日期（含）</Label>
+              <Input
+                id="content-end-date"
+                type="date"
+                value={draft.endDate}
+                onChange={(event) =>
+                  setDraft({ ...draft, endDate: event.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="content-analysis-state">标注状态</Label>
+              <select
+                id="content-analysis-state"
+                value={draft.analysisState}
+                onChange={(event) =>
+                  setDraft({
+                    ...draft,
+                    analysisState: event.target.value as AnalysisFilter,
+                  })
+                }
+                disabled={!draft.topicId}
+                className="border-input bg-background focus-visible:ring-ring h-10 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
+              >
+                <option value="">全部状态</option>
+                <option value="missing">暂无标注记录</option>
+                <option value="pending">等待标注</option>
+                <option value="failed">标注失败</option>
+                <option value="invalid">标注无效</option>
+                <option value="valid">已有有效结论</option>
+              </select>
+            </div>
+          </div>
+          {options.status === "error" ? (
+            <p role="alert" className="text-destructive mt-3 text-sm">
+              来源和主题暂时无法加载，日期筛选仍可使用。
+            </p>
+          ) : null}
+          {filterError ? (
+            <p role="alert" className="text-destructive mt-3 text-sm">
+              {filterError}
+            </p>
+          ) : null}
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <Button type="submit">应用筛选</Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setDraft(EMPTY_FILTERS);
+                setApplied(EMPTY_FILTERS);
+                setFilterError(null);
+                void load(EMPTY_FILTERS);
+              }}
+            >
+              清除筛选
+            </Button>
+            {JSON.stringify(draft) !== JSON.stringify(applied) ? (
+              <span className="text-muted-foreground text-xs">
+                条件尚未应用
+              </span>
+            ) : null}
+          </div>
+        </form>
+
         {state.status === "error" ? (
           <section className="bg-destructive/10 mt-8 rounded-2xl p-6 sm:p-8">
             <h2 className="text-lg font-medium">暂时无法读取作品</h2>
@@ -283,7 +636,7 @@ export function ContentList() {
               {state.message}
               {state.requestId ? ` 请求编号：${state.requestId}` : null}
             </p>
-            <Button className="mt-5" onClick={() => void load()}>
+            <Button className="mt-5" onClick={() => void load(applied)}>
               <RotateCcwIcon data-icon="inline-start" />
               重新加载
             </Button>
@@ -294,7 +647,7 @@ export function ContentList() {
 
         {state.status === "ready" && state.items.length === 0 ? (
           <section className="bg-muted mt-8 rounded-2xl px-6 py-14 text-center sm:px-10">
-            <h2 className="text-lg font-medium">尚无可读作品</h2>
+            <h2 className="text-lg font-medium">当前条件下没有可读作品</h2>
             <p className="text-muted-foreground mx-auto mt-2 max-w-md text-sm leading-6">
               完成受控采集并持久保存后，作品会显示在这里；当前为空不代表来源返回了零结果。
             </p>
@@ -321,6 +674,7 @@ export function ContentList() {
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge variant="outline">{content.source_key}</Badge>
                           <ContentStatus content={content} />
+                          <ContentAnalysisStatus content={content} />
                           <VisibilityStatus
                             visibility={content.current_visibility}
                           />
@@ -350,6 +704,9 @@ export function ContentList() {
                           发布：
                           {formatTime(content.latest_observation.published_at)}
                         </p>
+                        <p className="text-muted-foreground mt-1 text-xs">
+                          <TimelineBasis content={content} />
+                        </p>
                       </TableCell>
                       <TableCell className="max-w-xs whitespace-normal">
                         <PrimaryMetrics
@@ -377,6 +734,7 @@ export function ContentList() {
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline">{content.source_key}</Badge>
                     <ContentStatus content={content} />
+                    <ContentAnalysisStatus content={content} />
                     <VisibilityStatus visibility={content.current_visibility} />
                   </div>
                   <h2 className="mt-4 font-mono text-sm font-medium break-all">
@@ -392,6 +750,9 @@ export function ContentList() {
                   </p>
                   <p className="text-muted-foreground mt-1 text-xs">
                     观察于 {formatTime(content.latest_observation.observed_at)}
+                  </p>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    <TimelineBasis content={content} />
                   </p>
                   <p className="mt-3">
                     <PrimaryMetrics

@@ -449,6 +449,10 @@ class ContentRecordSummaryView(OutputModel):
     latest_observation: ContentObservationView
     current_visibility: ContentVisibilityView | None
     discovery_count: int = Field(ge=1)
+    timeline_at: datetime | None = None
+    timeline_basis: Literal["published_at", "first_observed_at"] | None = None
+    analysis_state: Literal["missing", "pending", "failed", "invalid", "valid"] | None = None
+    analysis_relevant: bool | None = None
 
 
 class ContentAnalysisTopicView(OutputModel):
