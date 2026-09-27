@@ -14,6 +14,7 @@ import structlog
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from analysis.prompts import ANALYSIS_PROMPT_VERSION
 from analysis.services import AnalysisService
 from connections.schemas import SourceEntryPoint, SourceExecutionPolicy
 from connections.services import (
@@ -663,6 +664,19 @@ def enqueue_due_analysis_in_transaction(session: Session, now: datetime) -> int:
     return accepted
 
 
+def record_analysis_prompt_activation_at_startup(
+    sessions: sessionmaker[Session], *, ai_enabled: bool, started_at: datetime
+) -> bool:
+    """Record prompt availability before the first enabled analysis scan."""
+    if not ai_enabled:
+        return False
+    with sessions() as session, session.begin():
+        return AnalysisService(session).record_prompt_activation_in_transaction(
+            prompt_version=ANALYSIS_PROMPT_VERSION,
+            activated_at=started_at,
+        )
+
+
 def _optional_report_scan() -> SchedulerScan | None:
     try:
         module = import_module("reports.services")
@@ -759,6 +773,11 @@ def run_scheduler() -> None:
     sessions = create_session_factory(engine)
     scans = _registered_scheduler_scans()
     try:
+        record_analysis_prompt_activation_at_startup(
+            sessions,
+            ai_enabled=settings.ai_enabled,
+            started_at=datetime.now(UTC),
+        )
         while not stopping.is_set():
             started_at = datetime.now(UTC)
             results = run_scheduler_round(sessions, scans, now=started_at)

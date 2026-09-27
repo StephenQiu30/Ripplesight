@@ -17,6 +17,16 @@ from sqlalchemy.orm import Mapped, mapped_column
 from db.base import Base
 
 
+class AnalysisPromptActivation(Base):
+    __tablename__ = "analysis_prompt_activations"
+    __table_args__ = (
+        CheckConstraint("prompt_version <> ''", name="analysis_prompt_activations_version_check"),
+    )
+
+    prompt_version: Mapped[str] = mapped_column(String(128), primary_key=True)
+    activated_at: Mapped[datetime]
+
+
 class ContentAnnotation(Base):
     __tablename__ = "content_annotations"
     __table_args__ = (

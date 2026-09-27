@@ -285,6 +285,7 @@ def test_candidate_backup_uses_real_snapshot_archive_and_minio_inventory(
     assert manifest.secrets_included is False
     assert set(table_counts) == {
         "ai_calls",
+        "analysis_prompt_activations",
         "collection_due_windows",
         "content_annotations",
         "coverage_windows",
@@ -331,6 +332,7 @@ def test_candidate_backup_uses_real_snapshot_archive_and_minio_inventory(
         "source_connections",
     }
     assert table_counts["identity_users"] == 1
+    assert table_counts["analysis_prompt_activations"] == 0
     assert table_counts["monitor_topic_status_events"] == 0
     assert table_counts["evidence_resources"] == 1
     assert len(manifest.evidence_objects) == 1
