@@ -3,7 +3,7 @@ layer: Plan
 scope: issue
 doc_no: "036"
 title: SearXNG新闻搜索执行计划
-status: in_progress
+status: completed
 version: v1.0
 date: 2026-09-26
 owner: HotKey Team
@@ -37,8 +37,8 @@ depends_on: ["031", "033"]
 - [x] CHK-036-G1-001：冻结API/DATA/JOB的实际引擎、错误、URL身份与分页边界。
 - [x] CHK-036-G2-001：保存HTTP200但引擎失败、非JSON、重复页、预算耗尽的失败测试。
 - [x] CHK-036-G3-001：完成CHK-036-001/002，部分结果和错误不伪装完整空集。
-- [ ] CHK-036-G4-001：运行B及真实PostgreSQL/Kafka计量重放。
+- [x] CHK-036-G4-001：运行B及真实PostgreSQL/Kafka计量重放。
 - [x] CHK-036-G5-001：执行CHK-036-003真实本机引擎与原帖核对。
 - [x] CHK-036-G6-001：登记AC-002-002/004的本来源结果；持续窗由009。
 
-2026-09-27 技术、受控重放与两轮真实本机引擎证据见 Acceptance 002 EV-002-019。真实 MSN 抽样原帖可打开，前后两轮分别入库 7 条而稳定身份总数仍 7，实际引擎在 Job 检查点，尾段均为 `partial/unverified_terminal`。本地全量后端在独立命名库排除一项固定 `hotkey_test` fixture；G4 等同一提交的远端 CI 核对后关闭。父级四来源和连续 72 小时仍由 009 汇合。
+2026-09-27 技术、受控重放与两轮真实本机引擎证据见 Acceptance 002 EV-002-019。真实 MSN 抽样原帖可打开，前后两轮分别入库 7 条而稳定身份总数仍 7，实际引擎在 Job 检查点，尾段均为 `partial/unverified_terminal`。代码提交 `95c17f94` 的远端 backend/contract/runtime 均成功，backend **884 passed、8 skipped**，固定 `hotkey_test` 用例由远端覆盖，G4 通过。本卡按单来源边界 `completed`；父级四来源和连续 72 小时仍由 009 汇合。
