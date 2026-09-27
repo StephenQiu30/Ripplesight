@@ -37,8 +37,8 @@ depends_on: ["031", "033"]
 - [x] CHK-035-G1-001：冻结DATA/JOB/SEC的RSS身份、时间依据、窗与部分覆盖。
 - [x] CHK-035-G2-001：保存无guid、重定向、半页失败及预算截断失败测试。
 - [x] CHK-035-G3-001：完成CHK-035-001/002，入库与缺口、预算同账。
-- [ ] CHK-035-G4-001：运行B及真实PostgreSQL/Kafka重放验证。
+- [x] CHK-035-G4-001：运行B及真实PostgreSQL/Kafka重放验证。
 - [ ] CHK-035-G5-001：执行CHK-035-003真实RSS→可打开原帖→二次去重。
 - [x] CHK-035-G6-001：登记AC-002-002/004的本来源证据；72小时由009。
 
-2026-09-27 技术与真实运行证据见 Acceptance 002 EV-002-018。RSS `SourcePost.identity_basis` 已进 `content_records`/内容读取 DTO；预设、工厂和适配器同用固定入口，Google News 拒绝重定向。受控 PostgreSQL/Kafka 测试核对版本、时间边界、重投、失败保留与预算；真实同主题两轮各保存 87 条，身份总数仍 87，来源/全局预算含一次上游失败各 3。当前浏览器打开抽样 Google News RSS 原帖链接返回连接关闭，CHK-035-003/G5 未通过；本地全量门禁还有一项依赖数据库固定名 `hotkey_test` 的测试在独立命名库被排除，G4 等远端 CI 核对。保持 `in_progress`，不据此关闭 AC-002-002/004。
+2026-09-27 技术与真实运行证据见 Acceptance 002 EV-002-018。RSS `SourcePost.identity_basis` 已进 `content_records`/内容读取 DTO；预设、工厂和适配器同用固定入口，Google News 拒绝重定向。受控 PostgreSQL/Kafka 测试核对版本、时间边界、重投、失败保留与预算；真实同主题两轮各保存 87 条，身份总数仍 87，来源/全局预算含一次上游失败各 3。代码提交 `06b47ca5` 的远端 backend/contract/frontend/runtime 均成功，backend **875 passed、8 skipped**；固定名 `hotkey_test` 用例由远端覆盖，G4 通过。当前浏览器打开抽样 Google News RSS 原帖链接返回连接关闭，CHK-035-003/G5 未通过。保持 `in_progress`，不据此关闭 AC-002-002/004。
