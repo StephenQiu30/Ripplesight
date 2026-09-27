@@ -182,6 +182,11 @@ class SourceConnectionView(OutputModel):
     updated_at: datetime
 
 
+class SourceCurrentVersionView(OutputModel):
+    source_key: str
+    current_version: int = Field(ge=1)
+
+
 class SourcePresetApplyView(OutputModel):
     source_key: str
     connection_id: UUID

@@ -179,6 +179,89 @@ class CollectionExecutionFactView(BaseModel):
     has_gap: bool
 
 
+class CollectionCoverageResultStatus(StrEnum):
+    PENDING = "pending"
+    NOT_ATTEMPTED = "not_attempted"
+    COMPLETE = "complete"
+    EMPTY = "empty"
+    PARTIAL = "partial"
+    FAILED = "failed"
+    STOPPED = "stopped"
+
+
+class CollectionCoverageAttemptView(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    attempt_id: UUID
+    collection_cycle_no: int = Field(ge=1)
+    started_at: datetime
+    finished_at: datetime | None
+    outcome: str | None
+
+
+class CollectionCoverageBudgetView(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    budget_key: str
+    policy_version: int = Field(ge=1)
+    limit_units: int = Field(ge=1)
+    reserved_units: int = Field(ge=0)
+    consumed_units: int = Field(ge=0)
+
+
+class CollectionCoverageGapView(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    starts_at: datetime
+    ends_at: datetime
+    reason: str
+
+
+class CollectionCoverageAnalysisView(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    pending_count: int | None = Field(ge=0)
+    failed_count: int | None = Field(ge=0)
+    invalid_count: int | None = Field(ge=0)
+    valid_count: int | None = Field(ge=0)
+
+
+class CollectionCoverageView(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    window_id: UUID
+    source_key: str
+    capability: SourceCapability
+    topic_id: UUID | None
+    due_at: datetime
+    window_start: datetime
+    window_end: datetime
+    admission_state: DueAdmissionState
+    admission_reason: str | None
+    current_connection_version: int | None
+    job_connection_version: int | None
+    job_id: UUID | None
+    job_status: JobStatus | None
+    attempts: tuple[CollectionCoverageAttemptView, ...] | None
+    started_at: datetime | None
+    finished_at: datetime | None
+    last_success_at: datetime | None
+    coverage_status: CollectionCoverageResultStatus
+    terminal_evidence: str | None
+    stop_reason: str | None
+    request_count: int | None = Field(ge=0)
+    request_attempt_count: int | None = Field(ge=0)
+    page_count: int | None = Field(ge=0)
+    observed_count: int | None = Field(ge=0)
+    inserted_count: int | None = Field(ge=0)
+    deduplicated_count: int | None = Field(ge=0)
+    analysis: CollectionCoverageAnalysisView | None
+    budgets: tuple[CollectionCoverageBudgetView, ...] | None
+    gaps: tuple[CollectionCoverageGapView, ...]
+    content_ids: tuple[UUID, ...] | None
+    snapshot_ids: tuple[UUID, ...] | None
+
+
 class AnalysisJobFactView(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
