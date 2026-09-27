@@ -310,6 +310,7 @@ def test_candidate_backup_uses_real_snapshot_archive_and_minio_inventory(
         "jobs",
         "knowledge_exports",
         "monitor_schedules",
+        "monitor_topic_status_events",
         "monitor_topic_versions",
         "monitor_topics",
         "notification_deliveries",
@@ -330,6 +331,7 @@ def test_candidate_backup_uses_real_snapshot_archive_and_minio_inventory(
         "source_connections",
     }
     assert table_counts["identity_users"] == 1
+    assert table_counts["monitor_topic_status_events"] == 0
     assert table_counts["evidence_resources"] == 1
     assert len(manifest.evidence_objects) == 1
     assert manifest.evidence_objects[0].object_name == object_name
