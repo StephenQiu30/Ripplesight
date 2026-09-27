@@ -24,7 +24,7 @@ Plan 038 见 Acceptance 002 EV-002-024—028：HN 评论预设、旧帖显式复
 
 Plan 041 见 Acceptance 002 EV-002-029—032：评论/作品列表和标注详情 API、页面、旧帖复采按钮经隔离库及桌面/390px 浏览器验证；`4ecced3d` 远端四项 CI 成功。真实 HN 阅读样本与 Codex 产品验收未完成，`in_progress`。
 
-Plan 006 见 Acceptance 002 EV-002-033—037：采集删失中位数、排除与热榜桶已接入只读 API/CLI；首次有效标注、主题状态和提示词首次启用已在新库持久化，分析候选按来源/热榜版本收紧。`4bf53815` 远端 backend **952 passed/8 skipped**、contract/runtime 成功。逐身份需分析集合、Codex 限流、热榜间隔/相位冻结和十来源真实复算仍缺；`analysis_status=not_computable`、`phase_verified=false`，Plan006/M1 继续 `in_progress`。
+Plan 006 见 Acceptance 002 EV-002-033—038：采集指标 API/CLI、首次有效标注、主题状态及提示词启用事实已落地；只读逐身份候选起点覆盖旧帖新主题、暂停换版及精确热榜命中。`28134fcf` 远端 backend **956 passed/8 skipped**、contract/runtime 成功。完整需分析集合、提示词停用/Codex 限流、热榜相位冻结与十来源真实复算仍缺；`analysis_status=not_computable`、`phase_verified=false`，Plan006/M1 继续 `in_progress`。
 
 Plan 005 的标注状态与重放技术切片已在隔离 `main` 工作树完成，PostgreSQL 17 全新库的后端全量回归为 **779 passed/17 skipped**，见 Acceptance 002 EV-002-010。旧开发库 3 条历史异常、真实 Codex 样本和远端门禁尚未在该证据中核对；Plan 005 保持 `in_progress`，产品验收不变。
 
