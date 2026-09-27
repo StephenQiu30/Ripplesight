@@ -48,6 +48,7 @@ def identity_client() -> Iterator[TestClient]:
                 "content_annotations, reports, monitor_schedules, "
                 "outbox_messages, coverage_windows, "
                 "jobs, followed_account_aliases, followed_accounts, "
+                "monitor_topic_status_events, "
                 "monitor_topic_versions, monitor_topics, "
                 "identity_sessions, identity_users"
             )
@@ -75,6 +76,7 @@ def identity_client() -> Iterator[TestClient]:
                     "content_annotations, reports, monitor_schedules, "
                     "outbox_messages, coverage_windows, "
                     "jobs, followed_account_aliases, followed_accounts, "
+                    "monitor_topic_status_events, "
                     "monitor_topic_versions, monitor_topics, "
                     "identity_sessions, identity_users"
                 )

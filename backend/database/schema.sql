@@ -91,6 +91,38 @@ CREATE TABLE monitor_topic_versions (
 CREATE INDEX monitor_topic_versions_created_by_idx
     ON monitor_topic_versions (created_by);
 
+CREATE TABLE monitor_topic_status_events (
+    id UUID PRIMARY KEY,
+    owner_id UUID NOT NULL,
+    topic_id UUID NOT NULL,
+    event_sequence INTEGER NOT NULL,
+    topic_rule_version INTEGER NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    reason VARCHAR(32) NOT NULL,
+    occurred_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT monitor_topic_status_events_owner_topic_sequence_key
+        UNIQUE (owner_id, topic_id, event_sequence),
+    CONSTRAINT monitor_topic_status_events_sequence_check
+        CHECK (event_sequence >= 1),
+    CONSTRAINT monitor_topic_status_events_rule_version_check
+        CHECK (topic_rule_version >= 1),
+    CONSTRAINT monitor_topic_status_events_owner_topic_fkey
+        FOREIGN KEY (owner_id, topic_id)
+        REFERENCES monitor_topics (owner_id, id) ON DELETE CASCADE,
+    CONSTRAINT monitor_topic_status_events_rule_version_fkey
+        FOREIGN KEY (topic_id, topic_rule_version)
+        REFERENCES monitor_topic_versions (topic_id, version)
+        ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+    CONSTRAINT monitor_topic_status_events_status_reason_check CHECK (
+        (status = 'paused' AND reason IN ('created', 'cloned', 'paused', 'source_selection'))
+        OR (status = 'active' AND reason = 'resumed')
+        OR (status = 'archived' AND reason = 'archived')
+    )
+);
+
+CREATE INDEX monitor_topic_status_events_timeline_idx
+    ON monitor_topic_status_events (owner_id, topic_id, occurred_at, event_sequence);
+
 CREATE TABLE monitor_schedules (
     owner_id UUID NOT NULL,
     topic_id UUID NOT NULL,
