@@ -15,11 +15,15 @@ from content.comments import (
     comment_target_hash,
 )
 from content.comments_execution import (
+    CommentsExecutor,
     UnsupportedCommentsSourceError,
     build_comments_adapter_factory,
 )
 from content.schemas import CommentCollectionRunInput
 from core.config import Settings
+from jobs.execution import ExecutionLease, JobExecutionFailure
+from jobs.schemas import JobAcceptedMessage
+from jobs.services import JobExecutionConfiguration
 from sources.adapters.hackernews import HackerNewsAdapter
 from sources.contracts import SourceComment
 from worker.app import _registered_job_handlers
@@ -214,3 +218,59 @@ def test_worker_registers_comments_handler() -> None:
     handlers = _registered_job_handlers(sessionmaker(), settings)
 
     assert "source.comments" in handlers
+
+
+def test_manual_comment_job_scope_reaches_adapter_setup(monkeypatch: pytest.MonkeyPatch) -> None:
+    class AdapterSetupReachedError(Exception):
+        pass
+
+    now = datetime(2026, 9, 25, 2, tzinfo=UTC)
+    owner_id = uuid4()
+    job_id = uuid4()
+    content_id = uuid4()
+    run = _run(entry_point=SourceEntryPoint.MANUAL)
+    command = build_comment_job_acceptance(run)
+    configuration = JobExecutionConfiguration(
+        job_id=job_id,
+        owner_id=owner_id,
+        operation_id=run.operation_id,
+        kind="source.comments",
+        started_at=now,
+        collection_cycle_started_at=now,
+        observation=command.observation,
+        scope={**command.scope, "manual_content_id": str(content_id)},
+    )
+    executor = CommentsExecutor(sessionmaker(), lease_seconds=60, clock=lambda: now)
+    monkeypatch.setattr(executor, "_configuration", lambda _message: configuration)
+
+    def stop_before_network(**_kwargs: object) -> None:
+        raise AdapterSetupReachedError
+
+    monkeypatch.setattr(executor, "_configured_adapter_factory", stop_before_network)
+    message = JobAcceptedMessage(
+        schema_version=2,
+        message_id=uuid4(),
+        event_type="job.accepted.v2",
+        job_id=job_id,
+        owner_id=owner_id,
+        operation_id=run.operation_id,
+        kind="source.comments",
+        configuration_ref=run.configuration_ref,
+        configuration_version=run.configuration_version,
+        source_key=run.source_key,
+        source_capability=command.observation.source_capability,
+    )
+    lease = ExecutionLease(
+        job_id=job_id,
+        worker_id="comment-test",
+        epoch=1,
+        expires_at=now + timedelta(minutes=1),
+        checkpoint_sequence=0,
+        checkpoint={},
+    )
+    with pytest.raises(AdapterSetupReachedError):
+        executor.execute(message, lease)
+
+    configuration.scope["manual_content_id"] = "not-a-uuid"
+    with pytest.raises(JobExecutionFailure, match="comments_scope_invalid"):
+        executor.execute(message, lease)

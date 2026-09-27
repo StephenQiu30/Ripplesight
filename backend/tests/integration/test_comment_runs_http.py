@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
@@ -12,10 +13,22 @@ from tests.integration.test_topic_runs import monitor_topic_client as _topic_cli
 
 from connections.schemas import SourceEntryPoint
 from content.comments import CommentManualRunService
+from content.comments_execution import CommentsExecutor
 from content.schemas import CommentManualRunInput, PersistContentPostInput
 from content.services import ContentService
 from core.errors import ApplicationError
 from evidence.schemas import AdmittedSourcePayload, DataClass
+from jobs.execution import JobExecutionService, MessageReference
+from jobs.models import Job
+from jobs.schemas import (
+    BudgetMetric,
+    BudgetPolicyInput,
+    BudgetScopeKind,
+    JobAcceptedMessage,
+    JobStatus,
+)
+from jobs.services import ResourceBudgetService
+from sources.adapters.hackernews import HackerNewsAdapter
 from sources.contracts import SourceCapability
 
 
@@ -73,7 +86,7 @@ def _seed_old_hn_post(client: TestClient) -> UUID:
                     expires_at=now + timedelta(days=retention_days),
                     fields={
                         "object_type": "post",
-                        "external_id": "old-hn-story",
+                        "external_id": "123456",
                         "canonical_url": "https://news.ycombinator.com/item?id=123456",
                         "author_external_id": "hn-author",
                         "published_at": (now - timedelta(days=3)).isoformat(),
@@ -92,6 +105,19 @@ def _seed_old_hn_post(client: TestClient) -> UUID:
             ),
         )
     with factory.begin() as session:
+        ResourceBudgetService(session, clock=lambda: now).save_budget_policy_in_transaction(
+            owner_id=owner_id,
+            command=BudgetPolicyInput(
+                budget_key="global.plan038.comments.daily",
+                metric=BudgetMetric.NETWORK_REQUEST,
+                scope_kind=BudgetScopeKind.GLOBAL,
+                scope_reference=None,
+                limit_units=10,
+                window_seconds=86_400,
+                window_anchor_at=datetime(2026, 1, 1, tzinfo=UTC),
+                enabled=True,
+            ),
+        )
         session.execute(
             text("UPDATE content_records SET created_at = :old WHERE id = :id"),
             {"old": now - timedelta(days=3), "id": created.id},
@@ -132,7 +158,7 @@ def test_old_hn_post_manual_comments_are_accepted_once(request: pytest.FixtureRe
             )
         ).all()
         assert len(rows) == 1
-        assert rows[0].scope["post_external_id"] == "old-hn-story"
+        assert rows[0].scope["post_external_id"] == "123456"
         assert rows[0].scope["entry_point"] == "manual"
         assert rows[0].configuration_ref.startswith("topic:")
         assert rows[0].configuration_version == 1
@@ -203,3 +229,160 @@ def test_manual_comments_require_budget_and_comment_capability(
     )
     assert capability.status_code == 409
     assert capability.json()["code"] == "comments_not_ready"
+
+
+def _execute_manual_comments(
+    client: TestClient,
+    *,
+    job_id: UUID,
+    now: datetime,
+    comment_children: list[dict[str, object]],
+    offset: int,
+) -> tuple[str, ...]:
+    factory = client.app.state.session_factory
+    with factory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        message = JobAcceptedMessage(
+            schema_version=2,
+            message_id=uuid4(),
+            event_type="job.accepted.v2",
+            job_id=job.id,
+            owner_id=job.owner_id,
+            operation_id=job.operation_id,
+            kind=job.kind,
+            configuration_ref=job.configuration_ref,
+            configuration_version=job.configuration_version,
+            source_key=job.source_key,
+            source_capability=SourceCapability.COMMENTS,
+        )
+    with factory() as session:
+        lease = JobExecutionService(session, lease_seconds=75, clock=lambda: now).acquire(
+            job_id=job_id, worker_id="comments-integration"
+        )
+    requested: list[str] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requested.append(str(request.url))
+        assert request.url.path == "/api/v1/items/123456"
+        return httpx.Response(200, json={"id": 123456, "children": comment_children})
+
+    executor = CommentsExecutor(
+        factory,
+        lease_seconds=75,
+        clock=lambda: now,
+        adapter_factory=lambda before, cancelled, max_requests, max_seconds: HackerNewsAdapter(
+            before_request=before,
+            cancelled=cancelled,
+            max_requests=max_requests,
+            max_seconds=max_seconds,
+            transport=httpx.MockTransport(respond),
+        ),
+    )
+    renewed, completion = executor.execute(message, lease)
+    assert completion.status is JobStatus.SUCCEEDED
+    with factory() as session:
+        JobExecutionService(session, lease_seconds=75, clock=lambda: now).complete(
+            renewed,
+            message=MessageReference(
+                message_id=message.message_id,
+                topic="hotkey.tests.comments",
+                partition=0,
+                offset=offset,
+            ),
+            completion=completion,
+        )
+    return tuple(requested)
+
+
+def test_old_hn_root_is_revisited_and_new_reply_keeps_direct_parent(
+    request: pytest.FixtureRequest,
+) -> None:
+    client: TestClient = request.getfixturevalue("_topic_client")
+    content_id = _seed_old_hn_post(client)
+    now = datetime.now(UTC)
+    route = f"/api/contents/{content_id}/comment-runs"
+    first = client.post(
+        route,
+        headers=_csrf_headers(client),
+        json={"operation_id": str(uuid4())},
+    )
+    assert first.status_code == 202, first.json()
+    now = datetime.now(UTC) + timedelta(seconds=1)
+    root = {
+        "type": "comment",
+        "id": 987001,
+        "author": "hn-reader",
+        "text": "<p>first root</p>",
+        "created_at_i": int((now - timedelta(days=2)).timestamp()),
+        "children": [],
+    }
+    first_requests = _execute_manual_comments(
+        client,
+        job_id=UUID(first.json()["job_id"]),
+        now=now,
+        comment_children=[root],
+        offset=0,
+    )
+    assert len(first_requests) == 1
+
+    next_round_at = now + timedelta(hours=6, minutes=1)
+    with client.app.state.session_factory() as session:
+        owner_id = session.scalar(text("SELECT id FROM identity_users"))
+        accepted = CommentManualRunService(session, clock=lambda: next_round_at).run(
+            owner_id=owner_id,
+            content_id=content_id,
+            command=CommentManualRunInput(operation_id=uuid4()),
+        )
+    reply = {
+        "type": "comment",
+        "id": 987002,
+        "author": "hn-reader-2",
+        "text": "<p>new reply</p>",
+        "created_at_i": int((now + timedelta(minutes=1)).timestamp()),
+        "children": [],
+    }
+    second_requests = _execute_manual_comments(
+        client,
+        job_id=accepted.job_id,
+        now=next_round_at,
+        comment_children=[{**root, "children": [reply]}],
+        offset=1,
+    )
+    assert len(second_requests) == 1
+    with client.app.state.session_factory() as session:
+        rows = session.execute(
+            text(
+                "SELECT c.external_id, t.post_content_id, t.parent_content_id, "
+                "c.id FROM content_threads t JOIN content_records c ON c.id = t.content_id "
+                "WHERE t.post_content_id = :post_id ORDER BY c.external_id"
+            ),
+            {"post_id": content_id},
+        ).all()
+        assert [(row.external_id, row.post_content_id) for row in rows] == [
+            ("987001", content_id),
+            ("987002", content_id),
+        ]
+        assert rows[0].parent_content_id is None
+        assert rows[1].parent_content_id == rows[0].id
+        assert (
+            session.scalar(
+                text(
+                    "SELECT count(*) FROM content_records WHERE source_key = 'hackernews' "
+                    "AND object_type = 'comment'"
+                )
+            )
+            == 2
+        )
+        assert session.scalar(text("SELECT count(*) FROM processed_messages")) == 2
+        budget_usage = session.execute(
+            text(
+                "SELECT p.budget_key, sum(r.actual_units) FROM resource_budget_reservations r "
+                "JOIN resource_budget_policies p ON p.id = r.budget_policy_id "
+                "GROUP BY p.budget_key ORDER BY p.budget_key"
+            )
+        ).all()
+        assert budget_usage == [
+            ("global.plan038.comments.daily", 2),
+            ("source.hackernews.network.daily", 2),
+        ]

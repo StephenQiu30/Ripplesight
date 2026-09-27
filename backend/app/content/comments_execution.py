@@ -119,7 +119,7 @@ class CommentsExecutor:
             source_key = configuration.observation.source_key
             if source_key is None:
                 raise ValueError("comments source is missing")
-            if set(scope) != {
+            required_fields = {
                 "connection_id",
                 "connection_version",
                 "post_external_id",
@@ -136,7 +136,12 @@ class CommentsExecutor:
                 "first_level_limit",
                 "replies_per_thread_limit",
                 "scan_kind",
-            }:
+            }
+            if set(scope) == required_fields | {"manual_content_id"}:
+                if scope.get("entry_point") != "manual":
+                    raise ValueError("manual content ID requires a manual entry point")
+                UUID(self._required_str(scope, "manual_content_id"))
+            elif set(scope) != required_fields:
                 raise ValueError("comments scope fields are incomplete")
             connection_id = UUID(self._required_str(scope, "connection_id"))
             connection_version = self._required_int(scope, "connection_version")
