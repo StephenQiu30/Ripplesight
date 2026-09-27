@@ -83,6 +83,27 @@ def test_comment_run_freezes_bounded_post_scope() -> None:
     assert command.scope["target_hash"] == comment_target_hash("topic:fixture", "42").hex()
 
 
+def test_comment_run_freezes_lower_versioned_limits() -> None:
+    run = _run(first_level_limit=2, replies_per_thread_limit=1, max_requests=3)
+    command = build_comment_job_acceptance(run)
+    assert command.scope["first_level_limit"] == 2
+    assert command.scope["replies_per_thread_limit"] == 1
+    assert command.scope["max_requests"] == 3
+
+    limiter = CommentTreeLimiter(first_level_limit=2, replies_per_thread_limit=1)
+    admitted, filtered = limiter.admit(
+        [
+            _comment("root-1"),
+            _comment("reply-1", parent="root-1"),
+            _comment("reply-2", parent="root-1"),
+            _comment("root-2"),
+            _comment("root-3"),
+        ]
+    )
+    assert [item.external_id for item in admitted] == ["root-1", "reply-1", "root-2"]
+    assert filtered == 2
+
+
 @pytest.mark.parametrize(
     "changes",
     [
@@ -91,6 +112,8 @@ def test_comment_run_freezes_bounded_post_scope() -> None:
         {"max_pages": 33},
         {"max_requests": 101},
         {"max_seconds": 91},
+        {"first_level_limit": 201},
+        {"replies_per_thread_limit": 21},
         {"ends_at": datetime(2026, 9, 25, tzinfo=UTC) + timedelta(days=2)},
         {"starts_at": datetime(2026, 9, 25)},
         {"scheduled_for_at": datetime(2026, 9, 25)},

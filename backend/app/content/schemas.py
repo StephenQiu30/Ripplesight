@@ -112,6 +112,8 @@ class CommentCollectionRunInput(InputModel):
     max_pages: int = Field(default=10, ge=1, le=32)
     max_requests: int = Field(default=10, ge=1, le=100)
     max_seconds: int = Field(default=90, ge=1, le=90)
+    first_level_limit: int = Field(default=200, ge=1, le=200)
+    replies_per_thread_limit: int = Field(default=20, ge=0, le=20)
     scan_kind: CollectionScanKind = CollectionScanKind.REFRESH
 
     @model_validator(mode="after")

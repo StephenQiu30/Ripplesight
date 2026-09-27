@@ -32,6 +32,7 @@ from connections.services import (
     SourceCapabilityEvidenceService,
     SourceConnectionService,
     SourcePresetService,
+    load_applied_source_presets_in_transaction,
     load_execution_policy_in_transaction,
     require_browser_state_execution,
     require_source_connection_enabled,
@@ -169,6 +170,23 @@ def test_preset_versions_snapshot_policy_and_rolls_back_partial_apply(
             connection_id=first.connection_id,
             connection_version=2,
         )
+        comment_config = session.scalar(
+            text(
+                "SELECT config -> 'comment_scan' FROM source_connection_versions "
+                "WHERE connection_id = :connection AND version = 1"
+            ),
+            {"connection": first.connection_id},
+        )
+        assert comment_config["refresh_interval_seconds"] == 21_600
+        with pytest.raises(IntegrityError, match="comment_scan_keys"), session.begin_nested():
+            session.execute(
+                text(
+                    "UPDATE source_connection_versions SET config = "
+                    "jsonb_set(config, '{comment_scan,unknown}', '1'::jsonb) "
+                    "WHERE connection_id = :connection AND version = 1"
+                ),
+                {"connection": first.connection_id},
+            )
     assert second.connection_version == 2
     assert old_policy.min_interval_seconds == 0
     assert new_policy.min_interval_seconds == 1_800
@@ -204,6 +222,40 @@ def test_preset_versions_snapshot_policy_and_rolls_back_partial_apply(
         assert [tuple(row) for row in session.execute(retention_query, retention_params)] == (
             retention_before
         )
+
+
+def test_legacy_hn_connection_keeps_search_until_comment_preset_is_reapplied(
+    source_connection_client: TestClient,
+) -> None:
+    owner_id = UUID(_initialize(source_connection_client))
+    factory = source_connection_client.app.state.session_factory
+    with factory.begin() as session:
+        applied = SourcePresetService(session).apply_in_transaction(
+            owner_id=owner_id, preset=SOURCE_PRESETS["hackernews"]
+        )
+        session.execute(
+            text(
+                "UPDATE source_connection_versions SET config = config - 'comment_scan' "
+                "WHERE connection_id = :connection AND version = 1"
+            ),
+            {"connection": applied.connection_id},
+        )
+    with factory.begin() as session:
+        legacy = load_applied_source_presets_in_transaction(
+            session, owner_id=owner_id, source_keys=("hackernews",)
+        )["hackernews"]
+        assert legacy.comment_scan_policy is None
+        assert legacy.capabilities == (SourceCapability.SEARCH,)
+        reapplied = SourcePresetService(session).apply_in_transaction(
+            owner_id=owner_id, preset=SOURCE_PRESETS["hackernews"]
+        )
+        assert reapplied.connection_version == 2
+    with factory.begin() as session:
+        current = load_applied_source_presets_in_transaction(
+            session, owner_id=owner_id, source_keys=("hackernews",)
+        )["hackernews"]
+        assert SourceCapability.COMMENTS in current.capabilities
+        assert current.comment_scan_policy is not None
 
 
 def test_public_preset_cli_twice_then_policy_change_keeps_budget_window(

@@ -258,6 +258,17 @@ HACKERNEWS_PRESET = SourcePreset(
         {
             "base_url": "https://hn.algolia.com/api/v1",
             "allowed_hosts": ("hn.algolia.com",),
+            "comment_scan": {
+                "candidate_age_seconds": 86_400,
+                "refresh_interval_seconds": 21_600,
+                "max_posts_per_topic": 20,
+                "page_size": 100,
+                "max_pages": 10,
+                "max_requests": 10,
+                "max_seconds": 90,
+                "first_level_limit": 200,
+                "replies_per_thread_limit": 20,
+            },
         }
     ),
     capabilities=(
