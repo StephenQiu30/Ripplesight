@@ -212,6 +212,8 @@ FastAPI 路由装饰器、类型注解和 Pydantic 模型是唯一可编辑的 A
 
 现行逐Issue计划001—057的持久化/任务细则见Design001 §4、子Design及Plan索引：到期窗口与采集周期归jobs，事件事实归events，报告设置唯一读取/写入`monitor_topics.report_time`、`report_timezone`、`weekly_report_enabled`，冻结和导出归reports，不新增`report_schedules`；原始导出归content，告警/投递审计归notifications，账号归monitors，检索投影/回答归knowledge。055—057仅承接共享底座回归/冻结，均不代表产品验收；不创建额外共享层、服务或存储桶。新增router按目标路径独立注册，现有 `/api/v1/reports` 由Plan018统一到 `/api/reports` 并同步生成客户端。新任务硬截止见Design001，真实依赖和保留库恢复仍按既有门槛验证。
 
+Plan 031 的 `backend/app/monitors/runs.py` 专管主题手动采集的 owner 校验、幂等重放、来源逐项受理及 Job/Outbox 事务；`monitors/services.py` 保留主题和调度投影，`worker/scheduler.py` 负责到期领取与事实入账。前端主题页专属入口位于 `frontend/src/app/monitors/[topicId]/components/topic-run-actions.tsx`，只使用生成的 API 客户端。
+
 Plan 001 的主题采集版本在 `monitor_topic_versions` 固定关键词组、排序后的来源键和主题请求间隔；`monitor_topics` 与 `monitor_schedules` 保存当前投影，既有 Job 的配置版本不随更新重释。只改显示名称或报告/推送偏好不生成采集版本。来源保存须有已应用搜索预设及当前准入/运行策略；恢复还检查可用来源预算，真实采集可用性仍须逐来源验收。
 
 `collection_due_windows` 属于 jobs 的持久到期事实，唯一键为 `(owner_id, schedule_key, due_at)`，允许未受理窗口没有 Job；`coverage_windows`、内容观察、资源尝试和预算账本仍分别保存执行事实。Plan 033 提供领域只读 DTO，Plan 031 才把调度受理写入同一事务，Plan 004 消费查询。

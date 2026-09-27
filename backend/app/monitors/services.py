@@ -356,7 +356,7 @@ class MonitorScheduleService:
         self,
         *,
         schedule: DueCollectionSchedule,
-        job_id: UUID,
+        job_id: UUID | None,
         next_run_at: datetime,
         updated_at: datetime,
     ) -> None:
@@ -376,7 +376,8 @@ class MonitorScheduleService:
         if model is None:
             raise RuntimeError("claimed collection schedule is no longer visible")
         model.next_run_at = next_run_at
-        model.last_job_id = job_id
+        if job_id is not None:
+            model.last_job_id = job_id
         model.updated_at = updated_at
 
 

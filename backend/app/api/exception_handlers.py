@@ -86,6 +86,9 @@ APPLICATION_ERRORS: Mapping[str, PublicError] = {
     ),
     "topic_archived": PublicError(409, "topic_archived", "已归档主题不能再修改"),
     "topic_not_ready": PublicError(409, "topic_not_ready", "主题来源尚未就绪"),
+    "invalid_topic_source_selection": PublicError(
+        422, "invalid_topic_source_selection", "所选来源不属于当前主题"
+    ),
     "topic_version_conflict": PublicError(409, "topic_version_conflict", "主题已被其他修改更新"),
 }
 

@@ -74,6 +74,7 @@ class AppliedHotlistPreset:
     source_key: str
     connection_id: UUID
     connection_version: int
+    active_since_at: datetime
 
 
 def list_applied_hotlist_presets_in_transaction(
@@ -101,16 +102,27 @@ def list_applied_hotlist_presets_in_transaction(
         applied = load_applied_source_presets_in_transaction(
             session, owner_id=current_owner, source_keys=keys
         )
-        result.extend(
-            AppliedHotlistPreset(
-                owner_id=current_owner,
-                source_key=key,
-                connection_id=preset.connection_id,
-                connection_version=preset.connection_version,
+        for key, preset in applied.items():
+            if SourceCapability.HOTLIST not in preset.capabilities:
+                continue
+            connection = session.get(SourceConnection, preset.connection_id)
+            if connection is None or connection.owner_id != current_owner:
+                raise RuntimeError("applied hotlist connection is unavailable")
+            updated_at = connection.updated_at
+            active_since_at = (
+                updated_at.replace(tzinfo=UTC)
+                if updated_at.tzinfo is None
+                else updated_at.astimezone(UTC)
             )
-            for key, preset in applied.items()
-            if SourceCapability.HOTLIST in preset.capabilities
-        )
+            result.append(
+                AppliedHotlistPreset(
+                    owner_id=current_owner,
+                    source_key=key,
+                    connection_id=preset.connection_id,
+                    connection_version=preset.connection_version,
+                    active_since_at=active_since_at,
+                )
+            )
     return tuple(sorted(result, key=lambda item: (item.owner_id, item.source_key)))
 
 
@@ -188,6 +200,38 @@ def load_execution_policy_in_transaction(
     if version is None or version.execution_policy is None:
         raise ApplicationError("resource_not_found")
     return SourceExecutionPolicy.model_validate(version.execution_policy)
+
+
+def load_source_execution_snapshot_at_in_transaction(
+    session: Session, *, owner_id: UUID, source_key: str, due_at: datetime
+) -> tuple[UUID | None, int | None, SourceExecutionPolicy | None]:
+    """Read the non-secret source policy that existed at a scheduled instant."""
+    if not session.in_transaction() or due_at.utcoffset() is None:
+        raise RuntimeError("historical source policy lookup requires a transaction and aware time")
+    row = session.execute(
+        select(
+            SourceConnection.id,
+            SourceConnectionVersion.version,
+            SourceConnectionVersion.execution_policy,
+        )
+        .join(
+            SourceConnectionVersion,
+            and_(
+                SourceConnectionVersion.connection_id == SourceConnection.id,
+                SourceConnectionVersion.owner_id == SourceConnection.owner_id,
+            ),
+        )
+        .where(
+            SourceConnection.owner_id == owner_id,
+            SourceConnection.source_key == source_key,
+            SourceConnectionVersion.created_at <= due_at,
+        )
+        .order_by(SourceConnectionVersion.created_at.desc(), SourceConnectionVersion.version.desc())
+        .limit(1)
+    ).one_or_none()
+    if row is None or row.execution_policy is None:
+        return None, None, None
+    return row.id, row.version, SourceExecutionPolicy.model_validate(row.execution_policy)
 
 
 @dataclass(frozen=True, slots=True)

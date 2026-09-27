@@ -328,10 +328,8 @@ def plan_keyword_discovery(run: KeywordDiscoveryRunInput) -> tuple[JobAcceptance
     return tuple(jobs)
 
 
-def plan_scheduled_keyword_discovery(run: KeywordDiscoveryRunInput) -> JobAcceptanceInput:
-    """Build the single latest-search job represented by one collection schedule window."""
-    if run.entry_point is not SourceEntryPoint.SCHEDULED:
-        raise ValueError("scheduled discovery requires the scheduled entry point")
+def plan_single_keyword_discovery(run: KeywordDiscoveryRunInput) -> JobAcceptanceInput:
+    """Build one bounded latest-search job for an explicit source query."""
     observation = JobObservationContext(
         configuration_ref=run.configuration_ref,
         configuration_version=run.configuration_version,
@@ -366,6 +364,13 @@ def plan_scheduled_keyword_discovery(run: KeywordDiscoveryRunInput) -> JobAccept
             "entry_point": run.entry_point.value,
         },
     )
+
+
+def plan_scheduled_keyword_discovery(run: KeywordDiscoveryRunInput) -> JobAcceptanceInput:
+    """Build the single latest-search job represented by one collection schedule window."""
+    if run.entry_point is not SourceEntryPoint.SCHEDULED:
+        raise ValueError("scheduled discovery requires the scheduled entry point")
+    return plan_single_keyword_discovery(run)
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Query, Response, status
 from api.dependencies import (
     AuthenticatedIdentityDependency,
     CsrfProtectedIdentityDependency,
+    MonitorTopicRunServiceDependency,
     MonitorTopicServiceDependency,
 )
 from core.schemas import ErrorView, PageView
@@ -15,6 +16,8 @@ from monitors.schemas import (
     MonitorTopicCreateInput,
     MonitorTopicPreviewInput,
     MonitorTopicPreviewView,
+    MonitorTopicRunInput,
+    MonitorTopicRunView,
     MonitorTopicUpdateInput,
     MonitorTopicView,
 )
@@ -236,3 +239,28 @@ def archive_monitor_topic(
     topic = service.archive_topic(owner_id=identity.view.user.id, topic_id=topic_id)
     response.headers["cache-control"] = "no-store"
     return topic
+
+
+@router.post(
+    "/{topic_id}/runs",
+    operation_id="runMonitorTopic",
+    response_model=MonitorTopicRunView,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="立即运行监控主题来源",
+    description="按当前主题规则和已应用来源预设创建搜索任务。重复操作标识返回原受理结果。",
+    responses={
+        **_WRITE_RESPONSES,
+        200: {"model": MonitorTopicRunView, "description": "同一次操作已受理"},
+    },
+)
+def run_monitor_topic(
+    topic_id: UUID,
+    payload: MonitorTopicRunInput,
+    response: Response,
+    service: MonitorTopicRunServiceDependency,
+    identity: CsrfProtectedIdentityDependency,
+) -> MonitorTopicRunView:
+    result = service.run(owner_id=identity.view.user.id, topic_id=topic_id, command=payload)
+    response.status_code = status.HTTP_200_OK if result.replayed else status.HTTP_202_ACCEPTED
+    response.headers["cache-control"] = "no-store"
+    return result.view
