@@ -91,8 +91,8 @@ def build_comment_job_acceptance(run: CommentCollectionRunInput) -> JobAcceptanc
             "max_pages": run.max_pages,
             "max_requests": run.max_requests,
             "max_seconds": run.max_seconds,
-            "first_level_limit": _FIRST_LEVEL_LIMIT,
-            "replies_per_thread_limit": _REPLIES_PER_THREAD_LIMIT,
+            "first_level_limit": run.first_level_limit,
+            "replies_per_thread_limit": run.replies_per_thread_limit,
             "scan_kind": run.scan_kind.value,
         },
     )
@@ -309,10 +309,10 @@ class CommentTreeLimiter:
     """Apply deterministic root and per-root reply limits to a preorder comment tree."""
 
     def __init__(self, *, first_level_limit: int, replies_per_thread_limit: int) -> None:
-        if first_level_limit != _FIRST_LEVEL_LIMIT:
-            raise ValueError("first-level comment limit must be 200")
-        if replies_per_thread_limit != _REPLIES_PER_THREAD_LIMIT:
-            raise ValueError("reply limit must be 20")
+        if not 1 <= first_level_limit <= _FIRST_LEVEL_LIMIT:
+            raise ValueError("first-level comment limit must be between 1 and 200")
+        if not 0 <= replies_per_thread_limit <= _REPLIES_PER_THREAD_LIMIT:
+            raise ValueError("reply limit must be between 0 and 20")
         self._first_level_limit = first_level_limit
         self._replies_per_thread_limit = replies_per_thread_limit
         self._seen: set[str] = set()
@@ -388,6 +388,8 @@ class CommentPageCommitService:
         self._session = session
         self._lease_seconds = lease_seconds
         self._clock = clock or (lambda: datetime.now(UTC))
+        self._first_level_limit = first_level_limit
+        self._replies_per_thread_limit = replies_per_thread_limit
         self._limiter = CommentTreeLimiter(
             first_level_limit=first_level_limit,
             replies_per_thread_limit=replies_per_thread_limit,
@@ -422,8 +424,8 @@ class CommentPageCommitService:
             or configuration.scope.get("starts_at") != window.starts_at.isoformat()
             or configuration.scope.get("ends_at") != window.ends_at.isoformat()
             or configuration.scope.get("max_pages") != request.max_pages
-            or configuration.scope.get("first_level_limit") != _FIRST_LEVEL_LIMIT
-            or configuration.scope.get("replies_per_thread_limit") != _REPLIES_PER_THREAD_LIMIT
+            or configuration.scope.get("first_level_limit") != self._first_level_limit
+            or configuration.scope.get("replies_per_thread_limit") != self._replies_per_thread_limit
             or window.owner_id != owner_id
             or window.capability is not SourceCapability.COMMENTS
             or page.source_key != window.source_key

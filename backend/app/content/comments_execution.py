@@ -167,8 +167,8 @@ class CommentsExecutor:
                 or not 1 <= max_requests <= 100
                 or not 1 <= max_seconds <= 90
                 or not 1 <= page_size <= 100
-                or first_level_limit != 200
-                or replies_per_thread_limit != 20
+                or not 1 <= first_level_limit <= 200
+                or not 0 <= replies_per_thread_limit <= 20
                 or connection_version < 1
                 or configuration.started_at is None
                 or configuration.started_at.utcoffset() is None

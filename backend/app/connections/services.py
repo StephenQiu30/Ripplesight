@@ -21,6 +21,7 @@ from connections.models import (
 )
 from connections.presets import SOURCE_PRESETS, SourcePreset
 from connections.schemas import (
+    CommentScanPolicy,
     ConnectionEvidenceKind,
     ConnectionEvidenceOutcome,
     PersistedReadEvidenceInput,
@@ -67,6 +68,7 @@ class AppliedSourcePreset:
     connection_id: UUID
     connection_version: int
     capabilities: tuple[SourceCapability, ...]
+    comment_scan_policy: CommentScanPolicy | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,10 +184,16 @@ def load_applied_source_presets_in_transaction(
             exclude_defaults=True,
             exclude_none=True,
         )
+        old_hn_config = (
+            {key: value for key, value in expected_config.items() if key != "comment_scan"}
+            if connection.source_key == "hackernews"
+            else None
+        )
+        legacy_hn_search = old_hn_config is not None and version.config == old_hn_config
         if (
             version.auth_kind != SourceConnectionAuthKind.NONE.value
             or version.secret_ref is not None
-            or version.config != expected_config
+            or (version.config != expected_config and not legacy_hn_search)
             or version.execution_policy != preset.execution_policy.model_dump(mode="json")
         ):
             continue
@@ -193,7 +201,12 @@ def load_applied_source_presets_in_transaction(
             source_key=connection.source_key,
             connection_id=connection.id,
             connection_version=connection.current_version,
-            capabilities=tuple(item.capability for item in preset.capabilities),
+            capabilities=tuple(
+                item.capability
+                for item in preset.capabilities
+                if not legacy_hn_search or item.capability is not SourceCapability.COMMENTS
+            ),
+            comment_scan_policy=SourceConnectionConfig.model_validate(version.config).comment_scan,
         )
     return applied
 

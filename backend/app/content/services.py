@@ -1805,18 +1805,29 @@ class CommentScanCandidate:
     preset: AppliedSourcePreset
 
 
-def comment_bucket_start(now: datetime) -> datetime:
+def comment_bucket_start(now: datetime, *, interval_seconds: int = 21_600) -> datetime:
     if now.tzinfo is None:
         raise ValueError("comment scan time must be timezone-aware")
+    if not 60 <= interval_seconds <= 86_400:
+        raise ValueError("comment refresh interval is out of bounds")
     now_utc = now.astimezone(UTC)
-    return now_utc.replace(hour=(now_utc.hour // 6) * 6, minute=0, second=0, microsecond=0)
+    return datetime.fromtimestamp(
+        int(now_utc.timestamp()) // interval_seconds * interval_seconds, tz=UTC
+    )
 
 
-def comment_operation_id(content_id: UUID, bucket_start: datetime) -> UUID:
+def comment_operation_id(
+    content_id: UUID, bucket_start: datetime, *, connection_version: int | None = None
+) -> UUID:
     if bucket_start.tzinfo is None:
         raise ValueError("comment bucket must be timezone-aware")
+    if connection_version is not None and connection_version < 1:
+        raise ValueError("comment connection version must be positive")
     bucket_text = bucket_start.astimezone(UTC).isoformat().replace("+00:00", "Z")
-    return uuid5(COMMENT_OPERATION_NAMESPACE, f"comments:{content_id}:{bucket_text}")
+    name = f"comments:{content_id}:{bucket_text}"
+    if connection_version is not None:
+        name = f"{name}:connection:{connection_version}"
+    return uuid5(COMMENT_OPERATION_NAMESPACE, name)
 
 
 def _comment_collection_run(
@@ -1824,8 +1835,15 @@ def _comment_collection_run(
     *,
     bucket_start: datetime,
 ) -> CommentCollectionRunInput:
+    policy = candidate.preset.comment_scan_policy
+    if candidate.post.source_key == "hackernews" and policy is None:
+        raise ValueError("Hacker News comments require a versioned scan policy")
     return CommentCollectionRunInput(
-        operation_id=comment_operation_id(candidate.post.content_id, bucket_start),
+        operation_id=comment_operation_id(
+            candidate.post.content_id,
+            bucket_start,
+            connection_version=candidate.preset.connection_version,
+        ),
         configuration_ref=f"topic:{candidate.topic.topic_id}",
         configuration_version=candidate.topic.topic_version,
         source_key=candidate.post.source_key,
@@ -1833,12 +1851,17 @@ def _comment_collection_run(
         connection_version=candidate.preset.connection_version,
         post_external_id=candidate.post.external_id,
         entry_point=SourceEntryPoint.SCHEDULED,
-        starts_at=bucket_start - _COMMENT_REFRESH_INTERVAL,
+        starts_at=bucket_start - timedelta(seconds=policy.refresh_interval_seconds)
+        if policy is not None
+        else bucket_start - _COMMENT_REFRESH_INTERVAL,
         ends_at=bucket_start,
         scheduled_for_at=bucket_start,
-        page_size=20 if candidate.post.source_key == "bilibili" else 100,
-        max_pages=1 if candidate.post.source_key == "bilibili" else 10,
-        max_requests=1 if candidate.post.source_key == "bilibili" else 10,
+        page_size=policy.page_size if policy is not None else 20,
+        max_pages=policy.max_pages if policy is not None else 1,
+        max_requests=policy.max_requests if policy is not None else 1,
+        max_seconds=policy.max_seconds if policy is not None else 90,
+        first_level_limit=policy.first_level_limit if policy is not None else 200,
+        replies_per_thread_limit=policy.replies_per_thread_limit if policy is not None else 20,
     )
 
 
@@ -1848,15 +1871,25 @@ def _rank_comment_posts_for_topic(
     posts: tuple[CommentScanPost, ...],
     presets: Mapping[tuple[UUID, str], AppliedSourcePreset],
     recent_jobs: frozenset[RecentCommentJobTarget],
+    now: datetime | None = None,
 ) -> tuple[CommentScanCandidate, ...]:
     matched: list[CommentScanPost] = []
     for post in posts:
         key = (post.owner_id, post.source_key)
+        preset = presets.get(key)
+        policy = preset.comment_scan_policy if preset is not None else None
+        if post.source_key == "hackernews" and policy is None:
+            continue
         if (
             post.owner_id != topic.owner_id
             or post.source_key not in topic.source_keys
             or post.comment_count <= 0
-            or key not in presets
+            or preset is None
+            or (
+                now is not None
+                and post.created_at
+                < now - timedelta(seconds=policy.candidate_age_seconds if policy else 86_400)
+            )
             or RecentCommentJobTarget(
                 owner_id=post.owner_id,
                 source_key=post.source_key,
@@ -1868,13 +1901,22 @@ def _rank_comment_posts_for_topic(
             continue
         matched.append(post)
     ranked = sorted(matched, key=lambda item: (-item.interaction_score, str(item.content_id)))
+    selected: list[CommentScanPost] = []
+    counts: dict[str, int] = {}
+    for post in ranked:
+        policy = presets[(post.owner_id, post.source_key)].comment_scan_policy
+        limit = policy.max_posts_per_topic if policy is not None else _COMMENT_TOPIC_LIMIT
+        if counts.get(post.source_key, 0) >= limit:
+            continue
+        selected.append(post)
+        counts[post.source_key] = counts.get(post.source_key, 0) + 1
     return tuple(
         CommentScanCandidate(
             post=post,
             topic=topic,
             preset=presets[(post.owner_id, post.source_key)],
         )
-        for post in ranked[:_COMMENT_TOPIC_LIMIT]
+        for post in selected
     )
 
 
@@ -1898,16 +1940,40 @@ class CommentScanService:
         presets = self._comment_presets(topics)
         if skip_bilibili:
             presets = {key: preset for key, preset in presets.items() if key[1] != "bilibili"}
+        max_candidate_age = max(
+            (
+                preset.comment_scan_policy.candidate_age_seconds
+                if preset.comment_scan_policy is not None
+                else int(_COMMENT_POST_LIFETIME.total_seconds())
+                for preset in presets.values()
+            ),
+            default=int(_COMMENT_POST_LIFETIME.total_seconds()),
+        )
         posts = self._load_recent_posts(
             owners={topic.owner_id for topic in topics},
             source_keys={source_key for _, source_key in presets},
-            since=now_utc - _COMMENT_POST_LIFETIME,
+            since=now_utc - timedelta(seconds=max_candidate_age),
             until=now_utc,
         )
-        recent_jobs = load_recent_comment_job_targets_in_transaction(
-            self._session,
-            since=now_utc - _COMMENT_REFRESH_INTERVAL,
-        )
+        recent_jobs: frozenset[RecentCommentJobTarget] = frozenset()
+        for source_key in {source for _, source in presets}:
+            source_presets = [preset for (_, key), preset in presets.items() if key == source_key]
+            interval_seconds = max(
+                (
+                    preset.comment_scan_policy.refresh_interval_seconds
+                    if preset.comment_scan_policy is not None
+                    else int(_COMMENT_REFRESH_INTERVAL.total_seconds())
+                    for preset in source_presets
+                ),
+                default=int(_COMMENT_REFRESH_INTERVAL.total_seconds()),
+            )
+            recent_jobs |= frozenset(
+                target
+                for target in load_recent_comment_job_targets_in_transaction(
+                    self._session, since=now_utc - timedelta(seconds=interval_seconds)
+                )
+                if target.source_key == source_key
+            )
         # Only a newer Bilibili search refreshes the cached comments. A standalone
         # comment scan must not replay the same JSONL as a fresh platform read.
         for post in posts:
@@ -1929,6 +1995,7 @@ class CommentScanService:
                 posts=posts,
                 presets=presets,
                 recent_jobs=recent_jobs,
+                now=now_utc,
             ):
                 unique_candidates.setdefault(
                     (candidate.post.owner_id, candidate.post.content_id), candidate
@@ -1937,10 +2004,16 @@ class CommentScanService:
         from content.comments import build_comment_job_acceptance
 
         accepted = 0
-        bucket_start = comment_bucket_start(now_utc)
         logger = structlog.get_logger("comment_scan")
         for candidate in unique_candidates.values():
             try:
+                policy = candidate.preset.comment_scan_policy
+                interval_seconds = (
+                    policy.refresh_interval_seconds
+                    if policy is not None
+                    else int(_COMMENT_REFRESH_INTERVAL.total_seconds())
+                )
+                bucket_start = comment_bucket_start(now_utc, interval_seconds=interval_seconds)
                 with self._session.begin_nested():
                     JobService(self._session, clock=lambda: now_utc).accept_in_transaction(
                         owner_id=candidate.post.owner_id,

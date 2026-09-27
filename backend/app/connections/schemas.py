@@ -94,12 +94,27 @@ class SourceExecutionPolicy(InputModel):
         return any(window.contains(instant) for window in self.quiet_windows)
 
 
+class CommentScanPolicy(InputModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    candidate_age_seconds: int = Field(ge=1, le=604_800)
+    refresh_interval_seconds: int = Field(ge=60, le=86_400)
+    max_posts_per_topic: int = Field(ge=1, le=100)
+    page_size: int = Field(ge=1, le=100)
+    max_pages: int = Field(ge=1, le=32)
+    max_requests: int = Field(ge=1, le=100)
+    max_seconds: int = Field(ge=1, le=90)
+    first_level_limit: int = Field(ge=1, le=200)
+    replies_per_thread_limit: int = Field(ge=0, le=20)
+
+
 class SourceConnectionConfig(InputModel):
     feed_url: str | None = Field(default=None, min_length=1, max_length=2048)
     feed_url_template: str | None = Field(default=None, min_length=1, max_length=2048)
     base_url: HttpUrl | None = None
     engines: tuple[str, ...] = Field(default=(), max_length=16)
     allowed_hosts: tuple[str, ...] = Field(default=(), max_length=32)
+    comment_scan: CommentScanPolicy | None = None
 
     @field_validator("feed_url", "feed_url_template")
     @classmethod

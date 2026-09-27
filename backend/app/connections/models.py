@@ -110,8 +110,18 @@ class SourceConnectionVersion(Base):
         ),
         CheckConstraint(
             "config - 'feed_url' - 'feed_url_template' - 'base_url' - 'engines' "
-            "- 'allowed_hosts' = '{}'::jsonb",
+            "- 'allowed_hosts' - 'comment_scan' = '{}'::jsonb",
             name="source_connection_versions_config_keys_check",
+        ),
+        CheckConstraint(
+            "NOT (config ? 'comment_scan') OR ("
+            "jsonb_typeof(config -> 'comment_scan') = 'object' AND "
+            "(config -> 'comment_scan') "
+            "- 'candidate_age_seconds' - 'refresh_interval_seconds' "
+            "- 'max_posts_per_topic' - 'page_size' - 'max_pages' "
+            "- 'max_requests' - 'max_seconds' - 'first_level_limit' "
+            "- 'replies_per_thread_limit' = '{}'::jsonb)",
+            name="source_connection_versions_comment_scan_keys_check",
         ),
         CheckConstraint(
             "execution_policy IS NULL OR jsonb_typeof(execution_policy) = 'object'",
