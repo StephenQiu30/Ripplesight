@@ -16,6 +16,7 @@ from content.services import ContentService
 from core.errors import DependencyUnavailableError
 from identity.services import AuthenticatedIdentity, IdentityService
 from jobs.services import JobService
+from monitors.runs import MonitorTopicRunService
 from monitors.services import MonitorTopicService
 from reports.services import ReportService
 
@@ -75,6 +76,18 @@ def get_monitor_topic_service(session: SessionDependency) -> MonitorTopicService
 MonitorTopicServiceDependency = Annotated[
     MonitorTopicService,
     Depends(get_monitor_topic_service),
+]
+
+
+def get_monitor_topic_run_service(
+    request: Request, session: SessionDependency
+) -> MonitorTopicRunService:
+    return MonitorTopicRunService(session, request.app.state.settings)
+
+
+MonitorTopicRunServiceDependency = Annotated[
+    MonitorTopicRunService,
+    Depends(get_monitor_topic_run_service),
 ]
 
 

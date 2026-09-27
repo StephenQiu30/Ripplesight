@@ -56,6 +56,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiRequestError } from "@/request";
 
+import { TopicRunActions } from "./topic-run-actions";
+
 type TopicEditorProps = { topicId: string };
 
 type EditorState =
@@ -638,6 +640,17 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
                 </Button>
               ) : null}
             </div>
+            <TopicRunActions
+              key={`${topic.id}:${topic.current_version}:${topic.source_keys.join(",")}`}
+              topic={topic}
+              sourceNames={Object.fromEntries(
+                sourceOptions.map((source) => [
+                  source.sourceKey,
+                  source.displayName,
+                ]),
+              )}
+              disabled={isBusy}
+            />
           </aside>
         </form>
       </main>

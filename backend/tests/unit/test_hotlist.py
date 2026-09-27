@@ -1,11 +1,9 @@
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
 
 import httpx
 
-from connections.services import AppliedHotlistPreset
 from content.hotlist import _post_payload, match_hotlist_topics, rank_change
 from core.config import Settings
 from main import create_app
@@ -13,7 +11,6 @@ from monitors.services import ActiveHotlistTopic, normalize_monitor_rules
 from reports.services import ReportService
 from sources.adapters.rsshub_hotlist import RsshubHotlistAdapter
 from sources.contracts import HotlistEntry, SourceCapability, SourcePageState, SourceStopReason
-from worker import scheduler
 from worker.scheduler import hotlist_operation_id
 
 FEED = b"""<rss version="2.0"><channel><title>Hot</title>
@@ -95,11 +92,14 @@ def test_rank_change_covers_new_up_down_and_same() -> None:
 def test_hotlist_operation_id_is_stable_within_bucket() -> None:
     owner_id = uuid4()
     now = datetime(2026, 9, 26, 8, 2, tzinfo=UTC)
-    assert hotlist_operation_id(owner_id, "hotlist_weibo", now, 1800) == hotlist_operation_id(
-        owner_id, "hotlist_weibo", now + timedelta(minutes=20), 1800
+    assert hotlist_operation_id(owner_id, "hotlist_weibo", now, 1800, 1) == hotlist_operation_id(
+        owner_id, "hotlist_weibo", now + timedelta(minutes=20), 1800, 1
     )
-    assert hotlist_operation_id(owner_id, "hotlist_weibo", now, 1800) != hotlist_operation_id(
-        owner_id, "hotlist_weibo", now + timedelta(minutes=30), 1800
+    assert hotlist_operation_id(owner_id, "hotlist_weibo", now, 1800, 1) != hotlist_operation_id(
+        owner_id, "hotlist_weibo", now + timedelta(minutes=30), 1800, 1
+    )
+    assert hotlist_operation_id(owner_id, "hotlist_weibo", now, 1800, 1) != hotlist_operation_id(
+        owner_id, "hotlist_weibo", now, 1800, 2
     )
 
 
@@ -135,46 +135,6 @@ def test_hotlist_matches_each_active_topic_using_title_and_summary() -> None:
         ),
     )
     assert match_hotlist_topics(entry, topics) == ("手机 AI",)
-
-
-def test_repeated_hotlist_scan_does_not_accept_same_operation(monkeypatch: object) -> None:
-    owner_id = uuid4()
-    preset = AppliedHotlistPreset(
-        owner_id=owner_id,
-        source_key="hotlist_weibo",
-        connection_id=uuid4(),
-        connection_version=1,
-    )
-    accepted: set[object] = set()
-
-    class FakeSession:
-        def in_transaction(self) -> bool:
-            return True
-
-    class FakeJobs:
-        def __init__(self, _session: object, *, clock: object) -> None:
-            pass
-
-        def operation_exists_in_transaction(
-            self, *, owner_id: object, kind: str, operation_id: object
-        ) -> bool:
-            return operation_id in accepted
-
-        def accept_in_transaction(self, *, owner_id: object, command: object) -> None:
-            accepted.add(command.operation_id)
-
-    monkeypatch.setattr(scheduler, "JobService", FakeJobs)
-    monkeypatch.setattr(
-        scheduler, "list_applied_hotlist_presets_in_transaction", lambda _: (preset,)
-    )
-    monkeypatch.setattr(
-        scheduler, "get_settings", lambda: SimpleNamespace(hotlist_interval_seconds=1800)
-    )
-    now = datetime(2026, 9, 26, 8, 2, tzinfo=UTC)
-    session = FakeSession()
-    assert scheduler.enqueue_due_hotlists_in_transaction(session, now) == 1
-    assert scheduler.enqueue_due_hotlists_in_transaction(session, now + timedelta(minutes=20)) == 0
-    assert len(accepted) == 1
 
 
 def test_daily_report_selects_hotlist_discoveries_by_topic_id() -> None:

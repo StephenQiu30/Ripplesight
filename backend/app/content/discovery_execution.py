@@ -152,7 +152,7 @@ class KeywordDiscoveryExecutor:
             source_key = configuration.observation.source_key
             if source_key is None:
                 raise ValueError("search source is missing")
-            if set(scope) != {
+            search_scope_fields = {
                 "run_id",
                 "connection_id",
                 "connection_version",
@@ -170,8 +170,29 @@ class KeywordDiscoveryExecutor:
                 "relevance_filter_position",
                 "scan_kind",
                 "entry_point",
-            }:
+            }
+            manual_scope_fields = {
+                "manual_request_id",
+                "manual_source_keys",
+                "manual_query_index",
+                "manual_skips",
+            }
+            scheduled_scope_fields = {"schedule_key", "due_at"}
+            if set(scope) not in (
+                search_scope_fields,
+                search_scope_fields | manual_scope_fields,
+                search_scope_fields | scheduled_scope_fields,
+            ):
                 raise ValueError("search scope fields are incomplete")
+            if manual_scope_fields.issubset(scope):
+                UUID(self._required_str(scope, "manual_request_id"))
+                self._required_str(scope, "manual_source_keys")
+                if (
+                    self._required_int(scope, "manual_query_index") < 0
+                    or not isinstance(scope["manual_skips"], str)
+                    or scope["entry_point"] != "manual"
+                ):
+                    raise ValueError("manual search scope fields are invalid")
             UUID(self._required_str(scope, "run_id"))
             connection_id = UUID(self._required_str(scope, "connection_id"))
             connection_version = self._required_int(scope, "connection_version")
@@ -193,6 +214,16 @@ class KeywordDiscoveryExecutor:
                 starts_at=datetime.fromisoformat(self._required_str(scope, "starts_at")),
                 ends_at=datetime.fromisoformat(self._required_str(scope, "ends_at")),
             )
+            if scheduled_scope_fields.issubset(scope):
+                schedule_key = self._required_str(scope, "schedule_key")
+                due_at = datetime.fromisoformat(self._required_str(scope, "due_at"))
+                if (
+                    str(UUID(schedule_key)) != schedule_key
+                    or scope["entry_point"] != "scheduled"
+                    or due_at.utcoffset() != timedelta(0)
+                    or due_at != window.ends_at
+                ):
+                    raise ValueError("scheduled search scope fields are invalid")
             if (
                 not 1 <= max_pages <= 20
                 or not 1 <= max_requests <= 100

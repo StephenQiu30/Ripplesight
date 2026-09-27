@@ -123,6 +123,25 @@ export async function resumeMonitorTopic(
   });
 }
 
+/** 立即运行监控主题来源 按当前主题规则和已应用来源预设创建搜索任务。重复操作标识返回原受理结果。 POST /api/topics/${param0}/runs */
+export async function runMonitorTopic(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: HotKeyAPI.runMonitorTopicParams,
+  body: HotKeyAPI.MonitorTopicRunInput,
+  options?: import("@/request").RequestOptions,
+) {
+  const { topic_id: param0, ...queryParams } = params;
+  return request<HotKeyAPI.MonitorTopicRunView>(`/api/topics/${param0}/runs`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    params: { ...queryParams },
+    data: body,
+    ...(options || {}),
+  });
+}
+
 /** 预览监控主题规则 只在本地规范化规则并检查标题样本; 不保存主题、不创建任务、不调用来源。 POST /api/topics/preview */
 export async function previewMonitorTopic(
   body: HotKeyAPI.MonitorTopicPreviewInput,

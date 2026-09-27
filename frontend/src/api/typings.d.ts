@@ -547,6 +547,34 @@ declare namespace HotKeyAPI {
   type MonitorTopicReadinessStatus =
     "pending_source_selection" | "pending_source_readiness" | "ready";
 
+  type MonitorTopicRunInput = {
+    /** Operation Id */
+    operation_id: string;
+    /** Source Keys */
+    source_keys: SourceKeyInput[];
+  };
+
+  type MonitorTopicRunSourceView = {
+    /** Source Key */
+    source_key: string;
+    /** Job Ids */
+    job_ids: string[];
+    /** Skip Reason */
+    skip_reason:
+      "source_unavailable" | "quiet" | "budget" | "rate_limited" | null;
+  };
+
+  type MonitorTopicRunView = {
+    /** Operation Id */
+    operation_id: string;
+    /** Topic Id */
+    topic_id: string;
+    /** Topic Version */
+    topic_version: number;
+    /** Sources */
+    sources: MonitorTopicRunSourceView[];
+  };
+
   type MonitorTopicStatus = "paused" | "active" | "archived";
 
   type MonitorTopicUpdateInput = {
@@ -709,6 +737,10 @@ declare namespace HotKeyAPI {
 
   type retryCollectionJobParams = {
     job_id: string;
+  };
+
+  type runMonitorTopicParams = {
+    topic_id: string;
   };
 
   type SourceCapability =
