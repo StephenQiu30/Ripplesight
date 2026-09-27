@@ -31,7 +31,7 @@ from worker.scheduler import enqueue_due_collections_in_transaction
 
 
 @pytest.fixture
-def monitor_topic_client() -> Iterator[TestClient]:
+def monitor_topic_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     database_url = os.getenv("HOTKEY_TEST_DATABASE_URL")
     if database_url is None:
         pytest.skip("HOTKEY_TEST_DATABASE_URL is required for PostgreSQL integration tests")
@@ -44,6 +44,9 @@ def monitor_topic_client() -> Iterator[TestClient]:
         database_url=database_url,
         bootstrap_token="monitor-topics-isolated-bootstrap-token",
     )
+    # Scheduler scans normally read process settings. The API fixture supplies
+    # an explicit isolated database URL, while CI intentionally has no app URL.
+    monkeypatch.setattr(scheduler, "get_settings", lambda: settings)
     try:
         with TestClient(create_app(settings)) as client:
             yield client
