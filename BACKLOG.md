@@ -14,6 +14,8 @@ Plan 035 Google News 见 Acceptance 002 EV-002-018：真实主题 API → Kafka 
 
 Plan 036 SearXNG 见 Acceptance 002 EV-002-019：真实两轮各入库 7、总身份 7，MSN 原帖可打开，来源/全局预算各 2；尾段未知，远端三项 CI 通过，本卡 `completed`。
 
+Plan 008 六榜见 Acceptance 002 EV-002-020/021：六路由 11:00/11:30 两轮真实快照、排名/命中身份及 Kafka 重放均核对；远端 backend **901 passed/8 skipped**。本卡 `completed`，共同 72 小时、历史页面和 Codex 标注另验。
+
 Plan 005 的标注状态与重放技术切片已在隔离 `main` 工作树完成，PostgreSQL 17 全新库的后端全量回归为 **779 passed/17 skipped**，见 Acceptance 002 EV-002-010。旧开发库 3 条历史异常、真实 Codex 样本和远端门禁尚未在该证据中核对；Plan 005 保持 `in_progress`，产品验收不变。
 
 Plan 031 的主题手动运行 API、到期调度账本、Job/Outbox 同事务及页面入口已在独立工作树验证：隔离 PostgreSQL 17 全量后端与隔离 Kafka 合计 **801 passed/13 skipped**，另补的连接版本 operation ID 目标测试 17 passed；前端 **55 passed**、lint/typecheck/format/build 通过，桌面和 390px 窄屏真实浏览器展示部分受理并进入任务详情。HN 手动真实输入已由 007 联验；定时与 72 小时窗口由 009 汇合；Plan 031 技术状态为 `completed`，见 Acceptance 002 Plan 031 小节。
