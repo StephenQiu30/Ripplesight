@@ -126,9 +126,10 @@ def _set_job_facts(
     session.execute(
         text(
             "INSERT INTO job_attempts "
-            "(id, job_id, lease_epoch, worker_id, started_at, lease_expires_at, "
-            "finished_at, outcome) VALUES (:id, :job_id, 1, 'freshness-test', "
-            ":started_at, :lease_expires_at, :finished_at, :outcome)"
+            "(id, job_id, lease_epoch, collection_cycle_no, worker_id, queued_at, "
+            "started_at, lease_expires_at, finished_at, outcome) VALUES "
+            "(:id, :job_id, 1, 1, 'freshness-test', :started_at, :started_at, "
+            ":lease_expires_at, :finished_at, :outcome)"
         ),
         {
             "id": uuid4(),
@@ -142,7 +143,9 @@ def _set_job_facts(
     session.execute(
         text(
             "UPDATE jobs SET created_at = :created_at, status = :status, "
-            "started_at = :started_at, completed_at = :completed_at, updated_at = :updated_at, "
+            "started_at = :started_at, collection_cycle_no = 1, "
+            "collection_cycle_started_at = :started_at, completed_at = :completed_at, "
+            "updated_at = :updated_at, "
             "defer_reason = :defer_reason, next_run_at = :next_run_at, retry_count = :retry_count, "
             "last_error_code = :error_code, last_error_category = :error_category, "
             "last_error_at = :error_at, next_action = :next_action "
@@ -195,6 +198,16 @@ def test_internal_job_status_is_readable_after_refresh(
         "failure": None,
         "result_content_id": None,
         "retry_count": 0,
+        "collection_cycle_no": 0,
+        "collection_cycle_started_at": None,
+        "collection_cycle_requests_sent": 0,
+        "collection_cycle_pending": False,
+        "latest_attempt_started_at": None,
+        "latest_attempt_finished_at": None,
+        "queue_wait_us": body["queue_wait_us"],
+        "attempt_elapsed_us": None,
+        "total_elapsed_us": None,
+        "collection_budget_remaining_us": None,
         "next_run_at": None,
         "scheduled_for_at": None,
         "started_at": None,
@@ -203,6 +216,7 @@ def test_internal_job_status_is_readable_after_refresh(
         "source_freshness": freshness,
         "coverage_windows": [],
     }
+    assert body["queue_wait_us"] is not None and body["queue_wait_us"] >= 0
     assert freshness == {
         "last_attempt_at": None,
         "last_success_at": None,

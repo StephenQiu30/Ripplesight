@@ -18,19 +18,22 @@ from connections.services import SourcePresetService
 from content import hotlist as hotlist_module
 from content.hotlist import HotlistService
 from content.hotlist_execution import HotlistExecutor
+from core.errors import ApplicationError
 from jobs.execution import (
     ExecutionLease,
     JobExecutionFailure,
     JobExecutionService,
     MessageReference,
+    StaleExecutionLeaseError,
 )
 from jobs.schemas import (
     BudgetMetric,
     BudgetPolicyInput,
     BudgetScopeKind,
     JobAcceptedMessage,
+    JobRetryScheduledMessage,
 )
-from jobs.services import ResourceBudgetService
+from jobs.services import JobService, ResourceBudgetService
 from sources.adapters.rsshub_hotlist import RsshubHotlistAdapter
 from sources.contracts import HotlistEntry, HotlistPage, SourcePageState, SourceStopReason
 from worker import scheduler
@@ -112,6 +115,25 @@ def _message(runtime: HotlistRuntime, job_id: UUID) -> JobAcceptedMessage:
         ).one()
     return JobAcceptedMessage.model_validate(
         {"schema_version": 2, "message_id": row.id, "event_type": "job.accepted.v2", **row.payload}
+    )
+
+
+def _retry_message(runtime: HotlistRuntime, job_id: UUID) -> JobRetryScheduledMessage:
+    with runtime.engine.connect() as connection:
+        row = connection.execute(
+            text(
+                "SELECT id, payload FROM outbox_messages "
+                "WHERE aggregate_id=:job AND dispatch_sequence=2"
+            ),
+            {"job": job_id},
+        ).one()
+    return JobRetryScheduledMessage.model_validate(
+        {
+            "schema_version": 1,
+            "message_id": row.id,
+            "event_type": "job.retry_scheduled.v1",
+            **row.payload,
+        }
     )
 
 
@@ -282,6 +304,206 @@ def test_real_adapter_failure_reaches_executor_without_empty_snapshot(
             {"job": job_id},
         ).one()
     assert (row.requests_sent, row.outcome) == (1, "failed")
+
+
+def _fail_one_hotlist_request(
+    runtime: HotlistRuntime, job_id: UUID
+) -> tuple[ExecutionLease, datetime]:
+    failed_at = runtime.due_at + timedelta(minutes=2)
+    lease = _acquire(runtime, job_id, failed_at)
+    executor = HotlistExecutor(
+        runtime.sessions,
+        lease_seconds=75,
+        clock=lambda: failed_at,
+        adapter_factory=lambda source, url, hosts, before, cancelled: RsshubHotlistAdapter(
+            source_key=source,
+            feed_url=url,
+            allowed_hosts=hosts,
+            before_request=before,
+            cancelled=cancelled,
+            transport=httpx.MockTransport(lambda _: httpx.Response(503)),
+        ),
+    )
+    message = _message(runtime, job_id)
+    with pytest.raises(JobExecutionFailure, match="hotlist_upstream_error") as caught:
+        executor.execute(message, lease)
+    assert caught.value.manual_retry_allowed
+    with runtime.sessions() as session:
+        JobExecutionService(session, lease_seconds=75, clock=lambda: failed_at).record_failure(
+            lease,
+            message=MessageReference(
+                message_id=message.message_id,
+                topic="hotkey.jobs.accepted.v2",
+                partition=0,
+                offset=3,
+            ),
+            failure=caught.value,
+        )
+    return lease, failed_at
+
+
+def test_failed_hotlist_retries_original_bucket_with_new_cycle_and_cumulative_budget(
+    runtime: HotlistRuntime,
+) -> None:
+    job_id = _accept(runtime, runtime.due_at)
+    old_lease, failed_at = _fail_one_hotlist_request(runtime, job_id)
+    retry_at = failed_at + timedelta(minutes=2)
+    with runtime.sessions() as session:
+        service = JobService(session, clock=lambda: retry_at)
+        queued = service.request_retry(owner_id=runtime.owner_id, job_id=job_id)
+        repeated = service.request_retry(owner_id=runtime.owner_id, job_id=job_id)
+    assert queued == repeated
+    assert queued.collection_cycle_no == 1
+    assert queued.collection_cycle_pending
+    assert queued.collection_budget_remaining_us is None
+
+    succeeded_at = retry_at + timedelta(minutes=1)
+    lease = _acquire(runtime, job_id, succeeded_at)
+    with runtime.sessions() as session, pytest.raises(StaleExecutionLeaseError):
+        execution = JobExecutionService(session, lease_seconds=75, clock=lambda: succeeded_at)
+        execution.begin_request(old_lease)
+    renewed, completion = _executor(runtime, _page(succeeded_at)).execute(
+        _retry_message(runtime, job_id), lease
+    )
+    assert completion.status.value == "succeeded"
+    assert renewed.epoch == 2
+    with runtime.engine.connect() as connection:
+        current = connection.execute(
+            text(
+                "SELECT j.operation_id, j.collection_cycle_no, j.collection_cycle_started_at, "
+                "j.collection_cycle_requests_sent, j.requests_sent, j.started_at, "
+                "d.due_at, s.observed_at, s.operation_id AS snapshot_operation_id "
+                "FROM jobs j JOIN collection_due_windows d ON d.job_id=j.id "
+                "JOIN hotlist_snapshots s ON s.job_id=j.id WHERE j.id=:job"
+            ),
+            {"job": job_id},
+        ).one()
+        attempts = (
+            connection.execute(
+                text(
+                    "SELECT collection_cycle_no FROM job_attempts WHERE job_id=:job "
+                    "ORDER BY lease_epoch"
+                ),
+                {"job": job_id},
+            )
+            .scalars()
+            .all()
+        )
+        usage = connection.execute(
+            text(
+                "SELECT outcome, attempt_id FROM resource_usage_attempts "
+                "WHERE operation_id=:operation ORDER BY started_at, attempt_id"
+            ),
+            {"operation": current.operation_id},
+        ).all()
+        budgets = connection.execute(
+            text(
+                "SELECT p.scope_kind, w.used_units FROM resource_budget_windows w "
+                "JOIN resource_budget_policies p ON p.id=w.budget_policy_id "
+                "WHERE p.owner_id=:owner AND p.metric='network_request' "
+                "ORDER BY p.scope_kind"
+            ),
+            {"owner": runtime.owner_id},
+        ).all()
+        outbox = connection.execute(
+            text("SELECT count(*) FROM outbox_messages WHERE aggregate_id=:job"),
+            {"job": job_id},
+        ).scalar_one()
+    assert current.operation_id == current.snapshot_operation_id
+    assert (current.due_at, current.observed_at) == (runtime.due_at, succeeded_at)
+    assert (
+        current.collection_cycle_no,
+        current.collection_cycle_started_at,
+        current.collection_cycle_requests_sent,
+        current.requests_sent,
+        current.started_at,
+    ) == (2, succeeded_at, 1, 2, failed_at)
+    assert attempts == [1, 2]
+    assert len(usage) == 2
+    assert {row.outcome for row in usage} == {"failed", "empty"}
+    assert usage[0].attempt_id != usage[1].attempt_id
+    assert budgets == [("global", 2), ("source", 2)]
+    assert outbox == 2
+
+
+@pytest.mark.parametrize("scope_kind", ["global", "source"])
+def test_hotlist_retry_rejects_exhausted_daily_budget_without_queueing(
+    runtime: HotlistRuntime,
+    scope_kind: str,
+) -> None:
+    job_id = _accept(runtime, runtime.due_at)
+    _, failed_at = _fail_one_hotlist_request(runtime, job_id)
+    with runtime.engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE resource_budget_policies SET limit_units=1 "
+                "WHERE owner_id=:owner AND metric='network_request' "
+                "AND scope_kind=:scope_kind"
+            ),
+            {"owner": runtime.owner_id, "scope_kind": scope_kind},
+        )
+    with (
+        runtime.sessions() as session,
+        pytest.raises(ApplicationError, match="retry_budget_exhausted"),
+    ):
+        JobService(session, clock=lambda: failed_at + timedelta(minutes=2)).request_retry(
+            owner_id=runtime.owner_id, job_id=job_id
+        )
+    with runtime.engine.connect() as connection:
+        row = connection.execute(
+            text("SELECT status, collection_cycle_no FROM jobs WHERE id=:job"),
+            {"job": job_id},
+        ).one()
+        outbox = connection.execute(
+            text("SELECT count(*) FROM outbox_messages WHERE aggregate_id=:job"),
+            {"job": job_id},
+        ).scalar_one()
+    assert tuple(row) == ("failed", 1)
+    assert outbox == 1
+
+
+def test_hotlist_retry_rejects_stale_connection_version_without_queueing(
+    runtime: HotlistRuntime,
+) -> None:
+    job_id = _accept(runtime, runtime.due_at)
+    _, failed_at = _fail_one_hotlist_request(runtime, job_id)
+    with runtime.engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO source_connection_versions "
+                "(connection_id, version, owner_id, auth_kind, secret_ref, config, "
+                "execution_policy, created_by, created_at) "
+                "SELECT connection_id, 2, owner_id, auth_kind, secret_ref, config, "
+                "execution_policy, created_by, :now FROM source_connection_versions "
+                "WHERE owner_id=:owner AND version=1"
+            ),
+            {"owner": runtime.owner_id, "now": failed_at + timedelta(seconds=1)},
+        )
+        connection.execute(
+            text(
+                "UPDATE source_connections SET current_version=2, updated_at=:now "
+                "WHERE owner_id=:owner AND source_key='hotlist_weibo'"
+            ),
+            {"owner": runtime.owner_id, "now": failed_at + timedelta(seconds=1)},
+        )
+    with (
+        runtime.sessions() as session,
+        pytest.raises(ApplicationError, match="connection_version_conflict"),
+    ):
+        JobService(session, clock=lambda: failed_at + timedelta(minutes=2)).request_retry(
+            owner_id=runtime.owner_id, job_id=job_id
+        )
+    with runtime.engine.connect() as connection:
+        row = connection.execute(
+            text("SELECT status, collection_cycle_no FROM jobs WHERE id=:job"),
+            {"job": job_id},
+        ).one()
+        outbox = connection.execute(
+            text("SELECT count(*) FROM outbox_messages WHERE aggregate_id=:job"),
+            {"job": job_id},
+        ).scalar_one()
+    assert tuple(row) == ("failed", 1)
+    assert outbox == 1
 
 
 def test_empty_bucket_then_nonempty_bucket_keep_distinct_observations(

@@ -34,6 +34,7 @@ ERROR_CATEGORIES: Mapping[str, ErrorCategory] = MappingProxyType(
         "invalid_session": ErrorCategory.AUTHENTICATION,
         "job_not_cancellable": ErrorCategory.CONFLICT,
         "job_not_retryable": ErrorCategory.CONFLICT,
+        "retry_budget_exhausted": ErrorCategory.CONFLICT,
         "invalid_monitor_rules": ErrorCategory.INVALID_INPUT,
         "invalid_topic_source_selection": ErrorCategory.INVALID_INPUT,
         "keyword_group_conflict": ErrorCategory.INVALID_INPUT,

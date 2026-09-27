@@ -681,6 +681,9 @@ CREATE TABLE jobs (
     cancel_deadline_at TIMESTAMPTZ,
     scheduled_for_at TIMESTAMPTZ,
     started_at TIMESTAMPTZ,
+    collection_cycle_no BIGINT NOT NULL DEFAULT 0,
+    collection_cycle_started_at TIMESTAMPTZ,
+    collection_cycle_requests_sent BIGINT NOT NULL DEFAULT 0,
     completed_at TIMESTAMPTZ,
     defer_reason VARCHAR(128),
     next_run_at TIMESTAMPTZ,
@@ -721,6 +724,13 @@ CREATE TABLE jobs (
         OR (progress_stage IS NOT NULL AND progress_updated_at IS NOT NULL)
     ),
     CHECK (progress_updated_at IS NULL OR progress_updated_at >= created_at),
+    CONSTRAINT jobs_collection_cycle_check CHECK (
+        (collection_cycle_no = 0 AND collection_cycle_started_at IS NULL
+            AND collection_cycle_requests_sent = 0)
+        OR (collection_cycle_no >= 1 AND collection_cycle_started_at IS NOT NULL
+            AND collection_cycle_requests_sent >= 0
+            AND collection_cycle_requests_sent <= requests_sent)
+    ),
     CHECK (
         (cancel_requested_at IS NULL AND cancel_deadline_at IS NULL)
         OR (
@@ -1492,12 +1502,15 @@ CREATE TABLE job_attempts (
     id UUID PRIMARY KEY,
     job_id UUID NOT NULL REFERENCES jobs (id) ON DELETE CASCADE,
     lease_epoch BIGINT NOT NULL CHECK (lease_epoch >= 1),
+    collection_cycle_no BIGINT NOT NULL CHECK (collection_cycle_no >= 1),
     worker_id VARCHAR(128) NOT NULL,
+    queued_at TIMESTAMPTZ NOT NULL,
     started_at TIMESTAMPTZ NOT NULL,
     lease_expires_at TIMESTAMPTZ NOT NULL CHECK (lease_expires_at > started_at),
     finished_at TIMESTAMPTZ,
     outcome VARCHAR(32),
     CONSTRAINT job_attempts_job_epoch_key UNIQUE (job_id, lease_epoch),
+    CHECK (queued_at <= started_at),
     CHECK (
         (finished_at IS NULL AND outcome IS NULL)
         OR (finished_at IS NOT NULL AND outcome IS NOT NULL)

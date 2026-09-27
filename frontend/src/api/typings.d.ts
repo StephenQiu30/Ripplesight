@@ -432,6 +432,26 @@ declare namespace HotKeyAPI {
     result_content_id: string | null;
     /** Retry Count */
     retry_count: number;
+    /** Collection Cycle No */
+    collection_cycle_no: number;
+    /** Collection Cycle Started At */
+    collection_cycle_started_at: string | null;
+    /** Collection Cycle Requests Sent */
+    collection_cycle_requests_sent: number;
+    /** Collection Cycle Pending */
+    collection_cycle_pending: boolean;
+    /** Latest Attempt Started At */
+    latest_attempt_started_at: string | null;
+    /** Latest Attempt Finished At */
+    latest_attempt_finished_at: string | null;
+    /** Queue Wait Us */
+    queue_wait_us: number | null;
+    /** Attempt Elapsed Us */
+    attempt_elapsed_us: number | null;
+    /** Total Elapsed Us */
+    total_elapsed_us: number | null;
+    /** Collection Budget Remaining Us */
+    collection_budget_remaining_us: number | null;
     /** Next Run At */
     next_run_at: string | null;
     /** Scheduled For At */
