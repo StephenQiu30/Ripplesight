@@ -1,6 +1,6 @@
 # HotKey BACKLOG
 
-更新日期：2026-09-27。状态：**Plan 001、002、007、031、033、036 技术交付完成；035 Google News 原帖未验；M1 四来源、六榜与连续 72 小时未全部验收**。早期 Claude/用户提供的 Plan 001/002/033 隔离库测试结果和后续逐卡证据见 [Acceptance 002](docs/acceptance/002-信息获取主链路验收.md)。任务、依赖、FR/NFR/AC 覆盖见 [Plan 001—057 索引](docs/plan/README.md)；产品边界见 [PRD 001](docs/prd/001-热点舆情监控平台需求.md) 和 [Design 001](docs/design/001-热点舆情监控平台总体设计.md)。旧里程碑 Plan/TASK 从 Git 追溯。
+更新日期：2026-09-27。状态：**Plan 001/002/007/008/031/033/036/039 技术交付完成；035 原帖、M1 72 小时与 Codex 尚未验收**。早期 Claude/用户提供的 Plan 001/002/033 隔离库测试结果和后续逐卡证据见 [Acceptance 002](docs/acceptance/002-信息获取主链路验收.md)。任务、依赖、FR/NFR/AC 覆盖见 [Plan 001—057 索引](docs/plan/README.md)；产品边界见 [PRD 001](docs/prd/001-热点舆情监控平台需求.md) 和 [Design 001](docs/design/001-热点舆情监控平台总体设计.md)。旧里程碑 Plan/TASK 从 Git 追溯。
 
 执行方：Codex 实现、受控集成与代码自检；Claude 可参与规划/代码审查；用户负责本人账号、授权与产品决策。用户已要求每个任务结束后提交并推送 main。代码、受控、真实、产品为不同证据等级。
 
@@ -14,7 +14,9 @@ Plan 035 Google News 见 Acceptance 002 EV-002-018：真实主题 API → Kafka 
 
 Plan 036 SearXNG 见 Acceptance 002 EV-002-019：真实两轮各入库 7、总身份 7，MSN 原帖可打开，来源/全局预算各 2；尾段未知，远端三项 CI 通过，本卡 `completed`。
 
-Plan 008 六榜见 Acceptance 002 EV-002-020/021：六路由 11:00/11:30 两轮真实快照、排名/命中身份及 Kafka 重放均核对；远端 backend **901 passed/8 skipped**。本卡 `completed`，共同 72 小时、历史页面和 Codex 标注另验。
+Plan 008 见 Acceptance 002 EV-002-020/021：六榜真实双轮、排名/命中和 Kafka 重放已核对；远端 backend **901 passed/8 skipped**，本卡 `completed`。
+
+Plan 039 见 Acceptance 002 EV-002-022：历史 API/页面读真实双轮快照，桌面及 390px 浏览器通过；本卡 `completed`，72 小时与 Codex 另验。
 
 Plan 005 的标注状态与重放技术切片已在隔离 `main` 工作树完成，PostgreSQL 17 全新库的后端全量回归为 **779 passed/17 skipped**，见 Acceptance 002 EV-002-010。旧开发库 3 条历史异常、真实 Codex 样本和远端门禁尚未在该证据中核对；Plan 005 保持 `in_progress`，产品验收不变。
 

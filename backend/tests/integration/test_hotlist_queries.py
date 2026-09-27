@@ -12,7 +12,10 @@ from sqlalchemy.orm import sessionmaker
 from tests.integration.test_hotlist_persistence import (
     HotlistRuntime,
     _accept,
+    _acquire,
     _execute,
+    _executor,
+    _message,
     _page,
     _ranked_page,
 )
@@ -21,9 +24,10 @@ from connections.presets import SOURCE_PRESETS
 from connections.services import SourcePresetService
 from content.hotlist import HotlistService
 from core.errors import ApplicationError
+from jobs.execution import JobExecutionFailure, JobExecutionService, MessageReference
 from jobs.schemas import BudgetMetric, BudgetPolicyInput, BudgetScopeKind
 from jobs.services import ResourceBudgetService
-from sources.contracts import HotlistEntry
+from sources.contracts import HotlistEntry, HotlistPage, SourcePageState, SourceStopReason
 from worker import scheduler
 
 
@@ -188,7 +192,35 @@ def test_unsuccessful_due_bucket_is_reported_as_gap_between_snapshots(
 ) -> None:
     first = _accept(runtime, runtime.due_at)
     _execute(runtime, first, _page(runtime.due_at + timedelta(minutes=2), entries=1))
-    _accept(runtime, runtime.due_at + timedelta(minutes=30))
+    failed_due = runtime.due_at + timedelta(minutes=30)
+    failed_job = _accept(runtime, failed_due)
+    failed_page = HotlistPage(
+        source_key="hotlist_weibo",
+        state=SourcePageState.STOPPED,
+        items=(),
+        stop_reason=SourceStopReason.UPSTREAM_ERROR,
+        observed_at=failed_due + timedelta(minutes=2),
+        request_count=1,
+        adapter_version="controlled-v1",
+    )
+    lease = _acquire(runtime, failed_job, failed_page.observed_at)
+    message = _message(runtime, failed_job)
+    with pytest.raises(JobExecutionFailure) as captured:
+        _executor(runtime, failed_page).execute(message, lease)
+    with runtime.sessions() as session:
+        executions = JobExecutionService(
+            session, lease_seconds=75, clock=lambda: failed_page.observed_at
+        )
+        executions.record_failure(
+            lease,
+            message=MessageReference(
+                message_id=message.message_id,
+                topic="hotkey.jobs.accepted.v2",
+                partition=0,
+                offset=1,
+            ),
+            failure=captured.value,
+        )
     third_due = runtime.due_at + timedelta(minutes=60)
     third = _accept(runtime, third_due)
     _execute(runtime, third, _page(third_due + timedelta(minutes=2)))
