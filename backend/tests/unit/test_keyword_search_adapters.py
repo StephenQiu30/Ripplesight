@@ -452,18 +452,277 @@ def test_36kr_factory_requires_newsflashes_on_local_rsshub() -> None:
         )
 
 
-def test_web_search_factory_uses_connection_base_url_and_engines() -> None:
+def test_web_search_factory_requires_local_fixed_engine() -> None:
     adapter = _factory(
         "news_search",
-        base_url="http://searxng:8080",
-        engines=("duckduckgo news", "bing news"),
-        allowed_hosts=("searxng",),
+        base_url="http://127.0.0.1:8888",
+        engines=("duckduckgo news",),
+        allowed_hosts=("127.0.0.1",),
     )
 
     assert isinstance(adapter, WebSearchAdapter)
     assert adapter.source_key == "news_search"
-    assert adapter._search_url == "http://searxng:8080/search"
-    assert adapter._engines == "duckduckgo news,bing news"
+    assert adapter._search_url == "http://127.0.0.1:8888/search"
+    assert adapter._engines == "duckduckgo news"
+    with pytest.raises(ValueError, match=r"allowlisted|SearXNG"):
+        _factory(
+            "news_search",
+            base_url="http://searxng:8080",
+            engines=("duckduckgo news",),
+            allowed_hosts=("searxng",),
+        )
+    with pytest.raises(ValueError, match="duckduckgo news"):
+        _factory(
+            "news_search",
+            base_url="http://127.0.0.1:8888",
+            engines=("duckduckgo news", "bing news"),
+            allowed_hosts=("127.0.0.1",),
+        )
+
+
+def _news_search_request(*, page_token: str | None = None, page_size: int = 2) -> SearchRequest:
+    return SearchRequest(
+        source_key="news_search",
+        query="AI",
+        page_size=page_size,
+        page_token=page_token,
+        starts_at=datetime(2026, 9, 25, tzinfo=UTC),
+        ends_at=datetime(2026, 9, 26, tzinfo=UTC),
+    )
+
+
+def test_web_search_records_engine_and_normalizes_only_known_tracking_parameters() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "engine": "duckduckgo news",
+                        "url": "https://EXAMPLE.com:443/article?id=42&utm_source=mail&x=1#section",
+                        "title": "AI story",
+                        "content": "<b>Summary</b>",
+                    },
+                    {
+                        "engine": "duckduckgo news",
+                        "url": "https://example.com/article?id=42&x=1&utm_source=other",
+                        "title": "AI story",
+                        "publishedDate": None,
+                    },
+                ],
+                "unresponsive_engines": [],
+            },
+        )
+
+    adapter = WebSearchAdapter(
+        source_key="news_search",
+        base_url="http://127.0.0.1:8888",
+        allowed_hosts=frozenset({"127.0.0.1"}),
+        before_request=lambda _attempt: True,
+        transport=httpx.MockTransport(handler),
+    )
+    page = adapter.fetch_page(_news_search_request(page_size=3))
+    assert page.state is SourcePageState.COMPLETE
+    assert page.request_count == 1
+    assert len(page.items) == 1
+    item = page.items[0]
+    assert isinstance(item, SourcePost)
+    assert item.identity_basis == "url_fallback"
+    assert item.canonical_url == "https://example.com/article?id=42&x=1"
+    assert item.text == "Summary" and item.text_scope == "truncated"
+    assert item.published_at is None
+    assert page.source_engine == "duckduckgo news"
+    assert page.source_page_number == 1
+    assert seen[0].url.path == "/search"
+    assert seen[0].url.params["q"] == "AI"
+    assert seen[0].url.params["pageno"] == "1"
+    assert seen[0].url.params["engines"] == "duckduckgo news"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"results": [], "unresponsive_engines": [["duckduckgo news", "Timeout"]]},
+        {"results": [], "error": "engine unavailable"},
+    ],
+)
+def test_web_search_engine_failure_is_not_a_legitimate_empty_page(
+    payload: dict[str, object],
+) -> None:
+    adapter = WebSearchAdapter(
+        source_key="news_search",
+        base_url="http://127.0.0.1:8888",
+        allowed_hosts=frozenset({"127.0.0.1"}),
+        before_request=lambda _attempt: True,
+        transport=httpx.MockTransport(lambda _request: httpx.Response(200, json=payload)),
+    )
+    page = adapter.fetch_page(_news_search_request())
+    assert page.state is SourcePageState.STOPPED
+    assert page.stop_reason is SourceStopReason.UPSTREAM_ERROR
+    assert page.request_count == 1
+    assert page.source_page_number == 1
+    if "unresponsive_engines" in payload:
+        assert page.source_unresponsive_engines == ("duckduckgo news: Timeout",)
+    else:
+        assert page.source_search_error == "engine unavailable"
+
+
+def test_web_search_partial_engine_failure_keeps_results_and_failure() -> None:
+    adapter = WebSearchAdapter(
+        source_key="news_search",
+        base_url="http://127.0.0.1:8888",
+        allowed_hosts=frozenset({"127.0.0.1"}),
+        before_request=lambda _attempt: True,
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {"engine": "duckduckgo news", "url": "https://example.com/a", "title": "AI"}
+                    ],
+                    "unresponsive_engines": [["duckduckgo news", "Timeout"]],
+                },
+            )
+        ),
+    )
+    page = adapter.fetch_page(_news_search_request())
+    assert page.state is SourcePageState.PARTIAL
+    assert page.stop_reason is SourceStopReason.UPSTREAM_ERROR
+    assert len(page.items) == 1 and page.request_count == 1
+    assert page.source_unresponsive_engines == ("duckduckgo news: Timeout",)
+
+
+def test_web_search_timeout_and_redirect_report_failures() -> None:
+    timeout_adapter = WebSearchAdapter(
+        source_key="news_search",
+        base_url="http://127.0.0.1:8888",
+        allowed_hosts=frozenset({"127.0.0.1"}),
+        before_request=lambda _attempt: True,
+        transport=httpx.MockTransport(
+            lambda _request: (_ for _ in ()).throw(httpx.ReadTimeout("slow engine"))
+        ),
+    )
+    timeout = timeout_adapter.fetch_page(_news_search_request())
+    assert timeout.state is SourcePageState.STOPPED
+    assert timeout.stop_reason is SourceStopReason.UPSTREAM_ERROR
+    assert timeout.request_count == 1
+    assert timeout.source_search_error == "timeout"
+    assert timeout.source_page_number == 1
+
+    redirect_adapter = WebSearchAdapter(
+        source_key="news_search",
+        base_url="http://127.0.0.1:8888",
+        allowed_hosts=frozenset({"127.0.0.1"}),
+        before_request=lambda _attempt: True,
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(302, headers={"location": "https://example.com/"})
+        ),
+    )
+    redirect = redirect_adapter.fetch_page(_news_search_request())
+    assert redirect.state is SourcePageState.STOPPED
+    assert redirect.stop_reason is SourceStopReason.ACCESS_DENIED
+    assert redirect.request_count == 1
+
+
+def test_web_search_valid_empty_and_malformed_json_are_distinct() -> None:
+    responses = iter(
+        [
+            httpx.Response(200, json={"results": [], "unresponsive_engines": []}),
+            httpx.Response(200, text="not JSON"),
+        ]
+    )
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return next(responses)
+
+    empty_adapter = WebSearchAdapter(
+        source_key="news_search",
+        base_url="http://127.0.0.1:8888",
+        allowed_hosts=frozenset({"127.0.0.1"}),
+        before_request=lambda _attempt: True,
+        transport=httpx.MockTransport(handler),
+    )
+    broken_adapter = WebSearchAdapter(
+        source_key="news_search",
+        base_url="http://127.0.0.1:8888",
+        allowed_hosts=frozenset({"127.0.0.1"}),
+        before_request=lambda _attempt: True,
+        transport=httpx.MockTransport(handler),
+    )
+    empty = empty_adapter.fetch_page(_news_search_request())
+    broken = broken_adapter.fetch_page(_news_search_request())
+    assert (
+        empty.state is SourcePageState.EMPTY and empty.stop_reason is SourceStopReason.SOURCE_EMPTY
+    )
+    assert (
+        broken.state is SourcePageState.STOPPED
+        and broken.stop_reason is SourceStopReason.PROTOCOL_ERROR
+    )
+
+
+def test_web_search_repeated_second_page_stops_without_recommitting_items() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {"engine": "duckduckgo news", "url": "https://example.com/a", "title": "AI a"},
+                    {"engine": "duckduckgo news", "url": "https://example.com/b", "title": "AI b"},
+                ],
+                "unresponsive_engines": [],
+            },
+        )
+
+    adapter = WebSearchAdapter(
+        source_key="news_search",
+        base_url="http://127.0.0.1:8888",
+        allowed_hosts=frozenset({"127.0.0.1"}),
+        before_request=lambda _attempt: True,
+        transport=httpx.MockTransport(handler),
+    )
+    first = adapter.fetch_page(_news_search_request())
+    second = adapter.fetch_page(_news_search_request(page_token=first.next_page_token))
+    assert first.state is SourcePageState.MORE
+    assert second.state is SourcePageState.STOPPED
+    assert second.stop_reason is SourceStopReason.CURSOR_LOOP
+    assert second.items == () and second.request_count == 1
+    assert [request.url.params["pageno"] for request in seen] == ["1", "2"]
+
+
+def test_web_search_page_overflow_marks_partial_without_silent_drop() -> None:
+    adapter = WebSearchAdapter(
+        source_key="news_search",
+        base_url="http://127.0.0.1:8888",
+        allowed_hosts=frozenset({"127.0.0.1"}),
+        before_request=lambda _attempt: True,
+        max_requests=4,
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {
+                            "engine": "duckduckgo news",
+                            "url": f"https://example.com/{index}",
+                            "title": "AI",
+                        }
+                        for index in range(3)
+                    ]
+                },
+            )
+        ),
+    )
+    page = adapter.fetch_page(_news_search_request(page_size=2))
+    assert page.state is SourcePageState.PARTIAL
+    assert page.stop_reason is SourceStopReason.BUDGET_EXHAUSTED
+    assert len(page.items) == 2 and page.next_page_token is None
+    assert page.request_count == 1
 
 
 def test_unknown_search_source_is_explicitly_rejected() -> None:

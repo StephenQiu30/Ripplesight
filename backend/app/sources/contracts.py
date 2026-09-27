@@ -387,6 +387,10 @@ class SourcePage(_ContractModel):
     request_count: int = Field(default=0, ge=0)
     adapter_version: str | None = Field(default=None, max_length=64)
     source_feed_updated_at: datetime | None = None
+    source_engine: str | None = Field(default=None, max_length=64)
+    source_page_number: int | None = Field(default=None, ge=1, le=100)
+    source_unresponsive_engines: tuple[str, ...] = Field(default=(), max_length=8)
+    source_search_error: str | None = Field(default=None, max_length=128)
     terminal_evidence: SourceTerminalEvidence | None = None
     retry_at: datetime | None = None
 

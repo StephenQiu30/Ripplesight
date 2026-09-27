@@ -127,6 +127,7 @@ _WEB_SEARCH_POST_FIELD_PURPOSES = MappingProxyType(
     {
         "object_type": "标记载荷为帖子",
         "external_id": "按结果链接稳定识别新闻结果",
+        "identity_basis": "标记新闻结果缺少原生 ID 时的规范 URL 回退身份",
         "canonical_url": "回溯新闻搜索结果指向的原始页面",
         "published_at": "保存搜索引擎提供的发布时间",
         "like_count": "记录 SearXNG 不提供点赞指标的缺失值",
