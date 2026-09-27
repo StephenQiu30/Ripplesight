@@ -4,6 +4,7 @@ import unicodedata
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from itertools import pairwise
 from uuid import UUID, uuid4
 
 from sqlalchemy import and_, select
@@ -95,6 +96,104 @@ class MonitorRuleMatch:
     matched_any: tuple[str, ...]
     matched_all: tuple[str, ...]
     excluded_by: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class TopicAnalysisRuleTimeline:
+    """Immutable rule window and verified active spans, without monitor ORM leakage."""
+
+    rules: NormalizedMonitorRules
+    source_keys: tuple[str, ...]
+    starts_at: datetime
+    ends_at: datetime | None
+    active_spans: tuple[tuple[datetime, datetime | None], ...]
+
+
+def load_topic_analysis_rule_timeline_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    topic_id: UUID,
+    topic_rule_version: int,
+) -> TopicAnalysisRuleTimeline | None:
+    """Return None when the lifecycle cannot be reconstructed from an initial event."""
+    if not session.in_transaction():
+        raise RuntimeError("topic timeline reads require the caller's transaction")
+    topic = session.scalar(
+        select(MonitorTopic).where(MonitorTopic.owner_id == owner_id, MonitorTopic.id == topic_id)
+    )
+    if topic is None:
+        return None
+    versions = tuple(
+        session.scalars(
+            select(MonitorTopicVersion)
+            .where(MonitorTopicVersion.topic_id == topic_id)
+            .order_by(MonitorTopicVersion.version)
+        )
+    )
+    events = tuple(
+        session.scalars(
+            select(MonitorTopicStatusEvent)
+            .where(
+                MonitorTopicStatusEvent.owner_id == owner_id,
+                MonitorTopicStatusEvent.topic_id == topic_id,
+            )
+            .order_by(MonitorTopicStatusEvent.event_sequence)
+        )
+    )
+    if (
+        len(versions) != topic.current_version
+        or any(row.version != index for index, row in enumerate(versions, 1))
+        or any(left.created_at > right.created_at for left, right in pairwise(versions))
+        or not 1 <= topic_rule_version <= len(versions)
+        or not events
+        or events[0].event_sequence != 1
+        or events[0].status != MonitorTopicStatus.PAUSED.value
+        or events[-1].status != topic.status
+    ):
+        return None
+    previous_status = None
+    previous_at = None
+    for sequence, event in enumerate(events, 1):
+        if (
+            event.event_sequence != sequence
+            or event.topic_rule_version > topic.current_version
+            or (previous_at is not None and event.occurred_at < previous_at)
+            or (
+                previous_status == MonitorTopicStatus.PAUSED.value
+                and event.status not in (MonitorTopicStatus.ACTIVE.value,)
+            )
+            or (
+                previous_status == MonitorTopicStatus.ACTIVE.value
+                and event.status
+                not in (
+                    MonitorTopicStatus.PAUSED.value,
+                    MonitorTopicStatus.ARCHIVED.value,
+                )
+            )
+            or previous_status == MonitorTopicStatus.ARCHIVED.value
+        ):
+            return None
+        previous_status = event.status
+        previous_at = event.occurred_at
+    version = versions[topic_rule_version - 1]
+    return TopicAnalysisRuleTimeline(
+        rules=normalize_monitor_rules(
+            match_any=version.match_any,
+            match_all=version.match_all,
+            exclude=version.exclude,
+        ),
+        source_keys=tuple(version.source_keys),
+        starts_at=version.created_at,
+        ends_at=(
+            versions[topic_rule_version].created_at if topic_rule_version < len(versions) else None
+        ),
+        active_spans=tuple(
+            (event.occurred_at, events[index + 1].occurred_at if index + 1 < len(events) else None)
+            for index, event in enumerate(events)
+            if event.status == MonitorTopicStatus.ACTIVE.value
+        ),
+    )
 
 
 @dataclass(frozen=True, slots=True)

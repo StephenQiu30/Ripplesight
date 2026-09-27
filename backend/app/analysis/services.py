@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4, uuid5
 
 from pydantic import ValidationError
@@ -32,6 +32,7 @@ from analysis.schemas import (
 )
 from content.schemas import AnalysisPostContentView
 from content.services import (
+    load_post_analysis_availability_in_transaction,
     load_post_comments_for_analysis,
     load_post_versions_for_analysis,
     load_post_versions_for_analysis_scan,
@@ -52,7 +53,12 @@ from jobs.services import (
     load_content_job_contexts,
     load_job_execution_configuration,
 )
-from monitors.services import MonitorTopicService, NormalizedMonitorRules, evaluate_monitor_rules
+from monitors.services import (
+    MonitorTopicService,
+    NormalizedMonitorRules,
+    evaluate_monitor_rules,
+    load_topic_analysis_rule_timeline_in_transaction,
+)
 
 _ANALYSIS_OPERATION_NAMESPACE = UUID("16cfeef5-e41d-43a2-8212-4e21cc6f4c85")
 _MAX_BATCH_ITEMS = 30
@@ -68,6 +74,70 @@ _MAX_SCAN_BATCHES = 20
 class AnalysisExecutionResult:
     completion: JobCompletion
     processed_items: int
+
+
+@dataclass(frozen=True, slots=True)
+class AnalysisNeedOriginProjection:
+    """Earliest qualifying instant; candidate does not prove uninterrupted Codex availability."""
+
+    status: Literal["candidate", "not_required", "unknown"]
+    started_at: datetime | None
+    reason: str | None = None
+
+
+def project_analysis_need_origin_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    topic_id: UUID,
+    topic_rule_version: int,
+    content_version_id: UUID,
+    prompt_version: str,
+    as_of: datetime,
+) -> AnalysisNeedOriginProjection:
+    """Intersect exact version receipt, rule lifetime, topic active spans and prompt activation."""
+    if not session.in_transaction():
+        raise RuntimeError("analysis need projection requires the caller's transaction")
+    if as_of.tzinfo is None or topic_rule_version < 1 or not prompt_version:
+        raise ValueError("analysis need projection requires aware time and valid identity")
+    if prompt_version != ANALYSIS_PROMPT_VERSION:
+        return AnalysisNeedOriginProjection("unknown", None, "prompt_history_unavailable")
+    timeline = load_topic_analysis_rule_timeline_in_transaction(
+        session,
+        owner_id=owner_id,
+        topic_id=topic_id,
+        topic_rule_version=topic_rule_version,
+    )
+    if timeline is None:
+        return AnalysisNeedOriginProjection("unknown", None, "topic_history_unavailable")
+    activation = session.get(AnalysisPromptActivation, prompt_version)
+    if activation is None:
+        return AnalysisNeedOriginProjection("unknown", None, "prompt_activation_unavailable")
+    availability = load_post_analysis_availability_in_transaction(
+        session,
+        owner_id=owner_id,
+        topic_id=topic_id,
+        content_version_id=content_version_id,
+    )
+    if (
+        availability is None
+        or not evaluate_monitor_rules(timeline.rules, _post_text(availability.post)).matched
+    ):
+        return AnalysisNeedOriginProjection("not_required", None)
+    received_at = (
+        availability.first_received_at
+        if availability.source_key in timeline.source_keys
+        else availability.first_hotlist_match_received_at
+    )
+    if received_at is None:
+        return AnalysisNeedOriginProjection("not_required", None)
+    cutoff = as_of.astimezone(UTC)
+    for active_start, active_end in timeline.active_spans:
+        start = max(received_at, timeline.starts_at, activation.activated_at, active_start)
+        ends = tuple(end for end in (timeline.ends_at, active_end) if end is not None)
+        if start <= cutoff and (not ends or start < min(ends)):
+            return AnalysisNeedOriginProjection("candidate", start)
+    return AnalysisNeedOriginProjection("not_required", None)
 
 
 def analysis_operation_id(
