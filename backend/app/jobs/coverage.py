@@ -37,14 +37,19 @@ from jobs.schemas import (
     CollectionCoverageAttemptView,
     CollectionCoverageBudgetView,
     CollectionCoverageGapView,
+    CollectionCoverageMetricsView,
     CollectionCoverageResultStatus,
     CollectionCoverageView,
     CollectionDueWindowInput,
     CollectionDueWindowView,
     CollectionExecutionFactView,
+    CollectionMetricExclusionView,
+    CollectionSourceMetricView,
+    CollectionTimingMetricView,
     CoverageWindowStatus,
     DueAdmissionState,
     DueSkipReason,
+    HotlistBucketMetricView,
     JobStatus,
 )
 from sources.contracts import SourceCapability
@@ -497,6 +502,198 @@ class CollectionCoverageQueryService:
 
     def __init__(self, session: Session) -> None:
         self._session = session
+
+    def get_metrics(
+        self,
+        *,
+        owner_id: UUID,
+        start: datetime,
+        end: datetime,
+        source_key: str | None = None,
+        capability: SourceCapability | None = None,
+        topic_id: UUID | None = None,
+        cutoff_at: datetime | None = None,
+    ) -> CollectionCoverageMetricsView:
+        """Read owner-visible due facts once and compute source timing without page loss."""
+        from connections.services import list_applied_hotlist_presets_in_transaction
+        from content.services import ContentService
+        from core.config import get_settings
+        from jobs.metrics import (
+            CollectionTimingSample,
+            expected_hotlist_buckets,
+            summarize_collection_timing,
+        )
+
+        cutoff = _as_utc(cutoff_at or datetime.now(UTC))
+        if (
+            start.utcoffset() != timedelta(0)
+            or end.utcoffset() != timedelta(0)
+            or not start < end <= start + timedelta(days=31)
+        ):
+            raise ValueError("coverage metrics need a UTC range of at most 31 days")
+        visible = self._visible_connections(owner_id=owner_id)
+        query = select(CollectionDueWindow).where(
+            CollectionDueWindow.owner_id == owner_id,
+            CollectionDueWindow.source_key.in_(visible),
+            CollectionDueWindow.due_at >= start,
+            CollectionDueWindow.due_at < end,
+            CollectionDueWindow.due_at <= cutoff,
+            CollectionDueWindow.recorded_at <= cutoff,
+        )
+        if source_key is not None:
+            query = query.where(CollectionDueWindow.source_key == source_key)
+        if capability is not None:
+            query = query.where(CollectionDueWindow.capability == capability.value)
+        if topic_id is not None:
+            query = query.where(CollectionDueWindow.topic_id == topic_id)
+        dues = self._session.scalars(
+            query.order_by(CollectionDueWindow.source_key, CollectionDueWindow.due_at)
+        ).all()
+        by_source: dict[tuple[str, str], list[CollectionDueWindow]] = defaultdict(list)
+        for due in dues:
+            by_source[(due.source_key, due.capability)].append(due)
+        hotlist_presets = {
+            preset.source_key: preset
+            for preset in list_applied_hotlist_presets_in_transaction(
+                self._session, owner_id=owner_id
+            )
+            if preset.source_key in visible
+        }
+        if topic_id is None and capability in (None, SourceCapability.HOTLIST):
+            for preset_key in hotlist_presets:
+                if source_key is None or source_key == preset_key:
+                    by_source.setdefault((preset_key, SourceCapability.HOTLIST.value), [])
+
+        job_ids = tuple({due.job_id for due in dues if due.job_id is not None})
+        jobs: dict[UUID, Job] = {}
+        snapshots: dict[UUID, UUID] = {}
+        for offset in range(0, len(job_ids), 500):
+            batch = job_ids[offset : offset + 500]
+            jobs.update(
+                (job.id, job)
+                for job in self._session.scalars(
+                    select(Job).where(Job.owner_id == owner_id, Job.id.in_(batch))
+                )
+            )
+            snapshots.update(
+                (fact.job_id, fact.snapshot_id)
+                for fact in ContentService(self._session).collection_snapshot_facts_in_transaction(
+                    owner_id=owner_id, job_ids=batch
+                )
+                if fact.snapshot_id is not None
+                and fact.observed_at is not None
+                and fact.observed_at <= cutoff
+            )
+        if len(jobs) != len(job_ids):
+            raise RuntimeError("accepted metric due has no owner-scoped Job")
+        completed_by_job: dict[UUID, datetime] = {}
+        for job in jobs.values():
+            if job.completed_at is not None:
+                completed_by_job[job.id] = _as_utc(job.completed_at)
+
+        sources: list[CollectionSourceMetricView] = []
+        for (key, kind), rows in sorted(by_source.items()):
+            exclusions = tuple(
+                CollectionMetricExclusionView(
+                    reason=due.reason,
+                    starts_at=_as_utc(due.due_at),
+                    ends_at=_as_utc(due.due_at) + timedelta(microseconds=1),
+                    evidence_id=due.id,
+                )
+                for due in rows
+                if due.admission_state == DueAdmissionState.SKIPPED.value
+                and due.reason in (DueSkipReason.QUIET.value, DueSkipReason.RATE_LIMITED.value)
+            )
+            excluded_ids = {item.evidence_id for item in exclusions}
+            timing = summarize_collection_timing(
+                tuple(
+                    CollectionTimingSample(
+                        due_at=_as_utc(due.due_at),
+                        finished_at=(
+                            completed_by_job.get(due.job_id) if due.job_id is not None else None
+                        ),
+                    )
+                    for due in rows
+                    if due.id not in excluded_ids
+                ),
+                cutoff_at=cutoff,
+                target_seconds=300,
+            )
+            hotlist = None
+            if kind == SourceCapability.HOTLIST.value:
+                interval = get_settings().hotlist_interval_seconds
+                measured_end = min(end, cutoff + timedelta(microseconds=1))
+                expected = (
+                    expected_hotlist_buckets(
+                        start=start, end=measured_end, interval_seconds=interval
+                    )
+                    if measured_end > start
+                    else ()
+                )
+                expected_set = set(expected)
+                recorded = {due.due_at for due in rows if due.due_at in expected_set}
+                successful = {
+                    due.due_at
+                    for due in rows
+                    if due.due_at in expected_set
+                    and due.job_id is not None
+                    and due.job_id in snapshots
+                    and jobs[due.job_id].status == JobStatus.SUCCEEDED.value
+                    and due.job_id in completed_by_job
+                    and completed_by_job[due.job_id] <= cutoff
+                }
+                cadence_consistent = (
+                    bool(rows)
+                    and all(
+                        due.window_end - due.window_start == timedelta(seconds=interval)
+                        and int(due.due_at.timestamp()) % interval == 0
+                        for due in rows
+                    )
+                    and len(recorded) == len(rows)
+                )
+                preset = hotlist_presets.get(key)
+                # A current preset cannot prove an immutable interval/phase at T0.
+                # Plan 009 will freeze that fact before product acceptance.
+                phase_verified = False
+                if preset is None:
+                    cadence_consistent = False
+                hotlist = HotlistBucketMetricView(
+                    interval_seconds=interval,
+                    expected_count=len(expected),
+                    recorded_count=len(recorded),
+                    success_count=len(successful),
+                    missing_count=len(expected_set - recorded),
+                    success_ratio=len(successful) / len(expected) if expected else None,
+                    cadence_consistent=cadence_consistent,
+                    phase_verified=phase_verified,
+                )
+            sources.append(
+                CollectionSourceMetricView(
+                    source_key=key,
+                    capability=SourceCapability(kind),
+                    timing=CollectionTimingMetricView(
+                        target_seconds=300,
+                        due_count=len(rows),
+                        excluded_count=len(exclusions),
+                        sample_count=timing.sample_count,
+                        finished_count=timing.finished_count,
+                        timeout_count=timing.timeout_count,
+                        median_seconds=timing.median_seconds,
+                        median_lower_bound_seconds=timing.median_lower_bound_seconds,
+                        result=timing.result,
+                    ),
+                    hotlist=hotlist,
+                    exclusions=exclusions,
+                )
+            )
+        return CollectionCoverageMetricsView(
+            metric_version="collection-v1",
+            start=start,
+            end=end,
+            cutoff_at=cutoff,
+            sources=tuple(sources),
+            analysis_status="not_computable",
+        )
 
     def list_coverage(
         self,

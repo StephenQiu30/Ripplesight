@@ -61,6 +61,21 @@ declare namespace HotKeyAPI {
     reason: string;
   };
 
+  type CollectionCoverageMetricsView = {
+    /** Metric Version */
+    metric_version: string;
+    /** Start */
+    start: string;
+    /** End */
+    end: string;
+    /** Cutoff At */
+    cutoff_at: string;
+    /** Sources */
+    sources: CollectionSourceMetricView[];
+    /** Analysis Status */
+    analysis_status: string;
+  };
+
   type CollectionCoverageResultStatus =
     | "pending"
     | "not_attempted"
@@ -130,7 +145,49 @@ declare namespace HotKeyAPI {
     snapshot_ids: string[] | null;
   };
 
+  type CollectionMetricExclusionView = {
+    /** Reason */
+    reason: "quiet" | "rate_limited";
+    /** Starts At 被排除到期点 (包含) */
+    starts_at: string;
+    /** Ends At 被排除到期点后 1 微秒 (不包含) */
+    ends_at: string;
+    /** Evidence Id */
+    evidence_id: string;
+  };
+
   type CollectionScanKind = "new_scan" | "refresh" | "backfill";
+
+  type CollectionSourceMetricView = {
+    /** Source Key */
+    source_key: string;
+    capability: SourceCapability;
+    timing: CollectionTimingMetricView;
+    hotlist: HotlistBucketMetricView | null;
+    /** Exclusions */
+    exclusions: CollectionMetricExclusionView[];
+  };
+
+  type CollectionTimingMetricView = {
+    /** Target Seconds */
+    target_seconds: number;
+    /** Due Count */
+    due_count: number;
+    /** Excluded Count */
+    excluded_count: number;
+    /** Sample Count */
+    sample_count: number;
+    /** Finished Count */
+    finished_count: number;
+    /** Timeout Count */
+    timeout_count: number;
+    /** Median Seconds */
+    median_seconds: number | null;
+    /** Median Lower Bound Seconds */
+    median_lower_bound_seconds: number | null;
+    /** Result */
+    result: "passed" | "failed" | "indeterminate" | "no_samples";
+  };
 
   type CommentManualRunInput = {
     /** Operation Id */
@@ -422,6 +479,16 @@ declare namespace HotKeyAPI {
     details?: ValidationErrorItem[] | null;
   };
 
+  type getCollectionCoverageMetricsParams = {
+    /** UTC 到期范围起点 (包含) */
+    start: string;
+    /** UTC 到期范围终点 (不包含); 最多 31 天 */
+    end: string;
+    source_key?: string | null;
+    capability?: SourceCapability | null;
+    topic_id?: string | null;
+  };
+
   type getCollectionCoverageParams = {
     window_id: string;
   };
@@ -462,6 +529,25 @@ declare namespace HotKeyAPI {
   type HealthView = {
     /** Status */
     status: "ok" | "ready";
+  };
+
+  type HotlistBucketMetricView = {
+    /** Interval Seconds */
+    interval_seconds: number;
+    /** Expected Count */
+    expected_count: number;
+    /** Recorded Count */
+    recorded_count: number;
+    /** Success Count */
+    success_count: number;
+    /** Missing Count */
+    missing_count: number;
+    /** Success Ratio */
+    success_ratio: number | null;
+    /** Cadence Consistent */
+    cadence_consistent: boolean;
+    /** Phase Verified */
+    phase_verified: boolean;
   };
 
   type HotlistEntryView = {

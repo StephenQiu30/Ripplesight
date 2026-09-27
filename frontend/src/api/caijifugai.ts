@@ -38,3 +38,21 @@ export async function getCollectionCoverage(
     },
   );
 }
+
+/** 复算逐来源采集时效与热榜桶 按当前可访问来源及 UTC 到期窗复算采集指标。分析时效与热榜相位冻结尚无足够持久事实时显式标为未验证。 GET /api/collection-coverage/metrics */
+export async function getCollectionCoverageMetrics(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: HotKeyAPI.getCollectionCoverageMetricsParams,
+  options?: import("@/request").RequestOptions,
+) {
+  return request<HotKeyAPI.CollectionCoverageMetricsView>(
+    "/api/collection-coverage/metrics",
+    {
+      method: "GET",
+      params: {
+        ...params,
+      },
+      ...(options || {}),
+    },
+  );
+}

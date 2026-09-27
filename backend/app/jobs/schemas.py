@@ -262,6 +262,65 @@ class CollectionCoverageView(BaseModel):
     snapshot_ids: tuple[UUID, ...] | None
 
 
+class CollectionMetricExclusionView(BaseModel):
+    """A single affected due instant; not the complete source restriction interval."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    reason: Literal["quiet", "rate_limited"]
+    starts_at: datetime = Field(description="被排除到期点 (包含)")
+    ends_at: datetime = Field(description="被排除到期点后 1 微秒 (不包含)")
+    evidence_id: UUID
+
+
+class CollectionTimingMetricView(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    target_seconds: int = Field(gt=0)
+    due_count: int = Field(ge=0)
+    excluded_count: int = Field(ge=0)
+    sample_count: int = Field(ge=0)
+    finished_count: int = Field(ge=0)
+    timeout_count: int = Field(ge=0)
+    median_seconds: float | None = Field(ge=0)
+    median_lower_bound_seconds: float | None = Field(ge=0)
+    result: Literal["passed", "failed", "indeterminate", "no_samples"]
+
+
+class HotlistBucketMetricView(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    interval_seconds: int = Field(ge=600, le=86_400)
+    expected_count: int = Field(ge=0)
+    recorded_count: int = Field(ge=0)
+    success_count: int = Field(ge=0)
+    missing_count: int = Field(ge=0)
+    success_ratio: float | None = Field(ge=0, le=1)
+    cadence_consistent: bool
+    phase_verified: bool
+
+
+class CollectionSourceMetricView(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source_key: str
+    capability: SourceCapability
+    timing: CollectionTimingMetricView
+    hotlist: HotlistBucketMetricView | None
+    exclusions: tuple[CollectionMetricExclusionView, ...]
+
+
+class CollectionCoverageMetricsView(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    metric_version: Literal["collection-v1"]
+    start: datetime
+    end: datetime
+    cutoff_at: datetime
+    sources: tuple[CollectionSourceMetricView, ...]
+    analysis_status: Literal["not_computable"]
+
+
 class AnalysisJobFactView(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 

@@ -3,6 +3,11 @@ from datetime import UTC, datetime, timedelta, timezone
 import pytest
 from pydantic import ValidationError
 
+from jobs.metrics import (
+    CollectionTimingSample,
+    expected_hotlist_buckets,
+    summarize_collection_timing,
+)
 from jobs.schemas import (
     FreshnessTimelineInput,
     SourceTimePrecision,
@@ -91,3 +96,71 @@ def test_source_time_anomalies_never_produce_negative_discovery_delay() -> None:
 def test_invalid_internal_time_chains_are_rejected(field: str, value: object) -> None:
     with pytest.raises(ValidationError):
         _timeline(**{field: value})
+
+
+def test_collection_timing_uses_exact_odd_and_even_medians_at_threshold() -> None:
+    samples = tuple(
+        CollectionTimingSample(due_at=BASE, finished_at=BASE + timedelta(seconds=s))
+        for s in (100, 300, 500)
+    )
+    odd = summarize_collection_timing(
+        samples, cutoff_at=BASE + timedelta(hours=1), target_seconds=300
+    )
+    assert (odd.median_seconds, odd.median_lower_bound_seconds, odd.result) == (300, 300, "passed")
+    even = summarize_collection_timing(
+        samples[:2], cutoff_at=BASE + timedelta(hours=1), target_seconds=300
+    )
+    assert (even.median_seconds, even.result) == (200, "passed")
+    late = summarize_collection_timing(
+        (CollectionTimingSample(due_at=BASE, finished_at=BASE + timedelta(seconds=301)),),
+        cutoff_at=BASE + timedelta(hours=1),
+        target_seconds=300,
+    )
+    assert (late.median_seconds, late.result) == (301, "failed")
+
+
+def test_unfinished_windows_keep_censored_median_and_lower_bound() -> None:
+    cutoff = BASE + timedelta(seconds=301)
+    pending = CollectionTimingSample(due_at=BASE, finished_at=None)
+    uncertain = summarize_collection_timing(
+        (pending,), cutoff_at=BASE + timedelta(seconds=300), target_seconds=300
+    )
+    assert (
+        uncertain.median_seconds,
+        uncertain.median_lower_bound_seconds,
+        uncertain.timeout_count,
+        uncertain.result,
+    ) == (None, 300, 1, "indeterminate")
+    failed = summarize_collection_timing((pending,), cutoff_at=cutoff, target_seconds=300)
+    assert (
+        failed.median_seconds,
+        failed.median_lower_bound_seconds,
+        failed.timeout_count,
+        failed.result,
+    ) == (None, 301, 1, "failed")
+    certain = summarize_collection_timing(
+        (
+            CollectionTimingSample(BASE, BASE + timedelta(seconds=100)),
+            CollectionTimingSample(BASE, BASE + timedelta(seconds=200)),
+            pending,
+        ),
+        cutoff_at=BASE + timedelta(hours=1),
+        target_seconds=300,
+    )
+    assert (certain.median_seconds, certain.timeout_count, certain.result) == (200, 1, "passed")
+    empty = summarize_collection_timing((), cutoff_at=cutoff, target_seconds=300)
+    assert (empty.sample_count, empty.median_seconds, empty.result) == (0, None, "no_samples")
+
+
+def test_hotlist_expected_buckets_count_missing_rows_across_utc_day() -> None:
+    start = datetime(2026, 9, 27, 23, 30, tzinfo=UTC)
+    end = start + timedelta(hours=72)
+    assert len(expected_hotlist_buckets(start=start, end=end, interval_seconds=1800)) == 144
+    assert (
+        len(
+            expected_hotlist_buckets(
+                start=start, end=end - timedelta(minutes=30), interval_seconds=1800
+            )
+        )
+        == 143
+    )
