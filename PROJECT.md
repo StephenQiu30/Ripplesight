@@ -192,6 +192,7 @@ FastAPI 路由装饰器、类型注解和 Pydantic 模型是唯一可编辑的 A
 7. FastAPI 从路由装饰器、类型注解和 Pydantic 模型自动生成 `/openapi.json`。它是唯一 API 契约视图；Swagger UI、Scalar、Umi OpenAPI 和 Flutter 客户端共用该地址，不维护独立契约文件。客户端由生成命令更新，CI 负责自动生成与差异检查。
 8. 数据库结构只由 `backend/database/schema.sql` 定义，SQLAlchemy Model 必须与其同批更新。`schema.sql` 自身以 `BEGIN`/`COMMIT` 保证完整 DDL 原子性；CI 的 psql stdin 和 Compose 官方 entrypoint 挂载均依赖此事务，显式 `--single-transaction` 可额外使用。只对全新空库执行，失败后核对没有部分业务表。当前不支持存量库自动就地升级；保留数据时采用备份、全新建库、完整建表和校验后导入流程。
 9. 热榜快照通过 owner/job 外键关联 `collection_due_windows` 的已受理到期事实，并以 owner/source/operation 唯一；合法空 Feed 是有观察时间的零条目快照，失败保留到期与 Job 原因，不由后续桶补写。
+10. 评论的 `content_threads` 分别保存所属作品、线程根、直接父节点与回复目标的同 owner 内容身份；根或回复目标尚不可判定时使用空值，不把直接父节点猜作线程根。`parent_relation_status` 区分顶层、来源已观察、来源不可访问和待解析父节点，已知但未入库的节点以身份占位并保留缺口。以上列只通过完整 `schema.sql` 建于新库，旧库保留与重建沿用第 8 条。
 
 ## 4. 产品约束与未决事项
 

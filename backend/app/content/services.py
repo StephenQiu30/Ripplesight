@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 from uuid import UUID, uuid4, uuid5
 
 import structlog
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -93,6 +93,9 @@ _ALLOWED_FIELDS = frozenset(
         "author_name",
         "post_external_id",
         "parent_comment_external_id",
+        "root_comment_external_id",
+        "reply_target_comment_external_id",
+        "parent_relation_status",
         "published_at",
         "like_count",
         "comment_count",
@@ -593,7 +596,16 @@ class ContentService:
         fields, external_id = self._admitted_social_fields(
             owner_id=owner_id, command=command, now=now, object_type="post"
         )
-        if "post_external_id" in fields or "parent_comment_external_id" in fields:
+        if any(
+            name in fields
+            for name in (
+                "post_external_id",
+                "parent_comment_external_id",
+                "root_comment_external_id",
+                "reply_target_comment_external_id",
+                "parent_relation_status",
+            )
+        ):
             raise ValueError("posts cannot declare comment thread fields")
         return self._persist_admitted_content_in_transaction(
             owner_id=owner_id,
@@ -638,10 +650,35 @@ class ContentService:
         parent_external_id = _optional_identifier(fields, "parent_comment_external_id")
         if parent_external_id == external_id:
             raise ValueError("a comment cannot be its own parent")
+        root_external_id = _optional_identifier(fields, "root_comment_external_id")
+        reply_target_external_id = _optional_identifier(fields, "reply_target_comment_external_id")
+        relation_status = fields.get("parent_relation_status")
+        if parent_external_id is None:
+            if root_external_id not in {None, external_id} or reply_target_external_id is not None:
+                raise ValueError("root comment has conflicting thread references")
+            if relation_status not in {None, "root"}:
+                raise ValueError("root comment has an invalid parent relation status")
+            root_external_id = external_id
+            relation_status = "root"
+        elif (
+            root_external_id == external_id
+            or reply_target_external_id == external_id
+            or relation_status not in {None, "observed", "unavailable", "unresolved"}
+        ):
+            raise ValueError("reply has conflicting thread references")
+        else:
+            relation_status = relation_status or "unresolved"
         observation_fields = {
             name: value
             for name, value in fields.items()
-            if name not in {"post_external_id", "parent_comment_external_id"}
+            if name
+            not in {
+                "post_external_id",
+                "parent_comment_external_id",
+                "root_comment_external_id",
+                "reply_target_comment_external_id",
+                "parent_relation_status",
+            }
         }
         saved = self._persist_admitted_content_in_transaction(
             owner_id=owner_id,
@@ -675,13 +712,42 @@ class ContentService:
             )
         )
         parent_id = parent.id if parent is not None else None
+        root = (
+            saved
+            if root_external_id == external_id
+            else self._find_or_create_content(
+                owner_id=owner_id,
+                source_key=source_key,
+                object_type="comment",
+                native_scope=command.native_scope,
+                external_id=root_external_id,
+                created_at=now,
+            )
+            if root_external_id is not None
+            else None
+        )
+        reply_target = (
+            self._find_or_create_content(
+                owner_id=owner_id,
+                source_key=source_key,
+                object_type="comment",
+                native_scope=command.native_scope,
+                external_id=reply_target_external_id,
+                created_at=now,
+            )
+            if reply_target_external_id is not None
+            else None
+        )
         inserted = self._session.scalar(
             insert(ContentThread)
             .values(
                 owner_id=owner_id,
                 content_id=saved.id,
                 post_content_id=post.id,
+                root_content_id=root.id if root is not None else None,
                 parent_content_id=parent_id,
+                reply_target_content_id=(reply_target.id if reply_target is not None else None),
+                parent_relation_status=relation_status,
                 created_at=now,
             )
             .on_conflict_do_nothing(index_elements=["owner_id", "content_id"])
@@ -693,8 +759,31 @@ class ContentService:
                 existing is None
                 or existing.post_content_id != post.id
                 or existing.parent_content_id != parent_id
+                or (root is not None and existing.root_content_id not in {None, root.id})
+                or (
+                    reply_target is not None
+                    and existing.reply_target_content_id not in {None, reply_target.id}
+                )
             ):
                 raise ValueError("comment thread conflicts with the stored thread")
+            if root is not None and existing.root_content_id is None:
+                existing.root_content_id = root.id
+            if reply_target is not None and existing.reply_target_content_id is None:
+                existing.reply_target_content_id = reply_target.id
+            if relation_status == "observed" or (
+                relation_status == "unavailable" and existing.parent_relation_status == "unresolved"
+            ):
+                existing.parent_relation_status = relation_status
+        if fields.get("body") is not None:
+            self._session.execute(
+                update(ContentThread)
+                .where(
+                    ContentThread.owner_id == owner_id,
+                    ContentThread.parent_content_id == saved.id,
+                    ContentThread.parent_relation_status.in_(("unavailable", "unresolved")),
+                )
+                .values(parent_relation_status="observed")
+            )
         return saved
 
     def _admitted_social_fields(

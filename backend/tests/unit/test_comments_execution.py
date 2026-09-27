@@ -170,6 +170,34 @@ def test_tree_limiter_treats_a_missing_parent_as_a_bounded_placeholder_root() ->
     assert filtered == 1
 
 
+def test_tree_limiter_uses_source_root_when_direct_parent_is_unavailable() -> None:
+    limiter = CommentTreeLimiter(first_level_limit=1, replies_per_thread_limit=2)
+    root = _comment("root").model_copy(update={"root_comment_external_id": "root"})
+    reply = _comment("reply", parent="deleted").model_copy(
+        update={
+            "root_comment_external_id": "root",
+            "reply_target_comment_external_id": "deleted",
+            "parent_relation_status": "unavailable",
+        }
+    )
+
+    admitted, filtered = limiter.admit((root, reply))
+
+    assert [item.external_id for item in admitted] == ["root", "reply"]
+    assert filtered == 0
+
+
+def test_tree_limiter_accepts_root_after_placeholder_reply() -> None:
+    limiter = CommentTreeLimiter(first_level_limit=1, replies_per_thread_limit=2)
+    reply = _comment("reply", parent="root").model_copy(update={"root_comment_external_id": "root"})
+    root = _comment("root").model_copy(update={"root_comment_external_id": "root"})
+
+    admitted, filtered = limiter.admit((reply, root))
+
+    assert [item.external_id for item in admitted] == ["reply", "root"]
+    assert filtered == 0
+
+
 def test_comment_payload_maps_thread_author_metric_and_text_fields() -> None:
     payload = CommentPageCommitService._payload(_comment("child", parent="root"))
 

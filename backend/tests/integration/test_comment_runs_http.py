@@ -353,8 +353,10 @@ def test_old_hn_root_is_revisited_and_new_reply_keeps_direct_parent(
     with client.app.state.session_factory() as session:
         rows = session.execute(
             text(
-                "SELECT c.external_id, t.post_content_id, t.parent_content_id, "
-                "c.id FROM content_threads t JOIN content_records c ON c.id = t.content_id "
+                "SELECT c.external_id, t.post_content_id, t.root_content_id, "
+                "t.parent_content_id, t.reply_target_content_id, "
+                "t.parent_relation_status, c.id "
+                "FROM content_threads t JOIN content_records c ON c.id = t.content_id "
                 "WHERE t.post_content_id = :post_id ORDER BY c.external_id"
             ),
             {"post_id": content_id},
@@ -364,7 +366,13 @@ def test_old_hn_root_is_revisited_and_new_reply_keeps_direct_parent(
             ("987002", content_id),
         ]
         assert rows[0].parent_content_id is None
+        assert rows[0].root_content_id == rows[0].id
+        assert rows[0].reply_target_content_id is None
+        assert rows[0].parent_relation_status == "root"
         assert rows[1].parent_content_id == rows[0].id
+        assert rows[1].root_content_id == rows[0].id
+        assert rows[1].reply_target_content_id == rows[0].id
+        assert rows[1].parent_relation_status == "observed"
         assert (
             session.scalar(
                 text(

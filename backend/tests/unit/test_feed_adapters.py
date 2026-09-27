@@ -410,6 +410,88 @@ def test_hackernews_comments_keep_reply_parents_and_skip_deleted() -> None:
     assert second.state is SourcePageState.COMPLETE
 
 
+def test_hackernews_deleted_parent_keeps_root_target_and_gap() -> None:
+    def respond(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "id": 100,
+                "children": [
+                    {
+                        "id": 201,
+                        "type": "comment",
+                        "parent_id": 100,
+                        "text": "Root",
+                        "created_at_i": 1790323300,
+                        "children": [
+                            {
+                                "id": 202,
+                                "type": "comment",
+                                "parent_id": 201,
+                                "text": None,
+                                "children": [
+                                    {
+                                        "id": 203,
+                                        "type": "comment",
+                                        "parent_id": 202,
+                                        "text": "Reply",
+                                        "created_at_i": 1790323400,
+                                        "children": [],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
+
+    adapter = HackerNewsAdapter(before_request=_allow, transport=httpx.MockTransport(respond))
+    page = adapter.fetch_page(
+        CommentsRequest(source_key="hackernews", post_external_id="100", page_size=10)
+    )
+
+    assert page.state is SourcePageState.COMPLETE
+    root, reply = page.items
+    assert isinstance(root, SourceComment) and isinstance(reply, SourceComment)
+    assert (root.root_comment_external_id, root.parent_relation_status) == ("201", "root")
+    assert (
+        reply.root_comment_external_id,
+        reply.parent_comment_external_id,
+        reply.reply_target_comment_external_id,
+        reply.parent_relation_status,
+    ) == ("201", "202", "202", "unavailable")
+
+
+def test_hackernews_rejects_parent_id_conflicting_with_tree() -> None:
+    def respond(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "id": 100,
+                "children": [
+                    {
+                        "id": 201,
+                        "type": "comment",
+                        "parent_id": 999,
+                        "text": "Wrong parent",
+                        "children": [],
+                    }
+                ],
+            },
+        )
+
+    adapter = HackerNewsAdapter(before_request=_allow, transport=httpx.MockTransport(respond))
+    page = adapter.fetch_page(
+        CommentsRequest(source_key="hackernews", post_external_id="100", page_size=10)
+    )
+
+    assert (page.state, page.stop_reason) == (
+        SourcePageState.STOPPED,
+        SourceStopReason.PROTOCOL_ERROR,
+    )
+
+
 def test_web_search_uses_searxng_json_and_dedupes_urls() -> None:
     calls: list[httpx.Request] = []
 

@@ -189,13 +189,19 @@ def test_manual_comments_kafka_redelivery_keeps_threads_budget_and_offset(
             )
             assert session.execute(
                 text(
-                    "SELECT c.external_id, parent.external_id "
+                    "SELECT c.external_id, root.external_id, parent.external_id, "
+                    "target.external_id, t.parent_relation_status "
                     "FROM content_threads t JOIN content_records c ON c.id = t.content_id "
+                    "LEFT JOIN content_records root ON root.id = t.root_content_id "
                     "LEFT JOIN content_records parent ON parent.id = t.parent_content_id "
+                    "LEFT JOIN content_records target ON target.id = t.reply_target_content_id "
                     "WHERE t.post_content_id = :post_id ORDER BY c.external_id"
                 ),
                 {"post_id": content_id},
-            ).all() == [("987011", None), ("987012", "987011")]
+            ).all() == [
+                ("987011", "987011", None, None, "root"),
+                ("987012", "987011", "987011", "987011", "observed"),
+            ]
             assert session.execute(
                 text(
                     "SELECT p.budget_key, sum(r.actual_units) FROM resource_budget_reservations r "

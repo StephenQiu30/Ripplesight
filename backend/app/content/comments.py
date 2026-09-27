@@ -514,7 +514,10 @@ class CommentTreeLimiter:
             if parent_id is None:
                 root_id = item.external_id
                 self._root_by_comment[item.external_id] = root_id
-                if len(self._accepted_roots) >= self._first_level_limit:
+                if root_id in self._rejected_roots or (
+                    root_id not in self._accepted_roots
+                    and len(self._accepted_roots) >= self._first_level_limit
+                ):
                     self._rejected_roots.add(root_id)
                     filtered += 1
                     continue
@@ -523,16 +526,24 @@ class CommentTreeLimiter:
                 continue
 
             parent_root_id = self._root_by_comment.get(parent_id)
+            source_root_id = item.root_comment_external_id
+            if (
+                source_root_id is not None
+                and parent_root_id is not None
+                and source_root_id != parent_root_id
+            ):
+                raise ValueError("comment root conflicts with the known parent chain")
             if parent_root_id is None:
-                resolved_root_id = parent_id
+                resolved_root_id = source_root_id or parent_id
                 self._root_by_comment[parent_id] = resolved_root_id
+            else:
+                resolved_root_id = parent_root_id
+            self._root_by_comment[item.external_id] = resolved_root_id
+            if resolved_root_id not in self._accepted_roots | self._rejected_roots:
                 if len(self._accepted_roots) >= self._first_level_limit:
                     self._rejected_roots.add(resolved_root_id)
                 else:
                     self._accepted_roots.add(resolved_root_id)
-            else:
-                resolved_root_id = parent_root_id
-            self._root_by_comment[item.external_id] = resolved_root_id
             if resolved_root_id in self._rejected_roots:
                 filtered += 1
                 continue
@@ -756,6 +767,12 @@ class CommentPageCommitService:
             ),
             "like_count": comment.like_count,
         }
+        if comment.root_comment_external_id is not None:
+            fields["root_comment_external_id"] = comment.root_comment_external_id
+        if comment.reply_target_comment_external_id is not None:
+            fields["reply_target_comment_external_id"] = comment.reply_target_comment_external_id
+        if comment.parent_relation_status != "unresolved":
+            fields["parent_relation_status"] = comment.parent_relation_status
         if comment.author_external_id is not None:
             fields["author_external_id"] = comment.author_external_id
         if comment.author_name is not None:
