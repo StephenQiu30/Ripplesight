@@ -88,6 +88,10 @@ class ContentAnnotation(Base):
             "created_at <= updated_at",
             name="content_annotations_updated_at_check",
         ),
+        CheckConstraint(
+            "(result_state = 'valid') = (first_valid_at IS NOT NULL)",
+            name="content_annotations_first_valid_at_check",
+        ),
         Index(
             "content_annotations_topic_created_idx",
             "owner_id",
@@ -119,5 +123,6 @@ class ContentAnnotation(Base):
     result_state: Mapped[str] = mapped_column(String(16))
     error_code: Mapped[str | None] = mapped_column(String(64))
     diagnostic_history: Mapped[list[dict[str, str | None]]] = mapped_column(JSONB)
+    first_valid_at: Mapped[datetime | None]
     created_at: Mapped[datetime]
     updated_at: Mapped[datetime]

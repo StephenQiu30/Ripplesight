@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -320,6 +322,34 @@ def test_postgresql_rejects_fake_valid_annotation(
         )
 
 
+def test_postgresql_rejects_valid_annotation_without_first_valid_time(
+    annotation_context: tuple[
+        sessionmaker[Session], UUID, UUID, AnalysisPostContentView, UUID, UUID, datetime
+    ],
+) -> None:
+    sessions, owner_id, topic_id, post, _, valid_call_id, now = annotation_context
+    with sessions() as session, pytest.raises(IntegrityError), session.begin():
+        session.execute(
+            text(
+                "INSERT INTO content_annotations "
+                "(id, owner_id, content_id, content_version_id, topic_id, "
+                "topic_rule_version, prompt_version, relevant, relevance_reason, "
+                "summary, ai_call_id, status, result_state, created_at, updated_at) VALUES "
+                "(:id, :owner_id, :content_id, :version_id, :topic_id, 1, 'v1', "
+                "FALSE, '不同主题', '受控摘要', :call_id, 'annotated', 'valid', :now, :now)"
+            ),
+            {
+                "id": uuid4(),
+                "owner_id": owner_id,
+                "content_id": post.content_id,
+                "version_id": post.content_version_id,
+                "topic_id": topic_id,
+                "call_id": valid_call_id,
+                "now": now,
+            },
+        )
+
+
 def test_failed_call_upgrades_to_valid_and_old_failure_cannot_replace_it(
     annotation_context: tuple[
         sessionmaker[Session], UUID, UUID, AnalysisPostContentView, UUID, UUID, datetime
@@ -379,6 +409,111 @@ def test_failed_call_upgrades_to_valid_and_old_failure_cannot_replace_it(
     assert row.ai_call_id == valid_call_id
     assert row.diagnostic_history[0]["error_code"] == "analysis_timeout"
     assert len(row.diagnostic_history) == 1
+
+
+def test_first_valid_time_survives_duplicate_and_later_diagnostic(
+    annotation_context: tuple[
+        sessionmaker[Session], UUID, UUID, AnalysisPostContentView, UUID, UUID, datetime
+    ],
+) -> None:
+    context = annotation_context
+    sessions, owner_id, _, post, invalid_call_id, valid_call_id, now = context
+    invalid = AnnotationWrite(
+        content_version_id=post.content_version_id,
+        ai_call_id=invalid_call_id,
+        status=AnnotationStatus.UNANALYZED,
+        result_state=AnnotationResultState.INVALID,
+        error_code="analysis_output_missing",
+    )
+    valid = AnnotationWrite(
+        content_version_id=post.content_version_id,
+        ai_call_id=valid_call_id,
+        status=AnnotationStatus.ANNOTATED,
+        result_state=AnnotationResultState.VALID,
+        relevant=False,
+        relevance_reason="不同主题",
+        summary="内容讨论另一主题",
+    )
+    _persist(context, invalid)
+    with sessions() as session:
+        pending = session.scalar(
+            select(ContentAnnotation).where(ContentAnnotation.owner_id == owner_id)
+        )
+        assert pending is not None
+        assert pending.first_valid_at is None
+    _persist(context, valid, at=now + timedelta(minutes=1))
+    _persist(context, valid, at=now + timedelta(minutes=2))
+    _persist(
+        context,
+        AnnotationWrite(
+            content_version_id=post.content_version_id,
+            ai_call_id=uuid4(),
+            status=AnnotationStatus.UNANALYZED,
+            result_state=AnnotationResultState.FAILED,
+            error_code="analysis_timeout",
+        ),
+        at=now + timedelta(minutes=3),
+    )
+    second_valid_call_id = uuid4()
+    with sessions() as session, session.begin():
+        session.execute(
+            text(
+                "INSERT INTO ai_calls "
+                "(id, owner_id, purpose, provider, model, prompt_version, "
+                "input_fingerprint, status, input_tokens, cached_input_tokens, "
+                "output_tokens, reasoning_output_tokens, duration_ms, created_at) VALUES "
+                "(:id, :owner_id, 'analysis.annotate', 'test', 'test-model', 'v1', "
+                ":fingerprint, 'succeeded', 0, 0, 0, 0, 0, :now)"
+            ),
+            {
+                "id": second_valid_call_id,
+                "owner_id": owner_id,
+                "fingerprint": b"c" * 32,
+                "now": now + timedelta(minutes=4),
+            },
+        )
+    _persist(
+        context,
+        valid.model_copy(update={"ai_call_id": second_valid_call_id}),
+        at=now + timedelta(minutes=4),
+    )
+    with sessions() as session:
+        row = session.execute(
+            text(
+                "SELECT first_valid_at, updated_at, result_state, ai_call_id "
+                "FROM content_annotations WHERE owner_id = :owner"
+            ),
+            {"owner": owner_id},
+        ).one()
+    assert row.first_valid_at == now + timedelta(minutes=1)
+    assert row.updated_at == now + timedelta(minutes=3)
+    assert row.result_state == "valid"
+    assert row.ai_call_id == valid_call_id
+    separate_process = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import os
+import sys
+from uuid import UUID
+from sqlalchemy import create_engine, text
+
+engine = create_engine(os.environ["HOTKEY_TEST_DATABASE_URL"])
+with engine.connect() as connection:
+    first_valid_at = connection.scalar(
+        text("SELECT first_valid_at FROM content_annotations WHERE owner_id = :owner"),
+        {"owner": UUID(sys.argv[1])},
+    )
+print(first_valid_at.isoformat() if first_valid_at else "missing")
+""",
+            str(owner_id),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert separate_process.stdout.strip() == (now + timedelta(minutes=1)).isoformat()
 
 
 def test_annotation_batch_rolls_back_when_a_content_version_is_not_frozen(

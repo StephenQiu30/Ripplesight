@@ -644,10 +644,10 @@ def test_annotation_projection_separates_pending_failed_and_abnormal(
                     "(id, owner_id, content_id, content_version_id, topic_id, "
                     "topic_rule_version, prompt_version, relevant, relevance_reason, "
                     "summary, viewpoints, ai_call_id, status, result_state, error_code, "
-                    "created_at, updated_at) VALUES "
+                    "first_valid_at, created_at, updated_at) VALUES "
                     "(:id, :owner_id, :content_id, :version_id, :topic_id, 1, 'v1', "
                     ":relevant, :reason, :summary, '[]'::jsonb, :call_id, :status, "
-                    ":result_state, :error_code, :now, :now)"
+                    ":result_state, :error_code, :first_valid_at, :now, :now)"
                 ),
                 {
                     "id": uuid4(),
@@ -662,6 +662,7 @@ def test_annotation_projection_separates_pending_failed_and_abnormal(
                     "status": status,
                     "result_state": "valid" if status == "annotated" else "invalid",
                     "error_code": None if status == "annotated" else "analysis_output_missing",
+                    "first_valid_at": now if status == "annotated" else None,
                     "now": now,
                 },
             )

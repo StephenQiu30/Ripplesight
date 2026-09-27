@@ -937,9 +937,10 @@ def test_detail_reads_annotation_status_by_readable_version_and_current_topic_ru
                     "INSERT INTO content_annotations "
                     "(id, owner_id, content_id, content_version_id, topic_id, topic_rule_version, "
                     "prompt_version, relevant, relevance_reason, sentiment, summary, ai_call_id, "
-                    "status, result_state, created_at, updated_at) VALUES "
+                    "status, result_state, first_valid_at, created_at, updated_at) VALUES "
                     "(:id, :owner, :content, :version, :topic, :rule, :prompt, :relevant, "
-                    ":reason, :sentiment, :summary, :call, :status, :state, :now, :now)"
+                    ":reason, :sentiment, :summary, :call, :status, :state, :first_valid_at, "
+                    ":now, :now)"
                 ),
                 {
                     "id": uuid4(),
@@ -956,6 +957,7 @@ def test_detail_reads_annotation_status_by_readable_version_and_current_topic_ru
                     "call": call_id if valid else None,
                     "status": "annotated" if valid else "unanalyzed",
                     "state": state,
+                    "first_valid_at": now if valid else None,
                     "now": now,
                 },
             )
