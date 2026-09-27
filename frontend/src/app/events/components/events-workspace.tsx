@@ -11,6 +11,7 @@ import {
   PlusIcon,
   RadioIcon,
   RotateCcwIcon,
+  TrendingUpIcon,
 } from "lucide-react";
 
 import { deleteIdentitySession, getIdentityWorkspace } from "@/api/identity";
@@ -167,6 +168,17 @@ export function EventsWorkspace() {
             <Link href="/sources">
               <RadioIcon className="sm:hidden" aria-hidden="true" />
               <span className="sr-only sm:not-sr-only">来源状态</span>
+            </Link>
+          </Button>
+          <Button
+            asChild
+            variant="ghost"
+            size="icon"
+            className="sm:h-11 sm:w-auto sm:px-3 md:h-8 md:px-2.5"
+          >
+            <Link href="/hotlists">
+              <TrendingUpIcon className="sm:hidden" aria-hidden="true" />
+              <span className="sr-only sm:not-sr-only">热榜历史</span>
             </Link>
           </Button>
           <Button

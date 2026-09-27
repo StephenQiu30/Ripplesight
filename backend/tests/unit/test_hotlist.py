@@ -5,7 +5,7 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from content.hotlist import _post_payload, match_hotlist_topics, rank_change
+from content.hotlist import _post_payload, _rank_identity, match_hotlist_topics, rank_change
 from core.config import Settings
 from main import create_app
 from monitors.services import ActiveHotlistTopic, normalize_monitor_rules
@@ -199,6 +199,17 @@ def test_rank_change_covers_new_up_down_and_same() -> None:
     assert rank_change(1, 2) == "up"
     assert rank_change(3, 2) == "down"
     assert rank_change(2, 2) == "same"
+
+
+def test_historical_rank_comparison_uses_canonical_url_but_preserves_semantic_query() -> None:
+    assert _rank_identity("https://EXAMPLE.com/a?article=7&utm_source=rss#top") == (
+        _rank_identity("https://example.com/a?article=7")
+    )
+    assert _rank_identity("https://example.com/a?article=8") != _rank_identity(
+        "https://example.com/a?article=7"
+    )
+    # Snapshots saved before result-link validation remain readable.
+    assert _rank_identity("http://localhost/legacy") == "http://localhost/legacy"
 
 
 def test_hotlist_operation_id_is_stable_within_bucket() -> None:
