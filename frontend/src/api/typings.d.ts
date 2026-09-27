@@ -1,4 +1,8 @@
 declare namespace HotKeyAPI {
+  type AnnotationResultState = "pending" | "failed" | "invalid" | "valid";
+
+  type AnnotationStatus = "annotated" | "unanalyzed";
+
   type archiveMonitorTopicParams = {
     topic_id: string;
   };
@@ -146,6 +150,43 @@ declare namespace HotKeyAPI {
       | null;
   };
 
+  type ContentAnalysisTopicView = {
+    /** Topic Id */
+    topic_id: string;
+    /** Topic Name */
+    topic_name: string;
+    /** Current Rule Version */
+    current_rule_version: number;
+  };
+
+  type ContentAnnotationReadView = {
+    /** Id */
+    id: string;
+    /** Topic Id */
+    topic_id: string;
+    /** Content Version Id */
+    content_version_id: string;
+    /** Topic Rule Version */
+    topic_rule_version: number;
+    /** Prompt Version */
+    prompt_version: string;
+    status: AnnotationStatus;
+    result_state: AnnotationResultState;
+    /** Relevant */
+    relevant: boolean | null;
+    /** Relevance Reason */
+    relevance_reason: string | null;
+    sentiment: Sentiment | null;
+    /** Summary */
+    summary: string | null;
+    /** Viewpoints */
+    viewpoints: string[];
+    /** Error Code */
+    error_code: string | null;
+    /** Updated At */
+    updated_at: string;
+  };
+
   type ContentCommentView = {
     /** Content Id */
     content_id: string;
@@ -235,6 +276,12 @@ declare namespace HotKeyAPI {
     version_history: ContentVersionHistoryView[];
     /** Visibility History */
     visibility_history: ContentVisibilityView[];
+    /** Analysis Topics */
+    analysis_topics: ContentAnalysisTopicView[];
+    /** Annotations */
+    annotations: ContentAnnotationReadView[];
+    /** Analysis Prompt Version */
+    analysis_prompt_version: string;
   };
 
   type ContentRecordSummaryView = {
@@ -1023,6 +1070,8 @@ declare namespace HotKeyAPI {
   type runMonitorTopicParams = {
     topic_id: string;
   };
+
+  type Sentiment = "positive" | "neutral" | "negative";
 
   type SourceCapability =
     | "search"

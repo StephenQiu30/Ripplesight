@@ -15,6 +15,9 @@ from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
+from analysis.prompts import ANALYSIS_PROMPT_VERSION
+from analysis.reads import load_content_annotations_in_transaction
+from analysis.schemas import ContentAnnotationReadView
 from connections.schemas import (
     ConnectionEvidenceOutcome,
     PersistedReadEvidenceInput,
@@ -42,6 +45,7 @@ from content.schemas import (
     CollectionContentFactView,
     CollectionSnapshotFactView,
     CommentCollectionRunInput,
+    ContentAnalysisTopicView,
     ContentCommentView,
     ContentDiscoveryView,
     ContentMetricView,
@@ -77,6 +81,7 @@ from monitors.services import (
     ActiveTopicScan,
     MonitorScheduleService,
     evaluate_monitor_rules,
+    load_content_topic_contexts_in_transaction,
 )
 from sources.adapters.web_targets import normalize_web_url
 from sources.contracts import SourceCapability
@@ -1072,6 +1077,34 @@ class ContentService:
                 owner_id=owner_id,
                 content_id=content.id,
             )
+            version_history = self._version_history(readable_observations, version_views)
+            annotations = load_content_annotations_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                content_id=content.id,
+                readable_version_ids={item.content_version.id for item in version_history},
+            )
+            topic_ids = {item.topic_id for item in annotations}
+            for discovery in discoveries:
+                context = contexts.get(discovery.job_id)
+                if context is not None and context.configuration_ref.startswith("topic:"):
+                    try:
+                        topic_ids.add(UUID(context.configuration_ref.removeprefix("topic:")))
+                    except ValueError:
+                        continue
+            topic_contexts = load_content_topic_contexts_in_transaction(
+                self._session, owner_id=owner_id, topic_ids=topic_ids
+            )
+            analysis_topics = [
+                ContentAnalysisTopicView(
+                    topic_id=topic.topic_id,
+                    topic_name=topic.name,
+                    current_rule_version=topic.current_version,
+                )
+                for topic in sorted(
+                    topic_contexts.values(), key=lambda item: (item.name, item.topic_id)
+                )
+            ]
             return self._detail_view(
                 content=content,
                 observation=observation,
@@ -1079,8 +1112,10 @@ class ContentService:
                 current_visibility=(visibility_history[0] if visibility_history else None),
                 discoveries=discoveries,
                 job_contexts=contexts,
-                version_history=self._version_history(readable_observations, version_views),
+                version_history=version_history,
                 visibility_history=visibility_history,
+                analysis_topics=analysis_topics,
+                annotations=annotations,
             )
 
     def list_contents(
@@ -1995,6 +2030,8 @@ class ContentService:
         job_contexts: dict[UUID, ContentJobContext],
         version_history: list[ContentVersionHistoryView],
         visibility_history: list[ContentVisibilityView],
+        analysis_topics: list[ContentAnalysisTopicView] | None = None,
+        annotations: list[ContentAnnotationReadView] | None = None,
     ) -> ContentRecordDetailView:
         discovery_views = [
             ContentDiscoveryView(
@@ -2019,6 +2056,9 @@ class ContentService:
             discoveries=discovery_views,
             version_history=version_history,
             visibility_history=visibility_history,
+            analysis_topics=analysis_topics or [],
+            annotations=annotations or [],
+            analysis_prompt_version=ANALYSIS_PROMPT_VERSION,
         )
 
 

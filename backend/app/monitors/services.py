@@ -46,6 +46,33 @@ _MAX_KEYWORD_LENGTH = 100
 _MAX_TOPIC_NAME_LENGTH = 80
 
 
+@dataclass(frozen=True, slots=True)
+class ContentTopicReadContext:
+    topic_id: UUID
+    name: str
+    current_version: int
+
+
+def load_content_topic_contexts_in_transaction(
+    session: Session, *, owner_id: UUID, topic_ids: set[UUID]
+) -> dict[UUID, ContentTopicReadContext]:
+    if not session.in_transaction():
+        raise RuntimeError("content topic reads require the caller's transaction")
+    if not topic_ids:
+        return {}
+    topics = session.scalars(
+        select(MonitorTopic).where(
+            MonitorTopic.owner_id == owner_id, MonitorTopic.id.in_(topic_ids)
+        )
+    ).all()
+    return {
+        topic.id: ContentTopicReadContext(
+            topic_id=topic.id, name=topic.name, current_version=topic.current_version
+        )
+        for topic in topics
+    }
+
+
 def _latest_timestamp(current: datetime, observed: datetime) -> datetime:
     current_utc = current.replace(tzinfo=UTC) if current.tzinfo is None else current.astimezone(UTC)
     observed_utc = (

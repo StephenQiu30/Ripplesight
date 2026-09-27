@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from enum import StrEnum
 from typing import Any, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from core.schemas import OutputModel
 
 
 class Sentiment(StrEnum):
@@ -24,6 +27,23 @@ class AnnotationResultState(StrEnum):
     FAILED = "failed"
     INVALID = "invalid"
     VALID = "valid"
+
+
+class ContentAnnotationReadView(OutputModel):
+    id: UUID
+    topic_id: UUID
+    content_version_id: UUID
+    topic_rule_version: int = Field(ge=1)
+    prompt_version: str
+    status: AnnotationStatus
+    result_state: AnnotationResultState
+    relevant: bool | None
+    relevance_reason: str | None
+    sentiment: Sentiment | None
+    summary: str | None
+    viewpoints: list[str]
+    error_code: str | None
+    updated_at: datetime
 
 
 class WindowAnnotationCountView(BaseModel):
