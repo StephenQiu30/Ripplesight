@@ -20,7 +20,7 @@ Plan 039 见 Acceptance 002 EV-002-022：历史 API/页面读真实双轮快照�
 
 Plan 040 见 Acceptance 002 EV-002-023：旧积压扫描、冻结输入、一次无效补偿、进程树回收及 Kafka 到 Worker 的关闭状态已验证；默认关闭真实模型。用户暂不发送真实模型请求；十来源真实标注和 60 分钟比例未验，本卡 `in_progress`，AC-002-008 未通过。
 
-Plan 038 见 Acceptance 002 EV-002-024—026：HN 评论参数已进入版本化预设，旧帖显式复采 API 及受控权限/预算/频次已实现；修复手动 Job 执行 scope，并以受控 HN 树和真实 PostgreSQL 验证旧根复扫新增回复。独立父链分页、真实旧帖新回复、该评论 Job 的 Kafka 重放、Plan041 按钮与真实十帖仍待验，本卡 `in_progress`。
+Plan 038 见 Acceptance 002 EV-002-024—027：HN 评论参数已进入版本化预设，旧帖显式复采 API 及受控权限/预算/频次已实现；修复手动 Job 执行 scope，并以受控 HN 树和真实 PostgreSQL 验证旧根复扫新增回复，以真实 Kafka 验证受控消息重投、预算与 offset 幂等。独立父链分页、真实旧帖新回复、真实 Worker 进程重启、Plan041 按钮与真实十帖仍待验，本卡 `in_progress`。
 
 Plan 005 的标注状态与重放技术切片已在隔离 `main` 工作树完成，PostgreSQL 17 全新库的后端全量回归为 **779 passed/17 skipped**，见 Acceptance 002 EV-002-010。旧开发库 3 条历史异常、真实 Codex 样本和远端门禁尚未在该证据中核对；Plan 005 保持 `in_progress`，产品验收不变。
 
