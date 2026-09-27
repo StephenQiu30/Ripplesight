@@ -54,6 +54,12 @@ APPLICATION_ERRORS: Mapping[str, PublicError] = {
     "invalid_connection_configuration": PublicError(
         422, "invalid_connection_configuration", "来源连接配置不符合当前来源要求"
     ),
+    "invalid_comment_scope": PublicError(
+        422, "invalid_comment_scope", "评论查询范围不能同时指定线程根和直接父节点"
+    ),
+    "invalid_comment_cursor": PublicError(
+        422, "invalid_comment_cursor", "评论分页游标不属于当前查询范围"
+    ),
     "connection_version_conflict": PublicError(
         409, "connection_version_conflict", "连接版本已变更且需要重新验证"
     ),

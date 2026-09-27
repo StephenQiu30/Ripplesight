@@ -42,6 +42,7 @@ from content.schemas import (
     CollectionContentFactView,
     CollectionSnapshotFactView,
     CommentCollectionRunInput,
+    ContentCommentView,
     ContentDiscoveryView,
     ContentMetricView,
     ContentObservationView,
@@ -1148,6 +1149,181 @@ class ContentService:
                 for content, observation, _ in page
             ]
             next_cursor = str(page[-1][0].id) if has_more else None
+        return items, next_cursor
+
+    def list_comments(
+        self,
+        *,
+        owner_id: UUID,
+        post_content_id: UUID,
+        root_id: UUID | None,
+        parent_id: UUID | None,
+        cursor: UUID | None,
+        limit: int,
+    ) -> tuple[list[ContentCommentView], str | None]:
+        if root_id is not None and parent_id is not None:
+            raise ApplicationError("invalid_comment_scope")
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        now = self._clock()
+        self._session.rollback()
+        with self._session.begin():
+            post = self._session.scalar(
+                select(ContentRecord).where(
+                    ContentRecord.owner_id == owner_id,
+                    ContentRecord.id == post_content_id,
+                    ContentRecord.object_type == "post",
+                )
+            )
+            if post is None or post_content_id not in self._readable_observations(
+                owner_id=owner_id, content_ids={post_content_id}, now=now
+            ):
+                raise ApplicationError("resource_not_found")
+
+            threads = list(
+                self._session.scalars(
+                    select(ContentThread)
+                    .where(
+                        ContentThread.owner_id == owner_id,
+                        ContentThread.post_content_id == post_content_id,
+                    )
+                    .order_by(ContentThread.created_at, ContentThread.content_id)
+                ).all()
+            )
+            thread_by_id = {thread.content_id: thread for thread in threads}
+
+            def resolve_root(thread: ContentThread) -> UUID:
+                if thread.root_content_id is not None:
+                    return thread.root_content_id
+                visited = {thread.content_id}
+                current = thread
+                while current.parent_content_id is not None:
+                    parent = current.parent_content_id
+                    if parent in visited:
+                        return parent
+                    visited.add(parent)
+                    ancestor = thread_by_id.get(parent)
+                    if ancestor is None:
+                        return parent
+                    if ancestor.root_content_id is not None:
+                        return ancestor.root_content_id
+                    current = ancestor
+                return current.content_id
+
+            groups: dict[UUID, list[ContentThread]] = {}
+            for thread in threads:
+                groups.setdefault(resolve_root(thread), []).append(thread)
+            root_ids = set(groups)
+            candidate_ids = {thread.content_id for thread in threads} | root_ids
+            readable = self._readable_observations(
+                owner_id=owner_id, content_ids=candidate_ids, now=now
+            )
+
+            if root_id is not None:
+                if root_id not in groups or not any(
+                    thread.content_id in readable for thread in groups[root_id]
+                ):
+                    raise ApplicationError("resource_not_found")
+                candidates = [
+                    thread
+                    for thread in groups[root_id]
+                    if thread.content_id != root_id and thread.content_id in readable
+                ]
+                candidates.sort(key=lambda item: (item.created_at, item.content_id))
+                selected_ids = [item.content_id for item in candidates]
+            elif parent_id is not None:
+                if parent_id not in candidate_ids | {
+                    thread.parent_content_id
+                    for thread in threads
+                    if thread.parent_content_id is not None
+                }:
+                    raise ApplicationError("resource_not_found")
+                candidates = [
+                    thread
+                    for thread in threads
+                    if thread.parent_content_id == parent_id and thread.content_id in readable
+                ]
+                selected_ids = [item.content_id for item in candidates]
+            else:
+                selected_ids = sorted(
+                    (
+                        item
+                        for item, members in groups.items()
+                        if any(member.content_id in readable for member in members)
+                    ),
+                    key=lambda item: (
+                        min((member.created_at, member.content_id) for member in groups[item]),
+                        item,
+                    ),
+                )
+
+            if cursor is not None:
+                try:
+                    start = selected_ids.index(cursor) + 1
+                except ValueError as error:
+                    raise ApplicationError("invalid_comment_cursor") from error
+            else:
+                start = 0
+            page_ids = selected_ids[start : start + limit]
+            next_cursor = str(page_ids[-1]) if start + limit < len(selected_ids) else None
+            records = {
+                record.id: record
+                for record in self._session.scalars(
+                    select(ContentRecord).where(
+                        ContentRecord.owner_id == owner_id,
+                        ContentRecord.id.in_(page_ids),
+                    )
+                ).all()
+            }
+            version_views = self._content_version_views(
+                owner_id=owner_id,
+                content_observations=[
+                    (records[item], readable[item][0]) for item in page_ids if item in readable
+                ],
+                now=now,
+            )
+            child_ids = {thread.parent_content_id for thread in threads}
+            items: list[ContentCommentView] = []
+            for item in page_ids:
+                page_thread = thread_by_id.get(item)
+                if root_id is None and parent_id is None:
+                    root_thread = (
+                        page_thread
+                        if page_thread is not None and page_thread.parent_content_id is None
+                        else None
+                    )
+                    item_root_id = item
+                    relation_status = "root" if root_thread is not None else "unresolved"
+                    parent_content_id = None
+                    reply_target_content_id = None
+                    has_replies = any(member.content_id != item for member in groups[item])
+                else:
+                    assert page_thread is not None
+                    item_root_id = resolve_root(page_thread)
+                    relation_status = page_thread.parent_relation_status
+                    parent_content_id = page_thread.parent_content_id
+                    reply_target_content_id = page_thread.reply_target_content_id
+                    has_replies = item in child_ids
+                observation = readable.get(item)
+                latest = observation[0] if observation is not None else None
+                items.append(
+                    ContentCommentView(
+                        content_id=item,
+                        external_id=records[item].external_id if latest is not None else None,
+                        root_content_id=item_root_id,
+                        parent_content_id=parent_content_id,
+                        reply_target_content_id=reply_target_content_id,
+                        parent_relation_status=relation_status,
+                        latest_observation=(
+                            self._observation_view(
+                                latest, self._selected_version_view(latest, version_views)
+                            )
+                            if latest is not None
+                            else None
+                        ),
+                        has_replies=has_replies,
+                    )
+                )
         return items, next_cursor
 
     @staticmethod

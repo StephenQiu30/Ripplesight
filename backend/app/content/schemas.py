@@ -448,6 +448,17 @@ class ContentRecordDetailView(ContentRecordSummaryView):
     visibility_history: list[ContentVisibilityView]
 
 
+class ContentCommentView(OutputModel):
+    content_id: UUID
+    external_id: str | None
+    root_content_id: UUID | None
+    parent_content_id: UUID | None
+    reply_target_content_id: UUID | None
+    parent_relation_status: Literal["root", "observed", "unavailable", "unresolved"]
+    latest_observation: ContentObservationView | None
+    has_replies: bool
+
+
 class AnalysisPostContentView(OutputModel):
     """Owner-scoped immutable post text exposed to the analysis domain."""
 

@@ -1318,3 +1318,125 @@ def test_comments_keep_root_reply_target_and_unavailable_parent_gap(
             ),
             {"owner_id": owner_id},
         )
+
+
+def test_comment_read_pages_keep_missing_root_and_parent_gap(
+    content_client: TestClient,
+) -> None:
+    assert content_client.get(f"/api/contents/{uuid4()}/comments").status_code == 401
+    owner_id = _initialize(content_client)
+    connection_id, policy_id, retention_id, post_job_id, _ = _seed_context(content_client, owner_id)
+    comment_policy_id, comment_retention_id, comment_job_id = _seed_comment_context(
+        content_client, owner_id, connection_id
+    )
+    factory = content_client.app.state.session_factory
+    with factory() as session:
+        post = ContentService(session).persist_post(
+            owner_id=owner_id,
+            command=_command(
+                owner_id=owner_id,
+                connection_id=connection_id,
+                policy_id=policy_id,
+                retention_id=retention_id,
+                job_id=post_job_id,
+                operation_id=uuid4(),
+                observed_at=datetime.now(UTC) - timedelta(minutes=2),
+                external_id="post-9",
+                extra_fields={"text_scope": "full", "text_origin": "source", "title": "测试帖子"},
+            ),
+        )
+
+    def persist(**kwargs: object) -> None:
+        with factory() as session:
+            ContentService(session).persist_comment(
+                owner_id=owner_id,
+                command=_comment_command(
+                    owner_id=owner_id,
+                    connection_id=connection_id,
+                    policy_id=comment_policy_id,
+                    retention_id=comment_retention_id,
+                    job_id=comment_job_id,
+                    post_external_id="post-9",
+                    **kwargs,  # type: ignore[arg-type]
+                ),
+            )
+
+    persist(
+        external_id="reply-1",
+        parent_comment_external_id="deleted-parent",
+        root_comment_external_id="missing-root",
+        reply_target_comment_external_id="deleted-parent",
+        parent_relation_status="unavailable",
+    )
+    persist(external_id="root-2", root_comment_external_id="root-2")
+    roots = content_client.get(f"/api/contents/{post.id}/comments", params={"limit": 1})
+    assert roots.status_code == 200
+    assert len(roots.json()["items"]) == 1
+    assert roots.json()["next_cursor"] is not None
+    second = content_client.get(
+        f"/api/contents/{post.id}/comments",
+        params={"limit": 1, "cursor": roots.json()["next_cursor"]},
+    )
+    assert second.status_code == 200
+    all_roots = roots.json()["items"] + second.json()["items"]
+    by_external = {item["external_id"]: item for item in all_roots}
+    assert set(by_external) == {None, "root-2"}
+    missing = by_external[None]
+    assert missing["latest_observation"] is None
+    assert missing["has_replies"] is True
+
+    replies = content_client.get(
+        f"/api/contents/{post.id}/comments", params={"root_id": missing["content_id"]}
+    )
+    assert replies.status_code == 200
+    assert len(replies.json()["items"]) == 1
+    reply = replies.json()["items"][0]
+    assert reply["external_id"] == "reply-1"
+    assert reply["root_content_id"] == missing["content_id"]
+    assert reply["parent_relation_status"] == "unavailable"
+    assert reply["parent_content_id"] != missing["content_id"]
+    assert reply["reply_target_content_id"] == reply["parent_content_id"]
+    assert reply["latest_observation"]["content_version"]["body"] == "评论 reply-1"
+    assert (
+        content_client.get(
+            f"/api/contents/{post.id}/comments",
+            params={
+                "root_id": missing["content_id"],
+                "cursor": by_external["root-2"]["content_id"],
+            },
+        ).status_code
+        == 422
+    )
+
+    children = content_client.get(
+        f"/api/contents/{post.id}/comments", params={"parent_id": reply["parent_content_id"]}
+    )
+    assert children.status_code == 200
+    assert [item["content_id"] for item in children.json()["items"]] == [reply["content_id"]]
+    assert (
+        content_client.get(
+            f"/api/contents/{post.id}/comments",
+            params={"root_id": missing["content_id"], "parent_id": reply["parent_content_id"]},
+        ).status_code
+        == 422
+    )
+    assert (
+        content_client.get(
+            f"/api/contents/{post.id}/comments", params={"root_id": uuid4()}
+        ).status_code
+        == 404
+    )
+    assert content_client.get(f"/api/contents/{uuid4()}/comments").status_code == 404
+    assert (
+        content_client.get(f"/api/contents/{post.id}/comments", params={"limit": 0}).status_code
+        == 422
+    )
+    with factory() as session, pytest.raises(ApplicationError, match="resource_not_found"):
+        ContentService(session).list_comments(
+            owner_id=uuid4(),
+            post_content_id=post.id,
+            root_id=None,
+            parent_id=None,
+            cursor=None,
+            limit=20,
+        )
