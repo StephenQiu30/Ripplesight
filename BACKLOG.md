@@ -26,7 +26,7 @@ Plan 041 见 Acceptance 002 EV-002-029—032：评论/作品列表和标注详�
 
 Plan 006 见 Acceptance 002 EV-002-033—038：采集指标 API/CLI、首次有效标注、主题状态及提示词启用事实已落地；只读逐身份候选起点覆盖旧帖新主题、暂停换版及精确热榜命中。`28134fcf` 远端 backend **956 passed/8 skipped**、contract/runtime 成功。完整需分析集合、提示词停用/Codex 限流、热榜相位冻结与十来源真实复算仍缺；`analysis_status=not_computable`、`phase_verified=false`，Plan006/M1 继续 `in_progress`。
 
-Plan 034 见 Acceptance 002 EV-002-039：来源覆盖页面可按来源/能力/北京时间筛选到期窗口与逐来源指标，并下钻无 Job 漏窗、任务、内容及固定快照；前端 80 测试、C/F 门禁和受控桌面/390px 浏览器通过。`20f9fcdc` 远端 frontend/contract/runtime 成功。现有隔离运行库无关键词或热榜失败到期窗；跨筛选慢响应浏览器测试、真实一词一榜字段对账与三天缺口尚未完成，本卡 `in_progress`，AC-002-006 未通过。
+Plan 034 见 Acceptance 002 EV-002-039/040：来源覆盖页面可按来源/能力/北京时间筛选到期窗口与逐来源指标，并下钻无 Job 漏窗、任务、内容及固定快照；前端 84 测试含挂载 DOM 竞态回归，C/F 门禁和受控桌面/390px 浏览器通过。`20f9fcdc` 远端 frontend/contract/runtime 成功。现有隔离运行库无关键词或热榜失败到期窗；真实一词一榜字段对账与三天缺口尚未完成，本卡 `in_progress`，AC-002-006 未通过。
 
 Plan 005 的标注状态与重放技术切片已在隔离 `main` 工作树完成，PostgreSQL 17 全新库的后端全量回归为 **779 passed/17 skipped**，见 Acceptance 002 EV-002-010。旧开发库 3 条历史异常、真实 Codex 样本和远端门禁尚未在该证据中核对；Plan 005 保持 `in_progress`，产品验收不变。
 
