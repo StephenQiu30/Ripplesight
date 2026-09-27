@@ -104,7 +104,8 @@ def _post_payload(entry: HotlistEntry, source_key: str) -> dict[str, object]:
         # Ranking is an observation; source publication time remains on the snapshot entry.
         published_at=None,
         text=entry.summary,
-        text_scope="truncated" if entry.summary else None,
+        # A ranking title (with or without a feed summary) is not the full article.
+        text_scope="truncated",
         title=entry.title,
         canonical_url=canonical_url,
         like_count=None,

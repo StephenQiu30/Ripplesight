@@ -185,6 +185,15 @@ def test_hotlist_content_uses_observation_time_even_with_feed_pubdate() -> None:
     assert _post_payload(entry, "hotlist_weibo")["published_at"] is None
 
 
+def test_hotlist_title_without_summary_is_not_marked_as_full_article() -> None:
+    entry = HotlistEntry(rank=1, title="Only a ranking title", url="https://example.com/one")
+    payload = _post_payload(entry, "hotlist_weibo")
+    assert payload["title"] == entry.title
+    assert "body" not in payload
+    assert payload["text_scope"] == "truncated"
+    assert payload["truncation_reason"] == "source_limit"
+
+
 def test_rank_change_covers_new_up_down_and_same() -> None:
     assert rank_change(1, None) == "new"
     assert rank_change(1, 2) == "up"
