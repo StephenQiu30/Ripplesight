@@ -556,6 +556,10 @@ class KeywordDiscoveryPageCommitService:
                 observed_items=len(page.items),
                 source_observed_at=page.observed_at,
                 source_feed_updated_at=page.source_feed_updated_at,
+                source_engine=page.source_engine,
+                source_page_number=page.source_page_number,
+                source_unresponsive_engines=page.source_unresponsive_engines,
+                source_search_error=page.source_search_error,
                 evidence=(
                     CoverageTerminalEvidence.model_validate(page.terminal_evidence.model_dump())
                     if page.terminal_evidence is not None

@@ -299,6 +299,7 @@ def test_news_search_preset_fields_cover_adapter_payload_without_interaction_val
                 json={
                     "results": [
                         {
+                            "engine": "duckduckgo news",
                             "url": "https://example.com/posts/1",
                             "title": "AI industry update",
                             "content": "Daily update",

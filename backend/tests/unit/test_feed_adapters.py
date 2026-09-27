@@ -417,14 +417,16 @@ def test_web_search_uses_searxng_json_and_dedupes_urls() -> None:
         calls.append(request)
         results = [
             {
+                "engine": "duckduckgo news",
                 "url": "https://news.qq.com/a",
                 "title": "SU7 销量",
                 "content": "<b>九月</b>销量",
                 "publishedDate": "2026-09-25T06:00:00",
             },
-            {"url": "https://news.qq.com/a", "title": "dup"},
-            {"url": "javascript:alert(1)", "title": "bad"},
+            {"engine": "duckduckgo news", "url": "https://news.qq.com/a", "title": "dup"},
+            {"engine": "duckduckgo news", "url": "javascript:alert(1)", "title": "bad"},
             {
+                "engine": "duckduckgo news",
                 "url": "https://sina.cn/b",
                 "title": "SU7 评测",
                 "publishedDate": "2026-09-25T07:00:00+08:00",
@@ -443,7 +445,8 @@ def test_web_search_uses_searxng_json_and_dedupes_urls() -> None:
     assert calls[0].url.params["format"] == "json"
     assert calls[0].url.params["engines"] == "duckduckgo news"
     assert "categories" not in calls[0].url.params
-    assert page.next_page_token == "2"
+    assert page.state is SourcePageState.COMPLETE
+    assert page.next_page_token is None
     naive, aware = page.items
     assert isinstance(naive, SourcePost) and isinstance(aware, SourcePost)
     assert naive.published_at == datetime(2026, 9, 25, 6, tzinfo=UTC)

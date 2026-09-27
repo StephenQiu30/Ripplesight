@@ -3,10 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable
-from contextlib import suppress
 from datetime import UTC, datetime
 from typing import ClassVar
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 
@@ -16,37 +15,83 @@ from sources.adapters.http_source import (
     html_to_text,
     parse_timestamp,
 )
+from sources.adapters.web_targets import normalize_web_url
 from sources.contracts import (
     SearchRequest,
     SocialSourceCapability,
     SourceCapability,
     SourcePage,
+    SourcePageState,
     SourcePost,
     SourceRequest,
     SourceStopReason,
 )
 
 _MAX_PAGES = 5
+_BASE_URL = "http://127.0.0.1:8888"
+_SEARCH_URL = f"{_BASE_URL}/search"
+_ENGINE = "duckduckgo news"
+_TRACKING_PARAMETERS = frozenset(
+    {"utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "fbclid"}
+)
 
 
 def _published_at(value: object) -> datetime | None:
     """SearXNG runs with TZ=UTC and emits naive ISO timestamps, so naive means UTC."""
     if isinstance(value, str):
-        with suppress(ValueError):
+        try:
             parsed = datetime.fromisoformat(value)
             if parsed.tzinfo is None:
                 return parsed.replace(tzinfo=UTC)
+        except ValueError:
+            pass
     return parse_timestamp(value)
 
 
-class WebSearchAdapter(HttpSourceAdapter):
-    """Keyword news search through the self-hosted SearXNG JSON API (DEC-001-107).
+def _article_url(value: object) -> str | None:
+    if not isinstance(value, str) or len(value) > 2048:
+        return None
+    try:
+        host = urlsplit(value).hostname
+        if host is None:
+            return None
+        normalized = normalize_web_url(value, allowed_hosts=frozenset({host}))
+    except ValueError:
+        return None
+    parts = urlsplit(normalized)
+    query = urlencode(
+        [
+            (key, item)
+            for key, item in parse_qsl(parts.query, keep_blank_values=True)
+            if key.lower() not in _TRACKING_PARAMETERS
+        ]
+    )
+    article_url = urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))
+    return article_url if len(article_url) <= 2048 else None
 
-    Results are identified by a hash of their URL, so the same article found by different
-    engines is stored once. Results without a publish date are returned; the keyword
-    discovery commit drops them when a time window is required. As measured on 2026-09-25,
-    only the "duckduckgo news" engine returns publish dates, so it is the default engine.
-    """
+
+def _failure_details(payload: dict[str, object]) -> tuple[tuple[str, ...], str | None]:
+    raw_unresponsive = payload.get("unresponsive_engines", [])
+    if not isinstance(raw_unresponsive, list) or len(raw_unresponsive) > 8:
+        raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
+    failures: list[str] = []
+    for item in raw_unresponsive:
+        if (
+            not isinstance(item, list | tuple)
+            or len(item) < 2
+            or not isinstance(item[0], str)
+            or not isinstance(item[1], str)
+        ):
+            raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
+        failures.append(f"{item[0][:64]}: {item[1][:60]}")
+    raw_error = payload.get("error")
+    if raw_error is not None and not isinstance(raw_error, str):
+        raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
+    return tuple(failures), raw_error[:128] if raw_error else None
+
+
+class WebSearchAdapter(HttpSourceAdapter):
+    """One bounded local SearXNG news search with URL fallback identity."""
 
     capabilities: ClassVar[frozenset[SocialSourceCapability]] = frozenset({SourceCapability.SEARCH})
     adapter_version: ClassVar[str] = "searxng-json-news"
@@ -60,14 +105,10 @@ class WebSearchAdapter(HttpSourceAdapter):
         cancelled: Callable[[], bool] = lambda: False,
         max_requests: int = _MAX_PAGES,
         max_seconds: float = 60,
-        categories: str = "news",
-        engines: str = "duckduckgo news",
+        engines: str = _ENGINE,
         source_key: str = "web",
         transport: httpx.BaseTransport | None = None,
     ) -> None:
-        parsed = urlsplit(base_url)
-        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-            raise ValueError("base_url must be an http(s) URL")
         super().__init__(
             source_key=source_key,
             allowed_hosts=allowed_hosts,
@@ -77,11 +118,20 @@ class WebSearchAdapter(HttpSourceAdapter):
             max_seconds=max_seconds,
             transport=transport,
         )
-        if parsed.hostname not in self._allowed_hosts:
+        if "127.0.0.1" not in self._allowed_hosts:
             raise ValueError("base_url host must be allowlisted")
-        self._search_url = base_url.rstrip("/") + "/search"
-        self._categories = categories
+        if base_url not in {_BASE_URL, f"{_BASE_URL}/"} or self._allowed_hosts != frozenset(
+            {"127.0.0.1"}
+        ):
+            raise ValueError("SearXNG requires the fixed local search endpoint")
+        if engines != _ENGINE:
+            raise ValueError("SearXNG requires the duckduckgo news engine")
+        self._search_url = _SEARCH_URL
         self._engines = engines
+        self._page_fingerprints: set[tuple[str, ...]] = set()
+
+    def _follow_redirects(self) -> bool:
+        return False
 
     def _fetch(self, request: SourceRequest) -> SourcePage:
         if not isinstance(request, SearchRequest):
@@ -91,19 +141,36 @@ class WebSearchAdapter(HttpSourceAdapter):
             if not request.page_token.isdigit():
                 raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
             page_number = int(request.page_token)
-        params = {"q": request.query, "format": "json", "pageno": str(page_number)}
-        # SearXNG adds category engines to explicit engines, so send only one of them.
-        if self._engines:
-            params["engines"] = self._engines
-        else:
-            params["categories"] = self._categories
-        payload = json.loads(self._get_bytes(self._search_url, params=params))
+        if page_number < 1 or page_number > _MAX_PAGES:
+            raise SourceFailureError(SourceStopReason.CURSOR_EXPIRED)
+        params = {
+            "q": request.query,
+            "format": "json",
+            "pageno": str(page_number),
+            "engines": self._engines,
+        }
+        try:
+            raw = self._get_bytes(self._search_url, params=params)
+        except httpx.TimeoutException:
+            return self._stopped(request, SourceStopReason.UPSTREAM_ERROR).model_copy(
+                update={"source_page_number": page_number, "source_search_error": "timeout"}
+            )
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            return self._stopped(request, SourceStopReason.PROTOCOL_ERROR).model_copy(
+                update={"source_page_number": page_number, "source_search_error": "invalid_json"}
+            )
         results = payload.get("results") if isinstance(payload, dict) else None
         if not isinstance(results, list):
             raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
+        assert isinstance(payload, dict)
+        failures, search_error = _failure_details(payload)
         items: list[SourcePost] = []
         seen: set[str] = set()
         for result in results:
+            if not isinstance(result, dict) or result.get("engine") != _ENGINE:
+                raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
             post = self._post(result)
             if post is None or post.external_id in seen:
                 continue
@@ -111,22 +178,68 @@ class WebSearchAdapter(HttpSourceAdapter):
             items.append(post)
             if len(items) >= request.page_size:
                 break
-        has_more = bool(results) and page_number < _MAX_PAGES
-        return self._page(request, tuple(items), str(page_number + 1) if has_more else None)
+        metadata = {
+            "source_engine": _ENGINE if results else None,
+            "source_page_number": page_number,
+            "source_unresponsive_engines": failures,
+            "source_search_error": search_error,
+        }
+        if failures or search_error:
+            if not items:
+                return self._stopped(request, SourceStopReason.UPSTREAM_ERROR).model_copy(
+                    update=metadata
+                )
+            return SourcePage(
+                source_key=self.source_key,
+                capability=request.capability,
+                state=SourcePageState.PARTIAL,
+                items=tuple(items),
+                next_page_token=None,
+                watermark=None,
+                stop_reason=SourceStopReason.UPSTREAM_ERROR,
+                observed_at=datetime.now(UTC),
+                adapter_version=self.adapter_version,
+            ).model_copy(update=metadata)
+        if results and not items:
+            return self._stopped(request, SourceStopReason.PROTOCOL_ERROR).model_copy(
+                update=metadata
+            )
+        fingerprint = tuple(sorted(seen))
+        if fingerprint and fingerprint in self._page_fingerprints:
+            return self._stopped(request, SourceStopReason.CURSOR_LOOP).model_copy(update=metadata)
+        if fingerprint:
+            self._page_fingerprints.add(fingerprint)
+        page_overflow = len(results) > request.page_size
+        can_continue = len(results) >= request.page_size
+        if can_continue and (
+            page_overflow or page_number >= _MAX_PAGES or self._request_count >= self._max_requests
+        ):
+            return SourcePage(
+                source_key=self.source_key,
+                capability=request.capability,
+                state=SourcePageState.PARTIAL,
+                items=tuple(items),
+                next_page_token=None,
+                watermark=None,
+                stop_reason=SourceStopReason.BUDGET_EXHAUSTED,
+                observed_at=datetime.now(UTC),
+                adapter_version=self.adapter_version,
+            ).model_copy(update=metadata)
+        page = self._page(request, tuple(items), str(page_number + 1) if can_continue else None)
+        return page.model_copy(update=metadata)
 
     def _post(self, result: object) -> SourcePost | None:
         if not isinstance(result, dict):
             raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
-        url = result.get("url")
-        if not isinstance(url, str) or not url.startswith(("http://", "https://")):
-            return None
-        if len(url) > 2048:
+        url = _article_url(result.get("url"))
+        if url is None:
             return None
         title = result.get("title") if isinstance(result.get("title"), str) else None
         text = html_to_text(result.get("content"))
         return SourcePost(
             source_key=self.source_key,
             external_id="url:" + hashlib.sha256(url.encode()).hexdigest(),
+            identity_basis="url_fallback",
             author_external_id=None,
             published_at=_published_at(result.get("publishedDate")),
             title=title[:2000] if title else None,

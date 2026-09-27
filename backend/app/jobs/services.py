@@ -250,6 +250,10 @@ class CoverageWindowService:
         observed_items: int | None = None,
         source_observed_at: datetime | None = None,
         source_feed_updated_at: datetime | None = None,
+        source_engine: str | None = None,
+        source_page_number: int | None = None,
+        source_unresponsive_engines: tuple[str, ...] = (),
+        source_search_error: str | None = None,
     ) -> tuple[ExecutionLease, CoverageWindowView, CursorPageProgress]:
         """Commit a bounded cursor page and range progress in the caller's transaction."""
         expected = plan_cursor_request(
@@ -289,6 +293,18 @@ class CoverageWindowService:
             )
         elif source_feed_updated_at is not None:
             raise ValueError("source feed update time requires a source observation")
+        if source_page_number is not None:
+            progress.checkpoint["collection.source_page_number"] = source_page_number
+            progress.checkpoint.pop("collection.source_unresponsive_engines", None)
+            progress.checkpoint.pop("collection.source_search_error", None)
+        if source_engine is not None:
+            progress.checkpoint["collection.source_engine"] = source_engine
+        if source_unresponsive_engines:
+            progress.checkpoint["collection.source_unresponsive_engines"] = json.dumps(
+                source_unresponsive_engines, ensure_ascii=False
+            )
+        if source_search_error is not None:
+            progress.checkpoint["collection.source_search_error"] = source_search_error
         opened = self.begin_in_transaction(lease=lease, window=window)
         if opened.status == "confirmed":
             raise CoverageWindowConflictError("confirmed window cannot accept another page")
