@@ -88,6 +88,23 @@ def test_rsshub_hotlist_accepts_each_fixed_route(source_key: str, route: str) ->
     assert adapter.fetch_hotlist().state is SourcePageState.COMPLETE
 
 
+def test_rsshub_hotlist_rejects_private_result_link() -> None:
+    feed = (
+        '<rss version="2.0"><channel><title>Hot</title><item><title>AI</title>'
+        "<link>http://localhost/internal</link></item></channel></rss>"
+    )
+    adapter = RsshubHotlistAdapter(
+        source_key="hotlist_weibo",
+        feed_url="http://127.0.0.1:1200/weibo/search/hot",
+        allowed_hosts=frozenset({"127.0.0.1"}),
+        before_request=lambda _: True,
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, text=feed)),
+    )
+    page = adapter.fetch_hotlist()
+    assert page.state is SourcePageState.STOPPED
+    assert page.stop_reason is SourceStopReason.PROTOCOL_ERROR
+
+
 def test_rsshub_hotlist_rejects_redirect_outside_local_allowlist() -> None:
     requested: list[str] = []
 

@@ -758,6 +758,71 @@ def test_repeated_url_keeps_feed_ranks_and_one_content_observation(
     assert entries[0].content_id == entries[1].content_id
     assert records == discoveries == observations == 1
 
+    next_due = runtime.due_at + timedelta(minutes=30)
+    second_job = _accept(runtime, next_due)
+    second_page = _ranked_page(
+        next_due + timedelta(minutes=2),
+        (
+            HotlistEntry(rank=1, title="Other", url="https://example.com/other"),
+            HotlistEntry(rank=2, title="AI story", url="https://example.com/story?item=3"),
+        ),
+    )
+    _execute(runtime, second_job, second_page)
+    with runtime.sessions() as session:
+        latest = HotlistService(session).get_latest(
+            owner_id=runtime.owner_id, source_key="hotlist_weibo"
+        )
+    assert (latest.items[1].previous_rank, latest.items[1].rank_delta) == (1, -1)
+    assert latest.items[1].rank_change == "down"
+
+
+def test_same_url_on_two_hotlists_keeps_distinct_source_identities(
+    runtime: HotlistRuntime,
+) -> None:
+    _add_active_topics(runtime, (("AI topic", "AI"),))
+    first_job = _accept(runtime, runtime.due_at)
+    entry = HotlistEntry(rank=1, title="AI story", url="https://example.com/story?item=3")
+    _execute(runtime, first_job, _ranked_page(runtime.due_at + timedelta(minutes=2), (entry,)))
+
+    with runtime.sessions.begin() as session:
+        SourcePresetService(session, clock=lambda: runtime.due_at).apply_in_transaction(
+            owner_id=runtime.owner_id, preset=SOURCE_PRESETS["hotlist_baidu"]
+        )
+    next_due = runtime.due_at + timedelta(minutes=30)
+    with runtime.sessions.begin() as session:
+        assert (
+            scheduler.enqueue_due_hotlists_in_transaction(session, next_due + timedelta(seconds=2))
+            == 2
+        )
+    with runtime.engine.connect() as connection:
+        second_job = connection.execute(
+            text(
+                "SELECT job_id FROM collection_due_windows "
+                "WHERE source_key='hotlist_baidu' AND due_at=:due"
+            ),
+            {"due": next_due},
+        ).scalar_one()
+    baidu_page = HotlistPage(
+        source_key="hotlist_baidu",
+        state=SourcePageState.COMPLETE,
+        items=(entry,),
+        stop_reason=SourceStopReason.END_OF_RESULTS,
+        observed_at=next_due + timedelta(minutes=2),
+        request_count=1,
+        adapter_version="controlled-v1",
+    )
+    _execute(runtime, second_job, baidu_page)
+
+    with runtime.engine.connect() as connection:
+        records = connection.execute(
+            text("SELECT id, source_key, external_id FROM content_records ORDER BY source_key")
+        ).all()
+    assert [(record.source_key, record.external_id) for record in records] == [
+        ("hotlist_baidu", "https://example.com/story?item=3"),
+        ("hotlist_weibo", "https://example.com/story?item=3"),
+    ]
+    assert records[0].id != records[1].id
+
 
 def test_equivalent_hotlist_urls_keep_content_identity_and_previous_rank(
     runtime: HotlistRuntime,

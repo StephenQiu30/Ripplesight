@@ -82,6 +82,9 @@ def normalize_public_article_url(value: str) -> str:
     host = urlsplit(value).hostname
     if host is None:
         raise ValueError("article URL has no host")
+    local_host = host.rstrip(".").lower()
+    if local_host in {"localhost", "local"} or local_host.endswith((".localhost", ".local")):
+        raise ValueError("article URL must use a public host")
     normalized = normalize_web_url(value, allowed_hosts=frozenset({host}))
     parts = urlsplit(normalized)
     query = urlencode(
