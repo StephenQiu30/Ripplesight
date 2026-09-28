@@ -27,6 +27,32 @@ class AnalysisPromptActivation(Base):
     activated_at: Mapped[datetime]
 
 
+class AnalysisPromptRuntimeSession(Base):
+    __tablename__ = "analysis_prompt_runtime_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "prompt_version <> ''", name="analysis_prompt_runtime_sessions_version_check"
+        ),
+        CheckConstraint(
+            "last_seen_at >= started_at", name="analysis_prompt_runtime_sessions_last_seen_check"
+        ),
+        CheckConstraint(
+            "stopped_at IS NULL OR stopped_at >= last_seen_at",
+            name="analysis_prompt_runtime_sessions_stopped_check",
+        ),
+        Index(
+            "analysis_prompt_runtime_sessions_version_started_idx", "prompt_version", "started_at"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    prompt_version: Mapped[str] = mapped_column(String(128))
+    ai_enabled: Mapped[bool] = mapped_column(Boolean)
+    started_at: Mapped[datetime]
+    last_seen_at: Mapped[datetime]
+    stopped_at: Mapped[datetime | None]
+
+
 class ContentAnnotation(Base):
     __tablename__ = "content_annotations"
     __table_args__ = (

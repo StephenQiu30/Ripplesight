@@ -16,7 +16,11 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from analysis.prompts import ANALYSIS_PROMPT_VERSION
 from analysis.services import AnalysisService
-from worker.scheduler import record_analysis_prompt_activation_at_startup
+from worker.scheduler import (
+    heartbeat_analysis_prompt_runtime,
+    start_analysis_prompt_runtime_at_startup,
+    stop_analysis_prompt_runtime,
+)
 
 
 @pytest.fixture
@@ -31,6 +35,12 @@ def activation_store() -> Iterator[tuple[Engine, sessionmaker[Session], list[str
     try:
         with engine.begin() as connection:
             connection.execute(
+                text(
+                    "DELETE FROM analysis_prompt_runtime_sessions WHERE prompt_version = :version"
+                ),
+                {"version": ANALYSIS_PROMPT_VERSION},
+            )
+            connection.execute(
                 text("DELETE FROM analysis_prompt_activations WHERE prompt_version = :version"),
                 {"version": ANALYSIS_PROMPT_VERSION},
             )
@@ -40,6 +50,13 @@ def activation_store() -> Iterator[tuple[Engine, sessionmaker[Session], list[str
         if prepared:
             with engine.begin() as connection:
                 for version in versions:
+                    connection.execute(
+                        text(
+                            "DELETE FROM analysis_prompt_runtime_sessions "
+                            "WHERE prompt_version = :version"
+                        ),
+                        {"version": version},
+                    )
                     connection.execute(
                         text(
                             "DELETE FROM analysis_prompt_activations "
@@ -57,7 +74,7 @@ def test_scheduler_activation_is_disabled_or_persisted_once_across_restarts(
     first_start = datetime(2026, 9, 28, 0, tzinfo=UTC)
     restart = first_start + timedelta(hours=2)
 
-    assert not record_analysis_prompt_activation_at_startup(
+    disabled_run = start_analysis_prompt_runtime_at_startup(
         sessions, ai_enabled=False, started_at=first_start
     )
     with engine.connect() as connection:
@@ -68,11 +85,18 @@ def test_scheduler_activation_is_disabled_or_persisted_once_across_restarts(
             == 0
         )
 
-    assert record_analysis_prompt_activation_at_startup(
+    first_run = start_analysis_prompt_runtime_at_startup(
         sessions, ai_enabled=True, started_at=first_start
     )
-    assert not record_analysis_prompt_activation_at_startup(
+    restart_run = start_analysis_prompt_runtime_at_startup(
         sessions, ai_enabled=True, started_at=restart
+    )
+    assert len({disabled_run, first_run, restart_run}) == 3
+    heartbeat_analysis_prompt_runtime(
+        sessions, run_id=first_run, observed_at=first_start + timedelta(seconds=30)
+    )
+    stop_analysis_prompt_runtime(
+        sessions, run_id=first_run, stopped_at=first_start + timedelta(seconds=45)
     )
     with engine.connect() as connection:
         row = connection.execute(
@@ -82,7 +106,19 @@ def test_scheduler_activation_is_disabled_or_persisted_once_across_restarts(
             ),
             {"version": ANALYSIS_PROMPT_VERSION},
         ).one()
+        runtime_states = connection.execute(
+            text(
+                "SELECT ai_enabled, started_at, stopped_at FROM analysis_prompt_runtime_sessions "
+                "WHERE id IN (:disabled, :first, :restart) ORDER BY started_at, ai_enabled"
+            ),
+            {"disabled": disabled_run, "first": first_run, "restart": restart_run},
+        ).all()
     assert row.activated_at.astimezone(UTC) == first_start
+    assert [(enabled, at.astimezone(UTC), stop) for enabled, at, stop in runtime_states] == [
+        (False, first_start, None),
+        (True, first_start, first_start + timedelta(seconds=45)),
+        (True, restart, None),
+    ]
 
     child = subprocess.run(
         [
