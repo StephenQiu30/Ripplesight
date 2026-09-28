@@ -4,17 +4,29 @@ import json
 import logging
 import subprocess
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import sessionmaker
 
+from connections.schemas import SourceEntryPoint
+from content.comments import build_comment_job_acceptance
 from content.comments_execution import CommentsExecutor
-from content.discovery import KeywordDiscoveryPageCommitService
+from content.discovery import KeywordDiscoveryPageCommitService, plan_single_keyword_discovery
 from content.discovery_execution import KeywordDiscoveryExecutor
-from jobs.schemas import JobFailureCategory
-from sources.adapters.mediacrawler import MediaCrawlerAdapter, MediaCrawlerPreflightError, _post
+from content.schemas import CommentCollectionRunInput, KeywordDiscoveryRunInput
+from jobs.execution import ExecutionLease, JobExecutionFailure
+from jobs.schemas import JobAcceptedMessage, JobFailureCategory
+from jobs.services import JobExecutionConfiguration
+from sources.adapters.mediacrawler import (
+    ADAPTER_VERSION,
+    PATCHED_REVISION,
+    MediaCrawlerAdapter,
+    MediaCrawlerPreflightError,
+    _post,
+)
 from sources.contracts import (
     CommentsRequest,
     SearchRequest,
@@ -365,6 +377,107 @@ def test_preflight_failure_keeps_stable_non_authentication_job_code(error_code: 
         assert failure.error_code == error_code
         assert failure.category is JobFailureCategory.CONFIGURATION_UNAVAILABLE
         assert failure.manual_retry_allowed is False
+
+
+@pytest.mark.parametrize("kind", ["search", "comments"])
+@pytest.mark.parametrize(
+    ("revisions", "expected_code"),
+    [
+        ((None, None, None), "mediacrawler_version_evidence_missing"),
+        (("1" * 40, PATCHED_REVISION, ADAPTER_VERSION), "mediacrawler_revision_mismatch"),
+    ],
+)
+def test_job_version_snapshot_is_checked_before_adapter_setup(
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+    revisions: tuple[str | None, str | None, str | None],
+    expected_code: str,
+) -> None:
+    now = datetime(2026, 9, 28, tzinfo=UTC)
+    owner_id, job_id, connection_id = uuid4(), uuid4(), uuid4()
+    if kind == "search":
+        command = plan_single_keyword_discovery(
+            KeywordDiscoveryRunInput(
+                run_id=uuid4(),
+                configuration_ref="source:bilibili",
+                configuration_version=1,
+                source_key="bilibili",
+                connection_id=connection_id,
+                connection_version=1,
+                primary_query="HotKey",
+                starts_at=now - timedelta(hours=1),
+                ends_at=now,
+                page_size=5,
+                latest_max_pages=1,
+                latest_max_requests=26,
+                top_max_pages=1,
+                top_max_requests=26,
+                max_seconds=220,
+            )
+        )
+        executor = KeywordDiscoveryExecutor(sessionmaker(), lease_seconds=30, clock=lambda: now)
+    else:
+        command = build_comment_job_acceptance(
+            CommentCollectionRunInput(
+                operation_id=uuid4(),
+                configuration_ref="source:bilibili",
+                configuration_version=1,
+                source_key="bilibili",
+                connection_id=connection_id,
+                connection_version=1,
+                post_external_id="42",
+                entry_point=SourceEntryPoint.MANUAL,
+                starts_at=now - timedelta(hours=1),
+                ends_at=now,
+            )
+        )
+        executor = CommentsExecutor(sessionmaker(), lease_seconds=30, clock=lambda: now)
+    configuration = JobExecutionConfiguration(
+        job_id=job_id,
+        owner_id=owner_id,
+        operation_id=command.operation_id,
+        kind=command.kind,
+        started_at=now,
+        collection_cycle_started_at=now,
+        observation=command.observation,
+        scope=command.scope,
+        upstream_revision=revisions[0],
+        patched_revision=revisions[1],
+        adapter_version=revisions[2],
+    )
+    monkeypatch.setattr(executor, "_configuration", lambda _message: configuration)
+    adapter_setup: list[int] = []
+    monkeypatch.setattr(
+        executor,
+        "_configured_adapter_factory",
+        lambda **_kwargs: adapter_setup.append(1),
+    )
+    message = JobAcceptedMessage(
+        schema_version=2,
+        message_id=uuid4(),
+        event_type="job.accepted.v2",
+        job_id=job_id,
+        owner_id=owner_id,
+        operation_id=command.operation_id,
+        kind=command.kind,
+        configuration_ref=command.observation.configuration_ref,
+        configuration_version=command.observation.configuration_version,
+        source_key="bilibili",
+        source_capability=command.observation.source_capability,
+    )
+    lease = ExecutionLease(
+        job_id=job_id,
+        worker_id="version-evidence-test",
+        epoch=1,
+        expires_at=now + timedelta(minutes=1),
+        checkpoint_sequence=0,
+        checkpoint={},
+    )
+    with pytest.raises(JobExecutionFailure) as error:
+        executor.execute(message, lease)
+    assert error.value.error_code == expected_code
+    assert error.value.category is JobFailureCategory.CONFIGURATION_UNAVAILABLE
+    assert adapter_setup == []
 
 
 @pytest.mark.parametrize(

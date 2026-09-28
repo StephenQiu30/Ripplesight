@@ -283,12 +283,20 @@ class ResourceComponentPolicy(Base):
             "updated_at >= created_at",
             name="resource_component_policies_updated_at_check",
         ),
+        CheckConstraint(
+            "(upstream_revision IS NULL AND patched_revision IS NULL) OR "
+            "(upstream_revision IS NOT NULL AND patched_revision IS NOT NULL AND "
+            "upstream_revision ~ '^[0-9a-f]{40}$' AND patched_revision ~ '^[0-9a-f]{40}$')",
+            name="resource_component_policies_revision_pair_check",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
     owner_id: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="CASCADE"))
     component_key: Mapped[str] = mapped_column(String(128))
     component_version: Mapped[str] = mapped_column(String(128))
+    upstream_revision: Mapped[str | None] = mapped_column(String(40))
+    patched_revision: Mapped[str | None] = mapped_column(String(40))
     cost_class: Mapped[str] = mapped_column(String(32))
     enabled_for_core: Mapped[bool]
     terms_reference: Mapped[str] = mapped_column(String(512))
@@ -364,6 +372,14 @@ class Job(Base):
             name="jobs_owner_kind_operation_key",
         ),
         UniqueConstraint("owner_id", "id", name="jobs_owner_id_key"),
+        CheckConstraint(
+            "(upstream_revision IS NULL AND patched_revision IS NULL AND adapter_version IS NULL) "
+            "OR (upstream_revision IS NOT NULL AND patched_revision IS NOT NULL AND "
+            "upstream_revision ~ '^[0-9a-f]{40}$' AND "
+            "patched_revision ~ '^[0-9a-f]{40}$' AND "
+            "adapter_version IS NOT NULL AND adapter_version <> '')",
+            name="jobs_mediacrawler_version_evidence_check",
+        ),
         CheckConstraint(
             "kind ~ '^[a-z][a-z0-9_.-]{0,63}$'",
             name="jobs_kind_check",
@@ -480,6 +496,9 @@ class Job(Base):
     configuration_version: Mapped[int] = mapped_column(BigInteger)
     source_key: Mapped[str | None] = mapped_column(String(64))
     source_capability: Mapped[str | None] = mapped_column(String(32))
+    upstream_revision: Mapped[str | None] = mapped_column(String(40))
+    patched_revision: Mapped[str | None] = mapped_column(String(40))
+    adapter_version: Mapped[str | None] = mapped_column(String(128))
     scope: Mapped[dict[str, JsonValue]] = mapped_column(JSONB)
     request_fingerprint: Mapped[bytes] = mapped_column(LargeBinary(32))
     status: Mapped[str] = mapped_column(String(32), server_default=text("'queued'"))

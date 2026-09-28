@@ -34,7 +34,11 @@ from jobs.services import (
     load_job_execution_configuration,
 )
 from sources.adapters.hackernews import HackerNewsAdapter
-from sources.adapters.mediacrawler import MediaCrawlerAdapter, MediaCrawlerPreflightError
+from sources.adapters.mediacrawler import (
+    MediaCrawlerAdapter,
+    MediaCrawlerPreflightError,
+    validate_job_version_evidence,
+)
 from sources.adapters.rss import GOOGLE_NEWS_FEED_URL_TEMPLATE, RssSourceAdapter
 from sources.adapters.web_search import WebSearchAdapter
 from sources.contracts import (
@@ -266,6 +270,16 @@ class KeywordDiscoveryExecutor:
                 JobFailureCategory.CONFIGURATION_UNAVAILABLE,
                 "重新提交有界的关键词搜索任务",
             ) from error
+
+        if source_key == "bilibili":
+            try:
+                validate_job_version_evidence(
+                    upstream_revision=configuration.upstream_revision,
+                    patched_revision=configuration.patched_revision,
+                    adapter_version=configuration.adapter_version,
+                )
+            except MediaCrawlerPreflightError as error:
+                raise self._adapter_failure(error) from error
 
         if lease.checkpoint.get("cursor.done") is True:
             with self._sessions() as session, session.begin():
