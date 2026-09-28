@@ -177,6 +177,7 @@ class SourceEntryPoint(StrEnum):
 class SourceConnectionUpdateInput(InputModel):
     expected_version: int = Field(ge=0, le=2_147_483_646)
     status: SourceConnectionStatus
+    owner_confirmed: bool = False
     allowed_hosts: tuple[str, ...] = Field(default=(), max_length=32)
 
     @field_validator("allowed_hosts")
@@ -331,6 +332,9 @@ class SourcePlatformView(OutputModel):
     has_credentials: bool
     connection_id: UUID | None
     connection_status: SourceConnectionStatus | None
+    safety_stop_reason: SourceStopReason | None = None
+    safety_stopped_at: datetime | None = None
+    safety_trigger_job_id: UUID | None = None
     credential_configured: bool
     credential_update_available: bool
     allowed_hosts: list[str]

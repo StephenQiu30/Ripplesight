@@ -1213,6 +1213,8 @@ declare namespace HotKeyAPI {
     /** Expected Version */
     expected_version: number;
     status: SourceConnectionStatus;
+    /** Owner Confirmed */
+    owner_confirmed?: boolean;
     /** Allowed Hosts */
     allowed_hosts?: string[];
   };
@@ -1279,6 +1281,11 @@ declare namespace HotKeyAPI {
     /** Connection Id */
     connection_id: string | null;
     connection_status: SourceConnectionStatus | null;
+    safety_stop_reason?: SourceStopReason | null;
+    /** Safety Stopped At */
+    safety_stopped_at?: string | null;
+    /** Safety Trigger Job Id */
+    safety_trigger_job_id?: string | null;
     /** Credential Configured */
     credential_configured: boolean;
     /** Credential Update Available */

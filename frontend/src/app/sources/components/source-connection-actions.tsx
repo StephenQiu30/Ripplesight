@@ -30,7 +30,14 @@ export function SourceConnectionActions({
     useState<HotKeyAPI.SourceConnectionStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [reviewed, setReviewed] = useState(false);
   const active = platform.connection_status === "active";
+  const safetyPaused =
+    platform.source_key === "bilibili" && platform.safety_stop_reason != null;
+  const safetyMessage =
+    platform.safety_stop_reason === "rate_limited"
+      ? "B 站访问频繁，来源已暂停。请本人检查访问频率和账号状态后再恢复。"
+      : "B 站登录态或验证要求发生变化，来源已暂停。请本人检查账号和验证状态后再恢复。";
   const label =
     platform.connection_version === null
       ? "配置连接"
@@ -52,9 +59,11 @@ export function SourceConnectionActions({
         {
           expected_version: platform.connection_version ?? 0,
           status,
+          owner_confirmed: safetyPaused && reviewed,
         },
       );
       setConfirm(null);
+      setReviewed(false);
       setNotice(
         status === "disabled"
           ? "连接已停用，历史资料仍可读取。"
@@ -70,6 +79,7 @@ export function SourceConnectionActions({
         return;
       }
       setConfirm(null);
+      setReviewed(false);
       setError(
         failure instanceof ApiRequestError
           ? `${failure.message}${failure.requestId ? ` 请求编号：${failure.requestId}` : ""}`
@@ -92,7 +102,8 @@ export function SourceConnectionActions({
           variant="outline"
           disabled={
             pending ||
-            !platform.credential_configured ||
+            (!platform.credential_configured &&
+              platform.source_key !== "bilibili") ||
             (active && !platform.credential_update_available)
           }
           onClick={() => setConfirm("active")}
@@ -109,7 +120,12 @@ export function SourceConnectionActions({
           </Button>
         ) : null}
       </div>
-      {!platform.credential_configured ? (
+      {safetyPaused ? (
+        <p role="status" className="text-destructive text-sm">
+          {safetyMessage}
+        </p>
+      ) : null}
+      {!platform.credential_configured && platform.source_key !== "bilibili" ? (
         <p className="text-muted-foreground text-sm">
           请维护者先配置服务端凭据。页面不接收或显示会话秘密。
         </p>
@@ -136,7 +152,10 @@ export function SourceConnectionActions({
       <AlertDialog
         open={confirm !== null}
         onOpenChange={(open) => {
-          if (!open && !pending) setConfirm(null);
+          if (!open && !pending) {
+            setConfirm(null);
+            setReviewed(false);
+          }
         }}
       >
         <AlertDialogContent>
@@ -154,13 +173,29 @@ export function SourceConnectionActions({
             <AlertDialogDescription>
               {confirm === "disabled"
                 ? "停止接受该连接的新任务。历史资料保留，不删除已有结果。"
-                : "使用维护者已配置的服务端凭据。新版本需要重新验证，不沿用旧版本成功状态，也不会自动发起平台请求。"}
+                : safetyPaused
+                  ? "请本人核查账号和访问状态。确认后仅恢复连接执行权，新版本仍需低频验证，不会自动发起平台请求。"
+                  : "使用维护者已配置的服务端凭据。新版本需要重新验证，不沿用旧版本成功状态，也不会自动发起平台请求。"}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {safetyPaused && confirm === "active" ? (
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="owner_reviewed_bilibili"
+                checked={reviewed}
+                onChange={(event) => setReviewed(event.target.checked)}
+                className="mt-1 size-4"
+              />
+              <span>我已本人核查 B 站账号与访问状态，并决定人工恢复。</span>
+            </label>
+          ) : null}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={pending}>取消</AlertDialogCancel>
             <Button
-              disabled={pending}
+              disabled={
+                pending || (safetyPaused && confirm === "active" && !reviewed)
+              }
               onClick={() => {
                 if (confirm) void save(confirm);
               }}

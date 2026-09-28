@@ -34,11 +34,14 @@ from connections.services import (
     SourcePresetService,
     load_applied_source_presets_in_transaction,
     load_execution_policy_in_transaction,
+    pause_bilibili_connection_in_transaction,
     require_browser_state_execution,
     require_source_connection_enabled,
+    require_source_connection_version,
     require_web_connection_execution,
     source_credential_reference,
 )
+from content.discovery_execution import KeywordDiscoveryExecutor
 from core.config import Settings, get_settings
 from core.errors import ApplicationError
 from jobs.schemas import (
@@ -53,7 +56,7 @@ from jobs.schemas import (
 )
 from jobs.services import JobService, ResourceBudgetService
 from main import create_app
-from sources.contracts import SourceCapability, SourceStopReason
+from sources.contracts import SearchRequest, SourceCapability, SourcePageState, SourceStopReason
 
 _BOOTSTRAP_TOKEN = "source-connection-bootstrap-token"
 _PASSWORD = "correct horse battery staple"
@@ -1122,6 +1125,167 @@ def test_concurrent_connection_requests_create_one_version_per_transition(
                     expected_version=2, status=SourceConnectionStatus.DISABLED
                 ),
             )
+
+
+def test_bilibili_safety_pause_requires_owner_review_and_records_versions(
+    source_connection_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = source_connection_client
+    owner_id = UUID(_initialize(client))
+    trigger_job_id = uuid4()
+    factory = client.app.state.session_factory
+    with factory.begin() as session:
+        applied = SourcePresetService(session).apply_in_transaction(
+            owner_id=owner_id, preset=SOURCE_PRESETS["bilibili"]
+        )
+    settings = client.app.state.settings.model_copy(update={"mediacrawler_enabled": True})
+    monkeypatch.setattr("content.discovery_execution.get_settings", lambda: settings)
+    adapter_factory = KeywordDiscoveryExecutor(
+        factory, lease_seconds=60
+    )._configured_adapter_factory(
+        owner_id=owner_id,
+        source_key="bilibili",
+        connection_id=applied.connection_id,
+        connection_version=applied.connection_version,
+    )
+    attempts: list[int] = []
+    adapter = adapter_factory(
+        lambda attempt: attempts.append(attempt) or True, lambda: False, 26, 1.0
+    )
+    assert not adapter._cancelled()
+    with factory.begin() as session:
+        pause_bilibili_connection_in_transaction(
+            session,
+            owner_id=owner_id,
+            connection_id=applied.connection_id,
+            connection_version=applied.connection_version,
+            now=datetime.now(UTC),
+            reason=SourceStopReason.RATE_LIMITED,
+            trigger_job_id=trigger_job_id,
+        )
+    assert adapter._cancelled()
+    stopped = adapter.fetch_page(
+        SearchRequest(source_key="bilibili", query="DeepSeek", page_size=1)
+    )
+    assert stopped.state is SourcePageState.STOPPED
+    assert stopped.request_count == 0
+    assert attempts == []
+    with factory.begin() as session:
+        pause_bilibili_connection_in_transaction(
+            session,
+            owner_id=owner_id,
+            connection_id=applied.connection_id,
+            connection_version=applied.connection_version,
+            now=datetime.now(UTC),
+            reason=SourceStopReason.RATE_LIMITED,
+            trigger_job_id=trigger_job_id,
+        )
+    with factory() as session:
+        connection = session.execute(
+            text(
+                "SELECT status, safety_stop_reason, safety_trigger_job_id, "
+                "safety_stopped_version, safety_events FROM source_connections WHERE id = :id"
+            ),
+            {"id": applied.connection_id},
+        ).one()
+        assert connection.status == "disabled"
+        assert connection.safety_stop_reason == "rate_limited"
+        assert connection.safety_trigger_job_id == trigger_job_id
+        assert connection.safety_stopped_version == applied.connection_version
+        assert len(connection.safety_events) == 1
+        with pytest.raises(ApplicationError, match="connection_disabled"):
+            require_source_connection_enabled(session, owner_id=owner_id, source_key="bilibili")
+        with pytest.raises(ApplicationError, match="connection_disabled"):
+            require_source_connection_version(
+                session,
+                owner_id=owner_id,
+                source_key="bilibili",
+                connection_id=applied.connection_id,
+                connection_version=applied.connection_version,
+            )
+    with pytest.raises(ApplicationError, match="connection_disabled"):
+        KeywordDiscoveryExecutor(factory, lease_seconds=60)._configured_adapter_factory(
+            owner_id=owner_id,
+            source_key="bilibili",
+            connection_id=applied.connection_id,
+            connection_version=applied.connection_version,
+        )
+    headers = {"X-HotKey-CSRF": client.cookies["hotkey_csrf"]}
+    monkeypatch.setattr("cli.commands.get_settings", lambda: client.app.state.settings)
+    runner = CliRunner()
+    status = runner.invoke(cli_app, ["sources", "status-bilibili"])
+    assert status.exit_code == 0
+    assert "safety reason: rate_limited" in status.stdout
+    unconfirmed = runner.invoke(
+        cli_app,
+        ["sources", "resume-bilibili", "--expected-version", str(applied.connection_version)],
+    )
+    assert unconfirmed.exit_code == 1
+    assert "connection_owner_confirmation_required" in unconfirmed.output
+    path = "/api/source-connections/bilibili"
+    payload = {"expected_version": applied.connection_version, "status": "active"}
+    assert client.put(path, headers=headers, json=payload).status_code == 409
+    with factory() as session, pytest.raises(ApplicationError, match="resource_not_found"):
+        SourceConnectionService(session).update_connection(
+            owner_id=uuid4(),
+            source_key="bilibili",
+            command=SourceConnectionUpdateInput(
+                expected_version=applied.connection_version,
+                status=SourceConnectionStatus.ACTIVE,
+                owner_confirmed=True,
+            ),
+        )
+    assert client.put(path, json=payload | {"owner_confirmed": True}).status_code == 403
+    assert (
+        client.put(
+            path, headers=headers, json=payload | {"expected_version": 0, "owner_confirmed": True}
+        ).status_code
+        == 409
+    )
+    resumed = client.put(path, headers=headers, json=payload | {"owner_confirmed": True})
+    assert resumed.status_code == 200
+    assert resumed.json()["version"] == applied.connection_version + 1
+    assert (
+        client.put(path, headers=headers, json=payload | {"owner_confirmed": True}).status_code
+        == 409
+    )
+    with factory() as session:
+        connection = session.execute(
+            text(
+                "SELECT status, safety_stop_reason, safety_events "
+                "FROM source_connections WHERE id = :id"
+            ),
+            {"id": applied.connection_id},
+        ).one()
+        assert connection.status == "active"
+        assert connection.safety_stop_reason is None
+        assert [event["action"] for event in connection.safety_events] == ["paused", "resumed"]
+        assert connection.safety_events[1]["actor_id"] == str(owner_id)
+        assert connection.safety_events[1]["before_version"] == applied.connection_version
+        assert connection.safety_events[1]["after_version"] == applied.connection_version + 1
+    with factory.begin() as session:
+        pause_bilibili_connection_in_transaction(
+            session,
+            owner_id=owner_id,
+            connection_id=applied.connection_id,
+            connection_version=applied.connection_version + 1,
+            now=datetime.now(UTC),
+            reason=SourceStopReason.AUTHENTICATION_REQUIRED,
+            trigger_job_id=uuid4(),
+        )
+    cli_resumed = runner.invoke(
+        cli_app,
+        [
+            "sources",
+            "resume-bilibili",
+            "--expected-version",
+            str(applied.connection_version + 1),
+            "--owner-reviewed",
+        ],
+    )
+    assert cli_resumed.exit_code == 0
+    assert f"version: {applied.connection_version + 2}" in cli_resumed.stdout
 
 
 def test_disabled_connection_rejects_manual_retry_of_historical_job(

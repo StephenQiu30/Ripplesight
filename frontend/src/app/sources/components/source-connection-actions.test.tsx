@@ -55,4 +55,16 @@ describe("source connection controls", () => {
     });
     expect(html).toContain("替换连接");
   });
+  it("does not show a safety pause for an ordinary Bilibili process failure", () => {
+    const html = render({
+      ...platform,
+      source_key: "bilibili",
+      display_name: "B 站关键词与评论",
+      connection_version: 2,
+      connection_status: "active",
+      credential_configured: false,
+    });
+    expect(html).not.toContain("来源已暂停");
+    expect(html).not.toContain("本人核查");
+  });
 });

@@ -23,7 +23,7 @@ G0 核对：历史 `68f1b02b` 的 046 S03 验收全项 `passed`；Plan002 已完
 
 ## 固定字段与实施路径
 
-修改 `backend/app/sources/adapters/mediacrawler.py`、`connections/presets.py`、`jobs/schemas.py`、`jobs/models.py` 与唯一schema。上游 `380b426000aac3d612837ed72c99808347dc94c9`、补丁提交 `fb4e6c57ade1c7a2b3a61e69abc4fd4130047eb2`、适配器 `mediacrawler-fb4e6c5-hotkey-safe` 分别写入固定Job配置/执行证据字段；组件策略存基线与补丁引用，实际运行证据关联operation_id、job_id、connection_version。旧历史只有component_version时标版本证据不完整，不反填虚假三版本。
+修改 `backend/app/sources/adapters/mediacrawler.py`、`connections/presets.py`、`jobs/schemas.py`、`jobs/models.py` 与唯一schema。上游 `380b426000aac3d612837ed72c99808347dc94c9`、Plan011 后固定补丁提交 `1bd07bc783963acef092ff00771207b7792b8cb6`、适配器 `mediacrawler-1bd07bc-hotkey-safe` 分别写入固定Job配置/执行证据字段；组件策略存基线与补丁引用，实际运行证据关联operation_id、job_id、connection_version。旧历史只有component_version时标版本证据不完整，不反填虚假三版本。
 
 校验固定目录realpath、HEAD和tracked diff，先于子进程/任何平台请求；错误稳定分类为 `mediacrawler_revision_mismatch`、`mediacrawler_worktree_dirty`、`mediacrawler_version_evidence_missing`，失败不映射认证失效。只允许已配置固定根，未受控可执行文件/未跟踪代码可能影响执行时同样拒绝，runtime私有输出按明确白名单隔离，不修改外部工作树或自动打补丁。
 

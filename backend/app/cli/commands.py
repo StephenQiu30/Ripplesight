@@ -27,6 +27,8 @@ from connections.schemas import (
     ConnectionEvidenceOutcome,
     ProbeEvidenceInput,
     SourceConnectionConfig,
+    SourceConnectionStatus,
+    SourceConnectionUpdateInput,
     SourceEntryPoint,
 )
 from connections.services import (
@@ -173,6 +175,64 @@ def apply_source_preset(
         f"connection: {applied.connection_id}; version: {applied.connection_version}; "
         f"capabilities: {capabilities}"
     )
+
+
+@sources_app.command("status-bilibili")
+def status_bilibili() -> None:
+    """Show the current Bilibili safety stop without exposing local browser data."""
+    settings = get_settings()
+    engine = create_db_engine(settings)
+    session = create_session_factory(engine)()
+    try:
+        owner_id = IdentityService(session, settings).initialized_owner_id()
+        platform = next(
+            item
+            for item in SourceConnectionService(session).list_platforms(owner_id=owner_id)
+            if item.source_key == "bilibili"
+        )
+    except ApplicationError as error:
+        typer.echo(f"Bilibili status failed: {error.code}", err=True)
+        raise typer.Exit(code=1) from None
+    finally:
+        session.close()
+        engine.dispose()
+    reason = platform.safety_stop_reason.value if platform.safety_stop_reason else "none"
+    typer.echo(
+        f"Bilibili connection: {platform.connection_status or 'not_connected'}; "
+        f"version: {platform.connection_version or 0}; safety reason: {reason}"
+    )
+
+
+@sources_app.command("resume-bilibili")
+def resume_bilibili(
+    expected_version: Annotated[int, typer.Option(min=1)],
+    owner_reviewed: Annotated[
+        bool, typer.Option(help="I reviewed my account and access state.")
+    ] = False,
+) -> None:
+    """Resume only a safety-paused Bilibili connection after owner review."""
+    settings = get_settings()
+    engine = create_db_engine(settings)
+    session = create_session_factory(engine)()
+    try:
+        owner_id = IdentityService(session, settings).initialized_owner_id()
+        connection = SourceConnectionService(session).update_connection(
+            owner_id=owner_id,
+            source_key="bilibili",
+            command=SourceConnectionUpdateInput(
+                expected_version=expected_version,
+                status=SourceConnectionStatus.ACTIVE,
+                owner_confirmed=owner_reviewed,
+            ),
+        )
+    except (ApplicationError, ValidationError, ValueError) as error:
+        code = error.code if isinstance(error, ApplicationError) else "invalid_connection_request"
+        typer.echo(f"Bilibili resume failed: {code}", err=True)
+        raise typer.Exit(code=1) from None
+    finally:
+        session.close()
+        engine.dispose()
+    typer.echo(f"Bilibili connection resumed: {connection.id}; version: {connection.version}")
 
 
 @sources_app.command("probe-webpage")

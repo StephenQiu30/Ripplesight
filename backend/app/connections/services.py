@@ -765,6 +765,8 @@ class SourceConnectionService:
         catalog = next((item for item in SOURCE_CATALOG if item.source_key == source_key), None)
         if catalog is None:
             raise ApplicationError("resource_not_found")
+        if command.owner_confirmed and (source_key != "bilibili" or command.expected_version == 0):
+            raise ApplicationError("connection_safety_resume_conflict")
         if (
             catalog.auth_kind is SourceConnectionAuthKind.SERVER_CREDENTIAL
             and command.allowed_hosts
@@ -845,6 +847,17 @@ class SourceConnectionService:
             )
             if previous is None:
                 raise RuntimeError("current connection version is not visible")
+            safety_resume = (
+                source_key == "bilibili"
+                and connection.safety_stop_reason is not None
+                and command.status is SourceConnectionStatus.ACTIVE
+            )
+            if safety_resume and not command.owner_confirmed:
+                raise ApplicationError("connection_owner_confirmation_required")
+            if command.owner_confirmed and not safety_resume:
+                raise ApplicationError("connection_safety_resume_conflict")
+            if safety_resume and connection.current_version != command.expected_version:
+                raise ApplicationError("connection_version_conflict")
             if command.status is SourceConnectionStatus.DISABLED:
                 target_auth_kind = SourceConnectionAuthKind(previous.auth_kind)
                 target_ref = previous.secret_ref
@@ -871,10 +884,27 @@ class SourceConnectionService:
             if connection.current_version != command.expected_version:
                 if not (unchanged and connection.current_version == command.expected_version + 1):
                     raise ApplicationError("connection_version_conflict")
-            elif not unchanged:
+            elif not unchanged or safety_resume:
+                previous_version = connection.current_version
                 connection.current_version += 1
                 connection.status = command.status.value
                 connection.updated_at = now
+                if safety_resume:
+                    connection.safety_events = [
+                        *connection.safety_events,
+                        {
+                            "action": "resumed",
+                            "actor_id": str(owner_id),
+                            "at": now.isoformat(),
+                            "reason": "owner_reviewed",
+                            "before_version": previous_version,
+                            "after_version": connection.current_version,
+                        },
+                    ]
+                    connection.safety_stop_reason = None
+                    connection.safety_trigger_job_id = None
+                    connection.safety_stopped_at = None
+                    connection.safety_stopped_version = None
                 self._session.add(
                     SourceConnectionVersion(
                         connection_id=connection.id,
@@ -1196,6 +1226,13 @@ class SourceConnectionService:
             has_credentials=current_version is not None and current_version.secret_ref is not None,
             connection_id=connection.id if connection is not None else None,
             connection_status=SourceConnectionStatus(connection.status) if connection else None,
+            safety_stop_reason=(
+                SourceStopReason(connection.safety_stop_reason)
+                if connection is not None and connection.safety_stop_reason is not None
+                else None
+            ),
+            safety_stopped_at=connection.safety_stopped_at if connection else None,
+            safety_trigger_job_id=connection.safety_trigger_job_id if connection else None,
             credential_configured=configured_ref is not None,
             credential_update_available=connection is not None
             and catalog.auth_kind is SourceConnectionAuthKind.SERVER_CREDENTIAL
@@ -1335,10 +1372,17 @@ def pause_bilibili_connection_in_transaction(
     connection_id: UUID,
     connection_version: int,
     now: datetime,
+    reason: SourceStopReason,
+    trigger_job_id: UUID,
 ) -> None:
     """Fence and disable a local crawler login after auth/rate-limit evidence."""
     if not session.in_transaction() or now.tzinfo is None:
         raise RuntimeError("Bilibili pause requires a transaction and aware time")
+    if reason not in {
+        SourceStopReason.AUTHENTICATION_REQUIRED,
+        SourceStopReason.RATE_LIMITED,
+    }:
+        raise ValueError("Bilibili pause requires a controlled safety stop reason")
     connection = session.scalar(
         select(SourceConnection)
         .where(
@@ -1348,10 +1392,30 @@ def pause_bilibili_connection_in_transaction(
         )
         .with_for_update()
     )
-    if connection is None or connection.current_version != connection_version:
+    if (
+        connection is None
+        or connection.current_version != connection_version
+        or connection.safety_stop_reason is not None
+    ):
         return
     connection.status = SourceConnectionStatus.DISABLED.value
     connection.updated_at = now.astimezone(UTC)
+    connection.safety_stop_reason = reason.value
+    connection.safety_trigger_job_id = trigger_job_id
+    connection.safety_stopped_at = now.astimezone(UTC)
+    connection.safety_stopped_version = connection_version
+    connection.safety_events = [
+        *connection.safety_events,
+        {
+            "action": "paused",
+            "actor_id": "system",
+            "at": now.astimezone(UTC).isoformat(),
+            "reason": reason.value,
+            "trigger_job_id": str(trigger_job_id),
+            "before_version": connection_version,
+            "after_version": connection_version,
+        },
+    ]
 
 
 def require_source_connection_version(

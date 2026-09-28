@@ -57,6 +57,27 @@ class SourceConnection(Base):
             name="source_connections_current_version_check",
         ),
         CheckConstraint(
+            "safety_stop_reason IS NULL OR safety_stop_reason IN "
+            "('authentication_required', 'rate_limited')",
+            name="source_connections_safety_stop_reason_check",
+        ),
+        CheckConstraint(
+            "safety_stopped_version IS NULL OR safety_stopped_version >= 1",
+            name="source_connections_safety_stopped_version_check",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(safety_events) = 'array'",
+            name="source_connections_safety_events_array_check",
+        ),
+        CheckConstraint(
+            "(safety_stop_reason IS NULL AND safety_trigger_job_id IS NULL "
+            "AND safety_stopped_at IS NULL AND safety_stopped_version IS NULL) "
+            "OR (source_key = 'bilibili' AND status = 'disabled' "
+            "AND safety_stop_reason IS NOT NULL AND safety_trigger_job_id IS NOT NULL "
+            "AND safety_stopped_at IS NOT NULL AND safety_stopped_version IS NOT NULL)",
+            name="source_connections_safety_stop_complete_check",
+        ),
+        CheckConstraint(
             "updated_at >= created_at",
             name="source_connections_updated_at_check",
         ),
@@ -67,6 +88,13 @@ class SourceConnection(Base):
     source_key: Mapped[str] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(16))
     current_version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+    safety_stop_reason: Mapped[str | None] = mapped_column(String(32))
+    safety_trigger_job_id: Mapped[UUID | None]
+    safety_stopped_at: Mapped[datetime | None]
+    safety_stopped_version: Mapped[int | None] = mapped_column(Integer)
+    safety_events: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb")
+    )
     created_at: Mapped[datetime]
     updated_at: Mapped[datetime]
 

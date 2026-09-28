@@ -51,6 +51,12 @@ APPLICATION_ERRORS: Mapping[str, PublicError] = {
     "connection_credentials_missing": PublicError(
         409, "connection_credentials_missing", "请先由维护者配置服务端连接凭据"
     ),
+    "connection_owner_confirmation_required": PublicError(
+        409, "connection_owner_confirmation_required", "请本人核查账号和访问状态后确认恢复"
+    ),
+    "connection_safety_resume_conflict": PublicError(
+        409, "connection_safety_resume_conflict", "当前连接没有待恢复的安全停用"
+    ),
     "invalid_connection_configuration": PublicError(
         422, "invalid_connection_configuration", "来源连接配置不符合当前来源要求"
     ),
