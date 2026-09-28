@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from ai.services import AI_COMPONENT_KEY
+from analysis.services import build_analysis_need_ledger_in_transaction
 from core.config import get_settings
 from core.errors import ApplicationError
 from db.session import create_db_engine, create_session_factory
@@ -27,6 +28,37 @@ from jobs.services import JobObservationService, ResourceBudgetService
 from sources.contracts import SourceCapability
 
 jobs_app = typer.Typer(no_args_is_help=True)
+
+
+@jobs_app.command("analysis-need-ledger")
+def analysis_need_ledger(
+    owner_id: Annotated[
+        UUID, typer.Option(help="Owner whose exact-version candidates are audited.")
+    ],
+    start: Annotated[str, typer.Option(help="UTC analysis-need start (inclusive).")],
+    end: Annotated[str, typer.Option(help="UTC analysis-need end (exclusive).")],
+    cutoff: Annotated[str, typer.Option(help="UTC observation cutoff, at or after end.")],
+) -> None:
+    """Export raw candidate IDs without claiming a Codex availability denominator."""
+    start_at = _parse_utc_datetime(start, option="--start")
+    end_at = _parse_utc_datetime(end, option="--end")
+    cutoff_at = _parse_utc_datetime(cutoff, option="--cutoff")
+    engine = create_db_engine(get_settings())
+    try:
+        with create_session_factory(engine)() as session, session.begin():
+            try:
+                result = build_analysis_need_ledger_in_transaction(
+                    session,
+                    owner_id=owner_id,
+                    start=start_at,
+                    end=end_at,
+                    cutoff_at=cutoff_at,
+                )
+            except ValueError as error:
+                raise typer.BadParameter(str(error), param_hint="--start/--end/--cutoff") from error
+    finally:
+        engine.dispose()
+    typer.echo(json.dumps(result.model_dump(mode="json"), allow_nan=False, separators=(",", ":")))
 
 
 @jobs_app.command("coverage-metrics")

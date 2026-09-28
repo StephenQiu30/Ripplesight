@@ -4,8 +4,10 @@ import pytest
 from pydantic import ValidationError
 
 from jobs.metrics import (
+    AnalysisTimingSample,
     CollectionTimingSample,
     expected_hotlist_buckets,
+    summarize_analysis_timing,
     summarize_collection_timing,
 )
 from jobs.schemas import (
@@ -164,3 +166,33 @@ def test_hotlist_expected_buckets_count_missing_rows_across_utc_day() -> None:
         )
         == 143
     )
+
+
+def test_analysis_timing_keeps_matured_failures_and_pending_samples() -> None:
+    start = datetime(2026, 9, 27, 23, 30, tzinfo=UTC)
+    cutoff = start + timedelta(hours=2)
+    result = summarize_analysis_timing(
+        (
+            AnalysisTimingSample(start, start + timedelta(seconds=3600)),
+            AnalysisTimingSample(start, start + timedelta(seconds=3601)),
+            AnalysisTimingSample(start, None),
+            AnalysisTimingSample(start + timedelta(minutes=90), None),
+        ),
+        cutoff_at=cutoff,
+    )
+    assert (result.matured_count, result.timely_valid_count) == (3, 1)
+    assert (result.late_or_missing_count, result.pending_observation_count) == (2, 1)
+
+
+def test_analysis_timing_zero_and_exact_maturity_boundary() -> None:
+    assert summarize_analysis_timing((), cutoff_at=BASE).matured_count == 0
+    pending = summarize_analysis_timing(
+        (AnalysisTimingSample(BASE, None),),
+        cutoff_at=BASE + timedelta(seconds=3599),
+    )
+    mature = summarize_analysis_timing(
+        (AnalysisTimingSample(BASE, None),),
+        cutoff_at=BASE + timedelta(seconds=3600),
+    )
+    assert (pending.pending_observation_count, pending.matured_count) == (1, 0)
+    assert (mature.pending_observation_count, mature.late_or_missing_count) == (0, 1)

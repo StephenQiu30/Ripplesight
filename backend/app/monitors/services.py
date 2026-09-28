@@ -109,6 +109,47 @@ class TopicAnalysisRuleTimeline:
     active_spans: tuple[tuple[datetime, datetime | None], ...]
 
 
+@dataclass(frozen=True, slots=True)
+class TopicAnalysisRuleIdentity:
+    """Owner-scoped immutable rule identity for historical analysis audits."""
+
+    topic_id: UUID
+    topic_rule_version: int
+    rules: NormalizedMonitorRules
+    source_keys: tuple[str, ...]
+
+
+def list_topic_analysis_rule_identities_in_transaction(
+    session: Session, *, owner_id: UUID, before: datetime
+) -> tuple[TopicAnalysisRuleIdentity, ...]:
+    if not session.in_transaction():
+        raise RuntimeError("topic rule reads require the caller's transaction")
+    if before.tzinfo is None:
+        raise ValueError("topic rule cutoff must be timezone-aware")
+    versions = session.scalars(
+        select(MonitorTopicVersion)
+        .join(MonitorTopic, MonitorTopic.id == MonitorTopicVersion.topic_id)
+        .where(
+            MonitorTopic.owner_id == owner_id,
+            MonitorTopicVersion.created_at < before.astimezone(UTC),
+        )
+        .order_by(MonitorTopicVersion.topic_id, MonitorTopicVersion.version)
+    ).all()
+    return tuple(
+        TopicAnalysisRuleIdentity(
+            topic_id=version.topic_id,
+            topic_rule_version=version.version,
+            rules=normalize_monitor_rules(
+                match_any=version.match_any,
+                match_all=version.match_all,
+                exclude=version.exclude,
+            ),
+            source_keys=tuple(version.source_keys),
+        )
+        for version in versions
+    )
+
+
 def load_topic_analysis_rule_timeline_in_transaction(
     session: Session,
     *,

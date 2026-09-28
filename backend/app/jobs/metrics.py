@@ -25,6 +25,21 @@ class CollectionTimingResult:
     result: Literal["passed", "failed", "indeterminate", "no_samples"]
 
 
+@dataclass(frozen=True, slots=True)
+class AnalysisTimingSample:
+    needed_at: datetime
+    first_valid_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class AnalysisTimingResult:
+    sample_count: int
+    matured_count: int
+    pending_observation_count: int
+    timely_valid_count: int
+    late_or_missing_count: int
+
+
 def _utc(value: datetime) -> datetime:
     if value.utcoffset() != timedelta(0):
         raise ValueError("metric timestamps must be UTC")
@@ -68,6 +83,33 @@ def summarize_collection_timing(
         result = "failed" if lower_median > target_seconds else "indeterminate"
     return CollectionTimingResult(
         len(samples), finished_count, len(samples) - finished_count, exact, lower_median, result
+    )
+
+
+def summarize_analysis_timing(
+    samples: Sequence[AnalysisTimingSample], *, cutoff_at: datetime
+) -> AnalysisTimingResult:
+    """Count 60-minute mature identities; this does not certify Codex availability."""
+    cutoff = _utc(cutoff_at)
+    matured = timely = 0
+    for sample in samples:
+        needed = _utc(sample.needed_at)
+        if needed > cutoff:
+            raise ValueError("future analysis need cannot enter the measured set")
+        valid = _utc(sample.first_valid_at) if sample.first_valid_at is not None else None
+        if valid is not None and valid < needed:
+            raise ValueError("valid analysis cannot precede its need")
+        deadline = needed + timedelta(hours=1)
+        if deadline <= cutoff:
+            matured += 1
+            if valid is not None and valid <= deadline:
+                timely += 1
+    return AnalysisTimingResult(
+        sample_count=len(samples),
+        matured_count=matured,
+        pending_observation_count=len(samples) - matured,
+        timely_valid_count=timely,
+        late_or_missing_count=matured - timely,
     )
 
 
