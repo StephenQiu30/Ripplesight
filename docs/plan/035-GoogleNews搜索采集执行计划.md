@@ -3,9 +3,9 @@ layer: Plan
 scope: issue
 doc_no: "035"
 title: GoogleNews搜索采集执行计划
-status: in_progress
-version: v1.0
-date: 2026-09-26
+status: completed
+version: v1.1
+date: 2026-09-28
 owner: HotKey Team
 canonical_path: docs/plan/035-GoogleNews搜索采集执行计划.md
 prd: docs/prd/002-信息获取主链路需求.md
@@ -27,7 +27,7 @@ depends_on: ["031", "033"]
 
 - [x] CHK-035-001 → DATA-001：扩展 `backend/tests/unit/test_feed_adapters.py`，覆盖无 guid、无时间、空摘要、重复 guid、不同帖子相同标题、HTML 字段与合法空 Feed。
 - [x] CHK-035-002 → JOB-001/SEC-001：新增 `backend/tests/integration/test_google_news_replay.py` 并扩展 `test_keyword_search_adapters.py`，验证主题换版、窗边界、重复消息、失败保留已入库、重定向拒绝与预算截断；断言请求/页/内容/去重对账。
-- [ ] CHK-035-003 → AC-002-002/004：用一个真实获准主题取得可打开原帖，保存 RSS 观察时间、Job、内容版本、首次发现与覆盖事实；再次扫描身份不重复。无真实命中则记录未通过，不能用受控 Feed 替代。
+- [x] CHK-035-003 → AC-002-002/004：真实获准主题的 RSS 链接在浏览器跳转到可打开的出版社原帖；两轮观察、Job、内容版本、首次发现与部分覆盖同库对账，见 EV-002-018/044。
 
 运行 B 门禁和上述测试；不新建专用 HTTP API，消费现有主题、Job、内容与覆盖端点。结果写 M1 Acceptance 的 Plan 035，真实证据保留来源失败和未知尾段；72 小时由 009，相关性由 040/005。失败停本来源调度，已有资料继续可读。
 
@@ -38,7 +38,9 @@ depends_on: ["031", "033"]
 - [x] CHK-035-G2-001：保存无guid、重定向、半页失败及预算截断失败测试。
 - [x] CHK-035-G3-001：完成CHK-035-001/002，入库与缺口、预算同账。
 - [x] CHK-035-G4-001：运行B及真实PostgreSQL/Kafka重放验证。
-- [ ] CHK-035-G5-001：执行CHK-035-003真实RSS→可打开原帖→二次去重。
+- [x] CHK-035-G5-001：执行CHK-035-003真实RSS→可打开原帖→二次去重，见 EV-002-044。
 - [x] CHK-035-G6-001：登记AC-002-002/004的本来源证据；72小时由009。
 
 2026-09-27 技术与真实运行证据见 Acceptance 002 EV-002-018。RSS `SourcePost.identity_basis` 已进 `content_records`/内容读取 DTO；预设、工厂和适配器同用固定入口，Google News 拒绝重定向。受控 PostgreSQL/Kafka 测试核对版本、时间边界、重投、失败保留与预算；真实同主题两轮各保存 87 条，身份总数仍 87，来源/全局预算含一次上游失败各 3。代码提交 `06b47ca5` 的远端 backend/contract/frontend/runtime 均成功，backend **875 passed、8 skipped**；固定名 `hotkey_test` 用例由远端覆盖，G4 通过。当前浏览器打开抽样 Google News RSS 原帖链接返回连接关闭，CHK-035-003/G5 未通过。保持 `in_progress`，不据此关闭 AC-002-002/004。
+
+2026-09-28 补充 EV-002-044：同一真实库另一抽样 RSS 链接在浏览器跳转新浪财经原帖，标题与持久内容版本一致；两轮同一内容 ID/版本各有观察与发现一条，原覆盖窗仍为部分。CHK-035-003/G5 据此通过，本单来源技术范围 `completed`。上段保留 09-27 的历史状态；定时首周期、共同 72 小时及 AC-002-002/004 父级验收由 009 汇合，尚未通过。

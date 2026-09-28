@@ -1,6 +1,6 @@
 # HotKey BACKLOG
 
-更新日期：2026-09-28。状态：**Plan 001/002/007/008/031/033/034/036/039 技术交付完成；035 原帖、M1 72 小时与 Codex 尚未验收**。早期 Claude/用户提供的 Plan 001/002/033 隔离库测试结果和后续逐卡证据见 [Acceptance 002](docs/acceptance/002-信息获取主链路验收.md)。任务、依赖、FR/NFR/AC 覆盖见 [Plan 001—057 索引](docs/plan/README.md)；产品边界见 [PRD 001](docs/prd/001-热点舆情监控平台需求.md) 和 [Design 001](docs/design/001-热点舆情监控平台总体设计.md)。旧里程碑 Plan/TASK 从 Git 追溯。
+更新日期：2026-09-28。状态：**Plan 001/002/007/008/031/033/034/035/036/039/051 技术完成；M1 72 小时与 Codex 未验收**。逐卡证据见 [Acceptance 002](docs/acceptance/002-信息获取主链路验收.md) 和 [Acceptance 001](docs/acceptance/001-共享运行门槛验收.md)；任务、依赖、FR/NFR/AC 见 [Plan 001—057 索引](docs/plan/README.md)，产品边界见 [PRD 001](docs/prd/001-热点舆情监控平台需求.md) 与 [Design 001](docs/design/001-热点舆情监控平台总体设计.md)。旧 Plan/TASK 从 Git 追溯。
 
 执行方：Codex 实现、受控集成与代码自检；Claude 可参与规划/代码审查；用户负责本人账号、授权与产品决策。用户已要求每个任务结束后提交并推送 main。代码、受控、真实、产品为不同证据等级。
 
@@ -10,7 +10,7 @@ Plan 004 只读覆盖 API 见 Acceptance 002 EV-002-016/043：owner/来源筛选
 
 Plan 007 HN 搜索与重放见 Acceptance 002 EV-002-017：真实 API→Kafka→Worker 两页观察 141 条、入库 111 条；重投无重复内容或预算实耗，远端及本地门禁通过。本卡手动搜索范围 `completed`；定时同窗和 72 小时归 009。
 
-Plan 035 Google News 见 Acceptance 002 EV-002-018：真实双轮各入库 87 条、总身份 87，来源/全局预算各实扣 3；RSS 尾段仍为部分覆盖。原帖打开未验，本卡 `in_progress`。
+Plan 035 见 Acceptance 002 EV-002-018/044：Google News 双轮各存 87 条、总身份 87；RSS 链接直达原帖，二扫无新身份/版本。预算各 3，尾段部分；技术 `completed`，定时/72 小时归 009，父级 AC 未过。
 
 Plan 036 SearXNG 见 Acceptance 002 EV-002-019：真实两轮各入库 7、总身份 7，MSN 原帖可打开，来源/全局预算各 2；尾段未知，远端三项 CI 通过，本卡 `completed`。
 
