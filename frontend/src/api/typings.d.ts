@@ -11,6 +11,95 @@ declare namespace HotKeyAPI {
     topic_id: string;
   };
 
+  type CollectionCoverageGapView = {
+    /** Start */
+    start: string;
+    /** End */
+    end: string;
+    /** Reason */
+    reason: string;
+  };
+
+  type CollectionCoverageStatus =
+    | "unattempted"
+    | "running"
+    | "confirmed"
+    | "empty"
+    | "partial"
+    | "failed"
+    | "stopped"
+    | "analysis_pending";
+
+  type CollectionCoverageView = {
+    /** Window Id */
+    window_id: string;
+    /** Source Key */
+    source_key: string;
+    capability: SourceCapability;
+    /** Topic Id */
+    topic_id: string | null;
+    /** Due At */
+    due_at: string;
+    /** Window Start */
+    window_start: string;
+    /** Window End */
+    window_end: string;
+    admission_state: DueAdmissionState;
+    /** Admission Reason */
+    admission_reason: string | null;
+    /** Current Connection Version */
+    current_connection_version: number | null;
+    current_connection_status: SourceConnectionStatus | null;
+    /** Job Connection Version */
+    job_connection_version: number | null;
+    /** Job Id */
+    job_id: string | null;
+    job_status: JobStatus | null;
+    /** Attempts */
+    attempts: number | null;
+    /** Started At */
+    started_at: string | null;
+    /** Finished At */
+    finished_at: string | null;
+    /** Last Success At */
+    last_success_at: string | null;
+    coverage_status: CollectionCoverageStatus;
+    /** Terminal Evidence */
+    terminal_evidence: boolean | null;
+    /** Request Count */
+    request_count: number | null;
+    /** Request Attempt Count */
+    request_attempt_count: number | null;
+    /** Page Count */
+    page_count: number | null;
+    /** Observed Count */
+    observed_count: number | null;
+    /** Inserted Count */
+    inserted_count: number | null;
+    /** Deduplicated Count */
+    deduplicated_count: number | null;
+    /** Analysis Pending Count */
+    analysis_pending_count: number | null;
+    /** Analysis Failed Count */
+    analysis_failed_count: number | null;
+    /** Analysis Invalid Count */
+    analysis_invalid_count: number | null;
+    /** Analysis Valid Count */
+    analysis_valid_count: number | null;
+    /** Budget Limit */
+    budget_limit: number | null;
+    /** Budget Reserved */
+    budget_reserved: number | null;
+    /** Budget Consumed */
+    budget_consumed: number | null;
+    /** Gaps */
+    gaps: CollectionCoverageGapView[];
+    /** Content Ids */
+    content_ids: string[];
+    /** Snapshot Ids */
+    snapshot_ids: string[];
+  };
+
   type CollectionScanKind = "new_scan" | "refresh" | "backfill";
 
   type ContentDiscoveryView = {
@@ -189,6 +278,8 @@ declare namespace HotKeyAPI {
     page_count: number;
   };
 
+  type DueAdmissionState = "pending" | "accepted" | "skipped" | "missed";
+
   type ErrorView = {
     /** Code */
     code: string;
@@ -198,6 +289,10 @@ declare namespace HotKeyAPI {
     request_id: string;
     /** Details */
     details?: ValidationErrorItem[] | null;
+  };
+
+  type getCollectionCoverageParams = {
+    window_id: string;
   };
 
   type getCollectionJobParams = {
@@ -255,6 +350,10 @@ declare namespace HotKeyAPI {
     snapshot_id: string;
     /** Source Key */
     source_key: string;
+    /** Operation Id */
+    operation_id: string;
+    /** Due At */
+    due_at: string;
     /** Observed At */
     observed_at: string;
     /** Entry Count */
@@ -302,6 +401,20 @@ declare namespace HotKeyAPI {
     /** Job Id */
     job_id: string;
     status: JobAcceptanceStatus;
+  };
+
+  type JobAttemptTimingView = {
+    /** Lease Epoch */
+    lease_epoch: number;
+    /** Collection Cycle No */
+    collection_cycle_no: number;
+    /** Started At */
+    started_at: string;
+    /** Finished At */
+    finished_at: string | null;
+    /** Outcome */
+    outcome:
+      "expired" | "succeeded" | "cancelled" | "delayed" | "failed" | null;
   };
 
   type JobCancellationView = {
@@ -412,6 +525,14 @@ declare namespace HotKeyAPI {
 
   type JobStage = "request" | "parse" | "save" | "analysis";
 
+  type JobStatus =
+    | "queued"
+    | "running"
+    | "succeeded"
+    | "partially_succeeded"
+    | "failed"
+    | "cancelled";
+
   type JobStatusView = {
     /** Id */
     id: string;
@@ -428,6 +549,23 @@ declare namespace HotKeyAPI {
     result_content_id: string | null;
     /** Retry Count */
     retry_count: number;
+    /** Collection Cycle No */
+    collection_cycle_no: number;
+    /** Collection Cycle Started At */
+    collection_cycle_started_at: string | null;
+    /** Collection Cycle Pending */
+    collection_cycle_pending: boolean;
+    /** Collection Cycle Limit Seconds */
+    collection_cycle_limit_seconds: number | null;
+    /** Collection Cycle Remaining Us */
+    collection_cycle_remaining_us: number | null;
+    latest_attempt: JobAttemptTimingView | null;
+    /** Queue Wait Us */
+    queue_wait_us: number | null;
+    /** Current Attempt Duration Us */
+    current_attempt_duration_us: number | null;
+    /** Total Duration Us */
+    total_duration_us: number;
     /** Next Run At */
     next_run_at: string | null;
     /** Scheduled For At */
@@ -444,6 +582,16 @@ declare namespace HotKeyAPI {
   };
 
   type KeywordInput = string;
+
+  type listCollectionCoverageParams = {
+    start: string;
+    end: string;
+    source_key?: string | null;
+    capability?: SourceCapability | null;
+    topic_id?: string | null;
+    limit?: number;
+    cursor?: string | null;
+  };
 
   type listCollectionJobsParams = {
     cursor?: string | null;
@@ -547,6 +695,34 @@ declare namespace HotKeyAPI {
   type MonitorTopicReadinessStatus =
     "pending_source_selection" | "pending_source_readiness" | "ready";
 
+  type MonitorTopicRunInput = {
+    /** Operation Id */
+    operation_id: string;
+    /** Source Keys */
+    source_keys: SourceKeyInput[];
+  };
+
+  type MonitorTopicRunSourceView = {
+    /** Source Key */
+    source_key: string;
+    /** Job Ids */
+    job_ids: string[];
+    /** Skip Reason */
+    skip_reason:
+      "source_unavailable" | "quiet" | "budget" | "rate_limited" | null;
+  };
+
+  type MonitorTopicRunView = {
+    /** Operation Id */
+    operation_id: string;
+    /** Topic Id */
+    topic_id: string;
+    /** Topic Version */
+    topic_version: number;
+    /** Sources */
+    sources: MonitorTopicRunSourceView[];
+  };
+
   type MonitorTopicStatus = "paused" | "active" | "archived";
 
   type MonitorTopicUpdateInput = {
@@ -601,6 +777,13 @@ declare namespace HotKeyAPI {
   };
 
   type NotificationTargetNameInput = string;
+
+  type PageViewCollectionCoverageView_ = {
+    /** Items */
+    items: CollectionCoverageView[];
+    /** Next Cursor */
+    next_cursor: string | null;
+  };
 
   type PageViewContentRecordSummaryView_ = {
     /** Items */
@@ -709,6 +892,10 @@ declare namespace HotKeyAPI {
 
   type retryCollectionJobParams = {
     job_id: string;
+  };
+
+  type runMonitorTopicParams = {
+    topic_id: string;
   };
 
   type SourceCapability =

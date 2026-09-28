@@ -1,11 +1,11 @@
 # HotKey Server 交接
 
-更新日期：2026-09-26。本文件只记录当前实现快照（≤5 KB）；需求见 [PRD 001 v5.0](docs/prd/001-热点舆情监控平台需求.md)，Epic 设计见 [Design 001 v4.0](docs/design/001-热点舆情监控平台总体设计.md) 及对应 Design，任务与证据见 [逐 Issue Plan 索引](docs/plan/README.md) 和 [BACKLOG](BACKLOG.md)。本次仅重构计划文档，代码实现和产品验收状态未改变。
+更新日期：2026-09-27。本文件只记录当前实现快照（≤5 KB）；需求见 [PRD 001 v5.0](docs/prd/001-热点舆情监控平台需求.md)，Epic 设计见 [Design 001 v4.1](docs/design/001-热点舆情监控平台总体设计.md) 及对应 Design，任务与证据见 [逐 Issue Plan 索引](docs/plan/README.md) 和 [BACKLOG](BACKLOG.md)。Codex 仅在独立 worktree 工作，共享 checkout 由其他任务并行编辑；当前工作树未提交或推送。
 
 ## 当前边界
 
 - 信息获取是当前核心：四关键词来源 HN Algolia、Google News 搜索 RSS、本机 SearXNG `duckduckgo news`、本机 RSSHub `/36kr/newsflashes`；六个 RSSHub 公开热榜；HN 评论父链、来源 × 能力 × 时间窗覆盖和本机 Codex 相关性。M1 须同窗连续 72 小时真实验收。日报/周报、Obsidian 与推送各自后验，飞书暂缓。
-- 单 owner 登录、主题、连接、内容、Outbox/Kafka/Worker、预算、备份、统一错误契约及 Web 工作台已有代码。宿主机单 Worker 已注册 `webpage.collect`、`keyword.search`、`source.comments`、`source.hotlist`、`analysis.annotate`、`report.daily`、`notification.send`、`knowledge.export`；独立调度进程已存在。事件归并、SMTP 与统一覆盖查询仍待实现，旧“Worker 只有网页处理器”的记录已过期。
+- 单 owner 登录、主题、连接、内容、Outbox/Kafka/Worker、预算、备份、统一错误契约及 Web 工作台已有代码。宿主机单 Worker 已注册关键词、评论、热榜、分析、报告、推送、导出与网页任务；独立调度进程已存在。事件归并与 SMTP 未实现；统一覆盖查询在独立 worktree 已对账受控状态及 HN/36Kr 热榜各一真实来源窗口。
 - 本人账号来源本轮仅 B 站试点。MediaCrawler 固定补丁及独立 CDP 资料记录在 `~/Desktop/Docker/mediacrawler-start-local/`，HotKey 从宿主机启动子进程；评论只读同轮缓存的一级评论每帖 ≤20 条。修复前真实尝试失败，修复后尚未真实采集，开关关闭。未知非零退出误归认证失效、组件三类版本证据、停用和人工恢复仍需修复/验收；不把离线回放称为接入成功。
 
 ## 证据快照
@@ -27,4 +27,4 @@
 
 ## 下一步
 
-现行Plan为001—052：先001/002/005与051准备，033/032后做031/003/040，再四来源/评论/六榜、覆盖指标和页面，最后009同窗72小时。依赖图、FR/NFR/AC覆盖与具体交付见Plan索引；编号不是执行顺序。按Design002 §3.1/Design001 §6.2审查stash `paused: partial P2-2b + A7b implementation (2026-09-26)`，不得直接恢复为已完成代码。M2版本/风控可技术准备，真实运行仍需本人核查。M6准入046—050不替代平台实现，获准后从053续建。当前只修订文档；所有代码提交、推送须先有用户明确授权。
+Plan 001/002/033/035/037 技术完成；031/003/005/032/004/036 在独立 worktree，未合入共享 checkout。真实 HN 定时窗入库 117 条、Google News 82 条、SearXNG 13 条、36Kr 快讯 3 条；36Kr 榜快照 8 条，均有覆盖 API/原表对账，关键词窗保留未确认缺口。36Kr 快讯原帖浏览器可读、真实双扫同身份仅增观察，受控 PostgreSQL 及真实 Kafka 同 offset 重投通过；SearXNG 引擎不可用页面样本仍缺。Plan 007 的 HN 手动入口生产 Worker/Kafka 重投此前已验。隔离 PostgreSQL/Kafka 全量 **844 passed/21 skipped**；前端 **57 passed**、lint/typecheck/format/build 通过，OpenAPI 生成无漂移。下一步核对五榜、评论、Codex、浏览器工作台，最后由 Plan 009 同库 72 小时汇合；Plan 004/007/036 仍为 `in_progress`。见 Acceptance 002 EV-002-017—031。未经授权不提交或推送。

@@ -31,6 +31,7 @@ from jobs.execution import (
     StaleExecutionLeaseError,
     plan_catchup_windows,
 )
+from jobs.models import JobAttempt, OutboxMessage
 from jobs.schemas import (
     JobAcceptanceInput,
     JobFailureCategory,
@@ -38,6 +39,7 @@ from jobs.schemas import (
     JobReliabilityOutcome,
     JobStage,
     JobStatus,
+    JobStatusView,
 )
 from jobs.services import JobObservationService, JobService, OutboxService
 from sources.contracts import SourceCapability
@@ -70,7 +72,7 @@ def job_context() -> Iterator[JobTestContext]:
     with engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE hotlist_entries, hotlist_snapshots, "
+                "TRUNCATE collection_due_windows, hotlist_entries, hotlist_snapshots, "
                 "content_version_relations, content_visibility_observations, "
                 "content_observations, content_versions, "
                 "content_discoveries, content_threads, content_records, "
@@ -104,7 +106,7 @@ def job_context() -> Iterator[JobTestContext]:
         with engine.begin() as connection:
             connection.execute(
                 text(
-                    "TRUNCATE hotlist_entries, hotlist_snapshots, "
+                    "TRUNCATE collection_due_windows, hotlist_entries, hotlist_snapshots, "
                     "content_version_relations, content_visibility_observations, "
                     "content_observations, content_versions, "
                     "content_discoveries, content_threads, content_records, "
@@ -286,6 +288,203 @@ def test_lost_response_retry_returns_the_original_job_and_one_outbox(
         "source_key": "x",
         "source_capability": "search",
     }
+
+
+def test_manual_retry_opens_collection_cycle_only_when_next_lease_is_acquired(
+    job_context: JobTestContext,
+) -> None:
+    now = [datetime.now(UTC)]
+    with job_context.sessions() as session:
+        job = JobService(session, clock=lambda: now[0]).accept(
+            owner_id=job_context.owner_id, command=_command()
+        )
+    now[0] += timedelta(seconds=1)
+    with job_context.sessions() as session:
+        first_lease = JobExecutionService(session, lease_seconds=60, clock=lambda: now[0]).acquire(
+            job_id=job.id, worker_id="first-worker"
+        )
+    with job_context.sessions() as session:
+        running = JobService(session, clock=lambda: now[0]).get_status(
+            owner_id=job_context.owner_id, job_id=job.id
+        )
+    assert running.collection_cycle_no == 1
+    assert running.collection_cycle_started_at == now[0]
+    assert running.latest_attempt is not None
+    assert running.latest_attempt.collection_cycle_no == 1
+    first_started_at = running.started_at
+
+    now[0] += timedelta(seconds=3)
+    with job_context.sessions() as session:
+        JobExecutionService(session, lease_seconds=60, clock=lambda: now[0]).record_failure(
+            first_lease,
+            message=MessageReference(message_id=uuid4(), topic="cycle-test", partition=0, offset=0),
+            failure=JobExecutionFailure(
+                error_code="source_invalid_response",
+                category=JobFailureCategory.INVALID_RESPONSE,
+                occurred_at=now[0],
+                next_action="检查来源后手动重试",
+                manual_retry_allowed=True,
+            ),
+        )
+    now[0] += timedelta(seconds=120)
+    retry_start = Barrier(2)
+
+    def retry_concurrently() -> JobStatusView:
+        retry_start.wait()
+        with job_context.sessions() as session:
+            return JobService(session, clock=lambda: now[0]).request_retry(
+                owner_id=job_context.owner_id, job_id=job.id
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        queued, repeated = list(pool.map(lambda _: retry_concurrently(), range(2)))
+    assert queued.collection_cycle_pending is True
+    assert queued.collection_cycle_no == 1
+    assert queued.collection_cycle_started_at == first_started_at
+    assert repeated.collection_cycle_no == 1
+    assert repeated.collection_cycle_pending is True
+    with job_context.engine.connect() as connection:
+        assert (
+            connection.scalar(
+                text("SELECT count(*) FROM outbox_messages WHERE aggregate_id = :id"),
+                {"id": job.id},
+            )
+            == 2
+        )
+
+    now[0] += timedelta(seconds=60)
+    with job_context.sessions() as session:
+        second_lease = JobExecutionService(session, lease_seconds=60, clock=lambda: now[0]).acquire(
+            job_id=job.id, worker_id="second-worker"
+        )
+    with job_context.sessions() as session:
+        restarted = JobService(session, clock=lambda: now[0]).get_status(
+            owner_id=job_context.owner_id, job_id=job.id
+        )
+    assert restarted.started_at == first_started_at
+    assert restarted.collection_cycle_no == 2
+    assert restarted.collection_cycle_started_at == now[0]
+    assert restarted.collection_cycle_pending is False
+    assert restarted.latest_attempt is not None
+    assert restarted.latest_attempt.collection_cycle_no == 2
+    assert second_lease.epoch == first_lease.epoch + 1
+    with job_context.sessions() as session, pytest.raises(StaleExecutionLeaseError):
+        JobExecutionService(session, lease_seconds=60, clock=lambda: now[0]).save_checkpoint(
+            first_lease, sequence=1, checkpoint={"page": 1}
+        )
+
+
+def _failed_job_for_cycle_test(job_context: JobTestContext, now: list[datetime]) -> UUID:
+    with job_context.sessions() as session:
+        job = JobService(session, clock=lambda: now[0]).accept(
+            owner_id=job_context.owner_id, command=_command()
+        )
+    now[0] += timedelta(seconds=1)
+    with job_context.sessions() as session:
+        lease = JobExecutionService(session, lease_seconds=60, clock=lambda: now[0]).acquire(
+            job_id=job.id, worker_id="cycle-test-worker"
+        )
+    now[0] += timedelta(seconds=1)
+    with job_context.sessions() as session:
+        JobExecutionService(session, lease_seconds=60, clock=lambda: now[0]).record_failure(
+            lease,
+            message=MessageReference(message_id=uuid4(), topic="cycle-test", partition=0, offset=0),
+            failure=JobExecutionFailure(
+                error_code="source_invalid_response",
+                category=JobFailureCategory.INVALID_RESPONSE,
+                occurred_at=now[0],
+                next_action="检查来源后手动重试",
+                manual_retry_allowed=True,
+            ),
+        )
+    return job.id
+
+
+def test_manual_retry_and_next_cycle_roll_back_with_their_transactions(
+    job_context: JobTestContext,
+) -> None:
+    now = [datetime.now(UTC)]
+    job_id = _failed_job_for_cycle_test(job_context, now)
+    now[0] += timedelta(seconds=120)
+
+    with job_context.sessions() as session:
+
+        def reject_retry_flush(_session: Session, _context: object, _instances: object) -> None:
+            if any(isinstance(item, OutboxMessage) for item in session.new):
+                raise RuntimeError("injected retry rollback")
+
+        event.listen(session, "before_flush", reject_retry_flush)
+        with pytest.raises(RuntimeError, match="injected retry rollback"):
+            JobService(session, clock=lambda: now[0]).request_retry(
+                owner_id=job_context.owner_id, job_id=job_id
+            )
+    with job_context.sessions() as session:
+        failed = JobService(session, clock=lambda: now[0]).get_status(
+            owner_id=job_context.owner_id, job_id=job_id
+        )
+    assert failed.status == "failed"
+    assert failed.collection_cycle_no == 1
+    assert failed.collection_cycle_pending is False
+    with job_context.engine.connect() as connection:
+        assert (
+            connection.scalar(
+                text("SELECT count(*) FROM outbox_messages WHERE aggregate_id=:id"), {"id": job_id}
+            )
+            == 1
+        )
+
+    with job_context.sessions() as session:
+        queued = JobService(session, clock=lambda: now[0]).request_retry(
+            owner_id=job_context.owner_id, job_id=job_id
+        )
+    assert queued.collection_cycle_pending is True
+
+    with job_context.sessions() as session:
+
+        def reject_attempt_flush(_session: Session, _context: object, _instances: object) -> None:
+            if any(isinstance(item, JobAttempt) for item in session.new):
+                raise RuntimeError("injected claim rollback")
+
+        event.listen(session, "before_flush", reject_attempt_flush)
+        with pytest.raises(RuntimeError, match="injected claim rollback"):
+            JobExecutionService(session, lease_seconds=60, clock=lambda: now[0]).acquire(
+                job_id=job_id, worker_id="crashed-worker"
+            )
+    with job_context.sessions() as session:
+        still_queued = JobService(session, clock=lambda: now[0]).get_status(
+            owner_id=job_context.owner_id, job_id=job_id
+        )
+    assert still_queued.status == "queued"
+    assert still_queued.collection_cycle_no == 1
+    assert still_queued.collection_cycle_pending is True
+
+    with job_context.sessions() as session:
+        JobExecutionService(session, lease_seconds=60, clock=lambda: now[0]).acquire(
+            job_id=job_id, worker_id="recovered-worker"
+        )
+    with job_context.sessions() as session:
+        running = JobService(session, clock=lambda: now[0]).get_status(
+            owner_id=job_context.owner_id, job_id=job_id
+        )
+    assert running.collection_cycle_no == 2
+    assert running.collection_cycle_pending is False
+
+
+def test_cancelling_queued_manual_retry_clears_pending_cycle(job_context: JobTestContext) -> None:
+    now = [datetime.now(UTC)]
+    job_id = _failed_job_for_cycle_test(job_context, now)
+    now[0] += timedelta(seconds=120)
+    with job_context.sessions() as session:
+        JobService(session, clock=lambda: now[0]).request_retry(
+            owner_id=job_context.owner_id, job_id=job_id
+        )
+    with job_context.sessions() as session:
+        cancelled = JobService(session, clock=lambda: now[0]).request_cancel(
+            owner_id=job_context.owner_id, job_id=job_id
+        )
+    assert cancelled.status == "cancelled"
+    assert cancelled.collection_cycle_no == 1
+    assert cancelled.collection_cycle_pending is False
 
 
 def test_reliability_snapshot_uses_logical_start_and_durable_source_evidence(
@@ -571,6 +770,10 @@ def test_transient_failure_retries_twice_then_fails_without_replay_duplicates(
     assert tuple(counts) == (3, 3)
     assert status.status == "failed"
     assert status.retry_count == 2
+    assert status.collection_cycle_no == 1
+    assert status.collection_cycle_pending is False
+    assert status.latest_attempt is not None
+    assert status.latest_attempt.collection_cycle_no == 1
     assert status.progress.requests_sent == 3
     assert status.next_run_at is None
     assert status.failure is not None
@@ -742,13 +945,14 @@ def test_retry_outbox_is_published_only_when_due_and_only_once(
             max_attempts=2,
         )
 
-    create_job_message_handler(
+    handler = create_job_message_handler(
         job_context.sessions,
         {"monitor.collect": delay},
         worker_id="worker-rate-limit",
         lease_seconds=60,
         clock=lambda: clock[0],
-    )(_stored_message(job_context, job_id=job.id, dispatch_sequence=1, offset=0))
+    )
+    handler(_stored_message(job_context, job_id=job.id, dispatch_sequence=1, offset=0))
 
     with job_context.sessions() as session:
         assert (
@@ -775,6 +979,16 @@ def test_retry_outbox_is_published_only_when_due_and_only_once(
             == 0
         )
     assert published == [("job.accepted.v2", 2), ("job.retry_scheduled.v1", 1)]
+    clock[0] += timedelta(seconds=10)
+    handler(_stored_message(job_context, job_id=job.id, dispatch_sequence=2, offset=1))
+    with job_context.sessions() as session:
+        status = JobService(session, clock=lambda: clock[0]).get_status(
+            owner_id=job_context.owner_id, job_id=job.id
+        )
+    assert status.collection_cycle_no == 1
+    assert status.collection_cycle_pending is False
+    assert status.latest_attempt is not None
+    assert status.latest_attempt.collection_cycle_no == 1
 
 
 def test_reused_operation_id_with_different_scope_is_rejected(

@@ -6,7 +6,67 @@ import {
   JobCoverageWindows,
   JobResult,
   JobSourceFreshness,
+  JobTimingDetails,
 } from "./job-detail";
+
+describe("job timing", () => {
+  it("separates queue, attempt, total and remaining cycle time", () => {
+    const html = renderToStaticMarkup(
+      createElement(JobTimingDetails, {
+        job: {
+          collection_cycle_no: 2,
+          collection_cycle_started_at: "2026-09-27T12:03:00Z",
+          collection_cycle_pending: false,
+          collection_cycle_limit_seconds: 60,
+          collection_cycle_remaining_us: 45_000_000,
+          latest_attempt: {
+            lease_epoch: 2,
+            collection_cycle_no: 2,
+            started_at: "2026-09-27T12:03:00Z",
+            finished_at: null,
+            outcome: null,
+          },
+          queue_wait_us: null,
+          current_attempt_duration_us: 15_000_000,
+          total_duration_us: 195_000_000,
+        },
+      }),
+    );
+
+    expect(html).toContain("排队等待</dt><dd");
+    expect(html).toContain("当前尝试</dt><dd");
+    expect(html).toContain("15 秒");
+    expect(html).toContain("整单历时</dt><dd");
+    expect(html).toContain("3 分钟 15 秒");
+    expect(html).toContain("采集周期剩余</dt><dd");
+    expect(html).toContain("45 秒");
+    expect(html).toContain("第 2 个采集周期");
+    expect(html).toContain("最近尝试 #2");
+  });
+
+  it("does not spend the next cycle while a manual retry waits", () => {
+    const html = renderToStaticMarkup(
+      createElement(JobTimingDetails, {
+        job: {
+          collection_cycle_no: 1,
+          collection_cycle_started_at: "2026-09-27T12:00:00Z",
+          collection_cycle_pending: true,
+          collection_cycle_limit_seconds: 60,
+          collection_cycle_remaining_us: null,
+          latest_attempt: null,
+          queue_wait_us: 60_000_000,
+          current_attempt_duration_us: null,
+          total_duration_us: 180_000_000,
+        },
+      }),
+    );
+
+    expect(html).toContain("1 分钟");
+    expect(html).toContain("尚未开始");
+    expect(html).toContain("下一周期将在领取任务时开始");
+    expect(html).toContain("尚无执行尝试");
+  });
+});
 
 describe("job result", () => {
   it("links a persisted result to the existing content detail page", () => {

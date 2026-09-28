@@ -33,10 +33,14 @@ from content.models import (
     ContentVersion,
     ContentVersionRelation,
     ContentVisibilityObservation,
+    HotlistEntryRecord,
+    HotlistSnapshot,
 )
 from content.schemas import (
     AnalysisCommentContentView,
     AnalysisPostContentView,
+    CollectionContentCountView,
+    CollectionSnapshotFactView,
     CommentCollectionRunInput,
     ContentDiscoveryView,
     ContentMetricView,
@@ -391,6 +395,104 @@ class ContentService:
     def __init__(self, session: Session, *, clock: Clock | None = None) -> None:
         self._session = session
         self._clock = clock or (lambda: datetime.now(UTC))
+
+    def collection_counts_in_transaction(
+        self, *, owner_id: UUID, job_ids: tuple[UUID, ...]
+    ) -> tuple[CollectionContentCountView, ...]:
+        """Count committed observations and first ingestion by stable source identity."""
+        if not self._session.in_transaction():
+            raise RuntimeError("collection count reads require the caller's transaction")
+        if not job_ids:
+            return ()
+        observations = self._session.scalars(
+            select(ContentObservation).where(
+                ContentObservation.owner_id == owner_id,
+                ContentObservation.job_id.in_(job_ids),
+            )
+        ).all()
+        candidate_ids = {item.content_id for item in observations}
+        first_by_content: dict[UUID, ContentObservation] = {}
+        if candidate_ids:
+            history = self._session.scalars(
+                select(ContentObservation).where(
+                    ContentObservation.owner_id == owner_id,
+                    ContentObservation.content_id.in_(candidate_ids),
+                )
+            ).all()
+            for item in history:
+                previous = first_by_content.get(item.content_id)
+                if previous is None or (item.received_at, item.id) < (
+                    previous.received_at,
+                    previous.id,
+                ):
+                    first_by_content[item.content_id] = item
+        return tuple(
+            CollectionContentCountView(
+                job_id=job_id,
+                observation_count=sum(item.job_id == job_id for item in observations),
+                ingested_count=len(
+                    {item.content_id for item in observations if item.job_id == job_id}
+                ),
+                first_ingested_count=sum(
+                    item.job_id == job_id for item in first_by_content.values()
+                ),
+                deduplicated_count=sum(item.job_id == job_id for item in observations)
+                - sum(item.job_id == job_id for item in first_by_content.values()),
+                content_version_ids=tuple(
+                    sorted(
+                        {
+                            item.content_version_id
+                            for item in observations
+                            if item.job_id == job_id and item.content_version_id is not None
+                        },
+                        key=str,
+                    )
+                ),
+                content_ids=tuple(
+                    sorted(
+                        {item.content_id for item in observations if item.job_id == job_id},
+                        key=str,
+                    )
+                ),
+            )
+            for job_id in job_ids
+        )
+
+    def collection_snapshots_in_transaction(
+        self, *, owner_id: UUID, job_ids: tuple[UUID, ...]
+    ) -> tuple[CollectionSnapshotFactView, ...]:
+        if not self._session.in_transaction():
+            raise RuntimeError("snapshot reads require the caller's transaction")
+        if not job_ids:
+            return ()
+        snapshots = self._session.scalars(
+            select(HotlistSnapshot).where(
+                HotlistSnapshot.owner_id == owner_id,
+                HotlistSnapshot.job_id.in_(job_ids),
+            )
+        ).all()
+        if not snapshots:
+            return ()
+        entries = self._session.scalars(
+            select(HotlistEntryRecord).where(
+                HotlistEntryRecord.owner_id == owner_id,
+                HotlistEntryRecord.snapshot_id.in_([row.id for row in snapshots]),
+            )
+        ).all()
+        ids_by_snapshot: dict[UUID, set[UUID]] = {}
+        for entry in entries:
+            if entry.content_id is not None:
+                ids_by_snapshot.setdefault(entry.snapshot_id, set()).add(entry.content_id)
+        return tuple(
+            CollectionSnapshotFactView(
+                job_id=row.job_id,
+                snapshot_id=row.id,
+                observed_at=row.observed_at,
+                entry_count=row.entry_count,
+                content_ids=tuple(sorted(ids_by_snapshot.get(row.id, set()), key=str)),
+            )
+            for row in snapshots
+        )
 
     def require_persisted_document_result(
         self,

@@ -6,6 +6,7 @@ import * as xitongzhuangtai from "./xitongzhuangtai";
 import * as rebang from "./rebang";
 import * as identity from "./identity";
 import * as caijirenwu from "./caijirenwu";
+import * as caijifugai from "./caijifugai";
 import * as zuopinziliao from "./zuopinziliao";
 import * as jiankongzhuti from "./jiankongzhuti";
 import * as ribao from "./ribao";
@@ -15,6 +16,7 @@ export default {
   rebang,
   identity,
   caijirenwu,
+  caijifugai,
   zuopinziliao,
   jiankongzhuti,
   ribao,

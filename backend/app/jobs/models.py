@@ -73,6 +73,16 @@ class ResourceBudgetPolicy(Base):
             "updated_at >= created_at",
             name="resource_budget_policies_updated_at_check",
         ),
+        Index(
+            "resource_budget_policies_source_window_key",
+            "owner_id",
+            "scope_reference",
+            "metric",
+            "window_seconds",
+            "window_anchor_at",
+            unique=True,
+            postgresql_where=text("scope_kind = 'source'"),
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
@@ -441,6 +451,16 @@ class Job(Base):
         ),
         CheckConstraint("retry_count >= 0", name="jobs_retry_count_check"),
         CheckConstraint(
+            "collection_cycle_no >= 0 AND "
+            "((collection_cycle_no = 0 AND collection_cycle_started_at IS NULL) OR "
+            "(collection_cycle_no > 0 AND collection_cycle_started_at IS NOT NULL))",
+            name="jobs_collection_cycle_check",
+        ),
+        CheckConstraint(
+            "NOT collection_cycle_pending OR (status = 'queued' AND defer_reason = 'manual_retry')",
+            name="jobs_collection_cycle_pending_check",
+        ),
+        CheckConstraint(
             "(last_error_code IS NULL AND last_error_category IS NULL AND "
             "last_error_at IS NULL AND next_action IS NULL) OR "
             "(last_error_code ~ '^[a-z][a-z0-9_.:-]{0,127}$' AND "
@@ -485,6 +505,9 @@ class Job(Base):
     defer_reason: Mapped[str | None] = mapped_column(String(128))
     next_run_at: Mapped[datetime | None]
     retry_count: Mapped[int] = mapped_column(BigInteger, server_default=text("0"))
+    collection_cycle_no: Mapped[int] = mapped_column(BigInteger, server_default=text("0"))
+    collection_cycle_started_at: Mapped[datetime | None]
+    collection_cycle_pending: Mapped[bool] = mapped_column(server_default=text("false"))
     last_error_code: Mapped[str | None] = mapped_column(String(128))
     last_error_category: Mapped[str | None] = mapped_column(String(32))
     last_error_at: Mapped[datetime | None]
@@ -557,6 +580,89 @@ class CoverageWindow(Base):
     page_count: Mapped[int] = mapped_column(BigInteger, server_default=text("0"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class CollectionDueWindow(Base):
+    __tablename__ = "collection_due_windows"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "id", name="collection_due_windows_owner_id_key"),
+        UniqueConstraint(
+            "owner_id",
+            "schedule_key",
+            "due_at",
+            name="collection_due_windows_owner_schedule_due_key",
+        ),
+        ForeignKeyConstraint(
+            ["owner_id", "topic_id"],
+            ["monitor_topics.owner_id", "monitor_topics.id"],
+            name="collection_due_windows_owner_topic_fkey",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["owner_id", "job_id"],
+            ["jobs.owner_id", "jobs.id"],
+            name="collection_due_windows_owner_job_fkey",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        CheckConstraint(
+            "source_key ~ '^[a-z][a-z0-9_-]{0,63}$'",
+            name="collection_due_windows_source_check",
+        ),
+        CheckConstraint(
+            "capability IN ('search', 'author_posts', 'comments', 'replies', "
+            "'page_content', 'hotlist')",
+            name="collection_due_windows_capability_check",
+        ),
+        CheckConstraint(
+            "window_start < window_end AND window_end <= due_at",
+            name="collection_due_windows_range_check",
+        ),
+        CheckConstraint(
+            "connection_version IS NULL OR connection_version >= 1",
+            name="collection_due_windows_version_check",
+        ),
+        CheckConstraint(
+            "policy_snapshot IS NULL OR jsonb_typeof(policy_snapshot) = 'object'",
+            name="collection_due_windows_policy_object_check",
+        ),
+        CheckConstraint(
+            "admission_state IN ('pending', 'accepted', 'skipped', 'missed')",
+            name="collection_due_windows_state_check",
+        ),
+        CheckConstraint(
+            "(admission_state = 'pending' AND reason IS NULL AND operation_id IS NULL "
+            "AND job_id IS NULL) OR "
+            "(admission_state = 'accepted' AND reason IS NULL AND operation_id IS NOT NULL "
+            "AND job_id IS NOT NULL) OR "
+            "(admission_state = 'skipped' AND reason IS NOT NULL AND reason IN "
+            "('quiet', 'disabled', 'rate_limited', 'budget') "
+            "AND operation_id IS NULL AND job_id IS NULL) OR "
+            "(admission_state = 'missed' AND reason IS NOT NULL "
+            "AND reason = 'scheduler_interrupted' "
+            "AND operation_id IS NULL AND job_id IS NULL)",
+            name="collection_due_windows_admission_pair_check",
+        ),
+        Index("collection_due_windows_owner_due_idx", "owner_id", "due_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    owner_id: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="CASCADE"))
+    schedule_key: Mapped[UUID]
+    topic_id: Mapped[UUID | None]
+    source_key: Mapped[str] = mapped_column(String(64))
+    capability: Mapped[str] = mapped_column(String(32))
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    window_end: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    connection_version: Mapped[int | None] = mapped_column(BigInteger)
+    policy_snapshot: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    admission_state: Mapped[str] = mapped_column(String(16), server_default=text("'pending'"))
+    reason: Mapped[str | None] = mapped_column(String(64))
+    operation_id: Mapped[UUID | None]
+    job_id: Mapped[UUID | None]
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class JobStageAttempt(Base):
@@ -651,6 +757,7 @@ class JobAttempt(Base):
     __table_args__ = (
         UniqueConstraint("job_id", "lease_epoch", name="job_attempts_job_epoch_key"),
         CheckConstraint("lease_epoch >= 1", name="job_attempts_lease_epoch_check"),
+        CheckConstraint("collection_cycle_no >= 1", name="job_attempts_collection_cycle_check"),
         CheckConstraint(
             "lease_expires_at > started_at",
             name="job_attempts_lease_expiry_check",
@@ -674,6 +781,7 @@ class JobAttempt(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True)
     job_id: Mapped[UUID] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"))
     lease_epoch: Mapped[int] = mapped_column(BigInteger)
+    collection_cycle_no: Mapped[int] = mapped_column(BigInteger)
     worker_id: Mapped[str] = mapped_column(String(128))
     started_at: Mapped[datetime]
     lease_expires_at: Mapped[datetime]

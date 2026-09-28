@@ -93,6 +93,11 @@ def build_search_adapter_factory(
         if config.feed_url_template is None:
             raise ValueError("RSS adapter requires feed_url_template")
         feed_url_template = config.feed_url_template
+        if source_key == "rss_36kr" and (
+            feed_url_template != "http://127.0.0.1:1200/36kr/newsflashes"
+            or allowed_hosts != frozenset({"127.0.0.1"})
+        ):
+            raise ValueError("rss_36kr requires the local RSSHub newsflashes endpoint")
         return lambda before_request, cancelled, max_requests, max_seconds: RssSourceAdapter(
             source_key=source_key,
             feed_url_template=feed_url_template,
@@ -106,11 +111,16 @@ def build_search_adapter_factory(
         if config.base_url is None:
             raise ValueError("web search adapter requires base_url")
         base_url = str(config.base_url)
-        engines = ",".join(config.engines)
+        if config.engines != ("duckduckgo news",):
+            raise ValueError("news_search requires the duckduckgo news engine")
+        if base_url.rstrip("/") != "http://127.0.0.1:8888" or allowed_hosts != frozenset(
+            {"127.0.0.1"}
+        ):
+            raise ValueError("news_search requires the configured local SearXNG endpoint")
         return lambda before_request, cancelled, max_requests, max_seconds: WebSearchAdapter(
             source_key=source_key,
             base_url=base_url,
-            engines=engines,
+            engines="duckduckgo news",
             allowed_hosts=allowed_hosts,
             before_request=before_request,
             cancelled=cancelled,
@@ -147,7 +157,7 @@ class KeywordDiscoveryExecutor:
             source_key = configuration.observation.source_key
             if source_key is None:
                 raise ValueError("search source is missing")
-            if set(scope) != {
+            search_scope_fields = {
                 "run_id",
                 "connection_id",
                 "connection_version",
@@ -165,8 +175,29 @@ class KeywordDiscoveryExecutor:
                 "relevance_filter_position",
                 "scan_kind",
                 "entry_point",
-            }:
+            }
+            manual_scope_fields = {
+                "manual_request_id",
+                "manual_source_keys",
+                "manual_query_index",
+                "manual_skips",
+            }
+            scheduled_scope_fields = {"schedule_key", "due_at"}
+            if set(scope) not in (
+                search_scope_fields,
+                search_scope_fields | manual_scope_fields,
+                search_scope_fields | scheduled_scope_fields,
+            ):
                 raise ValueError("search scope fields are incomplete")
+            if manual_scope_fields.issubset(scope):
+                UUID(self._required_str(scope, "manual_request_id"))
+                self._required_str(scope, "manual_source_keys")
+                if (
+                    self._required_int(scope, "manual_query_index") < 0
+                    or not isinstance(scope["manual_skips"], str)
+                    or scope["entry_point"] != "manual"
+                ):
+                    raise ValueError("manual search scope fields are invalid")
             UUID(self._required_str(scope, "run_id"))
             connection_id = UUID(self._required_str(scope, "connection_id"))
             connection_version = self._required_int(scope, "connection_version")
@@ -188,6 +219,16 @@ class KeywordDiscoveryExecutor:
                 starts_at=datetime.fromisoformat(self._required_str(scope, "starts_at")),
                 ends_at=datetime.fromisoformat(self._required_str(scope, "ends_at")),
             )
+            if scheduled_scope_fields.issubset(scope):
+                schedule_key = self._required_str(scope, "schedule_key")
+                due_at = datetime.fromisoformat(self._required_str(scope, "due_at"))
+                if (
+                    str(UUID(schedule_key)) != schedule_key
+                    or scope["entry_point"] != "scheduled"
+                    or due_at.utcoffset() != timedelta(0)
+                    or due_at != window.ends_at
+                ):
+                    raise ValueError("scheduled search scope fields are invalid")
             if (
                 not 1 <= max_pages <= 20
                 or not 1 <= max_requests <= 100
@@ -195,8 +236,8 @@ class KeywordDiscoveryExecutor:
                 or (source_key == "bilibili" and (page_size > 5 or max_pages != 1))
                 or scope["relevance_filter_position"] != "local"
                 or connection_version < 1
-                or configuration.started_at is None
-                or configuration.started_at.utcoffset() is None
+                or configuration.collection_cycle_started_at is None
+                or configuration.collection_cycle_started_at.utcoffset() is None
                 or query_role not in {"primary", "upstream_alias"}
                 or scope["entry_point"] not in {"manual", "scheduled"}
                 or window.rule_version != configuration.observation.configuration_version
@@ -244,8 +285,8 @@ class KeywordDiscoveryExecutor:
                 manual_retry_allowed=False,
             ) from error
 
-        assert configuration.started_at is not None
-        deadline_at = configuration.started_at + timedelta(seconds=max_seconds)
+        assert configuration.collection_cycle_started_at is not None
+        deadline_at = configuration.collection_cycle_started_at + timedelta(seconds=max_seconds)
         with self._sessions() as session:
             execution = JobExecutionService(
                 session, lease_seconds=self._lease_seconds, clock=self._clock
@@ -271,6 +312,7 @@ class KeywordDiscoveryExecutor:
                 component_key=self._component_key or f"collector.{source_key}",
                 max_requests=max_requests,
                 deadline_at=deadline_at,
+                cycle_started_at=configuration.collection_cycle_started_at,
                 lease_seconds=self._lease_seconds,
                 clock=self._clock,
             )

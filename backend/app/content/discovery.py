@@ -29,6 +29,7 @@ from jobs.execution import (
     JobProgress,
     resource_attempt_id,
 )
+from jobs.models import ResourceUsageAttempt
 from jobs.schemas import (
     BudgetContext,
     BudgetDecisionStatus,
@@ -78,6 +79,7 @@ class KeywordRequestMeter:
         component_key: str,
         max_requests: int,
         deadline_at: datetime,
+        cycle_started_at: datetime | None = None,
         lease_seconds: int,
         clock: Callable[[], datetime] | None = None,
         capability: SourceCapability = SourceCapability.SEARCH,
@@ -97,6 +99,9 @@ class KeywordRequestMeter:
         self._component_key = component_key
         self._max_requests = max_requests
         self._deadline_at = deadline_at
+        if cycle_started_at is not None and cycle_started_at.utcoffset() is None:
+            raise ValueError("collection cycle start must be timezone-aware")
+        self._cycle_started_at = cycle_started_at
         self._lease_seconds = lease_seconds
         self._clock = clock or (lambda: datetime.now(UTC))
         self._capability = capability
@@ -146,7 +151,25 @@ class KeywordRequestMeter:
                     capability=self._capability,
                     data_class=DataClass.STRUCTURED,
                 )
-                if request_sequence >= self._max_requests:
+                cycle_requests = (
+                    (
+                        self._session.scalar(
+                            select(func.count())
+                            .select_from(ResourceUsageAttempt)
+                            .where(
+                                ResourceUsageAttempt.owner_id == self._owner_id,
+                                ResourceUsageAttempt.operation_id == self._operation_id,
+                                ResourceUsageAttempt.usage_kind == UsageKind.NETWORK_REQUEST.value,
+                                ResourceUsageAttempt.stage == self._stage,
+                                ResourceUsageAttempt.started_at >= self._cycle_started_at,
+                            )
+                        )
+                        or 0
+                    )
+                    if self._cycle_started_at is not None
+                    else request_sequence
+                )
+                if cycle_requests >= self._max_requests:
                     return False
                 attempt_id = resource_attempt_id(
                     operation_id=self._operation_id,
@@ -241,8 +264,10 @@ class KeywordRequestMeter:
         self._lease = lease
         self._pending.clear()
 
-    def fail_pending(self) -> None:
-        """Charge attempts after a transport or persistence error."""
+    def fail_pending(self, *, outcome: UsageOutcome = UsageOutcome.FAILED) -> None:
+        """Charge attempts after a transport error or a rejected empty page."""
+        if outcome not in {UsageOutcome.FAILED, UsageOutcome.EMPTY}:
+            raise ValueError("pending source attempts require a failed or empty outcome")
         self._session.rollback()
         with self._session.begin():
             budget = ResourceBudgetService(self._session, clock=self._clock)
@@ -253,7 +278,7 @@ class KeywordRequestMeter:
                 budget.finish_attempt_in_transaction(
                     owner_id=self._owner_id,
                     attempt_id=attempt_id,
-                    outcome=UsageOutcome.FAILED,
+                    outcome=outcome,
                     finished_at=self._clock(),
                 )
         self._pending.clear()
@@ -326,10 +351,8 @@ def plan_keyword_discovery(run: KeywordDiscoveryRunInput) -> tuple[JobAcceptance
     return tuple(jobs)
 
 
-def plan_scheduled_keyword_discovery(run: KeywordDiscoveryRunInput) -> JobAcceptanceInput:
-    """Build the single latest-search job represented by one collection schedule window."""
-    if run.entry_point is not SourceEntryPoint.SCHEDULED:
-        raise ValueError("scheduled discovery requires the scheduled entry point")
+def plan_single_keyword_discovery(run: KeywordDiscoveryRunInput) -> JobAcceptanceInput:
+    """Build one bounded latest-search job for an explicit source query."""
     observation = JobObservationContext(
         configuration_ref=run.configuration_ref,
         configuration_version=run.configuration_version,
@@ -364,6 +387,13 @@ def plan_scheduled_keyword_discovery(run: KeywordDiscoveryRunInput) -> JobAccept
             "entry_point": run.entry_point.value,
         },
     )
+
+
+def plan_scheduled_keyword_discovery(run: KeywordDiscoveryRunInput) -> JobAcceptanceInput:
+    """Build the single latest-search job represented by one collection schedule window."""
+    if run.entry_point is not SourceEntryPoint.SCHEDULED:
+        raise ValueError("scheduled discovery requires the scheduled entry point")
+    return plan_single_keyword_discovery(run)
 
 
 @dataclass(frozen=True, slots=True)
@@ -545,6 +575,11 @@ class KeywordDiscoveryPageCommitService:
                 next_token=page.next_page_token,
                 stop_reason=page.stop_reason,
                 job_progress=JobProgress(stage=JobStage.SAVE, items_saved=saved_items),
+                observed_items=len(page.items),
+                source_engine=page.source_engine,
+                source_actual_engine=page.source_actual_engine,
+                source_diagnostic=page.source_diagnostic,
+                source_feed_updated_at=page.source_feed_updated_at,
             )
             if meter is not None:
                 meter.settle_page_in_transaction(

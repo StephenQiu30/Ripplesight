@@ -56,7 +56,7 @@ def engine() -> Iterator[Engine]:
     with engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE hotlist_entries, hotlist_snapshots, "
+                "TRUNCATE collection_due_windows, hotlist_entries, hotlist_snapshots, "
                 "knowledge_exports, notification_deliveries, "
                 "notification_targets, ai_calls, identity_sessions, identity_users CASCADE"
             )
@@ -67,7 +67,7 @@ def engine() -> Iterator[Engine]:
         with engine.begin() as connection:
             connection.execute(
                 text(
-                    "TRUNCATE hotlist_entries, hotlist_snapshots, "
+                    "TRUNCATE collection_due_windows, hotlist_entries, hotlist_snapshots, "
                     "knowledge_exports, notification_deliveries, "
                     "notification_targets, ai_calls, "
                     "identity_sessions, identity_users CASCADE"
@@ -134,7 +134,7 @@ def test_ai_calls_record_success_and_failure_without_prompt_text(engine: Engine)
         )
     assert result.output == {"sentiment": "neutral"}
 
-    with sessions() as session, pytest.raises(AiCallError):
+    with sessions() as session, pytest.raises(AiCallError) as failure:
         AiService(session, _FakeClient(AiFailureCode.RATE_LIMITED), clock=lambda: _NOW).complete(
             owner_id=owner_id,
             job_id=None,
@@ -143,6 +143,7 @@ def test_ai_calls_record_success_and_failure_without_prompt_text(engine: Engine)
             prompt="<data>内容</data>",
             output_schema={"type": "object"},
         )
+    assert failure.value.call_id is not None
 
     with engine.connect() as connection:
         rows = connection.execute(
@@ -176,6 +177,12 @@ def test_ai_calls_record_success_and_failure_without_prompt_text(engine: Engine)
         ("succeeded", None, "fake", "fake-model", 100, 5, 42, 32),
         ("failed", "rate_limited", "fake", "fake-model", 0, 0, 0, 32),
     ]
+    with engine.connect() as connection:
+        recorded_failure_id = connection.scalar(
+            text("SELECT id FROM ai_calls WHERE owner_id = :owner_id AND status = 'failed'"),
+            {"owner_id": owner_id},
+        )
+    assert failure.value.call_id == recorded_failure_id
     assert [tuple(row) for row in usage_rows] == [
         ("settled", 1, "succeeded"),
         ("settled", 1, "failed"),

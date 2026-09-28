@@ -261,6 +261,7 @@ class SourcePost(_ContractModel):
         pattern=r"^[a-z][a-z0-9_-]{0,63}$",
     )
     external_id: str = Field(min_length=1, max_length=512)
+    identity_basis: Literal["guid", "url_fallback"] | None = None
     author_external_id: str | None = Field(min_length=1, max_length=512)
     published_at: datetime | None
     text: str | None = Field(max_length=_MAX_TEXT_LENGTH)
@@ -361,9 +362,13 @@ class SourcePage(_ContractModel):
     observed_at: datetime
     request_count: int = Field(default=0, ge=0)
     adapter_version: str | None = Field(default=None, max_length=64)
+    source_engine: str | None = Field(default=None, max_length=64)
+    source_actual_engine: str | None = Field(default=None, max_length=64)
+    source_diagnostic: str | None = Field(default=None, max_length=64)
+    source_feed_updated_at: datetime | None = None
     retry_at: datetime | None = None
 
-    @field_validator("retry_at")
+    @field_validator("retry_at", "source_feed_updated_at")
     @classmethod
     def validate_retry_at(cls, value: datetime | None) -> datetime | None:
         if value is not None and value.utcoffset() is None:

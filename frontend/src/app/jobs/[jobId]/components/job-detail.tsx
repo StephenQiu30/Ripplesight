@@ -159,6 +159,82 @@ function formatDelayDuration(value: number | null): string {
   return `${days} 天${remainingHours ? ` ${remainingHours} 小时` : ""}`;
 }
 
+type JobTiming = Pick<
+  HotKeyAPI.JobStatusView,
+  | "collection_cycle_no"
+  | "collection_cycle_started_at"
+  | "collection_cycle_pending"
+  | "collection_cycle_limit_seconds"
+  | "collection_cycle_remaining_us"
+  | "latest_attempt"
+  | "queue_wait_us"
+  | "current_attempt_duration_us"
+  | "total_duration_us"
+>;
+
+function formatDuration(value: number | null): string {
+  if (value === null) {
+    return "—";
+  }
+  if (value === 0) {
+    return "0 秒";
+  }
+  return formatDelayDuration(value);
+}
+
+export function JobTimingDetails({ job }: { job: JobTiming }) {
+  const cycleRemaining =
+    job.collection_cycle_pending || job.collection_cycle_no === 0
+      ? "尚未开始"
+      : job.collection_cycle_limit_seconds === null
+        ? "无采集时限"
+        : formatDuration(job.collection_cycle_remaining_us);
+
+  return (
+    <section className="mt-10" aria-labelledby="job-timing-title">
+      <h2 id="job-timing-title" className="text-xl font-semibold">
+        执行时间
+      </h2>
+      <p className="text-muted-foreground mt-2 text-sm leading-6">
+        时长截至最近一次状态读取；人工重试排队期间，新采集周期尚未开始。
+      </p>
+      <dl className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="bg-muted rounded-2xl p-5">
+          <dt className="text-muted-foreground text-sm">排队等待</dt>
+          <dd className="mt-2 text-xl font-semibold">
+            {formatDuration(job.queue_wait_us)}
+          </dd>
+        </div>
+        <div className="bg-muted rounded-2xl p-5">
+          <dt className="text-muted-foreground text-sm">当前尝试</dt>
+          <dd className="mt-2 text-xl font-semibold">
+            {formatDuration(job.current_attempt_duration_us)}
+          </dd>
+        </div>
+        <div className="bg-muted rounded-2xl p-5">
+          <dt className="text-muted-foreground text-sm">整单历时</dt>
+          <dd className="mt-2 text-xl font-semibold">
+            {formatDuration(job.total_duration_us)}
+          </dd>
+        </div>
+        <div className="bg-muted rounded-2xl p-5">
+          <dt className="text-muted-foreground text-sm">采集周期剩余</dt>
+          <dd className="mt-2 text-xl font-semibold">{cycleRemaining}</dd>
+        </div>
+      </dl>
+      <p className="text-muted-foreground mt-4 text-sm leading-6">
+        {job.collection_cycle_no > 0
+          ? `第 ${job.collection_cycle_no} 个采集周期，开始于 ${formatTime(job.collection_cycle_started_at)}。`
+          : "尚无采集周期。"}
+        {job.collection_cycle_pending ? " 下一周期将在领取任务时开始。" : ""}
+        {job.latest_attempt
+          ? ` 最近尝试 #${job.latest_attempt.lease_epoch}，开始于 ${formatTime(job.latest_attempt.started_at)}。`
+          : " 尚无执行尝试。"}
+      </p>
+    </section>
+  );
+}
+
 export function JobSourceFreshness({
   freshness,
 }: {
@@ -602,6 +678,8 @@ export function JobDetail({ jobId }: JobDetailProps) {
             </p>
           </div>
         </section>
+
+        <JobTimingDetails job={job} />
 
         <JobResult
           resultContentId={job.result_content_id}

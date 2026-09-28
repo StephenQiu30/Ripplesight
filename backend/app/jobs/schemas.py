@@ -8,6 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from connections.schemas import SourceConnectionStatus, SourceExecutionPolicy
 from sources.contracts import SocialSourceCapability, SourceCapability, SourceSort, WebPageRequest
 
 type JobScopeValue = str | int | bool | None
@@ -109,6 +110,142 @@ class CoverageWindowView(BaseModel):
         if value.utcoffset() != timedelta(0):
             raise ValueError("coverage window bounds must be UTC")
         return value
+
+
+class DueAdmissionState(StrEnum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    SKIPPED = "skipped"
+    MISSED = "missed"
+
+
+class DueSkipReason(StrEnum):
+    QUIET = "quiet"
+    DISABLED = "disabled"
+    RATE_LIMITED = "rate_limited"
+    BUDGET = "budget"
+
+
+class CollectionDueWindowInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    owner_id: UUID
+    schedule_key: UUID
+    topic_id: UUID | None
+    source_key: str = Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_-]{0,63}$")
+    capability: SourceCapability
+    due_at: datetime
+    window_start: datetime
+    window_end: datetime
+    connection_version: int | None = Field(default=None, ge=1)
+    policy_snapshot: SourceExecutionPolicy | None = None
+
+    @field_validator("due_at", "window_start", "window_end")
+    @classmethod
+    def require_utc(cls, value: datetime) -> datetime:
+        if value.utcoffset() != timedelta(0):
+            raise ValueError("due window timestamps must be UTC")
+        return value
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> CollectionDueWindowInput:
+        if self.window_start >= self.window_end or self.window_end > self.due_at:
+            raise ValueError("due window must be a half-open range ending by due_at")
+        return self
+
+
+class CollectionDueWindowView(CollectionDueWindowInput):
+    id: UUID
+    admission_state: DueAdmissionState
+    reason: str | None
+    operation_id: UUID | None
+    job_id: UUID | None
+    recorded_at: datetime
+
+
+class CollectionExecutionFactView(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    due: CollectionDueWindowView
+    job_status: JobStatus | None
+    requests_sent: int | None = Field(ge=0)
+    request_attempt_count: int | None = Field(ge=0)
+    charged_request_count: int | None = Field(ge=0)
+    request_budget_reconciled: bool | None
+    page_count: int | None = Field(ge=0)
+    observed_count: int | None = Field(ge=0)
+    coverage_status: CoverageWindowStatus | None
+    stop_reason: str | None
+    has_gap: bool
+
+
+class CollectionCoverageStatus(StrEnum):
+    UNATTEMPTED = "unattempted"
+    RUNNING = "running"
+    CONFIRMED = "confirmed"
+    EMPTY = "empty"
+    PARTIAL = "partial"
+    FAILED = "failed"
+    STOPPED = "stopped"
+    ANALYSIS_PENDING = "analysis_pending"
+
+
+class CollectionCoverageGapView(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    start: datetime
+    end: datetime
+    reason: str
+
+
+class CollectionCoverageView(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    window_id: UUID
+    source_key: str
+    capability: SourceCapability
+    topic_id: UUID | None
+    due_at: datetime
+    window_start: datetime
+    window_end: datetime
+    admission_state: DueAdmissionState
+    admission_reason: str | None
+    current_connection_version: int | None
+    current_connection_status: SourceConnectionStatus | None
+    job_connection_version: int | None
+    job_id: UUID | None
+    job_status: JobStatus | None
+    attempts: int | None = Field(ge=0)
+    started_at: datetime | None
+    finished_at: datetime | None
+    last_success_at: datetime | None
+    coverage_status: CollectionCoverageStatus
+    terminal_evidence: bool | None
+    request_count: int | None = Field(ge=0)
+    request_attempt_count: int | None = Field(ge=0)
+    page_count: int | None = Field(ge=0)
+    observed_count: int | None = Field(ge=0)
+    inserted_count: int | None = Field(ge=0)
+    deduplicated_count: int | None = Field(ge=0)
+    analysis_pending_count: int | None = Field(ge=0)
+    analysis_failed_count: int | None = Field(ge=0)
+    analysis_invalid_count: int | None = Field(ge=0)
+    analysis_valid_count: int | None = Field(ge=0)
+    budget_limit: int | None = Field(ge=0)
+    budget_reserved: int | None = Field(ge=0)
+    budget_consumed: int | None = Field(ge=0)
+    gaps: tuple[CollectionCoverageGapView, ...]
+    content_ids: tuple[UUID, ...]
+    snapshot_ids: tuple[UUID, ...]
+
+
+class AnalysisJobFactView(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: UUID
+    status: JobStatus
+    scope: dict[str, JobScopeValue]
+    last_error_code: str | None
 
 
 class JobControlStatus(StrEnum):
@@ -924,6 +1061,16 @@ class SourceFreshnessView(BaseModel):
     delay_duration_us: int | None = Field(ge=0)
 
 
+class JobAttemptTimingView(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    lease_epoch: int = Field(ge=1)
+    collection_cycle_no: int = Field(ge=1)
+    started_at: datetime
+    finished_at: datetime | None
+    outcome: Literal["expired", "succeeded", "cancelled", "delayed", "failed"] | None
+
+
 class JobStatusView(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -937,6 +1084,15 @@ class JobStatusView(BaseModel):
     failure: JobFailureView | None
     result_content_id: UUID | None
     retry_count: int = Field(ge=0)
+    collection_cycle_no: int = Field(ge=0)
+    collection_cycle_started_at: datetime | None
+    collection_cycle_pending: bool
+    collection_cycle_limit_seconds: int | None = Field(ge=1)
+    collection_cycle_remaining_us: int | None = Field(ge=0)
+    latest_attempt: JobAttemptTimingView | None
+    queue_wait_us: int | None = Field(ge=0)
+    current_attempt_duration_us: int | None = Field(ge=0)
+    total_duration_us: int = Field(ge=0)
     next_run_at: datetime | None
     scheduled_for_at: datetime | None
     started_at: datetime | None

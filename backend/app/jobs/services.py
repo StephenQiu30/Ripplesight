@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from connections.services import (
     SourceCapabilityEvidenceService,
     require_source_connection_enabled,
+    require_source_connection_version,
 )
 from core.errors import ApplicationError
 from jobs.cursor import (
@@ -65,6 +66,7 @@ from jobs.schemas import (
     FreshnessTimelineInput,
     FreshnessTimelineView,
     JobAcceptanceInput,
+    JobAttemptTimingView,
     JobCancellationView,
     JobContinuousFailureIssueView,
     JobControlStatus,
@@ -246,6 +248,11 @@ class CoverageWindowService:
         stop_reason: SourceStopReason | None = None,
         evidence: CoverageTerminalEvidence | None = None,
         job_progress: JobProgress | None = None,
+        observed_items: int | None = None,
+        source_engine: str | None = None,
+        source_actual_engine: str | None = None,
+        source_diagnostic: str | None = None,
+        source_feed_updated_at: datetime | None = None,
     ) -> tuple[ExecutionLease, CoverageWindowView, CursorPageProgress]:
         """Commit a bounded cursor page and range progress in the caller's transaction."""
         expected = plan_cursor_request(
@@ -263,6 +270,19 @@ class CoverageWindowService:
             next_token=next_token,
             stop_reason=stop_reason,
         )
+        if source_engine is not None:
+            progress.checkpoint["source.engine"] = source_engine
+            progress.checkpoint["source.actual_engine"] = source_actual_engine or ""
+            progress.checkpoint["source.diagnostic"] = source_diagnostic or ""
+        if source_feed_updated_at is not None:
+            progress.checkpoint["source.feed_updated_at"] = source_feed_updated_at.isoformat()
+        if observed_items is not None:
+            if observed_items < 0:
+                raise ValueError("observed item count cannot be negative")
+            previous = lease.checkpoint.get("collection.observed_count", 0)
+            if type(previous) is not int or previous < 0:
+                raise CoverageWindowConflictError("invalid observed item checkpoint")
+            progress.checkpoint["collection.observed_count"] = previous + observed_items
         opened = self.begin_in_transaction(lease=lease, window=window)
         if opened.status == "confirmed":
             raise CoverageWindowConflictError("confirmed window cannot accept another page")
@@ -470,6 +490,7 @@ class JobExecutionConfiguration:
     operation_id: UUID
     kind: str
     started_at: datetime | None
+    collection_cycle_started_at: datetime | None
     observation: JobObservationContext
     scope: dict[str, OutboxValue]
 
@@ -541,6 +562,7 @@ def _job_execution_configuration(job: Job) -> JobExecutionConfiguration:
         operation_id=job.operation_id,
         kind=job.kind,
         started_at=job.started_at,
+        collection_cycle_started_at=job.collection_cycle_started_at,
         observation=JobObservationContext(
             configuration_ref=job.configuration_ref,
             configuration_version=job.configuration_version,
@@ -1021,6 +1043,23 @@ class ResourceBudgetService:
             raise ValueError("x api spend policy requires x source")
         now = self._clock()
         self._require_aware_clock(now)
+        if command.scope_kind is BudgetScopeKind.SOURCE:
+            same_window = self._session.scalar(
+                select(ResourceBudgetPolicy)
+                .where(
+                    ResourceBudgetPolicy.owner_id == owner_id,
+                    ResourceBudgetPolicy.scope_kind == BudgetScopeKind.SOURCE.value,
+                    ResourceBudgetPolicy.scope_reference == command.scope_reference,
+                    ResourceBudgetPolicy.metric == command.metric.value,
+                    ResourceBudgetPolicy.window_seconds == command.window_seconds,
+                    ResourceBudgetPolicy.window_anchor_at == command.window_anchor_at,
+                )
+                .with_for_update()
+            )
+            if same_window is not None and same_window.budget_key != command.budget_key:
+                raise BudgetPolicyConflictError(
+                    "source metric window already has a stable budget key"
+                )
         model = self._session.scalar(
             select(ResourceBudgetPolicy)
             .where(
@@ -2394,6 +2433,7 @@ class JobService:
 
             if model.status == JobStatus.QUEUED.value:
                 model.status = JobStatus.CANCELLED.value
+                model.collection_cycle_pending = False
                 model.cancel_requested_at = now
                 model.completed_at = now
                 model.defer_reason = None
@@ -2449,9 +2489,7 @@ class JobService:
             if model.status != JobStatus.FAILED.value or not model.manual_retry_allowed:
                 raise ApplicationError("job_not_retryable")
 
-            require_source_connection_enabled(
-                self._session, owner_id=owner_id, source_key=model.source_key
-            )
+            self._require_retry_ready(model, owner_id=owner_id)
             retry_count = model.retry_count + 1
             dispatch_sequence = (
                 self._session.scalar(
@@ -2466,6 +2504,7 @@ class JobService:
             model.defer_reason = "manual_retry"
             model.next_run_at = now
             model.retry_count = retry_count
+            model.collection_cycle_pending = True
             model.updated_at = now
             self._session.add(
                 OutboxMessage(
@@ -2486,6 +2525,58 @@ class JobService:
                 )
             )
             return self._status_view(model, now=now)
+
+    def _require_retry_ready(self, model: Job, *, owner_id: UUID) -> None:
+        require_source_connection_enabled(
+            self._session, owner_id=owner_id, source_key=model.source_key
+        )
+        if model.kind not in {"keyword.search", "source.comments", "source.hotlist"}:
+            return
+        source_key = model.source_key
+        raw_id = model.scope.get("connection_id")
+        raw_version = model.scope.get("connection_version")
+        if (
+            source_key is None
+            or not isinstance(raw_id, str)
+            or type(raw_version) is not int
+            or raw_version < 1
+        ):
+            raise ApplicationError("job_not_retryable")
+        try:
+            connection_id = UUID(raw_id)
+        except ValueError as error:
+            raise ApplicationError("job_not_retryable") from error
+        require_source_connection_version(
+            self._session,
+            owner_id=owner_id,
+            source_key=source_key,
+            connection_id=connection_id,
+            connection_version=raw_version,
+        )
+        budgets = ResourceBudgetService(self._session, clock=self._clock).budget_usage_snapshot(
+            owner_id=owner_id
+        )
+        applicable = [
+            budget
+            for budget in budgets
+            if budget.metric is BudgetMetric.NETWORK_REQUEST
+            and (
+                budget.scope_kind is BudgetScopeKind.GLOBAL
+                or (
+                    budget.scope_kind is BudgetScopeKind.SOURCE
+                    and budget.scope_reference == source_key
+                )
+            )
+        ]
+        if (
+            not any(budget.scope_kind is BudgetScopeKind.SOURCE for budget in applicable)
+            or not any(budget.scope_kind is BudgetScopeKind.GLOBAL for budget in applicable)
+            or any(
+                not budget.enabled or budget.remaining_units is None or budget.remaining_units < 1
+                for budget in applicable
+            )
+        ):
+            raise ApplicationError("job_budget_exhausted")
 
     def accept_schedule_window(
         self,
@@ -2673,6 +2764,30 @@ class JobService:
                 result_content_id = UUID(raw_content_id)
             except ValueError as error:
                 raise RuntimeError("job result content ID is invalid") from error
+        attempt = self._session.scalar(
+            select(JobAttempt)
+            .where(JobAttempt.job_id == model.id)
+            .order_by(JobAttempt.lease_epoch.desc())
+            .limit(1)
+        )
+        cycle_limit = self._collection_cycle_limit_seconds(model)
+        cycle_remaining_us = None
+        if (
+            cycle_limit is not None
+            and model.collection_cycle_started_at is not None
+            and not model.collection_cycle_pending
+        ):
+            cycle_elapsed = _duration_us(
+                model.collection_cycle_started_at, model.completed_at or now
+            )
+            assert cycle_elapsed is not None
+            cycle_remaining_us = max(0, cycle_limit * 1_000_000 - cycle_elapsed)
+        queue_wait_us = None
+        if model.status == JobStatus.QUEUED.value:
+            queue_wait_us = max(0, _duration_us(model.updated_at, now) or 0)
+        attempt_elapsed_us = None
+        if model.status == JobStatus.RUNNING.value and attempt is not None:
+            attempt_elapsed_us = max(0, _duration_us(attempt.started_at, now) or 0)
         return JobStatusView(
             id=model.id,
             operation_id=model.operation_id,
@@ -2689,6 +2804,27 @@ class JobService:
             failure=failure,
             result_content_id=result_content_id,
             retry_count=model.retry_count,
+            collection_cycle_no=model.collection_cycle_no,
+            collection_cycle_started_at=_as_utc(model.collection_cycle_started_at),
+            collection_cycle_pending=model.collection_cycle_pending,
+            collection_cycle_limit_seconds=cycle_limit,
+            collection_cycle_remaining_us=cycle_remaining_us,
+            latest_attempt=(
+                JobAttemptTimingView(
+                    lease_epoch=attempt.lease_epoch,
+                    collection_cycle_no=attempt.collection_cycle_no,
+                    started_at=attempt.started_at.astimezone(UTC),
+                    finished_at=_as_utc(attempt.finished_at),
+                    outcome=attempt.outcome,
+                )
+                if attempt is not None
+                else None
+            ),
+            queue_wait_us=queue_wait_us,
+            current_attempt_duration_us=attempt_elapsed_us,
+            total_duration_us=max(
+                0, _duration_us(model.created_at, model.completed_at or now) or 0
+            ),
             next_run_at=_as_utc(model.next_run_at),
             scheduled_for_at=_as_utc(model.scheduled_for_at),
             started_at=_as_utc(model.started_at),
@@ -2697,6 +2833,15 @@ class JobService:
             source_freshness=self._source_freshness(model, now=now),
             coverage_windows=self._coverage_windows(model),
         )
+
+    @staticmethod
+    def _collection_cycle_limit_seconds(model: Job) -> int | None:
+        if model.kind == "source.hotlist":
+            return 45
+        if model.kind in {"keyword.search", "source.comments"}:
+            value = model.scope.get("max_seconds")
+            return value if type(value) is int and value > 0 else None
+        return None
 
     def _coverage_windows(self, model: Job) -> tuple[CoverageWindowView, ...]:
         if model.source_key is None or model.source_capability is None:

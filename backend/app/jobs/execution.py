@@ -263,6 +263,10 @@ class JobExecutionService:
             model.lease_epoch += 1
             model.lease_expires_at = expires_at
             model.started_at = model.started_at or now
+            if model.collection_cycle_no == 0 or model.collection_cycle_pending:
+                model.collection_cycle_no += 1
+                model.collection_cycle_started_at = now
+                model.collection_cycle_pending = False
             model.defer_reason = None
             model.next_run_at = None
             model.updated_at = now
@@ -271,6 +275,7 @@ class JobExecutionService:
                     id=uuid4(),
                     job_id=model.id,
                     lease_epoch=model.lease_epoch,
+                    collection_cycle_no=model.collection_cycle_no,
                     worker_id=worker_id,
                     started_at=now,
                     lease_expires_at=expires_at,
