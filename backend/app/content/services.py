@@ -16,6 +16,7 @@ import structlog
 from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.sql.elements import ColumnElement
 
 from analysis.prompts import ANALYSIS_PROMPT_VERSION
 from analysis.reads import (
@@ -75,7 +76,11 @@ from content.schemas import (
 )
 from core.errors import ApplicationError
 from evidence.schemas import CleanupTargetKind, CleanupTargetSpec
-from evidence.services import LifecycleService, load_readable_resource_ids
+from evidence.services import (
+    LifecycleService,
+    load_readable_resource_ids,
+    readable_resource_ids_query,
+)
 from jobs.services import (
     ContentJobContext,
     JobService,
@@ -1092,6 +1097,12 @@ class ContentService:
                 readable_version_ids={item.content_version.id for item in version_history},
             )
             topic_ids = {item.topic_id for item in annotations}
+            topic_ids.update(
+                self._hotlist_topic_ids(
+                    owner_id=owner_id,
+                    readable_jobs={content.id: readable_job_ids},
+                ).get(content.id, set())
+            )
             for discovery in discoveries:
                 context = contexts.get(discovery.job_id)
                 if context is not None and context.configuration_ref.startswith("topic:"):
@@ -1241,6 +1252,16 @@ class ContentService:
                 contexts = load_content_job_contexts(
                     self._session, owner_id=owner_id, job_ids=topic_job_ids
                 )
+                hotlist_topics = (
+                    self._hotlist_topic_ids(
+                        owner_id=owner_id,
+                        readable_jobs={
+                            content_id: item[1] for content_id, item in projections.items()
+                        },
+                    )
+                    if topic_id is not None
+                    else {}
+                )
                 annotation_states: dict[UUID, tuple[AnnotationResultState, bool | None]] = {}
                 if topic_id is not None and topic_context is not None:
                     annotation_states = load_current_annotation_states_in_transaction(
@@ -1261,10 +1282,14 @@ class ContentService:
                         continue
                     observation = projection[0]
                     content_discoveries = discoveries.get(record.id, [])
-                    if topic_id is not None and not any(
-                        (context := contexts.get(item.job_id)) is not None
-                        and context.configuration_ref == f"topic:{topic_id}"
-                        for item in content_discoveries
+                    if (
+                        topic_id is not None
+                        and topic_id not in hotlist_topics.get(record.id, set())
+                        and not any(
+                            (context := contexts.get(item.job_id)) is not None
+                            and context.configuration_ref == f"topic:{topic_id}"
+                            for item in content_discoveries
+                        )
                     ):
                         continue
                     first_discovered_at = min(
@@ -1826,6 +1851,38 @@ class ContentService:
             and observation.observed_at == observed_at
             and all(getattr(observation, name) == value for name, value in values.items())
         )
+
+    def _hotlist_topic_ids(
+        self,
+        *,
+        owner_id: UUID,
+        readable_jobs: Mapping[UUID, set[UUID]],
+    ) -> dict[UUID, set[UUID]]:
+        if not readable_jobs:
+            return {}
+        rows = self._session.execute(
+            select(
+                HotlistEntryRecord.content_id,
+                HotlistSnapshot.job_id,
+                HotlistEntryRecord.matched_topic_ids,
+            )
+            .join(
+                HotlistSnapshot,
+                and_(
+                    HotlistSnapshot.owner_id == HotlistEntryRecord.owner_id,
+                    HotlistSnapshot.id == HotlistEntryRecord.snapshot_id,
+                ),
+            )
+            .where(
+                HotlistEntryRecord.owner_id == owner_id,
+                HotlistEntryRecord.content_id.in_(readable_jobs),
+            )
+        ).all()
+        result: dict[UUID, set[UUID]] = {}
+        for content_id, job_id, topic_ids in rows:
+            if job_id in readable_jobs.get(content_id, set()):
+                result.setdefault(content_id, set()).update(UUID(value) for value in topic_ids)
+        return result
 
     def _readable_observations(
         self,
@@ -2685,6 +2742,7 @@ def load_post_versions_for_analysis_scan(
     topic_id: UUID,
     source_keys: tuple[str, ...],
     as_of: datetime | None = None,
+    readable_at: datetime | None = None,
 ) -> tuple[AnalysisPostContentView, ...]:
     """Read selected search posts or versions from a matched hotlist observation."""
     if not session.in_transaction():
@@ -2693,6 +2751,19 @@ def load_post_versions_for_analysis_scan(
         raise ValueError("analysis scan cutoff must be timezone-aware")
     receipt_cutoff = (
         (ContentObservation.received_at < as_of.astimezone(UTC),) if as_of is not None else ()
+    )
+    readable = (
+        (
+            ContentObservation.id.in_(
+                readable_resource_ids_query(
+                    owner_id=owner_id,
+                    resource_type=_RESOURCE_TYPE,
+                    now=readable_at,
+                )
+            ),
+        )
+        if readable_at is not None
+        else ()
     )
     occurred_at = case(
         (ContentRecord.source_key == "bilibili", ContentObservation.observed_at),
@@ -2714,6 +2785,7 @@ def load_post_versions_for_analysis_scan(
             ContentObservation.owner_id == owner_id,
             ContentObservation.content_version_id.is_not(None),
             *receipt_cutoff,
+            *readable,
         )
         .group_by(ContentObservation.content_version_id)
         .subquery()
@@ -2742,6 +2814,7 @@ def load_post_versions_for_analysis_scan(
             HotlistSnapshot.source_key == ContentRecord.source_key,
             ContentObservation.content_version_id == ContentVersion.id,
             *receipt_cutoff,
+            *readable,
         )
         .correlate(ContentVersion, ContentRecord)
         .exists()
@@ -2841,6 +2914,7 @@ def load_post_versions_for_analysis(
     *,
     owner_id: UUID,
     content_version_ids: set[UUID],
+    readable_at: datetime | None = None,
 ) -> tuple[AnalysisPostContentView, ...]:
     """Read exact immutable post versions frozen into an analysis job."""
     if not session.in_transaction():
@@ -2860,6 +2934,7 @@ def load_post_versions_for_analysis(
             ContentVersion.owner_id == owner_id,
             ContentVersion.id.in_(content_version_ids),
             ContentRecord.object_type == "post",
+            *(_readable_version_conditions(owner_id=owner_id, now=readable_at)),
         )
         .order_by(ContentVersion.id)
     ).all()
@@ -2872,6 +2947,7 @@ def load_post_comments_for_analysis(
     owner_id: UUID,
     post_content_ids: set[UUID],
     limit_per_post: int = 50,
+    readable_at: datetime | None = None,
 ) -> dict[UUID, tuple[AnalysisCommentContentView, ...]]:
     """Return newest comment text; callers may request one extra truncation sentinel."""
     if not session.in_transaction():
@@ -2885,6 +2961,7 @@ def load_post_comments_for_analysis(
         select(
             ContentThread.post_content_id.label("post_content_id"),
             ContentVersion.content_id.label("comment_content_id"),
+            ContentVersion.id.label("comment_version_id"),
             ContentVersion.title.label("title"),
             ContentVersion.body.label("body"),
             func.row_number()
@@ -2904,6 +2981,7 @@ def load_post_comments_for_analysis(
         .where(
             ContentThread.owner_id == owner_id,
             ContentThread.post_content_id.in_(post_content_ids),
+            *_readable_version_conditions(owner_id=owner_id, now=readable_at),
         )
         .subquery()
     )
@@ -2911,6 +2989,7 @@ def load_post_comments_for_analysis(
         select(
             version_rows.c.post_content_id,
             version_rows.c.comment_content_id,
+            version_rows.c.comment_version_id,
             version_rows.c.title,
             version_rows.c.body,
             func.row_number()
@@ -2927,6 +3006,7 @@ def load_post_comments_for_analysis(
         select(
             latest_versions.c.post_content_id,
             latest_versions.c.comment_content_id,
+            latest_versions.c.comment_version_id,
             latest_versions.c.title,
             latest_versions.c.body,
         )
@@ -2937,7 +3017,7 @@ def load_post_comments_for_analysis(
         )
     ).all()
     comments: dict[UUID, list[AnalysisCommentContentView]] = {}
-    for post_content_id, comment_content_id, title, body in rows:
+    for post_content_id, comment_content_id, comment_version_id, title, body in rows:
         text = "\n".join(part for part in (title, body) if part)
         if not text:
             continue
@@ -2945,10 +3025,72 @@ def load_post_comments_for_analysis(
             AnalysisCommentContentView(
                 post_content_id=post_content_id,
                 comment_content_id=comment_content_id,
+                comment_version_id=comment_version_id,
                 text=text,
             )
         )
     return {post_id: tuple(items) for post_id, items in comments.items()}
+
+
+def _readable_version_conditions(
+    *, owner_id: UUID, now: datetime | None
+) -> tuple[ColumnElement[bool], ...]:
+    if now is None:
+        return ()
+    return (
+        select(ContentObservation.id)
+        .where(
+            ContentObservation.owner_id == owner_id,
+            ContentObservation.content_id == ContentVersion.content_id,
+            ContentObservation.content_version_id == ContentVersion.id,
+            ContentObservation.id.in_(
+                readable_resource_ids_query(
+                    owner_id=owner_id,
+                    resource_type=_RESOURCE_TYPE,
+                    now=now,
+                )
+            ),
+        )
+        .correlate(ContentVersion)
+        .exists(),
+    )
+
+
+def load_frozen_analysis_comments(
+    session: Session,
+    *,
+    owner_id: UUID,
+    version_ids: set[UUID],
+    now: datetime,
+) -> dict[UUID, AnalysisCommentContentView]:
+    if not session.in_transaction():
+        raise RuntimeError("analysis comment reads require the caller's transaction")
+    if not version_ids:
+        return {}
+    rows = session.execute(
+        select(ContentVersion, ContentThread.post_content_id)
+        .join(
+            ContentThread,
+            and_(
+                ContentThread.owner_id == ContentVersion.owner_id,
+                ContentThread.content_id == ContentVersion.content_id,
+            ),
+        )
+        .where(
+            ContentVersion.owner_id == owner_id,
+            ContentVersion.id.in_(version_ids),
+            *_readable_version_conditions(owner_id=owner_id, now=now),
+        )
+    ).all()
+    return {
+        version.id: AnalysisCommentContentView(
+            post_content_id=post_id,
+            comment_content_id=version.content_id,
+            comment_version_id=version.id,
+            text="\n".join(part for part in (version.title, version.body) if part),
+        )
+        for version, post_id in rows
+    }
 
 
 def _analysis_post_view(

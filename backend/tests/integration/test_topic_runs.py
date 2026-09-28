@@ -23,6 +23,7 @@ from tests.integration.test_monitor_topics import (
 from connections.presets import SOURCE_PRESETS
 from connections.services import SourcePresetService
 from core.config import Settings
+from jobs.services import try_lock_source_collection_in_transaction
 from main import create_app
 from monitors.runs import MonitorTopicRunService
 from monitors.schemas import MonitorTopicRunInput
@@ -175,6 +176,132 @@ def test_source_minimum_interval_wins_over_topic_interval(
             {"topic_id": location.rsplit("/", 1)[1]},
         )
     assert interval == 1800
+
+
+def test_shared_source_rotates_topics_across_due_windows(
+    monitor_topic_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    preset = SOURCE_PRESETS["hackernews"]
+    policy = preset.execution_policy.model_copy(update={"min_interval_seconds": 600})
+    monkeypatch.setattr(
+        "connections.services.SOURCE_PRESETS",
+        {
+            **SOURCE_PRESETS,
+            "hackernews": replace(preset, execution_policy=policy),
+        },
+    )
+    first = _ready_topic(monitor_topic_client, source_keys=("hackernews",), source_min_interval=600)
+    created = monitor_topic_client.post(
+        "/api/topics",
+        headers=_csrf_headers(monitor_topic_client),
+        json={
+            **_topic_payload(),
+            "name": "Second topic",
+            "source_keys": ["hackernews"],
+            "collection_interval_seconds": 600,
+        },
+    )
+    assert created.status_code == 201, created.json()
+    second = created.headers["location"]
+    assert (
+        monitor_topic_client.post(
+            second + "/resume", headers=_csrf_headers(monitor_topic_client)
+        ).status_code
+        == 200
+    )
+    factory = monitor_topic_client.app.state.session_factory
+    now = datetime.now(UTC) + timedelta(seconds=1)
+    with factory.begin() as session:
+        session.execute(text("UPDATE monitor_schedules SET next_run_at=:now"), {"now": now})
+    for round_index in range(4):
+        with factory.begin() as session:
+            assert (
+                enqueue_due_collections_in_transaction(
+                    session, now + timedelta(seconds=600 * round_index)
+                )
+                == 1
+            )
+    with factory() as session:
+        accepted = dict(
+            session.execute(
+                text("SELECT configuration_ref, count(*) FROM jobs GROUP BY configuration_ref")
+            ).all()
+        )
+    assert accepted == {f"topic:{url.rsplit('/', 1)[1]}": 2 for url in (first, second)}
+
+
+def test_schedule_continues_after_topic_interval_changes(monitor_topic_client: TestClient) -> None:
+    location = _ready_topic(monitor_topic_client, source_keys=("hackernews",))
+    factory = monitor_topic_client.app.state.session_factory
+    now = datetime.now(UTC) + timedelta(seconds=1)
+    with factory.begin() as session:
+        session.execute(text("UPDATE monitor_schedules SET next_run_at=:now"), {"now": now})
+        assert enqueue_due_collections_in_transaction(session, now) == 1
+    updated = monitor_topic_client.patch(
+        location,
+        headers=_csrf_headers(monitor_topic_client),
+        json={
+            **_topic_payload(),
+            "source_keys": ["hackernews"],
+            "expected_version": 1,
+            "collection_interval_seconds": 1800,
+        },
+    )
+    assert updated.status_code == 200, updated.json()
+    for seconds in (600, 2400):
+        with factory.begin() as session:
+            assert (
+                enqueue_due_collections_in_transaction(session, now + timedelta(seconds=seconds))
+                == 1
+            )
+    with factory() as session:
+        assert (
+            session.scalar(
+                text("SELECT count(*) FROM collection_due_windows WHERE admission_state='accepted'")
+            )
+            == 3
+        )
+        assert session.scalar(text("SELECT next_run_at FROM monitor_schedules")) == now + timedelta(
+            seconds=4200
+        )
+
+
+def test_manual_and_scheduled_admission_share_source_lock(
+    monitor_topic_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    preset = SOURCE_PRESETS["hackernews"]
+    policy = preset.execution_policy.model_copy(update={"min_interval_seconds": 600})
+    monkeypatch.setattr(
+        "connections.services.SOURCE_PRESETS",
+        {
+            **SOURCE_PRESETS,
+            "hackernews": replace(preset, execution_policy=policy),
+        },
+    )
+    location = _ready_topic(
+        monitor_topic_client, source_keys=("hackernews",), source_min_interval=600
+    )
+    factory = monitor_topic_client.app.state.session_factory
+    now = datetime.now(UTC) + timedelta(seconds=1)
+    with factory.begin() as session:
+        owner_id = session.scalar(text("SELECT id FROM identity_users"))
+        session.execute(text("UPDATE monitor_schedules SET next_run_at=:now"), {"now": now})
+    with factory.begin() as holder:
+        assert try_lock_source_collection_in_transaction(
+            holder, owner_id=owner_id, source_key="hackernews"
+        )
+        response = monitor_topic_client.post(
+            location + "/runs",
+            headers=_csrf_headers(monitor_topic_client),
+            json={"operation_id": str(uuid4()), "source_keys": ["hackernews"]},
+        )
+        assert response.status_code == 409, response.json()
+        with factory.begin() as session:
+            assert enqueue_due_collections_in_transaction(session, now) == 0
+            assert session.scalar(text("SELECT count(*) FROM jobs")) == 0
+            assert session.scalar(text("SELECT next_run_at FROM monitor_schedules")) == now
+    with factory.begin() as session:
+        assert enqueue_due_collections_in_transaction(session, now) == 1
 
 
 def test_manual_run_freezes_connection_version_after_preset_update(

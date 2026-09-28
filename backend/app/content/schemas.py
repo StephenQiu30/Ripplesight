@@ -504,4 +504,5 @@ class AnalysisCommentContentView(OutputModel):
 
     post_content_id: UUID
     comment_content_id: UUID
+    comment_version_id: UUID
     text: str

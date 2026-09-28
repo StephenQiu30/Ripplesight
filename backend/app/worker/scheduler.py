@@ -43,7 +43,12 @@ from jobs.schemas import (
     JobAcceptanceInput,
     JobObservationContext,
 )
-from jobs.services import JobService, ResourceBudgetService, load_job_execution_configuration
+from jobs.services import (
+    JobService,
+    ResourceBudgetService,
+    load_job_execution_configuration,
+    try_lock_source_collection_in_transaction,
+)
 from knowledge.services import KnowledgeExportService
 from monitors.services import DueCollectionSchedule, MonitorScheduleService
 from notifications.services import NotificationService
@@ -558,6 +563,12 @@ def _process_collection_schedule(
     if not _source_budget_available(session, schedule, now):
         return skip(DueSkipReason.BUDGET)
     if policy.min_interval_seconds:
+        if not try_lock_source_collection_in_transaction(
+            session,
+            owner_id=schedule.owner_id,
+            source_key=schedule.source_key,
+        ):
+            return 0, False
         recent = session.scalar(
             select(Job.id)
             .where(
@@ -602,6 +613,26 @@ def enqueue_due_collections_in_transaction(session: Session, now: datetime) -> i
         raise RuntimeError("collection scan requires the caller's transaction")
     now_utc = now.astimezone(UTC) if now.tzinfo is not None else now
     schedules = MonitorScheduleService(session).claim_due_collections_in_transaction(now=now_utc)
+    last_accepted = {
+        job_id: created_at
+        for job_id, created_at in session.execute(
+            select(Job.id, Job.created_at).where(
+                Job.id.in_({row.last_job_id for row in schedules if row.last_job_id is not None})
+            )
+        ).all()
+    }
+    schedules = tuple(
+        sorted(
+            schedules,
+            key=lambda row: (
+                last_accepted.get(row.last_job_id, datetime.min.replace(tzinfo=UTC)),
+                row.next_run_at,
+                row.owner_id,
+                row.topic_id,
+                row.source_key,
+            ),
+        )
+    )
     accepted = 0
     bilibili_accepted = False
     logger = structlog.get_logger("scheduler")

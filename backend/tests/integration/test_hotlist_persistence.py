@@ -19,7 +19,10 @@ from connections.services import SourcePresetService
 from content import hotlist as hotlist_module
 from content.hotlist import HotlistService
 from content.hotlist_execution import HotlistExecutor
+from content.services import ContentService, load_post_versions_for_analysis_scan
 from core.errors import ApplicationError
+from evidence.schemas import DeletionReason
+from evidence.services import LifecycleService
 from jobs.execution import (
     ExecutionLease,
     JobExecutionFailure,
@@ -724,6 +727,126 @@ def test_hotlist_match_persists_one_content_for_two_topics_and_skips_unmatched(
         "https://example.com/chip",
     )
     assert snapshots == [(job_id, 2)]
+    with runtime.sessions() as session:
+        service = ContentService(session, clock=lambda: page.observed_at)
+        for topic_id in (ai_topic, chip_topic):
+            visible, cursor = service.list_contents(
+                owner_id=runtime.owner_id, topic_id=topic_id, cursor=None, limit=1
+            )
+            assert [item.id for item in visible] == [records[0].id]
+            assert cursor is None
+        detail = service.get_content(owner_id=runtime.owner_id, content_id=records[0].id)
+        assert {item.topic_id for item in detail.analysis_topics} == {ai_topic, chip_topic}
+
+
+def test_analysis_scan_excludes_expired_hotlist_evidence(runtime: HotlistRuntime) -> None:
+    (topic_id,) = _add_active_topics(runtime, (("AI topic", "AI"),))
+    job_id = _accept(runtime, runtime.due_at)
+    _execute(
+        runtime,
+        job_id,
+        _ranked_page(
+            runtime.due_at + timedelta(minutes=2),
+            (HotlistEntry(rank=1, title="AI news", url="https://example.com/expired"),),
+        ),
+    )
+    with runtime.sessions.begin() as session:
+        expiry = session.scalar(text("SELECT max(expires_at) FROM evidence_resources"))
+        historical = load_post_versions_for_analysis_scan(
+            session,
+            owner_id=runtime.owner_id,
+            topic_id=topic_id,
+            source_keys=(),
+        )
+        assert len(historical) == 1
+        assert (
+            load_post_versions_for_analysis_scan(
+                session,
+                owner_id=runtime.owner_id,
+                topic_id=topic_id,
+                source_keys=(),
+                readable_at=expiry,
+            )
+            == ()
+        )
+
+
+@pytest.mark.parametrize("mode", ["expired", "deleted"])
+def test_old_hotlist_match_cannot_borrow_new_readable_observation(
+    runtime: HotlistRuntime, mode: str
+) -> None:
+    ai_topic, chip_topic = _add_active_topics(runtime, (("AI", "AI"), ("Chip", "chip")))
+    first = _accept(runtime, runtime.due_at)
+    _execute(
+        runtime,
+        first,
+        _ranked_page(
+            runtime.due_at + timedelta(minutes=2),
+            (HotlistEntry(rank=1, title="AI news", url="https://example.com/changed"),),
+        ),
+    )
+    next_due = runtime.due_at + timedelta(minutes=30)
+    second = _accept(runtime, next_due)
+    now = next_due + timedelta(minutes=2)
+    _execute(
+        runtime,
+        second,
+        _ranked_page(
+            now,
+            (
+                HotlistEntry(rank=1, title="chip news", url="https://example.com/changed"),
+                HotlistEntry(rank=2, title="chip extra", url="https://example.com/extra"),
+            ),
+        ),
+    )
+    with runtime.sessions() as session:
+        old_id, content_id = session.execute(
+            text("SELECT id, content_id FROM content_observations WHERE job_id=:job"),
+            {"job": first},
+        ).one()
+        session.rollback()
+        if mode == "deleted":
+            LifecycleService(session, clock=lambda: now).request_deletion(
+                owner_id=runtime.owner_id,
+                operation_id=uuid4(),
+                resource_type="content_observation",
+                resource_id=old_id,
+                reason=DeletionReason.USER_REQUEST,
+            )
+        else:
+            with session.begin():
+                session.execute(
+                    text("UPDATE evidence_resources SET expires_at=:now WHERE resource_id=:id"),
+                    {"now": now, "id": old_id},
+                )
+        service = ContentService(session, clock=lambda: now)
+        assert service.list_contents(
+            owner_id=runtime.owner_id, topic_id=ai_topic, cursor=None, limit=1
+        ) == ([], None)
+        seen = []
+        cursor = None
+        for _ in range(2):
+            page, cursor = service.list_contents(
+                owner_id=runtime.owner_id, topic_id=chip_topic, cursor=cursor, limit=1
+            )
+            assert len(page) == 1
+            seen.append(page[0].id)
+        assert len(set(seen)) == 2 and content_id in seen and cursor is None
+        detail = service.get_content(owner_id=runtime.owner_id, content_id=content_id)
+        assert {topic.topic_id for topic in detail.analysis_topics} == {chip_topic}
+        with session.begin():
+            assert (
+                load_post_versions_for_analysis_scan(
+                    session,
+                    owner_id=runtime.owner_id,
+                    topic_id=ai_topic,
+                    source_keys=(),
+                    readable_at=now,
+                )
+                == ()
+            )
+        with pytest.raises(ApplicationError):
+            service.get_content(owner_id=uuid4(), content_id=content_id)
 
 
 def test_repeated_url_keeps_feed_ranks_and_one_content_observation(
