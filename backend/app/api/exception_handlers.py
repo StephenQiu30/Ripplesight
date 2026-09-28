@@ -71,7 +71,13 @@ APPLICATION_ERRORS: Mapping[str, PublicError] = {
     "invalid_session": PublicError(401, "invalid_session", "会话无效或已过期"),
     "job_not_cancellable": PublicError(409, "job_not_cancellable", "任务当前状态不可取消"),
     "job_not_retryable": PublicError(409, "job_not_retryable", "任务当前状态不可重试"),
+    "job_budget_exhausted": PublicError(
+        409, "job_budget_exhausted", "采集预算已用尽; 请等待下个预算窗口后重试"
+    ),
     "invalid_monitor_rules": PublicError(422, "invalid_monitor_rules", "至少需要一个包含关键词"),
+    "invalid_topic_source_selection": PublicError(
+        422, "invalid_topic_source_selection", "所选来源不属于当前主题"
+    ),
     "keyword_group_conflict": PublicError(
         422,
         "keyword_group_conflict",

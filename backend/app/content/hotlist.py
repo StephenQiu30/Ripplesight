@@ -27,7 +27,8 @@ from core.errors import ApplicationError
 from evidence.schemas import DataClass
 from evidence.services import SourceAccessPolicyService
 from jobs.execution import ExecutionLease, JobExecutionService, JobProgress
-from jobs.schemas import JobStage
+from jobs.models import CollectionDueWindow
+from jobs.schemas import DueAdmissionState, JobStage
 from jobs.services import ResourceBudgetService
 from monitors.services import ActiveHotlistTopic, MonitorScheduleService, evaluate_monitor_rules
 from sources.contracts import (
@@ -126,8 +127,11 @@ class HotlistService:
         page: HotlistPage,
         meter: KeywordRequestMeter,
     ) -> ExecutionLease:
-        if page.source_key != source_key or page.state is not SourcePageState.COMPLETE:
-            raise ValueError("only a complete matching hotlist page may be saved")
+        if page.source_key != source_key or page.state not in {
+            SourcePageState.COMPLETE,
+            SourcePageState.EMPTY,
+        }:
+            raise ValueError("only a successful matching hotlist page may be saved")
         self._session.rollback()
         with self._session.begin():
             execution = JobExecutionService(
@@ -144,6 +148,20 @@ class HotlistService:
             )
             if existing is not None:
                 return current
+            due = self._session.scalar(
+                select(CollectionDueWindow)
+                .where(
+                    CollectionDueWindow.owner_id == owner_id,
+                    CollectionDueWindow.job_id == lease.job_id,
+                    CollectionDueWindow.operation_id == operation_id,
+                    CollectionDueWindow.source_key == source_key,
+                    CollectionDueWindow.capability == SourceCapability.HOTLIST.value,
+                    CollectionDueWindow.admission_state == DueAdmissionState.ACCEPTED.value,
+                )
+                .with_for_update()
+            )
+            if due is None or page.observed_at < due.due_at:
+                raise ValueError("hotlist success has no matching original due window")
             require_source_connection_version(
                 self._session,
                 owner_id=owner_id,
@@ -166,6 +184,8 @@ class HotlistService:
                 owner_id=owner_id,
                 source_key=source_key,
                 job_id=lease.job_id,
+                operation_id=operation_id,
+                due_window_id=due.id,
                 observed_at=page.observed_at,
                 entry_count=len(page.items),
             )
@@ -220,7 +240,10 @@ class HotlistService:
             renewed = execution.save_checkpoint_in_transaction(
                 lease,
                 sequence=lease.checkpoint_sequence + 1,
-                checkpoint={"snapshot_id": str(snapshot.id)},
+                checkpoint={
+                    "snapshot_id": str(snapshot.id),
+                    "collection.observed_count": len(page.items),
+                },
                 progress=JobProgress(stage=JobStage.SAVE, items_saved=len(page.items)),
             )
         meter.confirm_page(renewed)
@@ -273,6 +296,9 @@ class HotlistService:
             if not snapshots:
                 raise ApplicationError("resource_not_found")
             latest = snapshots[0]
+            due = self._session.get(CollectionDueWindow, latest.due_window_id)
+            if due is None or due.owner_id != owner_id:
+                raise RuntimeError("hotlist snapshot original due window is unavailable")
             previous = snapshots[1] if len(snapshots) > 1 else None
             previous_ranks = (
                 {
@@ -296,6 +322,8 @@ class HotlistService:
             return HotlistSnapshotView(
                 snapshot_id=latest.id,
                 source_key=source_key,
+                operation_id=latest.operation_id,
+                due_at=due.due_at,
                 observed_at=latest.observed_at,
                 entry_count=latest.entry_count,
                 items=tuple(

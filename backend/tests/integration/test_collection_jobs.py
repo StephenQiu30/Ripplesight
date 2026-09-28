@@ -18,7 +18,7 @@ from main import create_app
 _BOOTSTRAP_TOKEN = "bootstrap-token-used-only-by-the-isolated-test"
 _PASSWORD = "correct horse battery staple"
 _TRUNCATE = (
-    "TRUNCATE hotlist_entries, hotlist_snapshots, "
+    "TRUNCATE collection_due_windows, hotlist_entries, hotlist_snapshots, "
     "content_version_relations, content_visibility_observations, "
     "content_observations, content_versions, "
     "content_discoveries, content_threads, content_records, "
@@ -126,8 +126,9 @@ def _set_job_facts(
     session.execute(
         text(
             "INSERT INTO job_attempts "
-            "(id, job_id, lease_epoch, worker_id, started_at, lease_expires_at, "
-            "finished_at, outcome) VALUES (:id, :job_id, 1, 'freshness-test', "
+            "(id, job_id, lease_epoch, collection_cycle_no, worker_id, started_at, "
+            "lease_expires_at, "
+            "finished_at, outcome) VALUES (:id, :job_id, 1, 1, 'freshness-test', "
             ":started_at, :lease_expires_at, :finished_at, :outcome)"
         ),
         {
@@ -195,6 +196,15 @@ def test_internal_job_status_is_readable_after_refresh(
         "failure": None,
         "result_content_id": None,
         "retry_count": 0,
+        "collection_cycle_no": 0,
+        "collection_cycle_started_at": None,
+        "collection_cycle_pending": False,
+        "collection_cycle_limit_seconds": None,
+        "collection_cycle_remaining_us": None,
+        "latest_attempt": None,
+        "queue_wait_us": body["queue_wait_us"],
+        "current_attempt_duration_us": None,
+        "total_duration_us": body["total_duration_us"],
         "next_run_at": None,
         "scheduled_for_at": None,
         "started_at": None,
@@ -212,6 +222,10 @@ def test_internal_job_status_is_readable_after_refresh(
     }
     assert isinstance(freshness["delay_duration_us"], int)
     assert freshness["delay_duration_us"] >= 0
+    assert isinstance(body["queue_wait_us"], int)
+    assert body["queue_wait_us"] >= 0
+    assert isinstance(body["total_duration_us"], int)
+    assert body["total_duration_us"] >= body["queue_wait_us"]
     assert "owner_id" not in body
     assert "scope" not in body
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from typing import Protocol
 from uuid import UUID
 
 from sqlalchemy.orm import Session, sessionmaker
@@ -19,13 +20,18 @@ from jobs.execution import (
     JobLeaseUnavailableError,
     StaleExecutionLeaseError,
 )
-from jobs.schemas import JobFailureCategory, JobMessage, JobStatus
+from jobs.schemas import JobFailureCategory, JobMessage, JobStatus, UsageOutcome
 from jobs.services import load_job_execution_configuration
 from sources.adapters.rsshub_hotlist import RsshubHotlistAdapter
-from sources.contracts import SourceCapability, SourcePageState, SourceStopReason
+from sources.contracts import HotlistPage, SourceCapability, SourcePageState, SourceStopReason
+
+
+class HotlistReader(Protocol):
+    def fetch_hotlist(self) -> HotlistPage: ...
+
 
 type AdapterFactory = Callable[
-    [str, str, frozenset[str], Callable[[int], bool], Callable[[], bool]], RsshubHotlistAdapter
+    [str, str, frozenset[str], Callable[[int], bool], Callable[[], bool]], HotlistReader
 ]
 
 
@@ -65,7 +71,12 @@ class HotlistExecutor:
             category=category,
             occurred_at=self._clock(),
             next_action=action,
-            manual_retry_allowed=False,
+            manual_retry_allowed=category
+            in {
+                JobFailureCategory.TRANSIENT,
+                JobFailureCategory.RATE_LIMITED,
+                JobFailureCategory.INVALID_RESPONSE,
+            },
         )
 
     def execute(
@@ -105,7 +116,7 @@ class HotlistExecutor:
             connection_version = scope["connection_version"]
             if type(connection_version) is not int or connection_version < 1:
                 raise ValueError("invalid connection version")
-            if configuration.started_at is None:
+            if configuration.collection_cycle_started_at is None:
                 raise ValueError("hotlist job has not started")
             with self._sessions() as session, session.begin():
                 config = require_source_connection_version(
@@ -124,7 +135,7 @@ class HotlistExecutor:
                 "检查来源预设及连接版本后重新提交",
             ) from error
 
-        deadline_at = configuration.started_at + timedelta(seconds=45)
+        deadline_at = configuration.collection_cycle_started_at + timedelta(seconds=45)
         with self._sessions() as session:
             execution = JobExecutionService(
                 session, lease_seconds=self._lease_seconds, clock=self._clock
@@ -142,6 +153,7 @@ class HotlistExecutor:
                 component_key=f"collector.{source_key}",
                 max_requests=1,
                 deadline_at=deadline_at,
+                cycle_started_at=configuration.collection_cycle_started_at,
                 lease_seconds=self._lease_seconds,
                 clock=self._clock,
                 capability=SourceCapability.HOTLIST,
@@ -156,8 +168,8 @@ class HotlistExecutor:
                     lambda: execution.cancellation_requested(lease),
                 )
                 page = adapter.fetch_hotlist()
-                if page.state in {SourcePageState.STOPPED, SourcePageState.EMPTY}:
-                    meter.fail_pending()
+                if page.state is SourcePageState.STOPPED:
+                    meter.fail_pending(outcome=UsageOutcome.FAILED)
                     assert page.stop_reason is not None
                     if page.stop_reason is SourceStopReason.CANCELLED:
                         return lease, JobCompletion(status=JobStatus.SUCCEEDED)

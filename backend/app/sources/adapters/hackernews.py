@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any, ClassVar
 from urllib.parse import urlsplit
 
@@ -20,6 +21,7 @@ from sources.contracts import (
     SourceCapability,
     SourceComment,
     SourcePage,
+    SourcePageState,
     SourcePost,
     SourceRequest,
     SourceSort,
@@ -98,6 +100,8 @@ class HackerNewsAdapter(HttpSourceAdapter):
             if not request.page_token.isdigit():
                 raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
             page_index = int(request.page_token)
+        if page_index >= _MAX_PAGES:
+            raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
         params = {
             "query": request.query,
             "tags": "story",
@@ -113,13 +117,32 @@ class HackerNewsAdapter(HttpSourceAdapter):
         payload = self._json(f"{self._api}/{endpoint}", params)
         if not isinstance(payload, dict) or not isinstance(payload.get("hits"), list):
             raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
-        items = tuple(self._post(hit) for hit in payload["hits"][: request.page_size])
+        hits = payload["hits"]
         pages = payload.get("nbPages")
-        has_more = (
-            isinstance(pages, int)
-            and page_index + 1 < min(pages, _MAX_PAGES)
-            and len(payload["hits"]) >= request.page_size
-        )
+        if (
+            type(pages) is not int
+            or pages < 0
+            or (pages == 0 and (page_index != 0 or bool(hits)))
+            or (pages > 0 and page_index >= pages)
+            or len(hits) > request.page_size
+        ):
+            raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
+        items = tuple(self._post(hit) for hit in hits[: request.page_size])
+        has_more = page_index + 1 < pages
+        if has_more and page_index + 1 >= _MAX_PAGES:
+            if not items:
+                raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
+            return SourcePage(
+                source_key=self.source_key,
+                capability=request.capability,
+                state=SourcePageState.PARTIAL,
+                items=items,
+                next_page_token=None,
+                watermark=None,
+                stop_reason=SourceStopReason.PROTOCOL_ERROR,
+                observed_at=datetime.now(UTC),
+                adapter_version=self.adapter_version,
+            )
         return self._page(request, items, str(page_index + 1) if has_more else None)
 
     def _post(self, hit: object) -> SourcePost:
@@ -128,8 +151,7 @@ class HackerNewsAdapter(HttpSourceAdapter):
         identifier = _hn_id(hit.get("objectID"))
         author = hit.get("author") if isinstance(hit.get("author"), str) else None
         title = hit.get("title") if isinstance(hit.get("title"), str) else None
-        story_url = hit.get("url") if isinstance(hit.get("url"), str) else None
-        text = html_to_text(hit.get("story_text")) or story_url
+        text = html_to_text(hit.get("story_text"))
         return SourcePost(
             source_key=self.source_key,
             external_id=identifier,

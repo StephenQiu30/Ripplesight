@@ -15,7 +15,15 @@ from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
-from jobs.execution import resource_attempt_id
+from connections.schemas import SourceConnectionStatus, SourceConnectionUpdateInput
+from connections.services import SourceConnectionService
+from core.errors import ApplicationError
+from jobs.execution import (
+    JobExecutionFailure,
+    JobExecutionService,
+    MessageReference,
+    resource_attempt_id,
+)
 from jobs.schemas import (
     BudgetContext,
     BudgetDecisionStatus,
@@ -26,6 +34,9 @@ from jobs.schemas import (
     BudgetScopeKind,
     ComponentPolicyInput,
     CostClass,
+    JobAcceptanceInput,
+    JobFailureCategory,
+    JobObservationContext,
     UsageAttemptInput,
     UsageKind,
     UsageOutcome,
@@ -37,11 +48,12 @@ from jobs.services import (
     BudgetPolicyUnavailableError,
     BudgetReservationConflictError,
     ComponentPolicyUnavailableError,
+    JobService,
     ResourceBudgetService,
     UsageConflictError,
 )
 from sources.adapters.x_api import XApiAdapter
-from sources.contracts import SearchRequest, SourcePageState, SourceStopReason
+from sources.contracts import SearchRequest, SourceCapability, SourcePageState, SourceStopReason
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,7 +85,7 @@ def resource_budget_context() -> Iterator[ResourceBudgetContext]:
     with engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE hotlist_entries, hotlist_snapshots, "
+                "TRUNCATE collection_due_windows, hotlist_entries, hotlist_snapshots, "
                 "resource_budget_reservations, resource_budget_windows, "
                 "resource_budget_policies, resource_usage_attempts, "
                 "resource_component_policies, "
@@ -108,7 +120,7 @@ def resource_budget_context() -> Iterator[ResourceBudgetContext]:
         with engine.begin() as connection:
             connection.execute(
                 text(
-                    "TRUNCATE hotlist_entries, hotlist_snapshots, "
+                    "TRUNCATE collection_due_windows, hotlist_entries, hotlist_snapshots, "
                     "resource_budget_reservations, resource_budget_windows, "
                     "resource_budget_policies, resource_usage_attempts, "
                     "resource_component_policies, "
@@ -201,6 +213,191 @@ def _reservation(
             job_ref=job_ref,
         ),
     )
+
+
+def test_manual_retry_rejects_exhausted_source_budget_without_refunding_usage(
+    resource_budget_context: ResourceBudgetContext,
+) -> None:
+    clock = MutableClock(datetime.now(UTC))
+    owner_id = resource_budget_context.owner_id
+    with resource_budget_context.sessions() as session:
+        connection = SourceConnectionService(session, clock=clock).update_connection(
+            owner_id=owner_id,
+            source_key="hackernews",
+            command=SourceConnectionUpdateInput(
+                expected_version=0,
+                status=SourceConnectionStatus.ACTIVE,
+                allowed_hosts=("hn.algolia.com",),
+            ),
+        )
+        budgets = ResourceBudgetService(session, clock=clock)
+        budgets.save_budget_policy(
+            owner_id=owner_id,
+            command=_budget_policy(clock=clock, limit_units=5, window_seconds=86_400),
+        )
+        budgets.save_budget_policy(
+            owner_id=owner_id,
+            command=_budget_policy(
+                clock=clock,
+                budget_key="source.hackernews.daily",
+                scope_kind=BudgetScopeKind.SOURCE,
+                scope_reference="hackernews",
+                limit_units=1,
+                window_seconds=86_400,
+            ),
+        )
+        job = JobService(session, clock=clock).accept(
+            owner_id=owner_id,
+            command=JobAcceptanceInput(
+                operation_id=uuid4(),
+                kind="keyword.search",
+                observation=JobObservationContext(
+                    configuration_ref="test-keyword-rule",
+                    configuration_version=1,
+                    source_key="hackernews",
+                    source_capability=SourceCapability.SEARCH,
+                ),
+                scope={
+                    "connection_id": str(connection.id),
+                    "connection_version": connection.version,
+                },
+            ),
+        )
+
+    clock.current += timedelta(seconds=1)
+    with resource_budget_context.sessions() as session:
+        lease = JobExecutionService(session, lease_seconds=60, clock=clock).acquire(
+            job_id=job.id, worker_id="budget-test-worker"
+        )
+    with resource_budget_context.sessions() as session:
+        reservation = _reservation(
+            source_ref="hackernews",
+            connection_ref=str(connection.id),
+            job_ref=str(job.id),
+        )
+        budgets = ResourceBudgetService(session, clock=clock)
+        decision = budgets.reserve_budget(owner_id=owner_id, command=reservation)
+        assert decision.status is BudgetDecisionStatus.RESERVED
+        budgets.settle_budget_reservation(
+            owner_id=owner_id, reservation_id=reservation.reservation_id, actual_units=1
+        )
+        JobExecutionService(session, lease_seconds=60, clock=clock).record_failure(
+            lease,
+            message=MessageReference(
+                message_id=uuid4(), topic="budget-test", partition=0, offset=0
+            ),
+            failure=JobExecutionFailure(
+                error_code="source_invalid_response",
+                category=JobFailureCategory.INVALID_RESPONSE,
+                occurred_at=clock.current,
+                next_action="人工检查后重试",
+                manual_retry_allowed=True,
+            ),
+        )
+
+    clock.current += timedelta(seconds=120)
+    with resource_budget_context.sessions() as session:
+        with pytest.raises(ApplicationError) as error:
+            JobService(session, clock=clock).request_retry(owner_id=owner_id, job_id=job.id)
+        assert error.value.code == "job_budget_exhausted"
+        status = JobService(session, clock=clock).get_status(owner_id=owner_id, job_id=job.id)
+        snapshot = ResourceBudgetService(session, clock=clock).budget_usage_snapshot(
+            owner_id=owner_id
+        )
+    assert status.status == "failed"
+    assert status.collection_cycle_no == 1
+    assert status.collection_cycle_pending is False
+    source_budget = next(item for item in snapshot if item.scope_kind is BudgetScopeKind.SOURCE)
+    global_budget = next(item for item in snapshot if item.scope_kind is BudgetScopeKind.GLOBAL)
+    assert (source_budget.used_units, source_budget.remaining_units) == (1, 0)
+    assert (global_budget.used_units, global_budget.remaining_units) == (1, 4)
+    with resource_budget_context.sessions() as session:
+        rotated = SourceConnectionService(session, clock=clock).update_connection(
+            owner_id=owner_id,
+            source_key="hackernews",
+            command=SourceConnectionUpdateInput(
+                expected_version=connection.version,
+                status=SourceConnectionStatus.ACTIVE,
+                allowed_hosts=("hn.algolia.com", "example.com"),
+            ),
+        )
+    assert rotated.version == connection.version + 1
+    with resource_budget_context.sessions() as session, pytest.raises(ApplicationError) as error:
+        JobService(session, clock=clock).request_retry(owner_id=owner_id, job_id=job.id)
+    assert error.value.code == "connection_version_conflict"
+    with resource_budget_context.sessions() as session:
+        SourceConnectionService(session, clock=clock).update_connection(
+            owner_id=owner_id,
+            source_key="hackernews",
+            command=SourceConnectionUpdateInput(
+                expected_version=rotated.version,
+                status=SourceConnectionStatus.DISABLED,
+            ),
+        )
+    with resource_budget_context.sessions() as session, pytest.raises(ApplicationError) as error:
+        JobService(session, clock=clock).request_retry(owner_id=owner_id, job_id=job.id)
+    assert error.value.code == "connection_disabled"
+    with resource_budget_context.engine.connect() as connection:
+        assert (
+            connection.scalar(
+                text("SELECT count(*) FROM outbox_messages WHERE aggregate_id=:id"),
+                {"id": job.id},
+            )
+            == 1
+        )
+
+
+def test_request_reservation_and_attempt_roll_back_together(
+    resource_budget_context: ResourceBudgetContext,
+) -> None:
+    clock = MutableClock(datetime.now(UTC))
+    operation_id, attempt_id = uuid4(), uuid4()
+    with resource_budget_context.sessions() as session:
+        service = ResourceBudgetService(session, clock=clock)
+        service.save_component_policy(owner_id=resource_budget_context.owner_id, command=_policy())
+        service.save_budget_policy(
+            owner_id=resource_budget_context.owner_id,
+            command=_budget_policy(clock=clock),
+        )
+    with (
+        resource_budget_context.sessions() as session,
+        pytest.raises(RuntimeError, match="injected metering rollback"),
+        session.begin(),
+    ):
+        service = ResourceBudgetService(session, clock=clock)
+        service.reserve_budget_in_transaction(
+            owner_id=resource_budget_context.owner_id,
+            command=BudgetReservationInput(
+                reservation_id=attempt_id,
+                operation_id=operation_id,
+                metric=BudgetMetric.NETWORK_REQUEST,
+                requested_units=1,
+                context=BudgetContext(source_ref="source-a"),
+            ),
+        )
+        service.begin_attempt_in_transaction(
+            owner_id=resource_budget_context.owner_id,
+            command=_attempt(operation_id=operation_id, attempt_id=attempt_id),
+        )
+        raise RuntimeError("injected metering rollback")
+    with resource_budget_context.sessions() as session:
+        assert (
+            session.scalar(
+                text(
+                    "SELECT count(*) FROM resource_budget_reservations WHERE reservation_id = :id"
+                ),
+                {"id": attempt_id},
+            )
+            == 0
+        )
+        assert (
+            session.scalar(
+                text("SELECT count(*) FROM resource_usage_attempts WHERE attempt_id = :id"),
+                {"id": attempt_id},
+            )
+            == 0
+        )
+        assert session.scalar(text("SELECT count(*) FROM resource_budget_windows")) == 0
 
 
 def test_attempt_is_recorded_before_outcome_and_replay_is_idempotent(
@@ -1247,6 +1444,57 @@ def test_lower_limit_does_not_reset_current_window_and_structure_is_immutable(
 
     assert updated.policy_version == 2
     assert delayed.status is BudgetDecisionStatus.DELAYED
+
+
+def test_source_daily_window_survives_connection_version_change(
+    resource_budget_context: ResourceBudgetContext,
+) -> None:
+    clock = MutableClock(datetime(2026, 9, 21, 12, 0, 10, tzinfo=UTC))
+    source = _budget_policy(
+        clock=clock,
+        budget_key="source.bilibili.network.daily",
+        scope_kind=BudgetScopeKind.SOURCE,
+        scope_reference="bilibili",
+        limit_units=1,
+        window_seconds=86_400,
+    )
+    global_policy = _budget_policy(clock=clock, limit_units=10)
+    with resource_budget_context.sessions() as session:
+        service = ResourceBudgetService(session, clock=clock)
+        service.save_budget_policy(owner_id=resource_budget_context.owner_id, command=global_policy)
+        first = service.save_budget_policy(
+            owner_id=resource_budget_context.owner_id, command=source
+        )
+        reservation = _reservation(source_ref="bilibili", connection_ref="version-1")
+        assert (
+            service.reserve_budget(
+                owner_id=resource_budget_context.owner_id, command=reservation
+            ).status
+            is BudgetDecisionStatus.RESERVED
+        )
+        service.settle_budget_reservation(
+            owner_id=resource_budget_context.owner_id,
+            reservation_id=reservation.reservation_id,
+            actual_units=1,
+        )
+        updated = service.save_budget_policy(
+            owner_id=resource_budget_context.owner_id,
+            command=source.model_copy(update={"limit_units": 1}),
+        )
+        with pytest.raises(BudgetPolicyConflictError):
+            service.save_budget_policy(
+                owner_id=resource_budget_context.owner_id,
+                command=source.model_copy(
+                    update={"budget_key": "source.bilibili.network.version2"}
+                ),
+            )
+        delayed = service.reserve_budget(
+            owner_id=resource_budget_context.owner_id,
+            command=_reservation(source_ref="bilibili", connection_ref="version-2"),
+        )
+    assert updated.id == first.id
+    assert delayed.status is BudgetDecisionStatus.DELAYED
+    assert source.budget_key in delayed.limiting_budget_keys
 
 
 def test_missing_global_budget_fails_closed(

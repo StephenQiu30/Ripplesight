@@ -9,13 +9,16 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
+from analysis.services import AnalysisService
 from connections.services import SourceConnectionService
 from content.collection import WebPageCollectionService
 from content.hotlist import HotlistService
 from content.services import ContentService
 from core.errors import DependencyUnavailableError
 from identity.services import AuthenticatedIdentity, IdentityService
+from jobs.coverage import CollectionCoverageService
 from jobs.services import JobService
+from monitors.runs import MonitorTopicRunService
 from monitors.services import MonitorTopicService
 from reports.services import ReportService
 
@@ -58,6 +61,19 @@ def get_job_service(session: SessionDependency) -> JobService:
 JobServiceDependency = Annotated[JobService, Depends(get_job_service)]
 
 
+def get_collection_coverage_service(session: SessionDependency) -> CollectionCoverageService:
+    return CollectionCoverageService(
+        session,
+        content=ContentService(session),
+        analysis=AnalysisService(session),
+    )
+
+
+CollectionCoverageServiceDependency = Annotated[
+    CollectionCoverageService, Depends(get_collection_coverage_service)
+]
+
+
 def get_webpage_collection_service(session: SessionDependency) -> WebPageCollectionService:
     return WebPageCollectionService(session)
 
@@ -75,6 +91,18 @@ def get_monitor_topic_service(session: SessionDependency) -> MonitorTopicService
 MonitorTopicServiceDependency = Annotated[
     MonitorTopicService,
     Depends(get_monitor_topic_service),
+]
+
+
+def get_monitor_topic_run_service(
+    request: Request, session: SessionDependency
+) -> MonitorTopicRunService:
+    return MonitorTopicRunService(session, request.app.state.settings)
+
+
+MonitorTopicRunServiceDependency = Annotated[
+    MonitorTopicRunService,
+    Depends(get_monitor_topic_run_service),
 ]
 
 

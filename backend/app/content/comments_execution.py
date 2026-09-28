@@ -170,8 +170,8 @@ class CommentsExecutor:
                 or first_level_limit != 200
                 or replies_per_thread_limit != 20
                 or connection_version < 1
-                or configuration.started_at is None
-                or configuration.started_at.utcoffset() is None
+                or configuration.collection_cycle_started_at is None
+                or configuration.collection_cycle_started_at.utcoffset() is None
                 or scope["entry_point"] not in {"manual", "scheduled"}
                 or sort is not SourceSort.TOP
                 or window.rule_version != configuration.observation.configuration_version
@@ -217,8 +217,8 @@ class CommentsExecutor:
                 manual_retry_allowed=False,
             ) from error
 
-        assert configuration.started_at is not None
-        deadline_at = configuration.started_at + timedelta(seconds=max_seconds)
+        assert configuration.collection_cycle_started_at is not None
+        deadline_at = configuration.collection_cycle_started_at + timedelta(seconds=max_seconds)
         with self._sessions() as session:
             execution = JobExecutionService(
                 session,

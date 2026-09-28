@@ -42,7 +42,7 @@ def _schedule() -> DueCollectionSchedule:
     )
 
 
-def test_collection_operation_id_is_stable_for_schedule_and_window_start() -> None:
+def test_collection_operation_id_is_stable_for_due_and_frozen_versions() -> None:
     schedule = _schedule()
     start = datetime(2026, 9, 25, 0, tzinfo=UTC)
     expected_schedule_id = uuid5(
@@ -59,13 +59,16 @@ def test_collection_operation_id_is_stable_for_schedule_and_window_start() -> No
     )
     expected_operation_id = uuid5(
         COLLECTION_OPERATION_NAMESPACE,
-        f"collect:{expected_schedule_id}:2026-09-25T00:00:00Z",
+        f"collect:{expected_schedule_id}:2026-09-25T00:00:00Z:3:2",
     )
 
     assert collection_schedule_id(schedule) == expected_schedule_id
-    assert collection_operation_id(schedule, start) == expected_operation_id
-    assert collection_operation_id(schedule, start) != collection_operation_id(
-        schedule, start + timedelta(minutes=10)
+    assert collection_operation_id(schedule, start, 2) == expected_operation_id
+    assert collection_operation_id(schedule, start, 2) != collection_operation_id(
+        schedule, start + timedelta(minutes=10), 2
+    )
+    assert collection_operation_id(schedule, start, 2) != collection_operation_id(
+        schedule, start, 3
     )
 
 
@@ -90,7 +93,7 @@ def test_collection_operation_id_changes_with_schedule_identity() -> None:
     )
     start = datetime(2026, 9, 25, 0, tzinfo=UTC)
 
-    assert collection_operation_id(schedule, start) != collection_operation_id(changed, start)
+    assert collection_operation_id(schedule, start, 2) != collection_operation_id(changed, start, 2)
 
 
 def test_scheduled_collection_uses_each_match_any_term_and_falls_back_to_joined_match_all() -> None:

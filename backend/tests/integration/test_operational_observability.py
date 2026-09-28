@@ -59,7 +59,7 @@ def observation_context() -> Iterator[ObservationTestContext]:
     with engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE hotlist_entries, hotlist_snapshots, "
+                "TRUNCATE collection_due_windows, hotlist_entries, hotlist_snapshots, "
                 "content_version_relations, content_visibility_observations, "
                 "content_observations, content_versions, "
                 "content_discoveries, content_threads, content_records, "
@@ -98,7 +98,7 @@ def observation_context() -> Iterator[ObservationTestContext]:
         with engine.begin() as connection:
             connection.execute(
                 text(
-                    "TRUNCATE hotlist_entries, hotlist_snapshots, "
+                    "TRUNCATE collection_due_windows, hotlist_entries, hotlist_snapshots, "
                     "content_version_relations, content_visibility_observations, "
                     "content_observations, content_versions, "
                     "content_discoveries, content_threads, content_records, "
@@ -351,11 +351,12 @@ def test_snapshot_reconciles_mutually_exclusive_tasks_and_separate_attempts(
         connection.execute(
             text(
                 "INSERT INTO job_attempts "
-                "(id, job_id, lease_epoch, worker_id, started_at, lease_expires_at, "
+                "(id, job_id, lease_epoch, collection_cycle_no, worker_id, started_at, "
+                "lease_expires_at, "
                 "finished_at, outcome) VALUES "
-                "(:first_id, :job_id, 1, 'worker-1', :started_at, :expires_at, "
+                "(:first_id, :job_id, 1, 1, 'worker-1', :started_at, :expires_at, "
                 ":finished_at, 'expired'), "
-                "(:second_id, :job_id, 2, 'worker-2', :started_at, :expires_at, "
+                "(:second_id, :job_id, 2, 1, 'worker-2', :started_at, :expires_at, "
                 ":finished_at, 'succeeded')"
             ),
             {
