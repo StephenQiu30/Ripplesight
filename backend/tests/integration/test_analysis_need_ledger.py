@@ -9,14 +9,14 @@ from pathlib import Path
 from uuid import uuid4
 
 from sqlalchemy import text
-from tests.integration.test_analysis_need_origin import _activate_prompt, _event
+from tests.integration.test_analysis_need_origin import _activate_prompt, _event, _runtime_session
+from tests.integration.test_analysis_need_origin import origin_case as origin_case
 from tests.integration.test_analysis_pipeline import AnalysisCase, _post, _seed_ai_call
+from tests.integration.test_analysis_pipeline import analysis_case as analysis_case
 
 from analysis.prompts import ANALYSIS_PROMPT_VERSION
 from analysis.schemas import AnnotationResultState, AnnotationStatus, AnnotationWrite
 from analysis.services import AnalysisService, build_analysis_need_ledger_in_transaction
-
-pytest_plugins = ("tests.integration.test_analysis_need_origin",)
 
 
 def test_ledger_enumerates_unqueued_old_and_new_versions_without_claiming_ratio(
@@ -85,11 +85,13 @@ def test_ledger_enumerates_unqueued_old_and_new_versions_without_claiming_ratio(
             session, owner_id=case.owner_id, start=start, end=case.now, cutoff_at=cutoff
         )
     assert ledger.analysis_status == "not_computable"
+    assert ledger.metric_version == "analysis-candidate-v2"
     assert (ledger.candidate_count, ledger.unknown_count) == (2, 0)
     assert (ledger.matured_count, ledger.pending_observation_count) == (1, 1)
     assert (ledger.timely_valid_count, ledger.late_or_missing_count) == (0, 1)
     assert {row.content_version_id for row in ledger.rows} == {case.version_id, newer_version}
     assert {row.source_key for row in ledger.rows} == {"hackernews"}
+    assert all(row.prompt_runtime_ids for row in ledger.rows)
     assert {row.started_at for row in ledger.rows} == {
         case.now - timedelta(minutes=50),
         case.now - timedelta(minutes=10),
@@ -124,6 +126,8 @@ def test_ledger_enumerates_unqueued_old_and_new_versions_without_claiming_ratio(
     )
     exported = json.loads(process.stdout)
     assert exported["candidate_count"] == 2
+    assert exported["metric_version"] == "analysis-candidate-v2"
+    assert all(item["prompt_runtime_ids"] for item in exported["rows"])
     assert {item["content_version_id"] for item in exported["rows"]} == {
         str(case.version_id),
         str(newer_version),
@@ -254,6 +258,58 @@ def test_ledger_keeps_topic_and_rule_versions_as_distinct_identities(
         (case.version_id, case.topic_id, 2),
         (case.version_id, other_topic, 1),
     }
+
+
+def test_ledger_distinguishes_known_disabled_window_from_runtime_gap(
+    origin_case: AnalysisCase,
+) -> None:
+    case = origin_case
+    activation = case.now - timedelta(hours=2)
+    resumed = case.now - timedelta(minutes=30)
+    _event(case, 1, "paused", "created", case.now - timedelta(days=4))
+    _event(case, 2, "active", "resumed", case.now - timedelta(hours=1))
+    _activate_prompt(case, activation, runtime=False)
+    disabled_run = _runtime_session(
+        case, started_at=activation, last_seen_at=resumed, ai_enabled=False
+    )
+    enabled_run = _runtime_session(
+        case,
+        started_at=resumed,
+        last_seen_at=case.now + timedelta(hours=1),
+        ai_enabled=True,
+    )
+
+    def ledger(end):
+        with case.sessions() as session, session.begin():
+            return build_analysis_need_ledger_in_transaction(
+                session,
+                owner_id=case.owner_id,
+                start=case.now - timedelta(hours=1),
+                end=end,
+                cutoff_at=case.now + timedelta(hours=1),
+            )
+
+    off_window = ledger(resumed)
+    assert (off_window.candidate_count, off_window.unknown_count) == (0, 0)
+    assert off_window.rows == ()
+
+    resumed_window = ledger(case.now)
+    assert (resumed_window.candidate_count, resumed_window.unknown_count) == (1, 0)
+    assert resumed_window.rows[0].started_at == resumed
+    assert resumed_window.rows[0].prompt_runtime_ids == (disabled_run, enabled_run)
+
+    with case.sessions() as session, session.begin():
+        session.execute(
+            text(
+                "UPDATE analysis_prompt_runtime_sessions SET last_seen_at = :seen "
+                "WHERE id = :run_id"
+            ),
+            {"seen": case.now - timedelta(minutes=50), "run_id": disabled_run},
+        )
+    gap_window = ledger(case.now)
+    assert (gap_window.candidate_count, gap_window.unknown_count) == (0, 1)
+    assert gap_window.rows[0].reason == "prompt_runtime_history_gap"
+    assert gap_window.rows[0].prompt_runtime_ids == (disabled_run,)
 
 
 def test_ledger_marks_annotation_older_than_prompt_history_unknown(

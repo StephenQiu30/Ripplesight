@@ -24,6 +24,7 @@ from analysis.prompts import (
     build_analysis_prompt,
     serialize_analysis_data,
 )
+from analysis.runtime import PromptRuntimeWindow, project_prompt_runtime_origin
 from analysis.schemas import (
     AnalysisJobScope,
     AnalysisNeedLedgerRowView,
@@ -91,6 +92,26 @@ class AnalysisNeedOriginProjection:
     status: Literal["candidate", "not_required", "unknown"]
     started_at: datetime | None
     reason: str | None = None
+    prompt_runtime_ids: tuple[UUID, ...] = ()
+
+
+def _load_prompt_runtime_windows_in_transaction(
+    session: Session, *, as_of: datetime
+) -> tuple[PromptRuntimeWindow, ...]:
+    return tuple(
+        PromptRuntimeWindow(
+            run_id=runtime.id,
+            prompt_version=runtime.prompt_version,
+            ai_enabled=runtime.ai_enabled,
+            starts_at=runtime.started_at,
+            ends_at=runtime.last_seen_at,
+        )
+        for runtime in session.scalars(
+            select(AnalysisPromptRuntimeSession)
+            .where(AnalysisPromptRuntimeSession.started_at < as_of)
+            .order_by(AnalysisPromptRuntimeSession.started_at, AnalysisPromptRuntimeSession.id)
+        )
+    )
 
 
 def build_analysis_need_ledger_in_transaction(
@@ -114,6 +135,7 @@ def build_analysis_need_ledger_in_transaction(
         raise ValueError("analysis ledger needs a UTC range of at most 31 days and later cutoff")
     rows: list[AnalysisNeedLedgerRowView] = []
     timing_samples: list[AnalysisTimingSample] = []
+    prompt_runtime_windows = _load_prompt_runtime_windows_in_transaction(session, as_of=end)
     for rule in list_topic_analysis_rule_identities_in_transaction(
         session, owner_id=owner_id, before=end
     ):
@@ -156,6 +178,7 @@ def build_analysis_need_ledger_in_transaction(
                 content_version_id=post.content_version_id,
                 prompt_version=ANALYSIS_PROMPT_VERSION,
                 as_of=end,
+                prompt_runtime_windows=prompt_runtime_windows,
             )
             if origin.status == "not_required" or (
                 origin.status == "candidate"
@@ -180,6 +203,7 @@ def build_analysis_need_ledger_in_transaction(
                     origin_status="unknown" if inconsistent_history else origin.status,
                     started_at=None if inconsistent_history else origin.started_at,
                     reason="first_valid_precedes_need" if inconsistent_history else origin.reason,
+                    prompt_runtime_ids=origin.prompt_runtime_ids,
                     result_state=annotation.result_state if annotation is not None else None,
                     first_valid_at=first_valid_at,
                 )
@@ -200,7 +224,7 @@ def build_analysis_need_ledger_in_transaction(
         key=lambda row: (str(row.topic_id), row.topic_rule_version, str(row.content_version_id))
     )
     return AnalysisNeedLedgerView(
-        metric_version="analysis-candidate-v1",
+        metric_version="analysis-candidate-v2",
         analysis_status="not_computable",
         start=start,
         end=end,
@@ -224,8 +248,9 @@ def project_analysis_need_origin_in_transaction(
     content_version_id: UUID,
     prompt_version: str,
     as_of: datetime,
+    prompt_runtime_windows: Sequence[PromptRuntimeWindow] | None = None,
 ) -> AnalysisNeedOriginProjection:
-    """Intersect exact version receipt, rule lifetime, topic active spans and prompt activation."""
+    """Intersect exact receipt, rule/topic windows and evidenced prompt runtime."""
     if not session.in_transaction():
         raise RuntimeError("analysis need projection requires the caller's transaction")
     if as_of.tzinfo is None or topic_rule_version < 1 or not prompt_version:
@@ -262,12 +287,26 @@ def project_analysis_need_origin_in_transaction(
     if received_at is None:
         return AnalysisNeedOriginProjection("not_required", None)
     cutoff = as_of.astimezone(UTC)
+    eligible_spans: list[tuple[datetime, datetime]] = []
     for active_start, active_end in timeline.active_spans:
         start = max(received_at, timeline.starts_at, activation.activated_at, active_start)
-        ends = tuple(end for end in (timeline.ends_at, active_end) if end is not None)
-        if start <= cutoff and (not ends or start < min(ends)):
-            return AnalysisNeedOriginProjection("candidate", start)
-    return AnalysisNeedOriginProjection("not_required", None)
+        end = min(end for end in (timeline.ends_at, active_end, cutoff) if end is not None)
+        if start < end:
+            eligible_spans.append((start, end))
+    if not eligible_spans:
+        return AnalysisNeedOriginProjection("not_required", None)
+    runtime = project_prompt_runtime_origin(
+        prompt_version=prompt_version,
+        eligible_spans=eligible_spans,
+        runtime_windows=(
+            prompt_runtime_windows
+            if prompt_runtime_windows is not None
+            else _load_prompt_runtime_windows_in_transaction(session, as_of=cutoff)
+        ),
+    )
+    return AnalysisNeedOriginProjection(
+        runtime.status, runtime.started_at, runtime.reason, runtime.runtime_ids
+    )
 
 
 def analysis_operation_id(

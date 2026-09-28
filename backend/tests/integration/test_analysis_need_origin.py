@@ -18,6 +18,17 @@ pytest_plugins = ("tests.integration.test_analysis_pipeline",)
 def origin_case(analysis_case: AnalysisCase) -> Iterator[AnalysisCase]:
     case = analysis_case
     with case.sessions() as session, session.begin():
+        previous_runtime = (
+            session.execute(
+                text(
+                    "SELECT id, prompt_version, ai_enabled, started_at, last_seen_at, stopped_at "
+                    "FROM analysis_prompt_runtime_sessions"
+                )
+            )
+            .mappings()
+            .all()
+        )
+        session.execute(text("DELETE FROM analysis_prompt_runtime_sessions"))
         previous = session.execute(
             text(
                 "SELECT activated_at FROM analysis_prompt_activations "
@@ -33,6 +44,7 @@ def origin_case(analysis_case: AnalysisCase) -> Iterator[AnalysisCase]:
         yield case
     finally:
         with case.sessions() as session, session.begin():
+            session.execute(text("DELETE FROM analysis_prompt_runtime_sessions"))
             session.execute(
                 text("DELETE FROM analysis_prompt_activations WHERE prompt_version = :version"),
                 {"version": ANALYSIS_PROMPT_VERSION},
@@ -44,6 +56,16 @@ def origin_case(analysis_case: AnalysisCase) -> Iterator[AnalysisCase]:
                         "(prompt_version, activated_at) VALUES (:version, :at)"
                     ),
                     {"version": ANALYSIS_PROMPT_VERSION, "at": previous},
+                )
+            for runtime in previous_runtime:
+                session.execute(
+                    text(
+                        "INSERT INTO analysis_prompt_runtime_sessions "
+                        "(id, prompt_version, ai_enabled, started_at, last_seen_at, stopped_at) "
+                        "VALUES (:id, :prompt_version, :ai_enabled, :started_at, "
+                        ":last_seen_at, :stopped_at)"
+                    ),
+                    dict(runtime),
                 )
 
 
@@ -71,7 +93,34 @@ def _event(
         )
 
 
-def _activate_prompt(case: AnalysisCase, at: datetime) -> None:
+def _runtime_session(
+    case: AnalysisCase,
+    *,
+    started_at: datetime,
+    last_seen_at: datetime,
+    ai_enabled: bool,
+    prompt_version: str = ANALYSIS_PROMPT_VERSION,
+) -> UUID:
+    run_id = uuid4()
+    with case.sessions() as session, session.begin():
+        session.execute(
+            text(
+                "INSERT INTO analysis_prompt_runtime_sessions "
+                "(id, prompt_version, ai_enabled, started_at, last_seen_at, stopped_at) "
+                "VALUES (:id, :version, :enabled, :started, :last_seen, NULL)"
+            ),
+            {
+                "id": run_id,
+                "version": prompt_version,
+                "enabled": ai_enabled,
+                "started": started_at,
+                "last_seen": last_seen_at,
+            },
+        )
+    return run_id
+
+
+def _activate_prompt(case: AnalysisCase, at: datetime, *, runtime: bool = True) -> None:
     with case.sessions() as session, session.begin():
         session.execute(
             text(
@@ -79,6 +128,13 @@ def _activate_prompt(case: AnalysisCase, at: datetime) -> None:
                 "(prompt_version, activated_at) VALUES (:version, :at)"
             ),
             {"version": ANALYSIS_PROMPT_VERSION, "at": at},
+        )
+    if runtime:
+        _runtime_session(
+            case,
+            started_at=at,
+            last_seen_at=case.now + timedelta(hours=2),
+            ai_enabled=True,
         )
 
 
@@ -111,6 +167,81 @@ def test_old_post_origin_is_topic_activation_not_global_ingest(
     assert result.started_at == topic_active
     assert result.started_at != first_ingest
     assert _project(case, at=topic_active - timedelta(microseconds=1)).status == "not_required"
+
+
+def test_prompt_disable_then_resume_moves_origin_to_reenabled_session(
+    origin_case: AnalysisCase,
+) -> None:
+    case = origin_case
+    activation = case.now - timedelta(hours=2)
+    topic_active = case.now - timedelta(hours=1)
+    resumed = case.now - timedelta(minutes=30)
+    _event(case, 1, "paused", "created", case.now - timedelta(days=4))
+    _event(case, 2, "active", "resumed", topic_active)
+    _activate_prompt(case, activation, runtime=False)
+    _runtime_session(case, started_at=activation, last_seen_at=resumed, ai_enabled=False)
+    enabled_run = _runtime_session(
+        case, started_at=resumed, last_seen_at=case.now + timedelta(hours=1), ai_enabled=True
+    )
+
+    origin = _project(case)
+    assert origin.status == "candidate"
+    assert origin.started_at == resumed
+    assert enabled_run in origin.prompt_runtime_ids
+
+
+def test_prompt_runtime_gap_before_first_enabled_session_is_unknown(
+    origin_case: AnalysisCase,
+) -> None:
+    case = origin_case
+    activation = case.now - timedelta(hours=2)
+    _event(case, 1, "paused", "created", case.now - timedelta(days=4))
+    _event(case, 2, "active", "resumed", case.now - timedelta(hours=1))
+    _activate_prompt(case, activation, runtime=False)
+    disabled_run = _runtime_session(
+        case,
+        started_at=activation,
+        last_seen_at=case.now - timedelta(minutes=50),
+        ai_enabled=False,
+    )
+    _runtime_session(
+        case,
+        started_at=case.now - timedelta(minutes=30),
+        last_seen_at=case.now + timedelta(hours=1),
+        ai_enabled=True,
+    )
+    result = _project(case)
+    assert result.status == "unknown"
+    assert result.reason == "prompt_runtime_history_gap"
+    assert result.prompt_runtime_ids == (disabled_run,)
+
+
+def test_missing_or_conflicting_prompt_runtime_is_unknown(
+    origin_case: AnalysisCase,
+) -> None:
+    case = origin_case
+    activation = case.now - timedelta(hours=2)
+    _event(case, 1, "paused", "created", case.now - timedelta(days=4))
+    _event(case, 2, "active", "resumed", case.now - timedelta(hours=1))
+    _activate_prompt(case, activation, runtime=False)
+    assert _project(case).reason == "prompt_runtime_history_gap"
+
+    enabled_run = _runtime_session(
+        case,
+        started_at=activation,
+        last_seen_at=case.now + timedelta(hours=1),
+        ai_enabled=True,
+    )
+    disabled_run = _runtime_session(
+        case,
+        started_at=activation,
+        last_seen_at=case.now + timedelta(hours=1),
+        ai_enabled=False,
+    )
+    result = _project(case)
+    assert result.status == "unknown"
+    assert result.reason == "prompt_runtime_conflict"
+    assert set(result.prompt_runtime_ids) == {enabled_run, disabled_run}
 
 
 def test_rule_change_during_pause_starts_at_resume(
