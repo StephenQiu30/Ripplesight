@@ -267,6 +267,17 @@ class KeywordDiscoveryExecutor:
                 "重新提交有界的关键词搜索任务",
             ) from error
 
+        if lease.checkpoint.get("cursor.done") is True:
+            with self._sessions() as session, session.begin():
+                if CoverageWindowService(
+                    session,
+                    execution=JobExecutionService(
+                        session, lease_seconds=self._lease_seconds, clock=self._clock
+                    ),
+                    clock=self._clock,
+                ).confirmed_by_job_in_transaction(lease=lease, window=window):
+                    return lease, JobCompletion(status=JobStatus.SUCCEEDED)
+
         try:
             adapter_factory = self._adapter_factory or self._configured_adapter_factory(
                 owner_id=configuration.owner_id,
