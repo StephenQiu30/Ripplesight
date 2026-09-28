@@ -17,7 +17,9 @@ depends_on: ["002"]
 
 # Plan 010：MediaCrawler 三类版本证据
 
-2026-09-28 技术进度：运行前版本门禁已在适配器中核对固定根 realpath、Git 根/HEAD、已跟踪差异与未跟踪可执行/代码文件；失败统一为本卡三个稳定错误码并由搜索/评论执行器归为 `configuration_unavailable`。临时 Git 工作树先红后绿，受控验证校验失败时零请求计量、零子进程启动；本机固定目录只读检查因 HEAD 不符拒绝。三版本分别持久到组件策略与 Job、旧 Job 不变及失败 Job 关联的 `SPEC-010-DATA-001`/`CHK-010-102` 仍未实现；本卡保持 `in_progress`，本人账号未请求。
+2026-09-28 技术进度：运行前版本门禁核对固定根 realpath、Git 根/HEAD、已跟踪差异与未跟踪可执行/代码文件；失败归为 `configuration_unavailable`。三类版本已分别写入组件策略和受理时 Job 快照，旧 Job 换版不变，失败 Job 保留版本与错误码，缺失/不符快照在适配器装配前拒绝。临时 Git 工作树和隔离 PostgreSQL 17 均已受控验证；本机固定目录只读检查因 HEAD 不符拒绝，真实账号未请求。实际固定目录修复与 Plan012 真实 Job 关联仍待本人核对，故本卡保持 `in_progress`。
+
+G0 核对：历史 `68f1b02b` 的 046 S03 验收全项 `passed`；Plan002 已完成预设/预算同事务与连接版本快照。实施前 B 站 `component_version` 仍指向上游短版，Job 无三类版本列。当前切片修改 `sources/adapters/mediacrawler.py`、`connections/{presets,services}.py`、`jobs/{schemas,models,services}.py`、`content/{discovery_execution,comments_execution}.py`、`backend/database/schema.sql`、相关单元/集成测试及本设计、Plan、Acceptance、BACKLOG；新增 `backend/tests/integration/test_mediacrawler_evidence.py`。未修改 HTTP 路由或生成客户端。
 
 ## 固定字段与实施路径
 
@@ -25,8 +27,8 @@ depends_on: ["002"]
 
 校验固定目录realpath、HEAD和tracked diff，先于子进程/任何平台请求；错误稳定分类为 `mediacrawler_revision_mismatch`、`mediacrawler_worktree_dirty`、`mediacrawler_version_evidence_missing`，失败不映射认证失效。只允许已配置固定根，未受控可执行文件/未跟踪代码可能影响执行时同样拒绝，runtime私有输出按明确白名单隔离，不修改外部工作树或自动打补丁。
 
-- [ ] CHK-010-101 → SEC/JOB：`backend/tests/unit/test_mediacrawler_adapter.py` 使用临时受控Git夹具验证错HEAD、dirty、越界路径及额外可执行文件，断言子进程启动计数0。
-- [ ] CHK-010-102 → DATA：新增 `backend/tests/integration/test_mediacrawler_evidence.py`，断言三字段分别持久、换版旧Job不变、失败Job也可定位版本检查结果。
+- [x] CHK-010-101 → SEC/JOB：`backend/tests/unit/test_mediacrawler_adapter.py` 使用临时受控Git夹具验证错HEAD、dirty、越界路径及额外可执行文件，断言子进程启动计数0。
+- [x] CHK-010-102 → DATA：`backend/tests/integration/test_mediacrawler_evidence.py` 断言三字段分别持久、换版旧Job不变、失败Job也可定位版本检查结果。
 
 运行B门禁；真实固定工作树只读检查，实际账号请求归012。结果归M2 Acceptance Plan010；不因外部工作树存在就宣称来源接入。
 
@@ -46,12 +48,12 @@ depends_on: ["002"]
 
 Given：固定补丁工作树和三类版本标识可读。When：分别以正确、脏工作树、错 HEAD 启动受控 Job。Then：仅符合固定版本的 Job 可以继续，版本证据在 Job 可独立追溯。
 
-- [ ] `CHK-010-G0-001`：核对 PRD/Design、046 S03、Plan 002 与当前预设差异，列确切文件。
-- [ ] `CHK-010-G1-001`：冻结三类版本字段、校验顺序和错误码。
-- [ ] `CHK-010-G2-001`：先保存正确/错误 HEAD、已跟踪文件改动和版本缺失的失败验证。
-- [ ] `CHK-010-G3-001`：实现并核对 `SPEC-010-SEC-001`、`SPEC-010-DATA-001`、`SPEC-010-JOB-001` 与 Job 关联。
-- [ ] `CHK-010-G4-001`：运行 Ruff/mypy/pytest、真实库 Job 持久化和进程启动边界测试。
+- [x] `CHK-010-G0-001`：核对 PRD/Design、046 S03、Plan 002 与当前预设差异，列确切文件。
+- [x] `CHK-010-G1-001`：冻结三类版本字段、校验顺序和错误码。
+- [x] `CHK-010-G2-001`：先保存正确/错误 HEAD、已跟踪文件改动和版本缺失的失败验证。
+- [x] `CHK-010-G3-001`：实现并核对 `SPEC-010-SEC-001`、`SPEC-010-DATA-001`、`SPEC-010-JOB-001` 与 Job 关联。
+- [x] `CHK-010-G4-001`：运行 Ruff/mypy/pytest、真实库 Job 持久化和进程启动边界测试。
 - [ ] `CHK-010-G5-001`：本人账号真实低频采集前只读核对三类实际版本，并在 Plan 012 的真实 Job 验证关联。
-- [ ] `CHK-010-G6-001`：记录 `AC-003-001/002/003` 的版本部分；采集和风控结果另验。
+- [x] `CHK-010-G6-001`：记录 `AC-003-001/002/003` 的版本部分；采集和风控结果另验。
 
 失败时保持 B 站来源关闭，保留原 Job 和错误证据；不得自动切换工作树或补丁。受控、真实与产品证据分别登记。

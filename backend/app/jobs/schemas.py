@@ -644,6 +644,8 @@ class ComponentPolicyInput(BaseModel):
         pattern=r"^[a-z][a-z0-9_.:-]{0,127}$",
     )
     component_version: str = Field(min_length=1, max_length=128)
+    upstream_revision: str | None = Field(default=None, pattern=r"^[0-9a-f]{40}$")
+    patched_revision: str | None = Field(default=None, pattern=r"^[0-9a-f]{40}$")
     cost_class: CostClass
     enabled_for_core: bool
     terms_reference: str = Field(min_length=1, max_length=512)
@@ -658,6 +660,8 @@ class ComponentPolicyInput(BaseModel):
             raise ValueError("core components must be local or zero_price")
         if self.reviewed_at.tzinfo is None:
             raise ValueError("reviewed_at must be timezone-aware")
+        if (self.upstream_revision is None) != (self.patched_revision is None):
+            raise ValueError("upstream and patched revisions must be supplied together")
         return self
 
 

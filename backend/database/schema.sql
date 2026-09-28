@@ -643,6 +643,8 @@ CREATE TABLE resource_component_policies (
         component_key ~ '^[a-z][a-z0-9_.:-]{0,127}$'
     ),
     component_version VARCHAR(128) NOT NULL CHECK (component_version <> ''),
+    upstream_revision VARCHAR(40),
+    patched_revision VARCHAR(40),
     cost_class VARCHAR(32) NOT NULL CHECK (
         cost_class IN ('local', 'zero_price', 'free_credit', 'paid', 'unknown')
     ),
@@ -655,7 +657,12 @@ CREATE TABLE resource_component_policies (
     CONSTRAINT resource_component_policies_owner_component_key
         UNIQUE (owner_id, component_key),
     CONSTRAINT resource_component_policies_owner_id_key UNIQUE (owner_id, id),
-    CHECK (NOT enabled_for_core OR cost_class IN ('local', 'zero_price'))
+    CHECK (NOT enabled_for_core OR cost_class IN ('local', 'zero_price')),
+    CONSTRAINT resource_component_policies_revision_pair_check CHECK (
+        (upstream_revision IS NULL AND patched_revision IS NULL)
+        OR (upstream_revision IS NOT NULL AND patched_revision IS NOT NULL
+            AND upstream_revision ~ '^[0-9a-f]{40}$' AND patched_revision ~ '^[0-9a-f]{40}$')
+    )
 );
 
 CREATE TABLE resource_usage_attempts (
@@ -698,6 +705,9 @@ CREATE TABLE jobs (
     configuration_version BIGINT NOT NULL CHECK (configuration_version >= 1),
     source_key VARCHAR(64),
     source_capability VARCHAR(32),
+    upstream_revision VARCHAR(40),
+    patched_revision VARCHAR(40),
+    adapter_version VARCHAR(128),
     scope JSONB NOT NULL CHECK (jsonb_typeof(scope) = 'object'),
     request_fingerprint BYTEA NOT NULL CHECK (octet_length(request_fingerprint) = 32),
     status VARCHAR(32) NOT NULL DEFAULT 'queued' CHECK (
@@ -739,6 +749,12 @@ CREATE TABLE jobs (
     updated_at TIMESTAMPTZ NOT NULL CHECK (updated_at >= created_at),
     CONSTRAINT jobs_owner_kind_operation_key UNIQUE (owner_id, kind, operation_id),
     CONSTRAINT jobs_owner_id_key UNIQUE (owner_id, id),
+    CONSTRAINT jobs_mediacrawler_version_evidence_check CHECK (
+        (upstream_revision IS NULL AND patched_revision IS NULL AND adapter_version IS NULL)
+        OR (upstream_revision IS NOT NULL AND patched_revision IS NOT NULL
+            AND upstream_revision ~ '^[0-9a-f]{40}$' AND patched_revision ~ '^[0-9a-f]{40}$'
+            AND adapter_version IS NOT NULL AND adapter_version <> '')
+    ),
     CHECK (
         (source_key IS NULL AND source_capability IS NULL)
         OR (

@@ -32,7 +32,9 @@ from sources.contracts import (
 
 SOURCE_KEY = "bilibili"
 ADAPTER_VERSION = "mediacrawler-fb4e6c5-hotkey-safe"
-_PINNED_REVISION = "fb4e6c57ade1c7a2b3a61e69abc4fd4130047eb2"
+UPSTREAM_BASELINE = "380b426000aac3d612837ed72c99808347dc94c9"
+PATCHED_REVISION = "fb4e6c57ade1c7a2b3a61e69abc4fd4130047eb2"
+_PINNED_REVISION = PATCHED_REVISION
 _LOGGER = logging.getLogger(__name__)
 _MAX_OUTPUT_BYTES = 2 * 1024 * 1024
 _MAX_LOG_BYTES = 128 * 1024
@@ -52,6 +54,20 @@ class MediaCrawlerPreflightError(ValueError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
+
+
+def validate_job_version_evidence(
+    *, upstream_revision: str | None, patched_revision: str | None, adapter_version: str | None
+) -> None:
+    """Reject old or changed Job snapshots before any collector request is metered."""
+    if not upstream_revision or not patched_revision or not adapter_version:
+        raise MediaCrawlerPreflightError("mediacrawler_version_evidence_missing")
+    if (
+        upstream_revision != UPSTREAM_BASELINE
+        or patched_revision != PATCHED_REVISION
+        or adapter_version != ADAPTER_VERSION
+    ):
+        raise MediaCrawlerPreflightError("mediacrawler_revision_mismatch")
 
 
 def _counter(value: object) -> int | None:

@@ -34,7 +34,11 @@ from jobs.services import (
     load_job_execution_configuration,
 )
 from sources.adapters.hackernews import HackerNewsAdapter
-from sources.adapters.mediacrawler import MediaCrawlerAdapter, MediaCrawlerPreflightError
+from sources.adapters.mediacrawler import (
+    MediaCrawlerAdapter,
+    MediaCrawlerPreflightError,
+    validate_job_version_evidence,
+)
 from sources.contracts import (
     CommentsRequest,
     SourceAdapter,
@@ -199,6 +203,16 @@ class CommentsExecutor:
                 JobFailureCategory.CONFIGURATION_UNAVAILABLE,
                 "重新提交包含作品标识和有界预算的评论任务",
             ) from error
+
+        if source_key == "bilibili":
+            try:
+                validate_job_version_evidence(
+                    upstream_revision=configuration.upstream_revision,
+                    patched_revision=configuration.patched_revision,
+                    adapter_version=configuration.adapter_version,
+                )
+            except MediaCrawlerPreflightError as error:
+                raise self._adapter_failure(error) from error
 
         try:
             adapter_factory = self._adapter_factory or self._configured_adapter_factory(

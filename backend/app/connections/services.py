@@ -655,6 +655,8 @@ class SourcePresetService:
         component_command = ComponentPolicyInput(
             component_key=preset.component_name,
             component_version=preset.component_version,
+            upstream_revision=preset.upstream_revision,
+            patched_revision=preset.patched_revision,
             cost_class=CostClass(preset.component_cost_class),
             enabled_for_core=True,
             terms_reference=preset.component_terms_reference,

@@ -253,6 +253,19 @@ def test_bilibili_saved_search_output_commits_posts_and_cached_comments(
                 ),
                 {"id": retention_id, "owner_id": owner_id, "policy_id": policy_id, "now": now},
             )
+            ResourceBudgetService(session).save_component_policy_in_transaction(
+                owner_id=owner_id,
+                command=ComponentPolicyInput(
+                    component_key="collector.bilibili",
+                    component_version=BILIBILI_PRESET.component_version,
+                    upstream_revision=BILIBILI_PRESET.upstream_revision,
+                    patched_revision=BILIBILI_PRESET.patched_revision,
+                    cost_class=CostClass.LOCAL,
+                    enabled_for_core=True,
+                    terms_reference="https://example.invalid/terms",
+                    reviewed_at=now,
+                ),
+            )
             accepted = JobService(session).accept_in_transaction(owner_id=owner_id, command=command)
         with Session(engine) as session:
             lease = JobExecutionService(session, lease_seconds=60).acquire(
@@ -260,17 +273,6 @@ def test_bilibili_saved_search_output_commits_posts_and_cached_comments(
             )
         with Session(engine) as session:
             budget = ResourceBudgetService(session)
-            budget.save_component_policy(
-                owner_id=owner_id,
-                command=ComponentPolicyInput(
-                    component_key="collector.bilibili",
-                    component_version="1",
-                    cost_class=CostClass.LOCAL,
-                    enabled_for_core=True,
-                    terms_reference="https://example.invalid/terms",
-                    reviewed_at=now,
-                ),
-            )
             budget.save_budget_policy(
                 owner_id=owner_id,
                 command=BudgetPolicyInput(

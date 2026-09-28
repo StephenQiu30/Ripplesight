@@ -548,6 +548,9 @@ class JobExecutionConfiguration:
     collection_cycle_started_at: datetime | None
     observation: JobObservationContext
     scope: dict[str, OutboxValue]
+    upstream_revision: str | None = None
+    patched_revision: str | None = None
+    adapter_version: str | None = None
 
 
 def load_recent_comment_job_targets_in_transaction(
@@ -656,6 +659,9 @@ def _job_execution_configuration(job: Job) -> JobExecutionConfiguration:
             ),
         ),
         scope=dict(job.scope),
+        upstream_revision=job.upstream_revision,
+        patched_revision=job.patched_revision,
+        adapter_version=job.adapter_version,
     )
 
 
@@ -816,6 +822,8 @@ class ResourceBudgetService:
             owner_id=owner_id,
             component_key=command.component_key,
             component_version=command.component_version,
+            upstream_revision=command.upstream_revision,
+            patched_revision=command.patched_revision,
             cost_class=command.cost_class.value,
             enabled_for_core=command.enabled_for_core,
             terms_reference=command.terms_reference,
@@ -829,6 +837,8 @@ class ResourceBudgetService:
                 constraint="resource_component_policies_owner_component_key",
                 set_={
                     "component_version": statement.excluded.component_version,
+                    "upstream_revision": statement.excluded.upstream_revision,
+                    "patched_revision": statement.excluded.patched_revision,
                     "cost_class": statement.excluded.cost_class,
                     "enabled_for_core": statement.excluded.enabled_for_core,
                     "terms_reference": statement.excluded.terms_reference,
@@ -839,6 +849,12 @@ class ResourceBudgetService:
                 where=or_(
                     ResourceComponentPolicy.component_version
                     != statement.excluded.component_version,
+                    ResourceComponentPolicy.upstream_revision.is_distinct_from(
+                        statement.excluded.upstream_revision
+                    ),
+                    ResourceComponentPolicy.patched_revision.is_distinct_from(
+                        statement.excluded.patched_revision
+                    ),
                     ResourceComponentPolicy.cost_class != statement.excluded.cost_class,
                     ResourceComponentPolicy.enabled_for_core != statement.excluded.enabled_for_core,
                     ResourceComponentPolicy.terms_reference != statement.excluded.terms_reference,
@@ -875,6 +891,8 @@ class ResourceBudgetService:
         return (
             model is not None
             and model.component_version == command.component_version
+            and model.upstream_revision == command.upstream_revision
+            and model.patched_revision == command.patched_revision
             and model.cost_class == command.cost_class.value
             and model.enabled_for_core == command.enabled_for_core
             and model.terms_reference == command.terms_reference
@@ -1797,6 +1815,8 @@ class ResourceBudgetService:
             owner_id=model.owner_id,
             component_key=model.component_key,
             component_version=model.component_version,
+            upstream_revision=model.upstream_revision,
+            patched_revision=model.patched_revision,
             cost_class=CostClass(model.cost_class),
             enabled_for_core=model.enabled_for_core,
             terms_reference=model.terms_reference,
@@ -2251,6 +2271,27 @@ class JobService:
         now = self._clock()
         if now.tzinfo is None:
             raise ValueError("clock must return a timezone-aware datetime")
+        version_policy = (
+            self._session.scalar(
+                select(ResourceComponentPolicy).where(
+                    ResourceComponentPolicy.owner_id == owner_id,
+                    ResourceComponentPolicy.component_key == "collector.bilibili",
+                )
+            )
+            if command.observation.source_key == "bilibili"
+            else None
+        )
+        upstream_revision = None
+        patched_revision = None
+        adapter_version = None
+        if (
+            version_policy is not None
+            and version_policy.upstream_revision is not None
+            and version_policy.patched_revision is not None
+        ):
+            upstream_revision = version_policy.upstream_revision
+            patched_revision = version_policy.patched_revision
+            adapter_version = version_policy.component_version
         job_id = uuid4()
         inserted_id = self._session.scalar(
             insert(Job)
@@ -2267,6 +2308,9 @@ class JobService:
                     if command.observation.source_capability is not None
                     else None
                 ),
+                upstream_revision=upstream_revision,
+                patched_revision=patched_revision,
+                adapter_version=adapter_version,
                 scope=command.scope,
                 request_fingerprint=fingerprint,
                 status=JobStatus.QUEUED.value,

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from types import MappingProxyType
 
 from connections.schemas import SourceExecutionPolicy, SourceQuietWindow
+from sources.adapters.mediacrawler import ADAPTER_VERSION, PATCHED_REVISION, UPSTREAM_BASELINE
 from sources.adapters.rss import GOOGLE_NEWS_FEED_URL_TEMPLATE
 from sources.adapters.rsshub_hotlist import HOTLIST_ROUTES
 from sources.contracts import SourceCapability
@@ -58,6 +59,8 @@ class SourcePreset:
     reviewed_at: datetime
     budget: SourceBudgetPreset
     execution_policy: SourceExecutionPolicy = field(default_factory=_keyword_execution_policy)
+    upstream_revision: str | None = None
+    patched_revision: str | None = None
 
 
 _POST_FIELD_PURPOSES = MappingProxyType(
@@ -227,7 +230,9 @@ BILIBILI_PRESET = SourcePreset(
     ),
     retention_days=30,
     component_name="collector.bilibili",
-    component_version="mediacrawler-380b426-hotkey-safe",
+    component_version=ADAPTER_VERSION,
+    upstream_revision=UPSTREAM_BASELINE,
+    patched_revision=PATCHED_REVISION,
     component_license="NON-COMMERCIAL LEARNING LICENSE 1.1",
     component_cost_class="zero_price",
     component_terms_reference="https://github.com/NanmiCoder/MediaCrawler/blob/main/LICENSE",

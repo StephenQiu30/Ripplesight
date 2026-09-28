@@ -194,7 +194,9 @@ def test_bilibili_preset_is_separate_from_hotlist_and_caps_daily_requests() -> N
 
     assert BILIBILI_PRESET.source_key != "hotlist_bilibili"
     assert BILIBILI_PRESET.component_name == "collector.bilibili"
-    assert BILIBILI_PRESET.component_version == "mediacrawler-380b426-hotkey-safe"
+    assert BILIBILI_PRESET.component_version == "mediacrawler-fb4e6c5-hotkey-safe"
+    assert BILIBILI_PRESET.upstream_revision == "380b426000aac3d612837ed72c99808347dc94c9"
+    assert BILIBILI_PRESET.patched_revision == "fb4e6c57ade1c7a2b3a61e69abc4fd4130047eb2"
     assert BILIBILI_PRESET.budget.limit_units == 60
     assert {item.capability for item in BILIBILI_PRESET.capabilities} == {
         SourceCapability.SEARCH,
