@@ -5,7 +5,7 @@
 ## 当前边界
 
 - 信息获取是当前核心：四关键词来源 HN Algolia、Google News 搜索 RSS、本机 SearXNG `duckduckgo news`、本机 RSSHub `/36kr/newsflashes`；六个 RSSHub 公开热榜；HN 评论父链、来源 × 能力 × 时间窗覆盖和本机 Codex 相关性。M1 须同窗连续 72 小时真实验收。日报/周报、Obsidian 与推送各自后验，飞书暂缓。
-- 单 owner 登录、主题、连接、内容、Outbox/Kafka/Worker、预算、备份、统一错误契约及 Web 工作台已有代码。宿主机单 Worker 已注册 `webpage.collect`、`keyword.search`、`source.comments`、`source.hotlist`、`analysis.annotate`、`report.daily`、`notification.send`、`knowledge.export`；独立调度进程已存在。事件归并、SMTP 与统一覆盖查询仍待实现，旧“Worker 只有网页处理器”的记录已过期。
+- 单 owner 登录、主题、连接、内容、Outbox/Kafka/Worker、预算、备份、统一错误契约及 Web 工作台已有代码。宿主机单 Worker 已注册 `webpage.collect`、`keyword.search`、`source.comments`、`source.hotlist`、`analysis.annotate`、`events.cluster`、`report.daily`、`notification.send`、`knowledge.export`；独立调度进程已存在。事件候选与稳定身份已有受控技术切片，开关默认关闭；Plan014 v1.3 审查修复代码待本轮 PostgreSQL 回归，真实三平台、人工修订、热度和页面未验收。SMTP 仍待实现。
 - 本人账号来源本轮仅 B 站试点。MediaCrawler 固定补丁及独立 CDP 资料记录在 `~/Desktop/Docker/mediacrawler-start-local/`，HotKey 从宿主机启动子进程；评论只读同轮缓存的一级评论每帖 ≤20 条。固定提交现为 `1bd07bc`，普通非零退出不再误归认证失效；三类版本证据、风控停用与本人确认恢复已有受控验证。修复后尚未真实采集或恢复，开关关闭；不把离线回放称为接入成功。
 
 ## 证据快照
