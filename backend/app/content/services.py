@@ -2684,10 +2684,16 @@ def load_post_versions_for_analysis_scan(
     owner_id: UUID,
     topic_id: UUID,
     source_keys: tuple[str, ...],
+    as_of: datetime | None = None,
 ) -> tuple[AnalysisPostContentView, ...]:
     """Read selected search posts or versions from a matched hotlist observation."""
     if not session.in_transaction():
         raise RuntimeError("analysis content reads require the caller's transaction")
+    if as_of is not None and as_of.tzinfo is None:
+        raise ValueError("analysis scan cutoff must be timezone-aware")
+    receipt_cutoff = (
+        (ContentObservation.received_at < as_of.astimezone(UTC),) if as_of is not None else ()
+    )
     occurred_at = case(
         (ContentRecord.source_key == "bilibili", ContentObservation.observed_at),
         else_=func.coalesce(ContentObservation.published_at, ContentObservation.observed_at),
@@ -2707,6 +2713,7 @@ def load_post_versions_for_analysis_scan(
         .where(
             ContentObservation.owner_id == owner_id,
             ContentObservation.content_version_id.is_not(None),
+            *receipt_cutoff,
         )
         .group_by(ContentObservation.content_version_id)
         .subquery()
@@ -2734,6 +2741,7 @@ def load_post_versions_for_analysis_scan(
             HotlistEntryRecord.matched_topic_ids.contains([str(topic_id)]),
             HotlistSnapshot.source_key == ContentRecord.source_key,
             ContentObservation.content_version_id == ContentVersion.id,
+            *receipt_cutoff,
         )
         .correlate(ContentVersion, ContentRecord)
         .exists()

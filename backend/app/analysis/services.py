@@ -22,6 +22,8 @@ from analysis.prompts import (
 )
 from analysis.schemas import (
     AnalysisJobScope,
+    AnalysisNeedLedgerRowView,
+    AnalysisNeedLedgerView,
     AnalysisPromptItem,
     AnnotationOutputEnvelope,
     AnnotationOutputItem,
@@ -40,6 +42,7 @@ from content.services import (
 from core.config import Settings
 from jobs.coverage import CollectionDueWindowService
 from jobs.execution import JobCompletion, JobExecutionFailure
+from jobs.metrics import AnalysisTimingSample, summarize_analysis_timing
 from jobs.schemas import (
     JobAcceptanceInput,
     JobFailureCategory,
@@ -57,6 +60,7 @@ from monitors.services import (
     MonitorTopicService,
     NormalizedMonitorRules,
     evaluate_monitor_rules,
+    list_topic_analysis_rule_identities_in_transaction,
     load_topic_analysis_rule_timeline_in_transaction,
 )
 
@@ -83,6 +87,128 @@ class AnalysisNeedOriginProjection:
     status: Literal["candidate", "not_required", "unknown"]
     started_at: datetime | None
     reason: str | None = None
+
+
+def build_analysis_need_ledger_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    start: datetime,
+    end: datetime,
+    cutoff_at: datetime,
+) -> AnalysisNeedLedgerView:
+    """Enumerate observed exact-version candidates, including ones never queued."""
+    if not session.in_transaction():
+        raise RuntimeError("analysis ledger requires the caller's transaction")
+    if (
+        start.utcoffset() != timedelta(0)
+        or end.utcoffset() != timedelta(0)
+        or cutoff_at.utcoffset() != timedelta(0)
+        or not start < end <= start + timedelta(days=31)
+        or cutoff_at < end
+    ):
+        raise ValueError("analysis ledger needs a UTC range of at most 31 days and later cutoff")
+    rows: list[AnalysisNeedLedgerRowView] = []
+    timing_samples: list[AnalysisTimingSample] = []
+    for rule in list_topic_analysis_rule_identities_in_transaction(
+        session, owner_id=owner_id, before=end
+    ):
+        posts = load_post_versions_for_analysis_scan(
+            session,
+            owner_id=owner_id,
+            topic_id=rule.topic_id,
+            source_keys=rule.source_keys,
+            as_of=end,
+        )
+        if not posts:
+            continue
+        annotations = {
+            item.content_version_id: item
+            for item in session.scalars(
+                select(ContentAnnotation).where(
+                    ContentAnnotation.owner_id == owner_id,
+                    ContentAnnotation.topic_id == rule.topic_id,
+                    ContentAnnotation.topic_rule_version == rule.topic_rule_version,
+                    ContentAnnotation.prompt_version == ANALYSIS_PROMPT_VERSION,
+                )
+            )
+        }
+        for post in posts:
+            if not evaluate_monitor_rules(rule.rules, _post_text(post)).matched:
+                continue
+            availability = load_post_analysis_availability_in_transaction(
+                session,
+                owner_id=owner_id,
+                topic_id=rule.topic_id,
+                content_version_id=post.content_version_id,
+            )
+            if availability is None:
+                continue
+            origin = project_analysis_need_origin_in_transaction(
+                session,
+                owner_id=owner_id,
+                topic_id=rule.topic_id,
+                topic_rule_version=rule.topic_rule_version,
+                content_version_id=post.content_version_id,
+                prompt_version=ANALYSIS_PROMPT_VERSION,
+                as_of=end,
+            )
+            if origin.status == "not_required" or (
+                origin.status == "candidate"
+                and (origin.started_at is None or not start <= origin.started_at < end)
+            ):
+                continue
+            annotation = annotations.get(post.content_version_id)
+            first_valid_at = annotation.first_valid_at if annotation is not None else None
+            inconsistent_history = (
+                origin.status == "candidate"
+                and origin.started_at is not None
+                and first_valid_at is not None
+                and first_valid_at < origin.started_at
+            )
+            rows.append(
+                AnalysisNeedLedgerRowView(
+                    content_version_id=post.content_version_id,
+                    topic_id=rule.topic_id,
+                    topic_rule_version=rule.topic_rule_version,
+                    prompt_version=ANALYSIS_PROMPT_VERSION,
+                    source_key=availability.source_key,
+                    origin_status="unknown" if inconsistent_history else origin.status,
+                    started_at=None if inconsistent_history else origin.started_at,
+                    reason="first_valid_precedes_need" if inconsistent_history else origin.reason,
+                    result_state=annotation.result_state if annotation is not None else None,
+                    first_valid_at=first_valid_at,
+                )
+            )
+            if (
+                origin.status == "candidate"
+                and origin.started_at is not None
+                and not inconsistent_history
+            ):
+                timing_samples.append(
+                    AnalysisTimingSample(
+                        needed_at=origin.started_at,
+                        first_valid_at=first_valid_at,
+                    )
+                )
+    timing = summarize_analysis_timing(timing_samples, cutoff_at=cutoff_at)
+    rows.sort(
+        key=lambda row: (str(row.topic_id), row.topic_rule_version, str(row.content_version_id))
+    )
+    return AnalysisNeedLedgerView(
+        metric_version="analysis-candidate-v1",
+        analysis_status="not_computable",
+        start=start,
+        end=end,
+        cutoff_at=cutoff_at,
+        candidate_count=timing.sample_count,
+        unknown_count=len(rows) - timing.sample_count,
+        matured_count=timing.matured_count,
+        pending_observation_count=timing.pending_observation_count,
+        timely_valid_count=timing.timely_valid_count,
+        late_or_missing_count=timing.late_or_missing_count,
+        rows=tuple(rows),
+    )
 
 
 def project_analysis_need_origin_in_transaction(

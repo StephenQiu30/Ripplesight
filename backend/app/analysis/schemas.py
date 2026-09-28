@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Self
+from typing import Any, Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -54,6 +54,38 @@ class WindowAnnotationCountView(BaseModel):
     pending_count: int = Field(ge=0)
     failed_count: int = Field(ge=0)
     abnormal_count: int = Field(ge=0)
+
+
+class AnalysisNeedLedgerRowView(OutputModel):
+    content_version_id: UUID
+    topic_id: UUID
+    topic_rule_version: int = Field(ge=1)
+    prompt_version: str
+    source_key: str
+    origin_status: Literal["candidate", "unknown"]
+    started_at: datetime | None
+    reason: str | None
+    result_state: AnnotationResultState | None
+    first_valid_at: datetime | None
+
+
+class AnalysisNeedLedgerView(BaseModel):
+    """Raw candidate IDs, never a certified Codex availability denominator."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    metric_version: Literal["analysis-candidate-v1"]
+    analysis_status: Literal["not_computable"]
+    start: datetime
+    end: datetime
+    cutoff_at: datetime
+    candidate_count: int = Field(ge=0)
+    unknown_count: int = Field(ge=0)
+    matured_count: int = Field(ge=0)
+    pending_observation_count: int = Field(ge=0)
+    timely_valid_count: int = Field(ge=0)
+    late_or_missing_count: int = Field(ge=0)
+    rows: tuple[AnalysisNeedLedgerRowView, ...]
 
 
 class AnalysisPromptItem(BaseModel):
