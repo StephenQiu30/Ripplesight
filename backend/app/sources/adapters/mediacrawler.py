@@ -43,6 +43,15 @@ _AUTH_SIGNAL = re.compile(
 )
 _RATE_SIGNAL = re.compile(r"访问频繁|请求频繁|风控|rate.limit|too many requests|blocked", re.I)
 _VIDEO_ID = re.compile(r"^[0-9]{1,30}$")
+_EXECUTABLE_SUFFIXES = frozenset({".py", ".pyc", ".sh", ".so", ".dylib"})
+
+
+class MediaCrawlerPreflightError(ValueError):
+    """Stable, non-sensitive reason why a reviewed crawler cannot be launched."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
 
 
 def _counter(value: object) -> int | None:
@@ -350,35 +359,56 @@ class MediaCrawlerAdapter:
             (self._crawler_dir / ".venv" / "bin" / "python").is_file()
             and (self._crawler_dir / "main.py").is_file()
         ):
-            raise ValueError("MediaCrawler installation is unavailable")
+            raise MediaCrawlerPreflightError("mediacrawler_version_evidence_missing")
         if not self._verify_revision:
             return
-        child_env = {key: os.environ[key] for key in ("PATH", "HOME", "LANG") if key in os.environ}
-        revision = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=self._crawler_dir,
-            env=child_env,
-            capture_output=True,
-            text=True,
-            timeout=3,
-            check=False,
-        )
-        tracked_changes = subprocess.run(
-            ["git", "status", "--porcelain", "--untracked-files=no"],
-            cwd=self._crawler_dir,
-            env=child_env,
-            capture_output=True,
-            text=True,
-            timeout=3,
-            check=False,
-        )
+        try:
+            root = self._crawler_dir.resolve(strict=True)
+        except (OSError, RuntimeError) as error:
+            raise MediaCrawlerPreflightError("mediacrawler_version_evidence_missing") from error
         if (
-            revision.returncode != 0
-            or revision.stdout.strip() != _PINNED_REVISION
-            or tracked_changes.returncode != 0
-            or tracked_changes.stdout.strip()
+            not self._crawler_dir.is_absolute()
+            or root != self._crawler_dir
+            or (root / "main.py").is_symlink()
         ):
-            raise ValueError("MediaCrawler revision differs from the reviewed hotkey-safe build")
+            raise MediaCrawlerPreflightError("mediacrawler_version_evidence_missing")
+        child_env = {key: os.environ[key] for key in ("PATH", "HOME", "LANG") if key in os.environ}
+
+        def git(*args: str) -> str:
+            try:
+                result = subprocess.run(
+                    ["git", *args],
+                    cwd=root,
+                    env=child_env,
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                    check=False,
+                )
+            except (OSError, subprocess.TimeoutExpired) as error:
+                raise MediaCrawlerPreflightError("mediacrawler_version_evidence_missing") from error
+            if result.returncode != 0:
+                raise MediaCrawlerPreflightError("mediacrawler_version_evidence_missing")
+            return result.stdout
+
+        reported_root = git("rev-parse", "--show-toplevel").strip()
+        if not reported_root or Path(reported_root).resolve() != root:
+            raise MediaCrawlerPreflightError("mediacrawler_version_evidence_missing")
+        if git("rev-parse", "HEAD").strip() != _PINNED_REVISION:
+            raise MediaCrawlerPreflightError("mediacrawler_revision_mismatch")
+        if git("status", "--porcelain", "--untracked-files=no").strip():
+            raise MediaCrawlerPreflightError("mediacrawler_worktree_dirty")
+        untracked = git("ls-files", "--others", "--exclude-standard", "-z")
+        for relative in untracked.split("\0"):
+            if not relative:
+                continue
+            candidate = root / relative
+            try:
+                executable = candidate.is_file() and bool(candidate.stat().st_mode & 0o111)
+            except OSError as error:
+                raise MediaCrawlerPreflightError("mediacrawler_version_evidence_missing") from error
+            if executable or candidate.suffix.lower() in _EXECUTABLE_SUFFIXES:
+                raise MediaCrawlerPreflightError("mediacrawler_worktree_dirty")
 
     def _cached_comments(self, request: CommentsRequest) -> SourcePage:
         video_id = request.post_external_id

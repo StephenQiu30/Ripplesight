@@ -23,6 +23,7 @@
 | [执行 Plan 索引 001—057](plan/README.md) | 逐Issue全量清单、共享底座台账、技术依赖、逐条AC矩阵、文件串行及历史去向 | 逐卡状态见 BACKLOG；051 本次隔离库/Schema技术 completed，最终运行库需重验 |
 | [Acceptance 001 共享运行门槛](acceptance/001-共享运行门槛验收.md) | Plan051 同库/Schema 恢复与回退证据 | failed；TECH-001-051 限本次库通过，其他共享门槛与产品 AC 待验 |
 | [Acceptance 002 M1 信息获取主链路](acceptance/002-信息获取主链路验收.md) | M1 逐卡技术与真实证据、尚未通过的产品条件 | failed；父级 AC 待 Plan009 汇合 |
+| [Acceptance 003 M2 本人账号 B 站试点](acceptance/003-本人账号B站试点验收.md) | Plan010 运行前门禁受控证据与后续 M2 缺口 | failed；三版本 Job 与真实来源未验 |
 | 旧 Plan 001—007 | 拆分前基线与历史证据，原文从 Git 历史查阅 | historical |
 | [BACKLOG](../BACKLOG.md) | 阶段与任务状态看板 | — |
 | [HANDOVER](../HANDOVER.md) | 当前实现快照 | — |

@@ -3,7 +3,7 @@ layer: Plan
 scope: issue
 doc_no: "010"
 title: MediaCrawler 三类版本证据执行计划
-status: planned
+status: in_progress
 version: v1.1
 date: 2026-09-26
 owner: HotKey Team
@@ -16,6 +16,8 @@ depends_on: ["002"]
 ---
 
 # Plan 010：MediaCrawler 三类版本证据
+
+2026-09-28 技术进度：运行前版本门禁已在适配器中核对固定根 realpath、Git 根/HEAD、已跟踪差异与未跟踪可执行/代码文件；失败统一为本卡三个稳定错误码并由搜索/评论执行器归为 `configuration_unavailable`。临时 Git 工作树先红后绿，受控验证校验失败时零请求计量、零子进程启动；本机固定目录只读检查因 HEAD 不符拒绝。三版本分别持久到组件策略与 Job、旧 Job 不变及失败 Job 关联的 `SPEC-010-DATA-001`/`CHK-010-102` 仍未实现；本卡保持 `in_progress`，本人账号未请求。
 
 ## 固定字段与实施路径
 
