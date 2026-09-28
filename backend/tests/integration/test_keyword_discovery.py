@@ -2117,6 +2117,33 @@ def test_pages_atomically_save_distinct_channel_discoveries_and_unverified_gap()
         ).execute(_accepted_message(engine, verified_job.id), verified_lease)
         assert verified_renewed.checkpoint_sequence == 1
         assert verified_completion.status is JobStatus.SUCCEEDED
+        replay_at = late_at + timedelta(seconds=61)
+        with Session(engine) as session:
+            replay_lease = JobExecutionService(
+                session, lease_seconds=60, clock=lambda: replay_at
+            ).acquire(job_id=verified_job.id, worker_id="confirmed-replay")
+        recovered_lease, recovered_completion = KeywordDiscoveryExecutor(
+            sessionmaker(bind=engine),
+            lease_seconds=60,
+            component_key="collector.controlled",
+            adapter_factory=lambda _before, _cancelled, _limit, _seconds: pytest.fail(
+                "confirmed replay must not construct a source adapter"
+            ),
+            clock=lambda: replay_at,
+        ).execute(_accepted_message(engine, verified_job.id), replay_lease)
+        assert recovered_lease.checkpoint_sequence == verified_renewed.checkpoint_sequence
+        assert recovered_completion.status is JobStatus.SUCCEEDED
+        with Session(engine) as session:
+            JobExecutionService(session, lease_seconds=60, clock=lambda: replay_at).complete(
+                recovered_lease,
+                message=MessageReference(
+                    message_id=_accepted_message(engine, verified_job.id).message_id,
+                    topic="hotkey.jobs.accepted.v2",
+                    partition=0,
+                    offset=111,
+                ),
+                completion=recovered_completion,
+            )
         with Session(engine) as session:
             verified_coverage = session.scalar(
                 select(CoverageWindow).where(
@@ -2133,6 +2160,8 @@ def test_pages_atomically_save_distinct_channel_discoveries_and_unverified_gap()
                 None,
             )
             assert session.get(Job, verified_job.id).items_saved == 1
+            assert session.get(Job, verified_job.id).requests_sent == 1
+            assert session.get(Job, verified_job.id).status == "succeeded"
     finally:
         with engine.begin() as connection:
             connection.execute(text("SET CONSTRAINTS ALL DEFERRED"))

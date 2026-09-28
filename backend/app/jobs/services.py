@@ -143,6 +143,22 @@ class CoverageWindowService:
         self._execution = execution
         self._clock = clock or (lambda: datetime.now(UTC))
 
+    def confirmed_by_job_in_transaction(
+        self, *, lease: ExecutionLease, window: CoverageWindowInput
+    ) -> bool:
+        """Recognize a committed terminal page after its Job completion was interrupted."""
+        job = self._require_job(lease=lease, window=window)
+        try:
+            model = self._lock_window(window)
+        except CoverageWindowConflictError:
+            return False
+        return bool(
+            model.status == "confirmed"
+            and model.last_job_id == job.id
+            and model.checkpoint_sequence == job.checkpoint_sequence
+            and job.checkpoint_sequence > 0
+        )
+
     def begin_in_transaction(
         self,
         *,
