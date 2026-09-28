@@ -305,7 +305,7 @@ function MetricSummary({
         {value.analysis_status === "not_computable"
           ? "分析时效尚不可计算。"
           : `分析状态：${value.analysis_status}。`}
-        热榜相位未完成冻结验证时，成功桶比例仅供核对。
+        热榜相位未完成冻结验证时，延迟结论与成功桶比例仅供核对。
       </p>
       {value.sources.length === 0 ? (
         <p className="bg-muted mt-4 rounded-2xl p-5 text-sm">

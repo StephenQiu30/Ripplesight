@@ -313,7 +313,7 @@ class CollectionSourceMetricView(BaseModel):
 class CollectionCoverageMetricsView(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    metric_version: Literal["collection-v1"]
+    metric_version: Literal["collection-v2"]
     start: datetime
     end: datetime
     cutoff_at: datetime
