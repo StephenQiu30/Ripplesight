@@ -20,7 +20,11 @@ from core.errors import ApplicationError
 from evidence.services import load_source_access_readiness
 from jobs.models import Job
 from jobs.schemas import BudgetMetric, BudgetScopeKind, BudgetWindowUsageView, JobAcceptanceInput
-from jobs.services import JobService, ResourceBudgetService
+from jobs.services import (
+    JobService,
+    ResourceBudgetService,
+    try_lock_source_collection_in_transaction,
+)
 from monitors.models import MonitorTopic, MonitorTopicVersion
 from monitors.schemas import (
     MonitorTopicRunInput,
@@ -134,10 +138,17 @@ class MonitorTopicRunService:
                 if not self._has_budget(budgets, source_key):
                     skipped[source_key] = "budget"
                     continue
-                if policy.min_interval_seconds and self._recent_source_job(
-                    owner_id=owner_id,
-                    source_key=source_key,
-                    since=now - timedelta(seconds=policy.min_interval_seconds),
+                if policy.min_interval_seconds and (
+                    not try_lock_source_collection_in_transaction(
+                        self._session,
+                        owner_id=owner_id,
+                        source_key=source_key,
+                    )
+                    or self._recent_source_job(
+                        owner_id=owner_id,
+                        source_key=source_key,
+                        since=now - timedelta(seconds=policy.min_interval_seconds),
+                    )
                 ):
                     skipped[source_key] = "rate_limited"
                     continue

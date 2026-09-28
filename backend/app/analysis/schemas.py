@@ -96,6 +96,7 @@ class AnalysisPromptItem(BaseModel):
     title: str | None = Field(default=None, max_length=2_000)
     body: str | None = Field(default=None, max_length=100_000)
     comments: tuple[str, ...] = Field(default=(), max_length=51)
+    comment_version_ids: tuple[UUID, ...] | None = Field(default=None, max_length=51)
     body_truncated: bool = False
     comments_truncated: bool = False
 
@@ -105,6 +106,11 @@ class AnalysisPromptItem(BaseModel):
             raise ValueError("analysis content requires title or body text")
         if any(not comment for comment in self.comments):
             raise ValueError("analysis comments must not be empty")
+        if self.comment_version_ids is not None and (
+            len(self.comment_version_ids) != len(self.comments)
+            or len(set(self.comment_version_ids)) != len(self.comment_version_ids)
+        ):
+            raise ValueError("analysis comments require distinct aligned version references")
         return self
 
 

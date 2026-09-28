@@ -38,6 +38,7 @@ from analysis.schemas import (
 )
 from content.schemas import AnalysisPostContentView
 from content.services import (
+    load_frozen_analysis_comments,
     load_post_analysis_availability_in_transaction,
     load_post_comments_for_analysis,
     load_post_versions_for_analysis,
@@ -303,6 +304,9 @@ def pack_prompt_batches(
             update={
                 "body": item.body[:_MAX_BODY_CHARACTERS] if item.body is not None else None,
                 "comments": tuple(item.comments[:_MAX_COMMENTS_PER_POST]),
+                "comment_version_ids": item.comment_version_ids[:_MAX_COMMENTS_PER_POST]
+                if item.comment_version_ids is not None
+                else None,
                 "body_truncated": item.body_truncated
                 or (item.body is not None and len(item.body) > _MAX_BODY_CHARACTERS),
                 "comments_truncated": item.comments_truncated
@@ -317,6 +321,7 @@ def pack_prompt_batches(
         without_comments = item.model_copy(
             update={
                 "comments": (),
+                "comment_version_ids": () if item.comment_version_ids is not None else None,
                 "comments_truncated": bool(item.comments) or item.comments_truncated,
             }
         )
@@ -355,7 +360,14 @@ def _add_comments_within_limit(
                 exhausted[index] = True
                 continue
             comment = source.comments[position]
-            candidate_item = item.model_copy(update={"comments": (*item.comments, comment)})
+            references = (
+                source.comment_version_ids[: position + 1]
+                if source.comment_version_ids is not None
+                else None
+            )
+            candidate_item = item.model_copy(
+                update={"comments": (*item.comments, comment), "comment_version_ids": references}
+            )
             candidate_batch = [*batch[:index], candidate_item, *batch[index + 1 :]]
             if len(serialize_analysis_data(candidate_batch)) <= _MAX_SERIALIZED_CHARACTERS:
                 batch = candidate_batch
@@ -364,7 +376,9 @@ def _add_comments_within_limit(
                 continue
             prefix = _largest_comment_prefix(batch, index=index, comment=comment)
             if prefix:
-                batch[index] = item.model_copy(update={"comments": (*item.comments, prefix)})
+                batch[index] = item.model_copy(
+                    update={"comments": (*item.comments, prefix), "comment_version_ids": references}
+                )
                 changed = True
             truncated_by_budget[index] = True
             exhausted[index] = True
@@ -861,6 +875,7 @@ class AnalysisService:
             owner_id=owner_id,
             topic_id=topic_id,
             source_keys=source_keys,
+            readable_at=now,
         )
         matched = tuple(
             item for item in candidates if evaluate_monitor_rules(rules, _post_text(item)).matched
@@ -903,7 +918,15 @@ class AnalysisService:
                 continue
             for version_id in scope.content_version_ids:
                 jobs_by_version.setdefault(version_id, []).append(
-                    (job.status, scope.retry_index, scope.prompt_items is not None)
+                    (
+                        job.status,
+                        scope.retry_index,
+                        scope.prompt_items is not None
+                        and all(
+                            not item.comments or item.comment_version_ids is not None
+                            for item in scope.prompt_items
+                        ),
+                    )
                 )
 
         fresh: list[AnalysisPostContentView] = []
@@ -945,10 +968,15 @@ class AnalysisService:
             owner_id=owner_id,
             post_content_ids={item.content_id for item in due},
             limit_per_post=51,
+            readable_at=now,
         )
         prompt_items = {
             item.content_version_id: _prompt_item(
-                item, comments=tuple(comment.text for comment in comments.get(item.content_id, ()))
+                item,
+                comments=tuple(comment.text for comment in comments.get(item.content_id, ())),
+                comment_version_ids=tuple(
+                    comment.comment_version_id for comment in comments.get(item.content_id, ())
+                ),
             )
             for item in due
         }
@@ -1363,13 +1391,39 @@ class AnalysisAnnotateExecutor:
                 session,
                 owner_id=message.owner_id,
                 content_version_ids=set(missing_ids),
+                readable_at=self._clock(),
             )
             posts = {item.content_version_id: item for item in loaded_posts}
             if len(posts) != len(missing_ids):
                 raise self._configuration_failure("analysis_content_missing")
             frozen = {item.content_version_id: item for item in scope.prompt_items}
             items = tuple(frozen[content_version_id] for content_version_id in missing_ids)
+            if any(item.comments and item.comment_version_ids is None for item in items):
+                raise self._configuration_failure("analysis_frozen_input_missing")
+            frozen_comments = load_frozen_analysis_comments(
+                session,
+                owner_id=message.owner_id,
+                version_ids={
+                    version_id for item in items for version_id in (item.comment_version_ids or ())
+                },
+                now=self._clock(),
+            )
             for item in items:
+                for index, (version_id, text) in enumerate(
+                    zip(item.comment_version_ids or (), item.comments, strict=True)
+                ):
+                    comment = frozen_comments.get(version_id)
+                    if comment is None:
+                        raise self._configuration_failure("analysis_comment_missing")
+                    if comment.post_content_id != item.content_id or not (
+                        comment.text == text
+                        or (
+                            item.comments_truncated
+                            and index == len(item.comments) - 1
+                            and comment.text.startswith(text)
+                        )
+                    ):
+                        raise self._configuration_failure("analysis_frozen_content_mismatch")
                 post = posts[item.content_version_id]
                 frozen_body = post.body[:_MAX_BODY_CHARACTERS] if post.body is not None else None
                 if (
@@ -1400,6 +1454,7 @@ def _prompt_item(
     post: AnalysisPostContentView,
     *,
     comments: tuple[str, ...],
+    comment_version_ids: tuple[UUID, ...],
 ) -> AnalysisPromptItem:
     return AnalysisPromptItem(
         content_id=post.content_id,
@@ -1407,6 +1462,7 @@ def _prompt_item(
         title=post.title,
         body=post.body[:_MAX_BODY_CHARACTERS] if post.body is not None else None,
         comments=comments[: _MAX_COMMENTS_PER_POST + 1],
+        comment_version_ids=comment_version_ids[: _MAX_COMMENTS_PER_POST + 1],
         body_truncated=post.body is not None and len(post.body) > _MAX_BODY_CHARACTERS,
         comments_truncated=len(comments) > _MAX_COMMENTS_PER_POST,
     )

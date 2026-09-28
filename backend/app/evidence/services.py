@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TypeGuard, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import case, or_, select
+from sqlalchemy import Select, case, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -126,21 +126,36 @@ def load_readable_resource_ids(
     """Return readable business resource IDs without owning the caller's transaction."""
     if not resource_ids:
         return set()
+    return set(
+        session.scalars(
+            readable_resource_ids_query(
+                owner_id=owner_id,
+                resource_type=resource_type,
+                now=now,
+            ).where(EvidenceResource.resource_id.in_(resource_ids))
+        ).all()
+    )
+
+
+def readable_resource_ids_query(
+    *,
+    owner_id: UUID,
+    resource_type: str,
+    now: datetime,
+) -> Select[tuple[UUID]]:
+    """Lifecycle-owned projection for filtering business reads before limits/ranking."""
+    if now.tzinfo is None:
+        raise ValueError("resource read time must be timezone-aware")
     deletion_exists = (
         select(DeletionDirective.id)
         .where(DeletionDirective.resource_record_id == EvidenceResource.id)
         .exists()
     )
-    return set(
-        session.scalars(
-            select(EvidenceResource.resource_id).where(
-                EvidenceResource.owner_id == owner_id,
-                EvidenceResource.resource_type == resource_type,
-                EvidenceResource.resource_id.in_(resource_ids),
-                EvidenceResource.expires_at > now,
-                ~deletion_exists,
-            )
-        ).all()
+    return select(EvidenceResource.resource_id).where(
+        EvidenceResource.owner_id == owner_id,
+        EvidenceResource.resource_type == resource_type,
+        EvidenceResource.expires_at > now,
+        ~deletion_exists,
     )
 
 

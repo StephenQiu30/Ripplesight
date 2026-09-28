@@ -117,6 +117,23 @@ type PublishOutbox = Callable[["OutboxEnvelope"], None]
 type OutboxValue = str | int | bool | None
 
 
+def try_lock_source_collection_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    source_key: str,
+) -> bool:
+    """Serialize rate admission across manual and scheduled topic collections."""
+    if not session.in_transaction():
+        raise RuntimeError("source admission requires the caller's transaction")
+    key = int.from_bytes(
+        hashlib.sha256(f"collection-source:{owner_id}:{source_key}".encode()).digest()[:8],
+        "big",
+        signed=True,
+    )
+    return bool(session.scalar(select(func.pg_try_advisory_xact_lock(key))))
+
+
 class CoverageWindowConflictError(RuntimeError):
     """The page cannot advance the selected durable source range."""
 

@@ -10,13 +10,13 @@ from uuid import uuid4
 
 from sqlalchemy import text
 from tests.integration.test_analysis_need_origin import _activate_prompt, _event
+from tests.integration.test_analysis_need_origin import origin_case as origin_case
 from tests.integration.test_analysis_pipeline import AnalysisCase, _post, _seed_ai_call
+from tests.integration.test_analysis_pipeline import analysis_case as analysis_case
 
 from analysis.prompts import ANALYSIS_PROMPT_VERSION
 from analysis.schemas import AnnotationResultState, AnnotationStatus, AnnotationWrite
 from analysis.services import AnalysisService, build_analysis_need_ledger_in_transaction
-
-pytest_plugins = ("tests.integration.test_analysis_need_origin",)
 
 
 def test_ledger_enumerates_unqueued_old_and_new_versions_without_claiming_ratio(
@@ -94,6 +94,15 @@ def test_ledger_enumerates_unqueued_old_and_new_versions_without_claiming_ratio(
         case.now - timedelta(minutes=50),
         case.now - timedelta(minutes=10),
     }
+    with case.sessions() as session, session.begin():
+        session.execute(
+            text("UPDATE evidence_resources SET expires_at=:now WHERE owner_id=:owner"),
+            {"now": case.now, "owner": case.owner_id},
+        )
+        after_expiry = build_analysis_need_ledger_in_transaction(
+            session, owner_id=case.owner_id, start=start, end=case.now, cutoff_at=cutoff
+        )
+    assert after_expiry == ledger
 
     backend_root = Path(__file__).resolve().parents[2]
     process = subprocess.run(

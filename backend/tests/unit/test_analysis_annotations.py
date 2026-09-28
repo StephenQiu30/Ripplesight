@@ -48,6 +48,7 @@ def _prompt_item(*, body: str = "正文", comments: tuple[str, ...] = ()) -> Ana
         title="主题标题",
         body=body,
         comments=comments,
+        comment_version_ids=tuple(uuid4() for _ in comments),
     )
 
 
@@ -90,6 +91,14 @@ def test_batch_packing_enforces_item_body_and_serialized_character_limits() -> N
     assert all(len(item.comments) <= 50 for batch in batches for item in batch)
     assert all(item.body_truncated for batch in batches for item in batch)
     assert all(item.comments_truncated for batch in batches for item in batch)
+    original = {item.content_version_id: item for item in items}
+    for batch in batches:
+        for item in batch:
+            assert (
+                item.comment_version_ids
+                == original[item.content_version_id].comment_version_ids[: len(item.comments)]
+            )
+            assert AnalysisPromptItem.model_validate(item.model_dump()) == item
 
 
 def test_batch_packing_freezes_31_items_and_51_comments_with_multibyte_text() -> None:

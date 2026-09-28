@@ -216,11 +216,14 @@ class CollectionDueWindowService:
         start_index = 0
         if latest is not None:
             elapsed = _as_utc(latest) - first_due.due_at
-            if elapsed < timedelta(0) or elapsed % cadence:
-                raise CollectionDueConflictError(
-                    "last persisted due is outside the recovery cadence"
-                )
-            start_index = elapsed // cadence
+            # The caller's cursor may already be beyond the old ledger, including
+            # after an interval change. Only replayed points must share this cadence.
+            if elapsed >= timedelta(0):
+                if elapsed % cadence:
+                    raise CollectionDueConflictError(
+                        "last persisted due is outside the recovery cadence"
+                    )
+                start_index = elapsed // cadence
         if count - start_index > 1000:
             raise ValueError("recover at most 1000 due points per transaction")
         result: list[CollectionDueWindowView] = []

@@ -7,11 +7,10 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy import text
 from tests.integration.test_analysis_pipeline import AnalysisCase
+from tests.integration.test_analysis_pipeline import analysis_case as analysis_case
 
 from analysis.prompts import ANALYSIS_PROMPT_VERSION
 from analysis.services import project_analysis_need_origin_in_transaction
-
-pytest_plugins = ("tests.integration.test_analysis_pipeline",)
 
 
 @pytest.fixture

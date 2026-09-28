@@ -23,10 +23,15 @@ from analysis.services import (
     analysis_operation_id,
     resolve_annotation_results,
 )
+from connections.presets import SOURCE_PRESETS
+from connections.services import SourcePresetService
 from core.config import Settings
+from evidence.schemas import DataClass, DeletionReason
+from evidence.services import LifecycleService, SourceAccessPolicyService
 from jobs.execution import JobExecutionFailure
 from jobs.schemas import JobAcceptedMessage
 from jobs.services import OutboxEnvelope
+from sources.contracts import SourceCapability
 from worker.app import create_job_message_handler
 from worker.messaging import process_message, publish_outbox
 
@@ -157,11 +162,16 @@ def analysis_case() -> Iterator[AnalysisCase]:
                 "now": old,
             },
         )
+        _track_analysis_observations(session, owner_id)
     case = AnalysisCase(sessions, owner_id, topic_id, content_id, version_id, comment_id, now)
     try:
         yield case
     finally:
         with sessions() as session, session.begin():
+            for table in ("evidence_deletions", "evidence_resources"):
+                session.execute(
+                    text(f"DELETE FROM {table} WHERE owner_id = :owner"), {"owner": owner_id}
+                )
             session.execute(
                 text("DELETE FROM hotlist_entries WHERE owner_id = :owner"), {"owner": owner_id}
             )
@@ -185,6 +195,9 @@ def analysis_case() -> Iterator[AnalysisCase]:
             )
             session.execute(
                 text("DELETE FROM monitor_topics WHERE owner_id = :owner"), {"owner": owner_id}
+            )
+            session.execute(
+                text("DELETE FROM source_connections WHERE owner_id=:owner"), {"owner": owner_id}
             )
             session.execute(
                 text("DELETE FROM identity_users WHERE id = :owner"), {"owner": owner_id}
@@ -212,6 +225,61 @@ def _seed_comment_version(
             "now": at,
         },
     )
+    session.execute(
+        text(
+            "INSERT INTO content_observations "
+            "(id, owner_id, content_id, job_id, source_operation_id, "
+            "content_version_id, observed_at, received_at) "
+            "SELECT :id, :owner, :content, id, :operation, :version, :at, :at FROM jobs "
+            "WHERE owner_id=:owner AND source_key='hackernews' AND kind='keyword.search' LIMIT 1"
+        ),
+        {
+            "id": uuid4(),
+            "owner": owner_id,
+            "content": comment_id,
+            "operation": uuid4(),
+            "version": version_id,
+            "at": at,
+        },
+    )
+    _track_analysis_observations(session, owner_id)
+
+
+def _track_analysis_observations(session: Session, owner_id: UUID) -> None:
+    rows = session.execute(
+        text(
+            "SELECT o.id, o.observed_at, j.source_key, j.source_capability "
+            "FROM content_observations o "
+            "JOIN jobs j ON j.id=o.job_id AND j.owner_id=o.owner_id WHERE o.owner_id=:owner "
+            "AND NOT EXISTS (SELECT 1 FROM evidence_resources r WHERE r.owner_id=o.owner_id "
+            "AND r.resource_type='content_observation' AND r.resource_id=o.id) "
+            "ORDER BY o.observed_at"
+        ),
+        {"owner": owner_id},
+    ).all()
+    for row in rows:
+        at = max(row.observed_at, SOURCE_PRESETS[row.source_key].reviewed_at)
+        SourcePresetService(session, clock=lambda at=at: at).apply_in_transaction(
+            owner_id=owner_id,
+            preset=SOURCE_PRESETS[row.source_key],
+        )
+        admission = SourceAccessPolicyService(
+            session, clock=lambda at=at: at
+        ).admit_payload_in_transaction(
+            owner_id=owner_id,
+            source_key=row.source_key,
+            capability=SourceCapability(row.source_capability),
+            data_class=DataClass.STRUCTURED,
+            collected_at=row.observed_at,
+            payload={"title": "HotKey fixture"},
+        )
+        LifecycleService(session, clock=lambda at=at: at).track_resource_in_transaction(
+            owner_id=owner_id,
+            resource_type="content_observation",
+            resource_id=row.id,
+            admission=admission,
+            cleanup_targets=[],
+        )
 
 
 def _scan(case: AnalysisCase) -> tuple[UUID, ...]:
@@ -221,6 +289,102 @@ def _scan(case: AnalysisCase) -> tuple[UUID, ...]:
             for job in AnalysisService(session).enqueue_due_batches_in_transaction(
                 owner_id=case.owner_id, topic_id=case.topic_id, now=case.now
             )
+        )
+
+
+def _make_unreadable(case: AnalysisCase, content_id: UUID, mode: str) -> None:
+    with case.sessions() as session:
+        observation_id = session.scalar(
+            text(
+                "SELECT id FROM content_observations WHERE owner_id=:owner AND content_id=:content"
+            ),
+            {"owner": case.owner_id, "content": content_id},
+        )
+        assert observation_id is not None
+        session.rollback()
+        if mode == "deleted":
+            LifecycleService(session, clock=lambda: case.now).request_deletion(
+                owner_id=case.owner_id,
+                operation_id=uuid4(),
+                resource_type="content_observation",
+                resource_id=observation_id,
+                reason=DeletionReason.USER_REQUEST,
+            )
+        else:
+            with session.begin():
+                if mode == "untracked":
+                    session.execute(
+                        text(
+                            "DELETE FROM evidence_resources "
+                            "WHERE owner_id=:owner AND resource_id=:id"
+                        ),
+                        {"owner": case.owner_id, "id": observation_id},
+                    )
+                    return
+                session.execute(
+                    text(
+                        "UPDATE evidence_resources SET expires_at=:now "
+                        "WHERE owner_id=:owner AND resource_id=:id"
+                    ),
+                    {"now": case.now, "owner": case.owner_id, "id": observation_id},
+                )
+
+
+@pytest.mark.parametrize("mode", ["expired", "deleted", "untracked"])
+@pytest.mark.parametrize("target", ["post", "comment"])
+def test_analysis_scan_obeys_lifecycle(analysis_case: AnalysisCase, mode: str, target: str) -> None:
+    case = analysis_case
+    _make_unreadable(case, case.content_id if target == "post" else case.comment_id, mode)
+    jobs = _scan(case)
+    if target == "post":
+        assert jobs == ()
+    else:
+        assert len(jobs) == 1
+        with case.sessions() as session:
+            scope = session.scalar(text("SELECT scope FROM jobs WHERE id=:id"), {"id": jobs[0]})
+        assert json.loads(scope["prompt_items"])[0]["comments"] == []
+
+
+@pytest.mark.parametrize("mode", ["expired", "deleted", "untracked"])
+@pytest.mark.parametrize("target", ["post", "comment"])
+def test_queued_analysis_rechecks_frozen_evidence(
+    analysis_case: AnalysisCase, mode: str, target: str
+) -> None:
+    case = analysis_case
+    (job_id,) = _scan(case)
+    with case.sessions() as session:
+        operation_id = session.scalar(
+            text("SELECT operation_id FROM jobs WHERE id=:id"), {"id": job_id}
+        )
+    _make_unreadable(case, case.content_id if target == "post" else case.comment_id, mode)
+    executor = AnalysisAnnotateExecutor(
+        case.sessions,
+        Settings(database_url=os.environ["HOTKEY_TEST_DATABASE_URL"]),
+        clock=lambda: case.now,
+    )
+    message = JobAcceptedMessage(
+        schema_version=2,
+        message_id=uuid4(),
+        event_type="job.accepted.v2",
+        job_id=job_id,
+        owner_id=case.owner_id,
+        operation_id=operation_id,
+        kind="analysis.annotate",
+        configuration_ref=f"topic:{case.topic_id}",
+        configuration_version=1,
+    )
+    with pytest.raises(JobExecutionFailure) as failure:
+        executor._load_execution(message)
+    assert failure.value.error_code == (
+        "analysis_content_missing" if target == "post" else "analysis_comment_missing"
+    )
+    with case.sessions() as session:
+        assert (
+            session.scalar(
+                text("SELECT count(*) FROM ai_calls WHERE owner_id=:owner"),
+                {"owner": case.owner_id},
+            )
+            == 0
         )
 
 
@@ -411,6 +575,7 @@ def test_analysis_scan_uses_selected_source_or_exact_hotlist_topic_version(
         seed_hotlist_snapshot(
             later_job_id, later_operation_id, later, ((matched_hotlist_content_id, []),)
         )
+        _track_analysis_observations(session, case.owner_id)
 
     job_ids = _scan(case)
     assert len(job_ids) == 1
@@ -495,6 +660,22 @@ def test_old_backlog_concurrent_scans_freeze_comments_and_accept_once(
     _, _, _, items = executor._load_execution(message)
     assert items[0].comments == ("原评论",)
     assert _scan(case) == ()
+    with case.sessions() as session, session.begin():
+        legacy_scope = dict(rows[0].scope)
+        legacy_items = json.loads(legacy_scope["prompt_items"])
+        for item in legacy_items:
+            item.pop("comment_version_ids")
+        legacy_scope["prompt_items"] = json.dumps(legacy_items)
+        session.execute(
+            text("UPDATE jobs SET scope=CAST(:scope AS jsonb) WHERE id=:id"),
+            {"scope": json.dumps(legacy_scope), "id": rows[0].id},
+        )
+    with pytest.raises(JobExecutionFailure) as legacy_failure:
+        executor._load_execution(message)
+    assert legacy_failure.value.error_code == "analysis_frozen_input_missing"
+    with case.sessions() as session, session.begin():
+        session.execute(text("UPDATE jobs SET status='failed' WHERE id=:id"), {"id": rows[0].id})
+    assert len(_scan(case)) == 1
 
 
 def test_invalid_annotation_gets_one_retry_then_queryable_failure(
