@@ -7,7 +7,7 @@ from uuid import UUID
 
 import typer
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from ai.services import AI_COMPONENT_KEY
 from analysis.services import build_analysis_need_ledger_in_transaction
@@ -46,6 +46,7 @@ def analysis_need_ledger(
     engine = create_db_engine(get_settings())
     try:
         with create_session_factory(engine)() as session, session.begin():
+            session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
             try:
                 result = build_analysis_need_ledger_in_transaction(
                     session,
