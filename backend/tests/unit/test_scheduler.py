@@ -339,3 +339,46 @@ def test_scheduler_process_registers_every_orm_model() -> None:
         check=False,
     )
     assert result.returncode == 0, result.stderr[-2000:]
+
+
+def test_event_slots_catch_up_and_retry_only_after_failed_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sqlalchemy import event
+    from sqlalchemy.orm import sessionmaker
+
+    monkeypatch.setattr(
+        scheduler,
+        "get_settings",
+        lambda: SimpleNamespace(ai_enabled=False, events_cluster_enabled=True),
+    )
+    calls: list[datetime] = []
+
+    def enqueue(*, now: datetime, ai_enabled: bool) -> int:
+        calls.append(now)
+        return 1
+
+    monkeypatch.setattr(
+        scheduler,
+        "EventCandidateService",
+        lambda _session: SimpleNamespace(enqueue_due_in_transaction=enqueue),
+    )
+    fail_commit = True
+
+    sessions = sessionmaker()
+
+    def before_commit(_session):
+        if fail_commit:
+            raise RuntimeError("commit failed")
+
+    event.listen(sessions, "before_commit", before_commit)
+    scans = tuple(scan for scan in _registered_scheduler_scans() if scan.name == "events")
+    start = datetime(2026, 9, 28, 10, 0, 50, tzinfo=UTC)
+    run_scheduler_round(sessions, scans, now=start)
+    fail_commit = False
+    later = start + timedelta(seconds=50)
+    run_scheduler_round(sessions, scans, now=later)
+    run_scheduler_round(sessions, scans, now=later + timedelta(minutes=1))
+    next_slot = start.replace(minute=30)
+    run_scheduler_round(sessions, scans, now=next_slot)
+    assert calls == [start, later, next_slot]

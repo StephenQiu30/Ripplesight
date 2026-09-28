@@ -23,6 +23,13 @@ class EventInput:
     representative_comment_id: UUID | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class EventTarget:
+    event_id: UUID
+    revision: int
+    members: tuple[EventInput, ...]
+
+
 class EventDecision(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 

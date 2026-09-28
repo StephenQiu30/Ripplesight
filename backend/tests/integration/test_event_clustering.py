@@ -586,3 +586,528 @@ def test_event_worker_records_budget_denial_without_model_request(
         candidate = session.get(EventCandidate, candidate_id)
         assert candidate is not None and candidate.status == "confirmed"
         assert session.scalar(select(Event.id).where(Event.owner_id == owner)) == candidate.event_id
+
+
+def _add_event_inputs(session, owner, topic, call_id, now, count=1):
+    """Persist controlled source identities; never contact a source or model."""
+    rows = [
+        {
+            "id": uuid4(),
+            "version": uuid4(),
+            "annotation": uuid4(),
+            "owner": owner,
+            "topic": topic,
+            "call": call_id,
+            "seen": now,
+            "prompt": ANALYSIS_PROMPT_VERSION,
+        }
+        for _ in range(count)
+    ]
+    session.execute(
+        text(
+            "INSERT INTO content_records "
+            "(id, owner_id, source_key, object_type, external_id, created_at) "
+            "VALUES (:id, :owner, 'rss_36kr', 'post', CAST(:id AS text), :seen)"
+        ),
+        rows,
+    )
+    session.execute(
+        text(
+            "INSERT INTO content_versions "
+            "(id, owner_id, content_id, fingerprint, text_scope, text_origin, title, created_at) "
+            "VALUES (:version, :owner, :id, decode(repeat('ab',32),'hex'), 'full', 'source', "
+            "'Acme launches new model', :seen)"
+        ),
+        rows,
+    )
+    session.execute(
+        text(
+            "INSERT INTO content_annotations "
+            "(id, owner_id, content_id, content_version_id, topic_id, topic_rule_version, "
+            "prompt_version, relevant, relevance_reason, sentiment, summary, viewpoints, "
+            "ai_call_id, status, result_state, first_valid_at, created_at, updated_at) "
+            "VALUES (:annotation, :owner, :id, :version, :topic, 1, :prompt, true, 'Acme', "
+            "'neutral', 'Acme', '[]'::jsonb, :call, 'annotated', 'valid', :seen, :seen, :seen)"
+        ),
+        rows,
+    )
+    return tuple(row["version"] for row in rows)
+
+
+def _event_message(session, candidate):
+    job = session.get(Job, candidate.job_id)
+    assert job is not None
+    return SimpleNamespace(
+        kind="events.cluster",
+        owner_id=job.owner_id,
+        job_id=job.id,
+        operation_id=job.operation_id,
+        configuration_ref=job.configuration_ref,
+        configuration_version=job.configuration_version,
+    )
+
+
+def _fake_event_model(monkeypatch, call_id, versions, *, same_event=True, before_return=None):
+    prompts = []
+    monkeypatch.setattr(
+        "events.services.create_ai_client",
+        lambda _settings: SimpleNamespace(close=lambda: None, provider="fake", model="fake"),
+    )
+
+    def complete(*_args, **kwargs):
+        prompts.append(kwargs["prompt"])
+        if before_return:
+            before_return()
+        return SimpleNamespace(
+            call_id=call_id,
+            output={
+                "same_event": same_event,
+                "member_version_ids": [str(v) for v in versions],
+                "title": "模型新标题" if same_event else None,
+                "summary": "模型新摘要" if same_event else None,
+            },
+        )
+
+    monkeypatch.setattr("events.services.AiService.complete", complete)
+    return prompts
+
+
+def _event_executor(sessions, now):
+    return EventClusterExecutor(
+        sessions,
+        Settings(
+            database_url="postgresql+psycopg://test:test@127.0.0.1:5432/hotkey_test",
+            ai_enabled=True,
+            events_cluster_enabled=True,
+        ),
+        clock=lambda: now,
+    )
+
+
+def test_review_scan_pages_deduplicates_and_drains_next_slot(event_context, monkeypatch):
+
+    from analysis.services import list_relevant_event_annotation_refs_in_transaction
+
+    sessions, owner, topic, versions, call_id, now = event_context
+    with sessions() as session, session.begin():
+        # 2002 valid content identities plus an older annotation for the same content.
+        extra = _add_event_inputs(session, owner, topic, call_id, now, count=1999)
+        session.execute(
+            text(
+                "INSERT INTO monitor_topic_versions "
+                "(topic_id, version, created_by, match_any, match_all, exclude, created_at) "
+                "SELECT topic_id, 2, created_by, match_any, match_all, exclude, created_at "
+                "FROM monitor_topic_versions WHERE topic_id=:topic AND version=1"
+            ),
+            {"topic": topic},
+        )
+        session.execute(
+            text(
+                "INSERT INTO content_annotations "
+                "(id, owner_id, content_id, content_version_id, topic_id, topic_rule_version, "
+                "prompt_version, relevant, relevance_reason, sentiment, summary, viewpoints, "
+                "ai_call_id, status, result_state, first_valid_at, created_at, updated_at) "
+                "SELECT :id, owner_id, content_id, content_version_id, "
+                "topic_id, 2, prompt_version, "
+                "true, relevance_reason, sentiment, summary, viewpoints, ai_call_id, status, "
+                "result_state, first_valid_at, created_at - interval '1 minute', updated_at "
+                "FROM content_annotations WHERE content_version_id=:version"
+            ),
+            {"id": uuid4(), "version": extra[0]},
+        )
+        page = list_relevant_event_annotation_refs_in_transaction(
+            session, since=now - timedelta(hours=72), limit=2000
+        )
+        assert len(page.items) == 2000
+        assert {ref.content_version_id for ref in page.items[:1999]} == set(extra)
+        tail = list_relevant_event_annotation_refs_in_transaction(
+            session, since=now - timedelta(hours=72), after=page.next_after, limit=2000
+        )
+        assert len(tail.items) == 2
+        assert all(ref.topic_rule_version == 1 for ref in (*page.items, *tail.items))
+        assert len({ref.content_id for ref in (*page.items, *tail.items)}) == 2002
+        logs = []
+        with monkeypatch.context() as patches:
+            patches.setattr(
+                "events.services.structlog.get_logger",
+                lambda _name: SimpleNamespace(
+                    info=lambda name, **fields: logs.append({"event": name, **fields})
+                ),
+            )
+            inputs = load_relevant_event_inputs_in_transaction(
+                session, since=now - timedelta(hours=72)
+            )
+        assert len(inputs) == 2000
+        assert any(log["event"] == "event_scan_truncated" for log in logs)
+        EventCandidateService(session).enqueue_due_in_transaction(now=now, ai_enabled=False)
+        candidates = session.scalars(
+            select(EventCandidate).where(EventCandidate.owner_id == owner)
+        ).all()
+        confirmed_versions = {
+            UUID(version) for candidate in candidates for version in candidate.member_version_ids
+        }
+        for candidate in candidates:
+            EventCandidateService(session).confirm_in_transaction(
+                candidate_id=candidate.id,
+                owner_id=owner,
+                decision=_decision(tuple(UUID(v) for v in candidate.member_version_ids)),
+                ai_call_id=call_id,
+                now=now,
+            )
+    with sessions() as session, session.begin():
+        remaining = load_relevant_event_inputs_in_transaction(
+            session, since=now - timedelta(hours=72)
+        )
+        # Descending scans retain the latest inputs; unassigned older rows remain discoverable.
+        assert {item.content_version_id for item in remaining} == (
+            set((*versions[:3], *extra)) - confirmed_versions
+        )
+        EventCandidateService(session).enqueue_due_in_transaction(
+            now=now + timedelta(minutes=30), ai_enabled=False
+        )
+        pending = session.scalars(
+            select(EventCandidate).where(
+                EventCandidate.owner_id == owner, EventCandidate.status == "pending"
+            )
+        ).all()
+        assert pending
+        assert {
+            str(item.content_version_id)
+            for item in remaining
+            if item.content_version_id != versions[2]
+        } <= {v for candidate in pending for v in candidate.member_version_ids}
+
+
+@pytest.mark.parametrize(
+    "outcome", ["confirm", "reject", "revision", "removed", "assigned", "inactive"]
+)
+def test_review_append_to_existing_event(event_context, monkeypatch, outcome):
+    from sqlalchemy import event as sqlalchemy_event
+
+    sessions, owner, topic, versions, call_id, now = event_context
+    with sessions() as session, session.begin():
+        # Keep fixture content but use the exact HN + Google News source pair in the contract.
+        session.execute(
+            text(
+                "UPDATE content_records SET source_key='google_news' WHERE id="
+                "(SELECT content_id FROM content_versions WHERE id=:id)"
+            ),
+            {"id": versions[1]},
+        )
+        EventCandidateService(session).enqueue_due_in_transaction(now=now, ai_enabled=False)
+        initial = session.scalar(select(EventCandidate).where(EventCandidate.owner_id == owner))
+        event_id = EventCandidateService(session).confirm_in_transaction(
+            candidate_id=initial.id,
+            owner_id=owner,
+            decision=_decision(versions[:2]),
+            ai_call_id=call_id,
+            now=now,
+        )
+        added = _add_event_inputs(session, owner, topic, call_id, now - timedelta(hours=3))
+    with sessions() as session, session.begin():
+        statements = []
+
+        def capture(_connection, _cursor, statement, _parameters, _context, _many):
+            if "similarity(" in statement.lower():
+                statements.append(statement)
+
+        connection = session.connection()
+        sqlalchemy_event.listen(connection, "before_cursor_execute", capture)
+        try:
+            EventCandidateService(session).enqueue_due_in_transaction(
+                now=now + timedelta(minutes=30), ai_enabled=True
+            )
+        finally:
+            sqlalchemy_event.remove(connection, "before_cursor_execute", capture)
+        assert len(statements) == 1 and "unnest" in statements[0].lower()
+        candidate = session.scalar(
+            select(EventCandidate).where(
+                EventCandidate.owner_id == owner, EventCandidate.status == "pending"
+            )
+        )
+        assert candidate is not None
+        assert candidate.expected_event_revisions == {str(event_id): 1}
+        frozen = tuple(UUID(v) for v in candidate.member_version_ids)
+        assert set(added) < set(frozen) <= set((*versions[:2], *added))
+        assert versions[1] in frozen  # Most recent context first.
+        candidate_id, message = candidate.id, _event_message(session, candidate)
+
+    def manual_change():
+        with sessions() as session, session.begin():
+            target = session.get(Event, event_id)
+            if outcome == "revision":
+                target.revision = 7
+            elif outcome == "removed":
+                member = session.scalar(
+                    select(EventMember).where(
+                        EventMember.event_id == event_id,
+                        EventMember.content_version_id.in_(set(frozen) - set(added)),
+                    )
+                )
+                member.removed_revision = 2
+            elif outcome == "inactive":
+                other = Event(
+                    id=uuid4(),
+                    owner_id=owner,
+                    topic_id=topic,
+                    revision=1,
+                    title="人工目标",
+                    summary="人工目标",
+                    first_seen_at=now,
+                    first_seen_basis="discovered",
+                    status="active",
+                    merged_into_id=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(other)
+                session.flush()
+                target.status, target.merged_into_id = "merged", other.id
+            elif outcome == "assigned":
+                source = load_relevant_event_inputs_in_transaction(
+                    session, since=now - timedelta(hours=72), version_ids=added
+                )[0]
+                session.add(
+                    EventMember(
+                        id=uuid4(),
+                        owner_id=owner,
+                        topic_id=topic,
+                        event_id=event_id,
+                        content_id=source.content_id,
+                        content_version_id=source.content_version_id,
+                        source_key=source.source_key,
+                        added_revision=2,
+                        removed_revision=None,
+                        assignment_origin="manual",
+                        representative_comment_id=None,
+                        created_at=now,
+                    )
+                )
+
+    prompts = _fake_event_model(
+        monkeypatch, call_id, frozen, same_event=outcome != "reject", before_return=manual_change
+    )
+    executor = _event_executor(sessions, now + timedelta(minutes=31))
+    if outcome in {"revision", "removed", "assigned", "inactive"}:
+        with pytest.raises(JobExecutionFailure):
+            executor.execute(message)
+    else:
+        executor.execute(message)
+        executor.execute(message)
+    assert len(prompts) == 1
+    assert "上下文" in prompts[0]
+    with sessions() as session:
+        candidate = session.get(EventCandidate, candidate_id)
+        target = session.get(Event, event_id)
+        assert target.title == "Acme 发布新模型"
+        assert target.summary == "两处来源报道了同一次发布。"
+        members = session.scalars(select(EventMember).where(EventMember.event_id == event_id)).all()
+        if outcome == "confirm":
+            assert candidate.event_id == event_id and candidate.status == "confirmed"
+            assert target.revision == 2 and len(members) == 3
+            assert target.first_seen_at == now - timedelta(hours=3)
+            assert target.first_seen_basis == "discovered"
+            assert target.updated_at == now + timedelta(minutes=31)
+            added_member = next(m for m in members if m.source_key == "rss_36kr")
+            assert added_member.added_revision == 2 and added_member.assignment_origin == "model"
+        elif outcome == "reject":
+            assert candidate.status == "rejected" and target.revision == 1
+            assert len(members) == 2 and target.updated_at == now
+        else:
+            assert (
+                candidate.status == "failed" and candidate.error_code == "manual_revision_conflict"
+            )
+            assert target.revision == (7 if outcome == "revision" else 1)
+        assert len(session.scalars(select(Event).where(Event.owner_id == owner)).all()) == (
+            2 if outcome == "inactive" else 1
+        )
+
+
+def test_review_input_changed_is_persisted_before_model(event_context, monkeypatch):
+    sessions, owner, _, versions, _, now = event_context
+    with sessions() as session, session.begin():
+        EventCandidateService(session).enqueue_due_in_transaction(now=now, ai_enabled=True)
+        candidate = session.scalar(select(EventCandidate).where(EventCandidate.owner_id == owner))
+        candidate_id, message = candidate.id, _event_message(session, candidate)
+        session.execute(
+            text(
+                "UPDATE content_annotations SET relevant=false, sentiment=NULL "
+                "WHERE content_version_id=:id"
+            ),
+            {"id": versions[0]},
+        )
+    monkeypatch.setattr(
+        "events.services.create_ai_client", lambda _settings: pytest.fail("model called")
+    )
+    with pytest.raises(JobExecutionFailure, match="event_input_changed"):
+        _event_executor(sessions, now).execute(message)
+    with sessions() as session:
+        candidate = session.get(EventCandidate, candidate_id)
+        assert candidate.status == "failed" and candidate.error_code == "input_changed"
+        assert candidate.ai_call_id is None
+    with pytest.raises(JobExecutionFailure, match="event_candidate_not_pending"):
+        _event_executor(sessions, now).execute(message)
+
+
+def test_review_similarity_round_trips_are_constant(event_context):
+    from sqlalchemy import event as sqlalchemy_event
+
+    from events.clustering import cluster_candidates
+
+    sessions, owner, topic, _, call_id, now = event_context
+    with sessions() as session, session.begin():
+        _add_event_inputs(session, owner, topic, call_id, now, count=25)
+        inputs = load_relevant_event_inputs_in_transaction(session, since=now - timedelta(hours=72))
+        statements = []
+
+        def capture(_connection, _cursor, statement, _parameters, _context, _many):
+            if "similarity(" in statement.lower():
+                statements.append(statement)
+
+        connection = session.connection()
+        sqlalchemy_event.listen(connection, "before_cursor_execute", capture)
+        try:
+            cluster_candidates(session, inputs)
+            assert len(statements) == 1
+            assert "unnest" in statements[0].lower()
+        finally:
+            sqlalchemy_event.remove(connection, "before_cursor_execute", capture)
+
+
+def test_review_scan_is_not_limited_to_target_minute(event_context):
+    sessions, owner, _, _, _, now = event_context
+    with sessions() as session, session.begin():
+        EventCandidateService(session).enqueue_due_in_transaction(
+            now=now + timedelta(minutes=1, seconds=40), ai_enabled=False
+        )
+        assert session.scalar(select(EventCandidate.id).where(EventCandidate.owner_id == owner))
+
+
+def test_rework_new_pair_is_not_starved_by_old_singletons(event_context):
+    import hashlib
+
+    sessions, owner, topic, _, call_id, now = event_context
+    with sessions() as session, session.begin():
+        session.execute(
+            text(
+                "UPDATE content_annotations SET relevant=false, sentiment=NULL "
+                "WHERE owner_id=:owner"
+            ),
+            {"owner": owner},
+        )
+        older = _add_event_inputs(
+            session, owner, topic, call_id, now - timedelta(hours=2), count=2001
+        )
+        session.execute(
+            text("UPDATE content_versions SET title=:title WHERE id=:id"),
+            [
+                {"id": version, "title": "Acme " + hashlib.sha256(str(index).encode()).hexdigest()}
+                for index, version in enumerate(older)
+            ],
+        )
+        EventCandidateService(session).enqueue_due_in_transaction(now=now, ai_enabled=False)
+        assert (
+            session.scalar(select(EventCandidate.id).where(EventCandidate.owner_id == owner))
+            is None
+        )
+    later = now + timedelta(minutes=30)
+    with sessions() as session, session.begin():
+        pair = _add_event_inputs(session, owner, topic, call_id, later, count=2)
+    with sessions() as session, session.begin():
+        EventCandidateService(session).enqueue_due_in_transaction(now=later, ai_enabled=False)
+        candidates = session.scalars(
+            select(EventCandidate).where(EventCandidate.owner_id == owner)
+        ).all()
+        assert len(candidates) == 1
+        assert set(candidates[0].member_version_ids) == {str(version) for version in pair}
+        assert candidates[0].expected_event_revisions == {}
+
+
+@pytest.mark.parametrize("recent_member", ["current", "expired", "removed"])
+def test_rework_old_event_requires_recent_current_member(event_context, monkeypatch, recent_member):
+    sessions, owner, topic, versions, call_id, now = event_context
+    old_time = now - timedelta(hours=80)
+    with sessions() as session, session.begin():
+        EventCandidateService(session).enqueue_due_in_transaction(now=now, ai_enabled=False)
+        initial = session.scalar(select(EventCandidate).where(EventCandidate.owner_id == owner))
+        event_id = EventCandidateService(session).confirm_in_transaction(
+            candidate_id=initial.id,
+            owner_id=owner,
+            decision=_decision(versions[:2]),
+            ai_call_id=call_id,
+            now=now,
+        )
+        target = session.get(Event, event_id)
+        target.first_seen_at = old_time
+        session.execute(
+            text(
+                "UPDATE content_records SET created_at=:old WHERE id="
+                "(SELECT content_id FROM content_versions WHERE id=:version)"
+            ),
+            {"old": old_time, "version": versions[0]},
+        )
+        if recent_member == "expired":
+            session.execute(
+                text(
+                    "UPDATE content_records SET created_at=:old WHERE id="
+                    "(SELECT content_id FROM content_versions WHERE id=:version)"
+                ),
+                {"old": old_time, "version": versions[1]},
+            )
+        elif recent_member == "removed":
+            target.revision = 2
+            member = session.scalar(
+                select(EventMember).where(
+                    EventMember.event_id == event_id, EventMember.content_version_id == versions[1]
+                )
+            )
+            member.removed_revision = 2
+            # Exclude the removed content from new candidate inputs while retaining its evidence.
+            session.execute(
+                text(
+                    "UPDATE content_annotations SET relevant=false, sentiment=NULL "
+                    "WHERE content_version_id=:version"
+                ),
+                {"version": versions[1]},
+            )
+        added = _add_event_inputs(session, owner, topic, call_id, now, count=2)
+    later = now + timedelta(minutes=30)
+    with sessions() as session, session.begin():
+        EventCandidateService(session).enqueue_due_in_transaction(now=later, ai_enabled=True)
+        candidate = session.scalar(
+            select(EventCandidate).where(
+                EventCandidate.owner_id == owner, EventCandidate.status == "pending"
+            )
+        )
+        assert candidate is not None
+        frozen = tuple(UUID(value) for value in candidate.member_version_ids)
+        if recent_member == "current":
+            assert candidate.expected_event_revisions == {str(event_id): 1}
+            assert set(frozen) == {versions[1], *added}
+        else:
+            assert candidate.expected_event_revisions == {}
+            assert set(frozen) == set(added)
+        candidate_id, message = candidate.id, _event_message(session, candidate)
+    _fake_event_model(monkeypatch, call_id, frozen)
+    _event_executor(sessions, later).execute(message)
+    with sessions() as session:
+        candidate = session.get(EventCandidate, candidate_id)
+        target = session.get(Event, event_id)
+        assert candidate.status == "confirmed"
+        assert target.first_seen_at == old_time
+        assert target.title == "Acme 发布新模型"
+        event_count = len(session.scalars(select(Event).where(Event.owner_id == owner)).all())
+        if recent_member == "current":
+            assert candidate.event_id == event_id and target.revision == 2
+            assert event_count == 1
+            assert (
+                len(
+                    session.scalars(
+                        select(EventMember).where(EventMember.event_id == event_id)
+                    ).all()
+                )
+                == 4
+            )
+        else:
+            assert candidate.event_id != event_id and event_count == 2
+            assert target.revision == (2 if recent_member == "removed" else 1)

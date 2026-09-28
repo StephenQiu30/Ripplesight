@@ -78,6 +78,7 @@ SchedulerScanFunction = Callable[[Session, datetime], int]
 class SchedulerScan:
     name: str
     run_in_transaction: SchedulerScanFunction
+    after_commit: Callable[[datetime], None] | None = None
 
 
 class _ReportScanService(Protocol):
@@ -750,6 +751,28 @@ def _optional_report_scan() -> SchedulerScan | None:
 
 
 def _registered_scheduler_scans() -> tuple[SchedulerScan, ...]:
+    last_event_slot: datetime | None = None
+    attempted_event_slot: datetime | None = None
+
+    def scan_events(session: Session, now: datetime) -> int:
+        nonlocal attempted_event_slot
+        attempted_event_slot = None
+        if not get_settings().events_cluster_enabled:
+            return 0
+        utc_now = now.astimezone(UTC)
+        slot = utc_now.replace(minute=(utc_now.minute // 30) * 30, second=0, microsecond=0)
+        if slot == last_event_slot:
+            return 0
+        attempted_event_slot = slot
+        return EventCandidateService(session).enqueue_due_in_transaction(
+            now=now, ai_enabled=get_settings().ai_enabled
+        )
+
+    def event_scan_committed(_now: datetime) -> None:
+        nonlocal last_event_slot
+        if attempted_event_slot is not None:
+            last_event_slot = attempted_event_slot
+
     scans = [
         SchedulerScan(name="hotlists", run_in_transaction=enqueue_due_hotlists_in_transaction),
         SchedulerScan(
@@ -766,13 +789,8 @@ def _registered_scheduler_scans() -> tuple[SchedulerScan, ...]:
         ),
         SchedulerScan(
             name="events",
-            run_in_transaction=lambda session, now: (
-                EventCandidateService(session).enqueue_due_in_transaction(
-                    now=now, ai_enabled=get_settings().ai_enabled
-                )
-                if get_settings().events_cluster_enabled
-                else 0
-            ),
+            run_in_transaction=scan_events,
+            after_commit=event_scan_committed,
         ),
     ]
     report_scan = _optional_report_scan()
@@ -808,7 +826,10 @@ def run_scheduler_round(
     for scan in scans:
         try:
             with sessions() as session, session.begin():
-                results[scan.name] = scan.run_in_transaction(session, now)
+                count = scan.run_in_transaction(session, now)
+            if scan.after_commit is not None:
+                scan.after_commit(now)
+            results[scan.name] = count
         except Exception as error:
             logger.error(
                 "scheduler_scan_failed",
