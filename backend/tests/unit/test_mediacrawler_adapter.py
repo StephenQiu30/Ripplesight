@@ -8,9 +8,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from sqlalchemy.orm import sessionmaker
 
+from content.comments_execution import CommentsExecutor
 from content.discovery import KeywordDiscoveryPageCommitService
-from sources.adapters.mediacrawler import MediaCrawlerAdapter, _post
+from content.discovery_execution import KeywordDiscoveryExecutor
+from jobs.schemas import JobFailureCategory
+from sources.adapters.mediacrawler import MediaCrawlerAdapter, MediaCrawlerPreflightError, _post
 from sources.contracts import (
     CommentsRequest,
     SearchRequest,
@@ -251,37 +255,116 @@ def test_search_returns_empty_when_all_posts_are_outside_window(tmp_path: Path) 
     assert not (tmp_path / "output" / ("a" * 32) / "index" / "101.json").exists()
 
 
+def _reviewed_git_crawler(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    crawler = _fake_crawler(tmp_path, "")
+    (crawler / ".gitignore").write_text(".venv/\n", encoding="utf-8")
+    subprocess.run(["git", "init", "--quiet", str(crawler)], check=True)
+    subprocess.run(["git", "-C", str(crawler), "add", "main.py", ".gitignore"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(crawler),
+            "-c",
+            "user.name=HotKey test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "fixture",
+        ],
+        check=True,
+    )
+    revision = subprocess.check_output(
+        ["git", "-C", str(crawler), "rev-parse", "HEAD"], text=True
+    ).strip()
+    monkeypatch.setattr("sources.adapters.mediacrawler._PINNED_REVISION", revision)
+    return crawler
+
+
+def test_reviewed_revision_and_clean_crawler_are_accepted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    crawler = _reviewed_git_crawler(tmp_path, monkeypatch)
+    adapter = _adapter(tmp_path, crawler)
+    adapter._verify_revision = True
+    adapter._validate_crawler()
+
+
 @pytest.mark.parametrize(
-    ("revision", "accepted"),
+    ("scenario", "error_code"),
     [
-        ("fb4e6c57ade1c7a2b3a61e69abc4fd4130047eb2", True),
-        ("53bfdf9116b737575488eb05df2bbcaf4dbf05b9", False),
+        ("wrong_head", "mediacrawler_revision_mismatch"),
+        ("dirty", "mediacrawler_worktree_dirty"),
+        ("untracked_code", "mediacrawler_worktree_dirty"),
+        ("symlink_root", "mediacrawler_version_evidence_missing"),
     ],
 )
-def test_reviewed_revision_is_required(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, revision: str, accepted: bool
+def test_unreviewed_crawler_never_charges_or_starts_child(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    scenario: str,
+    error_code: str,
 ) -> None:
-    crawler = _fake_crawler(tmp_path, "")
-    adapter = MediaCrawlerAdapter(
-        crawler_dir=crawler,
-        output_dir=tmp_path / "output",
-        owner_key="a" * 32,
-        before_request=lambda _: True,
-        cancelled=lambda: False,
-        max_requests=26,
-        max_seconds=5,
-    )
+    crawler = _reviewed_git_crawler(tmp_path, monkeypatch)
+    if scenario == "wrong_head":
+        (crawler / "main.py").write_text("print('changed')\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(crawler), "add", "main.py"], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(crawler),
+                "-c",
+                "user.name=HotKey test",
+                "-c",
+                "user.email=test@example.invalid",
+                "commit",
+                "--quiet",
+                "-m",
+                "changed",
+            ],
+            check=True,
+        )
+    elif scenario == "dirty":
+        (crawler / "main.py").write_text("print('dirty')\n", encoding="utf-8")
+    elif scenario == "untracked_code":
+        (crawler / "extra.py").write_text("print('untracked')\n", encoding="utf-8")
+    elif scenario == "symlink_root":
+        alias = tmp_path / "crawler-alias"
+        alias.symlink_to(crawler, target_is_directory=True)
+        crawler = alias
 
-    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
-        output = f"{revision}\n" if command[1] == "rev-parse" else ""
-        return subprocess.CompletedProcess(command, 0, output, "")
+    attempts: list[int] = []
+    adapter = _adapter(tmp_path, crawler, attempts=attempts)
+    adapter._verify_revision = True
+    launches: list[int] = []
+    monkeypatch.setattr(adapter, "_run_child", lambda *_: launches.append(1))
+    with pytest.raises(ValueError) as error:
+        adapter.fetch_page(SearchRequest(source_key="bilibili", query="HotKey", page_size=1))
+    assert str(error.value) == error_code
+    assert attempts == []
+    assert launches == []
 
-    monkeypatch.setattr("sources.adapters.mediacrawler.subprocess.run", fake_run)
-    if accepted:
-        adapter._validate_crawler()
-    else:
-        with pytest.raises(ValueError, match="reviewed hotkey-safe build"):
-            adapter._validate_crawler()
+
+@pytest.mark.parametrize(
+    "error_code",
+    [
+        "mediacrawler_revision_mismatch",
+        "mediacrawler_worktree_dirty",
+        "mediacrawler_version_evidence_missing",
+    ],
+)
+def test_preflight_failure_keeps_stable_non_authentication_job_code(error_code: str) -> None:
+    for executor in (
+        KeywordDiscoveryExecutor(sessionmaker(), lease_seconds=30),
+        CommentsExecutor(sessionmaker(), lease_seconds=30),
+    ):
+        failure = executor._adapter_failure(MediaCrawlerPreflightError(error_code))
+        assert failure.error_code == error_code
+        assert failure.category is JobFailureCategory.CONFIGURATION_UNAVAILABLE
+        assert failure.manual_retry_allowed is False
 
 
 @pytest.mark.parametrize(

@@ -34,7 +34,7 @@ from jobs.services import (
     load_job_execution_configuration,
 )
 from sources.adapters.hackernews import HackerNewsAdapter
-from sources.adapters.mediacrawler import MediaCrawlerAdapter
+from sources.adapters.mediacrawler import MediaCrawlerAdapter, MediaCrawlerPreflightError
 from sources.adapters.rss import GOOGLE_NEWS_FEED_URL_TEMPLATE, RssSourceAdapter
 from sources.adapters.web_search import WebSearchAdapter
 from sources.contracts import (
@@ -585,6 +585,13 @@ class KeywordDiscoveryExecutor:
             )
 
     def _adapter_failure(self, error: Exception) -> JobExecutionFailure:
+        if isinstance(error, MediaCrawlerPreflightError):
+            return self._failure(
+                error.code,
+                JobFailureCategory.CONFIGURATION_UNAVAILABLE,
+                "核对固定 MediaCrawler 版本及工作树后重新提交",
+                manual_retry_allowed=False,
+            )
         if isinstance(error, ApplicationError):
             return self._failure(
                 "search_connection_changed",
