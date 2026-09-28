@@ -70,6 +70,7 @@ from content.schemas import (
     ContentVisibilityBasis,
     ContentVisibilityStatus,
     ContentVisibilityView,
+    EventContentInputView,
     PersistContentDocumentInput,
     PersistContentPostInput,
     RecordContentVisibilityInput,
@@ -3103,3 +3104,74 @@ def _analysis_post_view(
         title=version.title,
         body=version.body,
     )
+
+
+def load_event_content_inputs_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    version_ids: tuple[UUID, ...],
+    since: datetime,
+) -> dict[UUID, EventContentInputView]:
+    """Return current content versions and their original source/time references."""
+    if not session.in_transaction() or since.tzinfo is None:
+        raise RuntimeError("event content reads require a transaction and aware time")
+    if not version_ids:
+        return {}
+    rows = session.execute(
+        select(ContentVersion, ContentRecord)
+        .join(
+            ContentRecord,
+            (ContentRecord.owner_id == ContentVersion.owner_id)
+            & (ContentRecord.id == ContentVersion.content_id),
+        )
+        .where(ContentVersion.owner_id == owner_id, ContentVersion.id.in_(version_ids))
+    ).all()
+    result: dict[UUID, EventContentInputView] = {}
+    for version, record in rows:
+        if record.source_key == "bilibili" or version.title is None or not version.title.strip():
+            continue
+        latest_id = session.scalar(
+            select(ContentVersion.id)
+            .where(ContentVersion.owner_id == owner_id, ContentVersion.content_id == record.id)
+            .order_by(ContentVersion.created_at.desc(), ContentVersion.id.desc())
+            .limit(1)
+        )
+        if latest_id != version.id:
+            continue
+        published_at, observed_at = session.execute(
+            select(
+                func.min(ContentObservation.published_at),
+                func.min(ContentObservation.observed_at),
+            ).where(
+                ContentObservation.owner_id == owner_id,
+                ContentObservation.content_id == record.id,
+            )
+        ).one()
+        first_seen_at = published_at or observed_at or record.created_at
+        if first_seen_at < since:
+            continue
+        representative_comment_id = (
+            record.id
+            if record.object_type == "comment"
+            else session.scalar(
+                select(ContentThread.content_id)
+                .where(
+                    ContentThread.owner_id == owner_id,
+                    ContentThread.post_content_id == record.id,
+                )
+                .order_by(ContentThread.created_at, ContentThread.content_id)
+                .limit(1)
+            )
+        )
+        result[version.id] = EventContentInputView(
+            content_id=record.id,
+            content_version_id=version.id,
+            source_key=record.source_key,
+            title=version.title,
+            body=version.body,
+            first_seen_at=first_seen_at,
+            first_seen_basis="published" if published_at is not None else "discovered",
+            representative_comment_id=representative_comment_id,
+        )
+    return result

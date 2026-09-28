@@ -21,6 +21,7 @@ from content.models import (
     HotlistSnapshot,
 )
 from db.base import Base
+from events.models import Event, EventCandidate, EventMember
 from evidence.models import (
     CleanupTarget,
     DeletionDirective,
@@ -77,6 +78,9 @@ __all__ = [
     "ContentVisibilityObservation",
     "CoverageWindow",
     "DeletionDirective",
+    "Event",
+    "EventCandidate",
+    "EventMember",
     "EvidenceResource",
     "FollowedAccount",
     "FollowedAccountAlias",

@@ -31,6 +31,7 @@ from core.logging import configure_logging
 # The scheduler is its own process; import the canonical registry to resolve ORM foreign keys.
 from db.metadata import metadata as _registered_metadata  # noqa: F401
 from db.session import create_db_engine, create_session_factory
+from events.services import EventCandidateService
 from evidence.services import load_source_access_readiness
 from jobs.coverage import CollectionDueWindowService
 from jobs.models import CollectionDueWindow, Job
@@ -762,6 +763,16 @@ def _registered_scheduler_scans() -> tuple[SchedulerScan, ...]:
         SchedulerScan(
             name="analysis",
             run_in_transaction=enqueue_due_analysis_in_transaction,
+        ),
+        SchedulerScan(
+            name="events",
+            run_in_transaction=lambda session, now: (
+                EventCandidateService(session).enqueue_due_in_transaction(
+                    now=now, ai_enabled=get_settings().ai_enabled
+                )
+                if get_settings().events_cluster_enabled
+                else 0
+            ),
         ),
     ]
     report_scan = _optional_report_scan()

@@ -9,6 +9,8 @@ BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '60s';
 
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 CREATE TABLE identity_users (
     id UUID PRIMARY KEY,
     singleton_key SMALLINT NOT NULL UNIQUE DEFAULT 1 CHECK (singleton_key = 1),
@@ -1050,6 +1052,7 @@ CREATE TABLE content_records (
         CHECK (identity_basis IN ('guid', 'url_fallback')),
     created_at TIMESTAMPTZ NOT NULL,
     CONSTRAINT content_records_owner_id_key UNIQUE (owner_id, id),
+    CONSTRAINT content_records_owner_id_source_key UNIQUE (owner_id, id, source_key),
     CONSTRAINT content_records_source_identity_key
         UNIQUE NULLS NOT DISTINCT (
             owner_id,
@@ -1468,6 +1471,104 @@ CREATE INDEX content_annotations_topic_created_idx
 
 CREATE INDEX content_annotations_content_idx
     ON content_annotations (owner_id, content_id, created_at);
+
+CREATE TABLE events (
+    id UUID PRIMARY KEY,
+    owner_id UUID NOT NULL,
+    topic_id UUID NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+    title VARCHAR(200) NOT NULL CHECK (btrim(title) <> ''),
+    summary TEXT NOT NULL CHECK (btrim(summary) <> ''),
+    first_seen_at TIMESTAMPTZ NOT NULL,
+    first_seen_basis VARCHAR(16) NOT NULL CHECK (first_seen_basis IN ('published', 'discovered')),
+    status VARCHAR(16) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'merged')),
+    merged_into_id UUID,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL CHECK (updated_at >= created_at),
+    CONSTRAINT events_owner_id_key UNIQUE (owner_id, id),
+    CONSTRAINT events_owner_topic_id_key UNIQUE (owner_id, topic_id, id),
+    CONSTRAINT events_owner_topic_fkey FOREIGN KEY (owner_id, topic_id)
+        REFERENCES monitor_topics (owner_id, id) ON DELETE CASCADE,
+    CONSTRAINT events_merged_into_fkey FOREIGN KEY (owner_id, topic_id, merged_into_id)
+        REFERENCES events (owner_id, topic_id, id),
+    CONSTRAINT events_merge_state_check CHECK (
+        (status = 'active' AND merged_into_id IS NULL)
+        OR (status = 'merged' AND merged_into_id IS NOT NULL AND merged_into_id <> id)
+    )
+);
+
+CREATE INDEX events_owner_topic_seen_idx ON events (owner_id, topic_id, first_seen_at DESC, id);
+
+CREATE TABLE event_members (
+    id UUID PRIMARY KEY,
+    owner_id UUID NOT NULL,
+    topic_id UUID NOT NULL,
+    event_id UUID NOT NULL,
+    content_id UUID NOT NULL,
+    content_version_id UUID NOT NULL,
+    source_key VARCHAR(64) NOT NULL CHECK (source_key ~ '^[a-z][a-z0-9_-]{0,63}$'),
+    representative_comment_id UUID,
+    added_revision INTEGER NOT NULL CHECK (added_revision >= 1),
+    removed_revision INTEGER CHECK (removed_revision IS NULL OR removed_revision > added_revision),
+    assignment_origin VARCHAR(16) NOT NULL CHECK (assignment_origin IN ('model', 'manual')),
+    created_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT event_members_event_fkey FOREIGN KEY (owner_id, topic_id, event_id)
+        REFERENCES events (owner_id, topic_id, id) ON DELETE CASCADE,
+    CONSTRAINT event_members_content_version_fkey FOREIGN KEY (owner_id, content_id, content_version_id)
+        REFERENCES content_versions (owner_id, content_id, id) ON DELETE RESTRICT,
+    CONSTRAINT event_members_content_source_fkey FOREIGN KEY (owner_id, content_id, source_key)
+        REFERENCES content_records (owner_id, id, source_key) ON DELETE RESTRICT,
+    CONSTRAINT event_members_comment_fkey FOREIGN KEY (owner_id, representative_comment_id)
+        REFERENCES content_records (owner_id, id) ON DELETE RESTRICT,
+    CONSTRAINT event_members_revision_key UNIQUE (owner_id, topic_id, content_id, added_revision)
+);
+
+CREATE UNIQUE INDEX event_members_one_current_assignment_idx
+    ON event_members (owner_id, topic_id, content_id) WHERE removed_revision IS NULL;
+CREATE INDEX event_members_event_current_idx
+    ON event_members (owner_id, event_id) WHERE removed_revision IS NULL;
+
+CREATE TABLE event_candidates (
+    id UUID PRIMARY KEY,
+    owner_id UUID NOT NULL,
+    topic_id UUID NOT NULL,
+    input_fingerprint BYTEA NOT NULL CHECK (octet_length(input_fingerprint) = 32),
+    member_version_ids JSONB NOT NULL CHECK (
+        jsonb_typeof(member_version_ids) = 'array'
+        AND jsonb_array_length(member_version_ids) BETWEEN 2 AND 20
+    ),
+    expected_event_revisions JSONB NOT NULL DEFAULT '{}'::jsonb
+        CHECK (jsonb_typeof(expected_event_revisions) = 'object'),
+    window_start TIMESTAMPTZ NOT NULL,
+    window_end TIMESTAMPTZ NOT NULL CHECK (window_end > window_start),
+    prompt_version VARCHAR(128) NOT NULL CHECK (prompt_version <> ''),
+    status VARCHAR(16) NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'confirmed', 'rejected', 'failed')),
+    ai_call_id UUID,
+    job_id UUID,
+    event_id UUID,
+    error_code VARCHAR(64),
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL CHECK (updated_at >= created_at),
+    CONSTRAINT event_candidates_fingerprint_key UNIQUE (owner_id, topic_id, input_fingerprint),
+    CONSTRAINT event_candidates_owner_id_key UNIQUE (owner_id, id),
+    CONSTRAINT event_candidates_owner_topic_fkey FOREIGN KEY (owner_id, topic_id)
+        REFERENCES monitor_topics (owner_id, id) ON DELETE CASCADE,
+    CONSTRAINT event_candidates_ai_call_fkey FOREIGN KEY (owner_id, ai_call_id)
+        REFERENCES ai_calls (owner_id, id),
+    CONSTRAINT event_candidates_job_fkey FOREIGN KEY (owner_id, job_id)
+        REFERENCES jobs (owner_id, id),
+    CONSTRAINT event_candidates_event_fkey FOREIGN KEY (owner_id, topic_id, event_id)
+        REFERENCES events (owner_id, topic_id, id),
+    CONSTRAINT event_candidates_result_check CHECK (
+        (status = 'pending' AND event_id IS NULL)
+        OR (status = 'confirmed' AND event_id IS NOT NULL AND ai_call_id IS NOT NULL AND error_code IS NULL)
+        OR (status = 'rejected' AND event_id IS NULL AND ai_call_id IS NOT NULL AND error_code IS NULL)
+        OR (status = 'failed' AND event_id IS NULL AND error_code IS NOT NULL)
+    )
+);
+
+CREATE INDEX event_candidates_pending_idx ON event_candidates (status, owner_id, topic_id, created_at);
 
 CREATE TABLE reports (
     id UUID PRIMARY KEY,

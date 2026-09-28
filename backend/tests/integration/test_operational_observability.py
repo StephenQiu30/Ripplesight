@@ -59,7 +59,8 @@ def observation_context() -> Iterator[ObservationTestContext]:
     with engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE collection_due_windows, hotlist_entries, hotlist_snapshots, "
+                "TRUNCATE event_candidates, event_members, events, "
+                "collection_due_windows, hotlist_entries, hotlist_snapshots, "
                 "content_version_relations, content_visibility_observations, "
                 "content_observations, content_versions, "
                 "content_discoveries, content_threads, content_records, "
@@ -99,7 +100,8 @@ def observation_context() -> Iterator[ObservationTestContext]:
         with engine.begin() as connection:
             connection.execute(
                 text(
-                    "TRUNCATE collection_due_windows, hotlist_entries, hotlist_snapshots, "
+                    "TRUNCATE event_candidates, event_members, events, "
+                    "collection_due_windows, hotlist_entries, hotlist_snapshots, "
                     "content_version_relations, content_visibility_observations, "
                     "content_observations, content_versions, "
                     "content_discoveries, content_threads, content_records, "

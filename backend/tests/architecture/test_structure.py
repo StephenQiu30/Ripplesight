@@ -8,6 +8,27 @@ from core.errors import ERROR_CATEGORIES, ApplicationError
 
 BACKEND = Path(__file__).resolve().parents[2]
 APP = BACKEND / "app"
+REGISTERED_PACKAGES = {
+    "ai",
+    "analysis",
+    "api",
+    "backups",
+    "cli",
+    "connections",
+    "content",
+    "core",
+    "db",
+    "events",
+    "evidence",
+    "identity",
+    "jobs",
+    "knowledge",
+    "monitors",
+    "notifications",
+    "reports",
+    "sources",
+    "worker",
+}
 
 
 def _imports(path: Path) -> set[str]:
@@ -39,6 +60,16 @@ def test_backend_has_no_empty_top_level_package_placeholders() -> None:
             if path.name != "__init__.py" and "__pycache__" not in path.parts
         ]
         assert implementation_files, package
+
+
+def test_all_implemented_packages_are_registered() -> None:
+    actual = {path.name for path in APP.iterdir() if path.is_dir() and path.name != "__pycache__"}
+    assert actual == REGISTERED_PACKAGES
+
+
+def test_events_service_reads_cross_domain_facts_through_dtos() -> None:
+    imports = _imports(APP / "events" / "services.py")
+    assert not {"analysis.models", "content.models", "monitors.models"} & imports
 
 
 def test_public_api_uses_the_single_stable_namespace() -> None:

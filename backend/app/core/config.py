@@ -147,7 +147,7 @@ class Settings(BaseSettings):
             return 60
         if kind in {"keyword.search", "source.comments"}:
             return 240 if self.mediacrawler_enabled and source_key == "bilibili" else 90
-        if kind in {"analysis.annotate", "report.daily", "report.weekly"}:
+        if kind in {"analysis.annotate", "events.cluster", "report.daily", "report.weekly"}:
             return 600
         if kind in {"notification.send", "knowledge.export"}:
             return 60
@@ -252,6 +252,7 @@ class Settings(BaseSettings):
         return self
 
     ai_enabled: bool = False
+    events_cluster_enabled: bool = False
     ai_model: str = "gpt-5.6-luna"
     ai_command: str = "codex app-server"
     ai_timeout_seconds: int = Field(default=300, ge=1, le=900)

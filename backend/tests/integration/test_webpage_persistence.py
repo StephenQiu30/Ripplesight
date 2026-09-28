@@ -69,6 +69,7 @@ from worker.execution import JobProcessSupervisor
 from worker.messaging import create_producer, decode_job_message, publish_outbox
 
 _TABLES = (
+    "event_candidates, event_members, events, "
     "collection_due_windows, content_version_relations, "
     "content_visibility_observations, content_observations, "
     "hotlist_entries, hotlist_snapshots, content_versions, "

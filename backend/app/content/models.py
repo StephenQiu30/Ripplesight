@@ -26,6 +26,9 @@ class ContentRecord(Base):
     __table_args__ = (
         UniqueConstraint("owner_id", "id", name="content_records_owner_id_key"),
         UniqueConstraint(
+            "owner_id", "id", "source_key", name="content_records_owner_id_source_key"
+        ),
+        UniqueConstraint(
             "owner_id",
             "source_key",
             "object_type",

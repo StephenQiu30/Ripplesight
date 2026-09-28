@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal, Self
@@ -9,6 +10,15 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from core.schemas import OutputModel
+
+
+@dataclass(frozen=True, slots=True)
+class EventAnnotationRef:
+    owner_id: UUID
+    topic_id: UUID
+    topic_rule_version: int
+    content_id: UUID
+    content_version_id: UUID
 
 
 class Sentiment(StrEnum):
