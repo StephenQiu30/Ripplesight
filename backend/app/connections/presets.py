@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from types import MappingProxyType
 
-from connections.schemas import SourceExecutionPolicy, SourceQuietWindow
-from sources.adapters.rss import GOOGLE_NEWS_FEED_URL_TEMPLATE
-from sources.adapters.rsshub_hotlist import HOTLIST_ROUTES
 from sources.contracts import SourceCapability
 
 
@@ -29,20 +26,6 @@ class SourceBudgetPreset:
     window_anchor_at: datetime
 
 
-def _keyword_execution_policy() -> SourceExecutionPolicy:
-    return SourceExecutionPolicy(
-        min_interval_seconds=0,
-        quiet_windows=(),
-        max_queries=128,
-        max_items_per_query=100,
-        max_requests=3,
-        max_seconds=90,
-        hard_timeout_seconds=90,
-        max_concurrency=1,
-        enabled=True,
-    )
-
-
 @dataclass(frozen=True, slots=True)
 class SourcePreset:
     source_key: str
@@ -57,7 +40,6 @@ class SourcePreset:
     access_terms_reference: str
     reviewed_at: datetime
     budget: SourceBudgetPreset
-    execution_policy: SourceExecutionPolicy = field(default_factory=_keyword_execution_policy)
 
 
 _POST_FIELD_PURPOSES = MappingProxyType(
@@ -106,7 +88,6 @@ _RSS_POST_FIELD_PURPOSES = MappingProxyType(
     {
         "object_type": "标记载荷为帖子",
         "external_id": "稳定识别订阅条目",
-        "identity_basis": "区分订阅条目原生 GUID 与规范 URL 回退身份",
         "canonical_url": "回溯订阅条目指向的原始页面",
         "author_name": "保存订阅条目提供的公开作者名称",
         "published_at": "保存订阅条目提供的发布时间",
@@ -128,7 +109,6 @@ _WEB_SEARCH_POST_FIELD_PURPOSES = MappingProxyType(
     {
         "object_type": "标记载荷为帖子",
         "external_id": "按结果链接稳定识别新闻结果",
-        "identity_basis": "标记新闻结果缺少原生 ID 时的规范 URL 回退身份",
         "canonical_url": "回溯新闻搜索结果指向的原始页面",
         "published_at": "保存搜索引擎提供的发布时间",
         "like_count": "记录 SearXNG 不提供点赞指标的缺失值",
@@ -146,111 +126,6 @@ _WEB_SEARCH_POST_FIELD_PURPOSES = MappingProxyType(
 )
 
 _A_TIER_REVIEWED_AT = datetime(2026, 9, 25, tzinfo=UTC)
-
-_HOTLIST_FIELD_PURPOSES = MappingProxyType(
-    {
-        **_RSS_POST_FIELD_PURPOSES,
-    }
-)
-
-
-def _hotlist_preset(source_key: str, route: str) -> SourcePreset:
-    return SourcePreset(
-        source_key=source_key,
-        config=MappingProxyType(
-            {"feed_url": f"http://127.0.0.1:1200{route}", "allowed_hosts": ("127.0.0.1",)}
-        ),
-        capabilities=(
-            SourceCapabilityPreset(
-                capability=SourceCapability.HOTLIST,
-                processing_purpose="保存公开热榜快照并发现命中已配置主题的条目",
-                field_purposes=_HOTLIST_FIELD_PURPOSES,
-            ),
-        ),
-        retention_days=90,
-        component_name=f"collector.{source_key}",
-        component_version="rsshub-hotlist-v2",
-        component_license="AGPL-3.0",
-        component_cost_class="zero_price",
-        component_terms_reference="https://docs.rsshub.app/",
-        access_terms_reference=f"https://docs.rsshub.app{route}",
-        reviewed_at=_A_TIER_REVIEWED_AT,
-        budget=SourceBudgetPreset(
-            budget_key=f"source.{source_key}.network.daily",
-            metric="network_request",
-            scope_kind="source",
-            scope_reference=source_key,
-            limit_units=500,
-            window_seconds=86_400,
-            window_anchor_at=datetime(2026, 1, 1, tzinfo=UTC),
-        ),
-        execution_policy=SourceExecutionPolicy(
-            min_interval_seconds=1_800,
-            quiet_windows=(),
-            max_queries=1,
-            max_items_per_query=100,
-            max_requests=1,
-            max_seconds=45,
-            hard_timeout_seconds=60,
-            max_concurrency=1,
-            enabled=True,
-        ),
-    )
-
-
-HOTLIST_PRESETS: Mapping[str, SourcePreset] = MappingProxyType(
-    {key: _hotlist_preset(key, route) for key, route in HOTLIST_ROUTES.items()}
-)
-
-BILIBILI_PRESET = SourcePreset(
-    source_key="bilibili",
-    config=MappingProxyType(
-        {
-            "base_url": "https://www.bilibili.com",
-            "allowed_hosts": ("www.bilibili.com", "api.bilibili.com"),
-        }
-    ),
-    capabilities=(
-        SourceCapabilityPreset(
-            capability=SourceCapability.SEARCH,
-            processing_purpose="低频发现与已配置主题相关的公开视频",
-            field_purposes=_POST_FIELD_PURPOSES,
-        ),
-        SourceCapabilityPreset(
-            capability=SourceCapability.COMMENTS,
-            processing_purpose="读取同轮搜索暂存的公开一级评论; 不再次访问平台",
-            field_purposes=_COMMENT_FIELD_PURPOSES,
-        ),
-    ),
-    retention_days=30,
-    component_name="collector.bilibili",
-    component_version="mediacrawler-380b426-hotkey-safe",
-    component_license="NON-COMMERCIAL LEARNING LICENSE 1.1",
-    component_cost_class="zero_price",
-    component_terms_reference="https://github.com/NanmiCoder/MediaCrawler/blob/main/LICENSE",
-    access_terms_reference="https://www.bilibili.com/",
-    reviewed_at=_A_TIER_REVIEWED_AT,
-    budget=SourceBudgetPreset(
-        budget_key="source.bilibili.network.daily",
-        metric="network_request",
-        scope_kind="source",
-        scope_reference="bilibili",
-        limit_units=60,
-        window_seconds=86_400,
-        window_anchor_at=datetime(2026, 1, 1, tzinfo=UTC),
-    ),
-    execution_policy=SourceExecutionPolicy(
-        min_interval_seconds=21_600,
-        quiet_windows=(SourceQuietWindow(timezone="Asia/Shanghai", start="00:00", end="08:00"),),
-        max_queries=3,
-        max_items_per_query=5,
-        max_requests=26,
-        max_seconds=220,
-        hard_timeout_seconds=240,
-        max_concurrency=1,
-        enabled=True,
-    ),
-)
 
 HACKERNEWS_PRESET = SourcePreset(
     source_key="hackernews",
@@ -296,7 +171,9 @@ GOOGLE_NEWS_PRESET = SourcePreset(
     source_key="google_news",
     config=MappingProxyType(
         {
-            "feed_url_template": GOOGLE_NEWS_FEED_URL_TEMPLATE,
+            "feed_url_template": (
+                "https://news.google.com/rss/search?q={query}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+            ),
             "allowed_hosts": ("news.google.com",),
         }
     ),
@@ -309,7 +186,7 @@ GOOGLE_NEWS_PRESET = SourcePreset(
     ),
     retention_days=90,
     component_name="collector.google_news",
-    component_version="feedparser-6",
+    component_version="rss/feedparser-6",
     component_license="BSD-2-Clause",
     component_cost_class="zero_price",
     component_terms_reference="https://news.google.com/rss",
@@ -345,7 +222,7 @@ NEWS_SEARCH_PRESET = SourcePreset(
     ),
     retention_days=90,
     component_name="collector.news_search",
-    component_version="searxng-json-news",
+    component_version="searxng-json/news",
     component_license="AGPL-3.0-or-later",
     component_cost_class="zero_price",
     component_terms_reference="https://docs.searxng.org/dev/search_api.html",
@@ -381,7 +258,7 @@ RSS_36KR_PRESET = SourcePreset(
     ),
     retention_days=90,
     component_name="collector.rss_36kr",
-    component_version="rsshub-36kr-newsflashes",
+    component_version="rsshub/36kr-newsflashes",
     component_license="AGPL-3.0",
     component_cost_class="zero_price",
     component_terms_reference="https://docs.rsshub.app/routes/new-media#36kr",
@@ -400,12 +277,10 @@ RSS_36KR_PRESET = SourcePreset(
 
 
 SOURCE_PRESETS: Mapping[str, SourcePreset] = MappingProxyType(
-    dict(HOTLIST_PRESETS)
-    | {
+    {
         preset.source_key: preset
         for preset in (
             HACKERNEWS_PRESET,
-            BILIBILI_PRESET,
             GOOGLE_NEWS_PRESET,
             NEWS_SEARCH_PRESET,
             RSS_36KR_PRESET,

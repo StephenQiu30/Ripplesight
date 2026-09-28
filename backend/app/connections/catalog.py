@@ -18,34 +18,6 @@ class SourceCatalogEntry:
 
 
 SOURCE_CATALOG = (
-    *(
-        SourceCatalogEntry(
-            source_key=key,
-            display_name=name,
-            rollout_role="required",
-            product_restricted=False,
-            restricted_next_action="应用预设并完成真实热榜快照采集验证。",
-            capabilities=(SourceCapability.HOTLIST,),
-            auth_kind=SourceConnectionAuthKind.NONE,
-        )
-        for key, name in (
-            ("hotlist_weibo", "微博热搜"),
-            ("hotlist_baidu", "百度热榜"),
-            ("hotlist_zhihu", "知乎热榜"),
-            ("hotlist_bilibili", "B 站热门"),
-            ("hotlist_36kr", "36Kr 热榜"),
-            ("hotlist_thepaper", "澎湃精选"),
-        )
-    ),
-    SourceCatalogEntry(
-        source_key="bilibili",
-        display_name="B 站关键词与评论",
-        rollout_role="candidate",
-        product_restricted=False,
-        restricted_next_action="本机 MediaCrawler 登录态与持久化验收通过后人工启用。",
-        capabilities=(SourceCapability.SEARCH, SourceCapability.COMMENTS),
-        auth_kind=SourceConnectionAuthKind.NONE,
-    ),
     SourceCatalogEntry(
         source_key="hackernews",
         display_name="Hacker News",
@@ -112,7 +84,6 @@ SOURCE_CATALOG = (
 )
 
 CAPABILITY_LABELS = {
-    SourceCapability.HOTLIST: "热榜",
     SourceCapability.SEARCH: "关键词检索",
     SourceCapability.AUTHOR_POSTS: "作者作品",
     SourceCapability.COMMENTS: "评论",

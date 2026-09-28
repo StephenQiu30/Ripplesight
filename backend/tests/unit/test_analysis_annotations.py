@@ -5,11 +5,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
-import pytest
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from ai.schemas import AiCallError, AiCompletion, AiFailureCode, AiTokenUsage
+from ai.schemas import AiCallError, AiFailureCode
 from analysis.models import ContentAnnotation
 from analysis.prompts import (
     ANALYSIS_OUTPUT_SCHEMA,
@@ -17,26 +15,14 @@ from analysis.prompts import (
     build_analysis_prompt,
     serialize_analysis_data,
 )
-from analysis.schemas import (
-    AnalysisJobScope,
-    AnalysisPromptItem,
-    AnnotationResultState,
-    AnnotationStatus,
-    AnnotationWrite,
-    Sentiment,
-)
+from analysis.schemas import AnalysisPromptItem, AnnotationStatus, Sentiment
 from analysis.services import (
-    AnalysisAnnotateExecutor,
     analysis_failure,
     analysis_operation_id,
     pack_prompt_batches,
     resolve_annotation_results,
 )
-from content.schemas import AnalysisPostContentView
 from core.config import Settings
-from jobs.execution import JobExecutionFailure
-from jobs.schemas import JobAcceptedMessage
-from monitors.services import NormalizedMonitorRules
 from worker.app import _registered_job_handlers
 
 
@@ -146,152 +132,11 @@ def test_invalid_or_missing_items_become_unanalyzed_without_discarding_valid_ite
 
     by_id = {item.content_version_id: item for item in results}
     assert by_id[first_id].status is AnnotationStatus.ANNOTATED
-    assert by_id[first_id].result_state is AnnotationResultState.VALID
     assert by_id[first_id].sentiment is Sentiment.NEGATIVE
     assert by_id[first_id].ai_call_id == call_id
     assert by_id[second_id].status is AnnotationStatus.UNANALYZED
-    assert by_id[second_id].result_state is AnnotationResultState.INVALID
-    assert by_id[second_id].error_code == "analysis_output_invalid"
     assert by_id[second_id].relevant is None
     assert by_id[missing_id].status is AnnotationStatus.UNANALYZED
-    assert by_id[missing_id].error_code == "analysis_output_missing"
-
-
-def test_annotation_results_keep_valid_siblings_and_stable_invalid_reasons() -> None:
-    valid_id, duplicate_id, string_bool_id, no_reason_id, missing_id = (uuid4() for _ in range(5))
-    call_id = uuid4()
-
-    def item(content_version_id: object, **changes: object) -> dict[str, object]:
-        return {
-            "content_version_id": str(content_version_id),
-            "relevant": True,
-            "relevance_reason": "正文讨论主题",
-            "sentiment": "neutral",
-            "summary": "主题摘要",
-            "viewpoints": [],
-            **changes,
-        }
-
-    results = resolve_annotation_results(
-        expected_content_version_ids=(
-            valid_id,
-            duplicate_id,
-            string_bool_id,
-            no_reason_id,
-            missing_id,
-        ),
-        raw_items=[
-            item(valid_id),
-            item(duplicate_id),
-            item(duplicate_id),
-            item(string_bool_id, relevant="true"),
-            item(no_reason_id, relevance_reason=" "),
-            item(uuid4()),
-        ],
-        ai_call_id=call_id,
-    )
-    by_id = {result.content_version_id: result for result in results}
-    assert by_id[valid_id].result_state is AnnotationResultState.VALID
-    assert {
-        key: by_id[key].error_code
-        for key in (duplicate_id, string_bool_id, no_reason_id, missing_id)
-    } == {
-        duplicate_id: "analysis_output_duplicate",
-        string_bool_id: "analysis_output_invalid",
-        no_reason_id: "analysis_output_invalid",
-        missing_id: "analysis_output_missing",
-    }
-    assert all(result.ai_call_id == call_id for result in results)
-
-
-@pytest.mark.parametrize("failure_mode", ["invalid_envelope", "call_failed"])
-def test_whole_batch_failure_preserves_per_content_diagnostics(
-    monkeypatch: pytest.MonkeyPatch, failure_mode: str
-) -> None:
-    first, second = _prompt_item(), _prompt_item()
-    call_id = uuid4()
-    scope = AnalysisJobScope(
-        topic_id=uuid4(),
-        topic_rule_version=1,
-        prompt_version=ANALYSIS_PROMPT_VERSION,
-        content_version_ids=(first.content_version_id, second.content_version_id),
-    )
-    posts = {
-        item.content_version_id: AnalysisPostContentView(
-            content_id=item.content_id,
-            content_version_id=item.content_version_id,
-            title=item.title,
-            body=item.body,
-        )
-        for item in (first, second)
-    }
-    saved: list[AnnotationWrite] = []
-
-    class FakeClient:
-        def close(self) -> None:
-            pass
-
-    def complete(*args: object, **kwargs: object) -> AiCompletion:
-        if failure_mode == "call_failed":
-            raise AiCallError(AiFailureCode.TIMEOUT, call_id=call_id)
-        return AiCompletion(
-            provider="test",
-            model="test",
-            call_id=call_id,
-            output={"unexpected": []},
-            usage=AiTokenUsage(),
-            duration_ms=1,
-        )
-
-    executor = AnalysisAnnotateExecutor(
-        sessionmaker(create_engine("postgresql+psycopg://test:test@127.0.0.1/hotkey_test")),
-        Settings(database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test"),
-    )
-    monkeypatch.setattr(
-        executor,
-        "_load_execution",
-        lambda message: (
-            scope,
-            NormalizedMonitorRules(match_any=(), match_all=(), exclude=()),
-            posts,
-            (first, second),
-        ),
-    )
-    monkeypatch.setattr(
-        executor, "_persist_results", lambda **kwargs: saved.extend(kwargs["results"])
-    )
-    monkeypatch.setattr("analysis.services.create_ai_client", lambda settings: FakeClient())
-    monkeypatch.setattr("analysis.services.AiService.complete", complete)
-    message = JobAcceptedMessage(
-        schema_version=2,
-        message_id=uuid4(),
-        event_type="job.accepted.v2",
-        job_id=uuid4(),
-        owner_id=uuid4(),
-        operation_id=uuid4(),
-        kind="analysis.annotate",
-        configuration_ref=f"topic:{scope.topic_id}",
-        configuration_version=1,
-    )
-
-    with pytest.raises(JobExecutionFailure):
-        executor.execute(message)
-
-    assert {result.content_version_id for result in saved} == {
-        first.content_version_id,
-        second.content_version_id,
-    }
-    expected_state = (
-        AnnotationResultState.FAILED
-        if failure_mode == "call_failed"
-        else AnnotationResultState.INVALID
-    )
-    expected_code = (
-        "analysis_timeout" if failure_mode == "call_failed" else "analysis_output_envelope_invalid"
-    )
-    assert all(result.result_state is expected_state for result in saved)
-    assert all(result.error_code == expected_code for result in saved)
-    assert all(result.ai_call_id == call_id for result in saved)
 
 
 def test_rate_limit_failure_uses_delayed_retry_policy() -> None:

@@ -8,12 +8,8 @@ from uuid import UUID, uuid5
 from sqlalchemy.orm import Session, sessionmaker
 
 from connections.schemas import SourceConnectionConfig
-from connections.services import (
-    pause_bilibili_connection_in_transaction,
-    require_source_connection_version,
-)
+from connections.services import require_source_connection_version
 from content.discovery import KeywordDiscoveryPageCommitService, KeywordRequestMeter
-from core.config import get_settings
 from core.errors import ApplicationError
 from evidence.services import RetentionPolicyUnavailableError, SourceAccessUnavailableError
 from jobs.cursor import CursorBudgetExhaustedError, plan_cursor_request
@@ -34,8 +30,7 @@ from jobs.services import (
     load_job_execution_configuration,
 )
 from sources.adapters.hackernews import HackerNewsAdapter
-from sources.adapters.mediacrawler import MediaCrawlerAdapter
-from sources.adapters.rss import GOOGLE_NEWS_FEED_URL_TEMPLATE, RssSourceAdapter
+from sources.adapters.rss import RssSourceAdapter
 from sources.adapters.web_search import WebSearchAdapter
 from sources.contracts import (
     SearchRequest,
@@ -58,32 +53,13 @@ class UnsupportedSearchSourceError(ValueError):
 def build_search_adapter_factory(
     source_key: str,
     config: SourceConnectionConfig,
-    *,
-    owner_id: UUID | None = None,
 ) -> SearchAdapterFactory:
     allowed_hosts = frozenset(config.allowed_hosts)
     if not allowed_hosts:
         raise ValueError("search adapter requires allowed_hosts")
-    if source_key == "bilibili":
-        settings = get_settings()
-        if not settings.mediacrawler_enabled or owner_id is None:
-            raise ValueError("MediaCrawler requires enabled host configuration and owner")
-        return lambda before_request, cancelled, max_requests, max_seconds: MediaCrawlerAdapter(
-            crawler_dir=settings.mediacrawler_dir,
-            output_dir=settings.mediacrawler_output_dir,
-            owner_key=owner_id.hex,
-            before_request=before_request,
-            cancelled=cancelled,
-            max_requests=max_requests,
-            max_seconds=min(max_seconds, settings.mediacrawler_timeout_seconds),
-        )
     if source_key == "hackernews":
-        if (
-            config.base_url is None
-            or str(config.base_url).rstrip("/") != "https://hn.algolia.com/api/v1"
-            or allowed_hosts != frozenset({"hn.algolia.com"})
-        ):
-            raise ValueError("Hacker News requires the fixed HTTPS Algolia endpoint")
+        if config.base_url is None:
+            raise ValueError("Hacker News adapter requires base_url")
         base_url = str(config.base_url)
         return lambda before_request, cancelled, max_requests, max_seconds: HackerNewsAdapter(
             base_url=base_url,
@@ -97,16 +73,6 @@ def build_search_adapter_factory(
         if config.feed_url_template is None:
             raise ValueError("RSS adapter requires feed_url_template")
         feed_url_template = config.feed_url_template
-        if source_key == "rss_36kr" and (
-            feed_url_template != "http://127.0.0.1:1200/36kr/newsflashes"
-            or allowed_hosts != frozenset({"127.0.0.1"})
-        ):
-            raise ValueError("rss_36kr requires the local RSSHub newsflashes endpoint")
-        if source_key == "google_news" and (
-            feed_url_template != GOOGLE_NEWS_FEED_URL_TEMPLATE
-            or allowed_hosts != frozenset({"news.google.com"})
-        ):
-            raise ValueError("Google News requires the fixed HTTPS search RSS endpoint")
         return lambda before_request, cancelled, max_requests, max_seconds: RssSourceAdapter(
             source_key=source_key,
             feed_url_template=feed_url_template,
@@ -161,7 +127,7 @@ class KeywordDiscoveryExecutor:
             source_key = configuration.observation.source_key
             if source_key is None:
                 raise ValueError("search source is missing")
-            search_scope_fields = {
+            if set(scope) != {
                 "run_id",
                 "connection_id",
                 "connection_version",
@@ -179,29 +145,8 @@ class KeywordDiscoveryExecutor:
                 "relevance_filter_position",
                 "scan_kind",
                 "entry_point",
-            }
-            manual_scope_fields = {
-                "manual_request_id",
-                "manual_source_keys",
-                "manual_query_index",
-                "manual_skips",
-            }
-            scheduled_scope_fields = {"schedule_key", "due_at"}
-            if set(scope) not in (
-                search_scope_fields,
-                search_scope_fields | manual_scope_fields,
-                search_scope_fields | scheduled_scope_fields,
-            ):
+            }:
                 raise ValueError("search scope fields are incomplete")
-            if manual_scope_fields.issubset(scope):
-                UUID(self._required_str(scope, "manual_request_id"))
-                self._required_str(scope, "manual_source_keys")
-                if (
-                    self._required_int(scope, "manual_query_index") < 0
-                    or not isinstance(scope["manual_skips"], str)
-                    or scope["entry_point"] != "manual"
-                ):
-                    raise ValueError("manual search scope fields are invalid")
             UUID(self._required_str(scope, "run_id"))
             connection_id = UUID(self._required_str(scope, "connection_id"))
             connection_version = self._required_int(scope, "connection_version")
@@ -223,21 +168,10 @@ class KeywordDiscoveryExecutor:
                 starts_at=datetime.fromisoformat(self._required_str(scope, "starts_at")),
                 ends_at=datetime.fromisoformat(self._required_str(scope, "ends_at")),
             )
-            if scheduled_scope_fields.issubset(scope):
-                schedule_key = self._required_str(scope, "schedule_key")
-                due_at = datetime.fromisoformat(self._required_str(scope, "due_at"))
-                if (
-                    str(UUID(schedule_key)) != schedule_key
-                    or scope["entry_point"] != "scheduled"
-                    or due_at.utcoffset() != timedelta(0)
-                    or due_at != window.ends_at
-                ):
-                    raise ValueError("scheduled search scope fields are invalid")
             if (
                 not 1 <= max_pages <= 20
                 or not 1 <= max_requests <= 100
-                or not 1 <= max_seconds <= (220 if source_key == "bilibili" else 90)
-                or (source_key == "bilibili" and (page_size > 5 or max_pages != 1))
+                or not 1 <= max_seconds <= 90
                 or scope["relevance_filter_position"] != "local"
                 or connection_version < 1
                 or configuration.started_at is None
@@ -290,13 +224,7 @@ class KeywordDiscoveryExecutor:
             ) from error
 
         assert configuration.started_at is not None
-        if configuration.collection_cycle_started_at is None:
-            raise self._failure(
-                "search_cycle_unavailable",
-                JobFailureCategory.CONFIGURATION_UNAVAILABLE,
-                "检查任务采集预算周期后重新提交",
-            )
-        deadline_at = configuration.collection_cycle_started_at + timedelta(seconds=max_seconds)
+        deadline_at = configuration.started_at + timedelta(seconds=max_seconds)
         with self._sessions() as session:
             execution = JobExecutionService(
                 session, lease_seconds=self._lease_seconds, clock=self._clock
@@ -460,19 +388,6 @@ class KeywordDiscoveryExecutor:
                     and result.saved_items == 0
                     and page.stop_reason is not SourceStopReason.BUDGET_EXHAUSTED
                 ):
-                    if source_key == "bilibili" and page.stop_reason in {
-                        SourceStopReason.AUTHENTICATION_REQUIRED,
-                        SourceStopReason.RATE_LIMITED,
-                    }:
-                        session.rollback()
-                        with session.begin():
-                            pause_bilibili_connection_in_transaction(
-                                session,
-                                owner_id=configuration.owner_id,
-                                connection_id=connection_id,
-                                connection_version=connection_version,
-                                now=self._clock(),
-                            )
                     can_retry = False
                     if page.stop_reason in {
                         SourceStopReason.RATE_LIMITED,
@@ -481,11 +396,11 @@ class KeywordDiscoveryExecutor:
                         session.rollback()
                         try:
                             with session.begin():
-                                requests_sent = execution.current_request_counts_in_transaction(
+                                requests_sent = execution.current_request_count_in_transaction(
                                     lease,
                                     owner_id=configuration.owner_id,
                                     operation_id=configuration.operation_id,
-                                ).collection_cycle
+                                )
                         except JobLeaseUnavailableError:
                             if not self._stop_if_cancelled(
                                 session, execution=execution, lease=lease, window=window
@@ -521,7 +436,7 @@ class KeywordDiscoveryExecutor:
         connection_version: int,
     ) -> SearchAdapterFactory:
         if not (
-            source_key in {"hackernews", "google_news", "news_search", "bilibili"}
+            source_key in {"hackernews", "google_news", "news_search"}
             or source_key.startswith("rss_")
         ):
             raise UnsupportedSearchSourceError(source_key)
@@ -533,7 +448,7 @@ class KeywordDiscoveryExecutor:
                 connection_id=connection_id,
                 connection_version=connection_version,
             )
-        return build_search_adapter_factory(source_key, config, owner_id=owner_id)
+        return build_search_adapter_factory(source_key, config)
 
     def _stop_if_cancelled(
         self,

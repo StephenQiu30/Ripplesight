@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy.orm import Session
 
 from connections.schemas import (
     ConnectionEvidenceKind,
@@ -15,47 +13,15 @@ from connections.schemas import (
     ProbeEvidenceInput,
     SourceCapabilityStatus,
     SourceConnectionStatus,
-    SourceCurrentVersionView,
     SourceEntryPoint,
     SourcePlatformStatus,
 )
 from connections.services import (
     CapabilityStatusFacts,
     aggregate_platform_status,
-    list_current_source_connection_versions_in_transaction,
     resolve_capability_status,
 )
 from sources.contracts import SourceCapability, SourceStopReason
-
-
-def test_current_connection_versions_include_disabled_sources_for_owner() -> None:
-    owner_id = UUID(int=1)
-    session = MagicMock(spec=Session)
-    session.in_transaction.return_value = True
-    session.execute.return_value.all.return_value = [
-        ("disabled_source", 3),
-        ("enabled_source", 1),
-    ]
-
-    result = list_current_source_connection_versions_in_transaction(session, owner_id=owner_id)
-
-    assert result == (
-        SourceCurrentVersionView(source_key="disabled_source", current_version=3),
-        SourceCurrentVersionView(source_key="enabled_source", current_version=1),
-    )
-    session.execute.assert_called_once()
-    statement = session.execute.call_args.args[0]
-    assert owner_id in statement.compile().params.values()
-    assert "source_connections.status" not in str(statement)
-
-
-def test_current_connection_versions_require_transaction() -> None:
-    session = MagicMock(spec=Session)
-    session.in_transaction.return_value = False
-
-    with pytest.raises(RuntimeError, match="caller's transaction"):
-        list_current_source_connection_versions_in_transaction(session, owner_id=UUID(int=1))
-    session.execute.assert_not_called()
 
 
 @pytest.mark.parametrize(

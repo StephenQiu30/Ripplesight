@@ -170,7 +170,7 @@ class CommentRequestMeter:
         self._session.rollback()
         try:
             with self._session.begin():
-                request_counts = execution.current_request_counts_in_transaction(
+                request_sequence = execution.current_request_count_in_transaction(
                     self._lease,
                     owner_id=self._owner_id,
                     operation_id=self._operation_id,
@@ -199,13 +199,13 @@ class CommentRequestMeter:
                     capability=SourceCapability.COMMENTS,
                     data_class=DataClass.STRUCTURED,
                 )
-                if request_counts.collection_cycle >= self._max_requests:
+                if request_sequence >= self._max_requests:
                     return False
                 attempt_id = resource_attempt_id(
                     operation_id=self._operation_id,
                     component_key=self._component_key,
                     stage=_COMMENTS_STAGE,
-                    sequence=request_counts.total + 1,
+                    sequence=request_sequence + 1,
                 )
                 decision = budget.reserve_budget_in_transaction(
                     owner_id=self._owner_id,
@@ -542,7 +542,6 @@ class CommentPageCommitService:
                 stop_reason=page.stop_reason,
                 evidence=terminal_evidence,
                 job_progress=JobProgress(stage=JobStage.SAVE, items_saved=saved_items),
-                observed_items=len(page.items),
             )
             if meter is not None:
                 meter.settle_page_in_transaction(

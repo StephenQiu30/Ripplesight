@@ -67,52 +67,6 @@ def test_browser_state_directory_is_optional(monkeypatch) -> None:
     assert settings.browser_state_dir is None
 
 
-def test_mediacrawler_defaults_fit_the_long_process_deadline() -> None:
-    settings = Settings(
-        database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
-        mediacrawler_enabled=True,
-    )
-    assert settings.job_lease_seconds == 250
-    assert settings.kafka_max_poll_interval_seconds == 255
-
-
-def test_mediacrawler_requires_a_long_enough_lease_and_poll_window() -> None:
-    with pytest.raises(ValidationError, match="job lease"):
-        Settings(
-            database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
-            mediacrawler_enabled=True,
-            job_lease_seconds=249,
-        )
-    with pytest.raises(ValidationError, match="Kafka max poll interval"):
-        Settings(
-            database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
-            mediacrawler_enabled=True,
-            kafka_max_poll_interval_seconds=254,
-        )
-    settings = Settings(
-        database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
-        mediacrawler_enabled=True,
-        job_lease_seconds=250,
-        kafka_max_poll_interval_seconds=255,
-    )
-    assert settings.job_process_execution_timeout_seconds("keyword.search", "bilibili") == 240
-    assert settings.job_process_execution_timeout_seconds("source.comments", "bilibili") == 240
-    assert settings.job_process_execution_timeout_seconds("keyword.search", "hackernews") == 90
-    assert settings.job_process_execution_timeout_seconds("source.comments", "hackernews") == 90
-
-
-def test_disabled_mediacrawler_keeps_existing_lease_and_source_deadlines() -> None:
-    settings = Settings(database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test")
-    assert settings.job_lease_seconds == 75
-    assert settings.kafka_max_poll_interval_seconds == 120
-    assert settings.job_process_execution_timeout_seconds("keyword.search", "bilibili") == 90
-    with pytest.raises(ValidationError, match="job lease"):
-        Settings(
-            database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
-            job_lease_seconds=69,
-        )
-
-
 def test_browser_deadline_fits_job_lease_and_kafka_poll_window() -> None:
     settings = Settings(
         database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
@@ -140,37 +94,29 @@ def test_job_lease_must_leave_kafka_poll_margin() -> None:
     with pytest.raises(ValidationError, match="Kafka max poll interval"):
         Settings(
             database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
-            job_lease_seconds=75,
-            kafka_max_poll_interval_seconds=79,
+            job_lease_seconds=60,
+            kafka_max_poll_interval_seconds=64,
         )
 
 
-def test_disabled_webpage_runtimes_still_reserve_hotlist_deadline_budget() -> None:
-    with pytest.raises(ValidationError, match="job lease"):
-        Settings(
-            database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
-            firecrawl_enabled=False,
-            browser_enabled=False,
-            job_lease_seconds=15,
-            kafka_max_poll_interval_seconds=30,
-        )
+def test_disabled_source_runtimes_do_not_reserve_external_deadline_budget() -> None:
     settings = Settings(
         database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
         firecrawl_enabled=False,
         browser_enabled=False,
-        job_lease_seconds=70,
+        job_lease_seconds=15,
+        kafka_max_poll_interval_seconds=30,
     )
 
     assert not settings.browser_enabled
     assert settings.job_process_execution_timeout_seconds("webpage.collect") == 5
-    assert settings.job_process_execution_timeout_seconds("source.hotlist") == 60
 
 
 def test_firecrawl_timeout_includes_process_and_finalization_margins() -> None:
     settings = Settings(
         database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
         firecrawl_enabled=True,
-        job_lease_seconds=70,
+        job_lease_seconds=35,
     )
 
     assert settings.job_process_execution_timeout_seconds("webpage.collect") == 25
@@ -178,7 +124,7 @@ def test_firecrawl_timeout_includes_process_and_finalization_margins() -> None:
         Settings(
             database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
             firecrawl_enabled=True,
-            job_lease_seconds=69,
+            job_lease_seconds=34,
         )
 
 
@@ -187,7 +133,6 @@ def test_firecrawl_timeout_includes_process_and_finalization_margins() -> None:
     [
         ("keyword.search", 90),
         ("source.comments", 90),
-        ("source.hotlist", 60),
         ("analysis.annotate", 600),
         ("report.daily", 600),
         ("report.weekly", 600),

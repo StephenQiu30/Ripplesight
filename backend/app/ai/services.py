@@ -132,7 +132,6 @@ class AiService:
                 usage=AiTokenUsage(),
                 duration_ms=0,
             )
-            error.call_id = call_id
             raise
         except Exception as error:
             failure = AiCallError(AiFailureCode.FAILED, "AI client failed unexpectedly")
@@ -148,7 +147,6 @@ class AiService:
                 usage=AiTokenUsage(),
                 duration_ms=0,
             )
-            failure.call_id = call_id
             raise failure from error
 
         self._settle_and_record(

@@ -80,10 +80,6 @@ CREATE TABLE monitor_topic_versions (
     match_any JSONB NOT NULL CHECK (jsonb_typeof(match_any) = 'array'),
     match_all JSONB NOT NULL CHECK (jsonb_typeof(match_all) = 'array'),
     exclude JSONB NOT NULL CHECK (jsonb_typeof(exclude) = 'array'),
-    source_keys JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(source_keys) = 'array'),
-    collection_interval_seconds INTEGER NOT NULL DEFAULT 1800 CHECK (
-        collection_interval_seconds BETWEEN 600 AND 86400
-    ),
     created_at TIMESTAMPTZ NOT NULL,
     PRIMARY KEY (topic_id, version)
 );
@@ -98,7 +94,7 @@ CREATE TABLE monitor_schedules (
         source_key ~ '^[a-z][a-z0-9_-]{0,63}$'
     ),
     capability VARCHAR(32) NOT NULL CHECK (
-        capability IN ('search', 'author_posts', 'comments', 'replies', 'page_content', 'hotlist')
+        capability IN ('search', 'author_posts', 'comments', 'replies', 'page_content')
     ),
     interval_seconds INTEGER NOT NULL CHECK (
         interval_seconds BETWEEN 600 AND 86400
@@ -178,7 +174,6 @@ CREATE TABLE source_connection_versions (
     ),
     secret_ref VARCHAR(256),
     config JSONB NOT NULL DEFAULT '{}'::jsonb,
-    execution_policy JSONB,
     created_by UUID NOT NULL REFERENCES identity_users (id) ON DELETE RESTRICT,
     created_at TIMESTAMPTZ NOT NULL,
     PRIMARY KEY (connection_id, version),
@@ -202,19 +197,8 @@ CREATE TABLE source_connection_versions (
         jsonb_typeof(config) = 'object'
     ),
     CONSTRAINT source_connection_versions_config_keys_check CHECK (
-        config - 'feed_url' - 'feed_url_template' - 'base_url' - 'engines'
-            - 'allowed_hosts'
+        config - 'feed_url_template' - 'base_url' - 'engines' - 'allowed_hosts'
             = '{}'::jsonb
-    ),
-    CONSTRAINT source_connection_versions_execution_policy_object_check CHECK (
-        execution_policy IS NULL OR jsonb_typeof(execution_policy) = 'object'
-    ),
-    CONSTRAINT source_connection_versions_execution_policy_keys_check CHECK (
-        execution_policy IS NULL OR
-        execution_policy - 'min_interval_seconds' - 'quiet_windows'
-            - 'max_queries' - 'max_items_per_query' - 'max_requests'
-            - 'max_seconds' - 'hard_timeout_seconds' - 'max_concurrency'
-            - 'enabled' = '{}'::jsonb
     ),
     CONSTRAINT source_connection_versions_owner_connection_version_key
         UNIQUE (owner_id, connection_id, version),
@@ -239,7 +223,7 @@ CREATE TABLE source_capability_evidence (
     connection_id UUID NOT NULL,
     connection_version INTEGER NOT NULL CHECK (connection_version >= 1),
     capability VARCHAR(32) NOT NULL CHECK (
-        capability IN ('search', 'author_posts', 'comments', 'replies', 'page_content', 'hotlist')
+        capability IN ('search', 'author_posts', 'comments', 'replies', 'page_content')
     ),
     entry_point VARCHAR(16) NOT NULL CHECK (
         entry_point IN ('manual', 'scheduled')
@@ -300,7 +284,7 @@ CREATE TABLE source_access_policies (
     owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
     source_key VARCHAR(64) NOT NULL CHECK (source_key ~ '^[a-z][a-z0-9_-]{0,63}$'),
     capability VARCHAR(32) NOT NULL CHECK (
-        capability IN ('search', 'author_posts', 'comments', 'replies', 'page_content', 'hotlist')
+        capability IN ('search', 'author_posts', 'comments', 'replies', 'page_content')
     ),
     status VARCHAR(16) NOT NULL CHECK (status IN ('pending', 'approved', 'blocked')),
     enabled BOOLEAN NOT NULL DEFAULT false,
@@ -507,11 +491,6 @@ CREATE TABLE resource_budget_policies (
         CHECK (metric <> 'x_api_usd_micros' OR scope_kind <> 'source' OR scope_reference = 'x')
 );
 
-CREATE UNIQUE INDEX resource_budget_policies_source_window_key
-    ON resource_budget_policies
-        (owner_id, scope_reference, metric, window_seconds, window_anchor_at)
-    WHERE scope_kind = 'source';
-
 CREATE TABLE resource_budget_windows (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL,
@@ -681,9 +660,6 @@ CREATE TABLE jobs (
     cancel_deadline_at TIMESTAMPTZ,
     scheduled_for_at TIMESTAMPTZ,
     started_at TIMESTAMPTZ,
-    collection_cycle_no BIGINT NOT NULL DEFAULT 0,
-    collection_cycle_started_at TIMESTAMPTZ,
-    collection_cycle_requests_sent BIGINT NOT NULL DEFAULT 0,
     completed_at TIMESTAMPTZ,
     defer_reason VARCHAR(128),
     next_run_at TIMESTAMPTZ,
@@ -704,7 +680,7 @@ CREATE TABLE jobs (
             AND source_capability IS NOT NULL
             AND source_key ~ '^[a-z][a-z0-9_-]{0,63}$'
             AND source_capability IN (
-                'search', 'author_posts', 'comments', 'replies', 'page_content', 'hotlist'
+                'search', 'author_posts', 'comments', 'replies', 'page_content'
             )
         )
     ),
@@ -724,13 +700,6 @@ CREATE TABLE jobs (
         OR (progress_stage IS NOT NULL AND progress_updated_at IS NOT NULL)
     ),
     CHECK (progress_updated_at IS NULL OR progress_updated_at >= created_at),
-    CONSTRAINT jobs_collection_cycle_check CHECK (
-        (collection_cycle_no = 0 AND collection_cycle_started_at IS NULL
-            AND collection_cycle_requests_sent = 0)
-        OR (collection_cycle_no >= 1 AND collection_cycle_started_at IS NOT NULL
-            AND collection_cycle_requests_sent >= 0
-            AND collection_cycle_requests_sent <= requests_sent)
-    ),
     CHECK (
         (cancel_requested_at IS NULL AND cancel_deadline_at IS NULL)
         OR (
@@ -850,61 +819,6 @@ CREATE TABLE coverage_windows (
     )
 );
 
-CREATE TABLE collection_due_windows (
-    id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
-    schedule_key UUID NOT NULL,
-    topic_id UUID,
-    source_key VARCHAR(64) NOT NULL CONSTRAINT collection_due_windows_source_check
-        CHECK (source_key ~ '^[a-z][a-z0-9_-]{0,63}$'),
-    capability VARCHAR(32) NOT NULL CONSTRAINT collection_due_windows_capability_check
-        CHECK (capability IN ('search', 'author_posts', 'comments', 'replies',
-                             'page_content', 'hotlist')),
-    due_at TIMESTAMPTZ NOT NULL,
-    window_start TIMESTAMPTZ NOT NULL,
-    window_end TIMESTAMPTZ NOT NULL,
-    connection_version BIGINT CONSTRAINT collection_due_windows_version_check
-        CHECK (connection_version >= 1),
-    policy_snapshot JSONB CONSTRAINT collection_due_windows_policy_object_check
-        CHECK (policy_snapshot IS NULL OR jsonb_typeof(policy_snapshot) = 'object'),
-    admission_state VARCHAR(16) NOT NULL DEFAULT 'pending'
-        CONSTRAINT collection_due_windows_state_check
-        CHECK (admission_state IN ('pending', 'accepted', 'skipped', 'missed')),
-    reason VARCHAR(64),
-    operation_id UUID,
-    job_id UUID,
-    recorded_at TIMESTAMPTZ NOT NULL,
-    CONSTRAINT collection_due_windows_owner_schedule_due_key
-        UNIQUE (owner_id, schedule_key, due_at),
-    CONSTRAINT collection_due_windows_owner_job_key UNIQUE (owner_id, job_id),
-    CONSTRAINT collection_due_windows_owner_job_source_operation_key
-        UNIQUE (owner_id, job_id, source_key, operation_id),
-    CONSTRAINT collection_due_windows_owner_topic_fkey
-        FOREIGN KEY (owner_id, topic_id)
-        REFERENCES monitor_topics (owner_id, id) DEFERRABLE INITIALLY DEFERRED,
-    CONSTRAINT collection_due_windows_owner_job_fkey
-        FOREIGN KEY (owner_id, job_id)
-        REFERENCES jobs (owner_id, id) DEFERRABLE INITIALLY DEFERRED,
-    CONSTRAINT collection_due_windows_range_check
-        CHECK (window_start < window_end AND window_end <= due_at),
-    CONSTRAINT collection_due_windows_admission_pair_check CHECK (
-        (admission_state = 'pending' AND reason IS NULL AND operation_id IS NULL
-            AND job_id IS NULL)
-        OR (admission_state = 'accepted' AND reason IS NULL AND operation_id IS NOT NULL
-            AND job_id IS NOT NULL)
-        OR (admission_state = 'skipped'
-            AND reason IS NOT NULL
-            AND reason IN ('quiet', 'disabled', 'rate_limited', 'budget')
-            AND operation_id IS NULL AND job_id IS NULL)
-        OR (admission_state = 'missed' AND reason IS NOT NULL
-            AND reason = 'scheduler_interrupted'
-            AND operation_id IS NULL AND job_id IS NULL)
-    )
-);
-
-CREATE INDEX collection_due_windows_owner_due_idx
-    ON collection_due_windows (owner_id, due_at);
-
 CREATE TABLE job_stage_attempts (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL,
@@ -953,8 +867,6 @@ CREATE TABLE content_records (
     ),
     native_scope VARCHAR(512) CHECK (native_scope IS NULL OR native_scope <> ''),
     external_id VARCHAR(512) NOT NULL CHECK (external_id <> ''),
-    identity_basis VARCHAR(16) CONSTRAINT content_records_identity_basis_check
-        CHECK (identity_basis IN ('guid', 'url_fallback')),
     created_at TIMESTAMPTZ NOT NULL,
     CONSTRAINT content_records_owner_id_key UNIQUE (owner_id, id),
     CONSTRAINT content_records_source_identity_key
@@ -988,50 +900,6 @@ CREATE TABLE content_discoveries (
 
 CREATE INDEX content_discoveries_content_idx
     ON content_discoveries (owner_id, content_id);
-
-CREATE TABLE hotlist_snapshots (
-    id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL,
-    source_key VARCHAR(64) NOT NULL CHECK (source_key ~ '^[a-z][a-z0-9_-]{0,63}$'),
-    job_id UUID NOT NULL,
-    operation_id UUID NOT NULL,
-    observed_at TIMESTAMPTZ NOT NULL,
-    entry_count INTEGER NOT NULL CHECK (entry_count >= 0 AND entry_count <= 100),
-    CONSTRAINT hotlist_snapshots_owner_id_key UNIQUE (owner_id, id),
-    CONSTRAINT hotlist_snapshots_owner_job_key UNIQUE (owner_id, job_id),
-    CONSTRAINT hotlist_snapshots_owner_source_operation_key
-        UNIQUE (owner_id, source_key, operation_id),
-    CONSTRAINT hotlist_snapshots_owner_job_fkey FOREIGN KEY (owner_id, job_id)
-        REFERENCES jobs (owner_id, id) ON DELETE RESTRICT,
-    CONSTRAINT hotlist_snapshots_owner_due_identity_fkey
-        FOREIGN KEY (owner_id, job_id, source_key, operation_id)
-        REFERENCES collection_due_windows (owner_id, job_id, source_key, operation_id)
-        ON DELETE RESTRICT
-);
-
-CREATE INDEX hotlist_snapshots_latest_idx
-    ON hotlist_snapshots (owner_id, source_key, observed_at DESC, id DESC);
-
-CREATE TABLE hotlist_entries (
-    snapshot_id UUID NOT NULL,
-    owner_id UUID NOT NULL,
-    rank INTEGER NOT NULL CHECK (rank BETWEEN 1 AND 100),
-    title VARCHAR(2000) NOT NULL CHECK (title <> ''),
-    url VARCHAR(2048) NOT NULL CHECK (url ~ '^https?://'),
-    summary TEXT,
-    heat VARCHAR(256),
-    published_at TIMESTAMPTZ,
-    content_id UUID,
-    matched_topic_names JSONB NOT NULL DEFAULT '[]'::jsonb
-        CHECK (jsonb_typeof(matched_topic_names) = 'array'),
-    matched_topic_ids JSONB NOT NULL DEFAULT '[]'::jsonb
-        CHECK (jsonb_typeof(matched_topic_ids) = 'array'),
-    CONSTRAINT hotlist_entries_snapshot_rank_key PRIMARY KEY (snapshot_id, rank),
-    CONSTRAINT hotlist_entries_owner_snapshot_fkey FOREIGN KEY (owner_id, snapshot_id)
-        REFERENCES hotlist_snapshots (owner_id, id) ON DELETE CASCADE,
-    CONSTRAINT hotlist_entries_owner_content_fkey FOREIGN KEY (owner_id, content_id)
-        REFERENCES content_records (owner_id, id) ON DELETE SET NULL (content_id)
-);
 
 CREATE TABLE content_versions (
     id UUID PRIMARY KEY,
@@ -1281,15 +1149,7 @@ CREATE TABLE content_annotations (
     status VARCHAR(16) NOT NULL CHECK (
         status IN ('annotated', 'unanalyzed')
     ),
-    result_state VARCHAR(16) NOT NULL CHECK (
-        result_state IN ('pending', 'failed', 'invalid', 'valid')
-    ),
-    error_code VARCHAR(64),
-    diagnostic_history JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (
-        jsonb_typeof(diagnostic_history) = 'array'
-    ),
     created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL CHECK (created_at <= updated_at),
     CONSTRAINT content_annotations_owner_id_key UNIQUE (owner_id, id),
     CONSTRAINT content_annotations_owner_version_topic_rule_prompt_key
         UNIQUE (
@@ -1314,14 +1174,9 @@ CREATE TABLE content_annotations (
     CONSTRAINT content_annotations_output_status_check CHECK (
         (
             status = 'annotated'
-            AND result_state = 'valid'
             AND relevant IS NOT NULL
             AND relevance_reason IS NOT NULL
-            AND btrim(relevance_reason) <> ''
             AND summary IS NOT NULL
-            AND btrim(summary) <> ''
-            AND ai_call_id IS NOT NULL
-            AND error_code IS NULL
             AND (
                 (relevant AND sentiment IS NOT NULL)
                 OR (NOT relevant AND sentiment IS NULL)
@@ -1329,21 +1184,11 @@ CREATE TABLE content_annotations (
         )
         OR (
             status = 'unanalyzed'
-            AND result_state IN ('pending', 'failed', 'invalid')
             AND relevant IS NULL
             AND relevance_reason IS NULL
             AND sentiment IS NULL
             AND summary IS NULL
             AND viewpoints = '[]'::jsonb
-            AND (
-                (result_state = 'pending' AND ai_call_id IS NULL AND error_code IS NULL)
-                OR (
-                    result_state IN ('failed', 'invalid')
-                    AND ai_call_id IS NOT NULL
-                    AND error_code IS NOT NULL
-                    AND btrim(error_code) <> ''
-                )
-            )
         )
     )
 );
@@ -1504,15 +1349,12 @@ CREATE TABLE job_attempts (
     id UUID PRIMARY KEY,
     job_id UUID NOT NULL REFERENCES jobs (id) ON DELETE CASCADE,
     lease_epoch BIGINT NOT NULL CHECK (lease_epoch >= 1),
-    collection_cycle_no BIGINT NOT NULL CHECK (collection_cycle_no >= 1),
     worker_id VARCHAR(128) NOT NULL,
-    queued_at TIMESTAMPTZ NOT NULL,
     started_at TIMESTAMPTZ NOT NULL,
     lease_expires_at TIMESTAMPTZ NOT NULL CHECK (lease_expires_at > started_at),
     finished_at TIMESTAMPTZ,
     outcome VARCHAR(32),
     CONSTRAINT job_attempts_job_epoch_key UNIQUE (job_id, lease_epoch),
-    CHECK (queued_at <= started_at),
     CHECK (
         (finished_at IS NULL AND outcome IS NULL)
         OR (finished_at IS NOT NULL AND outcome IS NOT NULL)

@@ -1,14 +1,14 @@
 # HotKey 正式文档模板
 
-所有正式文档遵守根 `AGENTS.md`。PRD、Design 与里程碑 Acceptance 依需求主题保持原编号；执行 Plan 以一份 Issue 一份文件，在 `docs/plan/` 从 `001` 全局连续编号，`doc_no` 是 Plan 自己的编号，不要求与源 PRD 同号。除索引 `README.md` 外，文件名使用 `NNN-中文主题.md`。SPEC 与 CHECKLIST 写入对应 Plan。
+所有正式文档遵守根 `AGENTS.md`。同一交付项复用一个三位 `doc_no` 和同一主题；除索引 `README.md` 外，文件名使用 `NNN-中文主题.md`。SPEC 与 CHECKLIST 不建立独立目录，统一写入对应 Plan。
 
 根目录 `PROJECT.md` 是技术选型入口，`HANDOVER.md` 是交接快照；两者不占用 doc_no，不代替正式 Design/Acceptance。
 
 根目录 `BACKLOG.md` 是唯一进度看板（阶段、验收、任务卡、待办、风险，≤ 10 KB），`HANDOVER.md` 只记录当前实现快照（≤ 5 KB），不占用 doc_no。
 
-**逐 Issue 计划流程（2026-09-26 起）**：总 PRD/Design 为 001，M1—M6 PRD/Design 为 002—007；Design 是 Epic，执行 Plan 独立从 001 起连续编号，每份只对应一个 Issue。`docs/plan/README.md` 索引 Design、PRD、Plan 与整体 AC。计划评审时必须写实精确文件、SPEC、Checklist、依赖和证据门槛；关键契约未定就标blocked/设计待决，不把决定留给开工者。旧里程碑 Plan 从 Git 历史对照，不作为执行入口。
+**v2.0 轻量流程（2026-09-25 起）**：需求、总体设计、执行计划各只维护一份（001）。新功能不再单独建五件套，而是在 Plan 001 的任务下写一段说明；只有独立调研（如新平台接入可行性）才从 048 起新建文档。下文各层模板仍适用于这些文档与阶段验收记录。
 
-编号以 `docs/README.md` 和 `docs/plan/README.md` 的当前台账为准。PRD/Design/Acceptance 的需求编号与 Plan 的执行序号是两条独立序列；Plan 用 `prd`、`design`、`source_task` 追溯来源，不能因 Plan 重编号改动原 FR/NFR/AC 含义。纠错须同步文件名、元数据、内部 ID 与引用，并在台账记录旧号去向。
+编号以 `docs/README.md` 的当前文档台账为准。用户要求清理后从空文档基线重建时，从 `001` 登记新交付项，不从已清理的历史文档推算起始编号。同一主题的 Research、PRD、Design、Plan 和 Acceptance 共用编号；独立专项另行登记。未提交草案的编号错误可按用户要求统一纠正，需同步文件名、元数据、内部 ID 与所有引用，并在台账记录映射；不得借纠错改变已有需求含义。
 
 ## 状态枚举
 
@@ -36,7 +36,7 @@
 | 检查 | `CHK-NNN-G0-001` 至 `CHK-NNN-G6-001` | `CHK-005-G5-002` |
 | 证据 | `EV-NNN-001` | `EV-005-004` |
 
-编号一旦使用不得改变含义；新 Issue Plan 取下一个三位序号，不使用 `001-A` 或 `1.1`。被替代的执行计划在台账记旧号与新号映射，旧原文可从 Git 历史查阅。`OPEN` 只用于尚未决策的问题；关闭时保留原条目、结论与日期，并映射到承接结论的 `DEC`、`RSK`、`BR`/`FR`/`NFR`，不得静默删除。
+编号一旦使用不得改变含义；拆分大需求时申请新 `doc_no`，不得使用 `001-A` 或 `1.1`。`OPEN` 只用于尚未决策的问题；关闭时保留原条目、结论与日期，并映射到承接结论的 `DEC`、`RSK`、`BR`/`FR`/`NFR`，不得静默删除。
 
 ## Research
 
@@ -69,8 +69,7 @@ version: v1.0
 owner: HotKey Team
 canonical_path: docs/design/NNN-主题设计.md
 prd: docs/prd/NNN-主题.md
-plan_index: docs/plan/README.md
-parent: docs/design/001-热点舆情监控平台总体设计.md # 里程碑 Design
+plan: docs/plans/NNN-主题计划.md
 ---
 ```
 
@@ -99,7 +98,7 @@ version: v1.0
 owner: HotKey Team
 canonical_path: docs/prd/NNN-主题.md
 design: docs/design/NNN-主题设计.md
-plan_index: docs/plan/README.md
+plan: docs/plans/NNN-主题计划.md
 ---
 ```
 
@@ -116,62 +115,55 @@ plan_index: docs/plan/README.md
 
 不得把未校准的性能数字写成无条件承诺；必须同时记录数据规模、并发、硬件、缓存冷热、统计窗口与排除条件。
 
-拆分为逐项 PRD 时，新文件使用独立编号，并在元数据中增加 `parent`（父级文档路径）与 `source_requirement`（原始需求 ID）。原始需求及其优先级不重编号，本地规则使用新文档编号。保留父级验收场景，新增正常、边界、失败与权限场景；按真实覆盖关系关联细化规则，不把父级笼统场景当成全部细节已覆盖。尚未建立的 `design` / `plan_index` 使用 `null`，不链接不存在的文件。
+拆分为逐项 PRD 时，新文件使用独立编号，并在元数据中增加 `parent`（父级文档路径）与 `source_requirement`（原始需求 ID）。原始需求及其优先级不重编号，本地规则使用新文档编号。保留父级验收场景，新增正常、边界、失败与权限场景；按真实覆盖关系关联细化规则，不把父级笼统场景当成全部细节已覆盖。尚未建立的 `design` / `plan` 使用 `null`，不链接不存在的文件。
 
 ## Plan（含 SPEC 与 CHECKLIST）
 
-一份 Plan 对应一个可独立实施或取证的 Issue。必须映射源 PRD 的相关 BR/FR/NFR/AC，写明局部完成边界、依赖与非目标；SPEC 使用本 Plan 编号，Checklist 逐 SPEC 和 G0—G6 对应预期证据。跨多个 Issue 的父级 AC 仍由里程碑 Acceptance 统一关闭。未获准的来源或渠道先写准入门禁，条件明确后再建逐来源或逐渠道 Plan。
-
-所有新建或调整的实施 Plan 均登记 `architecture_prerequisite: "046 S03"`；旧 Design 046 全局异常与响应契约和旧 Plan 046 前置计划已删除，见 Git 历史。除旧 046 前置计划本身外，Plan 进入实现前须有 046 S03 真实通过证据；研究/设计准备不受阻塞。公共技术前置不新增产品 FR/NFR 分母，领域成功/错误/分页/任务响应必须复用 PROJECT.md 规定的类型化契约与稳定 `ErrorView`，运行响应、OpenAPI 和生成客户端一致。该规则随模板传播到后续计划，不能只依赖 BACKLOG 的临时备注。
+所有新建或调整的实施 Plan 均登记 `architecture_prerequisite: "046 S03"`，链接 [统一契约 Design](design/046-全局异常与响应契约设计.md) 与 [前置 Plan](plans/046-全局异常与响应契约前置计划.md)。只有046自身不依赖自己；研究/设计准备不受代码实施门禁阻塞。公共技术前置不新增产品 FR/NFR 分母，领域成功/错误/分页/任务响应必须复用统一契约。该规则随模板传播到后续计划，不能只依赖 BACKLOG 的临时备注。
 
 ```yaml
 ---
 layer: Plan
-scope: issue
+scope: shared
 doc_no: "NNN"
-title: 单项执行计划
+title: 主题计划
 status: planned
 version: v1.0
 owner: HotKey Team
-canonical_path: docs/plan/NNN-单项执行计划.md
-design: docs/design/002-信息获取主链路设计.md # 源 Epic
-prd: docs/prd/002-信息获取主链路需求.md # 源需求
-source_task: TASK-002-S01-T01 # 旧卡有对应关系时填写；新增 Issue 说明来源缺口
-architecture_prerequisite: "046 S03"
-depends_on: ["先行Plan编号"] # 只列必需技术交付；账号/产品验收条件另写
+canonical_path: docs/plans/NNN-主题计划.md
+design: docs/design/NNN-主题设计.md
+prd: docs/prd/NNN-主题.md
 ---
 ```
 
 正文至少包含：
 
-1. 当前实现与目标差距、唯一交付物和源FR/NFR/AC；区分实现、准入研究、运行验收三种Issue；
-2. 先行Plan编号及消费产物、技术/真实条件、明确非目标；不得以关联关系制造验收环；
-3. 精确新增/修改/生成文件、符号/职责与所属领域；计划路径标“新增”，不能冒充现有文件；
-4. 具体输入→操作→预期结果的失败测试与用户路径，不只写“补测试”；
+1. 当前实现与目标差距；
+2. G0–G3 前置门禁、依赖和明确不实施项；
+3. 预计变更文件及其职责；
+4. 按垂直切片组织的测试先行任务；
 5. 数据、OpenAPI、生成客户端、配置与部署的变更顺序；
 6. 实施规格（SPEC）：
-   - API：方法/路径/operationId、router前缀、权限/CSRF、请求/响应字段、状态/错误码、分页、幂等和兼容；
-   - DATA：字段、唯一键、状态迁移、事务边界、版本与时间口径、空值、保留、回填和对账；
-   - JOB：触发、幂等键、批大小、硬截止、预算身份、重试/取消、崩溃恢复和并发；
+   - API：方法、权限、DTO、错误码、幂等和兼容；
+   - DATA：约束、状态机、保留、回填和对账；
+   - JOB：幂等键、超时、重试、取消、恢复和并发；
    - UI：桌面/移动及正常、空、加载、错误、权限不足；
    - SEC/OBS/OPS：权限、敏感数据、指标、日志、告警、发布和恢复；
-7. 执行检查清单（CHECKLIST）：每项包含唯一CHK ID、SPEC与AC映射、具体测试路径或操作、预期断言；
-8. 可运行验证命令（可引用索引B/C/F）、保留库变更/回滚、技术与真实验收证据位置、局部完成定义；父AC由哪些卡汇合明确列出。
-
-初始工程上限可以由设计给出，但须注明依据、适用范围和校准方式；费用、授权和外部能力未知不能编造默认值。研究Issue的交付是准入结论和后续实施合同，不能关闭对应功能AC。每份计划须含空/失败/重放/并发/权限等适用边界；通用G0—G6只作公共门禁，不能取代具体SPEC和CHK。禁止用脚本批量套模板生成或重编号计划内容。
+7. 执行检查清单（CHECKLIST）：每项包含 CHK ID、AC 映射和预期证据；
+8. 验证命令、灰度、迁移、回滚和完成定义。
 
 Checklist 示例：
 
 每个执行阶段都应有任务、进入条件、完成输出及对应 checklist；依赖明确到先行 Plan 的具体切片，避免把关联关系写成循环前置。未建立 Design 时可以先写 planned 的计划，将设计列为实施前置并使用 design: null；不因此允许跳过设计直接实现。Plan 编写进度与产品验收进度分开，BACKLOG 以真实 AC/Acceptance 更新完成状态。
 
 ```markdown
-- [ ] `CHK-001-G3-001` → `SPEC-001-API-001` / `AC-002-002`：失败测试已保存；证据为测试名称和失败摘要。
-- [ ] `CHK-001-G4-001` → `AC-002-002`：OpenAPI 与客户端一致；证据为生成和校验命令。
+- [ ] `CHK-NNN-G3-001` → `AC-NNN-001`：失败测试已保存；证据为测试名称和失败摘要。
+- [ ] `CHK-NNN-G4-001` → `AC-NNN-002`：OpenAPI 与客户端一致；证据为生成和校验命令。
 ```
 
 ## Acceptance
 
-只有实现和验证真实发生后才创建与 PRD 里程碑同编号的 Acceptance；它汇总该里程碑关联 Plan 的证据。必须记录代码版本、环境、日期、每条 AC 的结果、命令摘要、人工/性能/安全/恢复证据、已知限制和回滚验证。没有证据的目标不得标记为 `passed`。
+只有实现和验证真实发生后才创建同编号 Acceptance。必须记录代码版本、环境、日期、每条 AC 的结果、命令摘要、人工/性能/安全/恢复证据、已知限制和回滚验证。没有证据的目标不得标记为 `passed`。
 
 ## Operations
 

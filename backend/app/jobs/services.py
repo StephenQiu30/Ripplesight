@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 from connections.services import (
     SourceCapabilityEvidenceService,
     require_source_connection_enabled,
-    require_source_connection_version,
 )
 from core.errors import ApplicationError
 from jobs.cursor import (
@@ -247,13 +246,6 @@ class CoverageWindowService:
         stop_reason: SourceStopReason | None = None,
         evidence: CoverageTerminalEvidence | None = None,
         job_progress: JobProgress | None = None,
-        observed_items: int | None = None,
-        source_observed_at: datetime | None = None,
-        source_feed_updated_at: datetime | None = None,
-        source_engine: str | None = None,
-        source_page_number: int | None = None,
-        source_unresponsive_engines: tuple[str, ...] = (),
-        source_search_error: str | None = None,
     ) -> tuple[ExecutionLease, CoverageWindowView, CursorPageProgress]:
         """Commit a bounded cursor page and range progress in the caller's transaction."""
         expected = plan_cursor_request(
@@ -271,40 +263,6 @@ class CoverageWindowService:
             next_token=next_token,
             stop_reason=stop_reason,
         )
-        if observed_items is not None:
-            if observed_items < 0:
-                raise ValueError("observed item count cannot be negative")
-            previous = lease.checkpoint.get("collection.observed_count", 0)
-            if type(previous) is not int or previous < 0:
-                raise CoverageWindowConflictError("invalid observed item checkpoint")
-            progress.checkpoint["collection.observed_count"] = previous + observed_items
-        if source_observed_at is not None:
-            if source_observed_at.tzinfo is None:
-                raise ValueError("source observation time must be timezone-aware")
-            if source_feed_updated_at is not None and source_feed_updated_at.tzinfo is None:
-                raise ValueError("source feed update time must be timezone-aware")
-            progress.checkpoint["collection.source_observed_at"] = source_observed_at.astimezone(
-                UTC
-            ).isoformat()
-            progress.checkpoint["collection.source_feed_updated_at"] = (
-                source_feed_updated_at.astimezone(UTC).isoformat()
-                if source_feed_updated_at is not None
-                else None
-            )
-        elif source_feed_updated_at is not None:
-            raise ValueError("source feed update time requires a source observation")
-        if source_page_number is not None:
-            progress.checkpoint["collection.source_page_number"] = source_page_number
-            progress.checkpoint.pop("collection.source_unresponsive_engines", None)
-            progress.checkpoint.pop("collection.source_search_error", None)
-        if source_engine is not None:
-            progress.checkpoint["collection.source_engine"] = source_engine
-        if source_unresponsive_engines:
-            progress.checkpoint["collection.source_unresponsive_engines"] = json.dumps(
-                source_unresponsive_engines, ensure_ascii=False
-            )
-        if source_search_error is not None:
-            progress.checkpoint["collection.source_search_error"] = source_search_error
         opened = self.begin_in_transaction(lease=lease, window=window)
         if opened.status == "confirmed":
             raise CoverageWindowConflictError("confirmed window cannot accept another page")
@@ -512,7 +470,6 @@ class JobExecutionConfiguration:
     operation_id: UUID
     kind: str
     started_at: datetime | None
-    collection_cycle_started_at: datetime | None
     observation: JobObservationContext
     scope: dict[str, OutboxValue]
 
@@ -584,7 +541,6 @@ def _job_execution_configuration(job: Job) -> JobExecutionConfiguration:
         operation_id=job.operation_id,
         kind=job.kind,
         started_at=job.started_at,
-        collection_cycle_started_at=job.collection_cycle_started_at,
         observation=JobObservationContext(
             configuration_ref=job.configuration_ref,
             configuration_version=job.configuration_version,
@@ -1065,23 +1021,6 @@ class ResourceBudgetService:
             raise ValueError("x api spend policy requires x source")
         now = self._clock()
         self._require_aware_clock(now)
-        if command.scope_kind is BudgetScopeKind.SOURCE:
-            same_window = self._session.scalar(
-                select(ResourceBudgetPolicy)
-                .where(
-                    ResourceBudgetPolicy.owner_id == owner_id,
-                    ResourceBudgetPolicy.scope_kind == BudgetScopeKind.SOURCE.value,
-                    ResourceBudgetPolicy.scope_reference == command.scope_reference,
-                    ResourceBudgetPolicy.metric == command.metric.value,
-                    ResourceBudgetPolicy.window_seconds == command.window_seconds,
-                    ResourceBudgetPolicy.window_anchor_at == command.window_anchor_at,
-                )
-                .with_for_update()
-            )
-            if same_window is not None and same_window.budget_key != command.budget_key:
-                raise BudgetPolicyConflictError(
-                    "source metric window already has a stable budget key"
-                )
         model = self._session.scalar(
             select(ResourceBudgetPolicy)
             .where(
@@ -2164,22 +2103,6 @@ class JobService:
         with self._session.begin():
             return self.accept_in_transaction(owner_id=owner_id, command=command)
 
-    def operation_exists_in_transaction(
-        self, *, owner_id: UUID, kind: str, operation_id: UUID
-    ) -> bool:
-        if not self._session.in_transaction():
-            raise RuntimeError("operation lookup requires the caller's transaction")
-        return (
-            self._session.scalar(
-                select(Job.id).where(
-                    Job.owner_id == owner_id,
-                    Job.kind == kind,
-                    Job.operation_id == operation_id,
-                )
-            )
-            is not None
-        )
-
     def accept_in_transaction(
         self,
         *,
@@ -2513,47 +2436,6 @@ class JobService:
             require_source_connection_enabled(
                 self._session, owner_id=owner_id, source_key=model.source_key
             )
-            if model.kind in {"keyword.search", "source.comments", "source.hotlist"}:
-                connection_id = model.scope.get("connection_id")
-                connection_version = model.scope.get("connection_version")
-                if (
-                    not isinstance(connection_id, str)
-                    or type(connection_version) is not int
-                    or connection_version < 1
-                    or model.source_key is None
-                ):
-                    raise ApplicationError("job_not_retryable")
-                try:
-                    parsed_connection_id = UUID(connection_id)
-                except ValueError as error:
-                    raise ApplicationError("job_not_retryable") from error
-                require_source_connection_version(
-                    self._session,
-                    owner_id=owner_id,
-                    source_key=model.source_key,
-                    connection_id=parsed_connection_id,
-                    connection_version=connection_version,
-                )
-                budgets = ResourceBudgetService(
-                    self._session, clock=lambda: now
-                ).budget_usage_snapshot(owner_id=owner_id)
-                relevant = [
-                    budget
-                    for budget in budgets
-                    if budget.metric is BudgetMetric.NETWORK_REQUEST
-                    and (
-                        budget.scope_kind is BudgetScopeKind.GLOBAL
-                        or (
-                            budget.scope_kind is BudgetScopeKind.SOURCE
-                            and budget.scope_reference == model.source_key
-                        )
-                    )
-                ]
-                if not any(b.scope_kind is BudgetScopeKind.SOURCE for b in relevant) or any(
-                    not b.enabled or b.remaining_units is None or b.remaining_units < 1
-                    for b in relevant
-                ):
-                    raise ApplicationError("retry_budget_exhausted")
             retry_count = model.retry_count + 1
             dispatch_sequence = (
                 self._session.scalar(
@@ -2775,46 +2657,6 @@ class JobService:
                 result_content_id = UUID(raw_content_id)
             except ValueError as error:
                 raise RuntimeError("job result content ID is invalid") from error
-        latest_attempt = self._session.scalar(
-            select(JobAttempt)
-            .where(JobAttempt.job_id == model.id)
-            .order_by(JobAttempt.lease_epoch.desc())
-            .limit(1)
-        )
-        cycle_pending = (
-            model.status == JobStatus.QUEUED.value and model.defer_reason == "manual_retry"
-        )
-        if model.status == JobStatus.QUEUED.value:
-            queue_anchor = model.next_run_at or model.scheduled_for_at or model.created_at
-            queue_wait_us = max(0, _duration_us(queue_anchor, now) or 0)
-        elif latest_attempt is not None:
-            queue_wait_us = max(
-                0, _duration_us(latest_attempt.queued_at, latest_attempt.started_at) or 0
-            )
-        else:
-            queue_wait_us = None
-        attempt_elapsed_us = (
-            max(
-                0,
-                _duration_us(latest_attempt.started_at, latest_attempt.finished_at or now) or 0,
-            )
-            if latest_attempt is not None
-            else None
-        )
-        total_elapsed_us = (
-            max(0, _duration_us(model.started_at, model.completed_at or now) or 0)
-            if model.started_at is not None
-            else None
-        )
-        budget_limit = self._collection_budget_limit_seconds(model)
-        budget_remaining_us = None
-        if (
-            budget_limit is not None
-            and model.collection_cycle_started_at is not None
-            and not cycle_pending
-        ):
-            deadline = model.collection_cycle_started_at + timedelta(seconds=budget_limit)
-            budget_remaining_us = max(0, _duration_us(model.completed_at or now, deadline) or 0)
         return JobStatusView(
             id=model.id,
             operation_id=model.operation_id,
@@ -2831,20 +2673,6 @@ class JobService:
             failure=failure,
             result_content_id=result_content_id,
             retry_count=model.retry_count,
-            collection_cycle_no=model.collection_cycle_no,
-            collection_cycle_started_at=_as_utc(model.collection_cycle_started_at),
-            collection_cycle_requests_sent=model.collection_cycle_requests_sent,
-            collection_cycle_pending=cycle_pending,
-            latest_attempt_started_at=(
-                _as_utc(latest_attempt.started_at) if latest_attempt is not None else None
-            ),
-            latest_attempt_finished_at=(
-                _as_utc(latest_attempt.finished_at) if latest_attempt is not None else None
-            ),
-            queue_wait_us=queue_wait_us,
-            attempt_elapsed_us=attempt_elapsed_us,
-            total_elapsed_us=total_elapsed_us,
-            collection_budget_remaining_us=budget_remaining_us,
             next_run_at=_as_utc(model.next_run_at),
             scheduled_for_at=_as_utc(model.scheduled_for_at),
             started_at=_as_utc(model.started_at),
@@ -2853,15 +2681,6 @@ class JobService:
             source_freshness=self._source_freshness(model, now=now),
             coverage_windows=self._coverage_windows(model),
         )
-
-    @staticmethod
-    def _collection_budget_limit_seconds(model: Job) -> int | None:
-        if model.kind == "source.hotlist":
-            return 45
-        if model.kind not in {"keyword.search", "source.comments"}:
-            return None
-        value = model.scope.get("max_seconds")
-        return value if type(value) is int and value > 0 else None
 
     def _coverage_windows(self, model: Job) -> tuple[CoverageWindowView, ...]:
         if model.source_key is None or model.source_capability is None:

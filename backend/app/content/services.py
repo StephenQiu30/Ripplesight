@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 from uuid import UUID, uuid4, uuid5
 
 import structlog
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -33,14 +33,10 @@ from content.models import (
     ContentVersion,
     ContentVersionRelation,
     ContentVisibilityObservation,
-    HotlistSnapshot,
 )
 from content.schemas import (
     AnalysisCommentContentView,
     AnalysisPostContentView,
-    CollectionContentCountView,
-    CollectionContentFactView,
-    CollectionSnapshotFactView,
     CommentCollectionRunInput,
     ContentDiscoveryView,
     ContentMetricView,
@@ -87,7 +83,6 @@ _ALLOWED_FIELDS = frozenset(
     {
         "object_type",
         "external_id",
-        "identity_basis",
         "canonical_url",
         "author_external_id",
         "author_name",
@@ -397,113 +392,6 @@ class ContentService:
         self._session = session
         self._clock = clock or (lambda: datetime.now(UTC))
 
-    def collection_counts_in_transaction(
-        self, *, owner_id: UUID, job_ids: tuple[UUID, ...]
-    ) -> tuple[CollectionContentCountView, ...]:
-        """Preserve the existing count projection for callers that do not need content IDs."""
-        if not self._session.in_transaction():
-            raise RuntimeError("collection count reads require the caller's transaction")
-        return tuple(
-            CollectionContentCountView(
-                job_id=fact.job_id,
-                observation_count=fact.observation_count,
-                ingested_count=fact.ingested_count,
-                first_ingested_count=fact.first_ingested_count,
-                deduplicated_count=fact.deduplicated_count,
-                content_version_ids=fact.content_version_ids,
-            )
-            for fact in self.collection_facts_in_transaction(owner_id=owner_id, job_ids=job_ids)
-        )
-
-    def collection_facts_in_transaction(
-        self, *, owner_id: UUID, job_ids: tuple[UUID, ...]
-    ) -> tuple[CollectionContentFactView, ...]:
-        """Return per-Job observation facts and stable IDs in two owner-scoped reads."""
-        if not self._session.in_transaction():
-            raise RuntimeError("collection fact reads require the caller's transaction")
-        if not job_ids:
-            return ()
-        observations = self._session.scalars(
-            select(ContentObservation).where(
-                ContentObservation.owner_id == owner_id,
-                ContentObservation.job_id.in_(job_ids),
-            )
-        ).all()
-        by_job: dict[UUID, list[ContentObservation]] = {job_id: [] for job_id in job_ids}
-        for item in observations:
-            by_job[item.job_id].append(item)
-        candidate_ids = {item.content_id for item in observations}
-        first_by_content: dict[UUID, ContentObservation] = {}
-        if candidate_ids:
-            history = self._session.scalars(
-                select(ContentObservation).where(
-                    ContentObservation.owner_id == owner_id,
-                    ContentObservation.content_id.in_(candidate_ids),
-                )
-            ).all()
-            for item in history:
-                previous = first_by_content.get(item.content_id)
-                if previous is None or (item.received_at, item.id) < (
-                    previous.received_at,
-                    previous.id,
-                ):
-                    first_by_content[item.content_id] = item
-        first_ingested_by_job = {job_id: 0 for job_id in job_ids}
-        for first in first_by_content.values():
-            if first.job_id in first_ingested_by_job:
-                first_ingested_by_job[first.job_id] += 1
-        return tuple(
-            CollectionContentFactView(
-                job_id=job_id,
-                observation_count=len(by_job[job_id]),
-                ingested_count=len({item.content_id for item in by_job[job_id]}),
-                first_ingested_count=first_ingested_by_job[job_id],
-                deduplicated_count=len(by_job[job_id]) - first_ingested_by_job[job_id],
-                content_version_ids=tuple(
-                    sorted(
-                        {
-                            item.content_version_id
-                            for item in by_job[job_id]
-                            if item.content_version_id is not None
-                        },
-                        key=str,
-                    )
-                ),
-                content_ids=tuple(sorted({item.content_id for item in by_job[job_id]}, key=str)),
-                analysis_targets_complete=all(
-                    item.content_version_id is not None for item in by_job[job_id]
-                ),
-            )
-            for job_id in job_ids
-        )
-
-    def collection_snapshot_facts_in_transaction(
-        self, *, owner_id: UUID, job_ids: tuple[UUID, ...]
-    ) -> tuple[CollectionSnapshotFactView, ...]:
-        """Return one observed hotlist snapshot per Job, preserving empty versus absent."""
-        if not self._session.in_transaction():
-            raise RuntimeError("collection snapshot reads require the caller's transaction")
-        if not job_ids:
-            return ()
-        snapshots = self._session.scalars(
-            select(HotlistSnapshot).where(
-                HotlistSnapshot.owner_id == owner_id,
-                HotlistSnapshot.job_id.in_(job_ids),
-            )
-        ).all()
-        by_job = {snapshot.job_id: snapshot for snapshot in snapshots}
-        return tuple(
-            CollectionSnapshotFactView(
-                job_id=job_id,
-                snapshot_id=by_job[job_id].id if job_id in by_job else None,
-                entry_count=by_job[job_id].entry_count if job_id in by_job else None,
-                observed_at=(
-                    by_job[job_id].observed_at.astimezone(UTC) if job_id in by_job else None
-                ),
-            )
-            for job_id in job_ids
-        )
-
     def require_persisted_document_result(
         self,
         *,
@@ -575,7 +463,6 @@ class ContentService:
             object_type="post",
             native_scope=command.native_scope,
             external_id=external_id,
-            identity_basis=self._identity_basis(fields),
             observation_values=self._observation_values(fields),
             version_values=_content_version_values(fields),
             now=now,
@@ -766,7 +653,6 @@ class ContentService:
         observation_values: dict[str, object],
         version_values: _ContentVersionValues | None,
         now: datetime,
-        identity_basis: str | None = None,
     ) -> ContentRecordDetailView:
         job = load_content_job_context(
             self._session,
@@ -786,7 +672,6 @@ class ContentService:
             native_scope=native_scope,
             external_id=external_id,
             created_at=now,
-            identity_basis=identity_basis,
         )
         content_version = self._find_or_create_content_version(
             owner_id=owner_id,
@@ -1036,15 +921,6 @@ class ContentService:
         return items, next_cursor
 
     @staticmethod
-    def _identity_basis(fields: Mapping[str, object]) -> str | None:
-        value = fields.get("identity_basis")
-        if value is None:
-            return None
-        if not isinstance(value, str) or value not in {"guid", "url_fallback"}:
-            raise ValueError("identity_basis must be guid or url_fallback")
-        return str(value)
-
-    @staticmethod
     def _observation_values(fields: Mapping[str, object]) -> dict[str, object]:
         published_at, published_at_fractional_digits = _optional_datetime_with_precision(
             fields, "published_at"
@@ -1068,7 +944,6 @@ class ContentService:
         native_scope: str | None,
         external_id: str,
         created_at: datetime,
-        identity_basis: str | None = None,
     ) -> ContentRecord:
         content_id = uuid4()
         inserted_id = self._session.scalar(
@@ -1080,7 +955,6 @@ class ContentService:
                 object_type=object_type,
                 native_scope=native_scope,
                 external_id=external_id,
-                identity_basis=identity_basis,
                 created_at=created_at,
             )
             .on_conflict_do_nothing(constraint="content_records_source_identity_key")
@@ -1094,7 +968,6 @@ class ContentService:
                 object_type=object_type,
                 native_scope=native_scope,
                 external_id=external_id,
-                identity_basis=identity_basis,
                 created_at=created_at,
             )
         conditions = [
@@ -1111,11 +984,6 @@ class ContentService:
         existing = self._session.scalar(select(ContentRecord).where(*conditions).with_for_update())
         if existing is None:
             raise RuntimeError("conflicting content identity is not visible")
-        if identity_basis is not None:
-            if existing.identity_basis is None:
-                existing.identity_basis = identity_basis
-            elif existing.identity_basis != identity_basis:
-                raise ValueError("conflicting content identity basis")
         return existing
 
     def _find_or_create_content_version(
@@ -1686,7 +1554,6 @@ class ContentService:
             object_type=content.object_type,
             native_scope=content.native_scope,
             external_id=content.external_id,
-            identity_basis=content.identity_basis,
             latest_observation=cls._observation_view(observation, content_version),
             current_visibility=current_visibility,
             discovery_count=discovery_count,
@@ -1787,7 +1654,6 @@ class CommentScanPost:
     like_count: int | None
     comment_count: int
     repost_count: int | None
-    last_observed_at: datetime | None = None
 
     @property
     def interaction_score(self) -> int:
@@ -1836,9 +1702,6 @@ def _comment_collection_run(
         starts_at=bucket_start - _COMMENT_REFRESH_INTERVAL,
         ends_at=bucket_start,
         scheduled_for_at=bucket_start,
-        page_size=20 if candidate.post.source_key == "bilibili" else 100,
-        max_pages=1 if candidate.post.source_key == "bilibili" else 10,
-        max_requests=1 if candidate.post.source_key == "bilibili" else 10,
     )
 
 
@@ -1884,9 +1747,7 @@ class CommentScanService:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def enqueue_due_comments_in_transaction(
-        self, *, now: datetime, skip_bilibili: bool = False
-    ) -> int:
+    def enqueue_due_comments_in_transaction(self, *, now: datetime) -> int:
         if not self._session.in_transaction():
             raise RuntimeError("comment scanning requires the caller's transaction")
         if now.tzinfo is None:
@@ -1896,8 +1757,6 @@ class CommentScanService:
             self._session
         ).list_active_topics_for_scanning_in_transaction()
         presets = self._comment_presets(topics)
-        if skip_bilibili:
-            presets = {key: preset for key, preset in presets.items() if key[1] != "bilibili"}
         posts = self._load_recent_posts(
             owners={topic.owner_id for topic in topics},
             source_keys={source_key for _, source_key in presets},
@@ -1908,20 +1767,6 @@ class CommentScanService:
             self._session,
             since=now_utc - _COMMENT_REFRESH_INTERVAL,
         )
-        # Only a newer Bilibili search refreshes the cached comments. A standalone
-        # comment scan must not replay the same JSONL as a fresh platform read.
-        for post in posts:
-            if post.source_key != "bilibili" or post.last_observed_at is None:
-                continue
-            target = RecentCommentJobTarget(
-                owner_id=post.owner_id,
-                source_key="bilibili",
-                post_external_id=post.external_id,
-            )
-            if target in load_recent_comment_job_targets_in_transaction(
-                self._session, since=post.last_observed_at
-            ):
-                recent_jobs |= frozenset({target})
         unique_candidates: dict[tuple[UUID, UUID], CommentScanCandidate] = {}
         for topic in topics:
             for candidate in _rank_comment_posts_for_topic(
@@ -2009,7 +1854,6 @@ class CommentScanService:
             ContentObservation.like_count.label("like_count"),
             ContentObservation.comment_count.label("comment_count"),
             ContentObservation.repost_count.label("repost_count"),
-            ContentObservation.observed_at.label("observed_at"),
             func.row_number()
             .over(
                 partition_by=(ContentObservation.owner_id, ContentObservation.content_id),
@@ -2033,7 +1877,6 @@ class CommentScanService:
                 latest_observations.c.like_count,
                 latest_observations.c.comment_count,
                 latest_observations.c.repost_count,
-                latest_observations.c.observed_at,
             )
             .join(
                 latest_versions,
@@ -2055,13 +1898,7 @@ class CommentScanService:
                 ContentRecord.owner_id.in_(owners),
                 ContentRecord.source_key.in_(source_keys),
                 ContentRecord.object_type == "post",
-                or_(
-                    ContentRecord.created_at >= since,
-                    and_(
-                        ContentRecord.source_key == "bilibili",
-                        latest_observations.c.observed_at >= since,
-                    ),
-                ),
+                ContentRecord.created_at >= since,
                 ContentRecord.created_at <= until,
                 latest_observations.c.comment_count > 0,
             )
@@ -2083,11 +1920,6 @@ class CommentScanService:
                 like_count=like_count,
                 comment_count=comment_count,
                 repost_count=repost_count,
-                last_observed_at=(
-                    observed_at.replace(tzinfo=UTC)
-                    if observed_at.tzinfo is None
-                    else observed_at.astimezone(UTC)
-                ),
             )
             for (
                 owner_id,
@@ -2100,7 +1932,6 @@ class CommentScanService:
                 like_count,
                 comment_count,
                 repost_count,
-                observed_at,
             ) in rows
         )
 
@@ -2116,21 +1947,11 @@ def load_recent_post_versions_for_analysis(
         raise RuntimeError("analysis content reads require the caller's transaction")
     if since.tzinfo is None:
         raise ValueError("analysis recency boundary must be timezone-aware")
-    occurred_at = case(
-        (ContentRecord.source_key == "bilibili", ContentObservation.observed_at),
-        else_=func.coalesce(ContentObservation.published_at, ContentObservation.observed_at),
-    )
+    occurred_at = func.coalesce(ContentObservation.published_at, ContentObservation.observed_at)
     recent_versions = (
         select(
             ContentObservation.content_version_id.label("content_version_id"),
             func.max(occurred_at).label("occurred_at"),
-        )
-        .join(
-            ContentRecord,
-            and_(
-                ContentRecord.owner_id == ContentObservation.owner_id,
-                ContentRecord.id == ContentObservation.content_id,
-            ),
         )
         .where(
             ContentObservation.owner_id == owner_id,

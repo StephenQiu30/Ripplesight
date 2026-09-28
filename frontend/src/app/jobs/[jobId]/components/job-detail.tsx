@@ -203,93 +203,6 @@ export function JobSourceFreshness({
   );
 }
 
-export function JobCycleTiming({ job }: { job: HotKeyAPI.JobStatusView }) {
-  const cyclePending = job.collection_cycle_pending;
-  const active = job.status === "running" || job.status === "cancelling";
-  const cycleLabel = cyclePending
-    ? `第 ${job.collection_cycle_no + 1} 周期待领取`
-    : job.collection_cycle_no > 0
-      ? `第 ${job.collection_cycle_no} 周期`
-      : "尚未开始";
-  const cycleStarted = cyclePending
-    ? "等待领取时开始"
-    : job.collection_cycle_started_at
-      ? formatTime(job.collection_cycle_started_at)
-      : "尚未开始";
-  const cycleRequests = cyclePending
-    ? "新周期尚未开始"
-    : job.collection_cycle_no === 0
-      ? "尚未开始"
-      : `${job.collection_cycle_requests_sent} 次`;
-  const cycleRemaining = cyclePending
-    ? "新周期尚未开始"
-    : job.collection_cycle_no === 0
-      ? "尚未开始"
-      : job.collection_budget_remaining_us === null
-        ? "暂无额度信息"
-        : job.collection_budget_remaining_us === 0
-          ? "已用完"
-          : formatDelayDuration(job.collection_budget_remaining_us);
-  const queueWait =
-    job.queue_wait_us === null
-      ? job.status === "queued"
-        ? "等待领取"
-        : "尚无记录"
-      : formatDelayDuration(job.queue_wait_us);
-  const attemptElapsed =
-    job.attempt_elapsed_us === null
-      ? job.latest_attempt_started_at
-        ? "时长暂不可用"
-        : "尚无尝试"
-      : formatDelayDuration(job.attempt_elapsed_us);
-  const totalElapsed =
-    job.total_elapsed_us === null
-      ? job.started_at
-        ? "时长暂不可用"
-        : "尚未开始"
-      : formatDelayDuration(job.total_elapsed_us);
-
-  return (
-    <section className="mt-10" aria-labelledby="job-cycle-title">
-      <h2 id="job-cycle-title" className="text-xl font-semibold">
-        任务时间与采集周期
-      </h2>
-      <div className="bg-muted mt-4 rounded-2xl p-6 sm:p-8">
-        <dl className="grid gap-x-8 gap-y-6 sm:grid-cols-2 xl:grid-cols-3">
-          <DetailItem label="采集周期" value={cycleLabel} />
-          <DetailItem label="周期开始" value={cycleStarted} />
-          <DetailItem label="本周期已发请求" value={cycleRequests} />
-          <DetailItem label="周期剩余额度" value={cycleRemaining} />
-          <DetailItem label="排队等待" value={queueWait} />
-          <DetailItem
-            label={active ? "当前尝试历时" : "最近一次尝试历时"}
-            value={attemptElapsed}
-          />
-          <DetailItem label="整单历时" value={totalElapsed} />
-          <DetailItem
-            label="最近一次尝试开始"
-            value={
-              job.latest_attempt_started_at
-                ? formatTime(job.latest_attempt_started_at)
-                : "尚无尝试"
-            }
-          />
-          <DetailItem
-            label="最近一次尝试结束"
-            value={
-              job.latest_attempt_finished_at
-                ? formatTime(job.latest_attempt_finished_at)
-                : active
-                  ? "进行中"
-                  : "尚无结束记录"
-            }
-          />
-        </dl>
-      </div>
-    </section>
-  );
-}
-
 export function JobResult({
   resultContentId,
   savedDescription,
@@ -689,8 +602,6 @@ export function JobDetail({ jobId }: JobDetailProps) {
             </p>
           </div>
         </section>
-
-        <JobCycleTiming job={job} />
 
         <JobResult
           resultContentId={job.result_content_id}

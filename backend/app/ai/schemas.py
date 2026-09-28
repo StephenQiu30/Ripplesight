@@ -43,11 +43,8 @@ class AiCompletion(BaseModel):
 
 
 class AiCallError(Exception):
-    def __init__(
-        self, code: AiFailureCode, detail: str = "", *, call_id: UUID | None = None
-    ) -> None:
+    def __init__(self, code: AiFailureCode, detail: str = "") -> None:
         super().__init__(code.value)
         self.code = code
-        self.call_id = call_id
         # Upstream text may echo prompt content; keep it short and out of logs by default.
         self.detail = detail[:500]

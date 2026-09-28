@@ -138,28 +138,3 @@ class MonitorTopicView(OutputModel):
     notification_target_names: list[str]
     created_at: datetime
     updated_at: datetime
-
-
-class MonitorTopicRunInput(InputModel):
-    operation_id: UUID
-    source_keys: list[SourceKeyInput] = Field(min_length=1, max_length=32)
-
-    @field_validator("source_keys")
-    @classmethod
-    def require_unique_sources(cls, value: list[str]) -> list[str]:
-        if len(set(value)) != len(value):
-            raise ValueError("source_keys must be unique")
-        return value
-
-
-class MonitorTopicRunSourceView(OutputModel):
-    source_key: str
-    job_ids: list[UUID]
-    skip_reason: Literal["source_unavailable", "quiet", "budget", "rate_limited"] | None
-
-
-class MonitorTopicRunView(OutputModel):
-    operation_id: UUID
-    topic_id: UUID
-    topic_version: int = Field(ge=1)
-    sources: list[MonitorTopicRunSourceView]

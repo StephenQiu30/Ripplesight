@@ -3,8 +3,7 @@ from __future__ import annotations
 import calendar
 import hashlib
 from collections.abc import Callable
-from datetime import UTC, datetime
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar
 from urllib.parse import quote, urlsplit
 
 import feedparser
@@ -16,12 +15,10 @@ from sources.adapters.http_source import (
     html_to_text,
     parse_timestamp,
 )
-from sources.adapters.web_targets import normalize_web_url
 from sources.contracts import (
     SocialSourceCapability,
     SourceCapability,
     SourcePage,
-    SourcePageState,
     SourcePost,
     SourceRequest,
     SourceStopReason,
@@ -29,31 +26,18 @@ from sources.contracts import (
 
 _QUERY_PLACEHOLDER = "{query}"
 _MAX_EXTERNAL_ID = 512
-GOOGLE_NEWS_FEED_URL_TEMPLATE = (
-    "https://news.google.com/rss/search?q={query}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
-)
 
 
-def _external_id(entry: Any) -> tuple[str, Literal["guid", "url_fallback"]] | None:
-    guid = entry.get("id")
-    if isinstance(guid, str) and (guid := guid.strip()):
-        if len(guid) > _MAX_EXTERNAL_ID or any(ord(char) < 32 or ord(char) == 127 for char in guid):
-            return "guid-sha256:" + hashlib.sha256(guid.encode()).hexdigest(), "guid"
-        return guid, "guid"
-    link = entry.get("link")
-    if not isinstance(link, str):
+def _external_id(entry: Any) -> str | None:
+    raw = entry.get("id") or entry.get("link")
+    if not isinstance(raw, str):
         return None
-    try:
-        host = urlsplit(link).hostname
-        if host is None:
-            return None
-        normalized = normalize_web_url(link, allowed_hosts=frozenset({host}))
-    except ValueError:
+    raw = raw.strip()
+    if not raw:
         return None
-    fallback = "url:" + normalized
-    if len(fallback) > _MAX_EXTERNAL_ID:
-        fallback = "url-sha256:" + hashlib.sha256(normalized.encode()).hexdigest()
-    return fallback, "url_fallback"
+    if len(raw) > _MAX_EXTERNAL_ID or any(ord(char) < 32 or ord(char) == 127 for char in raw):
+        return "sha256:" + hashlib.sha256(raw.encode()).hexdigest()
+    return raw
 
 
 def _published_at(entry: Any) -> object:
@@ -69,11 +53,11 @@ class RssSourceAdapter(HttpSourceAdapter):
 
     A template containing `{query}` receives the URL-encoded query; a template without it
     (for example a hot list) is fetched as-is and filtered later by the topic rules.
-    Feeds have no pagination, so every search returns one finite snapshot page.
+    Feeds have no pagination, so every search returns a single complete page.
     """
 
     capabilities: ClassVar[frozenset[SocialSourceCapability]] = frozenset({SourceCapability.SEARCH})
-    adapter_version: ClassVar[str] = "feedparser-6"
+    adapter_version: ClassVar[str] = "rss/feedparser-6"
 
     def __init__(
         self,
@@ -101,20 +85,7 @@ class RssSourceAdapter(HttpSourceAdapter):
         )
         if parsed.hostname not in self._allowed_hosts:
             raise ValueError("feed_url_template host must be allowlisted")
-        if source_key == "rss_36kr" and (
-            feed_url_template != "http://127.0.0.1:1200/36kr/newsflashes"
-            or allowed_hosts != frozenset({"127.0.0.1"})
-        ):
-            raise ValueError("rss_36kr requires the local RSSHub newsflashes endpoint")
-        if source_key == "google_news" and (
-            feed_url_template != GOOGLE_NEWS_FEED_URL_TEMPLATE
-            or allowed_hosts != frozenset({"news.google.com"})
-        ):
-            raise ValueError("Google News requires the fixed HTTPS search RSS endpoint")
         self._template = feed_url_template
-
-    def _follow_redirects(self) -> bool:
-        return self.source_key != "google_news"
 
     def _fetch(self, request: SourceRequest) -> SourcePage:
         if request.capability is not SourceCapability.SEARCH or request.page_token is not None:
@@ -122,16 +93,14 @@ class RssSourceAdapter(HttpSourceAdapter):
         assert request.capability is SourceCapability.SEARCH
         url = self._template.replace(_QUERY_PLACEHOLDER, quote(request.query, safe=""))
         feed = feedparser.parse(self._get_bytes(url))
-        if not feed.get("version") or feed.get("bozo"):
+        if feed.get("bozo") and not feed.get("entries"):
             raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
-        feed_updated_at = parse_timestamp(_published_at(feed.feed))
         items: list[SourcePost] = []
         seen: set[str] = set()
         for entry in feed.get("entries", []):
-            identity = _external_id(entry)
-            if identity is None or identity[0] in seen:
+            external_id = _external_id(entry)
+            if external_id is None or external_id in seen:
                 continue
-            external_id, identity_basis = identity
             seen.add(external_id)
             title = html_to_text(entry.get("title"))
             summary = entry.get("summary")
@@ -144,7 +113,6 @@ class RssSourceAdapter(HttpSourceAdapter):
                 SourcePost(
                     source_key=self.source_key,
                     external_id=external_id,
-                    identity_basis=identity_basis,
                     author_external_id=None,
                     author_name=author[:256] if isinstance(author, str) and author else None,
                     published_at=parse_timestamp(_published_at(entry)),
@@ -163,21 +131,6 @@ class RssSourceAdapter(HttpSourceAdapter):
                     ),
                 )
             )
-        if feed.entries and not items:
-            raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
-        if len(items) > request.page_size:
-            return SourcePage(
-                source_key=self.source_key,
-                capability=request.capability,
-                state=SourcePageState.PARTIAL,
-                items=tuple(items[: request.page_size]),
-                next_page_token=None,
-                watermark=None,
-                stop_reason=SourceStopReason.BUDGET_EXHAUSTED,
-                observed_at=datetime.now(UTC),
-                adapter_version=self.adapter_version,
-                source_feed_updated_at=feed_updated_at,
-            )
-        return self._page(request, tuple(items), None).model_copy(
-            update={"source_feed_updated_at": feed_updated_at}
-        )
+            if len(items) >= request.page_size:
+                break
+        return self._page(request, tuple(items), None)

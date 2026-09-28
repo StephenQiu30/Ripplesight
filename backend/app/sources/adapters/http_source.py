@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from sources.adapters.web_targets import normalize_web_host
 from sources.contracts import (
-    SourceCapability,
+    SocialSourceCapability,
     SourceComment,
     SourcePage,
     SourcePageState,
@@ -72,7 +72,7 @@ class HttpSourceAdapter:
     The executor settles usage per page through `SourcePage.request_count`.
     """
 
-    capabilities: ClassVar[frozenset[SourceCapability]]
+    capabilities: ClassVar[frozenset[SocialSourceCapability]]
     adapter_version: ClassVar[str]
 
     def __init__(
@@ -182,8 +182,6 @@ class HttpSourceAdapter:
                     timeout=min(self._request_timeout, remaining),
                 ) as response:
                     if response.is_redirect:
-                        if not self._follow_redirects():
-                            raise SourceFailureError(SourceStopReason.ACCESS_DENIED)
                         location = response.headers.get("location")
                         if location is None or redirect_count >= _MAX_REDIRECTS:
                             raise SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
@@ -203,9 +201,6 @@ class HttpSourceAdapter:
                         if time.monotonic() >= self._deadline:
                             raise SourceFailureError(SourceStopReason.BUDGET_EXHAUSTED)
                     return bytes(content)
-
-    def _follow_redirects(self) -> bool:
-        return True
 
     def _authorize_request(self) -> float:
         if self._cancelled():

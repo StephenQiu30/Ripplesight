@@ -69,10 +69,8 @@ from worker.execution import JobProcessSupervisor
 from worker.messaging import create_producer, decode_job_message, publish_outbox
 
 _TABLES = (
-    "collection_due_windows, content_version_relations, "
-    "content_visibility_observations, content_observations, "
-    "hotlist_entries, hotlist_snapshots, content_versions, "
-    "content_discoveries, content_threads, content_records, "
+    "content_version_relations, content_visibility_observations, content_observations, "
+    "content_versions, content_discoveries, content_threads, content_records, "
     "source_capability_evidence, "
     "source_connection_versions, source_connections, provenance_manifest_inputs, "
     "provenance_manifests, evidence_cleanup_targets, evidence_deletions, "
@@ -1464,12 +1462,11 @@ def test_connection_replacement_cannot_be_attributed_to_old_version(
                 "(connection_id, version, owner_id, auth_kind, secret_ref, config, "
                 "created_by, created_at) VALUES "
                 "(:id, 2, :owner_id, 'none', NULL, "
-                "CAST(:config AS jsonb), :owner_id, :now)"
+                '\'{"allowed_hosts":["example.com"]}\'::jsonb, :owner_id, :now)'
             ),
             {
                 "id": webpage_context.connection_id,
                 "owner_id": webpage_context.owner_id,
-                "config": '{"allowed_hosts":["example.com"]}',
                 "now": clock,
             },
         )
