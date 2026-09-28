@@ -113,7 +113,7 @@ def test_metrics_use_owner_visible_due_ids_and_keep_unfinished_denominator(
     assert response.status_code == 200, response.json()
     assert response.headers["cache-control"] == "no-store"
     payload = response.json()
-    assert payload["metric_version"] == "collection-v1"
+    assert payload["metric_version"] == "collection-v2"
     assert payload["analysis_status"] == "not_computable"
     assert [(item["source_key"], item["capability"]) for item in payload["sources"]] == [
         ("rss_36kr", "search")
@@ -196,3 +196,8 @@ def test_hotlist_denominator_enumerates_missing_bucket_in_72_hour_window(
     )
     assert hotlist["success_ratio"] == 0
     assert hotlist["phase_verified"] is False
+    timing = response.json()["sources"][0]["timing"]
+    assert timing["due_count"] == 144
+    assert timing["sample_count"] == 144
+    assert timing["timeout_count"] == 144
+    assert timing["result"] == "indeterminate"

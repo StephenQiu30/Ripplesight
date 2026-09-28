@@ -595,6 +595,19 @@ class CollectionCoverageQueryService:
 
         sources: list[CollectionSourceMetricView] = []
         for (key, kind), rows in sorted(by_source.items()):
+            expected: tuple[datetime, ...] = ()
+            expected_set: set[datetime] = set()
+            missing: set[datetime] = set()
+            if kind == SourceCapability.HOTLIST.value:
+                measured_end = min(end, cutoff + timedelta(microseconds=1))
+                if measured_end > start:
+                    expected = expected_hotlist_buckets(
+                        start=start,
+                        end=measured_end,
+                        interval_seconds=self._hotlist_interval_seconds,
+                    )
+                    expected_set = set(expected)
+                    missing = expected_set - {due.due_at for due in rows}
             exclusions = tuple(
                 CollectionMetricExclusionView(
                     reason=due.reason,
@@ -607,32 +620,26 @@ class CollectionCoverageQueryService:
                 and due.reason in (DueSkipReason.QUIET.value, DueSkipReason.RATE_LIMITED.value)
             )
             excluded_ids = {item.evidence_id for item in exclusions}
+            timing_samples = tuple(
+                CollectionTimingSample(
+                    due_at=_as_utc(due.due_at),
+                    finished_at=(
+                        completed_by_job.get(due.job_id) if due.job_id is not None else None
+                    ),
+                )
+                for due in rows
+                if due.id not in excluded_ids
+            ) + tuple(
+                CollectionTimingSample(due_at=due, finished_at=None) for due in sorted(missing)
+            )
             timing = summarize_collection_timing(
-                tuple(
-                    CollectionTimingSample(
-                        due_at=_as_utc(due.due_at),
-                        finished_at=(
-                            completed_by_job.get(due.job_id) if due.job_id is not None else None
-                        ),
-                    )
-                    for due in rows
-                    if due.id not in excluded_ids
-                ),
+                timing_samples,
                 cutoff_at=cutoff,
                 target_seconds=300,
             )
             hotlist = None
             if kind == SourceCapability.HOTLIST.value:
                 interval = self._hotlist_interval_seconds
-                measured_end = min(end, cutoff + timedelta(microseconds=1))
-                expected = (
-                    expected_hotlist_buckets(
-                        start=start, end=measured_end, interval_seconds=interval
-                    )
-                    if measured_end > start
-                    else ()
-                )
-                expected_set = set(expected)
                 recorded = {due.due_at for due in rows if due.due_at in expected_set}
                 successful = {
                     due.due_at
@@ -664,7 +671,7 @@ class CollectionCoverageQueryService:
                     expected_count=len(expected),
                     recorded_count=len(recorded),
                     success_count=len(successful),
-                    missing_count=len(expected_set - recorded),
+                    missing_count=len(missing),
                     success_ratio=len(successful) / len(expected) if expected else None,
                     cadence_consistent=cadence_consistent,
                     phase_verified=phase_verified,
@@ -675,21 +682,27 @@ class CollectionCoverageQueryService:
                     capability=SourceCapability(kind),
                     timing=CollectionTimingMetricView(
                         target_seconds=300,
-                        due_count=len(rows),
+                        due_count=len(rows) + len(missing),
                         excluded_count=len(exclusions),
                         sample_count=timing.sample_count,
                         finished_count=timing.finished_count,
                         timeout_count=timing.timeout_count,
                         median_seconds=timing.median_seconds,
                         median_lower_bound_seconds=timing.median_lower_bound_seconds,
-                        result=timing.result,
+                        result=(
+                            "indeterminate"
+                            if hotlist is not None
+                            and not hotlist.phase_verified
+                            and timing.result != "no_samples"
+                            else timing.result
+                        ),
                     ),
                     hotlist=hotlist,
                     exclusions=exclusions,
                 )
             )
         return CollectionCoverageMetricsView(
-            metric_version="collection-v1",
+            metric_version="collection-v2",
             start=start,
             end=end,
             cutoff_at=cutoff,
