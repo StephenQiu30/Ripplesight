@@ -7,7 +7,7 @@ from typing import Any, Literal
 from uuid import UUID, uuid4, uuid5
 
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -24,6 +24,7 @@ from analysis.prompts import (
     build_analysis_prompt,
     serialize_analysis_data,
 )
+from analysis.runtime import PromptRuntimeWindow, project_prompt_runtime_origin
 from analysis.schemas import (
     AnalysisJobScope,
     AnalysisNeedLedgerRowView,
@@ -48,6 +49,7 @@ from core.config import Settings
 from jobs.coverage import CollectionDueWindowService
 from jobs.execution import JobCompletion, JobExecutionFailure
 from jobs.metrics import AnalysisTimingSample, summarize_analysis_timing
+from jobs.models import Job
 from jobs.schemas import (
     JobAcceptanceInput,
     JobFailureCategory,
@@ -92,6 +94,73 @@ class AnalysisNeedOriginProjection:
     status: Literal["candidate", "not_required", "unknown"]
     started_at: datetime | None
     reason: str | None = None
+    prompt_runtime_ids: tuple[UUID, ...] = ()
+
+
+def _load_prompt_runtime_windows_in_transaction(
+    session: Session, *, as_of: datetime
+) -> tuple[PromptRuntimeWindow, ...]:
+    return tuple(
+        PromptRuntimeWindow(
+            run_id=runtime.id,
+            prompt_version=runtime.prompt_version,
+            ai_enabled=runtime.ai_enabled,
+            starts_at=runtime.started_at,
+            ends_at=runtime.last_seen_at,
+        )
+        for runtime in session.scalars(
+            select(AnalysisPromptRuntimeSession)
+            .where(AnalysisPromptRuntimeSession.started_at < as_of)
+            .order_by(AnalysisPromptRuntimeSession.started_at, AnalysisPromptRuntimeSession.id)
+        )
+    )
+
+
+def _load_prompt_versions_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    end: datetime,
+    cutoff_at: datetime,
+    runtime_windows: Sequence[PromptRuntimeWindow],
+) -> tuple[str, ...]:
+    """Include known old identities even when their activation history is missing."""
+    versions = {ANALYSIS_PROMPT_VERSION}
+    versions.update(
+        session.scalars(
+            select(AnalysisPromptActivation.prompt_version).where(
+                AnalysisPromptActivation.activated_at < end
+            )
+        )
+    )
+    versions.update(
+        window.prompt_version
+        for window in runtime_windows
+        if window.ai_enabled and window.starts_at < end
+    )
+    versions.update(
+        session.scalars(
+            select(ContentAnnotation.prompt_version)
+            .where(
+                ContentAnnotation.owner_id == owner_id,
+                ContentAnnotation.created_at <= cutoff_at,
+            )
+            .distinct()
+        )
+    )
+    versions.update(
+        session.scalars(
+            select(Job.scope["prompt_version"].astext)
+            .where(
+                Job.owner_id == owner_id,
+                Job.kind == "analysis.annotate",
+                Job.created_at <= cutoff_at,
+                func.jsonb_typeof(Job.scope["prompt_version"]) == "string",
+            )
+            .distinct()
+        )
+    )
+    return tuple(sorted(version for version in versions if version and len(version) <= 128))
 
 
 def build_analysis_need_ledger_in_transaction(
@@ -115,6 +184,14 @@ def build_analysis_need_ledger_in_transaction(
         raise ValueError("analysis ledger needs a UTC range of at most 31 days and later cutoff")
     rows: list[AnalysisNeedLedgerRowView] = []
     timing_samples: list[AnalysisTimingSample] = []
+    prompt_runtime_windows = _load_prompt_runtime_windows_in_transaction(session, as_of=end)
+    prompt_versions = _load_prompt_versions_in_transaction(
+        session,
+        owner_id=owner_id,
+        end=end,
+        cutoff_at=cutoff_at,
+        runtime_windows=prompt_runtime_windows,
+    )
     for rule in list_topic_analysis_rule_identities_in_transaction(
         session, owner_id=owner_id, before=end
     ):
@@ -128,13 +205,13 @@ def build_analysis_need_ledger_in_transaction(
         if not posts:
             continue
         annotations = {
-            item.content_version_id: item
+            (item.prompt_version, item.content_version_id): item
             for item in session.scalars(
                 select(ContentAnnotation).where(
                     ContentAnnotation.owner_id == owner_id,
                     ContentAnnotation.topic_id == rule.topic_id,
                     ContentAnnotation.topic_rule_version == rule.topic_rule_version,
-                    ContentAnnotation.prompt_version == ANALYSIS_PROMPT_VERSION,
+                    ContentAnnotation.created_at <= cutoff_at,
                 )
             )
         }
@@ -149,59 +226,69 @@ def build_analysis_need_ledger_in_transaction(
             )
             if availability is None:
                 continue
-            origin = project_analysis_need_origin_in_transaction(
-                session,
-                owner_id=owner_id,
-                topic_id=rule.topic_id,
-                topic_rule_version=rule.topic_rule_version,
-                content_version_id=post.content_version_id,
-                prompt_version=ANALYSIS_PROMPT_VERSION,
-                as_of=end,
-            )
-            if origin.status == "not_required" or (
-                origin.status == "candidate"
-                and (origin.started_at is None or not start <= origin.started_at < end)
-            ):
-                continue
-            annotation = annotations.get(post.content_version_id)
-            first_valid_at = annotation.first_valid_at if annotation is not None else None
-            inconsistent_history = (
-                origin.status == "candidate"
-                and origin.started_at is not None
-                and first_valid_at is not None
-                and first_valid_at < origin.started_at
-            )
-            rows.append(
-                AnalysisNeedLedgerRowView(
-                    content_version_id=post.content_version_id,
+            for prompt_version in prompt_versions:
+                origin = project_analysis_need_origin_in_transaction(
+                    session,
+                    owner_id=owner_id,
                     topic_id=rule.topic_id,
                     topic_rule_version=rule.topic_rule_version,
-                    prompt_version=ANALYSIS_PROMPT_VERSION,
-                    source_key=availability.source_key,
-                    origin_status="unknown" if inconsistent_history else origin.status,
-                    started_at=None if inconsistent_history else origin.started_at,
-                    reason="first_valid_precedes_need" if inconsistent_history else origin.reason,
-                    result_state=annotation.result_state if annotation is not None else None,
-                    first_valid_at=first_valid_at,
+                    content_version_id=post.content_version_id,
+                    prompt_version=prompt_version,
+                    as_of=end,
+                    prompt_runtime_windows=prompt_runtime_windows,
                 )
-            )
-            if (
-                origin.status == "candidate"
-                and origin.started_at is not None
-                and not inconsistent_history
-            ):
-                timing_samples.append(
-                    AnalysisTimingSample(
-                        needed_at=origin.started_at,
+                if origin.status == "not_required" or (
+                    origin.status == "candidate"
+                    and (origin.started_at is None or not start <= origin.started_at < end)
+                ):
+                    continue
+                annotation = annotations.get((prompt_version, post.content_version_id))
+                first_valid_at = annotation.first_valid_at if annotation is not None else None
+                inconsistent_history = (
+                    origin.status == "candidate"
+                    and origin.started_at is not None
+                    and first_valid_at is not None
+                    and first_valid_at < origin.started_at
+                )
+                rows.append(
+                    AnalysisNeedLedgerRowView(
+                        content_version_id=post.content_version_id,
+                        topic_id=rule.topic_id,
+                        topic_rule_version=rule.topic_rule_version,
+                        prompt_version=prompt_version,
+                        source_key=availability.source_key,
+                        origin_status="unknown" if inconsistent_history else origin.status,
+                        started_at=None if inconsistent_history else origin.started_at,
+                        reason=(
+                            "first_valid_precedes_need" if inconsistent_history else origin.reason
+                        ),
+                        prompt_runtime_ids=origin.prompt_runtime_ids,
+                        result_state=annotation.result_state if annotation is not None else None,
                         first_valid_at=first_valid_at,
                     )
                 )
+                if (
+                    origin.status == "candidate"
+                    and origin.started_at is not None
+                    and not inconsistent_history
+                ):
+                    timing_samples.append(
+                        AnalysisTimingSample(
+                            needed_at=origin.started_at,
+                            first_valid_at=first_valid_at,
+                        )
+                    )
     timing = summarize_analysis_timing(timing_samples, cutoff_at=cutoff_at)
     rows.sort(
-        key=lambda row: (str(row.topic_id), row.topic_rule_version, str(row.content_version_id))
+        key=lambda row: (
+            str(row.topic_id),
+            row.topic_rule_version,
+            row.prompt_version,
+            str(row.content_version_id),
+        )
     )
     return AnalysisNeedLedgerView(
-        metric_version="analysis-candidate-v1",
+        metric_version="analysis-candidate-v3",
         analysis_status="not_computable",
         start=start,
         end=end,
@@ -225,14 +312,13 @@ def project_analysis_need_origin_in_transaction(
     content_version_id: UUID,
     prompt_version: str,
     as_of: datetime,
+    prompt_runtime_windows: Sequence[PromptRuntimeWindow] | None = None,
 ) -> AnalysisNeedOriginProjection:
-    """Intersect exact version receipt, rule lifetime, topic active spans and prompt activation."""
+    """Intersect exact receipt, rule/topic windows and evidenced prompt runtime."""
     if not session.in_transaction():
         raise RuntimeError("analysis need projection requires the caller's transaction")
     if as_of.tzinfo is None or topic_rule_version < 1 or not prompt_version:
         raise ValueError("analysis need projection requires aware time and valid identity")
-    if prompt_version != ANALYSIS_PROMPT_VERSION:
-        return AnalysisNeedOriginProjection("unknown", None, "prompt_history_unavailable")
     timeline = load_topic_analysis_rule_timeline_in_transaction(
         session,
         owner_id=owner_id,
@@ -263,12 +349,26 @@ def project_analysis_need_origin_in_transaction(
     if received_at is None:
         return AnalysisNeedOriginProjection("not_required", None)
     cutoff = as_of.astimezone(UTC)
+    eligible_spans: list[tuple[datetime, datetime]] = []
     for active_start, active_end in timeline.active_spans:
         start = max(received_at, timeline.starts_at, activation.activated_at, active_start)
-        ends = tuple(end for end in (timeline.ends_at, active_end) if end is not None)
-        if start <= cutoff and (not ends or start < min(ends)):
-            return AnalysisNeedOriginProjection("candidate", start)
-    return AnalysisNeedOriginProjection("not_required", None)
+        end = min(end for end in (timeline.ends_at, active_end, cutoff) if end is not None)
+        if start < end:
+            eligible_spans.append((start, end))
+    if not eligible_spans:
+        return AnalysisNeedOriginProjection("not_required", None)
+    runtime = project_prompt_runtime_origin(
+        prompt_version=prompt_version,
+        eligible_spans=eligible_spans,
+        runtime_windows=(
+            prompt_runtime_windows
+            if prompt_runtime_windows is not None
+            else _load_prompt_runtime_windows_in_transaction(session, as_of=cutoff)
+        ),
+    )
+    return AnalysisNeedOriginProjection(
+        runtime.status, runtime.started_at, runtime.reason, runtime.runtime_ids
+    )
 
 
 def analysis_operation_id(

@@ -65,6 +65,7 @@ class AnalysisNeedLedgerRowView(OutputModel):
     origin_status: Literal["candidate", "unknown"]
     started_at: datetime | None
     reason: str | None
+    prompt_runtime_ids: tuple[UUID, ...]
     result_state: AnnotationResultState | None
     first_valid_at: datetime | None
 
@@ -74,7 +75,7 @@ class AnalysisNeedLedgerView(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    metric_version: Literal["analysis-candidate-v1"]
+    metric_version: Literal["analysis-candidate-v3"]
     analysis_status: Literal["not_computable"]
     start: datetime
     end: datetime
