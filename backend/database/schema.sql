@@ -195,8 +195,20 @@ CREATE TABLE source_connections (
     ),
     status VARCHAR(16) NOT NULL CHECK (status IN ('active', 'disabled')),
     current_version INTEGER NOT NULL DEFAULT 1 CHECK (current_version >= 1),
+    safety_stop_reason VARCHAR(32) CHECK (safety_stop_reason IN ('authentication_required', 'rate_limited')),
+    safety_trigger_job_id UUID,
+    safety_stopped_at TIMESTAMPTZ,
+    safety_stopped_version INTEGER CHECK (safety_stopped_version >= 1),
+    safety_events JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(safety_events) = 'array'),
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL CHECK (updated_at >= created_at),
+    CONSTRAINT source_connections_safety_stop_complete_check CHECK (
+        (safety_stop_reason IS NULL AND safety_trigger_job_id IS NULL
+            AND safety_stopped_at IS NULL AND safety_stopped_version IS NULL)
+        OR (source_key = 'bilibili' AND status = 'disabled'
+            AND safety_stop_reason IS NOT NULL AND safety_trigger_job_id IS NOT NULL
+            AND safety_stopped_at IS NOT NULL AND safety_stopped_version IS NOT NULL)
+    ),
     CONSTRAINT source_connections_owner_source_key UNIQUE (owner_id, source_key),
     CONSTRAINT source_connections_owner_id_key UNIQUE (owner_id, id)
 );

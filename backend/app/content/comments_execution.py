@@ -36,6 +36,7 @@ from jobs.services import (
 from sources.adapters.hackernews import HackerNewsAdapter
 from sources.adapters.mediacrawler import (
     MediaCrawlerAdapter,
+    MediaCrawlerExecutionError,
     MediaCrawlerPreflightError,
     validate_job_version_evidence,
 )
@@ -545,6 +546,16 @@ class CommentsExecutor:
                 JobFailureCategory.CONFIGURATION_UNAVAILABLE,
                 "核对固定 MediaCrawler 版本及工作树后重新提交",
                 manual_retry_allowed=False,
+            )
+        if isinstance(error, MediaCrawlerExecutionError):
+            return self._failure(
+                error.code,
+                (
+                    JobFailureCategory.INVALID_RESPONSE
+                    if error.code == "mediacrawler_output_invalid"
+                    else JobFailureCategory.TRANSIENT
+                ),
+                "核查本机 MediaCrawler 缓存输出后手动重试",
             )
         if isinstance(error, ApplicationError):
             return self._failure(

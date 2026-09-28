@@ -36,6 +36,7 @@ from jobs.services import (
 from sources.adapters.hackernews import HackerNewsAdapter
 from sources.adapters.mediacrawler import (
     MediaCrawlerAdapter,
+    MediaCrawlerExecutionError,
     MediaCrawlerPreflightError,
     validate_job_version_evidence,
 )
@@ -280,6 +281,19 @@ class KeywordDiscoveryExecutor:
                 )
             except MediaCrawlerPreflightError as error:
                 raise self._adapter_failure(error) from error
+            # A completed old checkpoint must not become a successful Job after
+            # this connection has been safety-paused by another execution.
+            try:
+                with self._sessions() as session, session.begin():
+                    require_source_connection_version(
+                        session,
+                        owner_id=configuration.owner_id,
+                        source_key=source_key,
+                        connection_id=connection_id,
+                        connection_version=connection_version,
+                    )
+            except ApplicationError as error:
+                raise self._adapter_failure(error) from error
 
         if lease.checkpoint.get("cursor.done") is True:
             with self._sessions() as session, session.begin():
@@ -497,6 +511,8 @@ class KeywordDiscoveryExecutor:
                                 connection_id=connection_id,
                                 connection_version=connection_version,
                                 now=self._clock(),
+                                reason=page.stop_reason,
+                                trigger_job_id=lease.job_id,
                             )
                     can_retry = False
                     if page.stop_reason in {
@@ -558,7 +574,35 @@ class KeywordDiscoveryExecutor:
                 connection_id=connection_id,
                 connection_version=connection_version,
             )
-        return build_search_adapter_factory(source_key, config, owner_id=owner_id)
+        factory = build_search_adapter_factory(source_key, config, owner_id=owner_id)
+        if source_key != "bilibili":
+            return factory
+
+        def build_with_live_safety(
+            before_request: Callable[[int], bool],
+            cancelled: Callable[[], bool],
+            max_requests: int,
+            max_seconds: float,
+        ) -> SourceAdapter:
+            def safety_cancelled() -> bool:
+                if cancelled():
+                    return True
+                try:
+                    with self._sessions() as session, session.begin():
+                        require_source_connection_version(
+                            session,
+                            owner_id=owner_id,
+                            source_key=source_key,
+                            connection_id=connection_id,
+                            connection_version=connection_version,
+                        )
+                except ApplicationError:
+                    return True
+                return False
+
+            return factory(before_request, safety_cancelled, max_requests, max_seconds)
+
+        return build_with_live_safety
 
     def _stop_if_cancelled(
         self,
@@ -605,6 +649,16 @@ class KeywordDiscoveryExecutor:
                 JobFailureCategory.CONFIGURATION_UNAVAILABLE,
                 "核对固定 MediaCrawler 版本及工作树后重新提交",
                 manual_retry_allowed=False,
+            )
+        if isinstance(error, MediaCrawlerExecutionError):
+            return self._failure(
+                error.code,
+                (
+                    JobFailureCategory.INVALID_RESPONSE
+                    if error.code == "mediacrawler_output_invalid"
+                    else JobFailureCategory.TRANSIENT
+                ),
+                "核查本机 MediaCrawler 运行状态和受限输出后手动重试",
             )
         if isinstance(error, ApplicationError):
             return self._failure(

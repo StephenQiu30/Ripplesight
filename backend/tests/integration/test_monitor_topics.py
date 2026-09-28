@@ -22,7 +22,7 @@ from jobs.schemas import JobAcceptanceInput
 from jobs.services import JobService
 from main import create_app
 from monitors.services import MonitorTopicService
-from sources.contracts import SourceCapability
+from sources.contracts import SourceCapability, SourceStopReason
 
 _BOOTSTRAP_TOKEN = "monitor-topics-isolated-bootstrap-token"
 _PASSWORD = "correct horse battery staple"
@@ -811,6 +811,8 @@ def test_bilibili_pause_is_not_cleared_by_preset_reapply(
             connection_id=applied.connection_id,
             connection_version=applied.connection_version,
             now=datetime.now(UTC),
+            reason=SourceStopReason.AUTHENTICATION_REQUIRED,
+            trigger_job_id=uuid4(),
         )
     with factory() as session:
         assert (

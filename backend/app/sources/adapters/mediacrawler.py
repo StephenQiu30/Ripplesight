@@ -31,25 +31,29 @@ from sources.contracts import (
 )
 
 SOURCE_KEY = "bilibili"
-ADAPTER_VERSION = "mediacrawler-fb4e6c5-hotkey-safe"
+ADAPTER_VERSION = "mediacrawler-1bd07bc-hotkey-safe"
 UPSTREAM_BASELINE = "380b426000aac3d612837ed72c99808347dc94c9"
-PATCHED_REVISION = "fb4e6c57ade1c7a2b3a61e69abc4fd4130047eb2"
+PATCHED_REVISION = "1bd07bc783963acef092ff00771207b7792b8cb6"
 _PINNED_REVISION = PATCHED_REVISION
 _LOGGER = logging.getLogger(__name__)
 _MAX_OUTPUT_BYTES = 2 * 1024 * 1024
 _MAX_LOG_BYTES = 128 * 1024
-_AUTH_SIGNAL = re.compile(
-    r"验证码|滑块|请扫码|扫码登录|登录失效|未登录|captcha|login required|"
-    r"login_by_qrcode.*Begin|Waiting for scan code login",
-    re.I,
-)
-_RATE_SIGNAL = re.compile(r"访问频繁|请求频繁|风控|rate.limit|too many requests|blocked", re.I)
+_AUTH_EXIT_CODE = 70
+_RATE_LIMIT_EXIT_CODE = 71
 _VIDEO_ID = re.compile(r"^[0-9]{1,30}$")
 _EXECUTABLE_SUFFIXES = frozenset({".py", ".pyc", ".sh", ".so", ".dylib"})
 
 
 class MediaCrawlerPreflightError(ValueError):
     """Stable, non-sensitive reason why a reviewed crawler cannot be launched."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+class MediaCrawlerExecutionError(RuntimeError):
+    """Stable local child or output failure without exposing crawler logs."""
 
     def __init__(self, code: str) -> None:
         super().__init__(code)
@@ -84,18 +88,21 @@ def _timestamp(value: object) -> datetime | None:
 
 
 def _read_rows(path: Path, *, limit: int) -> tuple[dict[str, object], ...]:
-    if path.is_symlink() or not path.is_file() or path.stat().st_size > _MAX_OUTPUT_BYTES:
-        raise ValueError("unsafe MediaCrawler result file")
-    rows: list[dict[str, object]] = []
-    with path.open(encoding="utf-8") as stream:
-        for line in stream:
-            if len(rows) >= limit:
-                raise ValueError("MediaCrawler result exceeds the requested cap")
-            value = json.loads(line)
-            if not isinstance(value, dict):
-                raise ValueError("MediaCrawler result row must be an object")
-            rows.append(value)
-    return tuple(rows)
+    try:
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > _MAX_OUTPUT_BYTES:
+            raise ValueError("unsafe MediaCrawler result file")
+        rows: list[dict[str, object]] = []
+        with path.open(encoding="utf-8") as stream:
+            for line in stream:
+                if len(rows) >= limit:
+                    raise ValueError("MediaCrawler result exceeds the requested cap")
+                value = json.loads(line)
+                if not isinstance(value, dict):
+                    raise ValueError("MediaCrawler result row must be an object")
+                rows.append(value)
+        return tuple(rows)
+    except (OSError, UnicodeError, ValueError) as error:
+        raise MediaCrawlerExecutionError("mediacrawler_output_invalid") from error
 
 
 def _post(row: dict[str, object]) -> SourcePost:
@@ -227,9 +234,12 @@ class MediaCrawlerAdapter:
             return self._stopped(SourceCapability.SEARCH, result, request_count=charged)
         files = tuple((run_dir / "bili" / "jsonl").glob("search_contents_*.jsonl"))
         if len(files) != 1:
-            raise ValueError("MediaCrawler search result is missing or ambiguous")
+            raise MediaCrawlerExecutionError("mediacrawler_output_invalid")
         rows = _read_rows(files[0], limit=request.page_size)
-        all_posts = tuple(_post(row) for row in rows)
+        try:
+            all_posts = tuple(_post(row) for row in rows)
+        except (KeyError, TypeError, ValueError, OverflowError) as error:
+            raise MediaCrawlerExecutionError("mediacrawler_output_invalid") from error
         if request.starts_at is not None and request.ends_at is not None:
             posts = tuple(
                 post
@@ -241,7 +251,7 @@ class MediaCrawlerAdapter:
             posts = all_posts
         comment_files = tuple((run_dir / "bili" / "jsonl").glob("search_comments_*.jsonl"))
         if len(comment_files) > 1:
-            raise ValueError("MediaCrawler comments result is ambiguous")
+            raise MediaCrawlerExecutionError("mediacrawler_output_invalid")
         filtered_comments = 0
         if comment_files:
             comments = _read_rows(comment_files[0], limit=request.page_size * 20)
@@ -251,13 +261,13 @@ class MediaCrawlerAdapter:
             for comment in comments:
                 video_id = str(comment.get("video_id"))
                 if video_id not in all_ids:
-                    raise ValueError("MediaCrawler returned unrelated comments")
+                    raise MediaCrawlerExecutionError("mediacrawler_output_invalid")
                 if video_id not in retained_ids:
                     filtered_comments += 1
                     continue
                 counts[video_id] = counts.get(video_id, 0) + 1
                 if counts[video_id] > 20:
-                    raise ValueError("MediaCrawler exceeded the comment cap")
+                    raise MediaCrawlerExecutionError("mediacrawler_output_invalid")
         filtered_posts = len(all_posts) - len(posts)
         if filtered_posts:
             _LOGGER.info(
@@ -294,6 +304,8 @@ class MediaCrawlerAdapter:
             "main.py",
             "--platform",
             "bili",
+            "--hotkey_safety_mode",
+            "true",
             "--lt",
             "qrcode",
             "--type",
@@ -322,17 +334,8 @@ class MediaCrawlerAdapter:
             deadline = time.monotonic() + self._max_seconds
             try:
                 while process.poll() is None:
-                    output.flush()
-                    current_log = self._log_tail(log_path)
-                    if _AUTH_SIGNAL.search(current_log):
-                        self._terminate_process_group(process)
-                        return SourceStopReason.AUTHENTICATION_REQUIRED
-                    if _RATE_SIGNAL.search(current_log):
-                        self._terminate_process_group(process)
-                        return SourceStopReason.RATE_LIMITED
                     cancelled = self._cancelled()
                     if cancelled or time.monotonic() >= deadline:
-                        self._terminate_process_group(process)
                         return (
                             SourceStopReason.CANCELLED
                             if cancelled
@@ -340,25 +343,19 @@ class MediaCrawlerAdapter:
                         )
                     time.sleep(0.2)
             finally:
-                if process.poll() is None:
-                    self._terminate_process_group(process)
+                self._terminate_process_group(process)
         log_size = log_path.stat().st_size
-        output_text = self._log_tail(log_path)
-        if _AUTH_SIGNAL.search(output_text):
+        if process.returncode == _AUTH_EXIT_CODE:
             return SourceStopReason.AUTHENTICATION_REQUIRED
-        if _RATE_SIGNAL.search(output_text):
+        if process.returncode == _RATE_LIMIT_EXIT_CODE:
             return SourceStopReason.RATE_LIMITED
-        if process.returncode != 0:
-            return SourceStopReason.AUTHENTICATION_REQUIRED
         if log_size > _MAX_LOG_BYTES:
-            return SourceStopReason.PROTOCOL_ERROR
+            raise MediaCrawlerExecutionError("mediacrawler_output_invalid")
+        if process.returncode is None or process.returncode < 0:
+            raise MediaCrawlerExecutionError("mediacrawler_unknown_exit")
+        if process.returncode != 0:
+            raise MediaCrawlerExecutionError("mediacrawler_process_failed")
         return None
-
-    @staticmethod
-    def _log_tail(path: Path) -> str:
-        with path.open("rb") as log:
-            log.seek(max(0, path.stat().st_size - _MAX_LOG_BYTES))
-            return log.read(_MAX_LOG_BYTES).decode("utf-8", errors="replace")
 
     @staticmethod
     def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
@@ -434,20 +431,26 @@ class MediaCrawlerAdapter:
         index = root / "index" / f"{video_id}.json"
         if index.is_symlink() or not index.is_file() or index.stat().st_size > 128:
             return self._stopped(SourceCapability.COMMENTS, SourceStopReason.NOT_FOUND)
-        record = json.loads(index.read_text(encoding="utf-8"))
+        try:
+            record = json.loads(index.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, ValueError) as error:
+            raise MediaCrawlerExecutionError("mediacrawler_output_invalid") from error
         run_name = record.get("run") if isinstance(record, dict) else None
         if not isinstance(run_name, str) or re.fullmatch(r"[0-9a-f]{32}", run_name) is None:
-            raise ValueError("invalid MediaCrawler run reference")
+            raise MediaCrawlerExecutionError("mediacrawler_output_invalid")
         run_dir = root / "runs" / run_name
         files = tuple((run_dir / "bili" / "jsonl").glob("search_comments_*.jsonl"))
         if len(files) != 1:
             return self._stopped(SourceCapability.COMMENTS, SourceStopReason.NOT_FOUND)
         rows = _read_rows(files[0], limit=100)
-        comments = tuple(
-            _comment(row, video_id) for row in rows if str(row.get("video_id")) == video_id
-        )
+        try:
+            comments = tuple(
+                _comment(row, video_id) for row in rows if str(row.get("video_id")) == video_id
+            )
+        except (KeyError, TypeError, ValueError, OverflowError) as error:
+            raise MediaCrawlerExecutionError("mediacrawler_output_invalid") from error
         if len(comments) > 20:
-            raise ValueError("MediaCrawler exceeded the comment cap")
+            raise MediaCrawlerExecutionError("mediacrawler_output_invalid")
         comments = comments[: request.page_size]
         return SourcePage(
             source_key=SOURCE_KEY,

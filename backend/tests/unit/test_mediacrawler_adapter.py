@@ -4,6 +4,7 @@ import json
 import logging
 import subprocess
 import sys
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -24,6 +25,7 @@ from sources.adapters.mediacrawler import (
     ADAPTER_VERSION,
     PATCHED_REVISION,
     MediaCrawlerAdapter,
+    MediaCrawlerExecutionError,
     MediaCrawlerPreflightError,
     _post,
 )
@@ -379,6 +381,28 @@ def test_preflight_failure_keeps_stable_non_authentication_job_code(error_code: 
         assert failure.manual_retry_allowed is False
 
 
+@pytest.mark.parametrize(
+    "error_code",
+    [
+        "mediacrawler_process_failed",
+        "mediacrawler_output_invalid",
+        "mediacrawler_unknown_exit",
+    ],
+)
+def test_execution_failure_keeps_stable_code_in_both_executors(error_code: str) -> None:
+    for executor in (
+        KeywordDiscoveryExecutor(sessionmaker(), lease_seconds=30),
+        CommentsExecutor(sessionmaker(), lease_seconds=30),
+    ):
+        failure = executor._adapter_failure(MediaCrawlerExecutionError(error_code))
+        assert failure.error_code == error_code
+        assert failure.category is (
+            JobFailureCategory.INVALID_RESPONSE
+            if error_code == "mediacrawler_output_invalid"
+            else JobFailureCategory.TRANSIENT
+        )
+
+
 @pytest.mark.parametrize("kind", ["search", "comments"])
 @pytest.mark.parametrize(
     ("revisions", "expected_code"),
@@ -481,18 +505,20 @@ def test_job_version_snapshot_is_checked_before_adapter_setup(
 
 
 @pytest.mark.parametrize(
-    ("signal_text", "expected"),
+    ("exit_code", "expected"),
     [
-        ("请完成验证码", SourceStopReason.AUTHENTICATION_REQUIRED),
-        ("访问频繁", SourceStopReason.RATE_LIMITED),
+        ("70", SourceStopReason.AUTHENTICATION_REQUIRED),
+        ("71", SourceStopReason.RATE_LIMITED),
     ],
 )
 def test_login_and_rate_signals_stop_without_retry(
-    tmp_path: Path, signal_text: str, expected: SourceStopReason
+    tmp_path: Path, exit_code: str, expected: SourceStopReason
 ) -> None:
     crawler = _fake_crawler(
         tmp_path,
-        f"print({signal_text!r})\nraise SystemExit(1)\n",
+        "import sys\n"
+        "assert sys.argv[sys.argv.index('--hotkey_safety_mode') + 1] == 'true'\n"
+        f"raise SystemExit({exit_code})\n",
     )
     page = _adapter(tmp_path, crawler).fetch_page(
         SearchRequest(source_key="bilibili", query="DeepSeek", page_size=2)
@@ -501,6 +527,53 @@ def test_login_and_rate_signals_stop_without_retry(
     assert page.state is SourcePageState.STOPPED
     assert page.stop_reason is expected
     assert page.request_count == 14
+
+
+def test_untrusted_log_keyword_does_not_claim_authentication_failure(tmp_path: Path) -> None:
+    crawler = _fake_crawler(
+        tmp_path,
+        "print('remote title says captcha but this is only page content', flush=True)\n"
+        "raise SystemExit(2)\n",
+    )
+
+    with pytest.raises(MediaCrawlerExecutionError) as failure:
+        _adapter(tmp_path, crawler).fetch_page(
+            SearchRequest(source_key="bilibili", query="DeepSeek", page_size=1)
+        )
+    assert failure.value.code == "mediacrawler_process_failed"
+
+
+def test_ordinary_child_failure_is_not_authentication_failure(tmp_path: Path) -> None:
+    crawler = _fake_crawler(tmp_path, "raise SystemExit(7)\n")
+
+    with pytest.raises(MediaCrawlerExecutionError) as failure:
+        _adapter(tmp_path, crawler).fetch_page(
+            SearchRequest(source_key="bilibili", query="DeepSeek", page_size=1)
+        )
+    assert failure.value.code == "mediacrawler_process_failed"
+
+
+def test_missing_success_output_has_a_distinct_failure_code(tmp_path: Path) -> None:
+    crawler = _fake_crawler(tmp_path, "raise SystemExit(0)\n")
+
+    with pytest.raises(MediaCrawlerExecutionError) as failure:
+        _adapter(tmp_path, crawler).fetch_page(
+            SearchRequest(source_key="bilibili", query="DeepSeek", page_size=1)
+        )
+    assert failure.value.code == "mediacrawler_output_invalid"
+
+
+def test_child_killed_by_signal_has_an_unknown_exit_code(tmp_path: Path) -> None:
+    crawler = _fake_crawler(
+        tmp_path,
+        "import os, signal\nos.kill(os.getpid(), signal.SIGKILL)\n",
+    )
+
+    with pytest.raises(MediaCrawlerExecutionError) as failure:
+        _adapter(tmp_path, crawler).fetch_page(
+            SearchRequest(source_key="bilibili", query="DeepSeek", page_size=1)
+        )
+    assert failure.value.code == "mediacrawler_unknown_exit"
 
 
 def test_timeout_stops_the_process_group(tmp_path: Path) -> None:
@@ -514,18 +587,39 @@ def test_timeout_stops_the_process_group(tmp_path: Path) -> None:
     assert page.stop_reason is SourceStopReason.BUDGET_EXHAUSTED
 
 
-def test_expired_login_interrupts_child_before_qrcode_wait(tmp_path: Path) -> None:
+def test_timeout_kills_descendant_before_it_can_write(tmp_path: Path) -> None:
+    marker = tmp_path / "late-grandchild-marker"
+    descendant = (
+        f"import pathlib, time; time.sleep(1); pathlib.Path({str(marker)!r}).write_text('survived')"
+    )
+    crawler = _fake_crawler(
+        tmp_path,
+        "import subprocess, sys, time\n"
+        f"subprocess.Popen([sys.executable, '-c', {descendant!r}])\n"
+        "time.sleep(30)\n",
+    )
+
+    page = _adapter(tmp_path, crawler, max_seconds=0.4).fetch_page(
+        SearchRequest(source_key="bilibili", query="DeepSeek", page_size=1)
+    )
+    time.sleep(1.1)
+
+    assert page.stop_reason is SourceStopReason.BUDGET_EXHAUSTED
+    assert not marker.exists()
+
+
+def test_login_log_without_controlled_exit_does_not_claim_authentication(tmp_path: Path) -> None:
     crawler = _fake_crawler(
         tmp_path,
         "import time\nprint('[BilibiliLogin.login_by_qrcode] Begin login', flush=True)\n"
         "time.sleep(30)\n",
     )
 
-    page = _adapter(tmp_path, crawler).fetch_page(
+    page = _adapter(tmp_path, crawler, max_seconds=0.1).fetch_page(
         SearchRequest(source_key="bilibili", query="DeepSeek", page_size=2)
     )
 
-    assert page.stop_reason is SourceStopReason.AUTHENTICATION_REQUIRED
+    assert page.stop_reason is SourceStopReason.BUDGET_EXHAUSTED
 
 
 def test_keyword_list_is_rejected_before_launch(tmp_path: Path) -> None:

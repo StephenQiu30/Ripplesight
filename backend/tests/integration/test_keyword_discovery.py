@@ -20,7 +20,7 @@ from sqlalchemy import Engine, create_engine, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from connections.presets import BILIBILI_PRESET, SOURCE_PRESETS
-from connections.services import SourcePresetService
+from connections.services import SourcePresetService, pause_bilibili_connection_in_transaction
 from content.discovery import (
     KeywordDiscoveryPageCommitService,
     KeywordRequestMeter,
@@ -321,7 +321,7 @@ def test_bilibili_saved_search_output_commits_posts_and_cached_comments(
             )
             return adapter
 
-        _, completion = KeywordDiscoveryExecutor(
+        finished_lease, completion = KeywordDiscoveryExecutor(
             sessionmaker(bind=engine),
             lease_seconds=60,
             adapter_factory=adapter_factory,
@@ -356,6 +356,29 @@ def test_bilibili_saved_search_output_commits_posts_and_cached_comments(
         assert [page.items[0].external_id for page in cached] == [
             comment_id for _, comment_id in comments
         ]
+        with Session(engine) as session, session.begin():
+            pause_bilibili_connection_in_transaction(
+                session,
+                owner_id=owner_id,
+                connection_id=connection_id,
+                connection_version=1,
+                now=datetime.now(UTC),
+                reason=SourceStopReason.RATE_LIMITED,
+                trigger_job_id=accepted.id,
+            )
+        with pytest.raises(JobExecutionFailure) as paused:
+            KeywordDiscoveryExecutor(
+                sessionmaker(bind=engine),
+                lease_seconds=60,
+                adapter_factory=adapter_factory,
+            ).execute(_accepted_message(engine, accepted.id), finished_lease)
+        assert paused.value.error_code == "search_connection_changed"
+        with Session(engine) as session:
+            assert len(
+                session.scalars(
+                    select(ContentRecord).where(ContentRecord.owner_id == owner_id)
+                ).all()
+            ) == len(videos)
     finally:
         with engine.begin() as connection:
             connection.execute(text("SET CONSTRAINTS ALL DEFERRED"))

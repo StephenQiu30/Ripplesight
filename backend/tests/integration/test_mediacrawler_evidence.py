@@ -68,7 +68,7 @@ def test_bilibili_versions_survive_policy_change_and_failed_job() -> None:
             )
             assert policy is not None
             assert policy.upstream_revision == "380b426000aac3d612837ed72c99808347dc94c9"
-            assert policy.patched_revision == "fb4e6c57ade1c7a2b3a61e69abc4fd4130047eb2"
+            assert policy.patched_revision == "1bd07bc783963acef092ff00771207b7792b8cb6"
             assert policy.component_version == ADAPTER_VERSION
 
         first_command = _command(
@@ -124,7 +124,7 @@ def test_bilibili_versions_survive_policy_change_and_failed_job() -> None:
             assert old.scope["connection_id"] == str(first_connection.connection_id)
             assert old.scope["connection_version"] == first_connection.connection_version
             assert old.upstream_revision == "380b426000aac3d612837ed72c99808347dc94c9"
-            assert old.patched_revision == "fb4e6c57ade1c7a2b3a61e69abc4fd4130047eb2"
+            assert old.patched_revision == "1bd07bc783963acef092ff00771207b7792b8cb6"
             assert old.adapter_version == ADAPTER_VERSION
             assert old.status == "failed"
             assert old.last_error_code == "mediacrawler_revision_mismatch"
