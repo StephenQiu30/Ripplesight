@@ -75,7 +75,7 @@ class AnalysisNeedLedgerView(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    metric_version: Literal["analysis-candidate-v2"]
+    metric_version: Literal["analysis-candidate-v3"]
     analysis_status: Literal["not_computable"]
     start: datetime
     end: datetime
