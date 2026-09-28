@@ -503,3 +503,42 @@ def test_failed_new_candidate_preserves_previous_candidate(
         assert current_digest == old_digest
     finally:
         engine.dispose()
+
+
+def test_missing_evidence_object_rejects_restore_before_creating_target(
+    backup_environment: tuple[str, Minio, str, str],
+    tmp_path: Path,
+) -> None:
+    database_url, minio, bucket, object_name = backup_environment
+    engine = create_engine(database_url)
+    object_store = MinioObjectInventory(minio, bucket)
+    try:
+        minio.remove_object(bucket, object_name)
+        candidate = BackupService(
+            engine=engine,
+            archive_writer=PostgresDumpAdapter(database_url),
+            object_inspector=object_store,
+            object_archiver=object_store,
+            evidence_bucket=bucket,
+            schema_path=Path(__file__).resolve().parents[2] / "database" / "schema.sql",
+        ).create_candidate(tmp_path)
+        assert candidate.manifest.evidence_objects[0].state is EvidenceObjectState.MISSING
+        with engine.connect() as connection:
+            before = connection.execute(
+                text("SELECT count(*) FROM pg_database WHERE datname LIKE 'hotkey_restore_%'")
+            ).scalar_one()
+        with pytest.raises(BackupRestoreError, match="missing evidence objects"):
+            BackupRestoreService(
+                source_database_url=database_url,
+                isolation_database_url=make_url(database_url).set(database="postgres"),
+                schema_path=Path(__file__).resolve().parents[2] / "database" / "schema.sql",
+                evidence_restore_verifier=MinioEvidenceRestoreVerifier(minio, bucket),
+            ).verify(candidate.directory)
+        with engine.connect() as connection:
+            after = connection.execute(
+                text("SELECT count(*) FROM pg_database WHERE datname LIKE 'hotkey_restore_%'")
+            ).scalar_one()
+        assert after == before
+        assert candidate.directory.exists()
+    finally:
+        engine.dispose()
