@@ -4,7 +4,7 @@
 
 `PROJECT.md` 是项目技术、架构、目录、API 契约和数据库事实源；本文件负责实现执行门禁、工具命令和验证要求。发生冲突时以 PROJECT.md 的架构决策为准。模块 README 记录使用方式，HANDOVER 记录实现状态；这些文件不得定义冲突的架构规则。变更架构或目录时必须先更新 PROJECT.md、对应 Design 和本文件，再修改代码。
 
-总设计为 [Design 001](docs/design/001-热点舆情监控平台总体设计.md)，M1—M6 的 Design 002—007 是各能力 Epic；需求为 [PRD 001](docs/prd/001-热点舆情监控平台需求.md) 与 PRD 002—007；[执行计划索引](docs/plan/README.md) 将每个 Issue 映射到从001连续编号的单份Plan。Plan不承载Epic。计划评审时固定精确文件、接口/数据/调度、SPEC、Checklist、测试与验收；关键契约未定标阻塞，不能交给执行者自行猜测。技术依赖和真实授权条件分别列明。架构/数据库变化同步对应Design及总Design001；证据实际产生后写Acceptance，未通过项如实保留。文档台账见 `docs/README.md`，格式见 `docs/TEMPLATE.md`。计划逐项人工编写和审核，不用脚本生成、批量改写或重编号。
+总设计为 [Design 001](docs/design/001-热点舆情监控平台总体设计.md)，M1—M6 的 Design 002—007 是各能力 Epic；需求为 [PRD 001](docs/prd/001-热点舆情监控平台需求.md) 与 PRD 002—007；[执行计划索引](docs/plan/README.md) 将每个 Issue 映射到从001连续编号的单份Plan。Plan不承载Epic。计划评审时固定精确文件、接口/数据/调度、SPEC、Checklist、测试与验收；关键契约未定标阻塞，不能交给执行者自行猜测。技术依赖和真实授权条件分别列明。架构/数据库变化同步对应Design及总Design001；证据实际产生后写Acceptance，未通过项如实保留。文档台账、编号与格式规则见 `docs/README.md`；新文档沿用现行同类文档的元数据和章节结构。计划逐项人工编写和审核，不用脚本生成、批量改写或重编号。
 
 ## 任务开始前的目录与选型门禁
 

@@ -93,7 +93,7 @@ Plan 048—053 在阶段 3 与同主题 Design/PRD 对齐，原 `Sxx-Txx`、验�
 | 052 / Plan | 旧 M5 里程碑计划 | 阶段 3 旧 TASK 前缀 052 → 006；现按新 Plan 024—026 拆分，旧原文见 Git |
 | 053 / Plan | 旧 M6 里程碑计划 | 阶段 3 旧 TASK 前缀 053 → 007；现按新 Plan 027—030 拆分，旧原文见 Git |
 
-[Research 001 热点事件监控平台调研](research/001-热点事件监控平台调研.md) 与总主题同号，保留原位。旧 Design 046 全局异常与响应契约及其 S03 验收记录已删除，可从 Git 历史查阅；现行约束和门禁见 Design 001、PROJECT.md 与 AGENTS.md。
+旧 Research 001 热点事件监控平台调研已删除，原文可从 Git 历史查阅；现行需求与决策见 PRD/Design 001—007。旧 Design 046 全局异常与响应契约及其 S03 验收记录已删除，可从 Git 历史查阅；现行约束和门禁见 Design 001、PROJECT.md 与 AGENTS.md。
 
 ## 3. 本次移除
 
@@ -106,6 +106,6 @@ Plan 048—053 在阶段 3 与同主题 Design/PRD 对齐，原 `Sxx-Txx`、验�
 
 ## 4. 编号与阶段迁移
 
-- 格式按 [TEMPLATE.md](TEMPLATE.md)。Design/Epic与PRD为001—007，执行Plan独立编号001—057，后续取058。Plan001是主题规则Issue；旧里程碑Plan和本轮修改前的30卡从Git追溯。002/007/030按收窄后的职责更名，责任迁移详见Plan索引；源BR/FR/NFR/AC编号及产品含义不变。
+- 除索引 `README.md` 外，正式文档使用 `NNN-中文主题.md` 文件名与现行同类文档的 YAML 元数据、章节结构。Design/Epic与PRD为001—007，执行Plan独立编号001—057，后续取058。Plan001是主题规则Issue；旧里程碑Plan和本轮修改前的30卡从Git追溯。002/007/030按收窄后的职责更名，责任迁移详见Plan索引；源BR/FR/NFR/AC编号及产品含义不变。
 - PRD 048—053 在阶段 2、Plan 048—053 在阶段 3 分别与同主题 002—007 对齐；后续新里程碑或独立专项依本台账续编号。
 - 里程碑验收记录放 `acceptance/`，按源 PRD/Design 的 002—007 编号命名，不按单 Issue Plan 编号；未形成记录的产品 AC 保持待验收。
