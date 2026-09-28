@@ -16,7 +16,7 @@ from sqlalchemy.exc import ArgumentError, SQLAlchemyError
 
 from backups.adapters.minio import ObjectArchiveError
 from backups.adapters.postgres import BackupToolError, PostgresDumpAdapter
-from backups.schemas import BackupManifest
+from backups.schemas import BackupManifest, EvidenceObjectState
 from db.metadata import metadata
 
 
@@ -62,6 +62,8 @@ class BackupRestoreService:
     def verify(self, candidate: Path) -> BackupRestoreResult:
         started = time.monotonic()
         manifest, archive = self._check_candidate(candidate)
+        if any(item.state is EvidenceObjectState.MISSING for item in manifest.evidence_objects):
+            raise BackupRestoreError("candidate has missing evidence objects")
         if (self._source_url.host, self._source_url.port) != (
             self._isolation_url.host,
             self._isolation_url.port,

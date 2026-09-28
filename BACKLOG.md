@@ -26,7 +26,9 @@ Plan 041 见 Acceptance 002 EV-002-029—032：评论/作品列表和标注详�
 
 Plan 006 见 Acceptance 002 EV-002-033—038：采集指标 API/CLI、首次有效标注、主题状态及提示词启用事实已落地；只读逐身份候选起点覆盖旧帖新主题、暂停换版及精确热榜命中。`28134fcf` 远端 backend **956 passed/8 skipped**、contract/runtime 成功。完整需分析集合、提示词停用/Codex 限流、热榜相位冻结与十来源真实复算仍缺；`analysis_status=not_computable`、`phase_verified=false`，Plan006/M1 继续 `in_progress`。
 
-Plan 034 见 Acceptance 002 EV-002-039—042：来源覆盖页面与 84 项前端测试、C/F 门禁已通过；新隔离库中真实 HN 定时关键词窗和受控 HTTP 503 热榜失败窗的请求、页、内容、预算、缺口与桌面/390px 浏览器/API/库一致，另在既有真实运行库完成固定快照下钻。已确认关键词页在 Job 结算中断后的恢复缺陷有 PostgreSQL 先红后绿回归；本卡技术 `completed`。跨库快照不合算同库成功率，三天共同缺口与 AC-002-006 产品验收仍未通过；真实 Codex 请求保持关闭。
+Plan 034 见 Acceptance 002 EV-002-039—042：覆盖页面、84 项前端测试及 C/F 门禁通过；真实 HN 定时窗、受控热榜 503 窗和固定快照下钻经浏览器/API/库核对，已确认页中断恢复有先红后绿回归，技术 `completed`。跨库指标不合算；三天共同缺口与 AC-002-006 未通过，真实 Codex 请求关闭。
+
+Plan 051 见 Acceptance 001 EV-001-001—004：隔离源/目标 46 表、1,289 行、74 外键及 MinIO 对象一致；Job/账本重放、失败恢复和损坏/缺对象/错 Schema 拒绝通过。后端全量 956 passed/8 skipped/1 deselected，Ruff/mypy 通过，`TECH-001-051` 技术 `completed`。009/013 最终库需重验；同桶不算独立灾备，产品 AC 未关闭。
 
 Plan 005 的标注状态与重放技术切片已在隔离 `main` 工作树完成，PostgreSQL 17 全新库的后端全量回归为 **779 passed/17 skipped**，见 Acceptance 002 EV-002-010。旧开发库 3 条历史异常、真实 Codex 样本和远端门禁尚未在该证据中核对；Plan 005 保持 `in_progress`，产品验收不变。
 
@@ -46,7 +48,7 @@ Plan 032 人工重试预算周期经隔离 PostgreSQL/Kafka 和浏览器验证�
 | [M4 / 017—023、043、052](docs/plan/README.md) | 分析质量、主题报告设置（monitor_topics 现有字段）与冻结调度、日报/周报、Obsidian、检索/问答；AC-005-001—008 | planned；部分代码/受控，真实产品验收未过 |
 | [M5 / 024—026、044](docs/plan/README.md) | 状态服务、目标/投递页面、SMTP、飞书；AC-006-001 | 024/025/044 planned，真实SMTP仍待凭据/目标授权；026飞书blocked |
 | [M6 / 027—030、045—050、053—054](docs/plan/README.md) | 告警/账号、两类导出、公共准入和逐来源调研 | 046—050、053—054 blocked；获准能力还需从058起建实施Plan，FR-007-003/004实际平台承接未就绪 |
-| [共享 / 051、055—057](docs/plan/README.md) | 同运行库/Schema恢复、证据生命周期、HTTP契约CI、网页/浏览器底座 | 051/055/056 planned；057 blocked；现有代码不等于本轮回归通过 |
+| [共享 / 051、055—057](docs/plan/README.md) | 同运行库/Schema恢复、证据生命周期、HTTP契约CI、网页/浏览器底座 | 051 本次隔离库/Schema技术 completed，最终运行库需重验；055/056 planned，057 blocked |
 
 ## 当前迭代（001、002、031、033技术交付完成，后续按依赖逐项执行）
 

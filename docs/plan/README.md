@@ -279,7 +279,7 @@
 | 048 | 无 | Design007与Plan索引的小红书准入记录 | 无 |
 | 049 | 无 | Design007与Plan索引的抖音准入记录 | 无 |
 | 050 | 无 | Design007与Plan索引的公众号逐路由准入记录 | 无 |
-| 051 | 无 | 共享Acceptance的恢复演练证据（产生后）；既有backups代码仅故障时修 | 无 |
+| 051 | `B/backups/restore.py` 缺对象候选拒绝、`B/tests/integration/test_backup_restore.py` | `docs/acceptance/001-共享运行门槛验收.md` 的同库/Schema恢复、逐表对账与回退证据；最终运行库需重验 | 无 |
 | 052 | `B/knowledge/retrieval.py` | `B/knowledge/{models,schemas}.py`、DDL、`B/db/metadata.py`、`B/core/config.py`、`B/worker/{scheduler,app,execution}.py` | Client（新增API时） |
 | 053 | 无 | Design007、PRD007与本索引的微博登录研究记录 | 无 |
 | 054 | 无 | Design007、PRD007与本索引的知乎登录研究记录 | 无 |
