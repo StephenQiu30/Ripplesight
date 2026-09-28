@@ -7,7 +7,7 @@ from typing import Any, Literal
 from uuid import UUID, uuid4, uuid5
 
 from pydantic import ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -1569,40 +1569,67 @@ def _prompt_item(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class EventAnnotationPage:
+    items: tuple[EventAnnotationRef, ...]
+    next_after: tuple[datetime, UUID] | None
+
+
 def list_relevant_event_annotation_refs_in_transaction(
     session: Session,
     *,
     since: datetime,
     version_ids: Sequence[UUID] | None = None,
-) -> tuple[EventAnnotationRef, ...]:
-    """Expose valid, recent annotation identities without content persistence models."""
+    after: tuple[datetime, UUID] | None = None,
+    limit: int = 2000,
+) -> EventAnnotationPage:
+    """Page latest valid identities newest first; after excludes newer/equal cursor keys."""
     if not session.in_transaction() or since.tzinfo is None:
         raise RuntimeError("event annotation reads require a transaction and aware time")
-    filters = (
-        (ContentAnnotation.content_version_id.in_(version_ids),) if version_ids is not None else ()
-    )
-    rows = session.scalars(
-        select(ContentAnnotation)
+    if not 1 <= limit <= 2000 or (after is not None and after[0].tzinfo is None):
+        raise ValueError("event annotation page requires an aware cursor and limit 1..2000")
+    latest = (
+        select(ContentAnnotation.id)
         .where(
             ContentAnnotation.prompt_version == ANALYSIS_PROMPT_VERSION,
             ContentAnnotation.status == AnnotationStatus.ANNOTATED.value,
             ContentAnnotation.result_state == AnnotationResultState.VALID.value,
             ContentAnnotation.relevant.is_(True),
             ContentAnnotation.created_at >= since,
-            *filters,
         )
-        .order_by(ContentAnnotation.created_at.desc(), ContentAnnotation.id.desc())
-        .limit(2001)
+        .distinct(
+            ContentAnnotation.owner_id, ContentAnnotation.topic_id, ContentAnnotation.content_id
+        )
+        .order_by(
+            ContentAnnotation.owner_id,
+            ContentAnnotation.topic_id,
+            ContentAnnotation.content_id,
+            ContentAnnotation.created_at.desc(),
+            ContentAnnotation.id.desc(),
+        )
+    )
+    statement = select(ContentAnnotation).where(ContentAnnotation.id.in_(latest))
+    if version_ids is not None:
+        statement = statement.where(ContentAnnotation.content_version_id.in_(version_ids))
+    if after is not None:
+        statement = statement.where(
+            tuple_(ContentAnnotation.created_at, ContentAnnotation.id) < after
+        )
+    rows = session.scalars(
+        statement.order_by(ContentAnnotation.created_at.desc(), ContentAnnotation.id.desc()).limit(
+            limit
+        )
     ).all()
-    if len(rows) > 2000:
-        raise RuntimeError("event annotation scan exceeded its bounded batch")
-    return tuple(
-        EventAnnotationRef(
-            owner_id=row.owner_id,
-            topic_id=row.topic_id,
-            topic_rule_version=row.topic_rule_version,
-            content_id=row.content_id,
-            content_version_id=row.content_version_id,
-        )
-        for row in rows
+    return EventAnnotationPage(
+        items=tuple(
+            EventAnnotationRef(
+                owner_id=row.owner_id,
+                topic_id=row.topic_id,
+                topic_rule_version=row.topic_rule_version,
+                content_id=row.content_id,
+                content_version_id=row.content_version_id,
+            )
+            for row in rows
+        ),
+        next_after=(rows[-1].created_at, rows[-1].id) if len(rows) == limit else None,
     )
