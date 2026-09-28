@@ -116,9 +116,31 @@ def cluster_candidates(
         components[root(index)].append(item)
     result: list[tuple[EventInput, ...]] = []
     for component in components.values():
-        for offset in range(0, len(component), MAX_CANDIDATE_MEMBERS):
-            batch = tuple(component[offset : offset + MAX_CANDIDATE_MEMBERS])
-            if len(batch) >= 2 and batch[-1].first_seen_at - batch[0].first_seen_at <= EVENT_WINDOW:
-                build_event_prompt(batch)
-                result.append(batch)
+        batches: list[list[EventInput]] = []
+        offset = 0
+        while offset < len(component):
+            end = min(offset + MAX_CANDIDATE_MEMBERS, len(component))
+            while (
+                end > offset + 1
+                and component[end - 1].first_seen_at - component[offset].first_seen_at
+                > EVENT_WINDOW
+            ):
+                end -= 1
+            batch = component[offset:end]
+            if len(batch) >= 2:
+                batches.append(batch)
+            elif (
+                batches
+                and component[offset].first_seen_at - batches[-1][-1].first_seen_at <= EVENT_WINDOW
+            ):
+                previous = batches[-1]
+                if len(previous) > 2:
+                    batch = [previous.pop(), component[offset]]
+                else:
+                    batch = [previous[-1], component[offset]]
+                batches.append(batch)
+            offset = end
+        for batch in batches:
+            build_event_prompt(batch)
+            result.append(tuple(batch))
     return tuple(result)

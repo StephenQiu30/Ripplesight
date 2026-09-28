@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from typing import cast
 from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy.orm import Session
 
 from core.config import Settings
-from events.clustering import build_event_prompt, candidate_fingerprint
+from events.clustering import build_event_prompt, candidate_fingerprint, cluster_candidates
 from events.schemas import EventDecision, EventInput
 from events.services import EventClusterExecutor
 from jobs.execution import JobExecutionFailure
@@ -36,6 +39,37 @@ def test_candidate_fingerprint_and_prompt_are_order_independent() -> None:
         topic_id=topic_id, members=(first, second)
     ) == candidate_fingerprint(topic_id=topic_id, members=(second, first))
     assert build_event_prompt((first, second)) == build_event_prompt((second, first))
+
+
+def test_candidate_batches_keep_all_21_members_without_singleton() -> None:
+    members = tuple(_member("Acme launches a model") for _ in range(21))
+    session = cast(Session, SimpleNamespace(scalar=lambda *_args, **_kwargs: 1.0))
+
+    batches = cluster_candidates(session, members)
+
+    assert [len(batch) for batch in batches] == [19, 2]
+    assert {item.content_version_id for batch in batches for item in batch} == {
+        item.content_version_id for item in members
+    }
+
+
+def test_candidate_batches_preserve_valid_pairs_across_a_long_similarity_chain() -> None:
+    start = datetime(2026, 9, 28, tzinfo=UTC)
+    members = tuple(
+        replace(_member("Acme launches a model"), first_seen_at=start + timedelta(hours=50 * i))
+        for i in range(3)
+    )
+    session = cast(Session, SimpleNamespace(scalar=lambda *_args, **_kwargs: 1.0))
+
+    batches = cluster_candidates(session, members)
+
+    assert [len(batch) for batch in batches] == [2, 2]
+    assert all(
+        batch[-1].first_seen_at - batch[0].first_seen_at <= timedelta(hours=72) for batch in batches
+    )
+    assert {item.content_version_id for batch in batches for item in batch} == {
+        item.content_version_id for item in members
+    }
 
 
 def test_model_confirmation_rejects_blank_title_and_duplicate_members() -> None:
