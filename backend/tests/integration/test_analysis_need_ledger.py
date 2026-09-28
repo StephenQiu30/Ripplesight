@@ -16,7 +16,11 @@ from tests.integration.test_analysis_pipeline import analysis_case as analysis_c
 
 from analysis.prompts import ANALYSIS_PROMPT_VERSION
 from analysis.schemas import AnnotationResultState, AnnotationStatus, AnnotationWrite
-from analysis.services import AnalysisService, build_analysis_need_ledger_in_transaction
+from analysis.services import (
+    AnalysisService,
+    build_analysis_need_ledger_in_transaction,
+    project_analysis_need_origin_in_transaction,
+)
 
 
 def test_ledger_enumerates_unqueued_old_and_new_versions_without_claiming_ratio(
@@ -85,7 +89,7 @@ def test_ledger_enumerates_unqueued_old_and_new_versions_without_claiming_ratio(
             session, owner_id=case.owner_id, start=start, end=case.now, cutoff_at=cutoff
         )
     assert ledger.analysis_status == "not_computable"
-    assert ledger.metric_version == "analysis-candidate-v2"
+    assert ledger.metric_version == "analysis-candidate-v3"
     assert (ledger.candidate_count, ledger.unknown_count) == (2, 0)
     assert (ledger.matured_count, ledger.pending_observation_count) == (1, 1)
     assert (ledger.timely_valid_count, ledger.late_or_missing_count) == (0, 1)
@@ -126,7 +130,7 @@ def test_ledger_enumerates_unqueued_old_and_new_versions_without_claiming_ratio(
     )
     exported = json.loads(process.stdout)
     assert exported["candidate_count"] == 2
-    assert exported["metric_version"] == "analysis-candidate-v2"
+    assert exported["metric_version"] == "analysis-candidate-v3"
     assert all(item["prompt_runtime_ids"] for item in exported["rows"])
     assert {item["content_version_id"] for item in exported["rows"]} == {
         str(case.version_id),
@@ -357,3 +361,177 @@ def test_ledger_marks_annotation_older_than_prompt_history_unknown(
     assert (ledger.candidate_count, ledger.unknown_count) == (0, 1)
     assert ledger.rows[0].reason == "first_valid_precedes_need"
     assert ledger.rows[0].first_valid_at == valid_at
+
+
+def test_ledger_keeps_historical_and_current_prompt_candidates_separate(
+    origin_case: AnalysisCase,
+) -> None:
+    case = origin_case
+    previous_version = "analysis.annotate.v0"
+    earlier = case.now - timedelta(hours=2)
+    topic_active = case.now - timedelta(minutes=90)
+    switched = case.now - timedelta(minutes=30)
+    _event(case, 1, "paused", "created", case.now - timedelta(days=4))
+    _event(case, 2, "active", "resumed", topic_active)
+    with case.sessions() as session, session.begin():
+        session.execute(
+            text(
+                "INSERT INTO analysis_prompt_activations (prompt_version, activated_at) "
+                "VALUES (:version, :at)"
+            ),
+            {"version": previous_version, "at": earlier},
+        )
+    old_run = _runtime_session(
+        case,
+        started_at=earlier,
+        last_seen_at=switched,
+        ai_enabled=True,
+        prompt_version=previous_version,
+    )
+    _activate_prompt(case, switched)
+
+    with case.sessions() as session, session.begin():
+        old_origin = project_analysis_need_origin_in_transaction(
+            session,
+            owner_id=case.owner_id,
+            topic_id=case.topic_id,
+            topic_rule_version=1,
+            content_version_id=case.version_id,
+            prompt_version=previous_version,
+            as_of=case.now,
+        )
+        ledger = build_analysis_need_ledger_in_transaction(
+            session,
+            owner_id=case.owner_id,
+            start=earlier,
+            end=case.now,
+            cutoff_at=case.now + timedelta(hours=1),
+        )
+    assert old_origin.status == "candidate"
+    assert old_origin.started_at == topic_active
+    assert old_origin.prompt_runtime_ids == (old_run,)
+    assert ledger.metric_version == "analysis-candidate-v3"
+    assert (ledger.candidate_count, ledger.unknown_count) == (2, 0)
+    assert {(row.prompt_version, row.started_at) for row in ledger.rows} == {
+        (previous_version, topic_active),
+        (ANALYSIS_PROMPT_VERSION, switched),
+    }
+
+    backend_root = Path(__file__).resolve().parents[2]
+    process = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "cli",
+            "jobs",
+            "analysis-need-ledger",
+            "--owner-id",
+            str(case.owner_id),
+            "--start",
+            earlier.isoformat(),
+            "--end",
+            case.now.isoformat(),
+            "--cutoff",
+            (case.now + timedelta(hours=1)).isoformat(),
+        ],
+        cwd=backend_root,
+        env={
+            **os.environ,
+            "HOTKEY_DATABASE_URL": os.environ["HOTKEY_TEST_DATABASE_URL"],
+            "PYTHONPATH": str(backend_root / "app"),
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    exported = json.loads(process.stdout)
+    assert exported["metric_version"] == "analysis-candidate-v3"
+    assert {row["prompt_version"] for row in exported["rows"]} == {
+        previous_version,
+        ANALYSIS_PROMPT_VERSION,
+    }
+
+
+def test_ledger_retains_legacy_annotation_without_activation_as_unknown(
+    origin_case: AnalysisCase,
+) -> None:
+    case = origin_case
+    previous_version = "analysis.annotate.legacy"
+    _event(case, 1, "paused", "created", case.now - timedelta(days=4))
+    _event(case, 2, "active", "resumed", case.now - timedelta(minutes=50))
+    call_id = uuid4()
+    _seed_ai_call(case, call_id)
+    with case.sessions() as session, session.begin():
+        AnalysisService(session).persist_results_in_transaction(
+            owner_id=case.owner_id,
+            topic_id=case.topic_id,
+            topic_rule_version=1,
+            prompt_version=previous_version,
+            posts={case.version_id: _post(case)},
+            results=(
+                AnnotationWrite(
+                    content_version_id=case.version_id,
+                    relevant=False,
+                    relevance_reason="受控测试: 历史提示词",
+                    summary="受控测试",
+                    ai_call_id=call_id,
+                    status=AnnotationStatus.ANNOTATED,
+                    result_state=AnnotationResultState.VALID,
+                ),
+            ),
+            created_at=case.now,
+        )
+    with case.sessions() as session, session.begin():
+        ledger = build_analysis_need_ledger_in_transaction(
+            session,
+            owner_id=case.owner_id,
+            start=case.now - timedelta(hours=1),
+            end=case.now,
+            cutoff_at=case.now + timedelta(hours=1),
+        )
+    legacy = [row for row in ledger.rows if row.prompt_version == previous_version]
+    assert len(legacy) == 1
+    assert legacy[0].origin_status == "unknown"
+    assert legacy[0].reason == "prompt_activation_unavailable"
+    assert legacy[0].first_valid_at == case.now
+
+
+def test_ledger_retains_unfinished_legacy_job_prompt_as_unknown(
+    origin_case: AnalysisCase,
+) -> None:
+    case = origin_case
+    previous_version = "analysis.annotate.queued-old"
+    _event(case, 1, "paused", "created", case.now - timedelta(days=4))
+    _event(case, 2, "active", "resumed", case.now - timedelta(minutes=50))
+    with case.sessions() as session, session.begin():
+        job_id = uuid4()
+        session.execute(
+            text(
+                "INSERT INTO jobs "
+                "(id, owner_id, operation_id, kind, configuration_ref, "
+                "configuration_version, scope, request_fingerprint, created_at, updated_at) "
+                "VALUES (:id, :owner, :operation, 'analysis.annotate', 'topic:seed', "
+                "1, jsonb_build_object('prompt_version', CAST(:version AS text)), "
+                ":fingerprint, :at, :at)"
+            ),
+            {
+                "id": job_id,
+                "owner": case.owner_id,
+                "operation": uuid4(),
+                "version": previous_version,
+                "fingerprint": job_id.bytes * 2,
+                "at": case.now - timedelta(minutes=30),
+            },
+        )
+    with case.sessions() as session, session.begin():
+        ledger = build_analysis_need_ledger_in_transaction(
+            session,
+            owner_id=case.owner_id,
+            start=case.now - timedelta(hours=1),
+            end=case.now,
+            cutoff_at=case.now + timedelta(hours=1),
+        )
+    legacy = [row for row in ledger.rows if row.prompt_version == previous_version]
+    assert len(legacy) == 1
+    assert legacy[0].origin_status == "unknown"
+    assert legacy[0].reason == "prompt_activation_unavailable"

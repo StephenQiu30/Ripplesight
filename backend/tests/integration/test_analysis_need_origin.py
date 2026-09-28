@@ -29,33 +29,27 @@ def origin_case(analysis_case: AnalysisCase) -> Iterator[AnalysisCase]:
             .all()
         )
         session.execute(text("DELETE FROM analysis_prompt_runtime_sessions"))
-        previous = session.execute(
-            text(
-                "SELECT activated_at FROM analysis_prompt_activations "
-                "WHERE prompt_version = :version"
-            ),
-            {"version": ANALYSIS_PROMPT_VERSION},
-        ).scalar_one_or_none()
-        session.execute(
-            text("DELETE FROM analysis_prompt_activations WHERE prompt_version = :version"),
-            {"version": ANALYSIS_PROMPT_VERSION},
+        previous_activations = (
+            session.execute(
+                text("SELECT prompt_version, activated_at FROM analysis_prompt_activations")
+            )
+            .mappings()
+            .all()
         )
+        session.execute(text("DELETE FROM analysis_prompt_activations"))
     try:
         yield case
     finally:
         with case.sessions() as session, session.begin():
             session.execute(text("DELETE FROM analysis_prompt_runtime_sessions"))
-            session.execute(
-                text("DELETE FROM analysis_prompt_activations WHERE prompt_version = :version"),
-                {"version": ANALYSIS_PROMPT_VERSION},
-            )
-            if previous is not None:
+            session.execute(text("DELETE FROM analysis_prompt_activations"))
+            for activation in previous_activations:
                 session.execute(
                     text(
                         "INSERT INTO analysis_prompt_activations "
                         "(prompt_version, activated_at) VALUES (:version, :at)"
                     ),
-                    {"version": ANALYSIS_PROMPT_VERSION, "at": previous},
+                    {"version": activation["prompt_version"], "at": activation["activated_at"]},
                 )
             for runtime in previous_runtime:
                 session.execute(
