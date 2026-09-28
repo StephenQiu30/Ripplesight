@@ -16,14 +16,15 @@
 | [Design 001 热点舆情监控平台总设计](design/001-热点舆情监控平台总体设计.md) | 架构、跨里程碑约束、共享决策与风险；共享维护Plan051、055—057 | accepted v4.0 |
 | [Design 002 M1 信息获取主链路](design/002-信息获取主链路设计.md) | 到期/预算/计量、接口、分析与验收合同 | accepted v1.1；待实施细则 |
 | [Design 003 M2 本人账号B站试点](design/003-本人账号B站试点设计.md) | 三类版本、同轮缓存、停用/恢复 | accepted v1.1；待实施细则 |
-| [Design 004 M3 事件与热度](design/004-事件与热度设计.md) | 表/事务/接口、公式、并发与事件页面 | accepted v1.1；待实施细则 |
+| [Design 004 M3 事件与热度](design/004-事件与热度设计.md) | 表/事务/接口、公式、并发与事件页面 | accepted v1.2；Plan014 受控技术切片，M3 未验收 |
 | [Design 005 M4 报告与知识库](design/005-报告与知识库设计.md) | 两阶段冻结、笔记冲突保护、检索与回答 | accepted v1.1；待实施细则 |
 | [Design 006 M5 推送](design/006-推送设计.md) | 收件身份、unknown审计、目标页面与SMTP | accepted v1.1；待实施细则 |
 | [Design 007 M6 扩展能力](design/007-扩展能力设计.md) | 告警/账号/导出合同与逐来源准入 | accepted v1.1；待实施细则 |
 | [执行 Plan 索引 001—057](plan/README.md) | 逐Issue全量清单、共享底座台账、技术依赖、逐条AC矩阵、文件串行及历史去向 | 逐卡状态见 BACKLOG；051 本次隔离库/Schema技术 completed，最终运行库需重验 |
 | [Acceptance 001 共享运行门槛](acceptance/001-共享运行门槛验收.md) | Plan051 同库/Schema 恢复与回退证据 | failed；TECH-001-051 限本次库通过，其他共享门槛与产品 AC 待验 |
 | [Acceptance 002 M1 信息获取主链路](acceptance/002-信息获取主链路验收.md) | M1 逐卡技术与真实证据、尚未通过的产品条件 | failed；父级 AC 待 Plan009 汇合 |
-| [Acceptance 003 M2 本人账号 B 站试点](acceptance/003-本人账号B站试点验收.md) | Plan010 运行前门禁受控证据与后续 M2 缺口 | failed；三版本 Job 与真实来源未验 |
+| [Acceptance 003 M2 本人账号 B 站试点](acceptance/003-本人账号B站试点验收.md) | Plan010/011 受控证据与后续 M2 缺口 | failed；真实来源恢复与连续窗口未验 |
+| [Acceptance 004 M3 事件与热度](acceptance/004-事件与热度验收.md) | Plan014 候选/稳定身份受控证据与后续 M3 缺口 | failed；真实三平台、修订、热度和页面未验 |
 | 旧 Plan 001—007 | 拆分前基线与历史证据，原文从 Git 历史查阅 | historical |
 | [BACKLOG](../BACKLOG.md) | 阶段与任务状态看板 | — |
 | [HANDOVER](../HANDOVER.md) | 当前实现快照 | — |

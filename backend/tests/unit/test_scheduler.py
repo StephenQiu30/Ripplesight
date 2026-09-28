@@ -176,10 +176,28 @@ def test_scheduler_registers_collection_comments_and_analysis_scans() -> None:
         "collection",
         "comments",
         "analysis",
+        "events",
         "reports",
         "knowledge",
         "notifications",
     )
+
+
+def test_event_scan_remains_off_even_when_analysis_is_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        scheduler,
+        "get_settings",
+        lambda: SimpleNamespace(ai_enabled=True, events_cluster_enabled=False),
+    )
+    monkeypatch.setattr(
+        scheduler,
+        "EventCandidateService",
+        lambda _session: pytest.fail("disabled scan accessed event storage"),
+    )
+    event_scan = next(scan for scan in _registered_scheduler_scans() if scan.name == "events")
+    assert event_scan.run_in_transaction(object(), datetime(2026, 9, 28, tzinfo=UTC)) == 0
 
 
 def test_analysis_scan_does_not_admit_jobs_until_model_usage_is_enabled(

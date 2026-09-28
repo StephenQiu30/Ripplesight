@@ -880,6 +880,18 @@ class MonitorTopicService:
             tuple(version.source_keys),
         )
 
+    def lock_topic_for_event_commit_in_transaction(self, *, owner_id: UUID, topic_id: UUID) -> None:
+        """Serialize automatic event assignment with manual topic operations."""
+        if not self._session.in_transaction():
+            raise RuntimeError("event topic lock requires the caller's transaction")
+        found = self._session.scalar(
+            select(MonitorTopic.id)
+            .where(MonitorTopic.owner_id == owner_id, MonitorTopic.id == topic_id)
+            .with_for_update()
+        )
+        if found is None:
+            raise ValueError("event topic is absent")
+
     def list_topics(
         self,
         *,

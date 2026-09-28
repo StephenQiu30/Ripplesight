@@ -35,6 +35,7 @@ from core.logging import configure_logging
 # Spawn starts a fresh interpreter; import the canonical registry to resolve ORM foreign keys.
 from db.metadata import metadata as _registered_metadata  # noqa: F401
 from db.session import create_db_engine, create_session_factory
+from events.services import EventClusterExecutor
 from jobs.execution import (
     CheckpointValue,
     Clock,
@@ -657,6 +658,7 @@ def _registered_job_handlers(
         clock=clock,
     )
     analysis_executor = AnalysisAnnotateExecutor(sessions, settings, clock=clock)
+    event_executor = EventClusterExecutor(sessions, settings, clock=clock)
     daily_report_executor = DailyReportExecutor(sessions, clock=clock)
     knowledge_executor = KnowledgeExportExecutor(sessions, settings, clock=clock)
     notification_executor = NotificationExecutor(sessions, settings, clock=clock)
@@ -689,6 +691,15 @@ def _registered_job_handlers(
         )
         return result.completion
 
+    def cluster_event(context: JobExecutionContext) -> JobCompletion:
+        completion = event_executor.execute(context.message)
+        context.save_checkpoint(
+            context.lease.checkpoint_sequence + 1,
+            {"candidate_processed": True},
+            progress=JobProgress(stage=JobStage.ANALYSIS, items_saved=1),
+        )
+        return completion
+
     def generate_daily_report(context: JobExecutionContext) -> JobCompletion:
         result = daily_report_executor.execute(context.message)
         context.save_checkpoint(
@@ -718,6 +729,7 @@ def _registered_job_handlers(
 
     return {
         "analysis.annotate": annotate_content,
+        "events.cluster": cluster_event,
         "keyword.search": search_keyword,
         "knowledge.export": export_knowledge,
         "notification.send": send_notification,

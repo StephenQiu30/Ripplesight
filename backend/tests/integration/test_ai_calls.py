@@ -56,7 +56,8 @@ def engine() -> Iterator[Engine]:
     with engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE collection_due_windows, hotlist_entries, hotlist_snapshots, "
+                "TRUNCATE event_candidates, event_members, events, "
+                "collection_due_windows, hotlist_entries, hotlist_snapshots, "
                 "knowledge_exports, notification_deliveries, "
                 "notification_targets, ai_calls, identity_sessions, identity_users CASCADE"
             )
@@ -67,7 +68,8 @@ def engine() -> Iterator[Engine]:
         with engine.begin() as connection:
             connection.execute(
                 text(
-                    "TRUNCATE collection_due_windows, hotlist_entries, hotlist_snapshots, "
+                    "TRUNCATE event_candidates, event_members, events, "
+                    "collection_due_windows, hotlist_entries, hotlist_snapshots, "
                     "knowledge_exports, notification_deliveries, "
                     "notification_targets, ai_calls, "
                     "identity_sessions, identity_users CASCADE"

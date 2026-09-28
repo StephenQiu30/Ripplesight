@@ -73,7 +73,8 @@ def resource_budget_context() -> Iterator[ResourceBudgetContext]:
     with engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE collection_due_windows, hotlist_entries, hotlist_snapshots, "
+                "TRUNCATE event_candidates, event_members, events, "
+                "collection_due_windows, hotlist_entries, hotlist_snapshots, "
                 "resource_budget_reservations, resource_budget_windows, "
                 "resource_budget_policies, resource_usage_attempts, "
                 "resource_component_policies, "
@@ -109,7 +110,8 @@ def resource_budget_context() -> Iterator[ResourceBudgetContext]:
         with engine.begin() as connection:
             connection.execute(
                 text(
-                    "TRUNCATE collection_due_windows, hotlist_entries, hotlist_snapshots, "
+                    "TRUNCATE event_candidates, event_members, events, "
+                    "collection_due_windows, hotlist_entries, hotlist_snapshots, "
                     "resource_budget_reservations, resource_budget_windows, "
                     "resource_budget_policies, resource_usage_attempts, "
                     "resource_component_policies, "

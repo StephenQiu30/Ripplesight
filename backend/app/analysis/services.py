@@ -35,6 +35,7 @@ from analysis.schemas import (
     AnnotationResultState,
     AnnotationStatus,
     AnnotationWrite,
+    EventAnnotationRef,
     WindowAnnotationCountView,
 )
 from content.schemas import AnalysisPostContentView
@@ -1565,4 +1566,43 @@ def _prompt_item(
         comment_version_ids=comment_version_ids[: _MAX_COMMENTS_PER_POST + 1],
         body_truncated=post.body is not None and len(post.body) > _MAX_BODY_CHARACTERS,
         comments_truncated=len(comments) > _MAX_COMMENTS_PER_POST,
+    )
+
+
+def list_relevant_event_annotation_refs_in_transaction(
+    session: Session,
+    *,
+    since: datetime,
+    version_ids: Sequence[UUID] | None = None,
+) -> tuple[EventAnnotationRef, ...]:
+    """Expose valid, recent annotation identities without content persistence models."""
+    if not session.in_transaction() or since.tzinfo is None:
+        raise RuntimeError("event annotation reads require a transaction and aware time")
+    filters = (
+        (ContentAnnotation.content_version_id.in_(version_ids),) if version_ids is not None else ()
+    )
+    rows = session.scalars(
+        select(ContentAnnotation)
+        .where(
+            ContentAnnotation.prompt_version == ANALYSIS_PROMPT_VERSION,
+            ContentAnnotation.status == AnnotationStatus.ANNOTATED.value,
+            ContentAnnotation.result_state == AnnotationResultState.VALID.value,
+            ContentAnnotation.relevant.is_(True),
+            ContentAnnotation.created_at >= since,
+            *filters,
+        )
+        .order_by(ContentAnnotation.created_at.desc(), ContentAnnotation.id.desc())
+        .limit(2001)
+    ).all()
+    if len(rows) > 2000:
+        raise RuntimeError("event annotation scan exceeded its bounded batch")
+    return tuple(
+        EventAnnotationRef(
+            owner_id=row.owner_id,
+            topic_id=row.topic_id,
+            topic_rule_version=row.topic_rule_version,
+            content_id=row.content_id,
+            content_version_id=row.content_version_id,
+        )
+        for row in rows
     )

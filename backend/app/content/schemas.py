@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Literal, Self
@@ -14,6 +15,18 @@ from core.schemas import InputModel, OutputModel
 from evidence.schemas import AdmittedSourcePayload, DataClass
 from jobs.schemas import CollectionScanKind
 from sources.contracts import CommentsRequest, SearchRequest, SourceCapability
+
+
+@dataclass(frozen=True, slots=True)
+class EventContentInputView:
+    content_id: UUID
+    content_version_id: UUID
+    source_key: str
+    title: str
+    body: str | None
+    first_seen_at: datetime
+    first_seen_basis: Literal["published", "discovered"]
+    representative_comment_id: UUID | None
 
 
 class HotlistSourceView(OutputModel):
