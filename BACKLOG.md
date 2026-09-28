@@ -40,7 +40,7 @@ Plan 003 的空榜与失败桶技术切片已在独立 PostgreSQL 17 空库验�
 
 Plan 032 人工重试预算周期经隔离 PostgreSQL/Kafka 和浏览器验证，`bd276c33` 远端四项 CI 成功；真实来源失败→人工重试与 Plan051 保留库核对未完成，`in_progress`，见 Acceptance 002 EV-002-013。
 
-Plan 011 受控风控分类、子进程组回收、来源停用/版本审计及 Web/CLI 本人确认恢复已实现；固定 MediaCrawler 提交 `1bd07bc` 与两阶段补丁精确复现，宿主机预检通过。隔离 PostgreSQL 与浏览器验证见 Acceptance 003 EV-003-003；真实本人账号恢复留给 012，连续三天留给 013，Plan 011 保持 `in_progress`。
+Plan 011 受控风控分类、子进程组回收、来源停用/版本审计及 Web/CLI 本人确认恢复已实现；固定 MediaCrawler 提交 `1bd07bc` 与两阶段补丁精确复现，宿主机预检通过。隔离 PostgreSQL 与浏览器验证、`09d1e135` 远端四项 CI 成功见 Acceptance 003 EV-003-003；真实本人账号恢复留给 012，连续三天留给 013，Plan 011 保持 `in_progress`。
 
 ## M1—M6 看板
 
