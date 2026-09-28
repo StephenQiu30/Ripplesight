@@ -1,9 +1,11 @@
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from uuid import uuid4, uuid5
 
 import pytest
 from sqlalchemy.dialects import postgresql
 
+import worker.scheduler as scheduler
 from content.services import (
     COMMENT_OPERATION_NAMESPACE,
     comment_bucket_start,
@@ -27,6 +29,46 @@ from worker.scheduler import (
     enqueue_due_analysis_in_transaction,
     run_scheduler_round,
 )
+
+
+def test_prompt_runtime_heartbeat_failure_stops_scheduler_without_closing_gap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    engine = SimpleNamespace(dispose=lambda: events.append("dispose"))
+    monkeypatch.setattr(
+        scheduler, "get_settings", lambda: SimpleNamespace(log_level="INFO", ai_enabled=False)
+    )
+    monkeypatch.setattr(scheduler, "configure_logging", lambda _level: None)
+    monkeypatch.setattr(scheduler.signal, "signal", lambda _signal, _handler: None)
+    monkeypatch.setattr(scheduler, "create_db_engine", lambda _settings: engine)
+    monkeypatch.setattr(scheduler, "create_session_factory", lambda _engine: object())
+    monkeypatch.setattr(scheduler, "_registered_scheduler_scans", lambda: ())
+    monkeypatch.setattr(
+        scheduler,
+        "start_analysis_prompt_runtime_at_startup",
+        lambda *_args, **_kwargs: events.append("start") or uuid4(),
+    )
+    monkeypatch.setattr(
+        scheduler,
+        "run_scheduler_round",
+        lambda *_args, **_kwargs: events.append("round") or {},
+    )
+
+    def fail_heartbeat(*_args: object, **_kwargs: object) -> None:
+        events.append("heartbeat")
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(scheduler, "heartbeat_analysis_prompt_runtime", fail_heartbeat)
+    monkeypatch.setattr(
+        scheduler,
+        "stop_analysis_prompt_runtime",
+        lambda *_args, **_kwargs: events.append("stop"),
+    )
+
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        scheduler.run_scheduler()
+    assert events == ["start", "round", "heartbeat", "dispose"]
 
 
 def _schedule() -> DueCollectionSchedule:

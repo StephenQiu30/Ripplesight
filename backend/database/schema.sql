@@ -858,6 +858,23 @@ CREATE TABLE analysis_prompt_activations (
     activated_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE analysis_prompt_runtime_sessions (
+    id UUID PRIMARY KEY,
+    prompt_version VARCHAR(128) NOT NULL
+        CONSTRAINT analysis_prompt_runtime_sessions_version_check CHECK (prompt_version <> ''),
+    ai_enabled BOOLEAN NOT NULL,
+    started_at TIMESTAMPTZ NOT NULL,
+    last_seen_at TIMESTAMPTZ NOT NULL,
+    stopped_at TIMESTAMPTZ,
+    CONSTRAINT analysis_prompt_runtime_sessions_last_seen_check
+        CHECK (last_seen_at >= started_at),
+    CONSTRAINT analysis_prompt_runtime_sessions_stopped_check
+        CHECK (stopped_at IS NULL OR stopped_at >= last_seen_at)
+);
+
+CREATE INDEX analysis_prompt_runtime_sessions_version_started_idx
+    ON analysis_prompt_runtime_sessions (prompt_version, started_at);
+
 CREATE TABLE coverage_windows (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,

@@ -59,7 +59,8 @@ def backup_environment() -> Iterator[tuple[str, Minio, str, str]]:
     with engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE collection_due_windows, hotlist_entries, hotlist_snapshots, "
+                "TRUNCATE analysis_prompt_activations, analysis_prompt_runtime_sessions, "
+                "collection_due_windows, hotlist_entries, hotlist_snapshots, "
                 "content_version_relations, content_visibility_observations, "
                 "content_observations, content_versions, "
                 "content_discoveries, content_threads, content_records, "
@@ -79,6 +80,18 @@ def backup_environment() -> Iterator[tuple[str, Minio, str, str]]:
                 "monitor_topic_versions, monitor_topics, "
                 "identity_sessions, identity_users"
             )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO analysis_prompt_runtime_sessions "
+                "(id, prompt_version, ai_enabled, started_at, last_seen_at, stopped_at) "
+                "VALUES (:id, 'backup-test-prompt', false, :started, :stopped, :stopped)"
+            ),
+            {
+                "id": uuid4(),
+                "started": now,
+                "stopped": now + timedelta(minutes=1),
+            },
         )
         connection.execute(
             text(
@@ -286,6 +299,7 @@ def test_candidate_backup_uses_real_snapshot_archive_and_minio_inventory(
     assert set(table_counts) == {
         "ai_calls",
         "analysis_prompt_activations",
+        "analysis_prompt_runtime_sessions",
         "collection_due_windows",
         "content_annotations",
         "coverage_windows",
@@ -333,6 +347,7 @@ def test_candidate_backup_uses_real_snapshot_archive_and_minio_inventory(
     }
     assert table_counts["identity_users"] == 1
     assert table_counts["analysis_prompt_activations"] == 0
+    assert table_counts["analysis_prompt_runtime_sessions"] == 1
     assert table_counts["monitor_topic_status_events"] == 0
     assert table_counts["evidence_resources"] == 1
     assert len(manifest.evidence_objects) == 1

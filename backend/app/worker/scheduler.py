@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from importlib import import_module
 from threading import Event
 from typing import Protocol, cast
-from uuid import UUID, uuid5
+from uuid import UUID, uuid4, uuid5
 from zoneinfo import ZoneInfo
 
 import structlog
@@ -664,16 +664,36 @@ def enqueue_due_analysis_in_transaction(session: Session, now: datetime) -> int:
     return accepted
 
 
-def record_analysis_prompt_activation_at_startup(
+def start_analysis_prompt_runtime_at_startup(
     sessions: sessionmaker[Session], *, ai_enabled: bool, started_at: datetime
-) -> bool:
-    """Record prompt availability before the first enabled analysis scan."""
-    if not ai_enabled:
-        return False
+) -> UUID:
+    """Record the scheduler configuration before its first analysis scan."""
+    run_id = uuid4()
     with sessions() as session, session.begin():
-        return AnalysisService(session).record_prompt_activation_in_transaction(
+        AnalysisService(session).start_prompt_runtime_in_transaction(
+            run_id=run_id,
             prompt_version=ANALYSIS_PROMPT_VERSION,
-            activated_at=started_at,
+            ai_enabled=ai_enabled,
+            started_at=started_at,
+        )
+    return run_id
+
+
+def heartbeat_analysis_prompt_runtime(
+    sessions: sessionmaker[Session], *, run_id: UUID, observed_at: datetime
+) -> None:
+    with sessions() as session, session.begin():
+        AnalysisService(session).heartbeat_prompt_runtime_in_transaction(
+            run_id=run_id, observed_at=observed_at
+        )
+
+
+def stop_analysis_prompt_runtime(
+    sessions: sessionmaker[Session], *, run_id: UUID, stopped_at: datetime
+) -> None:
+    with sessions() as session, session.begin():
+        AnalysisService(session).stop_prompt_runtime_in_transaction(
+            run_id=run_id, stopped_at=stopped_at
         )
 
 
@@ -772,8 +792,10 @@ def run_scheduler() -> None:
     engine = create_db_engine(settings)
     sessions = create_session_factory(engine)
     scans = _registered_scheduler_scans()
+    run_id: UUID | None = None
+    normal_shutdown = False
     try:
-        record_analysis_prompt_activation_at_startup(
+        run_id = start_analysis_prompt_runtime_at_startup(
             sessions,
             ai_enabled=settings.ai_enabled,
             started_at=datetime.now(UTC),
@@ -781,10 +803,18 @@ def run_scheduler() -> None:
         while not stopping.is_set():
             started_at = datetime.now(UTC)
             results = run_scheduler_round(sessions, scans, now=started_at)
+            heartbeat_analysis_prompt_runtime(
+                sessions, run_id=run_id, observed_at=datetime.now(UTC)
+            )
             logger.info("scheduler_round_completed", scan_counts=results)
             stopping.wait(SCHEDULER_POLL_SECONDS)
+        normal_shutdown = True
     finally:
-        engine.dispose()
+        try:
+            if normal_shutdown and run_id is not None:
+                stop_analysis_prompt_runtime(sessions, run_id=run_id, stopped_at=datetime.now(UTC))
+        finally:
+            engine.dispose()
     logger.info("scheduler_stopped")
 
 

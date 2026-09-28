@@ -13,7 +13,11 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ai.schemas import AiCallError, AiFailureCode
 from ai.services import AiService, create_ai_client
-from analysis.models import AnalysisPromptActivation, ContentAnnotation
+from analysis.models import (
+    AnalysisPromptActivation,
+    AnalysisPromptRuntimeSession,
+    ContentAnnotation,
+)
 from analysis.prompts import (
     ANALYSIS_OUTPUT_SCHEMA,
     ANALYSIS_PROMPT_VERSION,
@@ -518,6 +522,88 @@ class AnalysisService:
             .returning(AnalysisPromptActivation.prompt_version)
         )
         return inserted is not None
+
+    def start_prompt_runtime_in_transaction(
+        self,
+        *,
+        run_id: UUID,
+        prompt_version: str,
+        ai_enabled: bool,
+        started_at: datetime,
+    ) -> bool:
+        """Atomically record this scheduler run and its first enabled prompt use."""
+        if not self._session.in_transaction():
+            raise RuntimeError("prompt runtime start requires the caller's transaction")
+        if not 0 < len(prompt_version) <= 128 or started_at.tzinfo is None:
+            raise ValueError("prompt runtime start requires a version and aware time")
+        utc_start = started_at.astimezone(UTC)
+        inserted = self._session.scalar(
+            insert(AnalysisPromptRuntimeSession)
+            .values(
+                id=run_id,
+                prompt_version=prompt_version,
+                ai_enabled=ai_enabled,
+                started_at=utc_start,
+                last_seen_at=utc_start,
+                stopped_at=None,
+            )
+            .on_conflict_do_nothing(index_elements=["id"])
+            .returning(AnalysisPromptRuntimeSession.id)
+        )
+        if inserted is None:
+            existing = self._session.get(AnalysisPromptRuntimeSession, run_id)
+            if (
+                existing is None
+                or existing.prompt_version != prompt_version
+                or existing.ai_enabled != ai_enabled
+                or existing.started_at != utc_start
+            ):
+                raise ValueError("prompt runtime run ID conflicts with another configuration")
+            return False
+        if ai_enabled:
+            self.record_prompt_activation_in_transaction(
+                prompt_version=prompt_version, activated_at=utc_start
+            )
+        return True
+
+    def heartbeat_prompt_runtime_in_transaction(
+        self, *, run_id: UUID, observed_at: datetime
+    ) -> bool:
+        """Extend only a live scheduler run's confirmed configuration interval."""
+        if not self._session.in_transaction():
+            raise RuntimeError("prompt runtime heartbeat requires the caller's transaction")
+        if observed_at.tzinfo is None:
+            raise ValueError("prompt runtime heartbeat requires aware time")
+        runtime = self._session.get(AnalysisPromptRuntimeSession, run_id, with_for_update=True)
+        if runtime is None:
+            raise LookupError("prompt runtime session is missing")
+        utc_seen = observed_at.astimezone(UTC)
+        if runtime.stopped_at is not None or utc_seen < runtime.last_seen_at:
+            raise ValueError("prompt runtime heartbeat is stopped or out of order")
+        if utc_seen == runtime.last_seen_at:
+            return False
+        runtime.last_seen_at = utc_seen
+        return True
+
+    def stop_prompt_runtime_in_transaction(self, *, run_id: UUID, stopped_at: datetime) -> bool:
+        """Close a normally exiting run without inventing a crash end time."""
+        if not self._session.in_transaction():
+            raise RuntimeError("prompt runtime stop requires the caller's transaction")
+        if stopped_at.tzinfo is None:
+            raise ValueError("prompt runtime stop requires aware time")
+        runtime = self._session.get(AnalysisPromptRuntimeSession, run_id, with_for_update=True)
+        if runtime is None:
+            raise LookupError("prompt runtime session is missing")
+        utc_stop = stopped_at.astimezone(UTC)
+        if runtime.stopped_at is not None:
+            if runtime.stopped_at != utc_stop:
+                raise ValueError("prompt runtime session already stopped at another time")
+            return False
+        if utc_stop < runtime.last_seen_at:
+            raise ValueError("prompt runtime stop precedes last heartbeat")
+        runtime.last_seen_at = utc_stop
+        runtime.stopped_at = utc_stop
+        return True
 
     def collection_analysis_counts_in_transaction(
         self,

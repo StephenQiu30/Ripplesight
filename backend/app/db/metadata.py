@@ -1,5 +1,9 @@
 from ai.models import AiCall
-from analysis.models import AnalysisPromptActivation, ContentAnnotation
+from analysis.models import (
+    AnalysisPromptActivation,
+    AnalysisPromptRuntimeSession,
+    ContentAnnotation,
+)
 from connections.models import (
     SourceCapabilityEvidence,
     SourceConnection,
@@ -60,6 +64,7 @@ metadata = Base.metadata
 __all__ = [
     "AiCall",
     "AnalysisPromptActivation",
+    "AnalysisPromptRuntimeSession",
     "CleanupTarget",
     "CollectionDueWindow",
     "ContentAnnotation",

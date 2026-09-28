@@ -24,7 +24,7 @@ Plan 038 见 Acceptance 002 EV-002-024—028：HN 评论预设、旧帖显式复
 
 Plan 041 见 Acceptance 002 EV-002-029—032：评论/作品列表和标注详情 API、页面、旧帖复采按钮经隔离库及桌面/390px 浏览器验证；`4ecced3d` 远端四项 CI 成功。真实 HN 阅读样本与 Codex 产品验收未完成，`in_progress`。
 
-Plan 006 见 Acceptance 002 EV-002-033—038/045—046：采集 v2 将缺失热榜桶计入分母；当前提示词逐身份账本列出未入队旧帖、新版本、成熟与未知。提示词停用、Codex 限流、T0 相位与十来源复算仍缺；`analysis_status=not_computable`、`phase_verified=false`，Plan006/M1 仍 `in_progress`。
+Plan 006 见 Acceptance 002 EV-002-033—038/045—047：采集 v2 计缺失热榜桶；逐身份候选账本和提示词运行会话已存，停用区间尚未投影。Codex 限流、T0 相位与十来源复算仍缺；`analysis_status=not_computable`、`phase_verified=false`，Plan006/M1 仍 `in_progress`。
 
 Plan 034 见 Acceptance 002 EV-002-039—042：覆盖页面、84 项前端测试及 C/F 门禁通过；真实 HN 定时窗、受控热榜 503 窗和固定快照下钻经浏览器/API/库核对，已确认页中断恢复有先红后绿回归，技术 `completed`。跨库指标不合算；三天共同缺口与 AC-002-006 未通过，真实 Codex 请求关闭。
 
