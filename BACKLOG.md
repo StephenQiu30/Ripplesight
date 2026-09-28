@@ -6,7 +6,7 @@
 
 Plan 037 见 Acceptance 002 EV-002-008/014/015：36Kr 快讯固定入口、身份与时间字段、真实双轮原帖、PostgreSQL/Kafka 重放和预算已核对；单来源 `completed`，72 小时父级未通过。
 
-Plan 004 只读覆盖 API 见 Acceptance 002 EV-002-016：owner/来源筛选、游标、Job/内容/预算聚合经隔离 PostgreSQL 与运行 OpenAPI 验证；`f6f6b3e7` 远端四项 CI 成功。真实四词六榜和 72 小时对账未完成，`in_progress`。
+Plan 004 只读覆盖 API 见 Acceptance 002 EV-002-016/043：owner/来源筛选、游标、Job/内容/预算聚合经隔离 PostgreSQL 与运行 OpenAPI 验证；`f6f6b3e7` 远端四项 CI 成功。真实 HN 定时窗与既有真实微博热榜成功窗的 API/Job/内容或快照/预算对账完成，CHK-004-103 通过；两窗跨库，其余三关键词、五榜和 72 小时对账未完成，G5 与本卡仍 `in_progress`。
 
 Plan 007 HN 搜索与重放见 Acceptance 002 EV-002-017：真实 API→Kafka→Worker 两页观察 141 条、入库 111 条；重投无重复内容或预算实耗，远端及本地门禁通过。本卡手动搜索范围 `completed`；定时同窗和 72 小时归 009。
 
