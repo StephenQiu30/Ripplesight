@@ -59,8 +59,7 @@ def backup_environment() -> Iterator[tuple[str, Minio, str, str]]:
     with engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE collection_due_windows, hotlist_entries, hotlist_snapshots, "
-                "content_version_relations, content_visibility_observations, "
+                "TRUNCATE content_version_relations, content_visibility_observations, "
                 "content_observations, content_versions, "
                 "content_discoveries, content_threads, content_records, "
                 "source_capability_evidence, source_connection_versions, "
@@ -96,13 +95,12 @@ def backup_environment() -> Iterator[tuple[str, Minio, str, str]]:
                 "policy_version, created_at, updated_at) VALUES "
                 "(:policy_id, :owner_id, 'manual', 'search', 'approved', true, "
                 "'manual_import', 'test-fixture', 'backup test', 'fixture', '1', "
-                "'project-internal', CAST(:field_purposes AS jsonb), "
+                "'project-internal', '{\"external_id\": \"stable identity\"}'::jsonb, "
                 ":now, :review_expires_at, 1, :now, :now)"
             ),
             {
                 "policy_id": policy_id,
                 "owner_id": owner_id,
-                "field_purposes": '{"external_id": "stable identity"}',
                 "now": now,
                 "review_expires_at": now + timedelta(days=31),
             },
@@ -150,8 +148,7 @@ def backup_environment() -> Iterator[tuple[str, Minio, str, str]]:
         with engine.begin() as connection:
             connection.execute(
                 text(
-                    "TRUNCATE collection_due_windows, hotlist_entries, hotlist_snapshots, "
-                    "content_version_relations, content_visibility_observations, "
+                    "TRUNCATE content_version_relations, content_visibility_observations, "
                     "content_observations, content_versions, "
                     "content_discoveries, content_threads, content_records, "
                     "source_capability_evidence, source_connection_versions, "
@@ -283,14 +280,11 @@ def test_candidate_backup_uses_real_snapshot_archive_and_minio_inventory(
     assert manifest.secrets_included is False
     assert set(table_counts) == {
         "ai_calls",
-        "collection_due_windows",
         "content_annotations",
         "coverage_windows",
         "content_discoveries",
         "content_observations",
         "content_records",
-        "hotlist_snapshots",
-        "hotlist_entries",
         "content_threads",
         "content_version_relations",
         "content_versions",

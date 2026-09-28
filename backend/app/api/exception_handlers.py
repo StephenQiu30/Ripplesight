@@ -71,9 +71,6 @@ APPLICATION_ERRORS: Mapping[str, PublicError] = {
     "invalid_session": PublicError(401, "invalid_session", "会话无效或已过期"),
     "job_not_cancellable": PublicError(409, "job_not_cancellable", "任务当前状态不可取消"),
     "job_not_retryable": PublicError(409, "job_not_retryable", "任务当前状态不可重试"),
-    "retry_budget_exhausted": PublicError(
-        409, "retry_budget_exhausted", "当前来源或全局每日请求额度不足"
-    ),
     "invalid_monitor_rules": PublicError(422, "invalid_monitor_rules", "至少需要一个包含关键词"),
     "keyword_group_conflict": PublicError(
         422,
@@ -89,9 +86,6 @@ APPLICATION_ERRORS: Mapping[str, PublicError] = {
     ),
     "topic_archived": PublicError(409, "topic_archived", "已归档主题不能再修改"),
     "topic_not_ready": PublicError(409, "topic_not_ready", "主题来源尚未就绪"),
-    "invalid_topic_source_selection": PublicError(
-        422, "invalid_topic_source_selection", "所选来源不属于当前主题"
-    ),
     "topic_version_conflict": PublicError(409, "topic_version_conflict", "主题已被其他修改更新"),
 }
 

@@ -6,7 +6,7 @@ on:
     paths:
       - "backend/**"
       - "frontend/**"
-      - "docker-compose.yml"
+      - "compose.yaml"
       - ".env.example"
       - ".github/workflows/runtime.yml"
   pull_request:
@@ -14,7 +14,7 @@ on:
     paths:
       - "backend/**"
       - "frontend/**"
-      - "docker-compose.yml"
+      - "compose.yaml"
       - ".env.example"
       - ".github/workflows/runtime.yml"
 

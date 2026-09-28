@@ -17,7 +17,6 @@ class SourceCapability(StrEnum):
     COMMENTS = "comments"
     REPLIES = "replies"
     PAGE_CONTENT = "page_content"
-    HOTLIST = "hotlist"
 
 
 type SocialSourceCapability = Literal[
@@ -67,30 +66,6 @@ class SourceStopReason(StrEnum):
 
 class _ContractModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-
-
-class SourceTerminalEvidence(_ContractModel):
-    """Source-owned proof that a bounded, ordered query reached its true tail."""
-
-    starts_at: datetime
-    ends_at: datetime
-    sort_key: SourceSort
-    query_bounded: bool
-    sort_applied: bool
-    terminal_verified: bool
-
-    @field_validator("starts_at", "ends_at")
-    @classmethod
-    def require_utc(cls, value: datetime) -> datetime:
-        if value.utcoffset() != timedelta(0):
-            raise ValueError("source terminal bounds must be UTC")
-        return value
-
-    @model_validator(mode="after")
-    def require_forward_range(self) -> SourceTerminalEvidence:
-        if self.starts_at >= self.ends_at:
-            raise ValueError("source terminal range must be forward")
-        return self
 
 
 def _validate_identifier(value: str | None) -> str | None:
@@ -285,7 +260,6 @@ class SourcePost(_ContractModel):
         pattern=r"^[a-z][a-z0-9_-]{0,63}$",
     )
     external_id: str = Field(min_length=1, max_length=512)
-    identity_basis: Literal["guid", "url_fallback"] | None = None
     author_external_id: str | None = Field(min_length=1, max_length=512)
     published_at: datetime | None
     text: str | None = Field(max_length=_MAX_TEXT_LENGTH)
@@ -386,15 +360,9 @@ class SourcePage(_ContractModel):
     observed_at: datetime
     request_count: int = Field(default=0, ge=0)
     adapter_version: str | None = Field(default=None, max_length=64)
-    source_feed_updated_at: datetime | None = None
-    source_engine: str | None = Field(default=None, max_length=64)
-    source_page_number: int | None = Field(default=None, ge=1, le=100)
-    source_unresponsive_engines: tuple[str, ...] = Field(default=(), max_length=8)
-    source_search_error: str | None = Field(default=None, max_length=128)
-    terminal_evidence: SourceTerminalEvidence | None = None
     retry_at: datetime | None = None
 
-    @field_validator("retry_at", "source_feed_updated_at")
+    @field_validator("retry_at")
     @classmethod
     def validate_retry_at(cls, value: datetime | None) -> datetime | None:
         if value is not None and value.utcoffset() is None:
@@ -459,11 +427,6 @@ class SourcePage(_ContractModel):
             )
         if not valid:
             raise ValueError("source page fields do not match its state")
-        if self.terminal_evidence is not None and (
-            self.capability is not SourceCapability.SEARCH
-            or self.state not in {SourcePageState.COMPLETE, SourcePageState.EMPTY}
-        ):
-            raise ValueError("terminal evidence requires a terminal search page")
         return self
 
 
@@ -475,69 +438,6 @@ class SourceAdapter(Protocol):
     def capabilities(self) -> frozenset[SocialSourceCapability]: ...
 
     def fetch_page(self, request: SourceRequest) -> SourcePage: ...
-
-
-class HotlistEntry(_ContractModel):
-    rank: int = Field(ge=1, le=100)
-    title: str = Field(min_length=1, max_length=2000)
-    url: str = Field(min_length=1, max_length=2048)
-    summary: str | None = Field(default=None, max_length=100_000)
-    published_at: datetime | None = None
-    heat: str | None = Field(default=None, max_length=256)
-
-    @field_validator("published_at")
-    @classmethod
-    def validate_published_at(cls, value: datetime | None) -> datetime | None:
-        if value is not None and value.tzinfo is None:
-            raise ValueError("published_at must be timezone-aware")
-        return value
-
-    @field_validator("url")
-    @classmethod
-    def validate_url(cls, value: str) -> str:
-        parsed = urlsplit(value)
-        if (
-            parsed.scheme not in {"http", "https"}
-            or not parsed.hostname
-            or parsed.username
-            or parsed.password
-        ):
-            raise ValueError("hotlist entry URL must be public HTTP(S)")
-        return value
-
-
-class HotlistPage(_ContractModel):
-    source_key: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$", max_length=64)
-    capability: Literal[SourceCapability.HOTLIST] = SourceCapability.HOTLIST
-    state: SourcePageState
-    items: tuple[HotlistEntry, ...] = Field(max_length=100)
-    stop_reason: SourceStopReason | None = None
-    observed_at: datetime
-    request_count: int = Field(ge=0, le=1)
-    adapter_version: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._+:-]{0,63}$")
-    retry_at: datetime | None = None
-
-    @model_validator(mode="after")
-    def validate_page(self) -> HotlistPage:
-        if self.observed_at.tzinfo is None or (
-            self.retry_at is not None and self.retry_at.tzinfo is None
-        ):
-            raise ValueError("hotlist page times must be timezone-aware")
-        if self.state is SourcePageState.COMPLETE:
-            valid = bool(self.items) and self.stop_reason is SourceStopReason.END_OF_RESULTS
-        elif self.state is SourcePageState.EMPTY:
-            valid = not self.items and self.stop_reason is SourceStopReason.SOURCE_EMPTY
-        elif self.state is SourcePageState.STOPPED:
-            valid = not self.items and self.stop_reason not in {
-                None,
-                SourceStopReason.END_OF_RESULTS,
-                SourceStopReason.SOURCE_EMPTY,
-            }
-        else:
-            valid = False
-        if not valid or any(item.rank != index for index, item in enumerate(self.items, 1)):
-            raise ValueError("invalid hotlist page state or ranks")
-        return self
 
 
 class DocumentAdapter(Protocol):

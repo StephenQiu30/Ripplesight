@@ -35,7 +35,6 @@ from jobs.schemas import (
     BudgetMetric,
     BudgetReservationInput,
     CollectionScanKind,
-    CoverageTerminalEvidence,
     CoverageWindowInput,
     CoverageWindowView,
     JobAcceptanceInput,
@@ -52,7 +51,6 @@ from jobs.services import (
 )
 from monitors.services import MonitorTopicService, evaluate_monitor_rules
 from sources.contracts import (
-    HotlistPage,
     SourceCapability,
     SourcePage,
     SourcePageState,
@@ -81,8 +79,6 @@ class KeywordRequestMeter:
         deadline_at: datetime,
         lease_seconds: int,
         clock: Callable[[], datetime] | None = None,
-        capability: SourceCapability = SourceCapability.SEARCH,
-        stage: str = _SEARCH_STAGE,
     ) -> None:
         if not 1 <= max_requests <= 100:
             raise ValueError("search request budget must be between 1 and 100")
@@ -100,8 +96,6 @@ class KeywordRequestMeter:
         self._deadline_at = deadline_at
         self._lease_seconds = lease_seconds
         self._clock = clock or (lambda: datetime.now(UTC))
-        self._capability = capability
-        self._stage = stage
         self._started = 0
         self._pending: list[UUID] = []
 
@@ -119,7 +113,7 @@ class KeywordRequestMeter:
         self._session.rollback()
         try:
             with self._session.begin():
-                request_counts = execution.current_request_counts_in_transaction(
+                request_sequence = execution.current_request_count_in_transaction(
                     self._lease,
                     owner_id=self._owner_id,
                     operation_id=self._operation_id,
@@ -129,7 +123,7 @@ class KeywordRequestMeter:
                         owner_id=self._owner_id,
                         operation_id=self._operation_id,
                         component_key=self._component_key,
-                        stage=self._stage,
+                        stage=_SEARCH_STAGE,
                         finished_at=now,
                     )
                 require_source_connection_version(
@@ -144,16 +138,16 @@ class KeywordRequestMeter:
                 ).require_admission_ready_in_transaction(
                     owner_id=self._owner_id,
                     source_key=self._source_key,
-                    capability=self._capability,
+                    capability=SourceCapability.SEARCH,
                     data_class=DataClass.STRUCTURED,
                 )
-                if request_counts.collection_cycle >= self._max_requests:
+                if request_sequence >= self._max_requests:
                     return False
                 attempt_id = resource_attempt_id(
                     operation_id=self._operation_id,
                     component_key=self._component_key,
-                    stage=self._stage,
-                    sequence=request_counts.total + 1,
+                    stage=_SEARCH_STAGE,
+                    sequence=request_sequence + 1,
                 )
                 decision = budget.reserve_budget_in_transaction(
                     owner_id=self._owner_id,
@@ -178,7 +172,7 @@ class KeywordRequestMeter:
                         operation_id=self._operation_id,
                         component_key=self._component_key,
                         usage_kind=UsageKind.NETWORK_REQUEST,
-                        stage=self._stage,
+                        stage=_SEARCH_STAGE,
                         started_at=now,
                     ),
                 )
@@ -197,7 +191,7 @@ class KeywordRequestMeter:
     def settle_page_in_transaction(
         self,
         *,
-        page: SourcePage | HotlistPage,
+        page: SourcePage,
         owner_id: UUID,
         lease: ExecutionLease,
         operation_id: UUID,
@@ -242,10 +236,8 @@ class KeywordRequestMeter:
         self._lease = lease
         self._pending.clear()
 
-    def fail_pending(self, *, outcome: UsageOutcome = UsageOutcome.FAILED) -> None:
-        """Charge attempts after a transport error or a rejected empty page."""
-        if outcome not in {UsageOutcome.FAILED, UsageOutcome.EMPTY}:
-            raise ValueError("pending source attempts require a failed or empty outcome")
+    def fail_pending(self) -> None:
+        """Charge attempts after a transport or persistence error."""
         self._session.rollback()
         with self._session.begin():
             budget = ResourceBudgetService(self._session, clock=self._clock)
@@ -256,7 +248,7 @@ class KeywordRequestMeter:
                 budget.finish_attempt_in_transaction(
                     owner_id=self._owner_id,
                     attempt_id=attempt_id,
-                    outcome=outcome,
+                    outcome=UsageOutcome.FAILED,
                     finished_at=self._clock(),
                 )
         self._pending.clear()
@@ -289,15 +281,10 @@ def plan_keyword_discovery(run: KeywordDiscoveryRunInput) -> tuple[JobAcceptance
         source_capability=SourceCapability.SEARCH,
     )
     jobs = []
-    scans = (
-        ((SourceSort.TOP, run.latest_max_pages, run.latest_max_requests),)
-        if run.source_key == "bilibili"
-        else (
-            (SourceSort.LATEST, run.latest_max_pages, run.latest_max_requests),
-            (SourceSort.TOP, run.top_max_pages, run.top_max_requests),
-        )
-    )
-    for sort, max_pages, max_requests in scans:
+    for sort, max_pages, max_requests in (
+        (SourceSort.LATEST, run.latest_max_pages, run.latest_max_requests),
+        (SourceSort.TOP, run.top_max_pages, run.top_max_requests),
+    ):
         for index, query in enumerate((run.primary_query, *run.upstream_aliases)):
             jobs.append(
                 JobAcceptanceInput(
@@ -329,8 +316,10 @@ def plan_keyword_discovery(run: KeywordDiscoveryRunInput) -> tuple[JobAcceptance
     return tuple(jobs)
 
 
-def plan_single_keyword_discovery(run: KeywordDiscoveryRunInput) -> JobAcceptanceInput:
-    """Build one bounded latest-search job for an explicit source query."""
+def plan_scheduled_keyword_discovery(run: KeywordDiscoveryRunInput) -> JobAcceptanceInput:
+    """Build the single latest-search job represented by one collection schedule window."""
+    if run.entry_point is not SourceEntryPoint.SCHEDULED:
+        raise ValueError("scheduled discovery requires the scheduled entry point")
     observation = JobObservationContext(
         configuration_ref=run.configuration_ref,
         configuration_version=run.configuration_version,
@@ -349,9 +338,7 @@ def plan_single_keyword_discovery(run: KeywordDiscoveryRunInput) -> JobAcceptanc
             "connection_version": run.connection_version,
             "query": query,
             "query_role": "primary",
-            "sort_key": (
-                SourceSort.TOP.value if run.source_key == "bilibili" else SourceSort.LATEST.value
-            ),
+            "sort_key": SourceSort.LATEST.value,
             "target_hash": _target_hash(run.configuration_ref, query).hex(),
             "rule_version": run.configuration_version,
             "starts_at": run.starts_at.isoformat(),
@@ -365,13 +352,6 @@ def plan_single_keyword_discovery(run: KeywordDiscoveryRunInput) -> JobAcceptanc
             "entry_point": run.entry_point.value,
         },
     )
-
-
-def plan_scheduled_keyword_discovery(run: KeywordDiscoveryRunInput) -> JobAcceptanceInput:
-    """Build the single latest-search job represented by one collection schedule window."""
-    if run.entry_point is not SourceEntryPoint.SCHEDULED:
-        raise ValueError("scheduled discovery requires the scheduled entry point")
-    return plan_single_keyword_discovery(run)
 
 
 @dataclass(frozen=True, slots=True)
@@ -464,8 +444,7 @@ class KeywordDiscoveryPageCommitService:
                 self._session.rollback()
                 raise ValueError("keyword search page can contain only posts")
             if (
-                window.source_key != "bilibili"
-                and item.published_at is not None
+                item.published_at is not None
                 and not window.starts_at <= item.published_at < window.ends_at
             ) or item.external_id in seen:
                 filtered_items += 1
@@ -553,18 +532,6 @@ class KeywordDiscoveryPageCommitService:
                 next_token=page.next_page_token,
                 stop_reason=page.stop_reason,
                 job_progress=JobProgress(stage=JobStage.SAVE, items_saved=saved_items),
-                observed_items=len(page.items),
-                source_observed_at=page.observed_at,
-                source_feed_updated_at=page.source_feed_updated_at,
-                source_engine=page.source_engine,
-                source_page_number=page.source_page_number,
-                source_unresponsive_engines=page.source_unresponsive_engines,
-                source_search_error=page.source_search_error,
-                evidence=(
-                    CoverageTerminalEvidence.model_validate(page.terminal_evidence.model_dump())
-                    if page.terminal_evidence is not None
-                    else None
-                ),
             )
             if meter is not None:
                 meter.settle_page_in_transaction(
@@ -596,8 +563,6 @@ class KeywordDiscoveryPageCommitService:
             "play_count": post.play_count,
             "danmaku_count": post.danmaku_count,
         }
-        if post.identity_basis is not None:
-            fields["identity_basis"] = post.identity_basis
         if post.canonical_url is not None:
             fields["canonical_url"] = post.canonical_url
         if post.author_external_id is not None:

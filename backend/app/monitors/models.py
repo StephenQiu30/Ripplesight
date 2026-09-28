@@ -183,14 +183,6 @@ class MonitorTopicVersion(Base):
             "jsonb_typeof(exclude) = 'array'",
             name="monitor_topic_versions_exclude_check",
         ),
-        CheckConstraint(
-            "jsonb_typeof(source_keys) = 'array'",
-            name="monitor_topic_versions_source_keys_check",
-        ),
-        CheckConstraint(
-            "collection_interval_seconds BETWEEN 600 AND 86400",
-            name="monitor_topic_versions_collection_interval_check",
-        ),
         Index("monitor_topic_versions_created_by_idx", "created_by"),
     )
 
@@ -203,8 +195,6 @@ class MonitorTopicVersion(Base):
     match_any: Mapped[list[str]] = mapped_column(JSONB)
     match_all: Mapped[list[str]] = mapped_column(JSONB)
     exclude: Mapped[list[str]] = mapped_column(JSONB)
-    source_keys: Mapped[list[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
-    collection_interval_seconds: Mapped[int] = mapped_column(Integer, server_default=text("1800"))
     created_at: Mapped[datetime]
 
 
@@ -222,8 +212,7 @@ class MonitorSchedule(Base):
             name="monitor_schedules_source_key_check",
         ),
         CheckConstraint(
-            "capability IN ('search', 'author_posts', 'comments', 'replies', "
-            "'page_content', 'hotlist')",
+            "capability IN ('search', 'author_posts', 'comments', 'replies', 'page_content')",
             name="monitor_schedules_capability_check",
         ),
         CheckConstraint(

@@ -9,14 +9,8 @@ from uuid import UUID, uuid4
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
-from connections.services import (
-    load_applied_source_presets_in_transaction,
-    load_execution_policy_in_transaction,
-)
+from connections.services import load_applied_source_presets_in_transaction
 from core.errors import ApplicationError
-from evidence.services import load_source_access_readiness
-from jobs.schemas import BudgetMetric, BudgetScopeKind
-from jobs.services import ResourceBudgetService
 from monitors.models import (
     FollowedAccount,
     FollowedAccountAlias,
@@ -91,14 +85,6 @@ class ActiveTopicScan:
     source_keys: tuple[str, ...]
 
 
-@dataclass(frozen=True, slots=True)
-class ActiveHotlistTopic:
-    owner_id: UUID
-    topic_id: UUID
-    name: str
-    rules: NormalizedMonitorRules
-
-
 def scheduled_collection_queries(rules: NormalizedMonitorRules) -> tuple[str, ...]:
     """Keep upstream searches portable while local rules retain final relevance semantics."""
     if rules.match_any:
@@ -152,45 +138,16 @@ def normalize_monitor_rules(
     )
 
 
-def _is_ascii_word_char(value: str) -> bool:
-    return value.isascii() and value.isalnum()
-
-
-def _contains_keyword(comparable_content: str, keyword: str) -> bool:
-    """Match CJK keywords as substrings, but Latin edges only at word boundaries.
-
-    Without boundaries a short keyword such as "AI" matches inside "daily" or "email".
-    """
-    key = _comparison_key(keyword)
-    start = comparable_content.find(key)
-    while start != -1:
-        end = start + len(key)
-        before_ok = not (
-            _is_ascii_word_char(key[0])
-            and start > 0
-            and _is_ascii_word_char(comparable_content[start - 1])
-        )
-        after_ok = not (
-            _is_ascii_word_char(key[-1])
-            and end < len(comparable_content)
-            and _is_ascii_word_char(comparable_content[end])
-        )
-        if before_ok and after_ok:
-            return True
-        start = comparable_content.find(key, start + 1)
-    return False
-
-
 def evaluate_monitor_rules(rules: NormalizedMonitorRules, content: str) -> MonitorRuleMatch:
     comparable_content = _comparison_key(_normalize_text(content))
     matched_any = tuple(
-        keyword for keyword in rules.match_any if _contains_keyword(comparable_content, keyword)
+        keyword for keyword in rules.match_any if _comparison_key(keyword) in comparable_content
     )
     matched_all = tuple(
-        keyword for keyword in rules.match_all if _contains_keyword(comparable_content, keyword)
+        keyword for keyword in rules.match_all if _comparison_key(keyword) in comparable_content
     )
     excluded_by = tuple(
-        keyword for keyword in rules.exclude if _contains_keyword(comparable_content, keyword)
+        keyword for keyword in rules.exclude if _comparison_key(keyword) in comparable_content
     )
     any_matches = not rules.match_any or bool(matched_any)
     all_matches = len(matched_all) == len(rules.match_all)
@@ -318,45 +275,11 @@ class MonitorScheduleService:
             for (owner_id, topic_id), (version, source_keys) in grouped.items()
         )
 
-    def list_active_hotlist_topics_in_transaction(
-        self, *, owner_id: UUID
-    ) -> tuple[ActiveHotlistTopic, ...]:
-        if not self._session.in_transaction():
-            raise RuntimeError("hotlist topic scan requires the caller's transaction")
-        rows = self._session.execute(
-            select(MonitorTopic, MonitorTopicVersion)
-            .join(
-                MonitorTopicVersion,
-                and_(
-                    MonitorTopicVersion.topic_id == MonitorTopic.id,
-                    MonitorTopicVersion.version == MonitorTopic.current_version,
-                ),
-            )
-            .where(
-                MonitorTopic.owner_id == owner_id,
-                MonitorTopic.status == MonitorTopicStatus.ACTIVE.value,
-            )
-            .order_by(MonitorTopic.id)
-        ).all()
-        return tuple(
-            ActiveHotlistTopic(
-                owner_id=owner_id,
-                topic_id=topic.id,
-                name=topic.name,
-                rules=normalize_monitor_rules(
-                    match_any=version.match_any,
-                    match_all=version.match_all,
-                    exclude=version.exclude,
-                ),
-            )
-            for topic, version in rows
-        )
-
     def advance_collection_in_transaction(
         self,
         *,
         schedule: DueCollectionSchedule,
-        job_id: UUID | None,
+        job_id: UUID,
         next_run_at: datetime,
         updated_at: datetime,
     ) -> None:
@@ -376,8 +299,7 @@ class MonitorScheduleService:
         if model is None:
             raise RuntimeError("claimed collection schedule is no longer visible")
         model.next_run_at = next_run_at
-        if job_id is not None:
-            model.last_job_id = job_id
+        model.last_job_id = job_id
         model.updated_at = updated_at
 
 
@@ -566,9 +488,7 @@ class MonitorTopicService:
         now = self._clock()
         self._session.rollback()
         with self._session.begin():
-            source_intervals = self._require_applied_search_sources(
-                owner_id=owner_id, source_keys=source_keys
-            )
+            self._require_applied_search_sources(owner_id=owner_id, source_keys=source_keys)
             topic = MonitorTopic(
                 id=uuid4(),
                 owner_id=owner_id,
@@ -595,16 +515,12 @@ class MonitorTopicService:
                 match_any=list(rules.match_any),
                 match_all=list(rules.match_all),
                 exclude=list(rules.exclude),
-                source_keys=list(source_keys),
-                collection_interval_seconds=command.collection_interval_seconds,
                 created_at=now,
             )
             self._session.add(topic)
             self._session.flush()
             self._session.add(version)
-            self._sync_search_schedules(
-                topic=topic, source_keys=source_keys, source_intervals=source_intervals, now=now
-            )
+            self._sync_search_schedules(topic=topic, source_keys=source_keys, now=now)
             view = self._view(topic, version, source_keys=source_keys)
         return view
 
@@ -728,9 +644,7 @@ class MonitorTopicService:
             source = self._find_topic(owner_id=owner_id, topic_id=topic_id)
             source_version = self._find_version(source)
             source_keys = self._source_keys(source)
-            source_intervals = self._require_applied_search_sources(
-                owner_id=owner_id, source_keys=source_keys
-            )
+            self._require_applied_search_sources(owner_id=owner_id, source_keys=source_keys)
             clone = MonitorTopic(
                 id=uuid4(),
                 owner_id=owner_id,
@@ -757,16 +671,12 @@ class MonitorTopicService:
                 match_any=list(source_version.match_any),
                 match_all=list(source_version.match_all),
                 exclude=list(source_version.exclude),
-                source_keys=list(source_keys),
-                collection_interval_seconds=source.collection_interval_seconds,
                 created_at=now,
             )
             self._session.add(clone)
             self._session.flush()
             self._session.add(clone_version)
-            self._sync_search_schedules(
-                topic=clone, source_keys=source_keys, source_intervals=source_intervals, now=now
-            )
+            self._sync_search_schedules(topic=clone, source_keys=source_keys, now=now)
             view = self._view(clone, clone_version, source_keys=source_keys)
         return view
 
@@ -816,9 +726,7 @@ class MonitorTopicService:
                 raise ApplicationError("topic_archived")
             if topic.current_version != command.expected_version:
                 raise ApplicationError("topic_version_conflict")
-            source_intervals = self._require_applied_search_sources(
-                owner_id=owner_id, source_keys=source_keys
-            )
+            self._require_applied_search_sources(owner_id=owner_id, source_keys=source_keys)
             current = self._find_version(topic)
             rules_changed = (
                 tuple(current.match_any) != rules.match_any
@@ -826,23 +734,14 @@ class MonitorTopicService:
                 or tuple(current.exclude) != rules.exclude
             )
             name_changed = topic.name != name
-            collection_changed = (
-                tuple(current.source_keys) != source_keys
-                or current.collection_interval_seconds != command.collection_interval_seconds
-            )
-            if (
-                topic.status == MonitorTopicStatus.ACTIVE.value
-                and collection_changed
-                and source_keys
-            ):
-                self._require_available_source_budget(owner_id=owner_id, source_keys=source_keys)
             settings_changed = (
-                collection_changed
+                topic.collection_interval_seconds != command.collection_interval_seconds
                 or topic.report_time != command.report_time
                 or topic.weekly_report_enabled != command.weekly_report_enabled
                 or tuple(topic.notification_target_names) != notification_target_names
+                or tuple(self._source_keys(topic)) != source_keys
             )
-            if rules_changed or collection_changed:
+            if rules_changed:
                 next_version = topic.current_version + 1
                 current = MonitorTopicVersion(
                     topic_id=topic.id,
@@ -851,8 +750,6 @@ class MonitorTopicService:
                     match_any=list(rules.match_any),
                     match_all=list(rules.match_all),
                     exclude=list(rules.exclude),
-                    source_keys=list(source_keys),
-                    collection_interval_seconds=command.collection_interval_seconds,
                     created_at=now,
                 )
                 self._session.add(current)
@@ -871,12 +768,7 @@ class MonitorTopicService:
                 topic.weekly_report_enabled = command.weekly_report_enabled
                 topic.notification_target_names = list(notification_target_names)
                 topic.updated_at = now
-                self._sync_search_schedules(
-                    topic=topic,
-                    source_keys=source_keys,
-                    source_intervals=source_intervals,
-                    now=now,
-                )
+                self._sync_search_schedules(topic=topic, source_keys=source_keys, now=now)
             view = self._view(topic, current, source_keys=source_keys)
         return view
 
@@ -902,21 +794,12 @@ class MonitorTopicService:
                 source_keys = self._source_keys(topic)
                 if not source_keys:
                     raise ApplicationError("topic_not_ready")
-                source_intervals = self._require_applied_search_sources(
-                    owner_id=owner_id, source_keys=source_keys
-                )
-                self._require_available_source_budget(owner_id=owner_id, source_keys=source_keys)
+                self._require_applied_search_sources(owner_id=owner_id, source_keys=source_keys)
                 topic.readiness_status = MonitorTopicReadinessStatus.READY.value
                 if topic.status != target.value:
                     topic.status = target.value
                     topic.updated_at = now
                 self._set_schedules_enabled(topic=topic, enabled=True, now=now)
-                self._sync_search_schedules(
-                    topic=topic,
-                    source_keys=source_keys,
-                    source_intervals=source_intervals,
-                    now=now,
-                )
             elif topic.status != target.value:
                 topic.status = target.value
                 topic.updated_at = now
@@ -971,7 +854,7 @@ class MonitorTopicService:
         *,
         owner_id: UUID,
         source_keys: tuple[str, ...],
-    ) -> dict[str, int]:
+    ) -> None:
         applied = load_applied_source_presets_in_transaction(
             self._session,
             owner_id=owner_id,
@@ -981,56 +864,12 @@ class MonitorTopicService:
             SourceCapability.SEARCH not in preset.capabilities for preset in applied.values()
         ):
             raise ApplicationError("source_preset_not_applied")
-        readiness = load_source_access_readiness(
-            self._session, owner_id=owner_id, now=self._clock()
-        )
-        intervals: dict[str, int] = {}
-        for source_key, preset in applied.items():
-            policy = load_execution_policy_in_transaction(
-                self._session,
-                owner_id=owner_id,
-                connection_id=preset.connection_id,
-                connection_version=preset.connection_version,
-            )
-            if (
-                not readiness.get((source_key, SourceCapability.SEARCH), False)
-                or not policy.enabled
-            ):
-                raise ApplicationError("source_preset_not_applied")
-            intervals[source_key] = policy.min_interval_seconds
-        return intervals
-
-    def _require_available_source_budget(
-        self, *, owner_id: UUID, source_keys: tuple[str, ...]
-    ) -> None:
-        snapshots = ResourceBudgetService(self._session, clock=self._clock).budget_usage_snapshot(
-            owner_id=owner_id
-        )
-        for source_key in source_keys:
-            matching = [
-                budget
-                for budget in snapshots
-                if budget.metric is BudgetMetric.NETWORK_REQUEST
-                and (
-                    (
-                        budget.scope_kind is BudgetScopeKind.SOURCE
-                        and budget.scope_reference == source_key
-                    )
-                    or budget.scope_kind is BudgetScopeKind.GLOBAL
-                )
-            ]
-            if not any(budget.scope_kind is BudgetScopeKind.SOURCE for budget in matching) or any(
-                not budget.enabled or budget.remaining_units is None or budget.remaining_units < 1
-                for budget in matching
-            ):
-                raise ApplicationError("topic_not_ready")
 
     def _sync_search_schedules(
         self,
         *,
         topic: MonitorTopic,
         source_keys: tuple[str, ...],
-        source_intervals: dict[str, int],
         now: datetime,
     ) -> None:
         existing = {
@@ -1058,9 +897,7 @@ class MonitorTopicService:
                         topic_id=topic.id,
                         source_key=source_key,
                         capability=SourceCapability.SEARCH.value,
-                        interval_seconds=max(
-                            topic.collection_interval_seconds, source_intervals[source_key]
-                        ),
+                        interval_seconds=topic.collection_interval_seconds,
                         next_run_at=now,
                         enabled=topic.status == MonitorTopicStatus.ACTIVE.value,
                         last_job_id=None,
@@ -1069,15 +906,9 @@ class MonitorTopicService:
                     )
                 )
                 continue
-            interval_seconds = max(topic.collection_interval_seconds, source_intervals[source_key])
-            enabled = topic.status == MonitorTopicStatus.ACTIVE.value
-            if (
-                existing_schedule.interval_seconds != interval_seconds
-                or existing_schedule.enabled != enabled
-            ):
-                existing_schedule.interval_seconds = interval_seconds
-                existing_schedule.enabled = enabled
-                existing_schedule.updated_at = now
+            existing_schedule.interval_seconds = topic.collection_interval_seconds
+            existing_schedule.enabled = topic.status == MonitorTopicStatus.ACTIVE.value
+            existing_schedule.updated_at = now
 
     def _set_schedules_enabled(
         self,

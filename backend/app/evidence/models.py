@@ -40,8 +40,7 @@ class SourceAccessPolicy(Base):
             name="source_access_policies_source_key_check",
         ),
         CheckConstraint(
-            "capability IN ('search', 'author_posts', 'comments', 'replies', "
-            "'page_content', 'hotlist')",
+            "capability IN ('search', 'author_posts', 'comments', 'replies', 'page_content')",
             name="source_access_policies_capability_check",
         ),
         CheckConstraint(

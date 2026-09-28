@@ -36,8 +36,7 @@ def owner_client() -> Iterator[TestClient]:
     with engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE collection_due_windows, hotlist_entries, hotlist_snapshots, "
-                "content_version_relations, content_visibility_observations, "
+                "TRUNCATE content_version_relations, content_visibility_observations, "
                 "content_observations, content_versions, "
                 "content_discoveries, content_threads, content_records, "
                 "source_capability_evidence, source_connection_versions, "
@@ -63,8 +62,7 @@ def owner_client() -> Iterator[TestClient]:
         with engine.begin() as connection:
             connection.execute(
                 text(
-                    "TRUNCATE collection_due_windows, hotlist_entries, hotlist_snapshots, "
-                    "content_version_relations, content_visibility_observations, "
+                    "TRUNCATE content_version_relations, content_visibility_observations, "
                     "content_observations, content_versions, "
                     "content_discoveries, content_threads, content_records, "
                     "source_capability_evidence, source_connection_versions, "

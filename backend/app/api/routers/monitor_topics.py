@@ -8,7 +8,6 @@ from fastapi import APIRouter, Query, Response, status
 from api.dependencies import (
     AuthenticatedIdentityDependency,
     CsrfProtectedIdentityDependency,
-    MonitorTopicRunServiceDependency,
     MonitorTopicServiceDependency,
 )
 from core.schemas import ErrorView, PageView
@@ -16,8 +15,6 @@ from monitors.schemas import (
     MonitorTopicCreateInput,
     MonitorTopicPreviewInput,
     MonitorTopicPreviewView,
-    MonitorTopicRunInput,
-    MonitorTopicRunView,
     MonitorTopicUpdateInput,
     MonitorTopicView,
 )
@@ -75,7 +72,7 @@ def list_monitor_topics(
     status_code=status.HTTP_201_CREATED,
     summary="创建监控主题",
     description=(
-        "保存本地匹配规则和采集版本; 所选来源须有已应用搜索预设及当前准入策略。"
+        "保存本地匹配规则和主题运行设置; 所选来源必须已应用预设并支持搜索。"
         "新主题保持暂停, 来源选择会生成停用的搜索调度行。"
     ),
     responses=_WRITE_RESPONSES,
@@ -139,8 +136,8 @@ def get_monitor_topic(
     status_code=status.HTTP_200_OK,
     summary="编辑监控主题",
     description=(
-        "使用 expected_version 防止覆盖并发修改; 规则、来源或主题间隔变化创建采集版本; "
-        "名称与报告偏好只更新当前主题, 不改写旧 Job。"
+        "使用 expected_version 防止覆盖并发修改; 规则变化创建新版本; "
+        "来源与运行设置直接更新主题和搜索调度行。"
     ),
     responses=_WRITE_RESPONSES,
 )
@@ -207,7 +204,7 @@ def pause_monitor_topic(
     response_model=MonitorTopicView,
     status_code=status.HTTP_200_OK,
     summary="恢复监控主题",
-    description="仅已准入、启用且预算可用的搜索来源可恢复; 恢复会启用其调度行。",
+    description="仅至少选择一个已应用搜索来源的暂停主题可恢复; 恢复会启用其调度行。",
     responses=_WRITE_RESPONSES,
 )
 def resume_monitor_topic(
@@ -239,28 +236,3 @@ def archive_monitor_topic(
     topic = service.archive_topic(owner_id=identity.view.user.id, topic_id=topic_id)
     response.headers["cache-control"] = "no-store"
     return topic
-
-
-@router.post(
-    "/{topic_id}/runs",
-    operation_id="runMonitorTopic",
-    response_model=MonitorTopicRunView,
-    status_code=status.HTTP_202_ACCEPTED,
-    summary="立即运行监控主题来源",
-    description="按当前主题规则和已应用来源预设创建搜索任务。重复操作标识返回原受理结果。",
-    responses={
-        **_WRITE_RESPONSES,
-        200: {"model": MonitorTopicRunView, "description": "同一次操作已受理"},
-    },
-)
-def run_monitor_topic(
-    topic_id: UUID,
-    payload: MonitorTopicRunInput,
-    response: Response,
-    service: MonitorTopicRunServiceDependency,
-    identity: CsrfProtectedIdentityDependency,
-) -> MonitorTopicRunView:
-    result = service.run(owner_id=identity.view.user.id, topic_id=topic_id, command=payload)
-    response.status_code = status.HTTP_200_OK if result.replayed else status.HTTP_202_ACCEPTED
-    response.headers["cache-control"] = "no-store"
-    return result.view

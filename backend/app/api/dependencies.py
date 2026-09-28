@@ -11,13 +11,10 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from connections.services import SourceConnectionService
 from content.collection import WebPageCollectionService
-from content.hotlist import HotlistService
 from content.services import ContentService
 from core.errors import DependencyUnavailableError
 from identity.services import AuthenticatedIdentity, IdentityService
-from jobs.coverage import CollectionCoverageQueryService
 from jobs.services import JobService
-from monitors.runs import MonitorTopicRunService
 from monitors.services import MonitorTopicService
 from reports.services import ReportService
 
@@ -60,16 +57,6 @@ def get_job_service(session: SessionDependency) -> JobService:
 JobServiceDependency = Annotated[JobService, Depends(get_job_service)]
 
 
-def get_collection_coverage_service(session: SessionDependency) -> CollectionCoverageQueryService:
-    return CollectionCoverageQueryService(session)
-
-
-CollectionCoverageServiceDependency = Annotated[
-    CollectionCoverageQueryService,
-    Depends(get_collection_coverage_service),
-]
-
-
 def get_webpage_collection_service(session: SessionDependency) -> WebPageCollectionService:
     return WebPageCollectionService(session)
 
@@ -87,18 +74,6 @@ def get_monitor_topic_service(session: SessionDependency) -> MonitorTopicService
 MonitorTopicServiceDependency = Annotated[
     MonitorTopicService,
     Depends(get_monitor_topic_service),
-]
-
-
-def get_monitor_topic_run_service(
-    request: Request, session: SessionDependency
-) -> MonitorTopicRunService:
-    return MonitorTopicRunService(session, request.app.state.settings)
-
-
-MonitorTopicRunServiceDependency = Annotated[
-    MonitorTopicRunService,
-    Depends(get_monitor_topic_run_service),
 ]
 
 
@@ -121,13 +96,6 @@ def get_content_service(session: SessionDependency) -> ContentService:
 
 
 ContentServiceDependency = Annotated[ContentService, Depends(get_content_service)]
-
-
-def get_hotlist_service(session: SessionDependency) -> HotlistService:
-    return HotlistService(session)
-
-
-HotlistServiceDependency = Annotated[HotlistService, Depends(get_hotlist_service)]
 
 
 def get_report_service(session: SessionDependency) -> ReportService:

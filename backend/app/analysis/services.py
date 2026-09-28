@@ -26,10 +26,8 @@ from analysis.schemas import (
     AnalysisPromptItem,
     AnnotationOutputEnvelope,
     AnnotationOutputItem,
-    AnnotationResultState,
     AnnotationStatus,
     AnnotationWrite,
-    WindowAnnotationCountView,
 )
 from content.schemas import AnalysisPostContentView
 from content.services import (
@@ -38,7 +36,6 @@ from content.services import (
     load_recent_post_versions_for_analysis,
 )
 from core.config import Settings
-from jobs.coverage import CollectionDueWindowService
 from jobs.execution import JobCompletion, JobExecutionFailure
 from jobs.schemas import (
     JobAcceptanceInput,
@@ -48,11 +45,7 @@ from jobs.schemas import (
     JobStatus,
     JobView,
 )
-from jobs.services import (
-    JobService,
-    load_content_job_contexts,
-    load_job_execution_configuration,
-)
+from jobs.services import JobService, load_job_execution_configuration
 from monitors.services import MonitorTopicService, NormalizedMonitorRules, evaluate_monitor_rules
 
 _ANALYSIS_OPERATION_NAMESPACE = UUID("16cfeef5-e41d-43a2-8212-4e21cc6f4c85")
@@ -60,8 +53,6 @@ _MAX_BATCH_ITEMS = 30
 _MAX_SERIALIZED_CHARACTERS = 24_000
 _MAX_BODY_CHARACTERS = 1_500
 _MAX_COMMENTS_PER_POST = 50
-_MAX_COLLECTION_ANALYSIS_JOBS = 100
-_ANNOTATION_READ_BATCH_SIZE = 500
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,24 +203,14 @@ def resolve_annotation_results(
                         viewpoints=output.viewpoints,
                         ai_call_id=ai_call_id,
                         status=AnnotationStatus.ANNOTATED,
-                        result_state=AnnotationResultState.VALID,
                     )
                 )
                 continue
-        error_code = (
-            "analysis_output_missing"
-            if not candidates
-            else "analysis_output_duplicate"
-            if len(candidates) > 1
-            else "analysis_output_invalid"
-        )
         resolved.append(
             AnnotationWrite(
                 content_version_id=content_version_id,
                 ai_call_id=ai_call_id,
                 status=AnnotationStatus.UNANALYZED,
-                result_state=AnnotationResultState.INVALID,
-                error_code=error_code,
             )
         )
     return tuple(resolved)
@@ -264,242 +245,6 @@ def analysis_failure(error: AiCallError, *, now: datetime) -> JobExecutionFailur
 class AnalysisService:
     def __init__(self, session: Session) -> None:
         self._session = session
-
-    def collection_analysis_counts_in_transaction(
-        self,
-        *,
-        owner_id: UUID,
-        targets_by_job: Mapping[UUID, tuple[UUID, int, tuple[UUID, ...]]],
-    ) -> dict[UUID, WindowAnnotationCountView | None]:
-        """Count frozen analysis targets for a bounded page of collection jobs.
-
-        A missing or conflicting prompt identity is unknown, not a pending zero.
-        Every target version must have a persisted annotation or analysis Job scope
-        identifying the same prompt version before its Job can be counted.
-        The caller must supply a complete, proven target set; an empty tuple is
-        treated as a confirmed zero only under that contract.
-        """
-        if not self._session.in_transaction():
-            raise RuntimeError("collection analysis reads require the caller's transaction")
-        if len(targets_by_job) > _MAX_COLLECTION_ANALYSIS_JOBS:
-            raise ValueError("collection analysis reads allow at most 100 jobs")
-        if not targets_by_job:
-            return {}
-
-        contexts = load_content_job_contexts(
-            self._session, owner_id=owner_id, job_ids=set(targets_by_job)
-        )
-        zero = WindowAnnotationCountView(
-            total_count=0,
-            annotated_count=0,
-            pending_count=0,
-            failed_count=0,
-            abnormal_count=0,
-        )
-        result: dict[UUID, WindowAnnotationCountView | None] = {
-            job_id: None for job_id in targets_by_job
-        }
-        known: dict[UUID, tuple[UUID, int, set[UUID]]] = {}
-        targets_by_scope: dict[tuple[UUID, int], set[UUID]] = {}
-        for job_id, (topic_id, rule_version, version_ids) in targets_by_job.items():
-            if len(set(version_ids)) != len(version_ids):
-                raise ValueError("collection analysis content versions must be distinct")
-            context = contexts.get(job_id)
-            if context is None or rule_version < 1:
-                continue
-            if context.configuration_ref.startswith("topic:") and (
-                context.configuration_ref != f"topic:{topic_id}"
-                or context.configuration_version != rule_version
-            ):
-                continue
-            if not version_ids:
-                result[job_id] = zero
-                continue
-            versions = set(version_ids)
-            known[job_id] = (topic_id, rule_version, versions)
-            targets_by_scope.setdefault((topic_id, rule_version), set()).update(versions)
-        if not known:
-            return result
-
-        prompt_by_target: dict[tuple[UUID, int, UUID], set[str]] = {}
-        annotation_states: dict[tuple[UUID, int, str, UUID], str] = {}
-        all_versions = sorted(
-            {version for versions in targets_by_scope.values() for version in versions},
-            key=str,
-        )
-        topic_ids = {topic_id for topic_id, _ in targets_by_scope}
-        rule_versions = {rule_version for _, rule_version in targets_by_scope}
-        for start in range(0, len(all_versions), _ANNOTATION_READ_BATCH_SIZE):
-            batch = all_versions[start : start + _ANNOTATION_READ_BATCH_SIZE]
-            rows = self._session.execute(
-                select(
-                    ContentAnnotation.topic_id,
-                    ContentAnnotation.topic_rule_version,
-                    ContentAnnotation.content_version_id,
-                    ContentAnnotation.prompt_version,
-                    ContentAnnotation.result_state,
-                ).where(
-                    ContentAnnotation.owner_id == owner_id,
-                    ContentAnnotation.topic_id.in_(topic_ids),
-                    ContentAnnotation.topic_rule_version.in_(rule_versions),
-                    ContentAnnotation.content_version_id.in_(batch),
-                )
-            ).all()
-            for topic_id, rule_version, version_id, prompt_version, state in rows:
-                if version_id not in targets_by_scope.get((topic_id, rule_version), ()):
-                    continue
-                prompt_by_target.setdefault((topic_id, rule_version, version_id), set()).add(
-                    prompt_version
-                )
-                annotation_states[(topic_id, rule_version, prompt_version, version_id)] = state
-
-        failed_targets: set[tuple[UUID, int, str, UUID]] = set()
-        invalid_scopes: set[tuple[UUID, int]] = set()
-        # The jobs domain owns its ORM; read its owner-scoped DTOs once for the page.
-        analysis_jobs = CollectionDueWindowService(self._session).list_analysis_jobs_in_transaction(
-            owner_id=owner_id, topic_ids=topic_ids
-        )
-        for job in analysis_jobs:
-            raw_topic = job.scope.get("topic_id")
-            raw_rule = job.scope.get("topic_rule_version")
-            if not isinstance(raw_rule, int) or isinstance(raw_rule, bool):
-                continue
-            try:
-                scope_key = (UUID(str(raw_topic)), raw_rule)
-            except ValueError:
-                continue
-            candidate_versions = targets_by_scope.get(scope_key)
-            if candidate_versions is None:
-                continue
-            try:
-                scope = AnalysisJobScope.from_job_scope(job.scope)
-            except (TypeError, ValueError, ValidationError):
-                invalid_scopes.add(scope_key)
-                continue
-            matched = candidate_versions.intersection(scope.content_version_ids)
-            for version_id in matched:
-                prompt_by_target.setdefault((*scope_key, version_id), set()).add(
-                    scope.prompt_version
-                )
-                if job.status in {
-                    JobStatus.FAILED,
-                    JobStatus.PARTIALLY_SUCCEEDED,
-                    JobStatus.CANCELLED,
-                }:
-                    failed_targets.add((*scope_key, scope.prompt_version, version_id))
-
-        for job_id, (topic_id, rule_version, versions) in known.items():
-            scope_key = (topic_id, rule_version)
-            if scope_key in invalid_scopes:
-                continue
-            prompts = {
-                prompt
-                for version_id in versions
-                for prompt in prompt_by_target.get((topic_id, rule_version, version_id), ())
-            }
-            if len(prompts) != 1 or any(
-                len(prompt_by_target.get((topic_id, rule_version, version_id), ())) != 1
-                for version_id in versions
-            ):
-                continue
-            prompt_version = prompts.pop()
-            annotated = abnormal = failed = 0
-            for version_id in versions:
-                target = (topic_id, rule_version, prompt_version, version_id)
-                state = annotation_states.get(target)
-                if state == AnnotationResultState.VALID.value:
-                    annotated += 1
-                elif state == AnnotationResultState.INVALID.value:
-                    abnormal += 1
-                elif state == AnnotationResultState.FAILED.value or target in failed_targets:
-                    failed += 1
-            result[job_id] = WindowAnnotationCountView(
-                total_count=len(versions),
-                annotated_count=annotated,
-                pending_count=len(versions) - annotated - abnormal - failed,
-                failed_count=failed,
-                abnormal_count=abnormal,
-            )
-        return result
-
-    def window_annotation_counts_in_transaction(
-        self,
-        *,
-        owner_id: UUID,
-        topic_id: UUID,
-        topic_rule_version: int,
-        prompt_version: str,
-        content_version_ids: tuple[UUID, ...],
-    ) -> WindowAnnotationCountView:
-        """Separate missing annotations, failed jobs and malformed model output."""
-        if not self._session.in_transaction():
-            raise RuntimeError("annotation count reads require the caller's transaction")
-        if len(set(content_version_ids)) != len(content_version_ids):
-            raise ValueError("content version identities must be distinct")
-        if not content_version_ids:
-            return WindowAnnotationCountView(
-                total_count=0,
-                annotated_count=0,
-                pending_count=0,
-                failed_count=0,
-                abnormal_count=0,
-            )
-        annotations = self._session.scalars(
-            select(ContentAnnotation).where(
-                ContentAnnotation.owner_id == owner_id,
-                ContentAnnotation.topic_id == topic_id,
-                ContentAnnotation.topic_rule_version == topic_rule_version,
-                ContentAnnotation.prompt_version == prompt_version,
-                ContentAnnotation.content_version_id.in_(content_version_ids),
-            )
-        ).all()
-        annotated = {
-            row.content_version_id
-            for row in annotations
-            if row.result_state == AnnotationResultState.VALID.value
-        }
-        abnormal = {
-            row.content_version_id
-            for row in annotations
-            if row.result_state == AnnotationResultState.INVALID.value
-        }
-        row_failed = {
-            row.content_version_id
-            for row in annotations
-            if row.result_state == AnnotationResultState.FAILED.value
-        }
-        row_pending = {
-            row.content_version_id
-            for row in annotations
-            if row.result_state == AnnotationResultState.PENDING.value
-        }
-        failed: set[UUID] = set()
-        for job in CollectionDueWindowService(self._session).list_analysis_jobs_in_transaction(
-            owner_id=owner_id
-        ):
-            if job.status not in {
-                JobStatus.FAILED,
-                JobStatus.PARTIALLY_SUCCEEDED,
-                JobStatus.CANCELLED,
-            }:
-                continue
-            scope = AnalysisJobScope.from_job_scope(job.scope)
-            if (
-                scope.topic_id == topic_id
-                and scope.topic_rule_version == topic_rule_version
-                and scope.prompt_version == prompt_version
-            ):
-                failed.update(set(scope.content_version_ids) & set(content_version_ids))
-        failed.update(row_failed)
-        failed.difference_update(annotated | abnormal | row_pending)
-        pending = set(content_version_ids) - annotated - abnormal - failed
-        return WindowAnnotationCountView(
-            total_count=len(content_version_ids),
-            annotated_count=len(annotated),
-            pending_count=len(pending),
-            failed_count=len(failed),
-            abnormal_count=len(abnormal),
-        )
 
     def enqueue_due_batches_in_transaction(
         self,
@@ -596,7 +341,6 @@ class AnalysisService:
                     ContentAnnotation.topic_rule_version == topic_rule_version,
                     ContentAnnotation.prompt_version == prompt_version,
                     ContentAnnotation.content_version_id.in_(content_version_ids),
-                    ContentAnnotation.result_state == AnnotationResultState.VALID.value,
                 )
             )
         )
@@ -638,86 +382,12 @@ class AnalysisService:
                     viewpoints=list(result.viewpoints),
                     ai_call_id=result.ai_call_id,
                     status=result.status.value,
-                    result_state=result.result_state.value,
-                    error_code=result.error_code,
-                    diagnostic_history=[],
                     created_at=created_at,
-                    updated_at=created_at,
                 )
                 .on_conflict_do_nothing(
                     constraint="content_annotations_owner_version_topic_rule_prompt_key"
                 )
             )
-            current = self._session.scalar(
-                select(ContentAnnotation)
-                .where(
-                    ContentAnnotation.owner_id == owner_id,
-                    ContentAnnotation.content_version_id == result.content_version_id,
-                    ContentAnnotation.topic_id == topic_id,
-                    ContentAnnotation.topic_rule_version == topic_rule_version,
-                    ContentAnnotation.prompt_version == prompt_version,
-                )
-                .with_for_update()
-            )
-            if current is None:
-                raise RuntimeError("annotation insertion did not produce a row")
-            if (
-                current.ai_call_id == result.ai_call_id
-                and current.result_state == result.result_state.value
-            ):
-                continue
-            diagnostic = {
-                "result_state": result.result_state.value,
-                "error_code": result.error_code,
-                "ai_call_id": str(result.ai_call_id) if result.ai_call_id else None,
-                "recorded_at": created_at.astimezone(UTC).isoformat(),
-            }
-            history = list(current.diagnostic_history)
-            if current.result_state == AnnotationResultState.VALID.value:
-                if result.result_state is not AnnotationResultState.VALID and not any(
-                    entry.get("ai_call_id") == diagnostic["ai_call_id"]
-                    and entry.get("result_state") == diagnostic["result_state"]
-                    for entry in history
-                ):
-                    current.diagnostic_history = [*history, diagnostic]
-                    current.updated_at = max(current.updated_at, created_at)
-                continue
-            if result.result_state is AnnotationResultState.PENDING:
-                continue
-            if (
-                created_at < current.updated_at
-                and result.result_state is not AnnotationResultState.VALID
-            ):
-                if not any(
-                    entry.get("ai_call_id") == diagnostic["ai_call_id"]
-                    and entry.get("result_state") == diagnostic["result_state"]
-                    for entry in history
-                ):
-                    current.diagnostic_history = [*history, diagnostic]
-                continue
-            previous = {
-                "result_state": current.result_state,
-                "error_code": current.error_code,
-                "ai_call_id": str(current.ai_call_id) if current.ai_call_id else None,
-                "recorded_at": current.updated_at.astimezone(UTC).isoformat(),
-            }
-            if current.result_state != AnnotationResultState.PENDING.value and not any(
-                entry.get("ai_call_id") == previous["ai_call_id"]
-                and entry.get("result_state") == previous["result_state"]
-                for entry in history
-            ):
-                history.append(previous)
-            current.diagnostic_history = history
-            current.status = result.status.value
-            current.result_state = result.result_state.value
-            current.error_code = result.error_code
-            current.ai_call_id = result.ai_call_id
-            current.relevant = result.relevant
-            current.relevance_reason = result.relevance_reason
-            current.sentiment = result.sentiment.value if result.sentiment else None
-            current.summary = result.summary
-            current.viewpoints = list(result.viewpoints)
-            current.updated_at = max(current.updated_at, created_at)
 
     def _missing_posts(
         self,
@@ -779,50 +449,12 @@ class AnalysisAnnotateExecutor:
                         output_schema=ANALYSIS_OUTPUT_SCHEMA,
                     )
             except AiCallError as error:
-                self._persist_results(
-                    message=message,
-                    scope=scope,
-                    posts=posts,
-                    results=tuple(
-                        AnnotationWrite(
-                            content_version_id=item.content_version_id,
-                            ai_call_id=error.call_id,
-                            status=AnnotationStatus.UNANALYZED,
-                            result_state=(
-                                AnnotationResultState.FAILED
-                                if error.call_id is not None
-                                else AnnotationResultState.PENDING
-                            ),
-                            error_code=(
-                                f"analysis_{error.code.value}"
-                                if error.call_id is not None
-                                else None
-                            ),
-                        )
-                        for item in items
-                    ),
-                )
                 raise analysis_failure(error, now=self._clock()) from error
             if completion.call_id is None:
                 raise self._configuration_failure("analysis_ai_call_missing")
             try:
                 envelope = AnnotationOutputEnvelope.model_validate(completion.output)
             except ValidationError as error:
-                self._persist_results(
-                    message=message,
-                    scope=scope,
-                    posts=posts,
-                    results=tuple(
-                        AnnotationWrite(
-                            content_version_id=item.content_version_id,
-                            ai_call_id=completion.call_id,
-                            status=AnnotationStatus.UNANALYZED,
-                            result_state=AnnotationResultState.INVALID,
-                            error_code="analysis_output_envelope_invalid",
-                        )
-                        for item in items
-                    ),
-                )
                 raise JobExecutionFailure(
                     error_code="analysis_invalid_output",
                     category=JobFailureCategory.INVALID_RESPONSE,
@@ -835,7 +467,16 @@ class AnalysisAnnotateExecutor:
                 raw_items=envelope.items,
                 ai_call_id=completion.call_id,
             )
-            self._persist_results(message=message, scope=scope, posts=posts, results=results)
+            with self._sessions() as session, session.begin():
+                AnalysisService(session).persist_results_in_transaction(
+                    owner_id=message.owner_id,
+                    topic_id=scope.topic_id,
+                    topic_rule_version=scope.topic_rule_version,
+                    prompt_version=scope.prompt_version,
+                    posts=posts,
+                    results=results,
+                    created_at=self._clock(),
+                )
             invalid_count = sum(result.status is AnnotationStatus.UNANALYZED for result in results)
             job_completion = (
                 JobCompletion(status=JobStatus.SUCCEEDED)
@@ -846,7 +487,7 @@ class AnalysisAnnotateExecutor:
                         error_code="analysis_items_invalid",
                         category=JobFailureCategory.INVALID_RESPONSE,
                         occurred_at=self._clock(),
-                        next_action="由分析补偿流程重试无效条目",
+                        next_action="随下一提示词版本重新分析未分析条目",
                         manual_retry_allowed=False,
                     ),
                 )
@@ -857,25 +498,6 @@ class AnalysisAnnotateExecutor:
             )
         finally:
             client.close()
-
-    def _persist_results(
-        self,
-        *,
-        message: JobMessage,
-        scope: AnalysisJobScope,
-        posts: Mapping[UUID, AnalysisPostContentView],
-        results: Sequence[AnnotationWrite],
-    ) -> None:
-        with self._sessions() as session, session.begin():
-            AnalysisService(session).persist_results_in_transaction(
-                owner_id=message.owner_id,
-                topic_id=scope.topic_id,
-                topic_rule_version=scope.topic_rule_version,
-                prompt_version=scope.prompt_version,
-                posts=posts,
-                results=results,
-                created_at=self._clock(),
-            )
 
     def _load_execution(
         self,

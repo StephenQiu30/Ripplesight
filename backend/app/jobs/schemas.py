@@ -8,7 +8,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from connections.schemas import SourceExecutionPolicy
 from sources.contracts import SocialSourceCapability, SourceCapability, SourceSort, WebPageRequest
 
 type JobScopeValue = str | int | bool | None
@@ -110,165 +109,6 @@ class CoverageWindowView(BaseModel):
         if value.utcoffset() != timedelta(0):
             raise ValueError("coverage window bounds must be UTC")
         return value
-
-
-class DueAdmissionState(StrEnum):
-    PENDING = "pending"
-    ACCEPTED = "accepted"
-    SKIPPED = "skipped"
-    MISSED = "missed"
-
-
-class DueSkipReason(StrEnum):
-    QUIET = "quiet"
-    DISABLED = "disabled"
-    RATE_LIMITED = "rate_limited"
-    BUDGET = "budget"
-
-
-class CollectionDueWindowInput(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-
-    owner_id: UUID
-    schedule_key: UUID
-    topic_id: UUID | None
-    source_key: str = Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_-]{0,63}$")
-    capability: SourceCapability
-    due_at: datetime
-    window_start: datetime
-    window_end: datetime
-    connection_version: int | None = Field(default=None, ge=1)
-    policy_snapshot: SourceExecutionPolicy | None = None
-
-    @field_validator("due_at", "window_start", "window_end")
-    @classmethod
-    def require_utc(cls, value: datetime) -> datetime:
-        if value.utcoffset() != timedelta(0):
-            raise ValueError("due window timestamps must be UTC")
-        return value
-
-    @model_validator(mode="after")
-    def validate_bounds(self) -> CollectionDueWindowInput:
-        if self.window_start >= self.window_end or self.window_end > self.due_at:
-            raise ValueError("due window must be a half-open range ending by due_at")
-        return self
-
-
-class CollectionDueWindowView(CollectionDueWindowInput):
-    id: UUID
-    admission_state: DueAdmissionState
-    reason: str | None
-    operation_id: UUID | None
-    job_id: UUID | None
-    recorded_at: datetime
-
-
-class CollectionExecutionFactView(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    due: CollectionDueWindowView
-    job_status: JobStatus | None
-    requests_sent: int | None = Field(ge=0)
-    request_attempt_count: int | None = Field(ge=0)
-    charged_request_count: int | None = Field(ge=0)
-    request_budget_reconciled: bool | None
-    page_count: int | None = Field(ge=0)
-    observed_count: int | None = Field(ge=0)
-    coverage_status: CoverageWindowStatus | None
-    stop_reason: str | None
-    has_gap: bool
-
-
-class CollectionCoverageResultStatus(StrEnum):
-    PENDING = "pending"
-    NOT_ATTEMPTED = "not_attempted"
-    COMPLETE = "complete"
-    EMPTY = "empty"
-    PARTIAL = "partial"
-    FAILED = "failed"
-    STOPPED = "stopped"
-
-
-class CollectionCoverageAttemptView(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    attempt_id: UUID
-    collection_cycle_no: int = Field(ge=1)
-    started_at: datetime
-    finished_at: datetime | None
-    outcome: str | None
-
-
-class CollectionCoverageBudgetView(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    budget_key: str
-    policy_version: int = Field(ge=1)
-    limit_units: int = Field(ge=1)
-    reserved_units: int = Field(ge=0)
-    consumed_units: int = Field(ge=0)
-
-
-class CollectionCoverageGapView(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    starts_at: datetime
-    ends_at: datetime
-    reason: str
-
-
-class CollectionCoverageAnalysisView(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    pending_count: int | None = Field(ge=0)
-    failed_count: int | None = Field(ge=0)
-    invalid_count: int | None = Field(ge=0)
-    valid_count: int | None = Field(ge=0)
-
-
-class CollectionCoverageView(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    window_id: UUID
-    source_key: str
-    capability: SourceCapability
-    topic_id: UUID | None
-    due_at: datetime
-    window_start: datetime
-    window_end: datetime
-    admission_state: DueAdmissionState
-    admission_reason: str | None
-    current_connection_version: int | None
-    job_connection_version: int | None
-    job_id: UUID | None
-    job_status: JobStatus | None
-    attempts: tuple[CollectionCoverageAttemptView, ...] | None
-    started_at: datetime | None
-    finished_at: datetime | None
-    last_success_at: datetime | None
-    coverage_status: CollectionCoverageResultStatus
-    terminal_evidence: str | None
-    stop_reason: str | None
-    request_count: int | None = Field(ge=0)
-    request_attempt_count: int | None = Field(ge=0)
-    page_count: int | None = Field(ge=0)
-    observed_count: int | None = Field(ge=0)
-    inserted_count: int | None = Field(ge=0)
-    deduplicated_count: int | None = Field(ge=0)
-    analysis: CollectionCoverageAnalysisView | None
-    budgets: tuple[CollectionCoverageBudgetView, ...] | None
-    gaps: tuple[CollectionCoverageGapView, ...]
-    content_ids: tuple[UUID, ...] | None
-    snapshot_ids: tuple[UUID, ...] | None
-
-
-class AnalysisJobFactView(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    id: UUID
-    status: JobStatus
-    scope: dict[str, JobScopeValue]
-    last_error_code: str | None
 
 
 class JobControlStatus(StrEnum):
@@ -1097,16 +937,6 @@ class JobStatusView(BaseModel):
     failure: JobFailureView | None
     result_content_id: UUID | None
     retry_count: int = Field(ge=0)
-    collection_cycle_no: int = Field(ge=0)
-    collection_cycle_started_at: datetime | None
-    collection_cycle_requests_sent: int = Field(ge=0)
-    collection_cycle_pending: bool
-    latest_attempt_started_at: datetime | None
-    latest_attempt_finished_at: datetime | None
-    queue_wait_us: int | None = Field(ge=0)
-    attempt_elapsed_us: int | None = Field(ge=0)
-    total_elapsed_us: int | None = Field(ge=0)
-    collection_budget_remaining_us: int | None = Field(ge=0)
     next_run_at: datetime | None
     scheduled_for_at: datetime | None
     started_at: datetime | None

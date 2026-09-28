@@ -27,8 +27,6 @@ function capabilityLabel(capability: HotKeyAPI.SourceCapability): string {
       return "回复";
     case "page_content":
       return "页面正文";
-    case "hotlist":
-      return "热榜";
   }
 }
 

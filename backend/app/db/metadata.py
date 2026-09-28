@@ -13,8 +13,6 @@ from content.models import (
     ContentVersion,
     ContentVersionRelation,
     ContentVisibilityObservation,
-    HotlistEntryRecord,
-    HotlistSnapshot,
 )
 from db.base import Base
 from evidence.models import (
@@ -28,7 +26,6 @@ from evidence.models import (
 )
 from identity.models import IdentitySession, IdentityUser
 from jobs.models import (
-    CollectionDueWindow,
     CoverageWindow,
     Job,
     JobAttempt,
@@ -59,7 +56,6 @@ metadata = Base.metadata
 __all__ = [
     "AiCall",
     "CleanupTarget",
-    "CollectionDueWindow",
     "ContentAnnotation",
     "ContentDiscovery",
     "ContentObservation",
@@ -73,8 +69,6 @@ __all__ = [
     "EvidenceResource",
     "FollowedAccount",
     "FollowedAccountAlias",
-    "HotlistEntryRecord",
-    "HotlistSnapshot",
     "IdentitySession",
     "IdentityUser",
     "Job",

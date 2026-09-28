@@ -15,7 +15,6 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.base import Base
@@ -47,10 +46,6 @@ class ContentRecord(Base):
             name="content_records_native_scope_check",
         ),
         CheckConstraint("external_id <> ''", name="content_records_external_id_check"),
-        CheckConstraint(
-            "identity_basis IN ('guid', 'url_fallback')",
-            name="content_records_identity_basis_check",
-        ),
         Index("content_records_owner_id_idx", "owner_id", "id"),
     )
 
@@ -60,7 +55,6 @@ class ContentRecord(Base):
     object_type: Mapped[str] = mapped_column(String(16))
     native_scope: Mapped[str | None] = mapped_column(String(512))
     external_id: Mapped[str] = mapped_column(String(512))
-    identity_basis: Mapped[str | None] = mapped_column(String(16))
     created_at: Mapped[datetime]
 
 
@@ -94,83 +88,6 @@ class ContentDiscovery(Base):
     job_id: Mapped[UUID]
     first_observed_at: Mapped[datetime]
     created_at: Mapped[datetime]
-
-
-class HotlistSnapshot(Base):
-    __tablename__ = "hotlist_snapshots"
-    __table_args__ = (
-        UniqueConstraint("owner_id", "id", name="hotlist_snapshots_owner_id_key"),
-        UniqueConstraint("owner_id", "job_id", name="hotlist_snapshots_owner_job_key"),
-        UniqueConstraint(
-            "owner_id",
-            "source_key",
-            "operation_id",
-            name="hotlist_snapshots_owner_source_operation_key",
-        ),
-        ForeignKeyConstraint(
-            ["owner_id", "job_id"],
-            ["jobs.owner_id", "jobs.id"],
-            ondelete="RESTRICT",
-            name="hotlist_snapshots_owner_job_fkey",
-        ),
-        ForeignKeyConstraint(
-            ["owner_id", "job_id", "source_key", "operation_id"],
-            [
-                "collection_due_windows.owner_id",
-                "collection_due_windows.job_id",
-                "collection_due_windows.source_key",
-                "collection_due_windows.operation_id",
-            ],
-            ondelete="RESTRICT",
-            name="hotlist_snapshots_owner_due_identity_fkey",
-        ),
-        CheckConstraint("source_key ~ '^[a-z][a-z0-9_-]{0,63}$'"),
-        CheckConstraint("entry_count BETWEEN 0 AND 100"),
-        Index("hotlist_snapshots_latest_idx", "owner_id", "source_key", "observed_at", "id"),
-    )
-
-    id: Mapped[UUID] = mapped_column(primary_key=True)
-    owner_id: Mapped[UUID]
-    source_key: Mapped[str] = mapped_column(String(64))
-    job_id: Mapped[UUID]
-    operation_id: Mapped[UUID]
-    observed_at: Mapped[datetime]
-    entry_count: Mapped[int]
-
-
-class HotlistEntryRecord(Base):
-    __tablename__ = "hotlist_entries"
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ["owner_id", "snapshot_id"],
-            ["hotlist_snapshots.owner_id", "hotlist_snapshots.id"],
-            ondelete="CASCADE",
-            name="hotlist_entries_owner_snapshot_fkey",
-        ),
-        ForeignKeyConstraint(
-            ["owner_id", "content_id"],
-            ["content_records.owner_id", "content_records.id"],
-            ondelete="SET NULL",
-            name="hotlist_entries_owner_content_fkey",
-        ),
-        CheckConstraint("rank BETWEEN 1 AND 100"),
-        CheckConstraint("title <> ''"),
-        CheckConstraint("url ~ '^https?://'"),
-        CheckConstraint("jsonb_typeof(matched_topic_names) = 'array'"),
-        CheckConstraint("jsonb_typeof(matched_topic_ids) = 'array'"),
-    )
-
-    snapshot_id: Mapped[UUID] = mapped_column(primary_key=True)
-    rank: Mapped[int] = mapped_column(primary_key=True)
-    owner_id: Mapped[UUID]
-    title: Mapped[str] = mapped_column(String(2000))
-    url: Mapped[str] = mapped_column(String(2048))
-    summary: Mapped[str | None] = mapped_column(Text)
-    heat: Mapped[str | None] = mapped_column(String(256))
-    published_at: Mapped[datetime | None]
-    content_id: Mapped[UUID | None]
-    matched_topic_names: Mapped[list[str]] = mapped_column(JSONB)
-    matched_topic_ids: Mapped[list[str]] = mapped_column(JSONB)
 
 
 class ContentVersion(Base):

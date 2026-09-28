@@ -63,30 +63,16 @@ class ContentAnnotation(Base):
             name="content_annotations_viewpoints_check",
         ),
         CheckConstraint(
-            "jsonb_typeof(diagnostic_history) = 'array'",
-            name="content_annotations_diagnostic_history_check",
-        ),
-        CheckConstraint(
             "status IN ('annotated', 'unanalyzed')",
             name="content_annotations_status_check",
         ),
         CheckConstraint(
-            "(status = 'annotated' AND result_state = 'valid' "
-            "AND relevant IS NOT NULL AND relevance_reason IS NOT NULL "
-            "AND btrim(relevance_reason) <> '' AND summary IS NOT NULL "
-            "AND btrim(summary) <> '' AND ai_call_id IS NOT NULL AND error_code IS NULL "
+            "(status = 'annotated' AND relevant IS NOT NULL "
+            "AND relevance_reason IS NOT NULL AND summary IS NOT NULL "
             "AND ((relevant AND sentiment IS NOT NULL) OR (NOT relevant AND sentiment IS NULL))) "
-            "OR (status = 'unanalyzed' AND result_state IN ('pending', 'failed', 'invalid') "
-            "AND relevant IS NULL AND relevance_reason IS NULL AND sentiment IS NULL "
-            "AND summary IS NULL AND viewpoints = '[]'::jsonb "
-            "AND ((result_state = 'pending' AND ai_call_id IS NULL AND error_code IS NULL) "
-            "OR (result_state IN ('failed', 'invalid') AND ai_call_id IS NOT NULL "
-            "AND error_code IS NOT NULL AND btrim(error_code) <> '')))",
+            "OR (status = 'unanalyzed' AND relevant IS NULL AND relevance_reason IS NULL "
+            "AND sentiment IS NULL AND summary IS NULL AND viewpoints = '[]'::jsonb)",
             name="content_annotations_output_status_check",
-        ),
-        CheckConstraint(
-            "created_at <= updated_at",
-            name="content_annotations_updated_at_check",
         ),
         Index(
             "content_annotations_topic_created_idx",
@@ -116,8 +102,4 @@ class ContentAnnotation(Base):
     viewpoints: Mapped[list[str]] = mapped_column(JSONB)
     ai_call_id: Mapped[UUID | None]
     status: Mapped[str] = mapped_column(String(16))
-    result_state: Mapped[str] = mapped_column(String(16))
-    error_code: Mapped[str | None] = mapped_column(String(64))
-    diagnostic_history: Mapped[list[dict[str, str | None]]] = mapped_column(JSONB)
     created_at: Mapped[datetime]
-    updated_at: Mapped[datetime]

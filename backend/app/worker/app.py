@@ -22,8 +22,6 @@ from content.collection import (
 )
 from content.comments_execution import CommentsExecutor
 from content.discovery_execution import KeywordDiscoveryExecutor
-from content.hotlist import recover_hotlist_usage_in_transaction
-from content.hotlist_execution import HotlistExecutor
 from core.config import (
     JOB_PROCESS_STARTUP_TIMEOUT_SECONDS,
     JOB_PROCESS_TERMINATE_GRACE_SECONDS,
@@ -56,7 +54,6 @@ from reports.services import DailyReportExecutor
 from sources.adapters.firecrawl import FirecrawlAdapter
 from worker.execution import (
     IsolatedProcessResult,
-    JobProcessChildError,
     JobProcessCrashedError,
     JobProcessOutcome,
     JobProcessShutdownError,
@@ -246,7 +243,7 @@ def create_job_message_handler(
     clock: Clock | None = None,
     supervisor: JobProcessSupervisor | None = None,
     stopping: Event | None = None,
-    job_execution_timeout_seconds: Callable[[str, str | None], float] | None = None,
+    job_execution_timeout_seconds: Callable[[str], float] | None = None,
 ) -> MessageHandler:
     def handle(message: Message) -> None:
         body, reference = decode_job_message(message)
@@ -312,7 +309,7 @@ def create_job_message_handler(
                         ),
                         stopping=stopping,
                         execution_timeout_seconds=(
-                            job_execution_timeout_seconds(body.kind, body.source_key)
+                            job_execution_timeout_seconds(body.kind)
                             if job_execution_timeout_seconds is not None
                             else None
                         ),
@@ -321,32 +318,6 @@ def create_job_message_handler(
                     if body.kind == "notification.send":
                         _mark_interrupted_notification(sessions, message=body, now=_now(clock))
                     raise StopProcessingMessageError from error
-                except JobProcessChildError as error:
-                    failure = _child_exception_failure(error, occurred_at=_now(clock))
-                    _finalize_supervised_result(
-                        sessions,
-                        message=body,
-                        reference=reference,
-                        report=ChildJobResult(
-                            lease=lease,
-                            failure=ChildJobFailure.from_failure(failure),
-                        ),
-                        lease_seconds=lease_seconds,
-                        clock=clock,
-                    )
-                    structlog.get_logger("worker").error(
-                        "job_child_failed",
-                        error_code=failure.error_code,
-                        exception_type=error.exception_type,
-                        failure_category=failure.category.value,
-                        **(
-                            {"error_message": error.error_message[:200]}
-                            if error.exception_type in {"ValueError", "TypeError"}
-                            and error.error_message is not None
-                            else {}
-                        ),
-                    )
-                    return
                 except JobProcessCrashedError as error:
                     _defer_after_child_exit(
                         sessions,
@@ -434,37 +405,6 @@ def _now(clock: Clock | None) -> datetime:
     return clock() if clock is not None else datetime.now(UTC)
 
 
-def _child_exception_failure(
-    error: JobProcessChildError, *, occurred_at: datetime
-) -> JobExecutionFailure:
-    if error.error_code == "parse_error":
-        category = JobFailureCategory.PARSE_ERROR
-        next_action = "检查数据格式后手动重试"
-    elif error.error_code == "invalid_response":
-        category = JobFailureCategory.INVALID_RESPONSE
-        next_action = "检查数据契约后手动重试"
-    elif error.error_code == "network_error":
-        return JobExecutionFailure(
-            error_code=error.error_code,
-            category=JobFailureCategory.TRANSIENT,
-            occurred_at=occurred_at,
-            next_action="等待外部服务恢复后自动重试",
-            manual_retry_allowed=True,
-            retry_at=occurred_at + timedelta(seconds=30),
-            max_attempts=3,
-        )
-    else:
-        category = JobFailureCategory.CONFIGURATION_UNAVAILABLE
-        next_action = "检查任务执行异常后手动重试"
-    return JobExecutionFailure(
-        error_code=error.error_code,
-        category=category,
-        occurred_at=occurred_at,
-        next_action=next_action,
-        manual_retry_allowed=True,
-    )
-
-
 def _cancellation_requested(
     sessions: sessionmaker[Session],
     *,
@@ -512,15 +452,6 @@ def _defer_after_child_exit(
 ) -> NoReturn:
     if message.kind == "notification.send":
         _mark_interrupted_notification(sessions, message=message, now=_now(clock))
-    if message.kind == "source.hotlist" and message.source_key is not None:
-        with sessions() as session, session.begin():
-            recover_hotlist_usage_in_transaction(
-                session,
-                owner_id=message.owner_id,
-                operation_id=message.operation_id,
-                source_key=message.source_key,
-                finished_at=_now(clock),
-            )
     raise MessageDeferredError(
         _lease_retry_time(
             sessions,
@@ -587,14 +518,6 @@ def _finalize_supervised_result(
                     operation_id=message.operation_id,
                     finished_at=finished_at,
                 )
-            if message.kind == "source.hotlist" and message.source_key is not None:
-                recover_hotlist_usage_in_transaction(
-                    session,
-                    owner_id=message.owner_id,
-                    operation_id=message.operation_id,
-                    source_key=message.source_key,
-                    finished_at=finished_at,
-                )
             execution = JobExecutionService(
                 session,
                 lease_seconds=lease_seconds,
@@ -651,11 +574,6 @@ def _registered_job_handlers(
         lease_seconds=settings.job_lease_seconds,
         clock=clock,
     )
-    hotlist_executor = HotlistExecutor(
-        sessions,
-        lease_seconds=settings.job_lease_seconds,
-        clock=clock,
-    )
     analysis_executor = AnalysisAnnotateExecutor(sessions, settings, clock=clock)
     daily_report_executor = DailyReportExecutor(sessions, clock=clock)
     knowledge_executor = KnowledgeExportExecutor(sessions, settings, clock=clock)
@@ -671,10 +589,6 @@ def _registered_job_handlers(
 
     def collect_comments(context: JobExecutionContext) -> JobCompletion:
         context.lease, completion = comments_executor.execute(context.message, context.lease)
-        return completion
-
-    def collect_hotlist(context: JobExecutionContext) -> JobCompletion:
-        context.lease, completion = hotlist_executor.execute(context.message, context.lease)
         return completion
 
     def annotate_content(context: JobExecutionContext) -> JobCompletion:
@@ -723,7 +637,6 @@ def _registered_job_handlers(
         "notification.send": send_notification,
         "report.daily": generate_daily_report,
         "source.comments": collect_comments,
-        "source.hotlist": collect_hotlist,
         "webpage.collect": collect_webpage,
     }
 

@@ -15,58 +15,6 @@ from jobs.schemas import CollectionScanKind
 from sources.contracts import CommentsRequest, SearchRequest, SourceCapability
 
 
-class HotlistSourceView(OutputModel):
-    source_key: str
-    latest_observed_at: datetime | None
-
-
-class CollectionContentCountView(OutputModel):
-    job_id: UUID
-    observation_count: int = Field(ge=0)
-    ingested_count: int = Field(ge=0)
-    first_ingested_count: int = Field(ge=0)
-    deduplicated_count: int = Field(ge=0)
-    content_version_ids: tuple[UUID, ...]
-
-
-class CollectionContentFactView(CollectionContentCountView):
-    content_ids: tuple[UUID, ...]
-    analysis_targets_complete: bool
-
-
-class CollectionSnapshotFactView(OutputModel):
-    job_id: UUID
-    snapshot_id: UUID | None
-    entry_count: int | None = Field(ge=0)
-    observed_at: datetime | None
-
-
-class HotlistEntryView(OutputModel):
-    rank: int
-    title: str
-    url: str
-    summary: str | None
-    heat: str | None
-    published_at: datetime | None
-    content_id: UUID | None
-    previous_rank: int | None = Field(ge=1, le=100)
-    rank_delta: int | None = Field(ge=-99, le=99)
-    rank_change: Literal["new", "up", "down", "same"]
-    matched: bool
-    matched_topic_names: tuple[str, ...]
-
-
-class HotlistSnapshotView(OutputModel):
-    snapshot_id: UUID
-    source_key: str
-    observed_at: datetime
-    due_at: datetime
-    operation_id: UUID
-    entry_count: int
-    items: tuple[HotlistEntryView, ...]
-    next_cursor: int | None
-
-
 class CommentCollectionRunInput(InputModel):
     """Frozen input for accepting one bounded comments collection job."""
 
@@ -144,7 +92,7 @@ class KeywordDiscoveryRunInput(InputModel):
     latest_max_requests: int = Field(ge=1, le=100)
     top_max_pages: int = Field(ge=1, le=20)
     top_max_requests: int = Field(ge=1, le=100)
-    max_seconds: int = Field(ge=1, le=220)
+    max_seconds: int = Field(ge=1, le=90)
     entry_point: SourceEntryPoint = SourceEntryPoint.MANUAL
     scheduled_for_at: datetime | None = None
 
@@ -158,17 +106,7 @@ class KeywordDiscoveryRunInput(InputModel):
             raise ValueError("search requires an ordered UTC window of at most 30 days")
         if self.scheduled_for_at is not None and self.scheduled_for_at.utcoffset() is None:
             raise ValueError("scheduled_for_at must be timezone-aware")
-        if self.source_key != "bilibili" and self.max_seconds > 90:
-            raise ValueError("search time budget exceeds the source limit")
         queries = (self.primary_query, *self.upstream_aliases)
-        if self.source_key == "bilibili" and (
-            len(queries) > 3
-            or self.page_size > 5
-            or self.latest_max_pages != 1
-            or self.latest_max_requests < 6 + 4 * self.page_size
-            or self.max_seconds > 220
-        ):
-            raise ValueError("Bilibili search must stay within the source risk limits")
         for query in queries:
             SearchRequest(source_key=self.source_key, query=query, page_size=self.page_size)
         if len({normalize("NFKC", query).casefold() for query in queries}) != len(queries):
@@ -418,7 +356,6 @@ class ContentRecordSummaryView(OutputModel):
     object_type: Literal["post", "comment", "webpage"]
     native_scope: str | None
     external_id: str
-    identity_basis: Literal["guid", "url_fallback"] | None
     latest_observation: ContentObservationView
     current_visibility: ContentVisibilityView | None
     discovery_count: int = Field(ge=1)

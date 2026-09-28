@@ -38,8 +38,8 @@ class CheckpointConflictError(JobExecutionError):
     """A checkpoint attempted to skip or rewrite durable progress."""
 
 
-@dataclass(slots=True)
-class JobExecutionFailure(Exception):  # noqa: N818 - domain contract name
+@dataclass(frozen=True, slots=True)
+class JobExecutionFailure(Exception):  # noqa: N818 - frozen domain contract name
     error_code: str
     category: JobFailureCategory
     occurred_at: datetime
@@ -110,12 +110,6 @@ class ExecutionLease:
     expires_at: datetime
     checkpoint_sequence: int
     checkpoint: dict[str, CheckpointValue]
-
-
-@dataclass(frozen=True, slots=True)
-class JobRequestCounts:
-    total: int
-    collection_cycle: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -247,11 +241,9 @@ class JobExecutionService:
         self._session.rollback()
         with self._session.begin():
             model = self._lock_job(job_id)
-            queued_at = now
             if model.status == JobStatus.RUNNING.value:
                 if model.lease_expires_at is None or model.lease_expires_at > now:
                     raise JobLeaseUnavailableError("job already has a live execution lease")
-                queued_at = model.lease_expires_at
                 self._session.execute(
                     update(JobAttempt)
                     .where(
@@ -265,24 +257,6 @@ class JobExecutionService:
                 raise JobLeaseUnavailableError("terminal jobs cannot be acquired")
             elif model.next_run_at is not None and model.next_run_at > now:
                 raise JobLeaseUnavailableError("job is not due for execution")
-            else:
-                queued_at = min(
-                    model.next_run_at or model.scheduled_for_at or model.created_at, now
-                )
-
-            open_manual_cycle = (
-                model.status == JobStatus.QUEUED.value and model.defer_reason == "manual_retry"
-            )
-            if model.collection_cycle_no == 0:
-                model.collection_cycle_no = 1
-                model.collection_cycle_started_at = now
-                model.collection_cycle_requests_sent = 0
-            elif open_manual_cycle:
-                model.collection_cycle_no += 1
-                model.collection_cycle_started_at = now
-                model.collection_cycle_requests_sent = 0
-            elif model.collection_cycle_started_at is None:
-                raise RuntimeError("started job has no collection budget cycle")
 
             model.status = JobStatus.RUNNING.value
             model.lease_owner = worker_id
@@ -297,9 +271,7 @@ class JobExecutionService:
                     id=uuid4(),
                     job_id=model.id,
                     lease_epoch=model.lease_epoch,
-                    collection_cycle_no=model.collection_cycle_no,
                     worker_id=worker_id,
-                    queued_at=queued_at,
                     started_at=now,
                     lease_expires_at=expires_at,
                     finished_at=None,
@@ -381,26 +353,10 @@ class JobExecutionService:
         owner_id: UUID,
         operation_id: UUID,
     ) -> int:
-        """Return the fenced lifetime count for stable outbound attempt identities."""
-        return self.current_request_counts_in_transaction(
+        """Return the fenced task-wide request count before another outbound attempt."""
+        return self._require_current_operation_model(
             lease, owner_id=owner_id, operation_id=operation_id
-        ).total
-
-    def current_request_counts_in_transaction(
-        self,
-        lease: ExecutionLease,
-        *,
-        owner_id: UUID,
-        operation_id: UUID,
-    ) -> JobRequestCounts:
-        """Read lifetime and current-cycle counts under the same fenced row lock."""
-        model = self._require_current_operation_model(
-            lease, owner_id=owner_id, operation_id=operation_id
-        )
-        return JobRequestCounts(
-            total=model.requests_sent,
-            collection_cycle=model.collection_cycle_requests_sent,
-        )
+        ).requests_sent
 
     def save_checkpoint_in_transaction(
         self,
@@ -469,7 +425,6 @@ class JobExecutionService:
             return self._lease(model), False
 
         model.requests_sent += 1
-        model.collection_cycle_requests_sent += 1
         model.progress_stage = JobStage.REQUEST.value
         model.progress_updated_at = now
         model.lease_expires_at = expires_at
