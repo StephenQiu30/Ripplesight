@@ -1,10 +1,10 @@
 # 执行计划审核、依赖与需求覆盖
 
-更新：2026-10-01，按当前工作树与 Acceptance 002 的逐卡证据核对，并同步先最小演示、再扩围的核心链路 POC 顺序。Design/PRD 001—007承担总纲与M1—M6 Epic；逐Issue计划从001连续到059，编号是身份，不是执行顺序。各卡技术状态与证据见下表；计划中的新增表、接口、文件、测试仍是实施合同，未因列入索引就视为已创建、运行或验收。
+更新：2026-10-01，新增 ToC 用户登录设计合同060；本轮只清理文档，新登录尚未实施。核心链路仍按 Acceptance 002 逐卡证据及先最小演示、再扩围的 POC 顺序推进。Design/PRD 001—007承担总纲与M1—M6 Epic；逐Issue计划从001连续到060，编号是身份，不是执行顺序。各卡技术状态与证据见下表；计划中的新增表、接口、文件、测试不因列入索引就视为已创建、运行或验收。
 
 ## 调研新增需求的实施合同边界
 
-[Research048](../research/048-AI方向热点事件市场与竞品调研.md) 已由 PRD001 v5.1 及相关里程碑 PRD 承接。Plan059 已实现已有内容的只读样本预览，证据见 Acceptance002 EV-002-053；下表其余合同仍待补齐。Plan058 A/B、原产品 AC 和阈值均不扩张，当前任务进度继续以 BACKLOG/Acceptance 为准。
+[Research048](../research/048-AI方向热点事件市场与竞品调研.md) 已由 PRD001 及相关里程碑 PRD 承接；当前 PRD001 为 v5.2。Plan059 已实现已有内容的只读样本预览，证据见 Acceptance002 EV-002-053；下表其余合同仍待补齐。Plan058 A/B、原产品 AC 和阈值均不扩张，当前任务进度继续以 BACKLOG/Acceptance 为准。
 
 | 新增或补充需求 | 对应设计与既有责任卡 | 实施前须补齐 |
 |---|---|---|
@@ -15,7 +15,7 @@
 | FR-005-002 补充、FR-005-008/AC-005-009 | Design005；Plan017，后续报告消费者 | 观点逐条出处、程序分母、去重/排除口径、无评论/证据不足及质量抽检；M4 独立后验 |
 | FR-007-005/AC-007-005 | Design007；Plan029、046—050、053—054 | 逐来源软件/数据许可、能力/限额/真实窗口与证据状态；来源准入与实现分别结论 |
 
-先人工核对这些责任卡的实际交付与新增条文，再决定修订既有 Issue 或新增独立 Issue；新增 Plan 从060续编号，须完整定义接口、数据、调度、SPEC、Checklist、测试与验收。本文映射只确定待补责任，不替代实现合同。
+先人工核对这些责任卡的实际交付与新增条文，再决定修订既有 Issue 或新增独立 Issue；新增 Plan 从061续编号，须完整定义接口、数据、调度、SPEC、Checklist、测试与验收。本文映射只确定待补责任，不替代实现合同。
 
 ## 本次审核与修正
 
@@ -39,7 +39,7 @@
 
 ## Issue与技术依赖
 
-001—030为既有修订卡，031—052为新增/拆分卡，053—057接续审计缺口，058汇合M1短窗演示，059承接已有内容样本预览。001、002、007、008、031、033、034、035、036、037、039、051、059 在各自范围 completed；007 的 HN 手动真实搜索/重投已验，031 定时同窗仍归 009，003/004/014/032/058 保持 in_progress。001 已补配置保存/刷新及冲突浏览器证据，8a7135e2标题预览来源提示修复的同SHA frontend/contract/runtime门禁通过，受控技术completed不关闭父级AC；026、046—050、053—054、057为blocked，其余状态见各卡与 BACKLOG；账号、渠道、其他真实样本和长窗另按各卡放行。表内Design编号对应同号PRD（001→PRD001，002→PRD002，依此类推），因而每行同时给出Design/PRD映射；现行文件路径由链接确定。
+001—030为既有修订卡，031—052为新增/拆分卡，053—057接续审计缺口，058汇合M1短窗演示，059承接已有内容样本预览，060为身份改造planned。001、002、007、008、031、033、034、035、036、037、039、051、059在各自范围completed；007手动真实搜索/重投已验，031定时同窗归009，003/004/014/032/058保持in_progress。001配置保存/刷新及冲突浏览器证据已补，8a7135e2预览来源提示修复同SHA frontend/contract/runtime通过，受控completed不关闭父级AC；026、046—050、053—054、057为blocked，其余见各卡/BACKLOG。Design与同号PRD映射，账号/渠道/真实样本/长窗独立放行。
 
 | Plan | 唯一交付 | Design | 技术前置 |
 |---|---|---|---|
@@ -102,10 +102,13 @@
 | [057](057-通用网页与浏览器采集底座回归执行计划.md) | webpage.collect/Firecrawl/Browser/probe冻结回归，blocked | 001 | 055、056；目标来源与授权未定 |
 | [058](058-M1短窗POC演示与扩围执行计划.md) | 一个主题+HN+一榜最小闭环，随后四来源六榜短窗扩围 | 002 | 001/002/003/004/005/007/008/031—034/038—041、051适用技术产物 |
 | [059](059-已有内容关键词样本预览执行计划.md) | 已有内容只读预览；completed，EV-002-053；完整新增 AC 未关闭 | 002 | 001、041；历史046 S03 |
+| [060](060-GitHub与邮箱验证码登录执行计划.md) | GitHub App/邮箱验证码、真实多用户与旧身份删除；planned，文档完成，代码未改 | 001 | 051 数据保留/恢复、056 HTTP/客户端回归；历史046 S03 |
 
 ## 执行顺序
 
-按已授权的项目实现任务逐 Issue 推进，同组不代表并发改共享文件；每项完成后按仓库规范提交并推送 `main`。
+按已授权的范围逐Issue推进，同组不代表并发改共享文件。用户本轮授权将当前设计文档提交main并推送；应用身份代码改造仍归060，不因发布文档视为已实施。
+
+2026-10-01用户最新补充：普通ToC多用户保留用户名密码与无感登录，增加GitHub App/邮箱验证码，后两者首次验证可注册。设计与旧部署教程本轮清理；实现归060，不列为已通过底座。其他卡的owner_id表示数据归属，不设owner角色或单账户约束；身份/CLI/调度/旧夹具假设由060替换。
 
 2026-09-30 用户明确最终目标是整个核心链路的 POC，范围以 PRD001 §1 为准；当前先收尾 M1，不能把“全系统功能”解释为本轮实现全部58卡。日报、周报、Obsidian、知识库检索/问答、报告导出与渠道投递是后续非核心能力，不进入当前排期或核心完成条件。009/013 的真实连续72小时、正式时效和质量抽检留给产品验证；保留受控集成、真实依赖、浏览器与可取得的真实短窗证据及其缺口，原FR/NFR/AC不据此关闭。
 
@@ -121,6 +124,7 @@
 
 | 需求 | 承接Issue |
 |---|---|
+| FR-001-122—128；NFR-001-113 | 060保留用户名密码，新增GitHub/邮箱、凭据维护与无感恢复，真实多用户隔离；planned |
 | FR-002-001 | 001配置/规则，031运行入口 |
 | FR-002-002 | 002策略、031调度/手动、032重试、033漏窗 |
 | FR-002-003 | 007/035/036/037逐来源，033计量，041阅读 |
@@ -138,7 +142,7 @@
 | FR-006-001/002 | 044目标设置，024状态，025 SMTP，026飞书 |
 | FR-007-001 | 030报告MD/PDF，045原始CSV/JSON |
 | FR-007-002/003 | 027告警；028公共追踪链路+获准作者能力实现（尚缺实际平台承接） |
-| FR-007-004 | 029执行准入，046—050/053/054研究；X既有x_api/x_user_lookup归047代码台账；**平台采集实现未就绪，获准后从060另建实施卡** |
+| FR-007-004 | 029执行准入，046—050/053/054研究；X既有x_api/x_user_lookup归047代码台账；**平台采集实现未就绪，获准后从061另建实施卡** |
 | NFR-001-101/102 | 各来源身份/时间/版本；033/004证据、014—016事件、018/019/052冻结引用，055证据删除与谱系 |
 | NFR-001-103、NFR-002-001、NFR-003-002、NFR-005-001 | 006计算、009/013观察；043/018生成、025/026送达分别计时 |
 | NFR-001-104/105/112 | 031/032/033调度/重试/缺口，各执行器重放，024unknown，051恢复，056契约CI |
@@ -166,7 +170,7 @@
 | AC-005-006/008 | 020三日日报、021事件/精选帖、022周报/主题、023问答；真实vault/用户区/无悬链 |
 | AC-006-001 | 024/044幂等unknown；025/026分别真实核收3日日报+周一周报及时送达及降级 |
 | AC-007-001/002 | 027真实告警/冷却/核收；028及获准作者能力分别新帖/页尾/缺口 |
-| AC-007-003 | 029、046—050、053/054只供准入；后续各获准能力从060起建实施卡并有真实采集才逐项判定，当前未就绪 |
+| AC-007-003 | 029、046—050、053/054只供准入；后续各获准能力从061起建实施卡并有真实采集才逐项判定，当前未就绪 |
 | AC-007-004 | 030 MD/PDF、045 CSV/JSON分格式核对权限、版本、引用、字段和失败 |
 
 ### 逐条 AC → Plan 责任表
@@ -175,6 +179,7 @@
 
 | AC | 必需 Plan 与本卡责任 |
 |---|---|
+| AC-001-123—129 | 060新增两通道、用户名密码/设密恢复、无感登录、账户关联/隔离与退出；完整新合同未验 |
 | AC-002-001 | 007 HN搜索/重放、038评论父链、041阅读、009共同核对 |
 | AC-002-002 | 001主题、002策略、031调度、033到期、007/035/036/037四关键词来源、004/006/034覆盖与时效、009长窗 |
 | AC-002-003 | 038十帖分页/旧帖新回复、041父链阅读、009汇合 |
@@ -199,7 +204,7 @@
 | AC-006-001 | 024投递状态/unknown、044目标和可查记录、025 SMTP/026飞书各自真实核收 |
 | AC-007-001 | 027真实告警/冷却、024/044状态与记录、获准渠道025或026 |
 | AC-007-002 | 028指定账号公共链路、029及获准来源未来实施卡；真实作者能力待建卡 |
-| AC-007-003 | 029通用准入、046—050与053/054逐来源研究；获准后从060另建逐能力实施卡并真实验收 |
+| AC-007-003 | 029通用准入、046—050与053/054逐来源研究；获准后从061另建逐能力实施卡并真实验收 |
 | AC-007-004 | 030报告MD/PDF、045原始CSV/JSON，分格式权限、版本、引用与失败 |
 
 ### 已交付共享底座台账
@@ -208,8 +213,8 @@
 
 | 模块/表 | 代码位置 | 现有验证证据 | 维护责任 | Design/PRD映射 |
 |---|---|---|---|---|
-| 身份、会话、初始化/重置命令；`identity_users`、`identity_sessions` | `backend/app/identity/`、`api/routers/identity.py`、`cli/commands.py` | `test_application_security.py`及HTTP契约测试现有；本轮未重跑，真实部署身份核对归051/056 | identity领域；HTTP契约变更归056 | 001 / PRD001 §2、NFR-001-107 |
-| 公开首页、品牌、登录/初始化Web | `frontend/src/app/page.tsx`、`app/components/`、`components/brand/`、`app/login/`、`app/register/`、`components/auth/` | 现有页面代码；本轮未浏览器重验，图标现行母版为`app/icon.png` | 前端路由/brand/auth所有者；新增行为另建卡 | 001 / PRD001 §2、NFR-001-107 |
+| 旧身份、会话、初始化/重置命令；`identity_users`、`identity_sessions` | `backend/app/identity/`、`api/routers/identity.py`、`cli/commands.py` | 旧单账户测试与HTTP契约证据保留；不证明新登录或多用户隔离 | 060替换旧身份；051恢复、056契约回归 | 001 / PRD001 §2.1、NFR-001-107/113 |
+| 公开首页、品牌、旧登录/初始化Web | `frontend/src/app/page.tsx`、`app/components/`、`components/brand/`、`app/login/`、`app/register/`、`components/auth/` | 现有旧页面；新登录未验；图标现行母版为`app/icon.png` | 060替换登录/注册；brand沿用 | 001 / PRD001 §2.1、NFR-001-107/113 |
 | 主题工作台及共享状态页 | `frontend/src/app/events/`、`components/monitors/topic-list.tsx`、`components/system/page-state.tsx` | 已有入口；业务事件查询待042，不能把首页当事件验收 | 前端路由；事件业务归042 | 001/004 / PRD001、FR-004-001 |
 | HTTP路由汇总、文档、健康、异常、请求ID；同源代理/请求 | `backend/app/api/{router,docs,middleware,exception_handlers,dependencies}.py`、`api/routers/health.py`、`frontend/src/{request,proxy}.ts`、`app/api/[[...path]]/route.ts`、`app/health/route.ts` | 历史046 S03真实门槛见Design001 §5；`test_http_contract.py`/`test_http_contract_046.py`现有，本轮未重跑 | api/core与Web传输；056回归 | 001 / NFR-001-104/107 |
 | Web错误/加载入口与生成客户端 | `frontend/src/app/{layout,error,global-error,not-found,loading}.tsx`、`src/api/` | 现有代码/生成物；同提交生成漂移待056验证 | Web根布局与056契约 | 001 / NFR-001-104/107 |
@@ -220,7 +225,7 @@
 | Firecrawl、HTTP来源与安全目标、Browser运行时 | `backend/app/sources/adapters/{http_source,firecrawl,browser_runtime,web_targets}.py`、`connections/adapters/local_secrets.py` | `test_webpage_adapter.py`、`test_browser_adapter.py`、`test_browser_collection.py`现有；G4-002换版旧写仍待验 | sources/connections；057冻结回归 | 001/002 / NFR-001-107/110 |
 | 浏览器Server、seccomp、代理与镜像网络 | `backend/browser/{server.js,seccomp.json,squid.conf}`、`backend/Dockerfile`、`docker-compose.yml` | S03运行底座历史技术验证；真实平台出口/请求计量未证明 | browser/部署；057 | 001/002 / NFR-001-104/107 |
 | `sources probe-webpage`、`probe-browser` | `backend/app/cli/commands.py` | CLI探针只能证明本机通路，不能提升来源状态；本轮未重跑 | cli/sources；057 | 001/002 / NFR-001-107 |
-| `version`、`identity reset-password`、preset/连接CLI | `backend/app/cli/commands.py` | 现有命令；本轮未重跑；来源预设/浏览器状态受002/010—012/057约束 | cli与所属identity/connections域 | 001/002/003 / NFR-001-107/110 |
+| `version`、`identity reset-password`、preset/连接CLI | `backend/app/cli/commands.py` | 密码恢复保留，060要求显式用户；来源安全约束保留 | 060身份范围；cli/connections域 | 001/002/003 / NFR-001-107/110/113 |
 | 来源、Job与内容用户页面 | `frontend/src/app/{sources,jobs,content}/` | 现有列表/详情测试；034/041新增业务阅读，单网页表单归057 | 各路由所有者；034/041/057 | 002 / FR-002-003/007 |
 | 后端/契约/前端/运行CI | `.github/workflows/{backend,contract,frontend,runtime}.yml` | 现有工作流；本轮未触发远端最终CI，运行门禁不等于来源旅程 | CI；056 | 001 / NFR-001-104/107 |
 | Compose底座与API/Web镜像 | `docker-compose.yml`、`backend/Dockerfile`、`frontend/Dockerfile` | 现有编排；051需同库恢复，057浏览器出口另验 | 部署；051/056/057按变更范围 | 001 / NFR-001-104/106/107 |
@@ -243,6 +248,8 @@
 | `backend/app/api/router.py`、`dependencies.py` | api装配；各业务路由按Issue顺序，056最后核契约 | operation_id/错误模型/权限、运行OpenAPI与客户端同批 |
 | `frontend/src/api/`、`src/request.ts` | 业务Issue只生成/消费；056维护传输/生成门禁 | 从同提交运行Schema重生、C/F与CI最终结果，无手改 |
 | `.github/workflows/*.yml`、`docker-compose.yml` | 056维护CI、051恢复、057浏览器出口 | 文件差异单卡审查，不删除持久卷；最终Schema/客户端/运行门禁复验 |
+
+060 接续上述共享文件的当前版本，身份 Schema、配置、API、CLI、调度与 Worker、代理、生成客户端和 CI 的修改按同一切片串行核对；消费051同版本恢复证据并重跑056契约门禁，不与其他行为卡并行覆盖。精确清单和旧字段回归以060为准。
 
 ### 逐卡文件变更分类
 
@@ -308,6 +315,7 @@
 | 056 | 无 | `B/api/{exception_handlers,middleware,docs,router,dependencies}.py`、`F/{request,proxy}.ts`、四份CI工作流 | Client |
 | 057 | 无；获准后Browser处理器路径先补Design | `B/sources/adapters/{web_targets,http_source,firecrawl,browser_runtime}.py`、`B/connections/adapters/local_secrets.py`、`B/worker/{app,execution}.py`、`B/cli/commands.py`、浏览器/Compose文件（当前冻结） | Client（契约变化时） |
 | 059 | `backend/tests/unit/test_sample_preview_contract.py`、`F/components/monitors/topic-rule-preview.test.tsx` | `B/content/{schemas,services}.py`、`B/api/routers/monitor_topics.py`、`backend/tests/integration/test_content_records.py`、`F/components/monitors/topic-rule-preview.tsx`及主题新建/编辑调用处 | Client |
+| 060 | `B/identity/adapters/{__init__,github,email,verification_store}.py`、新登录通道组件、`F/app/account/`及身份/页面测试 | identity/API/配置/CLI/Worker/恢复/DDL/代理/CI/夹具；保留密码接口/表单/凭据版本，删除部署初始化/workspace包装 | Client；精确分类见060 §2 |
 
 ## 验证命令与证据
 
@@ -323,4 +331,4 @@
 
 旧七份里程碑Plan原文见Git历史；当前001—030以ba15f126为修订基线，FR/NFR/AC不重编号。002原“来源节奏与预算安全重试”拆至002/031/032；007原“HN重放与评论父链”拆至007/038；030原“报告与原始数据导出”拆至030/045，三份文件按新职责更名。004页面迁034、008历史页面迁039、事件页面迁042、报告调度迁043、通知配置迁044、009运行库保留迁051、023检索迁052。旧SPEC/CHK见前一Git版本，责任以本表和各卡具体合同为准。
 
-后续Issue取060起。新046/047分别为Reddit/X，历史HTTP/browser门槛必须带“历史”说明。059 已实现并留受控及真实只读证据；平台新采集、连续运行与父级产品验收按各卡分别记录。
+后续Issue取061起。新046/047分别为Reddit/X，历史HTTP/browser门槛必须带“历史”说明。059 已实现并留受控及真实只读证据，060仅设计完成、实现planned；平台新采集、连续运行与父级产品验收按各卡分别记录。
