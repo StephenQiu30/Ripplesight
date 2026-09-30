@@ -14,6 +14,7 @@ from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
+from connections import services as connection_services
 from connections.presets import SOURCE_PRESETS
 from connections.services import SourcePresetService
 from content import hotlist as hotlist_module
@@ -86,6 +87,11 @@ def runtime(
                         "allowed_hosts": (host,),
                     }
                 ),
+            )
+            monkeypatch.setattr(
+                connection_services,
+                "SOURCE_PRESETS",
+                MappingProxyType({**SOURCE_PRESETS, "hotlist_weibo": preset}),
             )
         service.apply_in_transaction(owner_id=owner_id, preset=preset)
     with sessions() as session:
