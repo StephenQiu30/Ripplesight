@@ -21,7 +21,8 @@ from jobs.execution import (
 )
 from jobs.schemas import JobFailureCategory, JobMessage, JobStatus
 from jobs.services import load_job_execution_configuration
-from sources.adapters.rsshub_hotlist import RsshubHotlistAdapter
+from sources.adapters.rsshub_endpoint import is_fixed_rsshub_endpoint
+from sources.adapters.rsshub_hotlist import HOTLIST_ROUTES, RsshubHotlistAdapter
 from sources.contracts import SourceCapability, SourcePageState, SourceStopReason
 
 type AdapterFactory = Callable[
@@ -120,7 +121,12 @@ class HotlistExecutor:
                     connection_id=connection_id,
                     connection_version=connection_version,
                 )
-            if config.feed_url is None or tuple(config.allowed_hosts) != ("127.0.0.1",):
+            route = HOTLIST_ROUTES.get(source_key)
+            if route is None or config.feed_url is None or not is_fixed_rsshub_endpoint(
+                config.feed_url,
+                route=route,
+                allowed_hosts=frozenset(config.allowed_hosts),
+            ):
                 raise ValueError("hotlist connection has no local RSSHub feed")
         except (ValueError, TypeError, ApplicationError) as error:
             raise self._failure(
