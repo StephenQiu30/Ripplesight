@@ -10,9 +10,11 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
+from tests.conftest import TEST_DATABASE_TRUNCATE
 
 from core.config import Settings
 from core.errors import ApplicationError
+from db.demo import resolve_demo_scope
 from jobs.coverage import CollectionCoverageQueryService
 from jobs.schemas import (
     BudgetContext,
@@ -29,7 +31,6 @@ from jobs.schemas import (
 from jobs.services import ResourceBudgetService
 from main import create_app
 
-_BOOTSTRAP_TOKEN = "coverage-http-isolated-bootstrap-token"
 _DATABASE_ENV = "HOTKEY_TEST_DATABASE_URL"
 _BASE = datetime(2026, 9, 27, 0, 0, tzinfo=UTC)
 
@@ -41,26 +42,20 @@ def coverage_client() -> Iterator[tuple[TestClient, Engine, UUID]]:
         pytest.skip(f"{_DATABASE_ENV} is required for PostgreSQL integration tests")
     engine = create_engine(database_url)
     with engine.begin() as connection:
-        connection.execute(text("TRUNCATE identity_users CASCADE"))
+        connection.execute(text(TEST_DATABASE_TRUNCATE))
     settings = Settings(
         environment="test",
         log_level="WARNING",
         database_url=database_url,
-        bootstrap_token=_BOOTSTRAP_TOKEN,
     )
     try:
         with TestClient(create_app(settings)) as client:
-            initialized = client.post(
-                "/api/identity/initialize",
-                headers={"X-HotKey-Bootstrap-Token": _BOOTSTRAP_TOKEN, "X-HotKey-CSRF": "1"},
-                json={"username": "coverage-owner", "password": "coverage isolated password"},
-            )
-            assert initialized.status_code == 201, initialized.json()
-            owner_id = UUID(initialized.json()["user"]["id"])
+            with client.app.state.session_factory() as session:
+                owner_id = resolve_demo_scope(session)
             yield client, engine, owner_id
     finally:
         with engine.begin() as connection:
-            connection.execute(text("TRUNCATE identity_users CASCADE"))
+            connection.execute(text(TEST_DATABASE_TRUNCATE))
         engine.dispose()
 
 

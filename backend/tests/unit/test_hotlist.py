@@ -324,7 +324,7 @@ def test_daily_report_selects_hotlist_discoveries_by_topic_id() -> None:
     assert parameters["topic_id_text"] == str(topic_id)
 
 
-def test_hotlist_api_openapi_declares_auth_and_result_models() -> None:
+def test_hotlist_api_openapi_declares_anonymous_access_and_result_models() -> None:
     app = create_app(
         Settings(environment="test", database_url="postgresql+psycopg://test:test@localhost/test")
     )
@@ -333,7 +333,7 @@ def test_hotlist_api_openapi_declares_auth_and_result_models() -> None:
     latest = paths["/api/hotlists/{source_key}"]["get"]
     assert sources["operationId"] == "listHotlistSources"
     assert latest["operationId"] == "getHotlistSnapshot"
-    assert sources["security"] == [{"SessionCookie": []}]
-    assert latest["security"] == [{"SessionCookie": []}]
-    assert {"200", "401", "422", "500"} <= set(sources["responses"])
-    assert {"200", "401", "404", "422", "500"} <= set(latest["responses"])
+    assert not sources.get("security")
+    assert not latest.get("security")
+    assert {"200", "422", "500", "503"} <= set(sources["responses"])
+    assert {"200", "404", "422", "500", "503"} <= set(latest["responses"])

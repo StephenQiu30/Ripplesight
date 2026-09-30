@@ -14,6 +14,7 @@ import pytest
 from minio import Minio
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
+from tests.conftest import TEST_DATABASE_TRUNCATE
 
 from backups.adapters.minio import MinioEvidenceRestoreVerifier, MinioObjectInventory
 from backups.adapters.postgres import BackupToolError, PostgresDumpAdapter
@@ -57,31 +58,7 @@ def backup_environment() -> Iterator[tuple[str, Minio, str, str]]:
     object_name = f"backup-tests/{uuid4()}/evidence.bin"
     content = b"hotkey-backup-evidence"
     with engine.begin() as connection:
-        connection.execute(
-            text(
-                "TRUNCATE event_candidates, event_members, events, "
-                "analysis_prompt_activations, analysis_prompt_runtime_sessions, "
-                "collection_due_windows, hotlist_entries, hotlist_snapshots, "
-                "content_version_relations, content_visibility_observations, "
-                "content_observations, content_versions, "
-                "content_discoveries, content_threads, content_records, "
-                "source_capability_evidence, source_connection_versions, "
-                "source_connections, provenance_manifest_inputs, provenance_manifests, "
-                "evidence_cleanup_targets, evidence_deletions, evidence_resources, "
-                "evidence_retention_policies, source_access_policies, "
-                "resource_budget_reservations, resource_budget_windows, "
-                "resource_budget_policies, resource_usage_attempts, "
-                "resource_component_policies, job_stage_attempts, processed_messages, "
-                "job_attempts, "
-                "ai_calls, knowledge_exports, notification_deliveries, notification_targets, "
-                "content_annotations, reports, monitor_schedules, "
-                "outbox_messages, coverage_windows, "
-                "jobs, followed_account_aliases, followed_accounts, "
-                "monitor_topic_status_events, "
-                "monitor_topic_versions, monitor_topics, "
-                "identity_sessions, identity_users"
-            )
-        )
+        connection.execute(text(TEST_DATABASE_TRUNCATE))
         connection.execute(
             text(
                 "INSERT INTO analysis_prompt_runtime_sessions "
@@ -93,14 +70,6 @@ def backup_environment() -> Iterator[tuple[str, Minio, str, str]]:
                 "started": now,
                 "stopped": now + timedelta(minutes=1),
             },
-        )
-        connection.execute(
-            text(
-                "INSERT INTO identity_users "
-                "(id, username, password_hash, credential_version, created_at, updated_at) "
-                "VALUES (:owner_id, 'backup-owner', 'test-only-hash', 1, :now, :now)"
-            ),
-            {"owner_id": owner_id, "now": now},
         )
         connection.execute(
             text(
@@ -163,30 +132,7 @@ def backup_environment() -> Iterator[tuple[str, Minio, str, str]]:
     finally:
         minio.remove_object(bucket, object_name)
         with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "TRUNCATE event_candidates, event_members, events, "
-                    "collection_due_windows, hotlist_entries, hotlist_snapshots, "
-                    "content_version_relations, content_visibility_observations, "
-                    "content_observations, content_versions, "
-                    "content_discoveries, content_threads, content_records, "
-                    "source_capability_evidence, source_connection_versions, "
-                    "source_connections, provenance_manifest_inputs, provenance_manifests, "
-                    "evidence_cleanup_targets, evidence_deletions, evidence_resources, "
-                    "evidence_retention_policies, source_access_policies, "
-                    "resource_budget_reservations, resource_budget_windows, "
-                    "resource_budget_policies, resource_usage_attempts, "
-                    "resource_component_policies, job_stage_attempts, processed_messages, "
-                    "job_attempts, "
-                    "ai_calls, knowledge_exports, notification_deliveries, notification_targets, "
-                    "content_annotations, reports, monitor_schedules, "
-                    "outbox_messages, coverage_windows, "
-                    "jobs, followed_account_aliases, followed_accounts, "
-                    "monitor_topic_status_events, "
-                    "monitor_topic_versions, monitor_topics, "
-                    "identity_sessions, identity_users"
-                )
-            )
+            connection.execute(text(TEST_DATABASE_TRUNCATE))
         engine.dispose()
 
 
@@ -242,7 +188,7 @@ def test_minio_evidence_content_archive_and_restore_round_trip(tmp_path: Path) -
                 schema_sha256="b" * 64,
                 server_version="18.4",
                 pg_dump_version="pg_dump (PostgreSQL) 18.4",
-                tables=(BackupTableCount(name="identity_users", row_count=0),),
+                tables=(BackupTableCount(name="monitor_topics", row_count=0),),
             ),
             evidence_mode=EvidenceBackupMode.CONTENT_ARCHIVED,
             evidence_bucket=bucket,
@@ -323,8 +269,6 @@ def test_candidate_backup_uses_real_snapshot_archive_and_minio_inventory(
         "evidence_retention_policies",
         "followed_account_aliases",
         "followed_accounts",
-        "identity_sessions",
-        "identity_users",
         "job_attempts",
         "job_stage_attempts",
         "jobs",
@@ -350,7 +294,8 @@ def test_candidate_backup_uses_real_snapshot_archive_and_minio_inventory(
         "source_connection_versions",
         "source_connections",
     }
-    assert table_counts["identity_users"] == 1
+    assert "identity_users" not in table_counts
+    assert "identity_sessions" not in table_counts
     assert table_counts["analysis_prompt_activations"] == 0
     assert table_counts["analysis_prompt_runtime_sessions"] == 1
     assert table_counts["monitor_topic_status_events"] == 0

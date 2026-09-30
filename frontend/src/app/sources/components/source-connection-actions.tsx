@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import { updateSourceConnection } from "@/api/laiyuannengli";
 import { Button } from "@/components/ui/button";
@@ -23,7 +22,6 @@ export function SourceConnectionActions({
   platform: HotKeyAPI.SourcePlatformView;
   onChanged: () => Promise<void>;
 }) {
-  const router = useRouter();
   const submitting = useRef(false);
   const [pending, setPending] = useState(false);
   const [confirm, setConfirm] =
@@ -71,13 +69,6 @@ export function SourceConnectionActions({
       );
       await onChanged();
     } catch (failure) {
-      if (
-        failure instanceof ApiRequestError &&
-        failure.code === "invalid_session"
-      ) {
-        router.replace("/login");
-        return;
-      }
       setConfirm(null);
       setReviewed(false);
       setError(

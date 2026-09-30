@@ -2,7 +2,7 @@
 /* eslint-disable */
 import request from "@/request";
 
-/** 读取最新热榜快照 读取当前用户最近一次快照及与上次快照的排名变化。按排名游标分页。 GET /api/hotlists/${param0} */
+/** 读取最新热榜快照 读取当前 Demo 分区最近一次快照及与上次快照的排名变化。按排名游标分页。 GET /api/hotlists/${param0} */
 export async function getHotlistSnapshot(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: HotKeyAPI.getHotlistSnapshotParams,
@@ -20,7 +20,7 @@ export async function getHotlistSnapshot(
   });
 }
 
-/** 列出热榜历史快照 按观察时间和快照 ID 倒序读取当前用户的持久快照。游标限定同一来源。 GET /api/hotlists/${param0}/snapshots */
+/** 列出热榜历史快照 按观察时间和快照 ID 倒序读取当前 Demo 分区的持久快照。游标限定同一来源。 GET /api/hotlists/${param0}/snapshots */
 export async function listHotlistSnapshots(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: HotKeyAPI.listHotlistSnapshotsParams,
@@ -62,7 +62,7 @@ export async function getHistoricalHotlistSnapshot(
   );
 }
 
-/** 列出已应用热榜来源 仅列出当前用户已应用的热榜来源及最近快照时间。读取不会访问 RSSHub。 GET /api/hotlists/sources */
+/** 列出已应用热榜来源 仅列出当前 Demo 分区已应用的热榜来源及最近快照时间。读取不会访问 RSSHub。 GET /api/hotlists/sources */
 export async function listHotlistSources(
   options?: import("@/request").RequestOptions,
 ) {

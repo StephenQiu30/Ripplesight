@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
+from tests.conftest import TEST_DATABASE_TRUNCATE
 
 from connections.presets import SOURCE_PRESETS
 from connections.schemas import SourceQuietWindow
@@ -44,15 +45,7 @@ def hotlist_context() -> Iterator[HotlistContext]:
     now = datetime.now(UTC)
     due_at = datetime.fromtimestamp((int(now.timestamp()) // 1800) * 1800, UTC)
     with engine.begin() as connection:
-        connection.execute(text("TRUNCATE identity_users CASCADE"))
-        connection.execute(
-            text(
-                "INSERT INTO identity_users "
-                "(id, username, password_hash, credential_version, created_at, updated_at) "
-                "VALUES (:id, 'hotlist-test-owner', 'test-only-hash', 1, :now, :now)"
-            ),
-            {"id": owner_id, "now": due_at - timedelta(seconds=1)},
-        )
+        connection.execute(text(TEST_DATABASE_TRUNCATE))
     with sessions.begin() as session:
         presets = SourcePresetService(session, clock=lambda: due_at - timedelta(seconds=1))
         presets.apply_in_transaction(owner_id=owner_id, preset=SOURCE_PRESETS["hotlist_weibo"])
@@ -73,7 +66,7 @@ def hotlist_context() -> Iterator[HotlistContext]:
         yield HotlistContext(engine, sessions, owner_id, due_at)
     finally:
         with engine.begin() as connection:
-            connection.execute(text("TRUNCATE identity_users CASCADE"))
+            connection.execute(text(TEST_DATABASE_TRUNCATE))
         engine.dispose()
 
 

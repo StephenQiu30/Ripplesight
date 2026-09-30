@@ -39,12 +39,12 @@ from connections.services import (
 from content.services import ContentObservationCleanup
 from core.config import get_settings
 from core.errors import ApplicationError
+from db.demo import require_demo_partition_match, resolve_demo_scope
 from db.session import create_db_engine, create_session_factory
 from evidence.adapters.cache import RedisCacheCleanup
 from evidence.adapters.minio import MinioObjectCleanup
 from evidence.schemas import CleanupTargetKind
 from evidence.services import CleanupProcessor, LifecycleService
-from identity.services import IdentityService
 from notifications.schemas import NotificationChannel, TargetInput
 from notifications.services import NotificationTargetService
 from sources.adapters.browser_runtime import BrowserRuntime, BrowserRuntimeDisabledError
@@ -52,7 +52,6 @@ from sources.adapters.firecrawl import FirecrawlAdapter
 from sources.contracts import SourceCapability, SourceStopReason, WebPageRequest
 
 app = typer.Typer(no_args_is_help=True)
-identity_app = typer.Typer(no_args_is_help=True)
 lifecycle_app = typer.Typer(no_args_is_help=True)
 backup_app = typer.Typer(no_args_is_help=True)
 connections_app = typer.Typer(no_args_is_help=True)
@@ -60,7 +59,6 @@ sources_app = typer.Typer(no_args_is_help=True)
 source_preset_app = typer.Typer(no_args_is_help=True)
 notifications_app = typer.Typer(no_args_is_help=True)
 notification_target_app = typer.Typer(no_args_is_help=True)
-app.add_typer(identity_app, name="identity")
 app.add_typer(lifecycle_app, name="lifecycle")
 app.add_typer(backup_app, name="backup")
 app.add_typer(connections_app, name="connections")
@@ -79,12 +77,12 @@ def add_notification_target(
         str | None, typer.Option(help="Name of a HOTKEY_ secret environment variable.")
     ] = None,
 ) -> None:
-    """Create a named notification target for the initialized owner."""
+    """Create a named notification target for the Demo business partition."""
     settings = get_settings()
     engine = create_db_engine(settings)
     session = create_session_factory(engine)()
     try:
-        owner_id = IdentityService(session, settings).initialized_owner_id()
+        owner_id = resolve_demo_scope(session)
         target = TargetInput(name=name, channel=channel, secret_env=secret_env)
         with session.begin():
             created = NotificationTargetService(session).add_in_transaction(
@@ -107,7 +105,7 @@ def list_notification_targets() -> None:
     engine = create_db_engine(settings)
     session = create_session_factory(engine)()
     try:
-        owner_id = IdentityService(session, settings).initialized_owner_id()
+        owner_id = resolve_demo_scope(session)
         targets = NotificationTargetService(session).list(owner_id=owner_id)
     except ApplicationError as error:
         typer.echo(f"Notification target list failed: {error.code}", err=True)
@@ -146,7 +144,7 @@ def list_source_presets() -> None:
 def apply_source_preset(
     preset_name: Annotated[str, typer.Argument(metavar="PRESET")],
 ) -> None:
-    """Atomically apply one built-in source preset for the initialized owner."""
+    """Atomically apply one built-in source preset for the Demo business partition."""
     preset = SOURCE_PRESETS.get(preset_name)
     if preset is None:
         typer.echo(f"Source preset apply failed: unknown preset: {preset_name}", err=True)
@@ -156,7 +154,7 @@ def apply_source_preset(
     engine = create_db_engine(settings)
     session = create_session_factory(engine)()
     try:
-        owner_id = IdentityService(session, settings).initialized_owner_id()
+        owner_id = resolve_demo_scope(session)
         with session.begin():
             applied = SourcePresetService(session).apply_in_transaction(
                 owner_id=owner_id,
@@ -184,7 +182,7 @@ def status_bilibili() -> None:
     engine = create_db_engine(settings)
     session = create_session_factory(engine)()
     try:
-        owner_id = IdentityService(session, settings).initialized_owner_id()
+        owner_id = resolve_demo_scope(session)
         platform = next(
             item
             for item in SourceConnectionService(session).list_platforms(owner_id=owner_id)
@@ -215,7 +213,7 @@ def resume_bilibili(
     engine = create_db_engine(settings)
     session = create_session_factory(engine)()
     try:
-        owner_id = IdentityService(session, settings).initialized_owner_id()
+        owner_id = resolve_demo_scope(session)
         connection = SourceConnectionService(session).update_connection(
             owner_id=owner_id,
             source_key="bilibili",
@@ -325,7 +323,7 @@ def probe_browser() -> None:
 
 @connections_app.command("record-probe")
 def record_source_probe(
-    owner_id: Annotated[UUID, typer.Option(help="Owner that controls the connection.")],
+    owner_id: Annotated[UUID, typer.Option(help="Historical Demo partition of the connection.")],
     connection_id: Annotated[UUID, typer.Option(help="Connection used by the probe.")],
     connection_version: Annotated[int, typer.Option(min=1, help="Version used by the probe.")],
     operation_id: Annotated[UUID, typer.Option(help="Idempotency key for this probe.")],
@@ -360,6 +358,7 @@ def record_source_probe(
     engine = create_db_engine(settings)
     session = create_session_factory(engine)()
     try:
+        require_demo_partition_match(resolve_demo_scope(session), owner_id)
         evidence = SourceCapabilityEvidenceService(session).record_probe(
             owner_id=owner_id,
             command=command,
@@ -378,7 +377,9 @@ def record_source_probe(
 
 @connections_app.command("rotate-browser-state")
 def rotate_browser_state(
-    owner_id: Annotated[UUID, typer.Option(help="Owner of an existing browser connection.")],
+    owner_id: Annotated[
+        UUID, typer.Option(help="Historical Demo partition of the browser connection.")
+    ],
     connection_id: Annotated[UUID, typer.Option(help="Existing browser connection to rotate.")],
     expected_version: Annotated[int, typer.Option(min=1, help="Current connection version.")],
     capture_file: Annotated[Path, typer.Option(help="Absolute private Playwright state file.")],
@@ -398,6 +399,7 @@ def rotate_browser_state(
     engine = create_db_engine(settings)
     session = create_session_factory(engine)()
     try:
+        require_demo_partition_match(resolve_demo_scope(session), owner_id)
         connection = SourceConnectionService(session).rotate_browser_state(
             owner_id=owner_id,
             connection_id=connection_id,
@@ -416,7 +418,9 @@ def rotate_browser_state(
 
 @connections_app.command("disable-browser-state")
 def disable_browser_state(
-    owner_id: Annotated[UUID, typer.Option(help="Owner of an existing browser connection.")],
+    owner_id: Annotated[
+        UUID, typer.Option(help="Historical Demo partition of the browser connection.")
+    ],
     connection_id: Annotated[UUID, typer.Option(help="Existing browser connection to stop.")],
     expected_version: Annotated[int, typer.Option(min=1, help="Current connection version.")],
 ) -> None:
@@ -425,6 +429,7 @@ def disable_browser_state(
     engine = create_db_engine(settings)
     session = create_session_factory(engine)()
     try:
+        require_demo_partition_match(resolve_demo_scope(session), owner_id)
         connection = SourceConnectionService(session).disable_browser_state(
             owner_id=owner_id,
             connection_id=connection_id,
@@ -531,28 +536,6 @@ def verify_backup_restore(
         f"duration seconds: {result.duration_seconds:.3f}; "
         "complete backup verified: false"
     )
-
-
-@identity_app.command("reset-password")
-def reset_password() -> None:
-    """Reset the owner password and revoke every active session."""
-    password = typer.prompt(
-        "New password",
-        hide_input=True,
-        confirmation_prompt=True,
-    )
-    settings = get_settings()
-    engine = create_db_engine(settings)
-    session = create_session_factory(engine)()
-    try:
-        revoked_sessions = IdentityService(session, settings).reset_owner_password(password)
-    except ApplicationError as error:
-        typer.echo(f"Password reset failed: {error.code}", err=True)
-        raise typer.Exit(code=1) from error
-    finally:
-        session.close()
-        engine.dispose()
-    typer.echo(f"Password reset complete; revoked sessions: {revoked_sessions}")
 
 
 @lifecycle_app.command("cleanup-once")

@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 
 from cli import jobs as job_commands
 from cli.commands import app
+from core.errors import ApplicationError
 from jobs.schemas import JobReliabilityOutcome, JobReliabilitySnapshot
 
 
@@ -56,6 +57,7 @@ def test_job_reliability_cli_prints_read_only_snapshot_json(monkeypatch) -> None
         job_commands, "create_session_factory", lambda _engine: lambda: FakeSession()
     )
     monkeypatch.setattr(job_commands, "JobObservationService", FakeObservationService)
+    monkeypatch.setattr(job_commands, "resolve_demo_scope", lambda _session: owner_id)
 
     result = CliRunner().invoke(
         app,
@@ -108,7 +110,7 @@ def test_job_reliability_cli_rejects_timestamps_without_timezone(monkeypatch) ->
     assert engine_opened is False
 
 
-def test_job_reliability_cli_fails_closed_when_owner_is_not_initialized(monkeypatch) -> None:
+def test_job_reliability_cli_fails_closed_when_demo_partition_is_ambiguous(monkeypatch) -> None:
     engine = MagicMock()
     session = MagicMock()
     session.__enter__.return_value = session
@@ -117,6 +119,11 @@ def test_job_reliability_cli_fails_closed_when_owner_is_not_initialized(monkeypa
     monkeypatch.setattr(job_commands, "create_db_engine", lambda _settings: engine)
     monkeypatch.setattr(job_commands, "create_session_factory", lambda _engine: lambda: session)
     monkeypatch.setattr(job_commands, "JobObservationService", None)
+    monkeypatch.setattr(
+        job_commands,
+        "resolve_demo_scope",
+        lambda _session: (_ for _ in ()).throw(ApplicationError("demo_scope_conflict")),
+    )
 
     result = CliRunner().invoke(
         app,
@@ -131,5 +138,5 @@ def test_job_reliability_cli_fails_closed_when_owner_is_not_initialized(monkeypa
     )
 
     assert result.exit_code == 1
-    assert "identity_uninitialized" in result.stderr
+    assert "demo_scope_conflict" in result.stderr
     engine.dispose.assert_called_once()

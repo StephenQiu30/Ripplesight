@@ -107,7 +107,6 @@ services:
     <<: *backend-service
     environment:
       <<: *backend-environment
-      HOTKEY_BOOTSTRAP_TOKEN: ${HOTKEY_BOOTSTRAP_TOKEN:-}
     depends_on:
       kafka:
         condition: service_healthy

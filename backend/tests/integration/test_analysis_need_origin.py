@@ -17,49 +17,9 @@ from analysis.services import project_analysis_need_origin_in_transaction
 def origin_case(analysis_case: AnalysisCase) -> Iterator[AnalysisCase]:
     case = analysis_case
     with case.sessions() as session, session.begin():
-        previous_runtime = (
-            session.execute(
-                text(
-                    "SELECT id, prompt_version, ai_enabled, started_at, last_seen_at, stopped_at "
-                    "FROM analysis_prompt_runtime_sessions"
-                )
-            )
-            .mappings()
-            .all()
-        )
         session.execute(text("DELETE FROM analysis_prompt_runtime_sessions"))
-        previous_activations = (
-            session.execute(
-                text("SELECT prompt_version, activated_at FROM analysis_prompt_activations")
-            )
-            .mappings()
-            .all()
-        )
         session.execute(text("DELETE FROM analysis_prompt_activations"))
-    try:
-        yield case
-    finally:
-        with case.sessions() as session, session.begin():
-            session.execute(text("DELETE FROM analysis_prompt_runtime_sessions"))
-            session.execute(text("DELETE FROM analysis_prompt_activations"))
-            for activation in previous_activations:
-                session.execute(
-                    text(
-                        "INSERT INTO analysis_prompt_activations "
-                        "(prompt_version, activated_at) VALUES (:version, :at)"
-                    ),
-                    {"version": activation["prompt_version"], "at": activation["activated_at"]},
-                )
-            for runtime in previous_runtime:
-                session.execute(
-                    text(
-                        "INSERT INTO analysis_prompt_runtime_sessions "
-                        "(id, prompt_version, ai_enabled, started_at, last_seen_at, stopped_at) "
-                        "VALUES (:id, :prompt_version, :ai_enabled, :started_at, "
-                        ":last_seen_at, :stopped_at)"
-                    ),
-                    dict(runtime),
-                )
+    yield case
 
 
 def _event(

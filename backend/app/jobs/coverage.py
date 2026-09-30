@@ -7,6 +7,7 @@ import hmac
 import json
 from collections import defaultdict
 from collections.abc import Callable, Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from itertools import pairwise
@@ -520,6 +521,29 @@ class CollectionCoverageQueryService:
         topic_id: UUID | None = None,
         cutoff_at: datetime | None = None,
     ) -> CollectionCoverageMetricsView:
+        transaction = nullcontext() if self._session.in_transaction() else self._session.begin()
+        with transaction:
+            return self._get_metrics_in_transaction(
+                owner_id=owner_id,
+                start=start,
+                end=end,
+                source_key=source_key,
+                capability=capability,
+                topic_id=topic_id,
+                cutoff_at=cutoff_at,
+            )
+
+    def _get_metrics_in_transaction(
+        self,
+        *,
+        owner_id: UUID,
+        start: datetime,
+        end: datetime,
+        source_key: str | None = None,
+        capability: SourceCapability | None = None,
+        topic_id: UUID | None = None,
+        cutoff_at: datetime | None = None,
+    ) -> CollectionCoverageMetricsView:
         """Read owner-visible due facts once and compute source timing without page loss."""
         from connections.services import list_applied_hotlist_presets_in_transaction
         from content.services import ContentService
@@ -725,6 +749,31 @@ class CollectionCoverageQueryService:
         cursor: str | None = None,
         limit: int = 20,
     ) -> tuple[tuple[CollectionCoverageView, ...], str | None]:
+        transaction = nullcontext() if self._session.in_transaction() else self._session.begin()
+        with transaction:
+            return self._list_coverage_in_transaction(
+                owner_id=owner_id,
+                start=start,
+                end=end,
+                source_key=source_key,
+                capability=capability,
+                topic_id=topic_id,
+                cursor=cursor,
+                limit=limit,
+            )
+
+    def _list_coverage_in_transaction(
+        self,
+        *,
+        owner_id: UUID,
+        start: datetime,
+        end: datetime,
+        source_key: str | None = None,
+        capability: SourceCapability | None = None,
+        topic_id: UUID | None = None,
+        cursor: str | None = None,
+        limit: int = 20,
+    ) -> tuple[tuple[CollectionCoverageView, ...], str | None]:
         if (
             start.utcoffset() != timedelta(0)
             or end.utcoffset() != timedelta(0)
@@ -797,6 +846,13 @@ class CollectionCoverageQueryService:
         return self._project(owner_id=owner_id, rows=page), next_cursor
 
     def get_coverage(self, *, owner_id: UUID, window_id: UUID) -> CollectionCoverageView:
+        transaction = nullcontext() if self._session.in_transaction() else self._session.begin()
+        with transaction:
+            return self._get_coverage_in_transaction(owner_id=owner_id, window_id=window_id)
+
+    def _get_coverage_in_transaction(
+        self, *, owner_id: UUID, window_id: UUID
+    ) -> CollectionCoverageView:
         connections = self._visible_connections(owner_id=owner_id)
         row = self._session.scalar(
             select(CollectionDueWindow).where(

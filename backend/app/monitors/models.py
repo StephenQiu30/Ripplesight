@@ -52,7 +52,7 @@ class FollowedAccount(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
-    owner_id: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="CASCADE"))
+    owner_id: Mapped[UUID] = mapped_column()
     source_key: Mapped[str] = mapped_column(String(64))
     external_id: Mapped[str] = mapped_column(String(256))
     display_name: Mapped[str | None] = mapped_column(String(256))
@@ -135,7 +135,7 @@ class MonitorTopic(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
-    owner_id: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="CASCADE"))
+    owner_id: Mapped[UUID] = mapped_column()
     name: Mapped[str] = mapped_column(String(80))
     status: Mapped[str] = mapped_column(String(16), server_default=text("'paused'"))
     readiness_status: Mapped[str] = mapped_column(
@@ -199,7 +199,7 @@ class MonitorTopicVersion(Base):
         primary_key=True,
     )
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
-    created_by: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="RESTRICT"))
+    created_by: Mapped[UUID] = mapped_column()
     match_any: Mapped[list[str]] = mapped_column(JSONB)
     match_all: Mapped[list[str]] = mapped_column(JSONB)
     exclude: Mapped[list[str]] = mapped_column(JSONB)

@@ -46,7 +46,7 @@ def _manifest(**changes: object) -> BackupManifest:
             schema_sha256="1" * 64,
             server_version="18.4",
             pg_dump_version="pg_dump (PostgreSQL) 18.4",
-            tables=(BackupTableCount(name="identity_users", row_count=0),),
+            tables=(BackupTableCount(name="monitor_topics", row_count=0),),
         ),
         "evidence_mode": EvidenceBackupMode.INVENTORY_ONLY,
         "evidence_bucket": "hotkey-evidence",

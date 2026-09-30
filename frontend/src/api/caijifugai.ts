@@ -2,7 +2,7 @@
 /* eslint-disable */
 import request from "@/request";
 
-/** 按来源与时间查询采集覆盖 从当前 owner 可访问来源的持久到期窗口分页读取任务、内容、分析与预算事实。 GET /api/collection-coverage */
+/** 按来源与时间查询采集覆盖 从当前 Demo 分区可访问来源的持久到期窗口分页读取任务、内容、分析与预算事实。 GET /api/collection-coverage */
 export async function listCollectionCoverage(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: HotKeyAPI.listCollectionCoverageParams,
@@ -22,7 +22,7 @@ export async function listCollectionCoverage(
   );
 }
 
-/** 读取单个采集覆盖窗口 按当前 owner 和当前可访问来源读取窗口及其持久事实。 GET /api/collection-coverage/${param0} */
+/** 读取单个采集覆盖窗口 按当前 Demo 分区和当前可访问来源读取窗口及其持久事实。 GET /api/collection-coverage/${param0} */
 export async function getCollectionCoverage(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: HotKeyAPI.getCollectionCoverageParams,

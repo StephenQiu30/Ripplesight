@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import sessionmaker
+from tests.conftest import TEST_DATABASE_TRUNCATE
 
 from ai.schemas import AiCallError, AiCompletion, AiFailureCode, AiTokenUsage
 from ai.services import AiService
@@ -54,40 +55,17 @@ def engine() -> Iterator[Engine]:
         pytest.skip("HOTKEY_TEST_DATABASE_URL is required for PostgreSQL integration tests")
     engine = create_engine(database_url)
     with engine.begin() as connection:
-        connection.execute(
-            text(
-                "TRUNCATE event_candidates, event_members, events, "
-                "collection_due_windows, hotlist_entries, hotlist_snapshots, "
-                "knowledge_exports, notification_deliveries, "
-                "notification_targets, ai_calls, identity_sessions, identity_users CASCADE"
-            )
-        )
+        connection.execute(text(TEST_DATABASE_TRUNCATE))
     try:
         yield engine
     finally:
         with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "TRUNCATE event_candidates, event_members, events, "
-                    "collection_due_windows, hotlist_entries, hotlist_snapshots, "
-                    "knowledge_exports, notification_deliveries, "
-                    "notification_targets, ai_calls, "
-                    "identity_sessions, identity_users CASCADE"
-                )
-            )
+            connection.execute(text(TEST_DATABASE_TRUNCATE))
         engine.dispose()
 
 
 def _owner(engine: Engine) -> UUID:
     owner_id = uuid4()
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                "INSERT INTO identity_users (id, username, password_hash, created_at, updated_at) "
-                "VALUES (:id, 'ai-owner', 'x', :now, :now)"
-            ),
-            {"id": owner_id, "now": _NOW},
-        )
     return owner_id
 
 

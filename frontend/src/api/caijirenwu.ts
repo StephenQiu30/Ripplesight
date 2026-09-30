@@ -2,7 +2,7 @@
 /* eslint-disable */
 import request from "@/request";
 
-/** 列出采集任务 按当前会话 owner 稳定分页读取任务摘要; 不暴露 scope、租约、操作标识或内部消息。 GET /api/jobs */
+/** 列出采集任务 按当前 Demo 分区稳定分页读取任务摘要; 不暴露 scope、租约、操作标识或内部消息。 GET /api/jobs */
 export async function listCollectionJobs(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: HotKeyAPI.listCollectionJobsParams,
@@ -34,7 +34,7 @@ export async function createCollectionJob(
   });
 }
 
-/** 读取采集任务状态 按当前会话 owner 读取持久任务, 不会暴露 scope、租约或内部消息。 GET /api/jobs/${param0} */
+/** 读取采集任务状态 按当前 Demo 分区读取持久任务, 不会暴露 scope、租约或内部消息。 GET /api/jobs/${param0} */
 export async function getCollectionJob(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: HotKeyAPI.getCollectionJobParams,
@@ -76,7 +76,7 @@ export async function retryCollectionJob(
   });
 }
 
-/** 列出连续失败问题 按当前会话 owner 返回连续三次失败的来源能力摘要供查看最近失败任务处理动作 GET /api/jobs/issues */
+/** 列出连续失败问题 按当前 Demo 分区返回连续三次失败的来源能力摘要供查看最近失败任务处理动作 GET /api/jobs/issues */
 export async function listContinuousFailureIssues(
   options?: import("@/request").RequestOptions,
 ) {

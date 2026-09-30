@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   ArrowLeftIcon,
@@ -96,10 +95,6 @@ const COVERAGE_STOP_REASON_LABELS: Record<string, string> = {
   unsupported: "来源不支持此范围",
   upstream_error: "来源暂时不可用",
 };
-
-function isInvalidSession(error: unknown): boolean {
-  return error instanceof ApiRequestError && error.code === "invalid_session";
-}
 
 function toErrorState(
   error: unknown,
@@ -369,7 +364,6 @@ export function JobCoverageWindows({
 }
 
 export function JobDetail({ jobId }: JobDetailProps) {
-  const router = useRouter();
   const [state, setState] = useState<DetailState>({ status: "loading" });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -388,9 +382,7 @@ export function JobDetail({ jobId }: JobDetailProps) {
         if (!current) {
           return;
         }
-        if (isInvalidSession(error)) {
-          router.replace("/login");
-        } else if (
+        if (
           error instanceof ApiRequestError &&
           error.code === "resource_not_found"
         ) {
@@ -402,7 +394,7 @@ export function JobDetail({ jobId }: JobDetailProps) {
     return () => {
       current = false;
     };
-  }, [jobId, router]);
+  }, [jobId]);
 
   async function refresh() {
     if (isRefreshing) {
@@ -414,15 +406,11 @@ export function JobDetail({ jobId }: JobDetailProps) {
       const job = await getCollectionJob({ job_id: jobId });
       setState({ status: "ready", job });
     } catch (error) {
-      if (isInvalidSession(error)) {
-        router.replace("/login");
-      } else {
-        setActionError(
-          error instanceof ApiRequestError
-            ? { message: error.message, requestId: error.requestId }
-            : { message: "刷新失败，当前显示的是上次读取的状态。" },
-        );
-      }
+      setActionError(
+        error instanceof ApiRequestError
+          ? { message: error.message, requestId: error.requestId }
+          : { message: "刷新失败，当前显示的是上次读取的状态。" },
+      );
     } finally {
       setIsRefreshing(false);
     }
@@ -438,15 +426,11 @@ export function JobDetail({ jobId }: JobDetailProps) {
       const job = await cancelCollectionJob({ job_id: jobId });
       setState({ status: "ready", job });
     } catch (error) {
-      if (isInvalidSession(error)) {
-        router.replace("/login");
-      } else {
-        setActionError(
-          error instanceof ApiRequestError
-            ? { message: error.message, requestId: error.requestId }
-            : { message: "取消失败，请重试。" },
-        );
-      }
+      setActionError(
+        error instanceof ApiRequestError
+          ? { message: error.message, requestId: error.requestId }
+          : { message: "取消失败，请重试。" },
+      );
     } finally {
       setIsCancelling(false);
     }
@@ -462,15 +446,11 @@ export function JobDetail({ jobId }: JobDetailProps) {
       const job = await retryCollectionJob({ job_id: jobId });
       setState({ status: "ready", job });
     } catch (error) {
-      if (isInvalidSession(error)) {
-        router.replace("/login");
-      } else {
-        setActionError(
-          error instanceof ApiRequestError
-            ? { message: error.message, requestId: error.requestId }
-            : { message: "重试提交失败，请检查任务状态后再试。" },
-        );
-      }
+      setActionError(
+        error instanceof ApiRequestError
+          ? { message: error.message, requestId: error.requestId }
+          : { message: "重试提交失败，请检查任务状态后再试。" },
+      );
     } finally {
       setIsRetrying(false);
     }

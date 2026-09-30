@@ -17,6 +17,7 @@ from confluent_kafka import Consumer, Message
 from confluent_kafka.admin import AdminClient, NewTopic
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
+from tests.conftest import TEST_DATABASE_TABLES
 
 from connections.schemas import SourceEntryPoint
 from content.collection import (
@@ -68,26 +69,7 @@ from worker.app import (
 from worker.execution import JobProcessSupervisor
 from worker.messaging import create_producer, decode_job_message, publish_outbox
 
-_TABLES = (
-    "event_candidates, event_members, events, "
-    "collection_due_windows, content_version_relations, "
-    "content_visibility_observations, content_observations, "
-    "hotlist_entries, hotlist_snapshots, content_versions, "
-    "content_discoveries, content_threads, content_records, "
-    "source_capability_evidence, "
-    "source_connection_versions, source_connections, provenance_manifest_inputs, "
-    "provenance_manifests, evidence_cleanup_targets, evidence_deletions, "
-    "evidence_resources, evidence_retention_policies, source_access_policies, "
-    "resource_budget_reservations, resource_budget_windows, resource_budget_policies, "
-    "resource_usage_attempts, resource_component_policies, job_stage_attempts, "
-    "processed_messages, job_attempts, "
-    "ai_calls, knowledge_exports, notification_deliveries, "
-    "notification_targets, content_annotations, reports, "
-    "monitor_schedules, outbox_messages, coverage_windows, "
-    "jobs, followed_account_aliases, followed_accounts, "
-    "monitor_topic_status_events, "
-    "monitor_topic_versions, monitor_topics, identity_sessions, identity_users"
-)
+_TABLES = TEST_DATABASE_TABLES
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,14 +114,6 @@ def webpage_context() -> Iterator[WebPageContext]:
     with engine.begin() as connection:
         connection.execute(text(f"TRUNCATE {_TABLES}"))
         connection.execute(text("SET CONSTRAINTS ALL DEFERRED"))
-        connection.execute(
-            text(
-                "INSERT INTO identity_users "
-                "(id, username, password_hash, credential_version, created_at, updated_at) "
-                "VALUES (:id, 'webpage-owner', 'test-only-hash', 1, :now, :now)"
-            ),
-            {"id": owner_id, "now": now},
-        )
         connection.execute(
             text(
                 "INSERT INTO source_connections "

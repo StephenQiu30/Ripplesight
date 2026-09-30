@@ -37,8 +37,6 @@ class Settings(BaseSettings):
     database_max_overflow: int = Field(default=10, ge=0, le=100)
     database_pool_timeout_seconds: float = Field(default=10, gt=0, le=60)
 
-    bootstrap_token: SecretStr | None = Field(default=None, min_length=32)
-    session_ttl_seconds: int = Field(default=43_200, ge=900, le=86_400)
     source_credentials: dict[Literal["x", "douyin"], SecretStr] = Field(
         default_factory=dict, repr=False
     )
@@ -206,11 +204,6 @@ class Settings(BaseSettings):
         ):
             raise ValueError("invalid browser WS URL")
         return value
-
-    @field_validator("bootstrap_token", mode="before")
-    @classmethod
-    def empty_bootstrap_token_is_unconfigured(cls, value: object) -> object:
-        return None if value == "" else value
 
     @field_validator("browser_state_dir", mode="before")
     @classmethod

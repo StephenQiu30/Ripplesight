@@ -6,7 +6,6 @@ from uuid import UUID
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
-    ForeignKey,
     ForeignKeyConstraint,
     Index,
     LargeBinary,
@@ -58,7 +57,7 @@ class ContentRecord(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
-    owner_id: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="CASCADE"))
+    owner_id: Mapped[UUID] = mapped_column()
     source_key: Mapped[str] = mapped_column(String(64))
     object_type: Mapped[str] = mapped_column(String(16))
     native_scope: Mapped[str | None] = mapped_column(String(512))

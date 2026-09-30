@@ -19,19 +19,19 @@
 
 每个切片在 Design 阶段记录组件名称、所属领域、复用范围、目标路径、数据来源及正常、空、加载、部分、错误和无权限状态。
 
-## 用户登录
+## Demo 访问
 
-目标为普通 ToC 用户体系：统一 `/login`，保留用户名和密码登录，与 GitHub App、邮箱验证码并存；GitHub 或邮箱首次成功验证可注册。移除部署密钥、单账户限制与独立工作区身份包装；保留 `CredentialsFields`、`PasswordField` 及密码显隐、自动完成语义。当前用户显示服务端返回的非敏感身份。登录页专属组件留在该路由，沿用 shadcn 字段和按钮，不建立通用认证组件框架。
+当前 Demo 直接进入 `/events`，删除 `/login`、`/register`、独占 auth 组件和身份先行请求；页面不显示账户信息或退出入口。`EventsWorkspace` 使用主题API，`TopicForm` 使用来源能力API，覆盖加载、空、错误重试与业务成功。来源授权/凭据和内容原生身份保留。
 
-无感登录是必要行为：页面通过服务端 Cookie 读取当前会话，有效会话自动恢复并进入工作台；过期、撤销、退出后重新验证。覆盖会话检查中、自动恢复成功、未登录和失效状态，避免401反复跳转。复用可撤销会话，不增加 JWT refresh 框架。
+`request.ts` 写请求固定 `X-HotKey-CSRF: 1`；代理不转发 Cookie/Authorization 或 Set-Cookie，业务失败就地显示并支持重试，不跳登录。CSP nonce、动态交互入口和 `noindex` 保持。
 
-账户关联、会话与错误规则见 [Design001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md)，文件和验证见 [Plan060](../docs/plan/060-GitHub与邮箱验证码登录执行计划.md)。本轮仅文档设计，现有用户名密码页面未变，GitHub/验证码尚未实现；新增流程覆盖密码错误/恢复、发送冷却、验证码无效/过期、限流、GitHub取消/失败、通道不可用和会话恢复/失效。
+访问规则见 [Design001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md)，文件和验证见 [Plan061](../docs/plan/061-Demo用户体系与历史依赖清理执行计划.md)。未来 ToC 登录需求后置，不保留组件或配置骨架。
 
 ## API 与状态
 
 - 公共协议遵循 PROJECT.md 与 AGENTS.md 的现行契约；旧 Design 046 全局异常与响应契约已删除，见 Git 历史。046 S03 是后续实施的共同前置；本文件仅细化 Web 消费与展示，不另定义返回模型。
 - 资源、分页、受理 DTO 和 ErrorView 来自同提交运行时 OpenAPI；错误读取 details，请求 ID 支持响应头/body 回退。HTTP、网络、超时、取消和协议失败分开；204 与文件不解析为 JSON，失败任务查询与合法空结果保持正常读取语义。
-- 传输层不全局弹提示、不按 message 分支、不自动重试写操作。字段错误就地显示，页面失败保留恢复入口，操作结果使用适当短时反馈；旧数据刷新失败要标明过期，401 会话失效避免重复跳转。
+- 传输层不全局弹提示、不按 message 分支、不自动重试写操作。字段错误就地显示，页面失败保留恢复入口，操作结果使用适当短时反馈；旧数据刷新失败要标明过期。
 - Umi OpenAPI 将端点和类型直接生成到 `src/api/`。
 - 所有生成请求统一使用 `src/request.ts`，页面不得手写端点或创建第二套 HTTP 客户端。
 - App Router 统一提供 loading、error、global-error 和 not-found 边界。
@@ -43,4 +43,4 @@
 - 动效遵循 `prefers-reduced-motion`。
 - 页面必须完成桌面和窄屏浏览器检查。
 - 生产镜像使用 standalone、非 root、只读文件系统和 `/health` 健康检查。
-- CSP nonce 由 `src/proxy.ts` 每请求生成；需要客户端交互的 HTML 入口必须按请求渲染。主题创建页在服务端入口等待 Next.js `connection()`，保持客户端会话/来源校验；生产脚本 nonce 必须与本次 CSP 一致，HTML 不使用共享缓存。生产镜像的 runtime 检查与浏览器冷进入均需通过。
+- CSP nonce 由 `src/proxy.ts` 每请求生成；需要客户端交互的 HTML 入口必须按请求渲染。主题创建页在服务端入口等待 Next.js `connection()`，保持来源校验；生产脚本 nonce 必须与本次 CSP 一致，HTML 不使用共享缓存。生产镜像的 runtime 检查与浏览器冷进入均需通过。

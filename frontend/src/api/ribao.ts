@@ -2,7 +2,7 @@
 /* eslint-disable */
 import request from "@/request";
 
-/** 列出日报 仅列出当前 owner 的定稿报告; 每个主题及时间窗只返回最新版本。日期按 Asia/Shanghai 自然日筛选。 GET /api/v1/reports */
+/** 列出日报 仅列出当前 Demo 分区的定稿报告; 每个主题及时间窗只返回最新版本。日期按 Asia/Shanghai 自然日筛选。 GET /api/v1/reports */
 export async function listReports(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: HotKeyAPI.listReportsParams,
@@ -22,7 +22,7 @@ export async function listReports(
   });
 }
 
-/** 读取日报详情 按当前 owner 读取指定定稿版本的 Markdown、窗口、截止时间和原帖引用。 GET /api/v1/reports/${param0} */
+/** 读取日报详情 按当前 Demo 分区读取指定定稿版本的 Markdown、窗口、截止时间和原帖引用。 GET /api/v1/reports/${param0} */
 export async function getReport(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: HotKeyAPI.getReportParams,

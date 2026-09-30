@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { RotateCcwIcon } from "lucide-react";
 
@@ -40,7 +39,6 @@ function reportTime(value: string): string {
 }
 
 export function ReportDetail({ reportId }: { reportId: string }) {
-  const router = useRouter();
   const [state, setState] = useState<DetailState>({ status: "loading" });
   const [retryKey, setRetryKey] = useState(0);
 
@@ -52,12 +50,7 @@ export function ReportDetail({ reportId }: { reportId: string }) {
       })
       .catch((error: unknown) => {
         if (!current) return;
-        if (
-          error instanceof ApiRequestError &&
-          error.code === "invalid_session"
-        ) {
-          router.replace("/login");
-        } else if (error instanceof ApiRequestError && error.status === 404) {
+        if (error instanceof ApiRequestError && error.status === 404) {
           setState({ status: "not-found" });
         } else {
           setState({
@@ -74,7 +67,7 @@ export function ReportDetail({ reportId }: { reportId: string }) {
     return () => {
       current = false;
     };
-  }, [reportId, retryKey, router]);
+  }, [reportId, retryKey]);
 
   if (state.status === "loading") {
     return (

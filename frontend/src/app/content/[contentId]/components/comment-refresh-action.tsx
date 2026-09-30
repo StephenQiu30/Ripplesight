@@ -105,20 +105,17 @@ export function CommentRefreshAction({ postId }: { postId: string }) {
       )
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        if (
-          error instanceof ApiRequestError &&
-          error.code === "invalid_session"
-        ) {
-          router.replace("/login");
-          return;
-        }
+
         setState({
           status: "error",
-          message: "评论更新资格暂不可用，请重新加载页面。",
+          message:
+            error instanceof ApiRequestError
+              ? `${error.message}${error.requestId ? ` 请求编号：${error.requestId}` : ""}`
+              : "评论更新资格暂不可用，请重新加载页面。",
         });
       });
     return () => controller.abort();
-  }, [postId, router]);
+  }, [postId]);
 
   async function refresh() {
     if (state.status !== "ready" || !state.readiness.available) return;
@@ -135,13 +132,7 @@ export function CommentRefreshAction({ postId }: { postId: string }) {
       router.push(`/jobs/${accepted.job_id}`);
     } catch (error) {
       operation.current.finish(false);
-      if (
-        error instanceof ApiRequestError &&
-        error.code === "invalid_session"
-      ) {
-        router.replace("/login");
-        return;
-      }
+
       if (
         error instanceof ApiRequestError &&
         (error.code === "comments_rate_limited" ||

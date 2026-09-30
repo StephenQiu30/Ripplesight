@@ -13,17 +13,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const navigation = vi.hoisted(() => {
   const listeners = new Set<() => void>();
   let href = "/sources";
-  let externalNavigation: string | null = null;
   return {
     get href() {
       return href;
     },
-    get externalNavigation() {
-      return externalNavigation;
-    },
     reset(value: string) {
       href = value;
-      externalNavigation = null;
       listeners.forEach((listener) => listener());
     },
     subscribe(listener: () => void) {
@@ -32,10 +27,6 @@ const navigation = vi.hoisted(() => {
     },
     router: {
       replace(value: string) {
-        if (value === "/login") {
-          externalNavigation = value;
-          return;
-        }
         href = value;
         listeners.forEach((listener) => listener());
       },
@@ -193,17 +184,25 @@ describe("source coverage interaction", () => {
     expect(screen.getAllByText("部分结果").length).toBeGreaterThan(0);
   });
 
-  it("redirects an expired session and keeps 403 scoped inside the page", async () => {
+  it("retries a business failure and keeps 403 scoped inside the page", async () => {
     vi.mocked(listCollectionCoverage).mockRejectedValueOnce(
       new ApiRequestError({
         kind: "http",
-        status: 401,
-        code: "invalid_session",
-        message: "会话失效",
+        status: 503,
+        code: "demo_scope_conflict",
+        message: "历史数据分区冲突",
+        requestId: "request-demo-scope",
       }),
     );
     const { unmount } = render(<SourceCoveragePanel />);
-    await waitFor(() => expect(navigation.externalNavigation).toBe("/login"));
+    expect(await screen.findByText(/历史数据分区冲突/)).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain(
+      "request-demo-scope",
+    );
+    expect(navigation.href).toBe(url("old_source"));
+    fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
+    expect(await screen.findByText("此筛选下暂无到期窗口")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
     unmount();
 
     navigation.reset(url("forbidden_source"));
@@ -217,6 +216,28 @@ describe("source coverage interaction", () => {
     render(<SourceCoveragePanel />);
     expect(await screen.findByText("记录不存在或无权查看")).toBeTruthy();
     expect(navigation.href).toContain("forbidden_source");
+  });
+
+  it("shows a source option error without blocking coverage and retries it", async () => {
+    vi.mocked(listSourceCapabilities).mockRejectedValueOnce(
+      new ApiRequestError({
+        kind: "http",
+        status: 502,
+        code: "upstream_error",
+        message: "来源服务暂不可用",
+        requestId: "request-source-options",
+      }),
+    );
+    render(<SourceCoveragePanel />);
+    expect(await screen.findByText("来源选项加载失败")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain(
+      "request-source-options",
+    );
+    expect(await screen.findByText("此筛选下暂无到期窗口")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    expect(listSourceCapabilities).toHaveBeenCalledTimes(2);
+    expect(navigation.href).toBe(url("old_source"));
   });
 
   it.each([

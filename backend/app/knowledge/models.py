@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, ForeignKey, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.base import Base
@@ -26,9 +26,7 @@ class KnowledgeExport(Base):
         ),
     )
 
-    owner_id: Mapped[UUID] = mapped_column(
-        ForeignKey("identity_users.id", ondelete="CASCADE"), primary_key=True
-    )
+    owner_id: Mapped[UUID] = mapped_column(primary_key=True)
     object_type: Mapped[str] = mapped_column(String(16), primary_key=True)
     object_id: Mapped[UUID] = mapped_column(primary_key=True)
     relative_path: Mapped[str] = mapped_column(String(512))

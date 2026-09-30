@@ -12,15 +12,15 @@ pnpm dev
 
 浏览器请求统一使用同源 `/api/*`，`src/app/api/[[...path]]/route.ts` 根据服务端 `HOTKEY_API_ORIGIN` 转发；`src/proxy.ts` 只负责 CSP nonce。
 
-## 账户与登录
+## Demo 业务入口
 
-目标 Web 统一 `/login`，保留用户名和密码登录，与 GitHub App、邮箱验证码并存；GitHub 或邮箱首次成功验证可注册，已有用户进入自己的工作台。移除部署密钥、单账户限制与独立工作区身份包装；资源归属由后端从会话派生，页面不让用户填写 owner 标识。登录入口保持 `noindex`。
+当前 Demo 直接访问 `/events`，登录、注册及用户体系删除。业务页面不读取身份、不显示账户/退出操作，也不因错误跳往登录页。来源授权和凭据状态仍由来源页面显示。
 
-无感登录通过现有服务端 Cookie 校验实现：有效会话自动恢复，已登录用户进入工作台；过期、撤销或退出后返回登录验证。保留用户名/密码字段及必要状态，不新增 JWT refresh 框架。
+写请求由 `src/request.ts` 设置固定 `X-HotKey-CSRF: 1`，无需 Cookie/token。Next 同源代理不转发旧 Cookie/Authorization，也不向浏览器透传 Set-Cookie；加载、空、错误/重试、草稿冲突及请求编号继续有效。
 
-当前页面和生成 API 客户端仍对应旧身份实现；GitHub App 与邮箱验证码尚不可用。本轮只更新设计和文档，运行和生成命令仍面向当前代码。组件、状态与账户合同见 [Design 001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md)，替换工作由 [Plan 060](../docs/plan/060-GitHub与邮箱验证码登录执行计划.md) 承接；实现后从同版本后端 OpenAPI 重新生成客户端。
+页面访问合同见 [Design 001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md)，清理归 [Plan061](../docs/plan/061-Demo用户体系与历史依赖清理执行计划.md)；API 从同版本后端 OpenAPI 生成，不手写端点。
 
-GitHub App 凭据、邮件发送凭据和验证码校验只在后端处理；Web 通过同源代理使用服务端会话 Cookie，写请求保留 CSRF 校验。邮件登录与后续报告邮件投递分别验证。
+未来 ToC 的用户名密码、GitHub App、邮箱验证码和无感登录需求后置。当前 Demo 保持 `noindex`、生产 CSP nonce 和动态交互入口。
 
 ## 目录
 

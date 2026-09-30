@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
-from api.dependencies import AuthenticatedIdentityDependency, CollectionCoverageServiceDependency
+from api.dependencies import CollectionCoverageServiceDependency, DemoScopeDependency
 from core.schemas import ErrorView, PageView
 from jobs.schemas import CollectionCoverageMetricsView, CollectionCoverageView
 from sources.contracts import SourceCapability
@@ -14,7 +14,7 @@ from sources.contracts import SourceCapability
 router = APIRouter(prefix="/collection-coverage", tags=["采集覆盖"])
 
 _READ_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
-    401: {"model": ErrorView, "description": "会话无效或已过期"},
+    503: {"model": ErrorView, "description": "数据库不可用或 Demo 数据分区冲突"},
     404: {"model": ErrorView, "description": "到期窗口不存在或不可访问"},
     422: {"model": ErrorView, "description": "查询时间或游标无效"},
     500: {"model": ErrorView, "description": "服务内部异常"},
@@ -30,13 +30,13 @@ _METRICS_ERROR_RESPONSES = {
     response_model=PageView[CollectionCoverageView],
     status_code=status.HTTP_200_OK,
     summary="按来源与时间查询采集覆盖",
-    description="从当前 owner 可访问来源的持久到期窗口分页读取任务、内容、分析与预算事实。",
+    description="从当前 Demo 分区可访问来源的持久到期窗口分页读取任务、内容、分析与预算事实。",
     responses=_READ_ERROR_RESPONSES,
 )
 def list_collection_coverage(
     response: Response,
     service: CollectionCoverageServiceDependency,
-    identity: AuthenticatedIdentityDependency,
+    scope_id: DemoScopeDependency,
     start: Annotated[
         datetime,
         Query(description="UTC 到期范围起点 (包含)", examples=["2026-09-27T00:00:00Z"]),
@@ -59,7 +59,7 @@ def list_collection_coverage(
 ) -> PageView[CollectionCoverageView]:
     try:
         items, next_cursor = service.list_coverage(
-            owner_id=identity.view.user.id,
+            owner_id=scope_id,
             start=start,
             end=end,
             source_key=source_key,
@@ -89,7 +89,7 @@ def list_collection_coverage(
 def get_collection_coverage_metrics(
     response: Response,
     service: CollectionCoverageServiceDependency,
-    identity: AuthenticatedIdentityDependency,
+    scope_id: DemoScopeDependency,
     start: Annotated[datetime, Query(description="UTC 到期范围起点 (包含)")],
     end: Annotated[datetime, Query(description="UTC 到期范围终点 (不包含); 最多 31 天")],
     source_key: Annotated[str | None, Query(pattern=r"^[a-z][a-z0-9_-]{0,63}$")] = None,
@@ -98,7 +98,7 @@ def get_collection_coverage_metrics(
 ) -> CollectionCoverageMetricsView:
     try:
         result = service.get_metrics(
-            owner_id=identity.view.user.id,
+            owner_id=scope_id,
             start=start,
             end=end,
             source_key=source_key,
@@ -117,15 +117,15 @@ def get_collection_coverage_metrics(
     response_model=CollectionCoverageView,
     status_code=status.HTTP_200_OK,
     summary="读取单个采集覆盖窗口",
-    description="按当前 owner 和当前可访问来源读取窗口及其持久事实。",
+    description="按当前 Demo 分区和当前可访问来源读取窗口及其持久事实。",
     responses=_READ_ERROR_RESPONSES,
 )
 def get_collection_coverage(
     window_id: UUID,
     response: Response,
     service: CollectionCoverageServiceDependency,
-    identity: AuthenticatedIdentityDependency,
+    scope_id: DemoScopeDependency,
 ) -> CollectionCoverageView:
-    view = service.get_coverage(owner_id=identity.view.user.id, window_id=window_id)
+    view = service.get_coverage(owner_id=scope_id, window_id=window_id)
     response.headers["cache-control"] = "no-store"
     return view

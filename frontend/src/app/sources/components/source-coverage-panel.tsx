@@ -90,13 +90,6 @@ function readFailure(error: unknown, fallback: string): ReadFailure {
   return { kind: "error", message: fallback };
 }
 
-function invalidSession(error: unknown): boolean {
-  return (
-    error instanceof ApiRequestError &&
-    (error.status === 401 || error.code === "invalid_session")
-  );
-}
-
 export function shanghaiLocalToUtc(value: string): string | null {
   if (!LOCAL_TIME_PATTERN.test(value)) return null;
   const [date, time] = value.split("T");
@@ -400,6 +393,10 @@ export function SourceCoveragePanel() {
         : { sourceKey: "", capability: "", startLocal: "", endLocal: "" };
   const [validation, setValidation] = useState<string | null>(null);
   const [sources, setSources] = useState<HotKeyAPI.SourcePlatformView[]>([]);
+  const [sourcesFailure, setSourcesFailure] = useState<ReadFailure | null>(
+    null,
+  );
+  const [sourcesRefresh, setSourcesRefresh] = useState(0);
   const [list, setList] = useState<ListState | null>(null);
   const [metrics, setMetrics] = useState<MetricsState | null>(null);
   const [detail, setDetail] = useState<DetailState | null>(null);
@@ -428,14 +425,17 @@ export function SourceCoveragePanel() {
     const controller = new AbortController();
     void listSourceCapabilities({ signal: controller.signal })
       .then((page) => {
-        if (!controller.signal.aborted) setSources(page.items);
+        if (!controller.signal.aborted) {
+          setSources(page.items);
+          setSourcesFailure(null);
+        }
       })
       .catch((error: unknown) => {
-        if (!controller.signal.aborted && invalidSession(error))
-          router.replace("/login");
+        if (controller.signal.aborted) return;
+        setSourcesFailure(readFailure(error, "来源选项加载失败，请重试。"));
       });
     return () => controller.abort();
-  }, [router]);
+  }, [sourcesRefresh]);
 
   useEffect(() => {
     if (!applied) return;
@@ -456,13 +456,11 @@ export function SourceCoveragePanel() {
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        if (invalidSession(error)) router.replace("/login");
-        else
-          setList({
-            key: requestKey,
-            status: "error",
-            failure: readFailure(error, "覆盖窗口加载失败，请重试。"),
-          });
+        setList({
+          key: requestKey,
+          status: "error",
+          failure: readFailure(error, "覆盖窗口加载失败，请重试。"),
+        });
       });
     void getCollectionCoverageMetrics(params, { signal: controller.signal })
       .then((value) => {
@@ -471,19 +469,17 @@ export function SourceCoveragePanel() {
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        if (invalidSession(error)) router.replace("/login");
-        else
-          setMetrics({
-            key: requestKey,
-            status: "error",
-            failure: readFailure(error, "逐来源指标加载失败，请重试。"),
-          });
+        setMetrics({
+          key: requestKey,
+          status: "error",
+          failure: readFailure(error, "逐来源指标加载失败，请重试。"),
+        });
       });
     return () => {
       controller.abort();
       pageController.current?.abort();
     };
-  }, [applied, requestKey, router]);
+  }, [applied, requestKey]);
 
   useEffect(() => {
     if (!selectedWindow) return;
@@ -498,16 +494,14 @@ export function SourceCoveragePanel() {
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        if (invalidSession(error)) router.replace("/login");
-        else
-          setDetail({
-            key: detailKey,
-            status: "error",
-            failure: readFailure(error, "窗口详情加载失败，请重试。"),
-          });
+        setDetail({
+          key: detailKey,
+          status: "error",
+          failure: readFailure(error, "窗口详情加载失败，请重试。"),
+        });
       });
     return () => controller.abort();
-  }, [selectedWindow, detailKey, router]);
+  }, [selectedWindow, detailKey]);
 
   function changeDraft(change: Partial<CoverageDraft>) {
     setDraftState({ key: queryKey, value: { ...draft, ...change } });
@@ -553,13 +547,11 @@ export function SourceCoveragePanel() {
       );
     } catch (error) {
       if (controller.signal.aborted) return;
-      if (invalidSession(error)) router.replace("/login");
-      else
-        setLoadMoreState({
-          key,
-          loading: false,
-          error: readFailure(error, "后续窗口加载失败，请重试。").message,
-        });
+      setLoadMoreState({
+        key,
+        loading: false,
+        error: readFailure(error, "后续窗口加载失败，请重试。").message,
+      });
     } finally {
       if (!controller.signal.aborted)
         setLoadMoreState((current) =>
@@ -586,6 +578,13 @@ export function SourceCoveragePanel() {
           时间输入与列表显示均为北京时间
         </p>
       </div>
+      {sourcesFailure ? (
+        <QueryFailure
+          title="来源选项加载失败"
+          failure={sourcesFailure}
+          onRetry={() => setSourcesRefresh((count) => count + 1)}
+        />
+      ) : null}
       <form
         onSubmit={applyFilters}
         className="bg-muted mt-5 grid gap-4 rounded-2xl p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-5"

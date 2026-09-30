@@ -1,148 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 import {
   FileTextIcon,
   ListChecksIcon,
-  LogOutIcon,
   NewspaperIcon,
   PlusIcon,
   RadioIcon,
-  RotateCcwIcon,
   TrendingUpIcon,
 } from "lucide-react";
 
-import { deleteIdentitySession, getIdentityWorkspace } from "@/api/identity";
 import { BrandLockup } from "@/components/brand/brand-lockup";
 import { TopicList } from "@/components/monitors/topic-list";
-import { PageState } from "@/components/system/page-state";
 import { Button } from "@/components/ui/button";
-import { ApiRequestError } from "@/request";
-
-type WorkspaceState =
-  | { status: "loading" }
-  | { status: "ready"; workspace: HotKeyAPI.IdentityWorkspaceView }
-  | { status: "error"; message: string; requestId?: string };
-
-type WorkspaceResult =
-  | Exclude<WorkspaceState, { status: "loading" }>
-  | { status: "unauthenticated" };
-
-function isInvalidSession(error: unknown): boolean {
-  return error instanceof ApiRequestError && error.code === "invalid_session";
-}
-
-function toWorkspaceError(
-  error: unknown,
-): Extract<WorkspaceState, { status: "error" }> {
-  if (error instanceof ApiRequestError) {
-    return {
-      status: "error",
-      message: error.message,
-      requestId: error.requestId,
-    };
-  }
-  return { status: "error", message: "工作台加载失败，请稍后重试。" };
-}
-
-async function readWorkspace(): Promise<WorkspaceResult> {
-  try {
-    return { status: "ready", workspace: await getIdentityWorkspace() };
-  } catch (error) {
-    return isInvalidSession(error)
-      ? { status: "unauthenticated" }
-      : toWorkspaceError(error);
-  }
-}
 
 export function EventsWorkspace() {
-  const router = useRouter();
-  const [state, setState] = useState<WorkspaceState>({ status: "loading" });
-  const [isSigningOut, setIsSigningOut] = useState(false);
-  const [signOutError, setSignOutError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let isCurrent = true;
-    void readWorkspace().then((result) => {
-      if (!isCurrent) {
-        return;
-      }
-      if (result.status === "unauthenticated") {
-        router.replace("/login");
-        return;
-      }
-      setState(result);
-    });
-    return () => {
-      isCurrent = false;
-    };
-  }, [router]);
-
-  async function reloadWorkspace() {
-    setState({ status: "loading" });
-    const result = await readWorkspace();
-    if (result.status === "unauthenticated") {
-      router.replace("/login");
-      return;
-    }
-    setState(result);
-  }
-
-  async function signOut() {
-    if (isSigningOut) {
-      return;
-    }
-    setIsSigningOut(true);
-    setSignOutError(null);
-    try {
-      await deleteIdentitySession();
-      router.replace("/login");
-      router.refresh();
-    } catch (error) {
-      if (isInvalidSession(error)) {
-        router.replace("/login");
-        return;
-      }
-      setSignOutError(
-        error instanceof ApiRequestError ? error.message : "注销失败，请重试。",
-      );
-    } finally {
-      setIsSigningOut(false);
-    }
-  }
-
-  if (state.status === "loading") {
-    return (
-      <PageState
-        eyebrow="工作台"
-        title="正在加载"
-        description="正在验证会话并读取你的私有工作区。"
-      />
-    );
-  }
-
-  if (state.status === "error") {
-    return (
-      <PageState
-        eyebrow="加载失败"
-        title="暂时无法打开工作台"
-        description={
-          state.requestId
-            ? `${state.message} 请求编号：${state.requestId}`
-            : state.message
-        }
-        action={
-          <Button onClick={() => void reloadWorkspace()}>
-            <RotateCcwIcon data-icon="inline-start" />
-            重新加载
-          </Button>
-        }
-      />
-    );
-  }
-
   return (
     <div className="bg-background min-h-screen">
       <header className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-8 xl:px-16 2xl:px-0">
@@ -203,18 +75,6 @@ export function EventsWorkspace() {
               <span className="sr-only sm:not-sr-only">日报</span>
             </Link>
           </Button>
-          <span className="text-muted-foreground hidden text-sm sm:inline">
-            {state.workspace.owner.username}
-          </span>
-          <Button
-            variant="ghost"
-            size="navigation"
-            onClick={() => void signOut()}
-            disabled={isSigningOut}
-          >
-            <LogOutIcon data-icon="inline-start" />
-            {isSigningOut ? "正在退出" : "退出"}
-          </Button>
         </div>
       </header>
 
@@ -242,11 +102,6 @@ export function EventsWorkspace() {
             事件归并仍在建设中。后续可沿时间与来源查看同一主题下的事件发展。
           </p>
         </section>
-        {signOutError ? (
-          <p role="alert" className="text-destructive mt-4 text-sm">
-            {signOutError}
-          </p>
-        ) : null}
       </main>
     </div>
   );

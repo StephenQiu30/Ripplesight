@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowLeftIcon, ExternalLinkIcon, RotateCcwIcon } from "lucide-react";
 
@@ -36,10 +35,6 @@ type DetailState =
   | { status: "ready"; content: HotKeyAPI.ContentRecordDetailView }
   | { status: "not-found" }
   | { status: "error"; message: string; requestId?: string };
-
-function isInvalidSession(error: unknown): boolean {
-  return error instanceof ApiRequestError && error.code === "invalid_session";
-}
 
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
@@ -277,7 +272,6 @@ function VisibilityHistory({
 }
 
 export function ContentDetail({ contentId }: ContentDetailProps) {
-  const router = useRouter();
   const [state, setState] = useState<DetailState>({ status: "loading" });
 
   useEffect(() => {
@@ -292,9 +286,7 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
         if (!isCurrent) {
           return;
         }
-        if (isInvalidSession(error)) {
-          router.replace("/login");
-        } else if (
+        if (
           error instanceof ApiRequestError &&
           error.code === "resource_not_found"
         ) {
@@ -314,7 +306,7 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
     return () => {
       isCurrent = false;
     };
-  }, [contentId, router]);
+  }, [contentId]);
 
   if (state.status === "loading") {
     return (

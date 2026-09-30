@@ -86,7 +86,7 @@ class SourceAccessPolicy(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
-    owner_id: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="CASCADE"))
+    owner_id: Mapped[UUID] = mapped_column()
     source_key: Mapped[str] = mapped_column(String(64))
     capability: Mapped[str] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(16))
@@ -155,7 +155,7 @@ class RetentionPolicy(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
-    owner_id: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="CASCADE"))
+    owner_id: Mapped[UUID] = mapped_column()
     source_policy_id: Mapped[UUID]
     source_policy_version: Mapped[int] = mapped_column(Integer)
     data_class: Mapped[str] = mapped_column(String(16))
@@ -215,7 +215,7 @@ class EvidenceResource(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
-    owner_id: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="CASCADE"))
+    owner_id: Mapped[UUID] = mapped_column()
     resource_type: Mapped[str] = mapped_column(String(64))
     resource_id: Mapped[UUID]
     source_policy_id: Mapped[UUID]
@@ -271,7 +271,7 @@ class DeletionDirective(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
-    owner_id: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="CASCADE"))
+    owner_id: Mapped[UUID] = mapped_column()
     operation_id: Mapped[UUID]
     resource_record_id: Mapped[UUID]
     reason: Mapped[str] = mapped_column(String(32))
@@ -377,7 +377,7 @@ class ProvenanceManifest(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
-    owner_id: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="CASCADE"))
+    owner_id: Mapped[UUID] = mapped_column()
     job_id: Mapped[UUID]
     operation_id: Mapped[UUID]
     result_kind: Mapped[str] = mapped_column(String(64))

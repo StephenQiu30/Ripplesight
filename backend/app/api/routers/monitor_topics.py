@@ -6,9 +6,9 @@ from uuid import UUID
 from fastapi import APIRouter, Query, Response, status
 
 from api.dependencies import (
-    AuthenticatedIdentityDependency,
     ContentServiceDependency,
-    CsrfProtectedIdentityDependency,
+    DemoScopeDependency,
+    DemoWriteScopeDependency,
     MonitorTopicRunServiceDependency,
     MonitorTopicServiceDependency,
 )
@@ -27,14 +27,14 @@ from monitors.schemas import (
 router = APIRouter(prefix="/topics", tags=["监控主题"])
 
 _READ_RESPONSES: dict[int | str, dict[str, Any]] = {
-    401: {"model": ErrorView, "description": "会话无效或已过期"},
+    503: {"model": ErrorView, "description": "数据库不可用或 Demo 数据分区冲突"},
     404: {"model": ErrorView, "description": "主题不存在或不可访问"},
     422: {"model": ErrorView, "description": "请求参数校验失败"},
     500: {"model": ErrorView, "description": "服务内部异常"},
 }
 
 _WRITE_RESPONSES: dict[int | str, dict[str, Any]] = {
-    401: {"model": ErrorView, "description": "会话无效或已过期"},
+    503: {"model": ErrorView, "description": "数据库不可用或 Demo 数据分区冲突"},
     403: {"model": ErrorView, "description": "请求安全校验失败"},
     404: {"model": ErrorView, "description": "主题不存在或不可访问"},
     409: {"model": ErrorView, "description": "主题状态或版本不允许当前操作"},
@@ -49,19 +49,19 @@ _WRITE_RESPONSES: dict[int | str, dict[str, Any]] = {
     response_model=PageView[MonitorTopicView],
     status_code=status.HTTP_200_OK,
     summary="列出监控主题",
-    description="按当前 owner 列出主题; 默认隐藏已归档主题。",
+    description="按当前 Demo 分区列出主题; 默认隐藏已归档主题。",
     responses=_READ_RESPONSES,
 )
 def list_monitor_topics(
     response: Response,
     service: MonitorTopicServiceDependency,
-    identity: AuthenticatedIdentityDependency,
+    scope_id: DemoScopeDependency,
     include_archived: bool = False,
     cursor: UUID | None = None,
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> PageView[MonitorTopicView]:
     items, next_cursor = service.list_topics(
-        owner_id=identity.view.user.id,
+        owner_id=scope_id,
         include_archived=include_archived,
         cursor=cursor,
         limit=limit,
@@ -86,9 +86,9 @@ def create_monitor_topic(
     payload: MonitorTopicCreateInput,
     response: Response,
     service: MonitorTopicServiceDependency,
-    identity: CsrfProtectedIdentityDependency,
+    scope_id: DemoWriteScopeDependency,
 ) -> MonitorTopicView:
-    topic = service.create_topic(owner_id=identity.view.user.id, command=payload)
+    topic = service.create_topic(owner_id=scope_id, command=payload)
     response.headers["location"] = f"/api/topics/{topic.id}"
     response.headers["cache-control"] = "no-store"
     return topic
@@ -107,7 +107,7 @@ def preview_monitor_topic(
     payload: MonitorTopicPreviewInput,
     response: Response,
     service: MonitorTopicServiceDependency,
-    _: CsrfProtectedIdentityDependency,
+    _: DemoWriteScopeDependency,
 ) -> MonitorTopicPreviewView:
     preview = service.preview_topic(command=payload)
     response.headers["cache-control"] = "no-store"
@@ -120,19 +120,21 @@ def preview_monitor_topic(
     response_model=ContentSamplePreviewView,
     status_code=status.HTTP_200_OK,
     summary="用已有内容预览草稿关键词",
-    description="只读取当前 owner 最近七天可读的内容样本; 不保存主题、不创建任务或请求来源/模型。",
+    description=(
+        "只读取当前 Demo 分区最近七天可读的内容样本; 不保存主题、不创建任务或请求来源/模型。"
+    ),
     responses={
-        key: value for key, value in _WRITE_RESPONSES.items() if key in (401, 403, 422, 500)
+        key: value for key, value in _WRITE_RESPONSES.items() if key in (403, 422, 500, 503)
     },
 )
 def preview_monitor_topic_samples(
     payload: ContentSamplePreviewInput,
     response: Response,
     service: ContentServiceDependency,
-    identity: CsrfProtectedIdentityDependency,
+    scope_id: DemoWriteScopeDependency,
 ) -> ContentSamplePreviewView:
     response.headers["cache-control"] = "no-store"
-    return service.preview_rule_samples(owner_id=identity.view.user.id, command=payload)
+    return service.preview_rule_samples(owner_id=scope_id, command=payload)
 
 
 @router.get(
@@ -141,16 +143,16 @@ def preview_monitor_topic_samples(
     response_model=MonitorTopicView,
     status_code=status.HTTP_200_OK,
     summary="读取监控主题",
-    description="按当前会话 owner 读取主题、当前不可变规则版本、来源选择和运行设置。",
+    description="按当前 Demo 分区读取主题、当前不可变规则版本、来源选择和运行设置。",
     responses=_READ_RESPONSES,
 )
 def get_monitor_topic(
     topic_id: UUID,
     response: Response,
     service: MonitorTopicServiceDependency,
-    identity: AuthenticatedIdentityDependency,
+    scope_id: DemoScopeDependency,
 ) -> MonitorTopicView:
-    topic = service.get_topic(owner_id=identity.view.user.id, topic_id=topic_id)
+    topic = service.get_topic(owner_id=scope_id, topic_id=topic_id)
     response.headers["cache-control"] = "no-store"
     return topic
 
@@ -172,10 +174,10 @@ def update_monitor_topic(
     payload: MonitorTopicUpdateInput,
     response: Response,
     service: MonitorTopicServiceDependency,
-    identity: CsrfProtectedIdentityDependency,
+    scope_id: DemoWriteScopeDependency,
 ) -> MonitorTopicView:
     topic = service.update_topic(
-        owner_id=identity.view.user.id,
+        owner_id=scope_id,
         topic_id=topic_id,
         command=payload,
     )
@@ -196,9 +198,9 @@ def clone_monitor_topic(
     topic_id: UUID,
     response: Response,
     service: MonitorTopicServiceDependency,
-    identity: CsrfProtectedIdentityDependency,
+    scope_id: DemoWriteScopeDependency,
 ) -> MonitorTopicView:
-    topic = service.clone_topic(owner_id=identity.view.user.id, topic_id=topic_id)
+    topic = service.clone_topic(owner_id=scope_id, topic_id=topic_id)
     response.headers["location"] = f"/api/topics/{topic.id}"
     response.headers["cache-control"] = "no-store"
     return topic
@@ -217,9 +219,9 @@ def pause_monitor_topic(
     topic_id: UUID,
     response: Response,
     service: MonitorTopicServiceDependency,
-    identity: CsrfProtectedIdentityDependency,
+    scope_id: DemoWriteScopeDependency,
 ) -> MonitorTopicView:
-    topic = service.pause_topic(owner_id=identity.view.user.id, topic_id=topic_id)
+    topic = service.pause_topic(owner_id=scope_id, topic_id=topic_id)
     response.headers["cache-control"] = "no-store"
     return topic
 
@@ -237,9 +239,9 @@ def resume_monitor_topic(
     topic_id: UUID,
     response: Response,
     service: MonitorTopicServiceDependency,
-    identity: CsrfProtectedIdentityDependency,
+    scope_id: DemoWriteScopeDependency,
 ) -> MonitorTopicView:
-    topic = service.resume_topic(owner_id=identity.view.user.id, topic_id=topic_id)
+    topic = service.resume_topic(owner_id=scope_id, topic_id=topic_id)
     response.headers["cache-control"] = "no-store"
     return topic
 
@@ -257,9 +259,9 @@ def archive_monitor_topic(
     topic_id: UUID,
     response: Response,
     service: MonitorTopicServiceDependency,
-    identity: CsrfProtectedIdentityDependency,
+    scope_id: DemoWriteScopeDependency,
 ) -> MonitorTopicView:
-    topic = service.archive_topic(owner_id=identity.view.user.id, topic_id=topic_id)
+    topic = service.archive_topic(owner_id=scope_id, topic_id=topic_id)
     response.headers["cache-control"] = "no-store"
     return topic
 
@@ -281,9 +283,9 @@ def run_monitor_topic(
     payload: MonitorTopicRunInput,
     response: Response,
     service: MonitorTopicRunServiceDependency,
-    identity: CsrfProtectedIdentityDependency,
+    scope_id: DemoWriteScopeDependency,
 ) -> MonitorTopicRunView:
-    result = service.run(owner_id=identity.view.user.id, topic_id=topic_id, command=payload)
+    result = service.run(owner_id=scope_id, topic_id=topic_id, command=payload)
     response.status_code = status.HTTP_200_OK if result.replayed else status.HTTP_202_ACCEPTED
     response.headers["cache-control"] = "no-store"
     return result.view

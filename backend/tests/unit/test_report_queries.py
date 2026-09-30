@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.dialects import postgresql
 
-from api.dependencies import get_report_service, require_identity_session
+from api.dependencies import get_demo_scope, get_report_service
 from core.config import Settings
 from core.errors import ApplicationError
 from main import create_app
@@ -68,7 +68,7 @@ def test_report_detail_missing_or_foreign_owner_is_not_found() -> None:
     assert "reports.status" in str(compiled)
 
 
-def test_report_routes_apply_session_identity_and_public_error_contract() -> None:
+def test_report_routes_apply_demo_partition_and_public_error_contract() -> None:
     owner_id = uuid4()
     app = create_app(
         Settings(
@@ -81,9 +81,7 @@ def test_report_routes_apply_session_identity_and_public_error_contract() -> Non
         list_reports=lambda **kwargs: ([], None),
         get_report=lambda **kwargs: (_ for _ in ()).throw(ApplicationError("resource_not_found")),
     )
-    app.dependency_overrides[require_identity_session] = lambda: SimpleNamespace(
-        view=SimpleNamespace(user=SimpleNamespace(id=owner_id))
-    )
+    app.dependency_overrides[get_demo_scope] = lambda: owner_id
     app.dependency_overrides[get_report_service] = lambda: service
     client = TestClient(app)
 

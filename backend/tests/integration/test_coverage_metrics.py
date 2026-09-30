@@ -3,11 +3,12 @@ from __future__ import annotations
 import os
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, text
+from tests.conftest import TEST_DATABASE_TRUNCATE
 from tests.integration.test_collection_coverage_http import (
     _accepted_job,
     _connection,
@@ -15,9 +16,8 @@ from tests.integration.test_collection_coverage_http import (
 )
 
 from core.config import Settings
+from db.demo import resolve_demo_scope
 from main import create_app
-
-_BOOTSTRAP_TOKEN = "coverage-metrics-isolated-bootstrap-token"
 
 
 @pytest.fixture
@@ -29,31 +29,20 @@ def metrics_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[TestClient
     monkeypatch.delenv("HOTKEY_DATABASE_URL", raising=False)
     engine = create_engine(database_url)
     with engine.begin() as connection:
-        connection.execute(text("TRUNCATE identity_users CASCADE"))
+        connection.execute(text(TEST_DATABASE_TRUNCATE))
     settings = Settings(
         environment="test",
         log_level="WARNING",
         database_url=database_url,
-        bootstrap_token=_BOOTSTRAP_TOKEN,
     )
     try:
         with TestClient(create_app(settings)) as client:
-            response = client.post(
-                "/api/identity/initialize",
-                headers={
-                    "X-HotKey-Bootstrap-Token": _BOOTSTRAP_TOKEN,
-                    "X-HotKey-CSRF": "1",
-                },
-                json={
-                    "username": f"metrics-{uuid4().hex}",
-                    "password": "coverage metrics isolated password",
-                },
-            )
-            assert response.status_code == 201, response.json()
-            yield client, engine, UUID(response.json()["user"]["id"])
+            with client.app.state.session_factory() as session:
+                owner_id = resolve_demo_scope(session)
+            yield client, engine, owner_id
     finally:
         with engine.begin() as connection:
-            connection.execute(text("TRUNCATE identity_users CASCADE"))
+            connection.execute(text(TEST_DATABASE_TRUNCATE))
         engine.dispose()
 
 

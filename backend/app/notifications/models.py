@@ -39,7 +39,7 @@ class NotificationTarget(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
-    owner_id: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="CASCADE"))
+    owner_id: Mapped[UUID] = mapped_column()
     name: Mapped[str] = mapped_column(String(80))
     channel: Mapped[str] = mapped_column(String(16))
     recipients: Mapped[list[Any]] = mapped_column(JSONB)
@@ -78,7 +78,7 @@ class NotificationDelivery(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
-    owner_id: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="CASCADE"))
+    owner_id: Mapped[UUID] = mapped_column()
     report_id: Mapped[UUID] = mapped_column(ForeignKey("reports.id", ondelete="CASCADE"))
     report_version: Mapped[int] = mapped_column(Integer)
     target_id: Mapped[UUID]

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRightIcon, RotateCcwIcon } from "lucide-react";
 
@@ -71,7 +70,6 @@ async function fetchReportPage(
 }
 
 export function ReportList() {
-  const router = useRouter();
   const [state, setState] = useState<ListState>({ status: "loading" });
   const [topicId, setTopicId] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
@@ -107,13 +105,7 @@ export function ReportList() {
       })
       .catch((error: unknown) => {
         if (!isCurrent || currentRequest !== requestNumber.current) return;
-        if (
-          error instanceof ApiRequestError &&
-          error.code === "invalid_session"
-        ) {
-          router.replace("/login");
-          return;
-        }
+
         setLoadedFilterKey(filterKey);
         setState({
           status: "error",
@@ -128,7 +120,7 @@ export function ReportList() {
     return () => {
       isCurrent = false;
     };
-  }, [router, topicId, dateFrom, dateTo, filterKey, rangeError, reloadToken]);
+  }, [topicId, dateFrom, dateTo, filterKey, rangeError, reloadToken]);
 
   function reload() {
     setState({ status: "loading" });

@@ -6,7 +6,6 @@ from uuid import UUID
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
-    ForeignKey,
     ForeignKeyConstraint,
     Index,
     LargeBinary,
@@ -55,7 +54,7 @@ class AiCall(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
-    owner_id: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="CASCADE"))
+    owner_id: Mapped[UUID] = mapped_column()
     job_id: Mapped[UUID | None]
     purpose: Mapped[str] = mapped_column(String(128))
     provider: Mapped[str] = mapped_column(String(64))
