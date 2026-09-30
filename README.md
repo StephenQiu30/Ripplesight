@@ -2,30 +2,43 @@
 
 从一个关键词观察变化：收集公开或获授权的内容，追踪主题与来源，并逐步生成可追溯的舆情日报、周报和本地知识库。
 
-HotKey 当前面向个人、非商业研究场景；代码授权范围以 [MIT 许可证](LICENSE) 为准。本仓库包含 Python 后端和 Next.js Web 工作台；独立的 [Flutter 客户端仓库](https://github.com/StephenQiu30/hotkey-app) 目前尚未初始化。项目仍在开发中，适合试用和参与开发，完整产品验收尚未完成。
+HotKey 面向关注 AI 等专业方向的用户，是 ToC 信息监控产品；代码授权范围以 [MIT 许可证](LICENSE) 为准，来源组件及数据的许可需要分别核对。本仓库包含 Python 后端和 Next.js Web 前端；独立的 [Flutter 客户端仓库](https://github.com/StephenQiu30/hotkey-app) 目前尚未初始化。项目仍在开发中，适合试用和参与开发，完整产品验收尚未完成。
 
 ## 当前能做什么
 
-- 单个部署者初始化账户，创建监控主题、关键词规则和来源连接。
+- Web 已有监控主题、关键词规则和来源连接管理页面；账户实现的替换状态见下方说明。
 - 使用 PostgreSQL 保存内容、任务与运行状态；Kafka Worker 执行持久任务，Web 展示主题、来源、内容、任务和报告页面。
 - 已有 Hacker News、RSS、网页搜索等采集适配器及调度、分析、日报相关代码；实际来源需要单独配置和验证。
 - 提供 FastAPI 自动生成的 OpenAPI、Swagger UI 与 Scalar 文档。
 
 **当前边界：**项目正在验证真实来源采集、评论、模型标注和日报链路。邮件推送、周报、事件归并、知识库后续能力及连续运行验收尚未完成；页面、适配器、单元测试或服务健康检查不代表某来源已经通过真实业务验收。最新进度和验收状态以 [BACKLOG](BACKLOG.md) 为准。
 
+## 账户与登录
+
+统一 `/login` 入口保留**用户名和密码登录**，同时提供 **GitHub App 登录**和**邮箱验证码登录**。GitHub 或邮箱首次成功验证可创建账户；用户分别拥有自己的主题、来源连接、内容和任务。部署密钥、单账户限制与独立工作区身份包装移除，邮件登录与报告邮件投递分别验收。
+
+**无感登录是必要体验**：进入页面时用现有服务端 Cookie 校验会话，有效会话自动恢复登录状态；过期、撤销或退出后重新验证。不额外引入 JWT refresh 或另一套认证框架。
+
+**当前代码保留旧身份与用户名密码登录，GitHub App 和邮箱验证码尚不可用。**本轮只更新设计和文档，代码、配置模板与运行环境未变；ToC 多用户和完整无感恢复流程仍待验证。完整账户合同见 [Design 001 §9.2](docs/design/001-热点舆情监控平台总体设计.md)，实现与验证由 [Plan 060](docs/plan/060-GitHub与邮箱验证码登录执行计划.md) 承接。
+
 ## 快速启动本地底座
 
-需要 Docker 与 Docker Compose。以下命令在本仓库根目录执行，会创建本地 PostgreSQL、Redis、Kafka、API 和 Web 容器；首次启动需要构建镜像。请先在**本地未跟踪**的 `.env` 中设置 URL 安全的随机数据库密码，以及至少 32 字符的临时 `HOTKEY_BOOTSTRAP_TOKEN`。不要提交 `.env` 或把密钥粘贴到 Issue。
+需要 Docker 与 Docker Compose。以下命令在本仓库根目录执行，会创建本地 PostgreSQL、Redis、Kafka、API 和 Web 容器；首次启动需要构建镜像。请先在**本地未跟踪**的 `.env` 中设置 URL 安全的随机数据库密码。不要提交 `.env` 或把凭据粘贴到 Issue。
 
 ```bash
 cp .env.example .env
-# 编辑 .env，设置 HOTKEY_POSTGRES_PASSWORD 和 HOTKEY_BOOTSTRAP_TOKEN
+# 编辑 .env，设置 HOTKEY_POSTGRES_PASSWORD
 docker compose config --quiet
 docker compose build
 docker compose up --detach --wait
 ```
 
-打开 [http://127.0.0.1:3000/register](http://127.0.0.1:3000/register)，用部署密钥初始化唯一 owner，然后到 [http://127.0.0.1:3000](http://127.0.0.1:3000) 登录。初始化完成后，从 `.env` 移除 `HOTKEY_BOOTSTRAP_TOKEN` 并执行 `docker compose up --detach --force-recreate backend`，使运行中的 API 不再持有该值。API 默认位于 `127.0.0.1:8867`，接口文档位于 `/docs` 和 `/scalar`。
+启动后可打开 [Web 首页](http://127.0.0.1:3000)，通过以下现有接口核对 API 底座。API 默认位于 `127.0.0.1:8867`，接口文档位于 `/docs` 和 `/scalar`；默认端口可在本地 `.env` 中调整。新登录方式仍待 Plan 060 实现，当前页面与生成客户端中的旧身份入口不能作为新账户体系的验收证据。
+
+```bash
+curl --fail http://127.0.0.1:8867/api/health
+curl --fail http://127.0.0.1:8867/api/ready
+```
 
 Worker 是按需 profile，可在底座启动后运行：
 
@@ -47,7 +60,7 @@ docker compose --profile worker up --detach worker
 | [贡献指南](CONTRIBUTING.md) | 开发、验证与 PR 要求 |
 | [安全策略](SECURITY.md) | 私密报告漏洞及敏感信息处理 |
 
-仅采集公开或获授权的数据；请遵守来源平台规则与适用法律，并自行控制请求频率、凭据与数据保留。
+仅采集公开或获授权的数据；请遵守来源平台规则与适用法律，并自行控制请求频率、凭据与数据保留。MediaCrawler 的许可与个人、非商业研究边界独立适用；当前只保留本人账号 B 站低频试点，不能因 ToC 账户设计扩大其使用范围或视作其他用户、商业场景及来源平台的授权。
 
 ## 参与项目
 
