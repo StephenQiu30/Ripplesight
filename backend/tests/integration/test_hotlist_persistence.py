@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 from uuid import UUID, uuid4
 
 import httpx
@@ -52,7 +52,9 @@ class HotlistRuntime:
 
 
 @pytest.fixture
-def runtime(monkeypatch: pytest.MonkeyPatch) -> Iterator[HotlistRuntime]:
+def runtime(
+    monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> Iterator[HotlistRuntime]:
     database_url = os.getenv("HOTKEY_TEST_DATABASE_URL")
     if database_url is None:
         pytest.skip("HOTKEY_TEST_DATABASE_URL is required for PostgreSQL integration tests")
@@ -73,7 +75,19 @@ def runtime(monkeypatch: pytest.MonkeyPatch) -> Iterator[HotlistRuntime]:
         )
     with sessions.begin() as session:
         service = SourcePresetService(session, clock=lambda: due_at - timedelta(seconds=1))
-        service.apply_in_transaction(owner_id=owner_id, preset=SOURCE_PRESETS["hotlist_weibo"])
+        preset = SOURCE_PRESETS["hotlist_weibo"]
+        host = getattr(request, "param", "127.0.0.1")
+        if host != "127.0.0.1":
+            preset = replace(
+                preset,
+                config=MappingProxyType(
+                    {
+                        "feed_url": f"http://{host}:1200/weibo/search/hot",
+                        "allowed_hosts": (host,),
+                    }
+                ),
+            )
+        service.apply_in_transaction(owner_id=owner_id, preset=preset)
     with sessions() as session:
         ResourceBudgetService(session, clock=lambda: due_at).save_budget_policy(
             owner_id=owner_id,
@@ -281,6 +295,17 @@ def test_empty_feed_persists_one_observed_snapshot_linked_to_due_bucket(
     assert usage == "empty"
     assert reservations
     assert all((item.status, item.actual_units) == ("settled", 1) for item in reservations)
+
+
+@pytest.mark.parametrize("runtime", ["host.docker.internal"], indirect=True)
+def test_container_rsshub_endpoint_reaches_hotlist_executor(runtime: HotlistRuntime) -> None:
+    job_id = _accept(runtime, runtime.due_at)
+    _execute(runtime, job_id, _page(runtime.due_at + timedelta(minutes=2), entries=1))
+    with runtime.engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT entry_count FROM hotlist_snapshots WHERE job_id=:job"),
+            {"job": job_id},
+        ).scalar_one() == 1
 
 
 def test_parser_or_transport_failure_does_not_create_empty_snapshot(
