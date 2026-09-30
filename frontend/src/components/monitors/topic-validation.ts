@@ -34,14 +34,3 @@ export function readTopicFieldErrors(error: unknown): TopicFieldErrors {
   }
   return result;
 }
-
-export function topicErrorAction(
-  error: unknown,
-): "login" | "conflict" | "validation" | "error" {
-  if (!(error instanceof ApiRequestError)) return "error";
-  if (error.status === 401 || error.code === "invalid_session") return "login";
-  if (error.status === 409 && error.code === "topic_version_conflict")
-    return "conflict";
-  if (error.status === 422) return "validation";
-  return "error";
-}

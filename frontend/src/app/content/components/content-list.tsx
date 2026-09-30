@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   type FormEvent,
   useCallback,
@@ -195,10 +194,6 @@ export function TimelineBasis({
   );
 }
 
-function isInvalidSession(error: unknown): boolean {
-  return error instanceof ApiRequestError && error.code === "invalid_session";
-}
-
 function toErrorState(
   error: unknown,
 ): Extract<ContentListState, { status: "error" }> {
@@ -324,7 +319,6 @@ function LoadingContentList() {
 }
 
 export function ContentList() {
-  const router = useRouter();
   const [state, setState] = useState<ContentListState>({ status: "loading" });
   const [options, setOptions] = useState<FilterOptions>({ status: "loading" });
   const [draft, setDraft] = useState<ContentFilters>(EMPTY_FILTERS);
@@ -338,40 +332,30 @@ export function ContentList() {
     setOptions({ status: "loading" });
     try {
       setOptions(await fetchFilterOptions());
-    } catch (error) {
-      if (isInvalidSession(error)) {
-        router.replace("/login");
-      } else {
-        setOptions({ status: "error" });
-      }
+    } catch {
+      setOptions({ status: "error" });
     }
-  }, [router]);
+  }, []);
 
-  const load = useCallback(
-    async (filters: ContentFilters) => {
-      const generation = ++requestGeneration.current;
-      setState({ status: "loading" });
-      setIsLoadingMore(false);
-      setLoadMoreError(null);
-      try {
-        const page = await listContentRecords(contentListParams(filters));
-        if (generation !== requestGeneration.current) return;
-        setState({
-          status: "ready",
-          items: page.items,
-          nextCursor: page.next_cursor,
-        });
-      } catch (error) {
-        if (generation !== requestGeneration.current) return;
-        if (isInvalidSession(error)) {
-          router.replace("/login");
-          return;
-        }
-        setState(toErrorState(error));
-      }
-    },
-    [router],
-  );
+  const load = useCallback(async (filters: ContentFilters) => {
+    const generation = ++requestGeneration.current;
+    setState({ status: "loading" });
+    setIsLoadingMore(false);
+    setLoadMoreError(null);
+    try {
+      const page = await listContentRecords(contentListParams(filters));
+      if (generation !== requestGeneration.current) return;
+      setState({
+        status: "ready",
+        items: page.items,
+        nextCursor: page.next_cursor,
+      });
+    } catch (error) {
+      if (generation !== requestGeneration.current) return;
+
+      setState(toErrorState(error));
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -388,23 +372,21 @@ export function ContentList() {
       })
       .catch((error: unknown) => {
         if (!active || generation !== requestGeneration.current) return;
-        if (isInvalidSession(error)) router.replace("/login");
-        else setState(toErrorState(error));
+        setState(toErrorState(error));
       });
     void fetchFilterOptions()
       .then((value) => {
         if (active) setOptions(value);
       })
-      .catch((error: unknown) => {
+      .catch(() => {
         if (!active) return;
-        if (isInvalidSession(error)) router.replace("/login");
-        else setOptions({ status: "error" });
+        setOptions({ status: "error" });
       });
     return () => {
       active = false;
       requestGeneration.current += 1;
     };
-  }, [router]);
+  }, []);
 
   function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -445,15 +427,12 @@ export function ContentList() {
       );
     } catch (error) {
       if (generation !== requestGeneration.current) return;
-      if (isInvalidSession(error)) {
-        router.replace("/login");
-      } else {
-        setLoadMoreError(
-          error instanceof ApiRequestError
-            ? error.message
-            : "后续作品加载失败，请重试。",
-        );
-      }
+
+      setLoadMoreError(
+        error instanceof ApiRequestError
+          ? error.message
+          : "后续作品加载失败，请重试。",
+      );
     } finally {
       if (generation === requestGeneration.current) setIsLoadingMore(false);
     }

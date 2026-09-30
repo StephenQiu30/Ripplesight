@@ -33,14 +33,6 @@ def window_context() -> Iterator[tuple[sessionmaker[Session], UUID, UUID, dateti
     with engine.begin() as connection:
         connection.execute(
             text(
-                "INSERT INTO identity_users "
-                "(id, username, password_hash, credential_version, created_at, updated_at) "
-                "VALUES (:id, :username, 'test-only-hash', 1, :now, :now)"
-            ),
-            {"id": owner_id, "username": f"window-{owner_id.hex}", "now": now},
-        )
-        connection.execute(
-            text(
                 "INSERT INTO jobs "
                 "(id, owner_id, operation_id, kind, configuration_ref, "
                 "configuration_version, source_key, source_capability, scope, "
@@ -62,20 +54,6 @@ def window_context() -> Iterator[tuple[sessionmaker[Session], UUID, UUID, dateti
     try:
         yield sessions, owner_id, job_id, now
     finally:
-        with engine.begin() as connection:
-            connection.execute(text("SET CONSTRAINTS ALL DEFERRED"))
-            connection.execute(
-                text("DELETE FROM content_records WHERE owner_id = :owner_id"),
-                {"owner_id": owner_id},
-            )
-            connection.execute(
-                text("DELETE FROM source_connection_versions WHERE owner_id = :owner_id"),
-                {"owner_id": owner_id},
-            )
-            connection.execute(
-                text("DELETE FROM identity_users WHERE id = :owner_id"),
-                {"owner_id": owner_id},
-            )
         engine.dispose()
 
 

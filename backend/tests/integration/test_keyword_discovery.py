@@ -18,6 +18,7 @@ from confluent_kafka import Consumer, Message, Producer
 from confluent_kafka.admin import AdminClient, NewTopic
 from sqlalchemy import Engine, create_engine, select, text
 from sqlalchemy.orm import Session, sessionmaker
+from tests.conftest import TEST_DATABASE_TRUNCATE
 
 from connections.presets import BILIBILI_PRESET, SOURCE_PRESETS
 from connections.services import SourcePresetService, pause_bilibili_connection_in_transaction
@@ -177,14 +178,6 @@ def test_bilibili_saved_search_output_commits_posts_and_cached_comments(
     monkeypatch.setattr(MediaCrawlerAdapter, "_run_child", replay)
     try:
         with Session(engine) as session, session.begin():
-            session.execute(
-                text(
-                    "INSERT INTO identity_users (id, username, password_hash, credential_version, "
-                    "created_at, updated_at) VALUES "
-                    "(:id, :username, 'test-only-hash', 1, :now, :now)"
-                ),
-                {"id": owner_id, "username": f"bilibili-{owner_id}", "now": now},
-            )
             session.execute(
                 text(
                     "INSERT INTO monitor_topics (id, owner_id, name, status, readiness_status, "
@@ -380,25 +373,6 @@ def test_bilibili_saved_search_output_commits_posts_and_cached_comments(
                 ).all()
             ) == len(videos)
     finally:
-        with engine.begin() as connection:
-            connection.execute(text("SET CONSTRAINTS ALL DEFERRED"))
-            connection.execute(
-                text("DELETE FROM content_records WHERE owner_id = :owner_id"),
-                {"owner_id": owner_id},
-            )
-            connection.execute(
-                text("DELETE FROM source_connection_versions WHERE owner_id = :owner_id"),
-                {"owner_id": owner_id},
-            )
-            connection.execute(
-                text("DELETE FROM monitor_topic_versions WHERE topic_id = :topic_id"),
-                {"topic_id": topic_id},
-            )
-            connection.execute(
-                text("DELETE FROM monitor_topics WHERE id = :topic_id"),
-                {"topic_id": topic_id},
-            )
-            connection.execute(text("DELETE FROM identity_users WHERE id = :id"), {"id": owner_id})
         engine.dispose()
 
 
@@ -429,14 +403,6 @@ def test_query_plan_persists_independent_jobs_without_leaking_query_to_outbox() 
     commands = plan_keyword_discovery(run)
     try:
         with Session(engine) as session, session.begin():
-            session.execute(
-                text(
-                    "INSERT INTO identity_users "
-                    "(id, username, password_hash, credential_version, created_at, updated_at) "
-                    "VALUES (:id, :username, 'test-only-hash', 1, now(), now())"
-                ),
-                {"id": owner_id, "username": f"discovery-{owner_id}"},
-            )
             accepted = [
                 JobService(session).accept_in_transaction(owner_id=owner_id, command=command)
                 for command in commands
@@ -476,8 +442,6 @@ def test_query_plan_persists_independent_jobs_without_leaking_query_to_outbox() 
             ).all()
             assert len(messages) == 2
     finally:
-        with engine.begin() as connection:
-            connection.execute(text("DELETE FROM identity_users WHERE id = :id"), {"id": owner_id})
         engine.dispose()
 
 
@@ -576,16 +540,8 @@ def test_36kr_feed_replay_keeps_source_time_and_separate_budget() -> None:
     empty = "<rss version='2.0'><channel><title>36Kr</title></channel></rss>"
     try:
         with engine.begin() as connection:
-            connection.execute(text("TRUNCATE identity_users CASCADE"))
+            connection.execute(text(TEST_DATABASE_TRUNCATE))
         with Session(engine) as session, session.begin():
-            session.execute(
-                text(
-                    "INSERT INTO identity_users "
-                    "(id, username, password_hash, credential_version, created_at, updated_at) "
-                    "VALUES (:id, :username, 'test-only-hash', 1, :now, :now)"
-                ),
-                {"id": owner_id, "username": f"rss-36kr-{owner_id}", "now": now},
-            )
             session.execute(
                 text(
                     "INSERT INTO monitor_topics "
@@ -853,25 +809,6 @@ def test_36kr_feed_replay_keeps_source_time_and_separate_budget() -> None:
                 ("source.rss_36kr.network.daily", 6),
             ]
     finally:
-        with engine.begin() as connection:
-            connection.execute(text("SET CONSTRAINTS ALL DEFERRED"))
-            connection.execute(
-                text("DELETE FROM monitor_topic_versions WHERE topic_id = :id"),
-                {"id": topic_id},
-            )
-            connection.execute(
-                text("DELETE FROM monitor_topics WHERE id = :id"),
-                {"id": topic_id},
-            )
-            connection.execute(
-                text("DELETE FROM source_connection_versions WHERE owner_id = :id"),
-                {"id": owner_id},
-            )
-            connection.execute(
-                text("DELETE FROM content_records WHERE owner_id = :id"),
-                {"id": owner_id},
-            )
-            connection.execute(text("DELETE FROM identity_users WHERE id = :id"), {"id": owner_id})
         engine.dispose()
 
 
@@ -899,16 +836,8 @@ def test_36kr_kafka_redelivery_does_not_repeat_collection() -> None:
     )
     try:
         with engine.begin() as connection:
-            connection.execute(text("TRUNCATE identity_users CASCADE"))
+            connection.execute(text(TEST_DATABASE_TRUNCATE))
         with sessions.begin() as session:
-            session.execute(
-                text(
-                    "INSERT INTO identity_users "
-                    "(id, username, password_hash, credential_version, created_at, updated_at) "
-                    "VALUES (:id, :username, 'test-only-hash', 1, :now, :now)"
-                ),
-                {"id": owner_id, "username": f"rss-kafka-{owner_id}", "now": now},
-            )
             session.execute(
                 text(
                     "INSERT INTO monitor_topics "
@@ -1069,20 +998,6 @@ def test_36kr_kafka_redelivery_does_not_repeat_collection() -> None:
             consumer.close()
         with suppress(Exception):
             admin.delete_topics([kafka_topic], operation_timeout=10)[kafka_topic].result(10)
-        with engine.begin() as connection:
-            connection.execute(text("SET CONSTRAINTS ALL DEFERRED"))
-            connection.execute(
-                text("DELETE FROM monitor_topic_versions WHERE topic_id = :id"), {"id": topic_id}
-            )
-            connection.execute(text("DELETE FROM monitor_topics WHERE id = :id"), {"id": topic_id})
-            connection.execute(
-                text("DELETE FROM source_connection_versions WHERE owner_id = :id"),
-                {"id": owner_id},
-            )
-            connection.execute(
-                text("DELETE FROM content_records WHERE owner_id = :id"), {"id": owner_id}
-            )
-            connection.execute(text("DELETE FROM identity_users WHERE id = :id"), {"id": owner_id})
         engine.dispose()
 
 
@@ -1122,14 +1037,6 @@ def test_pages_atomically_save_distinct_channel_discoveries_and_unverified_gap()
     target_hash = hashlib.sha256(f"{run.configuration_ref}\0{run.primary_query}".encode()).digest()
     try:
         with Session(engine) as session, session.begin():
-            session.execute(
-                text(
-                    "INSERT INTO identity_users "
-                    "(id, username, password_hash, credential_version, created_at, updated_at) "
-                    "VALUES (:id, :username, 'test-only-hash', 1, :now, :now)"
-                ),
-                {"id": owner_id, "username": f"discovery-pages-{owner_id}", "now": now},
-            )
             session.execute(
                 text(
                     "INSERT INTO monitor_topics "
@@ -2188,23 +2095,4 @@ def test_pages_atomically_save_distinct_channel_discoveries_and_unverified_gap()
             assert session.get(Job, verified_job.id).requests_sent == 1
             assert session.get(Job, verified_job.id).status == "succeeded"
     finally:
-        with engine.begin() as connection:
-            connection.execute(text("SET CONSTRAINTS ALL DEFERRED"))
-            connection.execute(
-                text("DELETE FROM content_records WHERE owner_id = :owner_id"),
-                {"owner_id": owner_id},
-            )
-            connection.execute(
-                text("DELETE FROM source_connection_versions WHERE owner_id = :owner_id"),
-                {"owner_id": owner_id},
-            )
-            connection.execute(
-                text("DELETE FROM monitor_topic_versions WHERE topic_id = :topic_id"),
-                {"topic_id": topic_id},
-            )
-            connection.execute(
-                text("DELETE FROM monitor_topics WHERE id = :topic_id"),
-                {"topic_id": topic_id},
-            )
-            connection.execute(text("DELETE FROM identity_users WHERE id = :id"), {"id": owner_id})
         engine.dispose()

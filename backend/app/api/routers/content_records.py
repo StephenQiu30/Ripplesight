@@ -7,10 +7,10 @@ from uuid import UUID
 from fastapi import APIRouter, Query, Response, status
 
 from api.dependencies import (
-    AuthenticatedIdentityDependency,
     CommentManualRunServiceDependency,
     ContentServiceDependency,
-    CsrfProtectedIdentityDependency,
+    DemoScopeDependency,
+    DemoWriteScopeDependency,
 )
 from content.schemas import (
     CommentManualRunInput,
@@ -24,7 +24,7 @@ from core.schemas import ErrorView, JobAcceptedView, PageView
 router = APIRouter(prefix="/contents", tags=["作品资料"])
 
 _COMMON_READ_RESPONSES: dict[int | str, dict[str, Any]] = {
-    401: {"model": ErrorView, "description": "会话无效或已过期"},
+    503: {"model": ErrorView, "description": "数据库不可用或 Demo 数据分区冲突"},
     422: {"model": ErrorView, "description": "请求参数校验失败"},
     500: {"model": ErrorView, "description": "服务内部异常"},
 }
@@ -37,7 +37,7 @@ _COMMON_READ_RESPONSES: dict[int | str, dict[str, Any]] = {
     status_code=status.HTTP_200_OK,
     summary="列出作品资料",
     description=(
-        "按当前 owner 列出具有可读观察的作品; 可按来源、发现主题、时间窗与当前标注状态筛选。"
+        "按当前 Demo 分区列出具有可读观察的作品; 可按来源、发现主题、时间窗与当前标注状态筛选。"
         "时间窗使用发布时间, 缺失时回退首次发现时间; 读取不会触发来源或模型请求。"
     ),
     responses=_COMMON_READ_RESPONSES,
@@ -45,7 +45,7 @@ _COMMON_READ_RESPONSES: dict[int | str, dict[str, Any]] = {
 def list_content_records(
     response: Response,
     service: ContentServiceDependency,
-    identity: AuthenticatedIdentityDependency,
+    scope_id: DemoScopeDependency,
     cursor: Annotated[str | None, Query(max_length=512)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     topic_id: UUID | None = None,
@@ -55,7 +55,7 @@ def list_content_records(
     analysis_state: Literal["missing", "pending", "failed", "invalid", "valid"] | None = None,
 ) -> PageView[ContentRecordSummaryView]:
     items, next_cursor = service.list_contents(
-        owner_id=identity.view.user.id,
+        owner_id=scope_id,
         cursor=cursor,
         limit=limit,
         topic_id=topic_id,
@@ -74,7 +74,9 @@ def list_content_records(
     response_model=ContentRecordDetailView,
     status_code=status.HTTP_200_OK,
     summary="读取作品资料",
-    description="读取当前 owner 的作品身份、最新可读观察、版本/可见性历史与发现依据; 不隐式刷新。",
+    description=(
+        "读取当前 Demo 分区的作品身份、最新可读观察、版本/可见性历史与发现依据; 不隐式刷新。"
+    ),
     responses={
         404: {"model": ErrorView, "description": "作品不存在或不可访问"},
         **_COMMON_READ_RESPONSES,
@@ -84,9 +86,9 @@ def get_content_record(
     content_id: UUID,
     response: Response,
     service: ContentServiceDependency,
-    identity: AuthenticatedIdentityDependency,
+    scope_id: DemoScopeDependency,
 ) -> ContentRecordDetailView:
-    content = service.get_content(owner_id=identity.view.user.id, content_id=content_id)
+    content = service.get_content(owner_id=scope_id, content_id=content_id)
     response.headers["cache-control"] = "no-store"
     return content
 
@@ -107,14 +109,14 @@ def list_content_comments(
     content_id: UUID,
     response: Response,
     service: ContentServiceDependency,
-    identity: AuthenticatedIdentityDependency,
+    scope_id: DemoScopeDependency,
     root_id: UUID | None = None,
     parent_id: UUID | None = None,
     cursor: UUID | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> PageView[ContentCommentView]:
     items, next_cursor = service.list_comments(
-        owner_id=identity.view.user.id,
+        owner_id=scope_id,
         post_content_id=content_id,
         root_id=root_id,
         parent_id=parent_id,
@@ -141,9 +143,9 @@ def get_content_comment_run_readiness(
     content_id: UUID,
     response: Response,
     service: CommentManualRunServiceDependency,
-    identity: AuthenticatedIdentityDependency,
+    scope_id: DemoScopeDependency,
 ) -> CommentRunReadinessView:
-    readiness = service.readiness(owner_id=identity.view.user.id, content_id=content_id)
+    readiness = service.readiness(owner_id=scope_id, content_id=content_id)
     response.headers["cache-control"] = "no-store"
     return readiness
 
@@ -154,10 +156,10 @@ def get_content_comment_run_readiness(
     response_model=JobAcceptedView,
     status_code=status.HTTP_202_ACCEPTED,
     summary="复采作品评论",
-    description="对当前 owner 已入库且仍属于活跃主题的 HN 帖子受理一次有界评论复采。",
+    description="对当前 Demo 分区已入库且仍属于活跃主题的 HN 帖子受理一次有界评论复采。",
     responses={
         200: {"model": JobAcceptedView, "description": "同一操作标识的原 Job"},
-        401: {"model": ErrorView, "description": "会话无效或已过期"},
+        503: {"model": ErrorView, "description": "数据库不可用或 Demo 数据分区冲突"},
         403: {"model": ErrorView, "description": "请求安全校验失败"},
         404: {"model": ErrorView, "description": "作品不存在或不可访问"},
         409: {"model": ErrorView, "description": "来源能力、频次或预算不允许复采"},
@@ -170,9 +172,9 @@ def run_content_comments(
     payload: CommentManualRunInput,
     response: Response,
     service: CommentManualRunServiceDependency,
-    identity: CsrfProtectedIdentityDependency,
+    scope_id: DemoWriteScopeDependency,
 ) -> JobAcceptedView:
-    result = service.run(owner_id=identity.view.user.id, content_id=content_id, command=payload)
+    result = service.run(owner_id=scope_id, content_id=content_id, command=payload)
     if result.replayed:
         response.status_code = status.HTTP_200_OK
     response.headers["location"] = f"/api/jobs/{result.job_id}"

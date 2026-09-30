@@ -2,7 +2,7 @@
 /* eslint-disable */
 import request from "@/request";
 
-/** 列出作品资料 按当前 owner 列出具有可读观察的作品; 可按来源、发现主题、时间窗与当前标注状态筛选。时间窗使用发布时间, 缺失时回退首次发现时间; 读取不会触发来源或模型请求。 GET /api/contents */
+/** 列出作品资料 按当前 Demo 分区列出具有可读观察的作品; 可按来源、发现主题、时间窗与当前标注状态筛选。时间窗使用发布时间, 缺失时回退首次发现时间; 读取不会触发来源或模型请求。 GET /api/contents */
 export async function listContentRecords(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: HotKeyAPI.listContentRecordsParams,
@@ -20,7 +20,7 @@ export async function listContentRecords(
   });
 }
 
-/** 读取作品资料 读取当前 owner 的作品身份、最新可读观察、版本/可见性历史与发现依据; 不隐式刷新。 GET /api/contents/${param0} */
+/** 读取作品资料 读取当前 Demo 分区的作品身份、最新可读观察、版本/可见性历史与发现依据; 不隐式刷新。 GET /api/contents/${param0} */
 export async function getContentRecord(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: HotKeyAPI.getContentRecordParams,
@@ -51,7 +51,7 @@ export async function getContentCommentRunReadiness(
   );
 }
 
-/** 复采作品评论 对当前 owner 已入库且仍属于活跃主题的 HN 帖子受理一次有界评论复采。 POST /api/contents/${param0}/comment-runs */
+/** 复采作品评论 对当前 Demo 分区已入库且仍属于活跃主题的 HN 帖子受理一次有界评论复采。 POST /api/contents/${param0}/comment-runs */
 export async function runContentComments(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: HotKeyAPI.runContentCommentsParams,

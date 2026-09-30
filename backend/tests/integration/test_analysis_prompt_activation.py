@@ -31,7 +31,6 @@ def activation_store() -> Iterator[tuple[Engine, sessionmaker[Session], list[str
     engine = create_engine(database_url)
     sessions = sessionmaker(engine, expire_on_commit=False)
     versions = [ANALYSIS_PROMPT_VERSION]
-    prepared = False
     try:
         with engine.begin() as connection:
             connection.execute(
@@ -44,26 +43,8 @@ def activation_store() -> Iterator[tuple[Engine, sessionmaker[Session], list[str
                 text("DELETE FROM analysis_prompt_activations WHERE prompt_version = :version"),
                 {"version": ANALYSIS_PROMPT_VERSION},
             )
-        prepared = True
         yield engine, sessions, versions
     finally:
-        if prepared:
-            with engine.begin() as connection:
-                for version in versions:
-                    connection.execute(
-                        text(
-                            "DELETE FROM analysis_prompt_runtime_sessions "
-                            "WHERE prompt_version = :version"
-                        ),
-                        {"version": version},
-                    )
-                    connection.execute(
-                        text(
-                            "DELETE FROM analysis_prompt_activations "
-                            "WHERE prompt_version = :version"
-                        ),
-                        {"version": version},
-                    )
         engine.dispose()
 
 

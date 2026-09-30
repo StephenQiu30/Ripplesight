@@ -688,30 +688,6 @@ declare namespace HotKeyAPI {
     latest_observed_at: string | null;
   };
 
-  type IdentityCredentialsInput = {
-    /** Username */
-    username: string;
-    /** Password */
-    password: string;
-  };
-
-  type IdentitySessionView = {
-    user: IdentityUserView;
-    /** Expires At */
-    expires_at: string;
-  };
-
-  type IdentityUserView = {
-    /** Id */
-    id: string;
-    /** Username */
-    username: string;
-  };
-
-  type IdentityWorkspaceView = {
-    owner: IdentityUserView;
-  };
-
   type JobAcceptanceStatus = "queued";
 
   type JobAcceptedView = {

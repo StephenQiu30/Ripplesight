@@ -43,39 +43,9 @@ def coverage_context() -> tuple[sessionmaker[Session], UUID, datetime]:
     sessions = sessionmaker(bind=engine, expire_on_commit=False)
     owner_id = uuid4()
     now = datetime(2026, 9, 27, 0, 0, tzinfo=UTC)
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                "INSERT INTO identity_users "
-                "(id, username, password_hash, credential_version, created_at, updated_at) "
-                "VALUES (:id, :username, 'test-only-hash', 1, :now, :now)"
-            ),
-            {"id": owner_id, "username": f"coverage-{owner_id.hex}", "now": now},
-        )
     try:
         yield sessions, owner_id, now
     finally:
-        with engine.begin() as connection:
-            connection.execute(
-                text("DELETE FROM collection_due_windows WHERE owner_id = :owner_id"),
-                {"owner_id": owner_id},
-            )
-            connection.execute(
-                text("DELETE FROM content_records WHERE owner_id = :owner_id"),
-                {"owner_id": owner_id},
-            )
-            connection.execute(
-                text("DELETE FROM monitor_topic_versions WHERE created_by = :owner_id"),
-                {"owner_id": owner_id},
-            )
-            connection.execute(
-                text("DELETE FROM monitor_topics WHERE owner_id = :owner_id"),
-                {"owner_id": owner_id},
-            )
-            connection.execute(
-                text("DELETE FROM identity_users WHERE id = :owner_id"),
-                {"owner_id": owner_id},
-            )
         engine.dispose()
 
 

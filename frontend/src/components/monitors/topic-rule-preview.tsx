@@ -2,7 +2,6 @@
 
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { LoaderCircleIcon, SearchCheckIcon } from "lucide-react";
 
 import {
@@ -66,7 +65,6 @@ function TopicRulePreviewDialog({
   sourceKeys = [],
   disabled = false,
 }: TopicRulePreviewProps) {
-  const router = useRouter();
   const [sampleTitle, setSampleTitle] = useState("");
   const [state, setState] = useState<PreviewState>({ status: "idle" });
   const [sampleState, setSampleState] = useState<SampleState>({
@@ -104,13 +102,7 @@ function TopicRulePreviewDialog({
       if (mountedRef.current) setSampleState({ status: "ready", preview });
     } catch (error) {
       if (!mountedRef.current) return;
-      if (
-        error instanceof ApiRequestError &&
-        error.code === "invalid_session"
-      ) {
-        router.replace("/login");
-        return;
-      }
+
       setSampleState({
         status: "error",
         message:
@@ -153,13 +145,7 @@ function TopicRulePreviewDialog({
       }
     } catch (error) {
       if (!mountedRef.current) return;
-      if (
-        error instanceof ApiRequestError &&
-        error.code === "invalid_session"
-      ) {
-        router.replace("/login");
-        return;
-      }
+
       setState({
         status: "error",
         message:

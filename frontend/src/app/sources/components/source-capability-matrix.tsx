@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { RotateCcwIcon } from "lucide-react";
 
@@ -24,8 +23,7 @@ type MatrixState =
   | { status: "ready"; platforms: HotKeyAPI.SourcePlatformView[] }
   | { status: "error"; message: string; requestId?: string };
 
-type MatrixResult =
-  Exclude<MatrixState, { status: "loading" }> | { status: "unauthenticated" };
+type MatrixResult = Exclude<MatrixState, { status: "loading" }>;
 
 const STATUS_LABELS: Record<HotKeyAPI.SourceCapabilityStatus, string> = {
   unconfigured: "未配置",
@@ -54,18 +52,11 @@ const STATUS_VARIANTS: Record<
   partial: "secondary",
 };
 
-function isInvalidSession(error: unknown): boolean {
-  return error instanceof ApiRequestError && error.code === "invalid_session";
-}
-
 async function readCapabilities(): Promise<MatrixResult> {
   try {
     const page = await listSourceCapabilities();
     return { status: "ready", platforms: page.items };
   } catch (error) {
-    if (isInvalidSession(error)) {
-      return { status: "unauthenticated" };
-    }
     return {
       status: "error",
       message:
@@ -219,27 +210,20 @@ function LoadingMatrix() {
 }
 
 export function SourceCapabilityMatrix() {
-  const router = useRouter();
   const [state, setState] = useState<MatrixState>({ status: "loading" });
 
   const reload = useCallback(async () => {
     setState({ status: "loading" });
     const result = await readCapabilities();
-    if (result.status === "unauthenticated") {
-      router.replace("/login");
-      return;
-    }
+
     setState(result);
-  }, [router]);
+  }, []);
 
   const refresh = useCallback(async () => {
     const result = await readCapabilities();
-    if (result.status === "unauthenticated") {
-      router.replace("/login");
-      return;
-    }
+
     setState(result);
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     let isCurrent = true;
@@ -247,16 +231,13 @@ export function SourceCapabilityMatrix() {
       if (!isCurrent) {
         return;
       }
-      if (result.status === "unauthenticated") {
-        router.replace("/login");
-        return;
-      }
+
       setState(result);
     });
     return () => {
       isCurrent = false;
     };
-  }, [router]);
+  }, []);
 
   if (state.status === "error") {
     return (

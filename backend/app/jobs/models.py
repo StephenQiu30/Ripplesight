@@ -86,7 +86,7 @@ class ResourceBudgetPolicy(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
-    owner_id: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="CASCADE"))
+    owner_id: Mapped[UUID] = mapped_column()
     budget_key: Mapped[str] = mapped_column(String(128))
     metric: Mapped[str] = mapped_column(String(32))
     scope_kind: Mapped[str] = mapped_column(String(32))
@@ -292,7 +292,7 @@ class ResourceComponentPolicy(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
-    owner_id: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="CASCADE"))
+    owner_id: Mapped[UUID] = mapped_column()
     component_key: Mapped[str] = mapped_column(String(128))
     component_version: Mapped[str] = mapped_column(String(128))
     upstream_revision: Mapped[str | None] = mapped_column(String(40))
@@ -489,7 +489,7 @@ class Job(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
-    owner_id: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="CASCADE"))
+    owner_id: Mapped[UUID] = mapped_column()
     operation_id: Mapped[UUID]
     kind: Mapped[str] = mapped_column(String(64))
     configuration_ref: Mapped[str] = mapped_column(String(128))
@@ -584,7 +584,7 @@ class CoverageWindow(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
-    owner_id: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="CASCADE"))
+    owner_id: Mapped[UUID] = mapped_column()
     source_key: Mapped[str] = mapped_column(String(64))
     capability: Mapped[str] = mapped_column(String(32))
     target_hash: Mapped[bytes] = mapped_column(LargeBinary(32))
@@ -674,7 +674,7 @@ class CollectionDueWindow(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
-    owner_id: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="CASCADE"))
+    owner_id: Mapped[UUID] = mapped_column()
     schedule_key: Mapped[UUID]
     topic_id: Mapped[UUID | None]
     source_key: Mapped[str] = mapped_column(String(64))

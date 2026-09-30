@@ -10,8 +10,8 @@ export function SiteHeader() {
       <BrandLockup href="/" showEnglish />
 
       <Button asChild size="lg" className="min-h-11">
-        <Link href="/login">
-          登录
+        <Link href="/events">
+          进入工作台
           <ArrowRightIcon data-icon="inline-end" />
         </Link>
       </Button>

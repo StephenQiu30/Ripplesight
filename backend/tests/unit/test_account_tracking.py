@@ -12,7 +12,6 @@ from sqlalchemy.pool import StaticPool
 
 from core.errors import ApplicationError
 from db.base import Base
-from identity.models import IdentityUser
 from monitors.models import FollowedAccount, FollowedAccountAlias
 from monitors.schemas import FollowedAccountIdentityInput
 from monitors.services import FollowedAccountService
@@ -33,25 +32,12 @@ def account_session() -> Iterator[Session]:
     Base.metadata.create_all(
         engine,
         tables=[
-            IdentityUser.__table__,
             FollowedAccount.__table__,
             FollowedAccountAlias.__table__,
         ],
     )
     session = Session(engine)
-    now = datetime(2026, 9, 25, tzinfo=UTC)
-    session.add(
-        IdentityUser(
-            id=uuid4(),
-            singleton_key=1,
-            username="account-owner",
-            password_hash="test-only-hash",
-            credential_version=1,
-            created_at=now,
-            updated_at=now,
-        )
-    )
-    session.commit()
+    session.info["demo_scope_id"] = uuid4()
     try:
         yield session
     finally:
@@ -60,8 +46,7 @@ def account_session() -> Iterator[Session]:
 
 
 def _owner_id(session: Session) -> UUID:
-    user = session.query(IdentityUser).one()
-    return user.id
+    return session.info["demo_scope_id"]
 
 
 def _without_timezone(value: datetime) -> datetime:

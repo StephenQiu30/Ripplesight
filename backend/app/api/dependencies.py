@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from typing import Annotated, cast
+from uuid import UUID
 
-from fastapi import Cookie, Depends, Header, Request, Security
-from fastapi.security import APIKeyCookie
+from fastapi import Depends, Header, Request
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
@@ -14,8 +14,8 @@ from content.collection import WebPageCollectionService
 from content.comments import CommentManualRunService
 from content.hotlist import HotlistService
 from content.services import ContentService
-from core.errors import DependencyUnavailableError
-from identity.services import AuthenticatedIdentity, IdentityService
+from core.errors import ApplicationError, DependencyUnavailableError
+from db.demo import resolve_demo_scope
 from jobs.coverage import CollectionCoverageQueryService
 from jobs.services import JobService
 from monitors.runs import MonitorTopicRunService
@@ -45,13 +45,6 @@ def require_database(session: SessionDependency) -> None:
 
 
 DatabaseReadyDependency = Annotated[None, Depends(require_database)]
-
-
-def get_identity_service(request: Request, session: SessionDependency) -> IdentityService:
-    return IdentityService(session, request.app.state.settings)
-
-
-IdentityServiceDependency = Annotated[IdentityService, Depends(get_identity_service)]
 
 
 def get_job_service(session: SessionDependency) -> JobService:
@@ -151,44 +144,21 @@ def get_report_service(session: SessionDependency) -> ReportService:
 
 ReportServiceDependency = Annotated[ReportService, Depends(get_report_service)]
 
-_SESSION_COOKIE = APIKeyCookie(
-    name="hotkey_session",
-    scheme_name="SessionCookie",
-    auto_error=False,
-)
+
+def get_demo_scope(session: SessionDependency) -> UUID:
+    return resolve_demo_scope(session)
 
 
-def require_identity_session(
-    service: IdentityServiceDependency,
-    session_token: Annotated[str | None, Security(_SESSION_COOKIE)],
-) -> AuthenticatedIdentity:
-    return service.authenticate(session_token)
+DemoScopeDependency = Annotated[UUID, Depends(get_demo_scope)]
 
 
-AuthenticatedIdentityDependency = Annotated[
-    AuthenticatedIdentity,
-    Depends(require_identity_session),
-]
-
-
-def require_identity_csrf(
-    service: IdentityServiceDependency,
-    identity: AuthenticatedIdentityDependency,
-    csrf_cookie: Annotated[
-        str | None,
-        Cookie(alias="hotkey_csrf", include_in_schema=False),
-    ] = None,
+def get_demo_write_scope(
+    scope_id: DemoScopeDependency,
     csrf_header: Annotated[str | None, Header(alias="X-HotKey-CSRF")] = None,
-) -> AuthenticatedIdentity:
-    service.validate_csrf(
-        identity,
-        csrf_cookie=csrf_cookie,
-        csrf_header=csrf_header,
-    )
-    return identity
+) -> UUID:
+    if csrf_header != "1":
+        raise ApplicationError("csrf_invalid")
+    return scope_id
 
 
-CsrfProtectedIdentityDependency = Annotated[
-    AuthenticatedIdentity,
-    Depends(require_identity_csrf),
-]
+DemoWriteScopeDependency = Annotated[UUID, Depends(get_demo_write_scope)]

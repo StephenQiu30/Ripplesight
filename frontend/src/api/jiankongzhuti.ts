@@ -2,7 +2,7 @@
 /* eslint-disable */
 import request from "@/request";
 
-/** 列出监控主题 按当前 owner 列出主题; 默认隐藏已归档主题。 GET /api/topics */
+/** 列出监控主题 按当前 Demo 分区列出主题; 默认隐藏已归档主题。 GET /api/topics */
 export async function listMonitorTopics(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: HotKeyAPI.listMonitorTopicsParams,
@@ -34,7 +34,7 @@ export async function createMonitorTopic(
   });
 }
 
-/** 读取监控主题 按当前会话 owner 读取主题、当前不可变规则版本、来源选择和运行设置。 GET /api/topics/${param0} */
+/** 读取监控主题 按当前 Demo 分区读取主题、当前不可变规则版本、来源选择和运行设置。 GET /api/topics/${param0} */
 export async function getMonitorTopic(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: HotKeyAPI.getMonitorTopicParams,
@@ -157,7 +157,7 @@ export async function previewMonitorTopic(
   });
 }
 
-/** 用已有内容预览草稿关键词 只读取当前 owner 最近七天可读的内容样本; 不保存主题、不创建任务或请求来源/模型。 POST /api/topics/sample-preview */
+/** 用已有内容预览草稿关键词 只读取当前 Demo 分区最近七天可读的内容样本; 不保存主题、不创建任务或请求来源/模型。 POST /api/topics/sample-preview */
 export async function previewMonitorTopicSamples(
   body: HotKeyAPI.ContentSamplePreviewInput,
   options?: import("@/request").RequestOptions,

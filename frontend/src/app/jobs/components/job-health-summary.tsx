@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowRightIcon, CircleAlertIcon } from "lucide-react";
 
@@ -113,7 +112,6 @@ export function JobHealthSummaryView({ state }: { state: IssueState }) {
 }
 
 export function JobHealthSummary() {
-  const router = useRouter();
   const [state, setState] = useState<IssueState>({ status: "loading" });
 
   useEffect(() => {
@@ -128,23 +126,17 @@ export function JobHealthSummary() {
         if (!isCurrent) {
           return;
         }
-        if (
-          error instanceof ApiRequestError &&
-          error.code === "invalid_session"
-        ) {
-          router.replace("/login");
-        } else {
-          setState({
-            status: "error",
-            message:
-              error instanceof ApiRequestError ? error.message : "请稍后重试。",
-          });
-        }
+
+        setState({
+          status: "error",
+          message:
+            error instanceof ApiRequestError ? error.message : "请稍后重试。",
+        });
       });
     return () => {
       isCurrent = false;
     };
-  }, [router]);
+  }, []);
 
   return <JobHealthSummaryView state={state} />;
 }

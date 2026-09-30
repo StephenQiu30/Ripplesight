@@ -1,12 +1,12 @@
 # HotKey Server 交接
 
-更新日期：2026-10-01。本文件记录实现快照与设计变更（≤5 KB）；需求见 [PRD001 v5.2](docs/prd/001-热点舆情监控平台需求.md)，设计见 [Design001 v4.3](docs/design/001-热点舆情监控平台总体设计.md)，任务及证据见 [Plan索引](docs/plan/README.md)、[BACKLOG](BACKLOG.md) 和 [Acceptance索引](docs/README.md)。
+更新日期：2026-10-01。本文件记录实现快照（≤5 KB）；需求见 [PRD001 v5.3](docs/prd/001-热点舆情监控平台需求.md)，设计见 [Design001 v4.4](docs/design/001-热点舆情监控平台总体设计.md)，任务及证据见 [Plan索引](docs/plan/README.md)、[BACKLOG](BACKLOG.md) 和 [Acceptance索引](docs/README.md)。
 
-## 账户设计与当前实现
+## Demo 清理与当前实现
 
-目标是ToC多用户，保留用户名密码，与GitHub App/邮箱验证码并存；后两者首次验证可注册。删除部署密钥、单owner及独立工作区包装，保留密码哈希/恢复、会话/CSRF与资源隔离。无感登录用有效Cookie恢复；过期、撤销、退出后重新验证，不增加JWT refresh。登录邮件/报告投递分别验收。
+用户最新要求当前Demo无需登录、注册及用户体系。Plan061删除身份模块/API、密码/会话/初始化配置、登录注册页与业务守卫；直接进入/events，读无需Cookie、写固定自定义头。业务owner_id/created_by保留为内部分区UUID，空库固定值、单分区复用、多分区拒绝；不造假用户或会话。来源授权/凭据、预算和任务幂等保留。
 
-[Plan060](docs/plan/060-GitHub与邮箱验证码登录执行计划.md) 为planned，代码仍是旧身份与用户名密码登录，GitHub/验证码尚不可用。本轮仅文档，未改代码、配置、数据库或运行环境；多用户、三种登录、无感恢复及旧库切换验收待完成，旧单用户证据不覆盖新账户AC。
+[Plan061](docs/plan/061-Demo用户体系与历史依赖清理执行计划.md) completed（EV-001-005—007）：后端1092通过/14项MinIO跳过，前端95通过，静态/构建/生成、匿名保存刷新和390px通过。Web13000/API18867用独立hotkey_demo_20261001库，旧库未改；060后置，不证明多用户权限。
 
 ## 核心边界与证据
 
@@ -29,8 +29,8 @@ Plan038部分覆盖修复受控通过（EV-002-051），真实分页、旧帖新
 | Firecrawl / MediaCrawler | 独立本地编排与资料；公开网页和平台采集分别验收，B站采用宿主机子进程及独立CDP |
 | Codex / Obsidian | 本机app-server，HOTKEY_AI_MODEL选模型，不发付费请求；vault为~/Desktop/Markdown/Obsidian，仅写HotKey/，真实写入另验 |
 
-保留运行库须先备份并实际验证恢复，再新建空库、原子应用完整schema.sql、导入并校验用户/外键、内容、连接版本、Job/Outbox/offset、覆盖与预算，旧库保留回退。不得对旧库执行完整Schema；Plan051隔离恢复技术completed，同桶不算独立灾备，最终009/013运行库需同版本重验。身份改造不得猜旧用户名对应邮箱或把旧数据交给首个新登录者。
+保留运行库须先验证备份，再新建空库、应用完整schema.sql、导入校验分区/外键、内容、连接版本、Job/Outbox/offset、覆盖与预算，旧库保留回退。不得对旧库执行完整Schema；051隔离恢复技术completed，同桶不算独立灾备，最终009/013同版本重验。旧备份用原版本恢复；旧业务为空且有身份表的Schema明确拒绝Demo写入。
 
 ## 下一步
 
-现行Plan001—060，下个Issue为061；060设计planned，按三种登录、无感恢复、用户隔离与旧库合同实施。058先汇齐A再扩B；M2核查后012低频，M3按014→015→016→042推进；模型、72小时、报告/知识库/渠道待验。逐卡状态见BACKLOG/Plan；不整体恢复旧stash，文档不算实现。提交和推送依当前会话授权。
+现行Plan001—061，新Issue取062；061Demo清理完成，060后置。058先汇齐A再扩B；M2核查后012低频，M3按014→015→016→042推进；模型、72小时、报告/知识库/渠道待验。逐卡状态见BACKLOG/Plan；不整体恢复旧stash。提交推送依会话授权。

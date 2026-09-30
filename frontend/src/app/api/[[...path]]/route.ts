@@ -2,8 +2,10 @@ const DEFAULT_API_ORIGIN = "http://127.0.0.1:8867";
 const API_TIMEOUT_MS = 15_000;
 
 const REQUEST_HEADER_BLOCKLIST = new Set([
+  "authorization",
   "connection",
   "content-length",
+  "cookie",
   "host",
   "keep-alive",
   "proxy-authenticate",
@@ -20,6 +22,7 @@ const RESPONSE_HEADER_BLOCKLIST = new Set([
   "keep-alive",
   "proxy-authenticate",
   "proxy-authorization",
+  "set-cookie",
   "te",
   "trailer",
   "transfer-encoding",
@@ -69,16 +72,10 @@ function createClientHeaders(upstream: Response): Headers {
   const headers = new Headers();
   upstream.headers.forEach((value, name) => {
     const normalized = name.toLowerCase();
-    if (
-      normalized !== "set-cookie" &&
-      !RESPONSE_HEADER_BLOCKLIST.has(normalized)
-    ) {
+    if (!RESPONSE_HEADER_BLOCKLIST.has(normalized)) {
       headers.append(name, value);
     }
   });
-  for (const cookie of upstream.headers.getSetCookie()) {
-    headers.append("set-cookie", cookie);
-  }
   return headers;
 }
 

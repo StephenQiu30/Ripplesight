@@ -13,14 +13,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const api = vi.hoisted(() => ({
   samples: vi.fn(),
   title: vi.fn(),
-  replace: vi.fn(),
 }));
 vi.mock("@/api/jiankongzhuti", () => ({
   previewMonitorTopicSamples: api.samples,
   previewMonitorTopic: api.title,
-}));
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: api.replace }),
 }));
 
 import { ApiRequestError } from "@/request";
@@ -146,7 +142,7 @@ describe("persisted rule samples", () => {
     });
   });
 
-  it("preserves the request ID on errors and sends an expired session to login", async () => {
+  it("preserves business error messages and request IDs through a retry", async () => {
     api.samples.mockRejectedValueOnce(
       new ApiRequestError({
         kind: "http",
@@ -165,12 +161,24 @@ describe("persisted rule samples", () => {
     api.samples.mockRejectedValueOnce(
       new ApiRequestError({
         kind: "http",
-        status: 401,
-        code: "invalid_session",
-        message: "会话失效",
+        status: 503,
+        code: "demo_scope_conflict",
+        message: "存在多个历史数据分区，无法读取样本",
+        requestId: "request-demo-scope",
       }),
     );
     readSamples();
-    await waitFor(() => expect(api.replace).toHaveBeenCalledWith("/login"));
+    await waitFor(() => {
+      expect(screen.getByRole("alert").textContent).toContain(
+        "存在多个历史数据分区，无法读取样本",
+      );
+      expect(screen.getByRole("alert").textContent).toContain(
+        "request-demo-scope",
+      );
+    });
+    api.samples.mockResolvedValueOnce(preview);
+    readSamples();
+    expect(await screen.findByText("AI 招聘")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

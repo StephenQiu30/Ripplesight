@@ -5,7 +5,6 @@ from uuid import UUID
 
 from sqlalchemy import (
     CheckConstraint,
-    ForeignKey,
     ForeignKeyConstraint,
     Index,
     Integer,
@@ -84,7 +83,7 @@ class SourceConnection(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
-    owner_id: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="CASCADE"))
+    owner_id: Mapped[UUID] = mapped_column()
     source_key: Mapped[str] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(16))
     current_version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
@@ -176,7 +175,7 @@ class SourceConnectionVersion(Base):
     secret_ref: Mapped[str | None] = mapped_column(String(256))
     config: Mapped[dict[str, object]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     execution_policy: Mapped[dict[str, object] | None] = mapped_column(JSONB(none_as_null=True))
-    created_by: Mapped[UUID] = mapped_column(ForeignKey("identity_users.id", ondelete="RESTRICT"))
+    created_by: Mapped[UUID] = mapped_column()
     created_at: Mapped[datetime]
 
 

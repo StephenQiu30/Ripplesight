@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Path, Response, status
 
-from api.dependencies import CsrfProtectedIdentityDependency, SourceConnectionServiceDependency
+from api.dependencies import DemoWriteScopeDependency, SourceConnectionServiceDependency
 from connections.schemas import SourceConnectionUpdateInput, SourceConnectionView
 from core.schemas import ErrorView
 
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/source-connections", tags=["来源能力"])
         "版本变化后必须重新验证, 历史资料保留。"
     ),
     responses={
-        401: {"model": ErrorView, "description": "会话无效或已过期"},
+        503: {"model": ErrorView, "description": "数据库不可用或 Demo 数据分区冲突"},
         403: {"model": ErrorView, "description": "请求安全校验失败"},
         404: {"model": ErrorView, "description": "来源或连接不存在"},
         409: {"model": ErrorView, "description": "版本冲突或服务端尚未配置凭据"},
@@ -35,10 +35,8 @@ def update_source_connection(
     payload: SourceConnectionUpdateInput,
     response: Response,
     service: SourceConnectionServiceDependency,
-    identity: CsrfProtectedIdentityDependency,
+    scope_id: DemoWriteScopeDependency,
 ) -> SourceConnectionView:
-    view = service.update_connection(
-        owner_id=identity.view.user.id, source_key=source_key, command=payload
-    )
+    view = service.update_connection(owner_id=scope_id, source_key=source_key, command=payload)
     response.headers["cache-control"] = "no-store"
     return view

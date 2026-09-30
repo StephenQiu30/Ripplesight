@@ -18,7 +18,6 @@ class ErrorCategory(StrEnum):
 
 ERROR_CATEGORIES: Mapping[str, ErrorCategory] = MappingProxyType(
     {
-        "bootstrap_forbidden": ErrorCategory.AUTHORIZATION,
         "connection_disabled": ErrorCategory.CONFLICT,
         "connection_authentication_required": ErrorCategory.CONFLICT,
         "connection_credentials_missing": ErrorCategory.CONFLICT,
@@ -35,12 +34,8 @@ ERROR_CATEGORIES: Mapping[str, ErrorCategory] = MappingProxyType(
         "comments_budget_exhausted": ErrorCategory.CONFLICT,
         "csrf_invalid": ErrorCategory.AUTHORIZATION,
         "database_unavailable": ErrorCategory.DEPENDENCY_UNAVAILABLE,
-        "identity_already_initialized": ErrorCategory.CONFLICT,
-        "identity_not_initialized": ErrorCategory.NOT_FOUND,
+        "demo_scope_conflict": ErrorCategory.DEPENDENCY_UNAVAILABLE,
         "idempotency_conflict": ErrorCategory.CONFLICT,
-        "invalid_credentials": ErrorCategory.AUTHENTICATION,
-        "invalid_password": ErrorCategory.INVALID_INPUT,
-        "invalid_session": ErrorCategory.AUTHENTICATION,
         "job_not_cancellable": ErrorCategory.CONFLICT,
         "job_not_retryable": ErrorCategory.CONFLICT,
         "retry_budget_exhausted": ErrorCategory.CONFLICT,

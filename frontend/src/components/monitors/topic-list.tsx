@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArchiveIcon, LoaderCircleIcon, RotateCcwIcon } from "lucide-react";
 
@@ -16,7 +15,6 @@ type TopicListState =
   | { status: "error"; message: string; requestId?: string };
 
 export function TopicList() {
-  const router = useRouter();
   const [includeArchived, setIncludeArchived] = useState(false);
   const [state, setState] = useState<TopicListState>({ status: "loading" });
 
@@ -29,13 +27,6 @@ export function TopicList() {
       });
       setState({ status: "ready", topics: page.items });
     } catch (error) {
-      if (
-        error instanceof ApiRequestError &&
-        error.code === "invalid_session"
-      ) {
-        router.replace("/login");
-        return;
-      }
       setState({
         status: "error",
         message:
@@ -60,13 +51,7 @@ export function TopicList() {
         if (!isCurrent) {
           return;
         }
-        if (
-          error instanceof ApiRequestError &&
-          error.code === "invalid_session"
-        ) {
-          router.replace("/login");
-          return;
-        }
+
         setState({
           status: "error",
           message:
@@ -80,7 +65,7 @@ export function TopicList() {
     return () => {
       isCurrent = false;
     };
-  }, [includeArchived, router]);
+  }, [includeArchived]);
 
   return (
     <section className="mt-10" aria-labelledby="monitor-topics-heading">

@@ -44,14 +44,6 @@ def event_context() -> Iterator[
     with engine.begin() as connection:
         connection.execute(
             text(
-                "INSERT INTO identity_users "
-                "(id, username, password_hash, created_at, updated_at) "
-                "VALUES (:id, :name, 'test-only-hash', :now, :now)"
-            ),
-            {"id": owner_id, "name": f"event-{owner_id.hex}", "now": now},
-        )
-        connection.execute(
-            text(
                 "INSERT INTO monitor_topics "
                 "(id, owner_id, name, status, readiness_status, "
                 "current_version, created_at, updated_at) "
@@ -148,28 +140,6 @@ def event_context() -> Iterator[
     try:
         yield sessions, owner_id, topic_id, version_ids, call_id, now
     finally:
-        with engine.begin() as connection:
-            for table in (
-                "event_candidates",
-                "event_members",
-                "events",
-                "content_annotations",
-                "content_versions",
-                "content_records",
-                "ai_calls",
-                "jobs",
-                "monitor_topic_versions",
-                "monitor_topics",
-                "identity_users",
-            ):
-                key = (
-                    "created_by"
-                    if table == "monitor_topic_versions"
-                    else ("id" if table == "identity_users" else "owner_id")
-                )
-                connection.execute(
-                    text(f"DELETE FROM {table} WHERE {key}=:owner"), {"owner": owner_id}
-                )
         engine.dispose()
 
 

@@ -14,6 +14,7 @@ from pydantic import SecretStr
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
+from tests.conftest import TEST_DATABASE_TRUNCATE
 
 from jobs.execution import resource_attempt_id
 from jobs.schemas import (
@@ -71,67 +72,12 @@ def resource_budget_context() -> Iterator[ResourceBudgetContext]:
     owner_id = uuid4()
     other_owner_id = uuid4()
     with engine.begin() as connection:
-        connection.execute(
-            text(
-                "TRUNCATE event_candidates, event_members, events, "
-                "collection_due_windows, hotlist_entries, hotlist_snapshots, "
-                "resource_budget_reservations, resource_budget_windows, "
-                "resource_budget_policies, resource_usage_attempts, "
-                "resource_component_policies, "
-                "content_version_relations, content_visibility_observations, "
-                "content_observations, content_versions, "
-                "content_discoveries, content_threads, content_records, "
-                "source_capability_evidence, source_connection_versions, source_connections, "
-                "provenance_manifest_inputs, provenance_manifests, "
-                "evidence_cleanup_targets, evidence_deletions, evidence_resources, "
-                "evidence_retention_policies, source_access_policies, "
-                "job_stage_attempts, processed_messages, "
-                "job_attempts, "
-                "ai_calls, knowledge_exports, notification_deliveries, notification_targets, "
-                "content_annotations, reports, monitor_schedules, "
-                "outbox_messages, coverage_windows, "
-                "jobs, followed_account_aliases, followed_accounts, "
-                "monitor_topic_status_events, "
-                "monitor_topic_versions, monitor_topics, "
-                "identity_sessions, identity_users"
-            )
-        )
-        connection.execute(
-            text(
-                "INSERT INTO identity_users "
-                "(id, username, password_hash, credential_version, created_at, updated_at) "
-                "VALUES (:owner_id, 'budget-owner', 'test-only-hash', 1, now(), now())"
-            ),
-            {"owner_id": owner_id},
-        )
+        connection.execute(text(TEST_DATABASE_TRUNCATE))
     try:
         yield ResourceBudgetContext(engine, sessions, owner_id, other_owner_id)
     finally:
         with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "TRUNCATE event_candidates, event_members, events, "
-                    "collection_due_windows, hotlist_entries, hotlist_snapshots, "
-                    "resource_budget_reservations, resource_budget_windows, "
-                    "resource_budget_policies, resource_usage_attempts, "
-                    "resource_component_policies, "
-                    "content_version_relations, content_visibility_observations, "
-                    "content_observations, content_versions, "
-                    "content_discoveries, content_threads, content_records, "
-                    "source_capability_evidence, source_connection_versions, "
-                    "source_connections, provenance_manifest_inputs, provenance_manifests, "
-                    "evidence_cleanup_targets, evidence_deletions, evidence_resources, "
-                    "evidence_retention_policies, source_access_policies, "
-                    "job_stage_attempts, processed_messages, job_attempts, "
-                    "ai_calls, knowledge_exports, notification_deliveries, notification_targets, "
-                    "content_annotations, reports, monitor_schedules, "
-                    "outbox_messages, coverage_windows, "
-                    "jobs, followed_account_aliases, followed_accounts, "
-                    "monitor_topic_status_events, "
-                    "monitor_topic_versions, monitor_topics, "
-                    "identity_sessions, identity_users"
-                )
-            )
+            connection.execute(text(TEST_DATABASE_TRUNCATE))
         engine.dispose()
 
 

@@ -1,6 +1,6 @@
 # 执行计划审核、依赖与需求覆盖
 
-更新：2026-10-01，新增 ToC 用户登录设计合同060；本轮只清理文档，新登录尚未实施。核心链路仍按 Acceptance 002 逐卡证据及先最小演示、再扩围的 POC 顺序推进。Design/PRD 001—007承担总纲与M1—M6 Epic；逐Issue计划从001连续到060，编号是身份，不是执行顺序。各卡技术状态与证据见下表；计划中的新增表、接口、文件、测试不因列入索引就视为已创建、运行或验收。
+更新：2026-10-01，用户要求直接删除当前Demo用户体系，061实施代码/页面清理；060缩减为后置ToC需求，不进入Demo排期。核心链路仍按 Acceptance002先最小演示再扩围。Design/PRD001—007承担总纲与能力Epic；逐Issue编号001—061，编号不是执行顺序。技术状态与证据见下表，设计不等于已实现或验收。
 
 ## 调研新增需求的实施合同边界
 
@@ -39,11 +39,11 @@
 
 ## Issue与技术依赖
 
-001—030为既有修订卡，031—052为新增/拆分卡，053—057接续审计缺口，058汇合M1短窗演示，059承接已有内容样本预览，060为身份改造planned。001、002、007、008、031、033、034、035、036、037、039、051、059在各自范围completed；007手动真实搜索/重投已验，031定时同窗归009，003/004/014/032/058保持in_progress。001配置保存/刷新及冲突浏览器证据已补，8a7135e2预览来源提示修复同SHA frontend/contract/runtime通过，受控completed不关闭父级AC；026、046—050、053—054、057为blocked，其余见各卡/BACKLOG。Design与同号PRD映射，账号/渠道/真实样本/长窗独立放行。
+001—030既有卡，031—052新增/拆分，053—057审计缺口，058短窗演示，059内容预览，060后置账户需求，061Demo清理。001、002、007、008、031、033、034、035、036、037、039、051、059、061在各自范围completed；003/004/014/032/058仍in_progress，026/046—050/053—054/057 blocked。历史真实证据仍按各卡/Acceptance读取，受控completed不关闭父级AC；账号/渠道/样本/长窗分别放行。
 
 | Plan | 唯一交付 | Design | 技术前置 |
 |---|---|---|---|
-| [001](001-监控主题与关键词规则执行计划.md) | 主题配置/规则/版本 | 002 | 既有身份/主题底座 |
+| [001](001-监控主题与关键词规则执行计划.md) | 主题配置/规则/版本 | 002 | 主题底座；身份前置由061删除 |
 | [002](002-来源预设版本与预算配置执行计划.md) | 版本化策略与预算配置 | 002 | 既有连接/预算底座 |
 | [003](003-空榜与失败时间桶执行计划.md) | 空快照与原桶失败 | 002 | 033 |
 | [004](004-采集覆盖查询执行计划.md) | 覆盖只读API | 002 | 033、003、005 |
@@ -102,13 +102,14 @@
 | [057](057-通用网页与浏览器采集底座回归执行计划.md) | webpage.collect/Firecrawl/Browser/probe冻结回归，blocked | 001 | 055、056；目标来源与授权未定 |
 | [058](058-M1短窗POC演示与扩围执行计划.md) | 一个主题+HN+一榜最小闭环，随后四来源六榜短窗扩围 | 002 | 001/002/003/004/005/007/008/031—034/038—041、051适用技术产物 |
 | [059](059-已有内容关键词样本预览执行计划.md) | 已有内容只读预览；completed，EV-002-053；完整新增 AC 未关闭 | 002 | 001、041；历史046 S03 |
-| [060](060-GitHub与邮箱验证码登录执行计划.md) | GitHub App/邮箱验证码、真实多用户与旧身份删除；planned，文档完成，代码未改 | 001 | 051 数据保留/恢复、056 HTTP/客户端回归；历史046 S03 |
+| [060](060-GitHub与邮箱验证码登录执行计划.md) | 未来ToC账户需求后置；planned，无实施就绪合同 | 001 | 恢复时重新定标 |
+| [061](061-Demo用户体系与历史依赖清理执行计划.md) | Demo身份代码/页面清理；completed，EV-001-005—007 | 001 | 历史046 S03；旧库不就地改Schema |
 
 ## 执行顺序
 
-按已授权的范围逐Issue推进，同组不代表并发改共享文件。用户本轮授权将当前设计文档提交main并推送；应用身份代码改造仍归060，不因发布文档视为已实施。
+按已授权范围逐Issue推进，同组不代表并发覆盖共享文件。此前设计文档已提交main推送；当前实现061，发布设计不代表代码通过。新提交推送依当前明确授权。
 
-2026-10-01用户最新补充：普通ToC多用户保留用户名密码与无感登录，增加GitHub App/邮箱验证码，后两者首次验证可注册。设计与旧部署教程本轮清理；实现归060，不列为已通过底座。其他卡的owner_id表示数据归属，不设owner角色或单账户约束；身份/CLI/调度/旧夹具假设由060替换。
+2026-10-01用户最新决定：Demo不需要登录注册和用户体系，061直接清理实现；此前ToC用户名密码/GitHub/邮箱/无感登录后置。当前owner_id/created_by仅维持历史业务分区，API/CLI从全部业务表解析唯一值，不创建默认账户；来源授权、预算与幂等保持。
 
 2026-09-30 用户明确最终目标是整个核心链路的 POC，范围以 PRD001 §1 为准；当前先收尾 M1，不能把“全系统功能”解释为本轮实现全部58卡。日报、周报、Obsidian、知识库检索/问答、报告导出与渠道投递是后续非核心能力，不进入当前排期或核心完成条件。009/013 的真实连续72小时、正式时效和质量抽检留给产品验证；保留受控集成、真实依赖、浏览器与可取得的真实短窗证据及其缺口，原FR/NFR/AC不据此关闭。
 
@@ -124,7 +125,7 @@
 
 | 需求 | 承接Issue |
 |---|---|
-| FR-001-122—128；NFR-001-113 | 060保留用户名密码，新增GitHub/邮箱、凭据维护与无感恢复，真实多用户隔离；planned |
+| FR-001-122—128；NFR-001-113 | 060未来ToC需求后置，Demo不实现；061移除当前身份依赖 |
 | FR-002-001 | 001配置/规则，031运行入口 |
 | FR-002-002 | 002策略、031调度/手动、032重试、033漏窗 |
 | FR-002-003 | 007/035/036/037逐来源，033计量，041阅读 |
@@ -179,7 +180,7 @@
 
 | AC | 必需 Plan 与本卡责任 |
 |---|---|
-| AC-001-123—129 | 060新增两通道、用户名密码/设密恢复、无感登录、账户关联/隔离与退出；完整新合同未验 |
+| AC-001-123—129 | 060后置账户需求未验；061Demo清理不能关闭正式产品账户AC |
 | AC-002-001 | 007 HN搜索/重放、038评论父链、041阅读、009共同核对 |
 | AC-002-002 | 001主题、002策略、031调度、033到期、007/035/036/037四关键词来源、004/006/034覆盖与时效、009长窗 |
 | AC-002-003 | 038十帖分页/旧帖新回复、041父链阅读、009汇合 |
@@ -213,8 +214,8 @@
 
 | 模块/表 | 代码位置 | 现有验证证据 | 维护责任 | Design/PRD映射 |
 |---|---|---|---|---|
-| 旧身份、会话、初始化/重置命令；`identity_users`、`identity_sessions` | `backend/app/identity/`、`api/routers/identity.py`、`cli/commands.py` | 旧单账户测试与HTTP契约证据保留；不证明新登录或多用户隔离 | 060替换旧身份；051恢复、056契约回归 | 001 / PRD001 §2.1、NFR-001-107/113 |
-| 公开首页、品牌、旧登录/初始化Web | `frontend/src/app/page.tsx`、`app/components/`、`components/brand/`、`app/login/`、`app/register/`、`components/auth/` | 现有旧页面；新登录未验；图标现行母版为`app/icon.png` | 060替换登录/注册；brand沿用 | 001 / PRD001 §2.1、NFR-001-107/113 |
+| 历史身份/会话/初始化与重置 | 原identity域/API/CLI，两身份表 | 061删除代码/新DDL；旧运行库不改，旧证据仅历史 | 061匿名/分区与契约回归 | 001 / PRD001 §2.1 |
+| 公开首页、品牌与Demo入口 | `frontend/src/app/page.tsx`、`app/components/`、`components/brand/` | 061删登录/注册/auth组件；首页进入/events；母版app/icon.png | 061浏览器；品牌沿用 | 001 / Design001 §9 |
 | 主题工作台及共享状态页 | `frontend/src/app/events/`、`components/monitors/topic-list.tsx`、`components/system/page-state.tsx` | 已有入口；业务事件查询待042，不能把首页当事件验收 | 前端路由；事件业务归042 | 001/004 / PRD001、FR-004-001 |
 | HTTP路由汇总、文档、健康、异常、请求ID；同源代理/请求 | `backend/app/api/{router,docs,middleware,exception_handlers,dependencies}.py`、`api/routers/health.py`、`frontend/src/{request,proxy}.ts`、`app/api/[[...path]]/route.ts`、`app/health/route.ts` | 历史046 S03真实门槛见Design001 §5；`test_http_contract.py`/`test_http_contract_046.py`现有，本轮未重跑 | api/core与Web传输；056回归 | 001 / NFR-001-104/107 |
 | Web错误/加载入口与生成客户端 | `frontend/src/app/{layout,error,global-error,not-found,loading}.tsx`、`src/api/` | 现有代码/生成物；同提交生成漂移待056验证 | Web根布局与056契约 | 001 / NFR-001-104/107 |
@@ -225,13 +226,13 @@
 | Firecrawl、HTTP来源与安全目标、Browser运行时 | `backend/app/sources/adapters/{http_source,firecrawl,browser_runtime,web_targets}.py`、`connections/adapters/local_secrets.py` | `test_webpage_adapter.py`、`test_browser_adapter.py`、`test_browser_collection.py`现有；G4-002换版旧写仍待验 | sources/connections；057冻结回归 | 001/002 / NFR-001-107/110 |
 | 浏览器Server、seccomp、代理与镜像网络 | `backend/browser/{server.js,seccomp.json,squid.conf}`、`backend/Dockerfile`、`docker-compose.yml` | S03运行底座历史技术验证；真实平台出口/请求计量未证明 | browser/部署；057 | 001/002 / NFR-001-104/107 |
 | `sources probe-webpage`、`probe-browser` | `backend/app/cli/commands.py` | CLI探针只能证明本机通路，不能提升来源状态；本轮未重跑 | cli/sources；057 | 001/002 / NFR-001-107 |
-| `version`、`identity reset-password`、preset/连接CLI | `backend/app/cli/commands.py` | 密码恢复保留，060要求显式用户；来源安全约束保留 | 060身份范围；cli/connections域 | 001/002/003 / NFR-001-107/110/113 |
+| `version`、preset/连接及业务CLI | `backend/app/cli/commands.py` | 061删identity命令，业务共用Demo分区；来源安全保持 | 061；cli/connections域 | 001/002/003 |
 | 来源、Job与内容用户页面 | `frontend/src/app/{sources,jobs,content}/` | 现有列表/详情测试；034/041新增业务阅读，单网页表单归057 | 各路由所有者；034/041/057 | 002 / FR-002-003/007 |
 | 后端/契约/前端/运行CI | `.github/workflows/{backend,contract,frontend,runtime}.yml` | 现有工作流；本轮未触发远端最终CI，运行门禁不等于来源旅程 | CI；056 | 001 / NFR-001-104/107 |
 | Compose底座与API/Web镜像 | `docker-compose.yml`、`backend/Dockerfile`、`frontend/Dockerfile` | 现有编排；051需同库恢复，057浏览器出口另验 | 部署；051/056/057按变更范围 | 001 / NFR-001-104/106/107 |
 | X只读适配与作者解析 | `backend/app/sources/adapters/{x_api,x_user_lookup}.py` | 既有MockTransport受控测试；无凭据/月度上限，零真实请求 | sources；047准入代码台账，获准后新实施卡 | 007 / FR-007-004、AC-007-003 |
 
-其余现有43张DDL表与领域模块的业务归属按上方Issue、Design001领域表及各卡SPEC管理；身份、证据/谱系和预算/任务共享表已在本台账显式点名。共享台账不代表它们满足真实来源或产品AC。
+当前48张业务DDL表归属按各Issue/Design/SPEC管理，证据/谱系、预算/任务及061历史分区共享边界已明确。台账不代表真实来源或产品AC通过。
 
 ### 共享文件所有权与串行顺序
 
@@ -249,7 +250,7 @@
 | `frontend/src/api/`、`src/request.ts` | 业务Issue只生成/消费；056维护传输/生成门禁 | 从同提交运行Schema重生、C/F与CI最终结果，无手改 |
 | `.github/workflows/*.yml`、`docker-compose.yml` | 056维护CI、051恢复、057浏览器出口 | 文件差异单卡审查，不删除持久卷；最终Schema/客户端/运行门禁复验 |
 
-060 接续上述共享文件的当前版本，身份 Schema、配置、API、CLI、调度与 Worker、代理、生成客户端和 CI 的修改按同一切片串行核对；消费051同版本恢复证据并重跑056契约门禁，不与其他行为卡并行覆盖。精确清单和旧字段回归以060为准。
+061接续当前共享文件，删除身份Schema/配置/API/CLI/页面依赖，同步客户端与CI；旧库不改，新Schema在隔离空库验证。已完成Plan中的身份前置、会话/CSRF协议和旧证据按历史保留，当前统一由061/Design001 §9.2替代，不批量重写历史实施记录。精确文件见061，不覆盖其他切片。
 
 ### 逐卡文件变更分类
 
@@ -315,7 +316,8 @@
 | 056 | 无 | `B/api/{exception_handlers,middleware,docs,router,dependencies}.py`、`F/{request,proxy}.ts`、四份CI工作流 | Client |
 | 057 | 无；获准后Browser处理器路径先补Design | `B/sources/adapters/{web_targets,http_source,firecrawl,browser_runtime}.py`、`B/connections/adapters/local_secrets.py`、`B/worker/{app,execution}.py`、`B/cli/commands.py`、浏览器/Compose文件（当前冻结） | Client（契约变化时） |
 | 059 | `backend/tests/unit/test_sample_preview_contract.py`、`F/components/monitors/topic-rule-preview.test.tsx` | `B/content/{schemas,services}.py`、`B/api/routers/monitor_topics.py`、`backend/tests/integration/test_content_records.py`、`F/components/monitors/topic-rule-preview.tsx`及主题新建/编辑调用处 | Client |
-| 060 | `B/identity/adapters/{__init__,github,email,verification_store}.py`、新登录通道组件、`F/app/account/`及身份/页面测试 | identity/API/配置/CLI/Worker/恢复/DDL/代理/CI/夹具；保留密码接口/表单/凭据版本，删除部署初始化/workspace包装 | Client；精确分类见060 §2 |
+| 060 | 无；未来需求后置 | 恢复时重新定标，不保留实现骨架 | 无 |
+| 061 | `B/db/demo.py`、Demo回归测试 | 删除身份域/API/auth页面/密码配置，修改UUID注入、DDL、CLI、恢复、代理、CI和夹具；清单见061 §2 | Client |
 
 ## 验证命令与证据
 
@@ -331,4 +333,4 @@
 
 旧七份里程碑Plan原文见Git历史；当前001—030以ba15f126为修订基线，FR/NFR/AC不重编号。002原“来源节奏与预算安全重试”拆至002/031/032；007原“HN重放与评论父链”拆至007/038；030原“报告与原始数据导出”拆至030/045，三份文件按新职责更名。004页面迁034、008历史页面迁039、事件页面迁042、报告调度迁043、通知配置迁044、009运行库保留迁051、023检索迁052。旧SPEC/CHK见前一Git版本，责任以本表和各卡具体合同为准。
 
-后续Issue取061起。新046/047分别为Reddit/X，历史HTTP/browser门槛必须带“历史”说明。059 已实现并留受控及真实只读证据，060仅设计完成、实现planned；平台新采集、连续运行与父级产品验收按各卡分别记录。
+后续Issue取062。新046/047为Reddit/X，历史HTTP/browser门槛须标历史。059与061各自范围完成，060后置；真实采集、连续运行与父级产品验收分别记录。

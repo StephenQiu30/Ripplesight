@@ -9,35 +9,15 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
+from tests.conftest import TEST_DATABASE_TRUNCATE
 
 from core.config import Settings
+from db.demo import resolve_demo_scope
 from jobs.schemas import JobAcceptanceInput
 from jobs.services import JobService
 from main import create_app
 
-_BOOTSTRAP_TOKEN = "bootstrap-token-used-only-by-the-isolated-test"
-_PASSWORD = "correct horse battery staple"
-_TRUNCATE = (
-    "TRUNCATE event_candidates, event_members, events, "
-    "collection_due_windows, hotlist_entries, hotlist_snapshots, "
-    "content_version_relations, content_visibility_observations, "
-    "content_observations, content_versions, "
-    "content_discoveries, content_threads, content_records, "
-    "source_capability_evidence, source_connection_versions, "
-    "source_connections, provenance_manifest_inputs, provenance_manifests, "
-    "evidence_cleanup_targets, evidence_deletions, "
-    "evidence_resources, evidence_retention_policies, source_access_policies, "
-    "resource_budget_reservations, resource_budget_windows, resource_budget_policies, "
-    "resource_usage_attempts, resource_component_policies, job_stage_attempts, "
-    "processed_messages, job_attempts, "
-    "ai_calls, knowledge_exports, notification_deliveries, "
-    "notification_targets, content_annotations, reports, "
-    "monitor_schedules, outbox_messages, coverage_windows, "
-    "jobs, followed_account_aliases, followed_accounts, "
-    "monitor_topic_status_events, "
-    "monitor_topic_versions, monitor_topics, "
-    "identity_sessions, identity_users"
-)
+_TRUNCATE = TEST_DATABASE_TRUNCATE
 
 
 @pytest.fixture
@@ -50,7 +30,6 @@ def collection_job_client() -> Iterator[TestClient]:
         environment="test",
         log_level="WARNING",
         database_url=database_url,
-        bootstrap_token=_BOOTSTRAP_TOKEN,
     )
     engine = create_engine(database_url)
     with engine.begin() as connection:
@@ -64,16 +43,9 @@ def collection_job_client() -> Iterator[TestClient]:
         engine.dispose()
 
 
-def _initialize(client: TestClient) -> None:
-    response = client.post(
-        "/api/identity/initialize",
-        headers={
-            "X-HotKey-Bootstrap-Token": _BOOTSTRAP_TOKEN,
-            "X-HotKey-CSRF": "1",
-        },
-        json={"username": "owner", "password": _PASSWORD},
-    )
-    assert response.status_code == 201
+def _demo_scope(client: TestClient) -> UUID:
+    with client.app.state.session_factory() as session:
+        return resolve_demo_scope(session)
 
 
 def _payload(
@@ -97,15 +69,13 @@ def _payload(
 
 
 def _csrf_headers(client: TestClient) -> dict[str, str]:
-    return {"X-HotKey-CSRF": client.cookies["hotkey_csrf"]}
+    return {"X-HotKey-CSRF": "1"}
 
 
 def _accept_internal_job(client: TestClient, payload: dict[str, object]) -> UUID:
     factory = client.app.state.session_factory
     with factory() as session:
-        owner_id = session.execute(
-            text("SELECT id FROM identity_users WHERE username = 'owner'")
-        ).scalar_one()
+        owner_id = resolve_demo_scope(session)
         job = JobService(session).accept(
             owner_id=owner_id,
             command=JobAcceptanceInput.model_validate(payload, strict=False),
@@ -174,7 +144,7 @@ def _set_job_facts(
 def test_internal_job_status_is_readable_after_refresh(
     collection_job_client: TestClient,
 ) -> None:
-    _initialize(collection_job_client)
+    _demo_scope(collection_job_client)
     payload = _payload()
     job_id = _accept_internal_job(collection_job_client, payload)
 
@@ -235,7 +205,7 @@ def test_internal_job_status_is_readable_after_refresh(
 def test_job_status_reports_last_attempt_full_success_and_budget_delay(
     collection_job_client: TestClient,
 ) -> None:
-    _initialize(collection_job_client)
+    _demo_scope(collection_job_client)
     success_job_id = _accept_internal_job(collection_job_client, _payload())
     partial_job_id = _accept_internal_job(collection_job_client, _payload())
     delayed_job_id = _accept_internal_job(collection_job_client, _payload())
@@ -307,7 +277,7 @@ def test_job_status_reports_last_attempt_full_success_and_budget_delay(
 def test_job_history_uses_owner_scoped_stable_cursor_and_safe_summary(
     collection_job_client: TestClient,
 ) -> None:
-    _initialize(collection_job_client)
+    _demo_scope(collection_job_client)
     job_ids: list[str] = []
     for window in (1, 2, 3):
         job_ids.append(str(_accept_internal_job(collection_job_client, _payload(window=window))))
@@ -372,19 +342,19 @@ def test_job_history_uses_owner_scoped_stable_cursor_and_safe_summary(
     )
 
 
-def test_job_history_requires_an_authenticated_owner(
+def test_job_history_is_readable_without_an_account(
     collection_job_client: TestClient,
 ) -> None:
     response = collection_job_client.get("/api/jobs")
 
-    assert response.status_code == 401
+    assert response.status_code == 200
 
 
-def test_continuous_failure_issue_endpoint_is_authenticated_and_redacted(
+def test_continuous_failure_issue_endpoint_is_anonymous_and_redacted(
     collection_job_client: TestClient,
 ) -> None:
-    assert collection_job_client.get("/api/jobs/issues").status_code == 401
-    _initialize(collection_job_client)
+    assert collection_job_client.get("/api/jobs/issues").status_code == 200
+    _demo_scope(collection_job_client)
 
     job_ids: list[str] = []
     for window in (1, 2, 3):
@@ -446,7 +416,7 @@ def test_continuous_failure_issue_endpoint_is_authenticated_and_redacted(
 def test_webpage_submission_derives_connection_context_without_leaking_url_to_outbox(
     collection_job_client: TestClient,
 ) -> None:
-    _initialize(collection_job_client)
+    _demo_scope(collection_job_client)
     configured = collection_job_client.put(
         "/api/source-connections/web",
         headers=_csrf_headers(collection_job_client),
@@ -510,7 +480,7 @@ def test_webpage_submission_derives_connection_context_without_leaking_url_to_ou
 def test_webpage_submission_rejects_client_owned_execution_context(
     collection_job_client: TestClient,
 ) -> None:
-    _initialize(collection_job_client)
+    _demo_scope(collection_job_client)
 
     response = collection_job_client.post(
         "/api/jobs",
@@ -538,7 +508,7 @@ def test_webpage_submission_rejects_client_owned_execution_context(
 def test_webpage_lost_response_replay_survives_connection_replacement(
     collection_job_client: TestClient,
 ) -> None:
-    _initialize(collection_job_client)
+    _demo_scope(collection_job_client)
     configured = collection_job_client.put(
         "/api/source-connections/web",
         headers=_csrf_headers(collection_job_client),
@@ -596,7 +566,7 @@ def test_webpage_lost_response_replay_survives_connection_replacement(
 def test_running_job_cancel_request_is_persisted_for_inflight_boundary(
     collection_job_client: TestClient,
 ) -> None:
-    _initialize(collection_job_client)
+    _demo_scope(collection_job_client)
     job_id = str(_accept_internal_job(collection_job_client, _payload()))
     factory = collection_job_client.app.state.session_factory
     with factory.begin() as session:
@@ -627,7 +597,7 @@ def test_running_job_cancel_request_is_persisted_for_inflight_boundary(
 def test_queued_job_cancel_is_immediate_idempotent_and_terminal_conflicts(
     collection_job_client: TestClient,
 ) -> None:
-    _initialize(collection_job_client)
+    _demo_scope(collection_job_client)
     job_id = _accept_internal_job(collection_job_client, _payload())
     location = f"/api/jobs/{job_id}"
     cancel_location = f"{location}/cancel"
@@ -665,7 +635,7 @@ def test_queued_job_cancel_is_immediate_idempotent_and_terminal_conflicts(
     assert conflict.json()["code"] == "job_not_cancellable"
 
 
-def test_job_routes_enforce_session_csrf_and_missing_resource_boundaries(
+def test_job_routes_enforce_csrf_and_missing_resource_boundaries(
     collection_job_client: TestClient,
 ) -> None:
     payload = {
@@ -673,15 +643,7 @@ def test_job_routes_enforce_session_csrf_and_missing_resource_boundaries(
         "kind": "webpage.collect",
         "url": "https://example.com/article",
     }
-    missing_session = collection_job_client.post(
-        "/api/jobs",
-        headers={"X-HotKey-CSRF": "1"},
-        json=payload,
-    )
-    assert missing_session.status_code == 401
-    assert missing_session.json()["code"] == "invalid_session"
-
-    _initialize(collection_job_client)
+    _demo_scope(collection_job_client)
     missing_csrf = collection_job_client.post("/api/jobs", json=payload)
     assert missing_csrf.status_code == 403
     assert missing_csrf.json()["code"] == "csrf_invalid"
@@ -690,23 +652,11 @@ def test_job_routes_enforce_session_csrf_and_missing_resource_boundaries(
     assert missing_job.status_code == 404
     assert missing_job.json()["code"] == "resource_not_found"
 
-    collection_job_client.cookies.set("hotkey_session", "forged-session")
-    forged_session = collection_job_client.get(f"/api/jobs/{uuid4()}")
-    assert forged_session.status_code == 401
-    assert forged_session.json()["code"] == "invalid_session"
 
-
-def test_cancel_route_enforces_session_csrf_and_owner_boundary(
+def test_cancel_route_enforces_csrf_and_owner_boundary(
     collection_job_client: TestClient,
 ) -> None:
-    missing_session = collection_job_client.post(
-        f"/api/jobs/{uuid4()}/cancel",
-        headers={"X-HotKey-CSRF": "1"},
-    )
-    assert missing_session.status_code == 401
-    assert missing_session.json()["code"] == "invalid_session"
-
-    _initialize(collection_job_client)
+    _demo_scope(collection_job_client)
     missing_csrf = collection_job_client.post(f"/api/jobs/{uuid4()}/cancel")
     assert missing_csrf.status_code == 403
     assert missing_csrf.json()["code"] == "csrf_invalid"
@@ -722,7 +672,7 @@ def test_cancel_route_enforces_session_csrf_and_owner_boundary(
 def test_retry_rejects_non_failed_job_without_duplicate_dispatch(
     collection_job_client: TestClient,
 ) -> None:
-    _initialize(collection_job_client)
+    _demo_scope(collection_job_client)
     job_id = _accept_internal_job(collection_job_client, _payload())
 
     retried = collection_job_client.post(
@@ -741,7 +691,7 @@ def test_retry_rejects_non_failed_job_without_duplicate_dispatch(
 def test_manual_retry_reuses_failed_job_and_is_idempotent(
     collection_job_client: TestClient,
 ) -> None:
-    _initialize(collection_job_client)
+    _demo_scope(collection_job_client)
     job_id = str(_accept_internal_job(collection_job_client, _payload()))
     factory = collection_job_client.app.state.session_factory
     with factory.begin() as session:
@@ -788,17 +738,10 @@ def test_manual_retry_reuses_failed_job_and_is_idempotent(
     assert rows == [(1, "job.accepted.v2"), (2, "job.retry_scheduled.v1")]
 
 
-def test_retry_route_enforces_session_csrf_and_missing_resource_boundary(
+def test_retry_route_enforces_csrf_and_missing_resource_boundary(
     collection_job_client: TestClient,
 ) -> None:
-    missing_session = collection_job_client.post(
-        f"/api/jobs/{uuid4()}/retry",
-        headers={"X-HotKey-CSRF": "1"},
-    )
-    assert missing_session.status_code == 401
-    assert missing_session.json()["code"] == "invalid_session"
-
-    _initialize(collection_job_client)
+    _demo_scope(collection_job_client)
     missing_csrf = collection_job_client.post(f"/api/jobs/{uuid4()}/retry")
     assert missing_csrf.status_code == 403
     assert missing_csrf.json()["code"] == "csrf_invalid"
@@ -814,7 +757,7 @@ def test_retry_route_enforces_session_csrf_and_missing_resource_boundary(
 def test_public_submission_rejects_unregistered_job_kinds(
     collection_job_client: TestClient,
 ) -> None:
-    _initialize(collection_job_client)
+    _demo_scope(collection_job_client)
     payload = _payload()
     payload["kind"] = "arbitrary.command"
 
@@ -835,7 +778,7 @@ def test_public_submission_rejects_unregistered_job_kinds(
 def test_public_submission_rejects_job_kind_without_worker_handler(
     collection_job_client: TestClient,
 ) -> None:
-    _initialize(collection_job_client)
+    _demo_scope(collection_job_client)
 
     response = collection_job_client.post(
         "/api/jobs",
@@ -873,20 +816,20 @@ def test_job_openapi_contract_is_generated_from_runtime_routes(
     assert get_operation["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/JobStatusView"
     }
-    assert create_operation["security"] == [{"SessionCookie": []}]
-    assert get_operation["security"] == [{"SessionCookie": []}]
+    assert not create_operation.get("security")
+    assert not get_operation.get("security")
     assert cancel_operation["operationId"] == "cancelCollectionJob"
     assert cancel_operation["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/JobStatusView"
     }
-    assert cancel_operation["security"] == [{"SessionCookie": []}]
+    assert not cancel_operation.get("security")
     assert retry_operation["operationId"] == "retryCollectionJob"
     assert "200" not in retry_operation["responses"]
     assert retry_operation["responses"]["202"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/JobStatusView"
     }
-    assert retry_operation["security"] == [{"SessionCookie": []}]
-    for status_code in ("401", "403", "409", "422", "500"):
+    assert not retry_operation.get("security")
+    for status_code in ("403", "409", "422", "500", "503"):
         assert create_operation["responses"][status_code]["content"]["application/json"][
             "schema"
         ] == {"$ref": "#/components/schemas/ErrorView"}

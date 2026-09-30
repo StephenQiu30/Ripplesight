@@ -9,6 +9,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
+from tests.conftest import TEST_DATABASE_TRUNCATE
 from tests.integration.test_hotlist_persistence import (
     HotlistRuntime,
     _accept,
@@ -42,15 +43,7 @@ def runtime(monkeypatch: pytest.MonkeyPatch) -> Iterator[HotlistRuntime]:
     current = datetime.now(UTC)
     due_at = datetime.fromtimestamp(int(current.timestamp()) // 1800 * 1800, UTC)
     with engine.begin() as connection:
-        connection.execute(text("TRUNCATE identity_users CASCADE"))
-        connection.execute(
-            text(
-                "INSERT INTO identity_users "
-                "(id, username, password_hash, credential_version, created_at, updated_at) "
-                "VALUES (:id, 'hotlist-query-test', 'test-only-hash', 1, :created, :created)"
-            ),
-            {"id": owner_id, "created": due_at - timedelta(seconds=1)},
-        )
+        connection.execute(text(TEST_DATABASE_TRUNCATE))
     with sessions.begin() as session:
         presets = SourcePresetService(session, clock=lambda: due_at - timedelta(seconds=1))
         presets.apply_in_transaction(owner_id=owner_id, preset=SOURCE_PRESETS["hotlist_weibo"])
@@ -74,7 +67,7 @@ def runtime(monkeypatch: pytest.MonkeyPatch) -> Iterator[HotlistRuntime]:
         yield HotlistRuntime(engine, sessions, owner_id, due_at)
     finally:
         with engine.begin() as connection:
-            connection.execute(text("TRUNCATE identity_users CASCADE"))
+            connection.execute(text(TEST_DATABASE_TRUNCATE))
         engine.dispose()
 
 

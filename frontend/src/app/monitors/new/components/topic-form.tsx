@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { ArrowLeftIcon, ArrowRightIcon, LoaderCircleIcon } from "lucide-react";
 
-import { getIdentityWorkspace } from "@/api/identity";
 import { createMonitorTopic } from "@/api/jiankongzhuti";
 import { listSourceCapabilities } from "@/api/laiyuannengli";
 import {
@@ -21,7 +20,6 @@ import {
 } from "@/components/monitors/topic-settings-fields";
 import {
   readTopicFieldErrors,
-  topicErrorAction,
   tryBeginTopicSubmission,
   type TopicFieldErrors,
 } from "@/components/monitors/topic-validation";
@@ -53,8 +51,8 @@ type SubmissionError = {
   fields?: TopicFieldErrors;
 };
 
-type AccessState =
-  | { status: "checking" }
+type SourcesState =
+  | { status: "loading" }
   | { status: "ready"; sourceOptions: TopicSourceOption[] }
   | { status: "error"; message: string; requestId?: string };
 
@@ -80,8 +78,8 @@ function toSubmissionError(error: unknown): SubmissionError {
 
 export function TopicForm() {
   const router = useRouter();
-  const [accessState, setAccessState] = useState<AccessState>({
-    status: "checking",
+  const [sourcesState, setSourcesState] = useState<SourcesState>({
+    status: "loading",
   });
   const [name, setName] = useState("");
   const [matchAny, setMatchAny] = useState("");
@@ -100,10 +98,10 @@ export function TopicForm() {
 
   useEffect(() => {
     let isCurrent = true;
-    void Promise.all([getIdentityWorkspace(), listSourceCapabilities()])
-      .then(([, sourcePage]) => {
+    void listSourceCapabilities()
+      .then((sourcePage) => {
         if (isCurrent) {
-          setAccessState({
+          setSourcesState({
             status: "ready",
             sourceOptions: selectableTopicSources(sourcePage.items),
           });
@@ -113,25 +111,23 @@ export function TopicForm() {
         if (!isCurrent) {
           return;
         }
-        if (topicErrorAction(error) === "login") {
-          router.replace("/login");
-        } else if (error instanceof ApiRequestError) {
-          setAccessState({
+        if (error instanceof ApiRequestError) {
+          setSourcesState({
             status: "error",
             message: error.message,
             requestId: error.requestId,
           });
         } else {
-          setAccessState({
+          setSourcesState({
             status: "error",
-            message: "无法验证当前会话，请稍后重试。",
+            message: "来源配置加载失败，请稍后重试。",
           });
         }
       });
     return () => {
       isCurrent = false;
     };
-  }, [router]);
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -192,36 +188,32 @@ export function TopicForm() {
       router.replace(`/monitors/${topic.id}`);
       router.refresh();
     } catch (error) {
-      if (topicErrorAction(error) === "login") {
-        router.replace("/login");
-      } else {
-        setSubmissionError(toSubmissionError(error));
-      }
+      setSubmissionError(toSubmissionError(error));
     } finally {
       submittingRef.current = false;
       setIsSubmitting(false);
     }
   }
 
-  if (accessState.status === "checking") {
+  if (sourcesState.status === "loading") {
     return (
       <PageState
         eyebrow="监控主题"
         title="正在准备创建页"
-        description="正在验证会话与私有工作台边界。"
+        description="正在读取可用来源与配置。"
       />
     );
   }
 
-  if (accessState.status === "error") {
+  if (sourcesState.status === "error") {
     return (
       <PageState
         eyebrow="加载失败"
         title="暂时无法打开创建页"
         description={
-          accessState.requestId
-            ? `${accessState.message} 请求编号：${accessState.requestId}`
-            : accessState.message
+          sourcesState.requestId
+            ? `${sourcesState.message} 请求编号：${sourcesState.requestId}`
+            : sourcesState.message
         }
         action={
           <Button type="button" onClick={() => window.location.reload()}>
@@ -327,7 +319,7 @@ export function TopicForm() {
             </Card>
 
             <TopicSettingsFields
-              sourceOptions={accessState.sourceOptions}
+              sourceOptions={sourcesState.sourceOptions}
               sourceKeys={sourceKeys}
               onSourceKeysChange={setSourceKeys}
               collectionIntervalSeconds={collectionIntervalSeconds}

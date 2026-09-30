@@ -145,14 +145,6 @@ def test_google_news_kafka_replay_and_second_rule_version_keep_one_identity() ->
         with sessions.begin() as session:
             session.execute(
                 text(
-                    "INSERT INTO identity_users "
-                    "(id, username, password_hash, credential_version, created_at, updated_at) "
-                    "VALUES (:id, :username, 'test-only-hash', 1, :now, :now)"
-                ),
-                {"id": owner_id, "username": f"google-news-{owner_id}", "now": end},
-            )
-            session.execute(
-                text(
                     "INSERT INTO monitor_topics "
                     "(id, owner_id, name, status, readiness_status, current_version, "
                     "created_at, updated_at) VALUES "
@@ -534,18 +526,4 @@ def test_google_news_kafka_replay_and_second_rule_version_keep_one_identity() ->
             consumer.close()
         with suppress(Exception):
             admin.delete_topics([kafka_topic], operation_timeout=10)[kafka_topic].result(10)
-        with engine.begin() as connection:
-            connection.execute(text("SET CONSTRAINTS ALL DEFERRED"))
-            connection.execute(
-                text("DELETE FROM monitor_topic_versions WHERE topic_id = :id"), {"id": topic_id}
-            )
-            connection.execute(text("DELETE FROM monitor_topics WHERE id = :id"), {"id": topic_id})
-            connection.execute(
-                text("DELETE FROM source_connection_versions WHERE owner_id = :id"),
-                {"id": owner_id},
-            )
-            connection.execute(
-                text("DELETE FROM content_records WHERE owner_id = :id"), {"id": owner_id}
-            )
-            connection.execute(text("DELETE FROM identity_users WHERE id = :id"), {"id": owner_id})
         engine.dispose()

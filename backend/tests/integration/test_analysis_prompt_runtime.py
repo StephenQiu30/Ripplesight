@@ -27,17 +27,6 @@ def runtime_store() -> Iterator[tuple[Engine, sessionmaker[Session], str]]:
     try:
         yield engine, sessions, version
     finally:
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "DELETE FROM analysis_prompt_runtime_sessions WHERE prompt_version = :version"
-                ),
-                {"version": version},
-            )
-            connection.execute(
-                text("DELETE FROM analysis_prompt_activations WHERE prompt_version = :version"),
-                {"version": version},
-            )
         engine.dispose()
 
 

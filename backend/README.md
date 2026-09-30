@@ -95,16 +95,16 @@ PYTHONPATH=app uv run --env-file .env python -m cli backup verify-restore \
 
 业务接口统一使用 `/api` 命名空间，例如存活检查 `/api/health`、就绪检查 `/api/ready`。采集任务使用 `POST /api/jobs` 持久受理，按响应 `Location` 读取 `GET /api/jobs/{job_id}`，并以 `POST /api/jobs/{job_id}/cancel` 登记取消；详情返回持久阶段、已发请求、已保存数量及取消截止。来源处理器的实现与真实验收状态见 [BACKLOG](../BACKLOG.md)，受控 Worker 验证不能代替来源接入验收。接口文档入口为 Swagger UI `/docs`、Scalar `/scalar`，共用 `/openapi.json`。
 
-## 账户与登录设计
+## Demo 访问与历史数据分区
 
-目标账户体系面向 ToC 多用户，保留用户名密码登录，与 GitHub App、邮箱验证码并存。GitHub 或邮箱首次成功验证可创建账户，已有身份进入对应账户；账户及其主题、连接、内容与任务按用户隔离。统一入口为 Web `/login`，取消部署密钥、单账户限制和独立工作区身份包装，保留必要的密码哈希与恢复能力。
+当前 Demo 不建立账户、会话或身份 API，业务读取无需 Cookie，写入需固定 `X-HotKey-CSRF: 1`。CLI 删除身份初始化与密码重置；来源平台凭据和人工导入登录态仍按来源合同管理。
 
-当前 `identity` 领域、Schema、HTTP 接口、CLI 和配置模板仍是旧身份实现，新登录能力尚未实现。本轮只修改设计与文档；目标数据结构、接口、配置和验证范围见 [Design 001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md) 与 [Plan 060](../docs/plan/060-GitHub与邮箱验证码登录执行计划.md)。运行中的 `/openapi.json` 反映当前代码，不能把设计中的接口当作已可调用接口。
+`db/demo.py`解析所有业务owner_id：新Schema空库固定UUID，唯一值复用、多值拒绝。新DDL无身份表/FK，不造假用户；业务为空且有旧身份表的Schema（包括身份表空表）也拒绝默认分区。现有库不执行新DDL；合同见 [Design001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md) 与 [Plan061](../docs/plan/061-Demo用户体系与历史依赖清理执行计划.md)。
 
-服务端可撤销会话、令牌摘要、过期校验、写操作 CSRF 和资源归属校验继续作为必要边界；浏览器通过同源代理使用会话 Cookie。无感登录复用有效 Cookie 自动恢复身份，过期、撤销、退出后重新验证；不新增 JWT refresh 框架，密码重置需撤销旧会话。GitHub App 与邮件发送凭据只允许保存在服务端私有配置中，不进入 Git、日志、前端或模型输入；具体配置与部署步骤随实现交付。邮箱验证码登录与报告邮件投递分别验证。
+未来 ToC 账户需求后置；Demo 不实现多用户权限。来源/模型秘密仍不得进入 Git、日志、前端或模型输入；任务预算、幂等与业务复合关联继续有效。
 
 账户结构变更仍遵守全新空库 Schema 与保留库备份恢复规则，不得为替换身份表在现有业务库上直接执行 `schema.sql`。ToC 多用户设计不改变来源许可和授权边界；MediaCrawler 保留个人、非商业研究和本人账号 B 站低频试点限制，不能扩展为所有用户均可采集。
 
 ## 状态
 
-当前实现与逐能力证据分别见 [HANDOVER](../HANDOVER.md)、[BACKLOG](../BACKLOG.md) 和 [Acceptance 索引](../docs/README.md)，历史底座盘点从 Git 历史查阅。服务健康、受控适配器及技术门禁不能替代真实来源或产品验收；新身份设计由 Plan 060 独立实现和验证。
+当前实现与逐能力证据分别见 [HANDOVER](../HANDOVER.md)、[BACKLOG](../BACKLOG.md) 和 [Acceptance 索引](../docs/README.md)，历史底座盘点从 Git 历史查阅。服务健康、受控适配器及技术门禁不能替代真实来源或产品验收。

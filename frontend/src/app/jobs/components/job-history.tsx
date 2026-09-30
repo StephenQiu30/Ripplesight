@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowRightIcon, RotateCcwIcon } from "lucide-react";
 
@@ -32,10 +31,6 @@ const STATUS_LABELS: Record<HotKeyAPI.JobControlStatus, string> = {
   failed: "失败",
   cancelled: "已取消",
 };
-
-function isInvalidSession(error: unknown): boolean {
-  return error instanceof ApiRequestError && error.code === "invalid_session";
-}
 
 function toErrorState(
   error: unknown,
@@ -187,7 +182,6 @@ export function JobHistoryContent({
 }
 
 export function JobHistory() {
-  const router = useRouter();
   const [state, setState] = useState<HistoryState>({ status: "loading" });
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
@@ -208,16 +202,13 @@ export function JobHistory() {
         if (!isCurrent) {
           return;
         }
-        if (isInvalidSession(error)) {
-          router.replace("/login");
-        } else {
-          setState(toErrorState(error));
-        }
+
+        setState(toErrorState(error));
       });
     return () => {
       isCurrent = false;
     };
-  }, [router]);
+  }, []);
 
   async function reload() {
     setState({ status: "loading" });
@@ -229,11 +220,7 @@ export function JobHistory() {
         nextCursor: page.next_cursor,
       });
     } catch (error) {
-      if (isInvalidSession(error)) {
-        router.replace("/login");
-      } else {
-        setState(toErrorState(error));
-      }
+      setState(toErrorState(error));
     }
   }
 
@@ -258,15 +245,11 @@ export function JobHistory() {
         nextCursor: page.next_cursor,
       });
     } catch (error) {
-      if (isInvalidSession(error)) {
-        router.replace("/login");
-      } else {
-        setLoadMoreError(
-          error instanceof ApiRequestError
-            ? error.message
-            : "后续任务加载失败，请重试。",
-        );
-      }
+      setLoadMoreError(
+        error instanceof ApiRequestError
+          ? error.message
+          : "后续任务加载失败，请重试。",
+      );
     } finally {
       setIsLoadingMore(false);
     }

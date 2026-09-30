@@ -35,14 +35,6 @@ def annotation_context() -> Iterator[
     with engine.begin() as connection:
         connection.execute(
             text(
-                "INSERT INTO identity_users "
-                "(id, username, password_hash, credential_version, created_at, updated_at) "
-                "VALUES (:id, :username, 'test-only-hash', 1, :now, :now)"
-            ),
-            {"id": owner_id, "username": f"annotation-{owner_id.hex}", "now": now},
-        )
-        connection.execute(
-            text(
                 "INSERT INTO monitor_topics "
                 "(id, owner_id, name, status, readiness_status, current_version, "
                 "created_at, updated_at) VALUES "
@@ -112,19 +104,6 @@ def annotation_context() -> Iterator[
     try:
         yield sessions, owner_id, topic_id, post, invalid_call_id, valid_call_id, now
     finally:
-        with engine.begin() as connection:
-            connection.execute(
-                text("DELETE FROM content_records WHERE owner_id = :id"), {"id": owner_id}
-            )
-            connection.execute(text("DELETE FROM ai_calls WHERE owner_id = :id"), {"id": owner_id})
-            connection.execute(
-                text("DELETE FROM monitor_topic_versions WHERE created_by = :id"),
-                {"id": owner_id},
-            )
-            connection.execute(
-                text("DELETE FROM monitor_topics WHERE owner_id = :id"), {"id": owner_id}
-            )
-            connection.execute(text("DELETE FROM identity_users WHERE id = :id"), {"id": owner_id})
         engine.dispose()
 
 

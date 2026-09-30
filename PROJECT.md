@@ -1,12 +1,12 @@
 # HotKey Server 项目与技术选型
 
-更新日期：2026-10-01。本文固定仓库边界、技术栈、后端目录、API 契约和运行约束。产品需求见 [PRD 001 v5.2](docs/prd/001-热点舆情监控平台需求.md) 和各里程碑 PRD，市场与竞品依据见 [Research048](docs/research/048-AI方向热点事件市场与竞品调研.md)，Epic 设计见 [Design 001 v4.3](docs/design/001-热点舆情监控平台总体设计.md) 及 Design 002—007，逐 Issue 执行计划见 [Plan 索引](docs/plan/README.md)。ToC 用户登录目标由 Plan060 承接；本轮只更新设计与文档，当前运行代码尚未切换。
+更新日期：2026-10-01。本文固定仓库边界、技术栈、后端目录、API 契约和运行约束。产品需求见 [PRD 001](docs/prd/001-热点舆情监控平台需求.md)，Epic 设计见 [Design 001](docs/design/001-热点舆情监控平台总体设计.md) 及 Design 002—007，逐 Issue 执行计划见 [Plan 索引](docs/plan/README.md)。用户最新决定：当前 Demo 删除登录、注册与用户体系，直接进入业务页面；实施归 Plan061。未来 ToC 账户要求延后，不作为 Demo 门禁。
 
 ## 1. 定位与仓库边界
 
-HotKey 是 ToC 信息监控产品，帮助关注 AI 等专业方向的用户发现具体事件、观察升温和进展、阅读原文与讨论。保留用户名密码登录，并提供 GitHub App 与邮箱验证码；首次 GitHub/邮箱验证成功创建账户，有效会话自动恢复身份，每个用户拥有自己的主题、连接、内容和任务。方向规则、事件卡片、可解释热度和评论引用按 PRD 分阶段交付；公开资料调研、代码/受控测试、真实来源和产品验收分别记录。
+HotKey 是 ToC 信息监控产品，帮助关注 AI 等专业方向的用户发现具体事件、观察升温和进展、阅读原文与讨论。当前 Demo 不建立账户、会话或登录入口，直接使用主题、来源、内容和任务页面。未来产品阶段的用户名密码、GitHub App、邮箱验证码与无感登录需求保留为后续需求，另行定标实现合同。公开资料调研、代码/受控测试、真实来源和产品验收分别记录。
 
-HotKey 当前以**可信的信息获取**为核心：按主题持续取得可追溯的帖子、评论与六个公开热榜，显示来源 × 能力 × 时间窗的覆盖和缺口，并由本机 Codex 判断相关性。最终交付目标是整个核心链路的 POC；先按 Plan058 在一个主题、HN 搜索和一榜上完成最小演示，再扩为四关键词来源和六榜的 M1 短窗 Demo；范围以 PRD001 §1 为准。日报、周报、Obsidian、知识库检索/问答、报告导出和渠道投递属于非核心后续能力，飞书推送暂缓；登录验证码邮件属于身份功能，单独由 Plan060 实现。当前来源验证仍使用本机基础设施，来源软件许可和平台授权范围不因 ToC 定位而扩大。本仓库同时维护 Python 后端与 Web 前端；同级 `hotkey-app`（Flutter）暂停。
+HotKey 当前以**可信的信息获取**为核心：按主题持续取得可追溯的帖子、评论与六个公开热榜，显示来源 × 能力 × 时间窗的覆盖和缺口，并由本机 Codex 判断相关性。最终交付目标是整个核心链路的 POC；先按 Plan058 在一个主题、HN 搜索和一榜上完成最小演示，再扩为四关键词来源和六榜的 M1 短窗 Demo；范围以 PRD001 §1 为准。日报、周报、Obsidian、知识库检索/问答、报告导出和渠道投递属于非核心后续能力，飞书推送暂缓。当前来源验证仍使用本机基础设施，来源软件许可和平台授权范围不因 ToC 定位而扩大。本仓库同时维护 Python 后端与 Web 前端；同级 `hotkey-app`（Flutter）暂停。
 
 ```text
 HotKey/
@@ -25,7 +25,7 @@ HotKey/
 
 ### 1.1 用户与交付结果
 
-使用者是正常注册、登录的产品用户；账户不区分部署者或 owner 角色，不要求部署密钥。`/login` 保留用户名密码，增加 GitHub App 与邮箱验证码；新注册经 GitHub/邮箱验证，用户名、密码设置/恢复及无感会话恢复均为必要能力。当前不引入组织、租户、角色权限或独立工作区实体；后端从会话取得用户 ID，按资源归属检查读写权限。报告接收方与平台采集账号分别归推送和来源连接管理。当前 POC 成功标准是同一环境下配置、采集、持久化、分析状态、阅读、覆盖和失败恢复可操作且可追溯；真实来源与受控模型分别出结论。
+当前 Demo 访问 `/events` 直接进入业务页面，不要求部署密钥、用户名、密码或 Cookie。报告接收方与平台采集账号仍分别归推送和来源连接管理。POC 成功标准是同一环境下配置、采集、持久化、分析状态、阅读、覆盖和失败恢复可操作且可追溯；真实来源与受控模型分别出结论。
 
 ### 1.2 能力里程碑
 
@@ -40,7 +40,11 @@ HotKey/
 
 ### 1.3 当前实现边界（2026-10-01）
 
-当前代码仍为旧单账户、用户名密码与部署密钥初始化；GitHub App、邮箱验证码和真实多用户隔离尚未实现或验收，替换范围见 [Plan060](docs/plan/060-GitHub与邮箱验证码登录执行计划.md)。会话撤销、资源归属校验、主题与关键词规则、来源连接、持久任务执行、内容版本、预算账本、统一错误契约和 Web 页面框架可复用。旧身份测试不能证明新的登录方式或多用户数据隔离已经可用。
+当前实施 [Plan061](docs/plan/061-Demo用户体系与历史依赖清理执行计划.md)：删除身份模块、身份 API、登录注册页、会话守卫、密码依赖与部署初始化配置。业务表的 `owner_id`/`created_by` 暂保留为内部历史分区 UUID，移除其身份表外键，保留业务复合外键、幂等与预算约束；不创建假用户、默认会话或认证开关。
+
+`db/demo.py`汇总全部已注册业务表owner_id：新Schema空库用`00000000-0000-4000-8000-000000000001`，唯一分区复用，多分区503 `demo_scope_conflict`，不取第一行或合并。业务为空且有旧身份表的Schema（含身份表空表）也明确拒绝。API/CLI共用解析，Worker沿用任务分区。读取无Cookie；写入固定`X-HotKey-CSRF: 1`，缺失/错误403 `csrf_invalid`，无CSRF Cookie/token。保持同源无跨域；仅用于本机/受控Demo，不提供公共用户权限。
+
+新完整 Schema 只对全新空库应用；现有数据库不删表、不改约束、不清空数据。有业务数据的单分区旧库可沿用原 UUID；旧备份按原代码及 Schema 恢复，正式重建仍遵守 §3 的备份/导入/校验门槛。
 
 宿主机 Worker 已注册 `webpage.collect`、`keyword.search`、`source.comments`、`source.hotlist`、`analysis.annotate`、`events.cluster`、`report.daily`、`notification.send`、`knowledge.export`；独立调度、四关键词来源、六榜、Codex 调用/标注、日报、Obsidian 日报导出和飞书发送均有代码与受控测试。Plan014 事件候选与稳定身份及 R1—R5 修复已通过受控 PostgreSQL 和远端技术门禁，开关默认关闭；人工修订、热度、事件页面和真实三平台归并仍待验证或实现。开发库约 4 小时运行仅证明有限真实范围，M1 连续 72 小时及各产品 AC 未通过。B 站修复后真实采集未做且开关关闭，SMTP 待实现。当前进度以 BACKLOG 与逐卡 Acceptance 为准；旧总 Plan 001 的历史证据从 Git 历史查阅。
 
@@ -57,17 +61,17 @@ HotKey/
 | Next.js App Router + React + TypeScript | 页面、布局、交互、服务端代理与类型约束 |
 | shadcn/ui + Radix UI | shadcn/ui 采用 Radix primitives 的组件方案，不切换其他底层组件实现 |
 | Tailwind CSS + CSS Variables | 样式与统一设计令牌 |
-| Axios | 集中处理请求、认证与错误；封装固定在 `frontend/src/request.ts` |
+| Axios | 请求、固定写入头与错误；封装固定在 `frontend/src/request.ts` |
 | `@umijs/openapi` | 从后端 OpenAPI 生成类型与端点函数至 `frontend/src/api/` |
 | ESLint + Prettier | 代码检查与格式化 |
 
-页面归 `frontend/src/app/`，页面专属组件放对应路由的 `components/`；跨页面复用组件按明确功能领域归 `frontend/src/components/<feature>/`，shadcn 基础组件归 `components/ui/`。不建立 `src/features/` 或含糊的 `common/patterns/shared` 层。浏览器调用同源 `/api/*`；`HOTKEY_API_ORIGIN` 仅供 Next.js 服务端代理使用。具体认证与错误契约由后端统一维护。现有根 DESIGN.md 是视觉研究参考；Web 执行规范为 frontend/DESIGN.md 及对应切片 Design，参考中的边框、原始尺寸或示例模块不构成实现要求。
+页面归`src/app/`，专属组件放路由`components/`；跨页面按明确领域归`components/<feature>/`，shadcn归`components/ui/`，不建立features/common/patterns/shared层。浏览器调用同源`/api/*`，`HOTKEY_API_ORIGIN`仅供服务端代理；Demo分区/写入头与错误契约由后端维护。根DESIGN仅视觉参考，执行规范为frontend/DESIGN及对应切片Design。
 
-Plan060 的身份 IP 限流要求受控部署入口覆写单值 `X-Real-IP`，Web 仅接该入口、API仅接Web内网与受控本机维护入口；API以原始TCP peer和明确可信代理网段校验，Uvicorn不自动改写代理头，不盲信浏览器自报地址。直连/异常处理、15秒代理与12秒身份请求截止见060；该目标尚未实施。
+当前 Demo 不实现身份 IP 限流、GitHub 回调或验证码代理链路。现有 API 代理的截止、脱敏错误、请求 ID 与必要安全头继续有效。
 
 Web 设计固定为组件优先的无边框系统：App Router 页面只组合页面专属组件、按功能领域分类的复用组件与 shadcn/Radix 基础组件；默认信息表面通过留白、排版和语义背景分层。布局只使用 Tailwind 命名尺度和 `sm/md/lg/xl/2xl` 标准响应式层级，不使用原始像素值或任意布局尺寸。输入、焦点、错误与浮层保留必要轮廓；加载、路由错误、全局错误、404 与进程健康状态都有统一边界。组件归属、复用范围、目标路径、数据来源和状态覆盖必须在对应切片 Design 阶段明确。
 
-Web 的 CSP nonce 由 `frontend/src/proxy.ts` 每请求生成，需要客户端交互的 HTML 入口须按请求渲染。主题创建的服务端 page 等待 Next.js `connection()`，沿用原客户端会话与来源校验；生产 HTML 的脚本 nonce 必须与当前响应 CSP 相同，不使用共享缓存。runtime workflow 从生产镜像校验响应与脚本，浏览器冷进入验证交互，不能只检查 `/health`。
+Web的CSP nonce由`proxy.ts`每请求生成，交互HTML按请求渲染。主题创建page等待`connection()`，客户端只读取来源能力；生产脚本nonce须与响应CSP相同，不共享HTML缓存。runtime核对脚本/响应，浏览器冷进入验证交互，不能只检查健康。
 
 ### Python 后端与基础设施
 
@@ -111,7 +115,7 @@ backend/
 │   ├── main.py                    # 唯一 create_app 与 lifespan 装配
 │   ├── api/
 │   │   ├── router.py              # 唯一 HTTP 路由汇总点
-│   │   ├── dependencies.py        # Session、身份和 Service 的类型化注入
+│   │   ├── dependencies.py        # DB Session、Demo分区和Service注入
 │   │   ├── docs.py                # Swagger/Scalar 文档注册
 │   │   ├── middleware.py          # request ID、访问日志等 HTTP 横切逻辑
 │   │   ├── exception_handlers.py  # 全局异常到 HTTP 错误响应的映射
@@ -151,7 +155,7 @@ backend/
 目录规则如下：
 
 - `main.py` 只创建 FastAPI 应用、注册 lifespan、路由、中间件和异常处理器；不放业务规则。
-- `api/routers/` 只处理 HTTP 参数、认证依赖、状态码和响应模型；不得导入 SQLAlchemy、业务 Service 实现、Worker 或消息客户端。
+- `api/routers/`只处理HTTP参数、Demo分区/写入头依赖、状态码和响应模型；不导入SQLAlchemy、业务Service实现、Worker或消息客户端。
 - 领域 Service 负责业务用例和事务；跨领域原子写入使用同一 Session，内层函数不得自行提交。
 - Schema 不依赖 ORM、Session 或 FastAPI；Model 只负责持久化映射；Adapter 只封装外部系统差异。
 - `worker/` 和 `cli/` 调用领域 Service，不复制 HTTP 层或业务规则。Worker 父进程独占 Kafka Consumer、offset 与任务终结；`worker/execution.py` 只监督单个 `spawn` 子进程，子进程自行创建数据库资源，不接收父进程 Session、Engine、Kafka Consumer 或网络连接。
@@ -185,11 +189,11 @@ FastAPI 路由装饰器、类型注解和 Pydantic 模型是唯一可编辑的 A
 
 本规范参考 [FastAPI 多文件应用指南](https://fastapi.tiangolo.com/tutorial/bigger-applications/)、[FastAPI 错误处理指南](https://fastapi.tiangolo.com/tutorial/handling-errors/)、[FastAPI Lifespan 指南](https://fastapi.tiangolo.com/advanced/events/)、[FastAPI 官方全栈模板](https://github.com/fastapi/full-stack-fastapi-template) 和 [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457.html)。这些资料用于确认框架机制和通用协议；目录、事实源和版本策略以本文为准。
 
-身份认证保留用户名密码（`pwdlib[argon2]`），增加 GitHub App 用户授权和邮箱验证码，统一创建数据库会话并设置持久 Cookie；有效期内无感恢复，密码变化递增凭据版本并撤销旧会话。不新增 JWT、refresh token 或滑动续期层。GitHub HTTP 调用使用 HTTPX，验证码邮件使用标准库 `smtplib`/`email.message`，临时验证与限流使用 Redis。GitHub/SMTP 服务端凭据和验证码摘要密钥不进入用户表单或客户端；密码仅保存哈希，锁文件仍由 uv 管理。Web 固定 Node.js 24.19.0、Next.js 16.3.5、React 19.2.8 与 pnpm 12.3.4。
+Demo 删除 `pwdlib`、身份配置和身份 CLI，不保留未来登录适配器或通用认证框架。来源与模型服务凭据继续保存在服务端。Web 固定 Node.js 24.19.0、Next.js 16.3.5、React 19.2.8 与 pnpm 12.3.4。
 
 ## 3. 数据与任务执行边界
 
-1. API 路由负责 HTTP、认证与输入输出，经依赖注入调用领域服务；服务管理事务，SQLAlchemy 模型负责持久化。
+1. API路由负责HTTP、Demo分区/写入头与输入输出，经注入调用领域服务；服务管理事务，SQLAlchemy映射持久化。
 2. 业务变更与 Outbox 写入同一 PostgreSQL 事务。独立发布器可靠地发送到 Kafka；消费者允许重复读取，以消息 ID、数据库唯一约束和业务状态保证幂等。
 3. 消费者在业务事务提交后提交连续完成位置的 offset；处理并发时不得越过尚未完成的记录。Kafka 事务不能直接保证 PostgreSQL 副作用的原子性。[Kafka 消息交付语义](https://kafka.apache.org/41/design/design/)
 4. Redis 的数据丢失不能导致任务或证据丢失。缓存设有效期与失效规则；限流故障时采用明确的保守策略。执行权、不可超额预算与撤权不能只依赖 Redis 锁或缓存。

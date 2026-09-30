@@ -7,15 +7,14 @@ from uuid import UUID
 
 import typer
 from pydantic import ValidationError
-from sqlalchemy import select, text
+from sqlalchemy import text
 
 from ai.services import AI_COMPONENT_KEY
 from analysis.services import build_analysis_need_ledger_in_transaction
 from core.config import get_settings
 from core.errors import ApplicationError
+from db.demo import require_demo_partition_match, resolve_demo_scope
 from db.session import create_db_engine, create_session_factory
-from identity.models import IdentityUser
-from identity.services import IdentityService
 from jobs.coverage import CollectionCoverageQueryService
 from jobs.schemas import (
     BudgetMetric,
@@ -33,7 +32,7 @@ jobs_app = typer.Typer(no_args_is_help=True)
 @jobs_app.command("analysis-need-ledger")
 def analysis_need_ledger(
     owner_id: Annotated[
-        UUID, typer.Option(help="Owner whose exact-version candidates are audited.")
+        UUID, typer.Option(help="Historical Demo partition whose candidates are audited.")
     ],
     start: Annotated[str, typer.Option(help="UTC analysis-need start (inclusive).")],
     end: Annotated[str, typer.Option(help="UTC analysis-need end (exclusive).")],
@@ -45,18 +44,25 @@ def analysis_need_ledger(
     cutoff_at = _parse_utc_datetime(cutoff, option="--cutoff")
     engine = create_db_engine(get_settings())
     try:
-        with create_session_factory(engine)() as session, session.begin():
-            session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
-            try:
-                result = build_analysis_need_ledger_in_transaction(
-                    session,
-                    owner_id=owner_id,
-                    start=start_at,
-                    end=end_at,
-                    cutoff_at=cutoff_at,
-                )
-            except ValueError as error:
-                raise typer.BadParameter(str(error), param_hint="--start/--end/--cutoff") from error
+        with create_session_factory(engine)() as session:
+            require_demo_partition_match(resolve_demo_scope(session), owner_id)
+            with session.begin():
+                session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
+                try:
+                    result = build_analysis_need_ledger_in_transaction(
+                        session,
+                        owner_id=owner_id,
+                        start=start_at,
+                        end=end_at,
+                        cutoff_at=cutoff_at,
+                    )
+                except ValueError as error:
+                    raise typer.BadParameter(
+                        str(error), param_hint="--start/--end/--cutoff"
+                    ) from error
+    except ApplicationError as error:
+        typer.echo(f"Analysis need ledger failed: {error.code}", err=True)
+        raise typer.Exit(code=1) from None
     finally:
         engine.dispose()
     typer.echo(json.dumps(result.model_dump(mode="json"), allow_nan=False, separators=(",", ":")))
@@ -64,7 +70,9 @@ def analysis_need_ledger(
 
 @jobs_app.command("coverage-metrics")
 def coverage_metrics(
-    owner_id: Annotated[UUID, typer.Option(help="Owner whose visible sources are measured.")],
+    owner_id: Annotated[
+        UUID, typer.Option(help="Historical Demo partition whose sources are measured.")
+    ],
     start: Annotated[str, typer.Option(help="UTC ISO 8601 due-window start (inclusive).")],
     end: Annotated[str, typer.Option(help="UTC ISO 8601 due-window end (exclusive).")],
     source_key: Annotated[str | None, typer.Option(help="Optional source key.")] = None,
@@ -73,13 +81,14 @@ def coverage_metrics(
     ] = None,
     topic_id: Annotated[UUID | None, typer.Option(help="Optional topic ID.")] = None,
 ) -> None:
-    """Print the same owner-scoped metric DTO as GET /collection-coverage/metrics."""
+    """Print the same Demo-partition metric DTO as GET /collection-coverage/metrics."""
     start_at = _parse_utc_datetime(start, option="--start")
     end_at = _parse_utc_datetime(end, option="--end")
     settings = get_settings()
     engine = create_db_engine(settings)
     try:
         with create_session_factory(engine)() as session:
+            require_demo_partition_match(resolve_demo_scope(session), owner_id)
             try:
                 result = CollectionCoverageQueryService(
                     session, hotlist_interval_seconds=settings.hotlist_interval_seconds
@@ -93,6 +102,9 @@ def coverage_metrics(
                 )
             except ValueError as error:
                 raise typer.BadParameter(str(error), param_hint="--start/--end") from error
+    except ApplicationError as error:
+        typer.echo(f"Coverage metrics failed: {error.code}", err=True)
+        raise typer.Exit(code=1) from None
     finally:
         engine.dispose()
     typer.echo(json.dumps(result.model_dump(mode="json"), allow_nan=False, separators=(",", ":")))
@@ -131,15 +143,15 @@ def reliability_snapshot(
     try:
         sessions = create_session_factory(engine)
         with sessions() as session:
-            owner_id = session.scalar(select(IdentityUser.id))
-            if owner_id is None:
-                typer.echo("Reliability snapshot failed: identity_uninitialized", err=True)
-                raise typer.Exit(code=1)
+            owner_id = resolve_demo_scope(session)
             snapshot = JobObservationService(session).reliability_snapshot(
                 owner_id=owner_id,
                 window_start=start,
                 window_end=end,
             )
+    except ApplicationError as error:
+        typer.echo(f"Reliability snapshot failed: {error.code}", err=True)
+        raise typer.Exit(code=1) from None
     finally:
         engine.dispose()
 
@@ -170,7 +182,7 @@ def budget_baseline(
     engine = create_db_engine(settings)
     session = create_session_factory(engine)()
     try:
-        owner_id = IdentityService(session, settings).initialized_owner_id()
+        owner_id = resolve_demo_scope(session)
         with session.begin():
             budgets = ResourceBudgetService(session)
             for budget_key, metric, limit_units in (

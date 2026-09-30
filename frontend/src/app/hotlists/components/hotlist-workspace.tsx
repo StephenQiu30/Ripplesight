@@ -71,10 +71,6 @@ function readError(error: unknown, fallback: string) {
     : { message: fallback };
 }
 
-function invalidSession(error: unknown): boolean {
-  return error instanceof ApiRequestError && error.code === "invalid_session";
-}
-
 export async function resolveSnapshotRequest(
   sourceKey: string,
   snapshotId: string,
@@ -267,10 +263,7 @@ export function HotlistWorkspace() {
       })
       .catch((error: unknown) => {
         if (!current) return;
-        if (invalidSession(error)) {
-          router.replace("/login");
-          return;
-        }
+
         setSources({
           status: "error",
           ...readError(error, "热榜来源加载失败，请重试。"),
@@ -279,7 +272,7 @@ export function HotlistWorkspace() {
     return () => {
       current = false;
     };
-  }, [router]);
+  }, []);
 
   const activeSource =
     requestedSource ??
@@ -306,10 +299,7 @@ export function HotlistWorkspace() {
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        if (invalidSession(error)) {
-          router.replace("/login");
-          return;
-        }
+
         setHistory({
           status: "error",
           sourceKey: activeSource,
@@ -317,7 +307,7 @@ export function HotlistWorkspace() {
         });
       });
     return () => controller.abort();
-  }, [activeSource, applied, router, historyRefresh]);
+  }, [activeSource, applied, historyRefresh]);
 
   const selectedSnapshot =
     history?.status === "ready" && history.sourceKey === activeSource
@@ -342,10 +332,7 @@ export function HotlistWorkspace() {
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        if (invalidSession(error)) {
-          router.replace("/login");
-          return;
-        }
+
         setDetail({
           status: "error",
           snapshotId: selectedSnapshot,
@@ -356,7 +343,7 @@ export function HotlistWorkspace() {
         });
       });
     return () => controller.abort();
-  }, [activeSource, selectedSnapshot, router, detailRefresh]);
+  }, [activeSource, selectedSnapshot, detailRefresh]);
 
   function selectSource(sourceKey: string) {
     router.replace(`/hotlists?source=${encodeURIComponent(sourceKey)}`);
@@ -395,8 +382,7 @@ export function HotlistWorkspace() {
           : current,
       );
     } catch (error) {
-      if (invalidSession(error)) router.replace("/login");
-      else setMoreError(readError(error, "后续历史加载失败，请重试。").message);
+      setMoreError(readError(error, "后续历史加载失败，请重试。").message);
     } finally {
       setLoadingHistoryMore(false);
     }
@@ -433,8 +419,7 @@ export function HotlistWorkspace() {
           : current,
       );
     } catch (error) {
-      if (invalidSession(error)) router.replace("/login");
-      else setMoreError(readError(error, "后续榜位加载失败，请重试。").message);
+      setMoreError(readError(error, "后续榜位加载失败，请重试。").message);
     } finally {
       setLoadingEntriesMore(false);
     }

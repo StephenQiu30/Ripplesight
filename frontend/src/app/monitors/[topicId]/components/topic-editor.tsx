@@ -44,7 +44,6 @@ import {
 } from "@/components/monitors/topic-settings-fields";
 import {
   readTopicFieldErrors,
-  topicErrorAction,
   tryBeginTopicSubmission,
   type TopicFieldErrors,
 } from "@/components/monitors/topic-validation";
@@ -74,10 +73,6 @@ type ActionFeedback = {
 };
 
 type PendingAction = "archive" | "clone" | "pause" | "resume" | "save";
-
-function isInvalidSession(error: unknown): boolean {
-  return topicErrorAction(error) === "login";
-}
 
 function toActionFeedback(error: unknown): ActionFeedback {
   if (error instanceof ApiRequestError) {
@@ -161,9 +156,7 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
       );
       applyTopic(topic);
     } catch (error) {
-      if (isInvalidSession(error)) {
-        router.replace("/login");
-      } else if (
+      if (
         error instanceof ApiRequestError &&
         error.code === "resource_not_found"
       ) {
@@ -178,7 +171,7 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
         setState({ status: "error", message: "主题加载失败，请稍后重试。" });
       }
     }
-  }, [applyTopic, router, topicId]);
+  }, [applyTopic, topicId]);
 
   useEffect(() => {
     let isCurrent = true;
@@ -198,9 +191,7 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
         if (!isCurrent) {
           return;
         }
-        if (isInvalidSession(error)) {
-          router.replace("/login");
-        } else if (
+        if (
           error instanceof ApiRequestError &&
           error.code === "resource_not_found"
         ) {
@@ -221,7 +212,7 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
     return () => {
       isCurrent = false;
     };
-  }, [applyTopic, router, topicId]);
+  }, [applyTopic, topicId]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -288,11 +279,7 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
         message: `已保存。当前规则版本为 v${topic.current_version}。`,
       });
     } catch (error) {
-      if (isInvalidSession(error)) {
-        router.replace("/login");
-      } else {
-        setFeedback(toActionFeedback(error));
-      }
+      setFeedback(toActionFeedback(error));
     } finally {
       pendingActionRef.current = false;
       setPendingAction(null);
@@ -334,11 +321,7 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
               : "主题已恢复。",
       });
     } catch (error) {
-      if (isInvalidSession(error)) {
-        router.replace("/login");
-      } else {
-        setFeedback(toActionFeedback(error));
-      }
+      setFeedback(toActionFeedback(error));
     } finally {
       pendingActionRef.current = false;
       setPendingAction(null);

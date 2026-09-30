@@ -62,14 +62,6 @@ def analysis_case() -> Iterator[AnalysisCase]:
     with sessions() as session, session.begin():
         session.execute(
             text(
-                "INSERT INTO identity_users "
-                "(id, username, password_hash, credential_version, created_at, updated_at) "
-                "VALUES (:id, :username, 'test-only-hash', 1, :now, :now)"
-            ),
-            {"id": owner_id, "username": f"analysis-pipeline-{owner_id.hex}", "now": old},
-        )
-        session.execute(
-            text(
                 "INSERT INTO monitor_topics "
                 "(id, owner_id, name, status, readiness_status, current_version, "
                 "created_at, updated_at) VALUES "
@@ -167,41 +159,6 @@ def analysis_case() -> Iterator[AnalysisCase]:
     try:
         yield case
     finally:
-        with sessions() as session, session.begin():
-            for table in ("evidence_deletions", "evidence_resources"):
-                session.execute(
-                    text(f"DELETE FROM {table} WHERE owner_id = :owner"), {"owner": owner_id}
-                )
-            session.execute(
-                text("DELETE FROM hotlist_entries WHERE owner_id = :owner"), {"owner": owner_id}
-            )
-            session.execute(
-                text("DELETE FROM hotlist_snapshots WHERE owner_id = :owner"), {"owner": owner_id}
-            )
-            session.execute(
-                text("DELETE FROM collection_due_windows WHERE owner_id = :owner"),
-                {"owner": owner_id},
-            )
-            session.execute(
-                text("DELETE FROM content_records WHERE owner_id = :owner"), {"owner": owner_id}
-            )
-            session.execute(text("DELETE FROM jobs WHERE owner_id = :owner"), {"owner": owner_id})
-            session.execute(
-                text("DELETE FROM ai_calls WHERE owner_id = :owner"), {"owner": owner_id}
-            )
-            session.execute(
-                text("DELETE FROM monitor_topic_versions WHERE created_by = :owner"),
-                {"owner": owner_id},
-            )
-            session.execute(
-                text("DELETE FROM monitor_topics WHERE owner_id = :owner"), {"owner": owner_id}
-            )
-            session.execute(
-                text("DELETE FROM source_connections WHERE owner_id=:owner"), {"owner": owner_id}
-            )
-            session.execute(
-                text("DELETE FROM identity_users WHERE id = :owner"), {"owner": owner_id}
-            )
         engine.dispose()
 
 

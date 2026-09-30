@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ExternalLinkIcon, RotateCcwIcon } from "lucide-react";
 
@@ -33,7 +32,6 @@ function toError(
 }
 
 function useCommentPage(postId: string, rootId: string | null) {
-  const router = useRouter();
   const [state, setState] = useState<CommentPageState>({ status: "loading" });
   const [loadingMore, setLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
@@ -65,17 +63,11 @@ function useCommentPage(postId: string, rootId: string | null) {
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        if (
-          error instanceof ApiRequestError &&
-          error.code === "invalid_session"
-        ) {
-          router.replace("/login");
-          return;
-        }
+
         setState(toError(error));
       });
     return () => controller.abort();
-  }, [fetchPage, router]);
+  }, [fetchPage]);
 
   async function reload() {
     setState({ status: "loading" });
@@ -87,14 +79,7 @@ function useCommentPage(postId: string, rootId: string | null) {
         nextCursor: page.next_cursor,
       });
     } catch (error) {
-      if (
-        error instanceof ApiRequestError &&
-        error.code === "invalid_session"
-      ) {
-        router.replace("/login");
-      } else {
-        setState(toError(error));
-      }
+      setState(toError(error));
     }
   }
 
@@ -116,14 +101,7 @@ function useCommentPage(postId: string, rootId: string | null) {
         nextCursor: page.next_cursor,
       });
     } catch (error) {
-      if (
-        error instanceof ApiRequestError &&
-        error.code === "invalid_session"
-      ) {
-        router.replace("/login");
-      } else {
-        setLoadMoreError(toError(error).message);
-      }
+      setLoadMoreError(toError(error).message);
     } finally {
       loadingMoreRef.current = false;
       setLoadingMore(false);

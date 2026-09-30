@@ -10,13 +10,14 @@ from typing import Protocol
 from uuid import UUID, uuid4
 
 from pydantic import ValidationError
-from sqlalchemy import create_engine, func, select, text
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.engine import URL, Engine, make_url
 from sqlalchemy.exc import ArgumentError, SQLAlchemyError
 
 from backups.adapters.minio import ObjectArchiveError
 from backups.adapters.postgres import BackupToolError, PostgresDumpAdapter
 from backups.schemas import BackupManifest, EvidenceObjectState
+from db.demo import DEFAULT_DEMO_SCOPE_ID
 from db.metadata import metadata
 
 
@@ -193,6 +194,8 @@ class BackupRestoreService:
 
     @staticmethod
     def _check_restored_data(engine: Engine, manifest: BackupManifest) -> None:
+        topics = metadata.tables["monitor_topics"]
+        probe_id = uuid4()
         try:
             with engine.connect() as connection:
                 transaction = connection.begin()
@@ -204,38 +207,32 @@ class BackupRestoreService:
                         if actual != item.row_count:
                             raise BackupRestoreError("restored table counts do not match candidate")
 
-                    owner_id = connection.execute(
-                        text("SELECT id FROM identity_users LIMIT 1")
-                    ).scalar_one_or_none()
-                    if owner_id is None:
-                        owner_id = uuid4()
-                        connection.execute(
-                            text(
-                                "INSERT INTO identity_users "
-                                "(id, username, password_hash, credential_version, "
-                                "created_at, updated_at) "
-                                "VALUES (:id, 'restore-probe', 'restore-probe', 1, :now, :now)"
-                            ),
-                            {"id": owner_id, "now": datetime.now(UTC)},
+                    now = datetime.now(UTC)
+                    connection.execute(
+                        topics.insert().values(
+                            id=probe_id,
+                            owner_id=DEFAULT_DEMO_SCOPE_ID,
+                            name="restore-probe",
+                            created_at=now,
+                            updated_at=now,
                         )
-                    else:
-                        connection.execute(
-                            text(
-                                "UPDATE identity_users SET password_hash = 'restore-probe' "
-                                "WHERE id = :id"
-                            ),
-                            {"id": owner_id},
-                        )
+                    )
                     if (
                         connection.execute(
-                            text("SELECT password_hash FROM identity_users WHERE id = :id"),
-                            {"id": owner_id},
+                            select(topics.c.name).where(topics.c.id == probe_id)
                         ).scalar_one()
                         != "restore-probe"
                     ):
                         raise BackupRestoreError("isolated write probe could not be read")
                 finally:
                     transaction.rollback()
+                if (
+                    connection.execute(
+                        select(topics.c.id).where(topics.c.id == probe_id)
+                    ).scalar_one_or_none()
+                    is not None
+                ):
+                    raise BackupRestoreError("isolated write probe was not rolled back")
         except SQLAlchemyError as error:
             raise BackupRestoreError("restored data read or write probe failed") from error
 

@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy import create_engine, delete, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
+from tests.conftest import TEST_DATABASE_TRUNCATE
 
 from connections.presets import BILIBILI_PRESET
 from connections.services import SourcePresetService
@@ -43,18 +44,9 @@ def test_bilibili_versions_survive_policy_change_and_failed_job() -> None:
     engine = create_engine(database_url)
     sessions = sessionmaker(bind=engine, expire_on_commit=False)
     owner_id = uuid4()
-    now = datetime.now(UTC)
     try:
         with engine.begin() as connection:
-            connection.execute(text("TRUNCATE identity_users CASCADE"))
-            connection.execute(
-                text(
-                    "INSERT INTO identity_users "
-                    "(id, username, password_hash, credential_version, created_at, updated_at) "
-                    "VALUES (:id, :name, 'test-only-hash', 1, :now, :now)"
-                ),
-                {"id": owner_id, "name": f"evidence-{owner_id}", "now": now},
-            )
+            connection.execute(text(TEST_DATABASE_TRUNCATE))
 
         with sessions.begin() as session:
             first_connection = SourcePresetService(session).apply_in_transaction(
@@ -174,5 +166,5 @@ def test_bilibili_versions_survive_policy_change_and_failed_job() -> None:
             assert snapshot.adapter_version is None
     finally:
         with engine.begin() as connection:
-            connection.execute(text("TRUNCATE identity_users CASCADE"))
+            connection.execute(text(TEST_DATABASE_TRUNCATE))
         engine.dispose()

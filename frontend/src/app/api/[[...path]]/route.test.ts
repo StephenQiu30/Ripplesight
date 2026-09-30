@@ -46,7 +46,7 @@ describe("API route proxy", () => {
     ]);
   });
 
-  it("streams payloads and preserves credentials and response headers", async () => {
+  it("streams payloads and business headers without forwarding credentials", async () => {
     let receivedBody = "";
     let receivedAuthorization = "";
     let receivedCookie = "";
@@ -97,13 +97,13 @@ describe("API route proxy", () => {
       expect(response.headers.get("content-disposition")).toContain(
         "hotkey.bin",
       );
-      expect(response.headers.get("set-cookie")).toContain("session=renewed");
+      expect(response.headers.get("set-cookie")).toBeNull();
       expect(response.headers.get("x-request-id")).toBe(
         "b64c7bc5-cf50-47ad-aa7d-82e5951d537a",
       );
       expect(receivedBody).toBe("payload");
-      expect(receivedAuthorization).toBe("Bearer test-token");
-      expect(receivedCookie).toBe("session=test-session");
+      expect(receivedAuthorization).toBe("");
+      expect(receivedCookie).toBe("");
       expect(receivedForwarded).toBe("");
     } finally {
       await close(server);

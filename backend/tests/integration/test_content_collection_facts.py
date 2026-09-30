@@ -24,17 +24,6 @@ def content_fact_sessions() -> Iterator[sessionmaker[Session]]:
         engine.dispose()
 
 
-def _seed_user(session: Session, owner_id: UUID, now: datetime) -> None:
-    session.execute(
-        text(
-            "INSERT INTO identity_users "
-            "(id, username, password_hash, credential_version, created_at, updated_at) "
-            "VALUES (:id, :username, 'test-only-hash', 1, :now, :now)"
-        ),
-        {"id": owner_id, "username": f"content-facts-{owner_id.hex}", "now": now},
-    )
-
-
 def _seed_job(session: Session, owner_id: UUID, job_id: UUID, now: datetime) -> None:
     session.execute(
         text(
@@ -125,7 +114,6 @@ def test_collection_facts_batch_preserves_job_identity_and_first_ingestion(
     with content_fact_sessions() as session:
         session.begin()
         try:
-            _seed_user(session, owner_id, now)
             for job_id in (first_job, second_job, empty_job):
                 _seed_job(session, owner_id, job_id, now)
             _seed_content(session, owner_id, shared_content, (shared_v1, shared_v2), now)
@@ -218,7 +206,6 @@ def test_collection_snapshot_facts_distinguish_empty_snapshot_from_absence(
     with content_fact_sessions() as session:
         session.begin()
         try:
-            _seed_user(session, owner_id, now)
             for job_id in (snapshot_job, no_snapshot_job):
                 session.execute(
                     text(

@@ -16,13 +16,14 @@ from sqlalchemy import create_engine, text
 from tests.integration.test_monitor_topics import (
     _TRUNCATE,
     _csrf_headers,
-    _initialize,
+    _demo_scope,
     _topic_payload,
 )
 
 from connections.presets import SOURCE_PRESETS
 from connections.services import SourcePresetService
 from core.config import Settings
+from db.demo import resolve_demo_scope
 from jobs.services import try_lock_source_collection_in_transaction
 from main import create_app
 from monitors.runs import MonitorTopicRunService
@@ -43,7 +44,6 @@ def monitor_topic_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient
         environment="test",
         log_level="WARNING",
         database_url=database_url,
-        bootstrap_token="monitor-topics-isolated-bootstrap-token",
     )
     # Scheduler scans normally read process settings. The API fixture supplies
     # an explicit isolated database URL, while CI intentionally has no app URL.
@@ -64,10 +64,10 @@ def _ready_topic(
     interval: int = 600,
     source_min_interval: int | None = None,
 ) -> str:
-    _initialize(client)
+    _demo_scope(client)
     factory = client.app.state.session_factory
     with factory.begin() as session:
-        owner_id = session.execute(text("SELECT id FROM identity_users")).scalar_one()
+        owner_id = resolve_demo_scope(session)
         for source_key in source_keys:
             preset = SOURCE_PRESETS[source_key]
             if source_min_interval is not None:
@@ -129,13 +129,13 @@ def test_manual_run_replays_one_job_and_outbox(monitor_topic_client: TestClient)
         assert session.scalar(text("SELECT count(*) FROM outbox_messages")) == 1
 
 
-def test_manual_run_rejects_anonymous_and_all_skipped(monitor_topic_client: TestClient) -> None:
+def test_manual_run_requires_csrf_and_rejects_all_skipped(monitor_topic_client: TestClient) -> None:
     location = _ready_topic(monitor_topic_client, source_keys=("hackernews",))
     payload = {"operation_id": str(uuid4()), "source_keys": ["hackernews"]}
     anonymous = TestClient(monitor_topic_client.app)
     try:
         response = anonymous.post(location + "/runs", json=payload)
-        assert response.status_code == 401
+        assert response.status_code == 403
     finally:
         anonymous.close()
     with monitor_topic_client.app.state.session_factory.begin() as session:
@@ -284,7 +284,7 @@ def test_manual_and_scheduled_admission_share_source_lock(
     factory = monitor_topic_client.app.state.session_factory
     now = datetime.now(UTC) + timedelta(seconds=1)
     with factory.begin() as session:
-        owner_id = session.scalar(text("SELECT id FROM identity_users"))
+        owner_id = resolve_demo_scope(session)
         session.execute(text("UPDATE monitor_schedules SET next_run_at=:now"), {"now": now})
     with factory.begin() as holder:
         assert try_lock_source_collection_in_transaction(
@@ -325,7 +325,7 @@ def test_manual_run_freezes_connection_version_after_preset_update(
     )
     factory = monitor_topic_client.app.state.session_factory
     with factory.begin() as session:
-        owner_id = session.scalar(text("SELECT id FROM identity_users"))
+        owner_id = resolve_demo_scope(session)
         SourcePresetService(session).apply_in_transaction(owner_id=owner_id, preset=changed)
     second = monitor_topic_client.post(
         location + "/runs",
@@ -389,7 +389,7 @@ def test_concurrent_manual_retries_create_one_job(monitor_topic_client: TestClie
     topic_id = location.rsplit("/", 1)[1]
     factory = monitor_topic_client.app.state.session_factory
     with factory() as session:
-        owner_id = session.scalar(text("SELECT id FROM identity_users"))
+        owner_id = resolve_demo_scope(session)
     assert owner_id is not None
     command = MonitorTopicRunInput(operation_id=uuid4(), source_keys=["hackernews"])
 
@@ -418,7 +418,7 @@ def test_scheduler_records_missed_due_points_and_accepts_latest_atomically(
     topic_id = location.rsplit("/", 1)[1]
     factory = monitor_topic_client.app.state.session_factory
     with factory() as session:
-        owner_id = session.scalar(text("SELECT id FROM identity_users"))
+        owner_id = resolve_demo_scope(session)
     assert owner_id is not None
     now = datetime.now(UTC) + timedelta(seconds=1)
     due_at = now - timedelta(minutes=20)
@@ -532,7 +532,7 @@ def test_scheduler_records_quiet_due_without_dispatch(monitor_topic_client: Test
         ]
     )
     with factory.begin() as session:
-        owner_id = session.scalar(text("SELECT id FROM identity_users"))
+        owner_id = resolve_demo_scope(session)
         session.execute(
             text("UPDATE monitor_schedules SET next_run_at = :due WHERE topic_id = :topic_id"),
             {"due": now, "topic_id": topic_id},

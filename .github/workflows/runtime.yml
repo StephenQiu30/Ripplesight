@@ -31,7 +31,6 @@ jobs:
     timeout-minutes: 15
     env:
       HOTKEY_API_PORT: "8867"
-      HOTKEY_BOOTSTRAP_TOKEN: runtime-ci-bootstrap-token-is-not-a-default
       HOTKEY_POSTGRES_PASSWORD: runtime_ci_only
       HOTKEY_WEB_PORT: "3000"
       NEXT_TELEMETRY_DISABLED: "1"
@@ -88,7 +87,7 @@ jobs:
 
           origin = "http://127.0.0.1:" + os.environ["HOTKEY_WEB_PORT"]
           failures = []
-          for path in ("/login", "/monitors/new"):
+          for path in ("/events", "/monitors/new"):
               previous_nonce = None
               for request_number in (1, 2):
                   with urllib.request.urlopen(origin + path, timeout=15) as response:
@@ -117,7 +116,7 @@ jobs:
           test "$(docker compose --project-name hotkey-ci exec -T postgres psql -X --set ON_ERROR_STOP=on --username hotkey --dbname hotkey --tuples-only --no-align --command 'SELECT current_database()')" = "hotkey"
           test "$(docker compose --project-name hotkey-ci exec -T redis redis-cli ping)" = "PONG"
           docker compose --project-name hotkey-ci exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server 127.0.0.1:9092 --list
-          test "$(docker compose --project-name hotkey-ci exec -T postgres psql -X --username hotkey --dbname hotkey --tuples-only --no-align --command "SELECT to_regclass('public.identity_users') IS NOT NULL AND to_regclass('public.identity_sessions') IS NOT NULL")" = "t"
+          test "$(docker compose --project-name hotkey-ci exec -T postgres psql -X --username hotkey --dbname hotkey --tuples-only --no-align --command "SELECT to_regclass('public.identity_users') IS NULL AND to_regclass('public.identity_sessions') IS NULL")" = "t"
           curl --fail --silent http://127.0.0.1:8867/api/health
           curl --fail --silent http://127.0.0.1:8867/api/ready
           curl --fail --silent http://127.0.0.1:3000/health
@@ -137,19 +136,58 @@ jobs:
           test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' $(docker compose --project-name hotkey-ci ps --quiet backend))" = "true"
           test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' $(docker compose --project-name hotkey-ci ps --quiet frontend))" = "true"
 
-      - name: Verify the deployed identity session boundary
+      - name: Verify anonymous Demo access and the write boundary
         run: |
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' --request POST http://127.0.0.1:3000/api/identity/initialize --header 'Content-Type: application/json' --header 'X-HotKey-CSRF: 1' --header 'X-HotKey-Bootstrap-Token: wrong' --data-binary '{"username":"owner","password":"runtime verification password"}')" = "403"
-          curl --fail --silent --cookie-jar /tmp/hotkey-ci-cookies --request POST http://127.0.0.1:3000/api/identity/initialize --header 'Content-Type: application/json' --header 'X-HotKey-CSRF: 1' --header 'X-HotKey-Bootstrap-Token: runtime-ci-bootstrap-token-is-not-a-default' --data-binary '{"username":"owner","password":"runtime verification password"}' | grep '"username":"owner"'
-          curl --fail --silent --cookie /tmp/hotkey-ci-cookies http://127.0.0.1:3000/api/identity/session | grep '"username":"owner"'
-          session_token="$(awk '$6 == "hotkey_session" {print $7}' /tmp/hotkey-ci-cookies)"
-          csrf_token="$(awk '$6 == "hotkey_csrf" {print $7}' /tmp/hotkey-ci-cookies)"
-          test -n "$session_token"
-          test -n "$csrf_token"
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' --request DELETE --cookie /tmp/hotkey-ci-cookies http://127.0.0.1:3000/api/identity/session)" = "403"
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' --request DELETE --cookie /tmp/hotkey-ci-cookies --header "X-HotKey-CSRF: $csrf_token" http://127.0.0.1:3000/api/identity/session)" = "204"
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' --cookie "hotkey_session=$session_token" http://127.0.0.1:3000/api/identity/session)" = "401"
-          if docker compose --project-name hotkey-ci logs --no-color backend frontend | grep --quiet --fixed-strings --regexp='runtime verification password' --regexp='runtime-ci-bootstrap-token-is-not-a-default' --regexp="$session_token" --regexp="$csrf_token"; then exit 1; fi
+          python3 - <<'PYTHON'
+          import json
+          import urllib.error
+          import urllib.request
+
+          origin = "http://127.0.0.1:3000"
+
+          def request(path, method="GET", payload=None, csrf=None):
+              headers = {}
+              body = None
+              if payload is not None:
+                  body = json.dumps(payload).encode()
+                  headers["Content-Type"] = "application/json"
+              if csrf is not None:
+                  headers["X-HotKey-CSRF"] = csrf
+              req = urllib.request.Request(origin + path, data=body, headers=headers, method=method)
+              try:
+                  response = urllib.request.urlopen(req, timeout=15)
+              except urllib.error.HTTPError as error:
+                  response = error
+              with response:
+                  status, response_headers, content = response.status, response.headers, response.read()
+              assert "Set-Cookie" not in response_headers
+              return status, response_headers, content
+
+          assert request("/api/topics")[0] == 200
+          assert request("/api/source-capabilities")[0] == 200
+          for path in ("/login", "/register", "/api/identity/session", "/api/identity/workspace"):
+              assert request(path)[0] == 404, path
+          for path in ("/api/identity/initialize", "/api/identity/sessions"):
+              assert request(path, method="POST", payload={})[0] == 404, path
+          payload = {"name": "Runtime Demo topic", "match_any": ["AI"], "match_all": [], "exclude": []}
+          for csrf in (None, "wrong"):
+              status, _, content = request("/api/topics", method="POST", payload=payload, csrf=csrf)
+              assert status == 403
+              assert json.loads(content)["code"] == "csrf_invalid"
+          status, headers, content = request("/api/topics", method="POST", payload=payload, csrf="1")
+          assert status == 201
+          topic = json.loads(content)
+          status, _, content = request(headers["Location"])
+          assert status == 200 and json.loads(content) == topic
+          status, _, content = request("/api/topics")
+          assert status == 200 and len(json.loads(content)["items"]) == 1
+          with urllib.request.urlopen("http://127.0.0.1:8867/openapi.json", timeout=15) as response:
+              schema = json.load(response)
+          assert not any(path.startswith("/api/identity") for path in schema["paths"])
+          assert not schema.get("components", {}).get("securitySchemes")
+          assert not any(name.startswith("Identity") for name in schema["components"]["schemas"])
+          print(json.dumps({"anonymous_reads": True, "csrf_write_boundary": True, "removed_identity": True}))
+          PYTHON
 
       - name: Record one bounded resource snapshot
         run: docker stats --no-stream $(docker compose --project-name hotkey-ci ps --quiet)

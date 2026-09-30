@@ -11,40 +11,9 @@ SET LOCAL statement_timeout = '60s';
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
-CREATE TABLE identity_users (
-    id UUID PRIMARY KEY,
-    singleton_key SMALLINT NOT NULL UNIQUE DEFAULT 1 CHECK (singleton_key = 1),
-    username VARCHAR(64) NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    credential_version INTEGER NOT NULL DEFAULT 1 CHECK (credential_version >= 1),
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL
-);
-
-CREATE TABLE identity_sessions (
-    id UUID PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
-    token_digest BYTEA NOT NULL UNIQUE CHECK (octet_length(token_digest) = 32),
-    csrf_digest BYTEA NOT NULL CHECK (octet_length(csrf_digest) = 32),
-    credential_version INTEGER NOT NULL CHECK (credential_version >= 1),
-    created_at TIMESTAMPTZ NOT NULL,
-    expires_at TIMESTAMPTZ NOT NULL CHECK (expires_at > created_at),
-    revoked_at TIMESTAMPTZ,
-    revoked_reason VARCHAR(32),
-    CHECK (
-        (revoked_at IS NULL AND revoked_reason IS NULL)
-        OR (revoked_at IS NOT NULL AND revoked_reason IS NOT NULL)
-    )
-);
-
-CREATE INDEX identity_sessions_user_id_idx ON identity_sessions (user_id);
-CREATE INDEX identity_sessions_active_expiry_idx
-    ON identity_sessions (expires_at)
-    WHERE revoked_at IS NULL;
-
 CREATE TABLE monitor_topics (
     id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL,
     name VARCHAR(80) NOT NULL CHECK (char_length(name) BETWEEN 1 AND 80),
     status VARCHAR(16) NOT NULL DEFAULT 'paused'
         CHECK (status IN ('paused', 'active', 'archived')),
@@ -78,7 +47,7 @@ CREATE INDEX monitor_topics_owner_updated_idx ON monitor_topics (owner_id, updat
 CREATE TABLE monitor_topic_versions (
     topic_id UUID NOT NULL REFERENCES monitor_topics (id) ON DELETE CASCADE,
     version INTEGER NOT NULL CHECK (version >= 1),
-    created_by UUID NOT NULL REFERENCES identity_users (id) ON DELETE RESTRICT,
+    created_by UUID NOT NULL,
     match_any JSONB NOT NULL CHECK (jsonb_typeof(match_any) = 'array'),
     match_all JSONB NOT NULL CHECK (jsonb_typeof(match_all) = 'array'),
     exclude JSONB NOT NULL CHECK (jsonb_typeof(exclude) = 'array'),
@@ -158,7 +127,7 @@ CREATE INDEX monitor_schedules_enabled_next_run_idx
 
 CREATE TABLE followed_accounts (
     id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL,
     source_key VARCHAR(64) NOT NULL CHECK (length(source_key) BETWEEN 1 AND 64),
     external_id VARCHAR(256) NOT NULL CHECK (length(external_id) BETWEEN 1 AND 256),
     display_name VARCHAR(256) CHECK (
@@ -191,7 +160,7 @@ CREATE INDEX followed_account_aliases_owner_value_idx
 
 CREATE TABLE source_connections (
     id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL,
     source_key VARCHAR(64) NOT NULL CHECK (
         source_key ~ '^[a-z][a-z0-9_-]{0,63}$'
     ),
@@ -225,7 +194,7 @@ CREATE TABLE source_connection_versions (
     secret_ref VARCHAR(256),
     config JSONB NOT NULL DEFAULT '{}'::jsonb,
     execution_policy JSONB,
-    created_by UUID NOT NULL REFERENCES identity_users (id) ON DELETE RESTRICT,
+    created_by UUID NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
     PRIMARY KEY (connection_id, version),
     CONSTRAINT source_connection_versions_auth_secret_check CHECK (
@@ -353,7 +322,7 @@ CREATE INDEX source_capability_evidence_latest_idx
 
 CREATE TABLE source_access_policies (
     id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL,
     source_key VARCHAR(64) NOT NULL CHECK (source_key ~ '^[a-z][a-z0-9_-]{0,63}$'),
     capability VARCHAR(32) NOT NULL CHECK (
         capability IN ('search', 'author_posts', 'comments', 'replies', 'page_content', 'hotlist')
@@ -406,7 +375,7 @@ CREATE TABLE source_access_policies (
 
 CREATE TABLE evidence_retention_policies (
     id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL,
     source_policy_id UUID NOT NULL,
     source_policy_version INTEGER NOT NULL CHECK (source_policy_version >= 1),
     data_class VARCHAR(16) NOT NULL CHECK (data_class IN ('structured', 'raw', 'media')),
@@ -433,7 +402,7 @@ CREATE TABLE evidence_retention_policies (
 
 CREATE TABLE evidence_resources (
     id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL,
     resource_type VARCHAR(64) NOT NULL CHECK (
         resource_type ~ '^[a-z][a-z0-9_]{0,63}$'
     ),
@@ -466,7 +435,7 @@ CREATE INDEX evidence_resources_expiry_idx ON evidence_resources (expires_at);
 
 CREATE TABLE evidence_deletions (
     id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL,
     operation_id UUID NOT NULL,
     resource_record_id UUID NOT NULL,
     reason VARCHAR(32) NOT NULL CHECK (
@@ -532,7 +501,7 @@ CREATE INDEX evidence_cleanup_targets_claim_idx
 
 CREATE TABLE resource_budget_policies (
     id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL,
     budget_key VARCHAR(128) NOT NULL CHECK (
         budget_key ~ '^[a-z][a-z0-9_.:-]{0,127}$'
     ),
@@ -652,7 +621,7 @@ CREATE INDEX resource_budget_reservations_lookup_idx
 
 CREATE TABLE resource_component_policies (
     id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL,
     component_key VARCHAR(128) NOT NULL CHECK (
         component_key ~ '^[a-z][a-z0-9_.:-]{0,127}$'
     ),
@@ -711,7 +680,7 @@ CREATE INDEX resource_usage_attempts_operation_idx
 
 CREATE TABLE jobs (
     id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL,
     operation_id UUID NOT NULL,
     kind VARCHAR(64) NOT NULL CHECK (kind ~ '^[a-z][a-z0-9_.-]{0,63}$'),
     configuration_ref VARCHAR(128) NOT NULL
@@ -854,7 +823,7 @@ CREATE INDEX jobs_runnable_idx ON jobs (status, lease_expires_at);
 
 CREATE TABLE ai_calls (
     id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL,
     job_id UUID,
     purpose VARCHAR(128) NOT NULL CHECK (purpose <> ''),
     provider VARCHAR(64) NOT NULL CHECK (provider <> ''),
@@ -907,7 +876,7 @@ CREATE INDEX analysis_prompt_runtime_sessions_version_started_idx
 
 CREATE TABLE coverage_windows (
     id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL,
     source_key VARCHAR(64) NOT NULL CONSTRAINT coverage_windows_source_check
         CHECK (source_key ~ '^[a-z][a-z0-9_-]{0,63}$'),
     capability VARCHAR(32) NOT NULL CONSTRAINT coverage_windows_capability_check
@@ -947,7 +916,7 @@ CREATE TABLE coverage_windows (
 
 CREATE TABLE collection_due_windows (
     id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL,
     schedule_key UUID NOT NULL,
     topic_id UUID,
     source_key VARCHAR(64) NOT NULL CONSTRAINT collection_due_windows_source_check
@@ -1039,7 +1008,7 @@ CREATE INDEX job_stage_attempts_job_stage_idx
 
 CREATE TABLE content_records (
     id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL,
     source_key VARCHAR(64) NOT NULL CHECK (
         source_key ~ '^[a-z][a-z0-9_-]{0,63}$'
     ),
@@ -1599,7 +1568,7 @@ CREATE INDEX reports_owner_topic_window_idx
     ON reports (owner_id, topic_id, kind, window_start, status);
 
 CREATE TABLE knowledge_exports (
-    owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL,
     object_type VARCHAR(16) NOT NULL CHECK (
         object_type IN ('daily', 'weekly', 'event', 'topic', 'post', 'qa')
     ),
@@ -1613,7 +1582,7 @@ CREATE TABLE knowledge_exports (
 
 CREATE TABLE notification_targets (
     id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL,
     name VARCHAR(80) NOT NULL CHECK (char_length(name) BETWEEN 1 AND 80),
     channel VARCHAR(16) NOT NULL CHECK (channel IN ('feishu', 'email')),
     recipients JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(recipients) = 'array'),
@@ -1630,7 +1599,7 @@ CREATE TABLE notification_targets (
 
 CREATE TABLE notification_deliveries (
     id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL,
     report_id UUID NOT NULL REFERENCES reports (id) ON DELETE CASCADE,
     report_version INTEGER NOT NULL CHECK (report_version >= 1),
     target_id UUID NOT NULL,
@@ -1649,7 +1618,7 @@ CREATE TABLE notification_deliveries (
 
 CREATE TABLE provenance_manifests (
     id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL REFERENCES identity_users (id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL,
     job_id UUID NOT NULL,
     operation_id UUID NOT NULL,
     result_kind VARCHAR(64) NOT NULL CHECK (

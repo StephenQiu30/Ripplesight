@@ -43,7 +43,6 @@ HTTP_ERRORS: Mapping[int, PublicError] = {
     504: PublicError(504, "upstream_timeout", "上游服务响应超时"),
 }
 APPLICATION_ERRORS: Mapping[str, PublicError] = {
-    "bootstrap_forbidden": PublicError(403, "bootstrap_forbidden", "初始化授权无效"),
     "connection_disabled": PublicError(409, "connection_disabled", "连接已停用"),
     "connection_authentication_required": PublicError(
         409, "connection_authentication_required", "连接授权已失效且需要更新凭据后重新验证"
@@ -82,16 +81,10 @@ APPLICATION_ERRORS: Mapping[str, PublicError] = {
     ),
     "csrf_invalid": PublicError(403, "csrf_invalid", "请求安全校验失败"),
     "database_unavailable": PublicError(503, "database_unavailable", "数据库暂不可用"),
-    "identity_already_initialized": PublicError(
-        409,
-        "identity_already_initialized",
-        "使用者已完成初始化",
+    "demo_scope_conflict": PublicError(
+        503, "demo_scope_conflict", "Demo 数据分区冲突, 请检查数据库"
     ),
-    "identity_not_initialized": PublicError(404, "identity_not_initialized", "使用者尚未初始化"),
     "idempotency_conflict": PublicError(409, "idempotency_conflict", "操作标识已用于其他请求"),
-    "invalid_credentials": PublicError(401, "invalid_credentials", "用户名或密码错误"),
-    "invalid_password": PublicError(422, "invalid_password", "密码不符合安全要求"),
-    "invalid_session": PublicError(401, "invalid_session", "会话无效或已过期"),
     "job_not_cancellable": PublicError(409, "job_not_cancellable", "任务当前状态不可取消"),
     "job_not_retryable": PublicError(409, "job_not_retryable", "任务当前状态不可重试"),
     "retry_budget_exhausted": PublicError(

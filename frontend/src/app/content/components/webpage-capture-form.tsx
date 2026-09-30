@@ -95,14 +95,7 @@ export function WebPageCaptureForm() {
       });
       router.push(`/jobs/${job.job_id}`);
     } catch (error) {
-      if (
-        error instanceof ApiRequestError &&
-        error.code === "invalid_session"
-      ) {
-        router.replace("/login");
-      } else {
-        setSubmissionError(toSubmissionError(error));
-      }
+      setSubmissionError(toSubmissionError(error));
     } finally {
       isSubmittingRef.current = false;
       setIsSubmitting(false);

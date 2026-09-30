@@ -31,7 +31,6 @@ from evidence.models import (
     RetentionPolicy,
     SourceAccessPolicy,
 )
-from identity.models import IdentitySession, IdentityUser
 from jobs.models import (
     CollectionDueWindow,
     CoverageWindow,
@@ -86,8 +85,6 @@ __all__ = [
     "FollowedAccountAlias",
     "HotlistEntryRecord",
     "HotlistSnapshot",
-    "IdentitySession",
-    "IdentityUser",
     "Job",
     "JobAttempt",
     "JobStageAttempt",

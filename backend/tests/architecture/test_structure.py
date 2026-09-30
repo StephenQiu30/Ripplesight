@@ -20,7 +20,6 @@ REGISTERED_PACKAGES = {
     "db",
     "events",
     "evidence",
-    "identity",
     "jobs",
     "knowledge",
     "monitors",

@@ -64,14 +64,23 @@ async function captureError(adapter: AxiosAdapter): Promise<ApiRequestError> {
 }
 
 describe("request transport", () => {
-  it("adds the session CSRF token only to protected mutations", async () => {
-    vi.stubGlobal("document", { cookie: "hotkey_csrf=session-csrf-token" });
-    let protectedHeader: unknown;
-    let publicHeader: unknown;
+  it("uses the Demo write header without reading cookies or credentials", async () => {
+    const readCookie = vi.fn(() => "hotkey_csrf=obsolete-session-token");
+    vi.stubGlobal("document", {
+      get cookie() {
+        return readCookie();
+      },
+    });
+    let mutationHeader: unknown;
+    let readHeader: unknown;
+    let credentials: unknown;
 
-    await request<void>("/api/identity/session", {
+    await request<void>("/api/topics/topic-1/pause", {
       adapter: async (config) => {
-        protectedHeader = config.headers.get("X-HotKey-CSRF");
+        mutationHeader = config.headers.get("X-HotKey-CSRF");
+        credentials = config.withCredentials;
+        expect(config.headers.get("Cookie")).toBeUndefined();
+        expect(config.headers.get("Authorization")).toBeUndefined();
         return {
           config,
           data: "",
@@ -80,11 +89,11 @@ describe("request transport", () => {
           statusText: "204",
         };
       },
-      method: "DELETE",
+      method: "POST",
     });
-    await request<void>("/api/identity/sessions", {
+    await request<void>("/api/topics", {
       adapter: async (config) => {
-        publicHeader = config.headers.get("X-HotKey-CSRF");
+        readHeader = config.headers.get("X-HotKey-CSRF");
         return {
           config,
           data: {},
@@ -93,11 +102,13 @@ describe("request transport", () => {
           statusText: "200",
         };
       },
-      method: "POST",
+      method: "GET",
     });
 
-    expect(protectedHeader).toBe("session-csrf-token");
-    expect(publicHeader).toBe("1");
+    expect(mutationHeader).toBe("1");
+    expect(readHeader).toBeUndefined();
+    expect(readCookie).not.toHaveBeenCalled();
+    expect(credentials).not.toBe(true);
   });
 
   it("reads details and falls back to the body request id", async () => {

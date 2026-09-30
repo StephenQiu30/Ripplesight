@@ -6,8 +6,8 @@ from uuid import UUID
 from fastapi import APIRouter, Query, Response, status
 
 from api.dependencies import (
-    AuthenticatedIdentityDependency,
-    CsrfProtectedIdentityDependency,
+    DemoScopeDependency,
+    DemoWriteScopeDependency,
     JobServiceDependency,
     WebPageCollectionServiceDependency,
 )
@@ -22,7 +22,7 @@ from jobs.schemas import (
 router = APIRouter(prefix="/jobs", tags=["采集任务"])
 
 _READ_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
-    401: {"model": ErrorView, "description": "会话无效或已过期"},
+    503: {"model": ErrorView, "description": "数据库不可用或 Demo 数据分区冲突"},
     404: {"model": ErrorView, "description": "任务不存在或不可访问"},
     422: {"model": ErrorView, "description": "请求参数校验失败"},
     500: {"model": ErrorView, "description": "服务内部异常"},
@@ -37,7 +37,7 @@ _READ_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     summary="提交采集任务",
     description="任务与 Outbox 持久提交后才返回受理, 相同操作标识复用原任务。",
     responses={
-        401: {"model": ErrorView, "description": "会话无效或已过期"},
+        503: {"model": ErrorView, "description": "数据库不可用或 Demo 数据分区冲突"},
         403: {"model": ErrorView, "description": "请求安全校验失败"},
         409: {"model": ErrorView, "description": "操作标识与原任务意图冲突"},
         422: {"model": ErrorView, "description": "请求参数校验失败"},
@@ -48,10 +48,10 @@ def create_collection_job(
     payload: WebPageCollectionJobInput,
     response: Response,
     webpage_service: WebPageCollectionServiceDependency,
-    identity: CsrfProtectedIdentityDependency,
+    scope_id: DemoWriteScopeDependency,
 ) -> JobAcceptedView:
     job = webpage_service.accept_job(
-        owner_id=identity.view.user.id,
+        owner_id=scope_id,
         operation_id=payload.operation_id,
         target_url=payload.url,
     )
@@ -66,18 +66,18 @@ def create_collection_job(
     response_model=PageView[JobHistoryItemView],
     status_code=status.HTTP_200_OK,
     summary="列出采集任务",
-    description="按当前会话 owner 稳定分页读取任务摘要; 不暴露 scope、租约、操作标识或内部消息。",
+    description="按当前 Demo 分区稳定分页读取任务摘要; 不暴露 scope、租约、操作标识或内部消息。",
     responses=_READ_ERROR_RESPONSES,
 )
 def list_collection_jobs(
     response: Response,
     service: JobServiceDependency,
-    identity: AuthenticatedIdentityDependency,
+    scope_id: DemoScopeDependency,
     cursor: UUID | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> PageView[JobHistoryItemView]:
     items, next_cursor = service.list_history(
-        owner_id=identity.view.user.id,
+        owner_id=scope_id,
         cursor=cursor,
         limit=limit,
     )
@@ -91,18 +91,18 @@ def list_collection_jobs(
     response_model=list[JobContinuousFailureIssueView],
     status_code=status.HTTP_200_OK,
     summary="列出连续失败问题",
-    description="按当前会话 owner 返回连续三次失败的来源能力摘要供查看最近失败任务处理动作",
+    description="按当前 Demo 分区返回连续三次失败的来源能力摘要供查看最近失败任务处理动作",
     responses={
-        401: {"model": ErrorView, "description": "会话无效或已过期"},
+        503: {"model": ErrorView, "description": "数据库不可用或 Demo 数据分区冲突"},
         500: {"model": ErrorView, "description": "服务内部异常"},
     },
 )
 def list_continuous_failure_issues(
     response: Response,
     service: JobServiceDependency,
-    identity: AuthenticatedIdentityDependency,
+    scope_id: DemoScopeDependency,
 ) -> list[JobContinuousFailureIssueView]:
-    issues = service.list_continuous_failure_issues(owner_id=identity.view.user.id)
+    issues = service.list_continuous_failure_issues(owner_id=scope_id)
     response.headers["cache-control"] = "no-store"
     return list(issues)
 
@@ -113,16 +113,16 @@ def list_continuous_failure_issues(
     response_model=JobStatusView,
     status_code=status.HTTP_200_OK,
     summary="读取采集任务状态",
-    description="按当前会话 owner 读取持久任务, 不会暴露 scope、租约或内部消息。",
+    description="按当前 Demo 分区读取持久任务, 不会暴露 scope、租约或内部消息。",
     responses=_READ_ERROR_RESPONSES,
 )
 def get_collection_job(
     job_id: UUID,
     response: Response,
     service: JobServiceDependency,
-    identity: AuthenticatedIdentityDependency,
+    scope_id: DemoScopeDependency,
 ) -> JobStatusView:
-    job = service.get_status(owner_id=identity.view.user.id, job_id=job_id)
+    job = service.get_status(owner_id=scope_id, job_id=job_id)
     response.headers["cache-control"] = "no-store"
     return job
 
@@ -135,7 +135,7 @@ def get_collection_job(
     summary="取消采集任务",
     description="排队任务立即取消; 运行任务持久化取消意图并等待在途响应收尾。",
     responses={
-        401: {"model": ErrorView, "description": "会话无效或已过期"},
+        503: {"model": ErrorView, "description": "数据库不可用或 Demo 数据分区冲突"},
         403: {"model": ErrorView, "description": "请求安全校验失败"},
         404: {"model": ErrorView, "description": "任务不存在或不可访问"},
         409: {"model": ErrorView, "description": "任务当前状态不可取消"},
@@ -147,9 +147,9 @@ def cancel_collection_job(
     job_id: UUID,
     response: Response,
     service: JobServiceDependency,
-    identity: CsrfProtectedIdentityDependency,
+    scope_id: DemoWriteScopeDependency,
 ) -> JobStatusView:
-    job = service.request_cancel(owner_id=identity.view.user.id, job_id=job_id)
+    job = service.request_cancel(owner_id=scope_id, job_id=job_id)
     response.headers["cache-control"] = "no-store"
     return job
 
@@ -162,7 +162,7 @@ def cancel_collection_job(
     summary="重试采集任务",
     description="恢复同一任务及其检查点; 重复点击已排队任务不会重复派发。",
     responses={
-        401: {"model": ErrorView, "description": "会话无效或已过期"},
+        503: {"model": ErrorView, "description": "数据库不可用或 Demo 数据分区冲突"},
         403: {"model": ErrorView, "description": "请求安全校验失败"},
         404: {"model": ErrorView, "description": "任务不存在或不可访问"},
         409: {"model": ErrorView, "description": "任务当前状态不可重试"},
@@ -174,9 +174,9 @@ def retry_collection_job(
     job_id: UUID,
     response: Response,
     service: JobServiceDependency,
-    identity: CsrfProtectedIdentityDependency,
+    scope_id: DemoWriteScopeDependency,
 ) -> JobStatusView:
-    job = service.request_retry(owner_id=identity.view.user.id, job_id=job_id)
+    job = service.request_retry(owner_id=scope_id, job_id=job_id)
     response.headers["location"] = f"/api/jobs/{job.id}"
     response.headers["cache-control"] = "no-store"
     return job

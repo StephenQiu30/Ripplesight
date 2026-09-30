@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { LoaderCircleIcon, PlayIcon } from "lucide-react";
 
@@ -121,7 +120,6 @@ export function TopicRunActions({
   sourceNames,
   disabled = false,
 }: Props) {
-  const router = useRouter();
   const [selected, setSelected] = useState<string[]>(topic.source_keys);
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<HotKeyAPI.MonitorTopicRunView | null>(
@@ -152,10 +150,6 @@ export function TopicRunActions({
     try {
       setResult(await controller.current.run(topic.id, selected));
     } catch (cause) {
-      if (cause instanceof ApiRequestError && cause.status === 401) {
-        router.replace("/login");
-        return;
-      }
       if (cause instanceof ApiRequestError) {
         setError(
           cause.code === "topic_not_ready"
