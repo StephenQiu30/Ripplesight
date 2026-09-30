@@ -4,7 +4,7 @@
 
 ## 1. 定位与仓库边界
 
-HotKey 当前以**可信的信息获取**为核心：按主题持续取得可追溯的帖子、评论与六个公开热榜，显示来源 × 能力 × 时间窗的覆盖和缺口，并由本机 Codex 判断相关性。最终交付目标是整个核心链路的 POC，当前先收尾 M1；范围以 PRD001 §1 为准。日报、周报、Obsidian、知识库检索/问答与推送是非核心后续能力，不进入当前 POC 排期或完成条件；飞书推送暂缓。使用性质为个人/非商业研究。本仓库同时维护 Python 后端与 Web 前端；同级 `hotkey-app`（Flutter）暂停。
+HotKey 当前以**可信的信息获取**为核心：按主题持续取得可追溯的帖子、评论与六个公开热榜，显示来源 × 能力 × 时间窗的覆盖和缺口，并由本机 Codex 判断相关性。最终交付目标是整个核心链路的 POC；先按 Plan058 在一个主题、HN 搜索和一榜上完成最小演示，再扩为四关键词来源和六榜的 M1 短窗 Demo；范围以 PRD001 §1 为准。日报、周报、Obsidian、知识库检索/问答与推送是非核心后续能力，不进入当前 POC 排期或完成条件；飞书推送暂缓。使用性质为个人/非商业研究。本仓库同时维护 Python 后端与 Web 前端；同级 `hotkey-app`（Flutter）暂停。
 
 ```text
 HotKey/
@@ -29,7 +29,7 @@ HotKey/
 
 | 阶段 | 内容 |
 |---|---|
-| M1 | 当前核心 POC 收尾：四关键词来源、HN 评论、六榜、分析与阅读/覆盖/恢复闭环；产品阶段再做同窗连续 72 小时 |
+| M1 | 一个主题、HN 与一榜先完成同库最小演示，再扩为四关键词来源、HN 评论、六榜、分析与阅读/覆盖/恢复闭环；产品阶段再做同窗连续 72 小时 |
 | M2 | 本人账号 B 站 MediaCrawler 试点，真实低频采集、风控停止/人工恢复；72 小时后置 |
 | M3 | 跨平台事件归并、热度与人工修订 |
 | M4 | 分别验收分析质量、日报/周报、Obsidian 导出与问答 |
@@ -212,7 +212,7 @@ FastAPI 路由装饰器、类型注解和 Pydantic 模型是唯一可编辑的 A
 
 按 [Plan 索引](docs/plan/README.md) 的单 Issue 推进：计划评审先固定文件/接口/数据/调度/测试与验收合同 → 核对技术依赖和代码漂移 → 失败测试 → 实现 → 回归 → 阶段验收记录。核心契约未定不得列为实施就绪；真实账号/费用/渠道条件仅阻塞对应步骤。架构或数据库变化同步所属Design/Epic、总Design001与本文。
 
-现行逐Issue计划001—057的持久化/任务细则见Design001 §4、子Design及Plan索引：到期窗口与采集周期归jobs，事件事实归events，报告设置唯一读取/写入`monitor_topics.report_time`、`report_timezone`、`weekly_report_enabled`，冻结和导出归reports，不新增`report_schedules`；原始导出归content，告警/投递审计归notifications，账号归monitors，检索投影/回答归knowledge。055—057仅承接共享底座回归/冻结，均不代表产品验收；不创建额外共享层、服务或存储桶。新增router按目标路径独立注册，现有 `/api/v1/reports` 由Plan018统一到 `/api/reports` 并同步生成客户端。新任务硬截止见Design001，真实依赖和保留库恢复仍按既有门槛验证。
+现行逐Issue计划001—058的持久化/任务细则见Design001 §4、子Design及Plan索引：到期窗口与采集周期归jobs，事件事实归events，报告设置唯一读取/写入`monitor_topics.report_time`、`report_timezone`、`weekly_report_enabled`，冻结和导出归reports，不新增`report_schedules`；原始导出归content，告警/投递审计归notifications，账号归monitors，检索投影/回答归knowledge。055—057仅承接共享底座回归/冻结，均不代表产品验收；不创建额外共享层、服务或存储桶。新增router按目标路径独立注册，现有 `/api/v1/reports` 由Plan018统一到 `/api/reports` 并同步生成客户端。新任务硬截止见Design001，真实依赖和保留库恢复仍按既有门槛验证。
 
 Plan 031 的 `backend/app/monitors/runs.py` 专管主题手动采集的 owner 校验、幂等重放、来源逐项受理及 Job/Outbox 事务；`monitors/services.py` 保留主题和调度投影，`worker/scheduler.py` 负责到期领取与事实入账。前端主题页专属入口位于 `frontend/src/app/monitors/[topicId]/components/topic-run-actions.tsx`，只使用生成的 API 客户端。
 
