@@ -388,6 +388,7 @@ export function TopicForm() {
                     matchAny={matchAny}
                     matchAll={matchAll}
                     exclude={exclude}
+                    sourceKeys={sourceKeys}
                     disabled={isSubmitting}
                   />
                 </div>

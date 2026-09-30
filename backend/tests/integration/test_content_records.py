@@ -16,6 +16,7 @@ from analysis.prompts import ANALYSIS_PROMPT_VERSION
 from connections.schemas import SourceEntryPoint
 from connections.services import SourceConnectionService
 from content.schemas import (
+    ContentSamplePreviewInput,
     ContentVisibilityBasis,
     ContentVisibilityStatus,
     PersistContentPostInput,
@@ -1751,3 +1752,145 @@ def test_comment_read_pages_keep_missing_root_and_parent_gap(
             cursor=None,
             limit=20,
         )
+
+
+def test_persisted_rule_preview_is_bounded_local_and_owner_scoped(
+    content_client: TestClient,
+) -> None:
+    owner = _initialize(content_client)
+    connection, policy, retention, first_job, second_job = _seed_context(content_client, owner)
+    factory = content_client.app.state.session_factory
+    now = datetime.now(UTC) - timedelta(minutes=2)
+    with factory() as session:
+        service = ContentService(session)
+        for index in range(25):
+            title = ["AI 发布", "daily update", "AI 招聘", "无关标题"][index % 4]
+            recorder = (
+                ContentService(session, clock=lambda: now + timedelta(days=2))
+                if index == 24
+                else service
+            )
+            saved = recorder.persist_post(
+                owner_id=owner,
+                command=_command(
+                    owner_id=owner,
+                    connection_id=connection,
+                    policy_id=policy,
+                    retention_id=retention,
+                    job_id=first_job,
+                    operation_id=uuid4(),
+                    external_id=f"preview-{index}",
+                    observed_at=(
+                        now + timedelta(days=1)
+                        if index == 24
+                        else now + timedelta(seconds=2)
+                        if index == 23
+                        else now - timedelta(days=8)
+                        if index == 22
+                        else now - timedelta(seconds=index)
+                    ),
+                    extra_fields={
+                        "title": title,
+                        "body": "AI Agent " + "x" * 1500 if index % 4 == 3 else None,
+                        "text_scope": "full",
+                        "text_origin": "source",
+                    },
+                ),
+            )
+            if index == 23:
+                LifecycleService(session).request_deletion(
+                    owner_id=owner,
+                    operation_id=uuid4(),
+                    resource_type="content_observation",
+                    resource_id=saved.latest_observation.id,
+                    reason=DeletionReason.USER_REQUEST,
+                )
+        latest = service.persist_post(
+            owner_id=owner,
+            command=_command(
+                owner_id=owner,
+                connection_id=connection,
+                policy_id=policy,
+                retention_id=retention,
+                job_id=second_job,
+                operation_id=uuid4(),
+                external_id="preview-0",
+                observed_at=now + timedelta(seconds=1),
+                extra_fields={
+                    "title": "AI 新版本",
+                    "body": None,
+                    "text_scope": "full",
+                    "text_origin": "source",
+                },
+            ),
+        )
+    tables = ["jobs", "outbox_messages", "ai_calls", "monitor_topics", "resource_budget_windows"]
+    with factory() as session:
+        before = {
+            t: session.execute(text(f"SELECT count(*) FROM {t}")).scalar_one() for t in tables
+        }
+    payload = {
+        "match_any": [" AI ", "ai"],
+        "match_all": [],
+        "exclude": ["招聘"],
+        "source_keys": ["x"],
+    }
+    headers = {"X-HotKey-CSRF": content_client.cookies["hotkey_csrf"]}
+    response = content_client.post("/api/topics/sample-preview", json=payload, headers=headers)
+    assert response.status_code == 200
+    result = response.json()
+    assert response.headers["cache-control"] == "no-store"
+    assert result["rule_basis"] == "draft" and result["rules"]["match_any"] == ["AI"]
+    assert result["sample_status"] == "available" and result["truncated"]
+    assert len(result["samples"]) == result["sample_limit"] == 20
+    assert result["samples"][0]["content_version_id"] == str(
+        latest.latest_observation.content_version.id
+    )
+    assert result["samples"][0]["title"] == "AI 新版本"
+    assert all(not s["matched"] for s in result["samples"] if s["title"] == "daily update")
+    assert all(
+        s["excluded_by"] == ["招聘"] and not s["matched"]
+        for s in result["samples"]
+        if s["title"] == "AI 招聘"
+    )
+    assert all(
+        s["matched"] and s["excerpt_truncated"] and len(s["body_excerpt"]) == 1200
+        for s in result["samples"]
+        if s["title"] == "无关标题"
+    )
+    assert all(s["source_key"] == "x" for s in result["samples"])
+    with factory() as session:
+        assert before == {
+            t: session.execute(text(f"SELECT count(*) FROM {t}")).scalar_one() for t in tables
+        }
+    empty = content_client.post(
+        "/api/topics/sample-preview",
+        json={**payload, "source_keys": ["hackernews"]},
+        headers=headers,
+    )
+    assert empty.json()["sample_status"] == "insufficient_samples" and not empty.json()["samples"]
+    assert content_client.post("/api/topics/sample-preview", json=payload).status_code == 403
+    assert (
+        content_client.post(
+            "/api/topics/sample-preview",
+            json={**payload, "owner_id": str(uuid4())},
+            headers=headers,
+        ).status_code
+        == 422
+    )
+    command = ContentSamplePreviewInput.model_validate(payload)
+    with factory() as session:
+        foreign = ContentService(session).preview_rule_samples(owner_id=uuid4(), command=command)
+        assert foreign.sample_status == "insufficient_samples" and not foreign.samples
+        aged = ContentService(
+            session, clock=lambda: datetime.now(UTC) + timedelta(days=8)
+        ).preview_rule_samples(owner_id=owner, command=command)
+        assert aged.sample_status == "insufficient_samples" and not aged.samples
+    with factory() as session, session.begin():
+        session.execute(
+            text("UPDATE evidence_resources SET expires_at=collected_at + interval '1 second'")
+        )
+    empty = content_client.post("/api/topics/sample-preview", json=payload, headers=headers)
+    assert empty.json()["sample_status"] == "insufficient_samples" and not empty.json()["samples"]
+    content_client.cookies.clear()
+    assert content_client.post("/api/topics/sample-preview", json=payload).status_code == 401

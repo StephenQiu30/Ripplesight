@@ -380,6 +380,70 @@ declare namespace HotKeyAPI {
 
   type ContentRelationType = "quote" | "repost";
 
+  type ContentRuleSampleView = {
+    /** Content Id */
+    content_id: string;
+    /** Observation Id */
+    observation_id: string;
+    /** Content Version Id */
+    content_version_id: string;
+    /** Source Key */
+    source_key: string;
+    /** Title */
+    title: string | null;
+    /** Body Excerpt */
+    body_excerpt: string | null;
+    /** Excerpt Truncated */
+    excerpt_truncated: boolean;
+    /** Published At */
+    published_at: string | null;
+    /** Observed At */
+    observed_at: string;
+    /** Matched */
+    matched: boolean;
+    /** Matched Any */
+    matched_any: string[];
+    /** Matched All */
+    matched_all: string[];
+    /** Excluded By */
+    excluded_by: string[];
+  };
+
+  type ContentSamplePreviewInput = {
+    /** Match Any */
+    match_any: KeywordInput[];
+    /** Match All */
+    match_all: KeywordInput[];
+    /** Exclude */
+    exclude: KeywordInput[];
+    /** Source Keys */
+    source_keys?: SourceKeyInput[];
+  };
+
+  type ContentSamplePreviewView = {
+    rules: MonitorRuleSetView;
+    /** Rule Basis */
+    rule_basis: string;
+    /** Source Keys */
+    source_keys: string[];
+    /** Starts At */
+    starts_at: string;
+    /** Ends At */
+    ends_at: string;
+    /** Sample Limit */
+    sample_limit: number;
+    /** Sample Status */
+    sample_status: "available" | "insufficient_samples";
+    /** Truncated */
+    truncated: boolean;
+    /** Samples */
+    samples: ContentRuleSampleView[];
+    /** External Requests */
+    external_requests: number;
+    /** Model Requests */
+    model_requests: number;
+  };
+
   type ContentTextOrigin = "source" | "machine_extracted";
 
   type ContentTextScope = "full" | "summary" | "truncated" | "media_only";

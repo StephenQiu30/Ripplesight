@@ -571,6 +571,7 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
                   matchAny={matchAny}
                   matchAll={matchAll}
                   exclude={exclude}
+                  sourceKeys={sourceKeys}
                   disabled={isBusy}
                 />
               </div>

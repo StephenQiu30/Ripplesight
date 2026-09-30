@@ -1,10 +1,14 @@
 "use client";
 
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LoaderCircleIcon, SearchCheckIcon } from "lucide-react";
 
-import { previewMonitorTopic } from "@/api/jiankongzhuti";
+import {
+  previewMonitorTopic,
+  previewMonitorTopicSamples,
+} from "@/api/jiankongzhuti";
 import { parseKeywordLines } from "@/components/monitors/keyword-group-field";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +29,7 @@ type TopicRulePreviewProps = {
   matchAny: string;
   matchAll: string;
   exclude: string;
+  sourceKeys?: string[];
   disabled?: boolean;
 };
 
@@ -34,16 +39,91 @@ type PreviewState =
   | { status: "ready"; preview: HotKeyAPI.MonitorTopicPreviewView }
   | { status: "error"; message: string; requestId?: string };
 
-export function TopicRulePreview({
+type SampleState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; preview: HotKeyAPI.ContentSamplePreviewView }
+  | { status: "error"; message: string; requestId?: string };
+
+export function TopicRulePreview(props: TopicRulePreviewProps) {
+  return (
+    <TopicRulePreviewDialog
+      key={JSON.stringify([
+        props.matchAny,
+        props.matchAll,
+        props.exclude,
+        props.sourceKeys,
+      ])}
+      {...props}
+    />
+  );
+}
+
+function TopicRulePreviewDialog({
   matchAny,
   matchAll,
   exclude,
+  sourceKeys = [],
   disabled = false,
 }: TopicRulePreviewProps) {
   const router = useRouter();
   const [sampleTitle, setSampleTitle] = useState("");
   const [state, setState] = useState<PreviewState>({ status: "idle" });
+  const [sampleState, setSampleState] = useState<SampleState>({
+    status: "idle",
+  });
   const submittingRef = useRef(false);
+  const sampleSubmittingRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  async function handleSamplePreview() {
+    if (sampleSubmittingRef.current) return;
+    if (
+      parseKeywordLines(matchAny).length === 0 &&
+      parseKeywordLines(matchAll).length === 0
+    ) {
+      setSampleState({ status: "error", message: "至少填写一个包含关键词。" });
+      return;
+    }
+    sampleSubmittingRef.current = true;
+    setSampleState({ status: "loading" });
+    try {
+      const preview = await previewMonitorTopicSamples({
+        match_any: parseKeywordLines(matchAny),
+        match_all: parseKeywordLines(matchAll),
+        exclude: parseKeywordLines(exclude),
+        source_keys: sourceKeys,
+      });
+      if (mountedRef.current) setSampleState({ status: "ready", preview });
+    } catch (error) {
+      if (!mountedRef.current) return;
+      if (
+        error instanceof ApiRequestError &&
+        error.code === "invalid_session"
+      ) {
+        router.replace("/login");
+        return;
+      }
+      setSampleState({
+        status: "error",
+        message:
+          error instanceof ApiRequestError
+            ? error.message
+            : "样本预览失败，请重试。",
+        requestId:
+          error instanceof ApiRequestError ? error.requestId : undefined,
+      });
+    } finally {
+      sampleSubmittingRef.current = false;
+    }
+  }
 
   async function handlePreview(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -68,8 +148,11 @@ export function TopicRulePreview({
         exclude: parseKeywordLines(exclude),
         sample_titles: [sampleTitle],
       });
-      setState({ status: "ready", preview });
+      if (mountedRef.current) {
+        setState({ status: "ready", preview });
+      }
     } catch (error) {
+      if (!mountedRef.current) return;
       if (
         error instanceof ApiRequestError &&
         error.code === "invalid_session"
@@ -108,15 +191,126 @@ export function TopicRulePreview({
         </Button>
       </DialogTrigger>
       <DialogContent
-        className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto"
+        className="max-h-dvh max-w-lg overflow-y-auto"
         showCloseButton={false}
       >
         <DialogHeader>
           <DialogTitle>本地规则预览</DialogTitle>
           <DialogDescription>
-            输入一条标题检查组合逻辑。预览不会保存主题、创建任务或访问外部来源。
+            检查草稿关键词，或查看已有内容的匹配情况。预览不会保存主题、创建任务或访问外部来源。
           </DialogDescription>
         </DialogHeader>
+
+        <div className="space-y-3">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleSamplePreview}
+            disabled={disabled || sampleState.status === "loading"}
+          >
+            {sampleState.status === "loading" ? (
+              <LoaderCircleIcon className="animate-spin" aria-hidden="true" />
+            ) : (
+              <SearchCheckIcon aria-hidden="true" />
+            )}
+            {sampleState.status === "loading"
+              ? "正在读取样本"
+              : "预览已采集内容"}
+          </Button>
+          <p className="text-muted-foreground text-xs leading-5">
+            读取所选来源最近 7 天的最多 20
+            条可读内容；未选择来源时读取全部已有来源。包含未命中与排除样本，只说明本地草稿匹配。
+          </p>
+          {sampleState.status === "error" ? (
+            <div
+              role="alert"
+              className="bg-destructive/10 rounded-lg p-3 text-sm"
+            >
+              <p>{sampleState.message}</p>
+              {sampleState.requestId ? (
+                <p className="mt-1 text-xs">
+                  请求编号：{sampleState.requestId}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          {sampleState.status === "ready" ? (
+            <div className="space-y-3" aria-live="polite">
+              <p className="text-muted-foreground text-xs leading-5">
+                {new Date(sampleState.preview.starts_at).toLocaleString(
+                  "zh-CN",
+                  { timeZone: "Asia/Shanghai" },
+                )}{" "}
+                至{" "}
+                {new Date(sampleState.preview.ends_at).toLocaleString("zh-CN", {
+                  timeZone: "Asia/Shanghai",
+                })}
+                （上海时间） · {sampleState.preview.samples.length} 条样本
+                {sampleState.preview.truncated ? "，仅展示最新 20 条" : ""} ·
+                未保存的草稿规则
+              </p>
+              <p className="text-muted-foreground text-xs">
+                规范化规则：任一{" "}
+                {sampleState.preview.rules.match_any.join("、") || "不限制"}
+                ；全部{" "}
+                {sampleState.preview.rules.match_all.join("、") || "不限制"}
+                ；排除 {sampleState.preview.rules.exclude.join("、") || "无"}
+              </p>
+              {sampleState.preview.sample_status === "insufficient_samples" ? (
+                <p role="status" className="bg-muted rounded-lg p-3 text-sm">
+                  预览证据不足：此时间窗与来源下没有可读样本。不能据此判断源站无结果或规则无效。
+                </p>
+              ) : (
+                sampleState.preview.samples.map((item) => (
+                  <article
+                    key={item.observation_id}
+                    className="bg-muted space-y-2 rounded-xl p-4 text-sm"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={item.matched ? "secondary" : "outline"}>
+                        {item.excluded_by.length
+                          ? "已排除"
+                          : item.matched
+                            ? "命中"
+                            : "未命中"}
+                      </Badge>
+                      <span className="text-muted-foreground text-xs">
+                        {item.source_key} · 观察于{" "}
+                        {new Date(item.observed_at).toLocaleString("zh-CN", {
+                          timeZone: "Asia/Shanghai",
+                        })}
+                      </span>
+                    </div>
+                    <Link
+                      href={`/content/${item.content_id}`}
+                      className="font-medium break-words underline underline-offset-4"
+                    >
+                      {item.title || "查看正文样本"}
+                    </Link>
+                    {item.body_excerpt ? (
+                      <p className="text-muted-foreground break-words whitespace-pre-wrap">
+                        {item.body_excerpt}
+                      </p>
+                    ) : null}
+                    {item.excerpt_truncated ? (
+                      <p className="text-muted-foreground text-xs">
+                        摘录已截断；匹配依据为完整已保存文字。
+                      </p>
+                    ) : null}
+                    <p className="text-xs leading-5">
+                      任一命中：{item.matched_any.join("、") || "无"}
+                      ；全部命中：{item.matched_all.join("、") || "无"}
+                      ；排除命中：{item.excluded_by.join("、") || "无"}
+                    </p>
+                    <p className="text-muted-foreground text-xs break-all">
+                      内容版本：{item.content_version_id}
+                    </p>
+                  </article>
+                ))
+              )}
+            </div>
+          ) : null}
+        </div>
 
         <form className="space-y-4" onSubmit={handlePreview}>
           <div className="space-y-2">
@@ -127,7 +321,7 @@ export function TopicRulePreview({
               onChange={(event) => setSampleTitle(event.target.value)}
               maxLength={500}
               required
-              placeholder="例如：品牌召回招聘公告"
+              placeholder="例如：AI Agent 开源模型发布"
             />
           </div>
           <Button type="submit" disabled={state.status === "loading"}>
