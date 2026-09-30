@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import ClassVar
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -27,9 +29,15 @@ from sources.contracts import (
 )
 
 _MAX_PAGES = 5
-_BASE_URL = "http://127.0.0.1:8888"
-_SEARCH_URL = f"{_BASE_URL}/search"
+SEARXNG_HOSTS = frozenset({"127.0.0.1", "host.docker.internal"})
 _ENGINE = "duckduckgo news"
+
+
+def configured_searxng_host() -> str:
+    host = os.environ.get("HOTKEY_SEARXNG_HOST", "127.0.0.1")
+    if host not in SEARXNG_HOSTS:
+        raise ValueError("HOTKEY_SEARXNG_HOST must be a fixed local SearXNG host")
+    return host
 
 
 def _published_at(value: object) -> datetime | None:
@@ -101,15 +109,17 @@ class WebSearchAdapter(HttpSourceAdapter):
             max_seconds=max_seconds,
             transport=transport,
         )
-        if "127.0.0.1" not in self._allowed_hosts:
+        if urlsplit(base_url).hostname not in self._allowed_hosts:
             raise ValueError("base_url host must be allowlisted")
-        if base_url not in {_BASE_URL, f"{_BASE_URL}/"} or self._allowed_hosts != frozenset(
-            {"127.0.0.1"}
+        endpoint = base_url.removesuffix("/")
+        if not any(
+            endpoint == f"http://{host}:8888" and self._allowed_hosts == frozenset({host})
+            for host in SEARXNG_HOSTS
         ):
             raise ValueError("SearXNG requires the fixed local search endpoint")
         if engines != _ENGINE:
             raise ValueError("SearXNG requires the duckduckgo news engine")
-        self._search_url = _SEARCH_URL
+        self._search_url = f"{endpoint}/search"
         self._engines = engines
         self._page_fingerprints: set[tuple[str, ...]] = set()
 

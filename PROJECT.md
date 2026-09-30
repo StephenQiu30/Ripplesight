@@ -1,6 +1,6 @@
 # HotKey Server 项目与技术选型
 
-更新日期：2026-09-30。本文固定仓库边界、技术栈、后端目录、API 契约和运行约束。产品需求见 [PRD 001 v5.1](docs/prd/001-热点舆情监控平台需求.md) 和各里程碑 PRD，市场与竞品依据见 [Research048](docs/research/048-AI方向热点事件市场与竞品调研.md)，Epic 设计见 [Design 001 v4.0](docs/design/001-热点舆情监控平台总体设计.md) 及 Design 002—007，逐 Issue 执行计划见 [Plan 索引](docs/plan/README.md)。调研新增需求的设计/计划合同待补，不自动改变既有架构与执行范围。
+更新日期：2026-09-30。本文固定仓库边界、技术栈、后端目录、API 契约和运行约束。产品需求见 [PRD 001 v5.1](docs/prd/001-热点舆情监控平台需求.md) 和各里程碑 PRD，市场与竞品依据见 [Research048](docs/research/048-AI方向热点事件市场与竞品调研.md)，Epic 设计见 [Design 001 v4.1](docs/design/001-热点舆情监控平台总体设计.md) 及 Design 002—007，逐 Issue 执行计划见 [Plan 索引](docs/plan/README.md)。调研新增需求的设计/计划合同待补，不自动改变既有架构与执行范围。
 
 ## 1. 定位与仓库边界
 
@@ -83,7 +83,7 @@ Web 设计固定为组件优先的无边框系统：App Router 页面只组合�
 | Redis | 缓存、限流和可重建临时状态；关键权限、预算与任务状态仍有数据库依据 |
 | Kafka | 任务事件与异步消息传输，由 Python Worker 消费 |
 | MinIO | 复用既有对象存储，保存有权限与保留期约束的文件及证据 |
-| Docker Compose | 根 `docker-compose.yml` 编排 HotKey 应用；RSSHub、SearXNG 由同级 `Docker` 服务集合编排；Compose Worker 通过固定 `host.docker.internal:1200` 读取宿主机 RSSHub，宿主机 Worker 使用 `127.0.0.1:1200`；Firecrawl、MediaCrawler 各有本地入口 |
+| Docker Compose | 根 `docker-compose.yml` 编排 HotKey 应用；RSSHub、SearXNG 由同级 `Docker` 服务集合编排；Compose Worker 通过 `host.docker.internal` 访问宿主机 RSSHub 固定 1200 端口与 SearXNG 固定 8888 端口，宿主机 Worker 使用 `127.0.0.1`；`HOTKEY_RSSHUB_HOST/HOTKEY_SEARXNG_HOST` 仅选这两个主机并冻结到来源连接版本，路由和引擎保持固定；Firecrawl、MediaCrawler 各有本地入口 |
 | Ruff + mypy + pytest | 格式/静态检查、类型、单元/集成/架构验证 |
 | uv | 依赖、虚拟环境与 `uv.lock`，按锁文件安装 |
 | HTTPX + Tenacity | HTTP 客户端与有界重试 |

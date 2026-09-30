@@ -16,9 +16,10 @@ from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import sessionmaker
 
 from connections.presets import NEWS_SEARCH_PRESET
+from connections.schemas import SourceConnectionConfig
 from connections.services import SourcePresetService
 from content.discovery import plan_single_keyword_discovery
-from content.discovery_execution import KeywordDiscoveryExecutor
+from content.discovery_execution import KeywordDiscoveryExecutor, build_search_adapter_factory
 from content.models import ContentDiscovery, ContentObservation, ContentRecord, ContentVersion
 from content.schemas import KeywordDiscoveryRunInput
 from jobs.execution import JobCompletion
@@ -71,7 +72,10 @@ def _result(url: str, title: str, published_at: datetime | None) -> dict[str, st
     return result
 
 
-def test_news_search_kafka_replay_preserves_normalized_identity_and_partial_coverage() -> None:
+@pytest.mark.parametrize("host", ["127.0.0.1", "host.docker.internal"])
+def test_news_search_kafka_replay_preserves_normalized_identity_and_partial_coverage(
+    host: str,
+) -> None:
     database_url = os.getenv("HOTKEY_TEST_DATABASE_URL")
     bootstrap_servers = os.getenv("HOTKEY_TEST_KAFKA_BOOTSTRAP_SERVERS")
     if database_url is None or bootstrap_servers is None:
@@ -88,11 +92,16 @@ def test_news_search_kafka_replay_preserves_normalized_identity_and_partial_cove
     producer = Producer({"bootstrap.servers": bootstrap_servers})
     consumers: list[Consumer] = []
     requested: list[str] = []
+    preset = replace(
+        NEWS_SEARCH_PRESET,
+        config=dict(NEWS_SEARCH_PRESET.config)
+        | {"base_url": f"http://{host}:8888", "allowed_hosts": (host,)},
+    )
 
     def respond(request: httpx.Request) -> httpx.Response:
         requested.append(str(request.url))
         assert request.url.scheme == "http"
-        assert request.url.host == "127.0.0.1"
+        assert request.url.host == host
         assert request.url.port == 8888
         assert request.url.path == "/search"
         assert dict(request.url.params) == {
@@ -189,7 +198,7 @@ def test_news_search_kafka_replay_preserves_normalized_identity_and_partial_cove
                 {"id": topic_id, "owner_id": owner_id, "now": end},
             )
             applied = SourcePresetService(session, clock=lambda: end).apply_in_transaction(
-                owner_id=owner_id, preset=NEWS_SEARCH_PRESET
+                owner_id=owner_id, preset=preset
             )
             ResourceBudgetService(session, clock=lambda: end).save_budget_policy_in_transaction(
                 owner_id=owner_id,
@@ -220,21 +229,21 @@ def test_news_search_kafka_replay_preserves_normalized_identity_and_partial_cove
             )
 
         admin.create_topics([NewTopic(kafka_topic, 1, 1)])[kafka_topic].result(10)
+        factory = build_search_adapter_factory(
+            "news_search", SourceConnectionConfig.model_validate(dict(preset.config))
+        )
+
+        def adapter_factory(before, cancelled, max_requests, max_seconds):
+            adapter = factory(before, cancelled, max_requests, max_seconds)
+            assert isinstance(adapter, WebSearchAdapter)
+            adapter._transport = httpx.MockTransport(respond)
+            return adapter
+
         executor = KeywordDiscoveryExecutor(
             sessions,
             lease_seconds=60,
             component_key="collector.news_search",
-            adapter_factory=lambda before, cancelled, max_requests, max_seconds: WebSearchAdapter(
-                source_key="news_search",
-                base_url="http://127.0.0.1:8888",
-                engines="duckduckgo news",
-                allowed_hosts=frozenset({"127.0.0.1"}),
-                before_request=before,
-                cancelled=cancelled,
-                max_requests=max_requests,
-                max_seconds=max_seconds,
-                transport=httpx.MockTransport(respond),
-            ),
+            adapter_factory=adapter_factory,
         )
 
         def search(context: JobExecutionContext) -> JobCompletion:

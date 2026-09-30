@@ -16,6 +16,8 @@ uv run --locked python -m cli
 
 API、Worker 和 CLI 分别启动。应用启动不会创建或修改数据库结构。
 
+宿主机 Worker 的 `HOTKEY_RSSHUB_HOST/HOTKEY_SEARXNG_HOST` 默认 `127.0.0.1`；根 Compose 默认 `host.docker.internal`。两项仅允许这两个固定主机，RSSHub/SearXNG 端口分别固定 1200/8888；SearXNG 引擎固定 `duckduckgo news`。应用来源预设时将主机与白名单写入连接版本，修改环境后需显式重新应用预设，不会改写已有版本。
+
 浏览器登录状态维护仅适用于数据库中已存在的 `browser_state` 连接；目前尚无真实平台连接创建入口。操作者在本机设置 `HOTKEY_BROWSER_STATE_DIR` 为已存在、权限 0700 的绝对目录，捕获文件必须位于 0700 目录、权限 0600，且不得是符号链接。CLI 不接收 Cookie 正文参数，不打印捕获内容或路径：
 
 ```bash

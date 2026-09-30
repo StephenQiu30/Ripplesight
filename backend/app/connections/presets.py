@@ -10,6 +10,7 @@ from sources.adapters.mediacrawler import ADAPTER_VERSION, PATCHED_REVISION, UPS
 from sources.adapters.rss import GOOGLE_NEWS_FEED_URL_TEMPLATE
 from sources.adapters.rsshub_endpoint import configured_rsshub_host
 from sources.adapters.rsshub_hotlist import HOTLIST_ROUTES
+from sources.adapters.web_search import configured_searxng_host
 from sources.contracts import SourceCapability
 
 
@@ -350,13 +351,14 @@ GOOGLE_NEWS_PRESET = SourcePreset(
 )
 
 
+_SEARXNG_HOST = configured_searxng_host()
 NEWS_SEARCH_PRESET = SourcePreset(
     source_key="news_search",
     config=MappingProxyType(
         {
-            "base_url": "http://127.0.0.1:8888",
+            "base_url": f"http://{_SEARXNG_HOST}:8888",
             "engines": ("duckduckgo news",),
-            "allowed_hosts": ("127.0.0.1",),
+            "allowed_hosts": (_SEARXNG_HOST,),
         }
     ),
     capabilities=(
