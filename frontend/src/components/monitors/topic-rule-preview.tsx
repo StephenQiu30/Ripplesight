@@ -412,10 +412,7 @@ function TopicRulePreviewDialog({
               </p>
               <p className="text-muted-foreground mt-1 leading-6">
                 上游扩词：
-                {state.preview.expansion.upstream_status ===
-                "pending_source_selection"
-                  ? "来源尚未选择"
-                  : "状态未知"}
+                {sourceKeys.length === 0 ? "来源尚未选择" : "尚未核实"}
                 ，查询次数
                 {state.preview.expansion.upstream_external_queries ?? "未知"}
                 ，预算
