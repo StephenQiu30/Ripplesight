@@ -69,6 +69,7 @@ from sources.contracts import (
     SourcePage,
     SourcePageState,
     SourceSort,
+    SourceStopReason,
 )
 
 _COMMENTS_STAGE = "comments.request"
@@ -561,6 +562,11 @@ class CommentTreeLimiter:
         self._rejected_roots: set[str] = set()
         self._root_by_comment: dict[str, str] = {}
         self._reply_counts: dict[str, int] = {}
+        self._truncated = False
+
+    @property
+    def truncated(self) -> bool:
+        return self._truncated
 
     def admit(self, items: Iterable[SourceComment]) -> tuple[tuple[SourceComment, ...], int]:
         admitted: list[SourceComment] = []
@@ -579,6 +585,7 @@ class CommentTreeLimiter:
                     and len(self._accepted_roots) >= self._first_level_limit
                 ):
                     self._rejected_roots.add(root_id)
+                    self._truncated = True
                     filtered += 1
                     continue
                 self._accepted_roots.add(root_id)
@@ -605,10 +612,12 @@ class CommentTreeLimiter:
                 else:
                     self._accepted_roots.add(resolved_root_id)
             if resolved_root_id in self._rejected_roots:
+                self._truncated = True
                 filtered += 1
                 continue
             count = self._reply_counts.get(resolved_root_id, 0)
             if count >= self._replies_per_thread_limit:
+                self._truncated = True
                 filtered += 1
                 continue
             self._reply_counts[resolved_root_id] = count + 1
@@ -771,18 +780,17 @@ class CommentPageCommitService:
                 )
             )
             assert saved_items is not None
-            terminal_evidence = (
-                CoverageTerminalEvidence(
-                    starts_at=window.starts_at,
-                    ends_at=window.ends_at,
-                    sort_key=window.sort_key,
-                    query_bounded=True,
-                    sort_applied=True,
-                    terminal_verified=True,
-                )
-                if page.state in {SourcePageState.COMPLETE, SourcePageState.EMPTY}
-                else None
-            )
+            page_state = page.state
+            stop_reason = page.stop_reason
+            terminal_evidence = None
+            if page_state in {SourcePageState.COMPLETE, SourcePageState.EMPTY}:
+                if self._limiter.truncated:
+                    page_state = SourcePageState.PARTIAL
+                    stop_reason = SourceStopReason.BUDGET_EXHAUSTED
+                elif page.terminal_evidence is not None:
+                    terminal_evidence = CoverageTerminalEvidence.model_validate(
+                        page.terminal_evidence.model_dump()
+                    )
             renewed, coverage, progress = CoverageWindowService(
                 self._session,
                 execution=execution,
@@ -791,9 +799,9 @@ class CommentPageCommitService:
                 lease=lease,
                 window=window,
                 request=request,
-                page_state=page.state,
+                page_state=page_state,
                 next_token=page.next_page_token,
-                stop_reason=page.stop_reason,
+                stop_reason=stop_reason,
                 evidence=terminal_evidence,
                 job_progress=JobProgress(stage=JobStage.SAVE, items_saved=saved_items),
                 observed_items=len(page.items),

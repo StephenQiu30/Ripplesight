@@ -29,7 +29,14 @@ from jobs.schemas import (
 )
 from jobs.services import ResourceBudgetService
 from sources.adapters.hackernews import HackerNewsAdapter
-from sources.contracts import SourceCapability
+from sources.contracts import (
+    CommentsRequest,
+    SourceCapability,
+    SourcePage,
+    SourcePageState,
+    SourceSort,
+    SourceTerminalEvidence,
+)
 
 
 def _seed_old_hn_post(client: TestClient) -> UUID:
@@ -296,6 +303,8 @@ def _execute_manual_comments(
     now: datetime,
     comment_children: list[dict[str, object]],
     offset: int,
+    expected_status: JobStatus = JobStatus.PARTIALLY_SUCCEEDED,
+    terminal_proof: str = "missing",
 ) -> tuple[str, ...]:
     factory = client.app.state.session_factory
     with factory() as session:
@@ -314,6 +323,8 @@ def _execute_manual_comments(
             source_key=job.source_key,
             source_capability=SourceCapability.COMMENTS,
         )
+        starts_at = datetime.fromisoformat(job.scope["starts_at"])
+        ends_at = datetime.fromisoformat(job.scope["ends_at"])
     with factory() as session:
         lease = JobExecutionService(session, lease_seconds=75, clock=lambda: now).acquire(
             job_id=job_id, worker_id="comments-integration"
@@ -325,11 +336,33 @@ def _execute_manual_comments(
         assert request.url.path == "/api/v1/items/123456"
         return httpx.Response(200, json={"id": 123456, "children": comment_children})
 
+    class TailEvidenceAdapter(HackerNewsAdapter):
+        def _comments(self, request: CommentsRequest) -> SourcePage:
+            page = super()._comments(request)
+            if terminal_proof == "missing" or page.state is SourcePageState.MORE:
+                return page
+            return page.model_copy(
+                update={
+                    "terminal_evidence": SourceTerminalEvidence(
+                        starts_at=(
+                            starts_at - timedelta(seconds=1)
+                            if terminal_proof == "mismatched"
+                            else starts_at
+                        ),
+                        ends_at=ends_at,
+                        sort_key=SourceSort.TOP,
+                        query_bounded=terminal_proof != "unbounded",
+                        sort_applied=True,
+                        terminal_verified=True,
+                    )
+                }
+            )
+
     executor = CommentsExecutor(
         factory,
         lease_seconds=75,
         clock=lambda: now,
-        adapter_factory=lambda before, cancelled, max_requests, max_seconds: HackerNewsAdapter(
+        adapter_factory=lambda before, cancelled, max_requests, max_seconds: TailEvidenceAdapter(
             before_request=before,
             cancelled=cancelled,
             max_requests=max_requests,
@@ -338,7 +371,7 @@ def _execute_manual_comments(
         ),
     )
     renewed, completion = executor.execute(message, lease)
-    assert completion.status is JobStatus.SUCCEEDED
+    assert completion.status is expected_status
     with factory() as session:
         JobExecutionService(session, lease_seconds=75, clock=lambda: now).complete(
             renewed,
@@ -351,6 +384,78 @@ def _execute_manual_comments(
             completion=completion,
         )
     return tuple(requested)
+
+
+@pytest.mark.parametrize(
+    ("sample", "terminal_proof", "expected_reason"),
+    [
+        ("empty", "missing", "unverified_terminal"),
+        ("root", "missing", "unverified_terminal"),
+        ("root", "unbounded", "unverified_terminal"),
+        ("root", "mismatched", "unverified_terminal"),
+        ("roots_over_limit", "matching", "budget_exhausted"),
+        ("replies_over_limit", "matching", "budget_exhausted"),
+        ("earlier_page_over_limit", "matching", "budget_exhausted"),
+        ("duplicate", "matching", None),
+        ("root", "matching", None),
+    ],
+)
+def test_comment_coverage_requires_source_proof_and_an_untruncated_sample(
+    request: pytest.FixtureRequest,
+    sample: str,
+    terminal_proof: str,
+    expected_reason: str | None,
+) -> None:
+    client: TestClient = request.getfixturevalue("_topic_client")
+    content_id = _seed_old_hn_post(client)
+    accepted = client.post(
+        f"/api/contents/{content_id}/comment-runs",
+        headers=_csrf_headers(client),
+        json={"operation_id": str(uuid4())},
+    )
+    assert accepted.status_code == 202, accepted.json()
+    job_id = UUID(accepted.json()["job_id"])
+    root: dict[str, object] = {
+        "type": "comment",
+        "id": 987001,
+        "author": "hn-reader",
+        "text": "<p>root</p>",
+        "created_at_i": int(datetime.now(UTC).timestamp()),
+        "children": [],
+    }
+    children = [] if sample == "empty" else [root]
+    if sample in {"roots_over_limit", "earlier_page_over_limit"}:
+        children.extend([{**root, "id": 987002}, {**root, "id": 987003}])
+    elif sample == "replies_over_limit":
+        root["children"] = [{**root, "id": 987002}, {**root, "id": 987003}]
+    elif sample == "duplicate":
+        children.append(root)
+    with client.app.state.session_factory.begin() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        job.scope = {
+            **job.scope,
+            "first_level_limit": 1,
+            "replies_per_thread_limit": 1,
+            "page_size": 1 if sample == "earlier_page_over_limit" else 100,
+        }
+    requested = _execute_manual_comments(
+        client,
+        job_id=job_id,
+        now=datetime.now(UTC) + timedelta(seconds=1),
+        comment_children=children,
+        offset=0,
+        expected_status=JobStatus.PARTIALLY_SUCCEEDED if expected_reason else JobStatus.SUCCEEDED,
+        terminal_proof=terminal_proof,
+    )
+    assert len(requested) == 1
+    with client.app.state.session_factory() as session:
+        coverage = session.execute(
+            text("SELECT status, stop_reason FROM coverage_windows WHERE last_job_id = :job_id"),
+            {"job_id": job_id},
+        ).one()
+        assert coverage.status == ("partial" if expected_reason else "confirmed")
+        assert coverage.stop_reason == expected_reason
 
 
 def test_old_hn_root_is_revisited_and_new_reply_keeps_direct_parent(

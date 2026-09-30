@@ -157,6 +157,21 @@ def test_tree_limiter_preserves_parent_chain_and_counts_duplicate_as_filtered() 
 
     assert admitted == (root, child, grandchild)
     assert filtered == 1
+    assert limiter.truncated is False
+
+
+def test_tree_limiter_retains_limit_truncation_across_pages() -> None:
+    limiter = CommentTreeLimiter(first_level_limit=1, replies_per_thread_limit=1)
+    limiter.admit((_comment("root"), _comment("reply", parent="root")))
+    assert limiter.truncated is False
+
+    admitted, filtered = limiter.admit((_comment("extra-reply", parent="root"),))
+    assert admitted == ()
+    assert filtered == 1
+    assert limiter.truncated is True
+
+    limiter.admit((_comment("root"),))
+    assert limiter.truncated is True
 
 
 def test_tree_limiter_treats_a_missing_parent_as_a_bounded_placeholder_root() -> None:
