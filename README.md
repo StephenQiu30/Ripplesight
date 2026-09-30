@@ -33,7 +33,7 @@ Worker 是按需 profile，可在底座启动后运行：
 docker compose --profile worker up --detach worker
 ```
 
-这套 Compose 启动步骤只验证本地底座。周期调度与实际采集还需要按来源配置外部服务、准入与预算，并完成对应的真实验收；现有 Compose 没有独立调度服务。不要对已有业务数据库直接执行 `backend/database/schema.sql`，它仅用于**全新空库**。停止服务请用 `docker compose down`；不要随意添加 `--volumes`，这会删除本地数据卷。更详细的开发与运行说明见 [后端 README](backend/README.md) 和 [Web README](frontend/README.md)。
+这套 Compose 启动步骤只验证本地底座。RSSHub 由宿主机独立运行；Compose Worker 通过 `HOTKEY_RSSHUB_HOST=host.docker.internal` 访问其固定 1200 端口，宿主机 Worker 使用 `127.0.0.1`。应用预设只接受这两个主机与固定路由。周期调度与实际采集还需要按来源配置外部服务、准入与预算，并完成对应的真实验收；现有 Compose 没有独立调度服务。不要对已有业务数据库直接执行 `backend/database/schema.sql`，它仅用于**全新空库**。停止服务请用 `docker compose down`；不要随意添加 `--volumes`，这会删除本地数据卷。更详细的开发与运行说明见 [后端 README](backend/README.md) 和 [Web README](frontend/README.md)。
 
 ## 技术与文档
 

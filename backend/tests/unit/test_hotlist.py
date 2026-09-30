@@ -10,6 +10,7 @@ from core.config import Settings
 from main import create_app
 from monitors.services import ActiveHotlistTopic, normalize_monitor_rules
 from reports.services import ReportService
+from sources.adapters.rsshub_endpoint import configured_rsshub_host, is_fixed_rsshub_endpoint
 from sources.adapters.rsshub_hotlist import HOTLIST_ROUTES, RsshubHotlistAdapter
 from sources.contracts import HotlistEntry, SourceCapability, SourcePageState, SourceStopReason
 from worker.scheduler import hotlist_operation_id
@@ -64,6 +65,7 @@ def test_rsshub_hotlist_retains_first_100_feed_positions(count: int) -> None:
         ("hotlist_weibo", "http://127.0.0.1:1200/baidu/top"),
         ("hotlist_weibo", "http://127.0.0.1:1200/weibo/search/hot?mode=other"),
         ("hotlist_other", "http://127.0.0.1:1200/weibo/search/hot"),
+        ("hotlist_other", "http://127.0.0.1:1200"),
     ],
 )
 def test_rsshub_hotlist_requires_source_fixed_route(source_key: str, feed_url: str) -> None:
@@ -86,6 +88,45 @@ def test_rsshub_hotlist_accepts_each_fixed_route(source_key: str, route: str) ->
         transport=httpx.MockTransport(lambda _: httpx.Response(200, content=FEED)),
     )
     assert adapter.fetch_hotlist().state is SourcePageState.COMPLETE
+
+
+def test_rsshub_hotlist_accepts_fixed_docker_host_route() -> None:
+    adapter = RsshubHotlistAdapter(
+        source_key="hotlist_36kr",
+        feed_url="http://host.docker.internal:1200/36kr/hot-list",
+        allowed_hosts=frozenset({"host.docker.internal"}),
+        before_request=lambda _: True,
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, content=FEED)),
+    )
+    assert adapter.fetch_hotlist().state is SourcePageState.COMPLETE
+
+
+@pytest.mark.parametrize("host", ["rsshub.example.com", "localhost", "host.docker.internal:8080"])
+def test_rsshub_host_setting_rejects_other_targets(
+    monkeypatch: pytest.MonkeyPatch, host: str
+) -> None:
+    monkeypatch.setenv("HOTKEY_RSSHUB_HOST", host)
+    with pytest.raises(ValueError, match="fixed local RSSHub host"):
+        configured_rsshub_host()
+
+
+def test_rsshub_docker_endpoint_requires_matching_host_and_fixed_port() -> None:
+    allowed_hosts = frozenset({"host.docker.internal"})
+    assert is_fixed_rsshub_endpoint(
+        "http://host.docker.internal:1200/36kr/hot-list",
+        route="/36kr/hot-list",
+        allowed_hosts=allowed_hosts,
+    )
+    assert not is_fixed_rsshub_endpoint(
+        "http://host.docker.internal:8080/36kr/hot-list",
+        route="/36kr/hot-list",
+        allowed_hosts=allowed_hosts,
+    )
+    assert not is_fixed_rsshub_endpoint(
+        "http://127.0.0.1:1200/36kr/hot-list",
+        route="/36kr/hot-list",
+        allowed_hosts=allowed_hosts,
+    )
 
 
 def test_rsshub_hotlist_rejects_private_result_link() -> None:

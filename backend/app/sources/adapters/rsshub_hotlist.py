@@ -6,7 +6,6 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from types import MappingProxyType
 from typing import Any, ClassVar
-from urllib.parse import urlsplit
 
 import feedparser
 import httpx
@@ -18,6 +17,7 @@ from sources.adapters.http_source import (
     html_to_text,
     parse_timestamp,
 )
+from sources.adapters.rsshub_endpoint import RSSHUB_HOSTS, is_fixed_rsshub_endpoint
 from sources.adapters.web_targets import normalize_public_article_url
 from sources.contracts import (
     HotlistEntry,
@@ -56,18 +56,12 @@ class RsshubHotlistAdapter(HttpSourceAdapter):
         max_seconds: float = 35,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
-        if allowed_hosts != frozenset({"127.0.0.1"}):
-            raise ValueError("RSSHub hotlist may access only 127.0.0.1")
-        parsed = urlsplit(feed_url)
-        if (
-            parsed.scheme != "http"
-            or parsed.hostname != "127.0.0.1"
-            or parsed.port != 1200
-            or parsed.username is not None
-            or parsed.password is not None
-            or parsed.path != HOTLIST_ROUTES.get(source_key)
-            or parsed.query
-            or parsed.fragment
+        if allowed_hosts not in {frozenset({host}) for host in RSSHUB_HOSTS}:
+            raise ValueError("RSSHub hotlist may access only a fixed local host")
+        if source_key not in HOTLIST_ROUTES or not is_fixed_rsshub_endpoint(
+            feed_url,
+            route=HOTLIST_ROUTES[source_key],
+            allowed_hosts=allowed_hosts,
         ):
             raise ValueError("RSSHub hotlist requires its fixed route on the local endpoint")
         super().__init__(
@@ -80,6 +74,9 @@ class RsshubHotlistAdapter(HttpSourceAdapter):
             transport=transport,
         )
         self._feed_url = feed_url
+
+    def _follow_redirects(self) -> bool:
+        return False
 
     def fetch_hotlist(self) -> HotlistPage:
         if not self._lock.acquire(blocking=False):

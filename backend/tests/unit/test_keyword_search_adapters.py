@@ -437,6 +437,13 @@ def test_36kr_factory_requires_newsflashes_on_local_rsshub() -> None:
     )
     assert isinstance(adapter, RssSourceAdapter)
     assert adapter._template == "http://127.0.0.1:1200/36kr/newsflashes"
+    docker_adapter = _factory(
+        "rss_36kr",
+        feed_url_template="http://host.docker.internal:1200/36kr/newsflashes",
+        allowed_hosts=("host.docker.internal",),
+    )
+    assert docker_adapter._template == "http://host.docker.internal:1200/36kr/newsflashes"
+    assert not docker_adapter._follow_redirects()
 
     with pytest.raises(ValueError, match="newsflashes"):
         _factory(
