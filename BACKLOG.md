@@ -1,10 +1,12 @@
 # HotKey BACKLOG
 
-更新日期：2026-09-30。**Plan059 已有内容预览完成；Plan058 同主题短窗尚未通过，72小时与真实 Codex 未验收**。逐卡证据见 [Acceptance002](docs/acceptance/002-信息获取主链路验收.md)/[001](docs/acceptance/001-共享运行门槛验收.md)；任务与需求覆盖见 [Plan001—059索引](docs/plan/README.md)，产品边界见 [PRD001](docs/prd/001-热点舆情监控平台需求.md)/[Design001](docs/design/001-热点舆情监控平台总体设计.md)。旧 Plan/TASK 从 Git 追溯。
+更新日期：2026-10-01。**Plan059 已有内容预览完成；Plan058 同主题短窗尚未通过，72小时与真实 Codex 未验收**。逐卡证据见 [Acceptance002](docs/acceptance/002-信息获取主链路验收.md)/[001](docs/acceptance/001-共享运行门槛验收.md)；任务与需求覆盖见 [Plan001—059索引](docs/plan/README.md)，产品边界见 [PRD001](docs/prd/001-热点舆情监控平台需求.md)/[Design001](docs/design/001-热点舆情监控平台总体设计.md)。旧 Plan/TASK 从 Git 追溯。
 
 执行方：Codex 实现、受控集成与代码自检；Claude 可参与规划/代码审查；用户负责本人账号、授权与产品决策。用户已要求每个任务结束后提交并推送 main。代码、受控、真实、产品为不同证据等级。
 
 核心 POC 范围以 PRD001 §1 为准：[Plan058](docs/plan/058-M1短窗POC演示与扩围执行计划.md) 先一个主题+HN+一榜 A，再扩四来源六榜 B，各阶段分别留证。日报/周报、知识库/Obsidian、报告导出与推送后置，不阻塞核心；009/013真实72小时、正式指标与质量后验。真实 Codex 暂停，受控模型不关闭产品AC。
+
+Plan058 运行准备见 EV-002-056：依根 Compose 叠加本机回环端口，恢复单宿主机 Worker，并实际停止/重启（59015→61107）；原 Kafka 分组 offset 28、lag 0，库 OID16384、内容及预算计数不变，容器 Worker/调度仍停用。百度热榜显式应用宿主机预设为连接 v2，只改固定主机，保留 v1；准入、执行策略及预算不变。全局仍20/20，下个合法窗口为10月1日08:00上海时间；同主题短窗、失败人工重试与来源 v2 的真实读取仍待完成，A未通过、B未开始。
 
 Plan 037 见 Acceptance 002 EV-002-008/014/015：36Kr 快讯固定入口、身份与时间字段、真实双轮原帖、PostgreSQL/Kafka 重放和预算已核对；单来源 `completed`，72 小时父级未通过。
 
