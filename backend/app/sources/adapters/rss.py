@@ -16,6 +16,7 @@ from sources.adapters.http_source import (
     html_to_text,
     parse_timestamp,
 )
+from sources.adapters.rsshub_endpoint import is_fixed_rsshub_endpoint
 from sources.adapters.web_targets import normalize_web_url
 from sources.contracts import (
     SocialSourceCapability,
@@ -101,9 +102,10 @@ class RssSourceAdapter(HttpSourceAdapter):
         )
         if parsed.hostname not in self._allowed_hosts:
             raise ValueError("feed_url_template host must be allowlisted")
-        if source_key == "rss_36kr" and (
-            feed_url_template != "http://127.0.0.1:1200/36kr/newsflashes"
-            or allowed_hosts != frozenset({"127.0.0.1"})
+        if source_key == "rss_36kr" and not is_fixed_rsshub_endpoint(
+            feed_url_template,
+            route="/36kr/newsflashes",
+            allowed_hosts=allowed_hosts,
         ):
             raise ValueError("rss_36kr requires the local RSSHub newsflashes endpoint")
         if source_key == "google_news" and (
@@ -114,7 +116,7 @@ class RssSourceAdapter(HttpSourceAdapter):
         self._template = feed_url_template
 
     def _follow_redirects(self) -> bool:
-        return self.source_key != "google_news"
+        return self.source_key not in {"google_news", "rss_36kr"}
 
     def _fetch(self, request: SourceRequest) -> SourcePage:
         if request.capability is not SourceCapability.SEARCH or request.page_token is not None:

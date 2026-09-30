@@ -41,6 +41,7 @@ from sources.adapters.mediacrawler import (
     validate_job_version_evidence,
 )
 from sources.adapters.rss import GOOGLE_NEWS_FEED_URL_TEMPLATE, RssSourceAdapter
+from sources.adapters.rsshub_endpoint import is_fixed_rsshub_endpoint
 from sources.adapters.web_search import WebSearchAdapter
 from sources.contracts import (
     SearchRequest,
@@ -102,9 +103,10 @@ def build_search_adapter_factory(
         if config.feed_url_template is None:
             raise ValueError("RSS adapter requires feed_url_template")
         feed_url_template = config.feed_url_template
-        if source_key == "rss_36kr" and (
-            feed_url_template != "http://127.0.0.1:1200/36kr/newsflashes"
-            or allowed_hosts != frozenset({"127.0.0.1"})
+        if source_key == "rss_36kr" and not is_fixed_rsshub_endpoint(
+            feed_url_template,
+            route="/36kr/newsflashes",
+            allowed_hosts=allowed_hosts,
         ):
             raise ValueError("rss_36kr requires the local RSSHub newsflashes endpoint")
         if source_key == "google_news" and (

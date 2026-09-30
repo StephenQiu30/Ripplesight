@@ -8,6 +8,7 @@ from types import MappingProxyType
 from connections.schemas import SourceExecutionPolicy, SourceQuietWindow
 from sources.adapters.mediacrawler import ADAPTER_VERSION, PATCHED_REVISION, UPSTREAM_BASELINE
 from sources.adapters.rss import GOOGLE_NEWS_FEED_URL_TEMPLATE
+from sources.adapters.rsshub_endpoint import configured_rsshub_host
 from sources.adapters.rsshub_hotlist import HOTLIST_ROUTES
 from sources.contracts import SourceCapability
 
@@ -160,11 +161,14 @@ _HOTLIST_FIELD_PURPOSES = MappingProxyType(
 )
 
 
+_RSSHUB_HOST = configured_rsshub_host()
+
+
 def _hotlist_preset(source_key: str, route: str) -> SourcePreset:
     return SourcePreset(
         source_key=source_key,
         config=MappingProxyType(
-            {"feed_url": f"http://127.0.0.1:1200{route}", "allowed_hosts": ("127.0.0.1",)}
+            {"feed_url": f"http://{_RSSHUB_HOST}:1200{route}", "allowed_hosts": (_RSSHUB_HOST,)}
         ),
         capabilities=(
             SourceCapabilityPreset(
@@ -387,8 +391,8 @@ RSS_36KR_PRESET = SourcePreset(
     config=MappingProxyType(
         {
             # 36kr.com/feed now answers with an HTML challenge page; read it via local RSSHub.
-            "feed_url_template": "http://127.0.0.1:1200/36kr/newsflashes",
-            "allowed_hosts": ("127.0.0.1",),
+            "feed_url_template": f"http://{_RSSHUB_HOST}:1200/36kr/newsflashes",
+            "allowed_hosts": (_RSSHUB_HOST,),
         }
     ),
     capabilities=(
