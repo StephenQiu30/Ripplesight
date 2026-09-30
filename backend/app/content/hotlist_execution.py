@@ -122,10 +122,14 @@ class HotlistExecutor:
                     connection_version=connection_version,
                 )
             route = HOTLIST_ROUTES.get(source_key)
-            if route is None or config.feed_url is None or not is_fixed_rsshub_endpoint(
-                config.feed_url,
-                route=route,
-                allowed_hosts=frozenset(config.allowed_hosts),
+            if (
+                route is None
+                or config.feed_url is None
+                or not is_fixed_rsshub_endpoint(
+                    config.feed_url,
+                    route=route,
+                    allowed_hosts=frozenset(config.allowed_hosts),
+                )
             ):
                 raise ValueError("hotlist connection has no local RSSHub feed")
         except (ValueError, TypeError, ApplicationError) as error:

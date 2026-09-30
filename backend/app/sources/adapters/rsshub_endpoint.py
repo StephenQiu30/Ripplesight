@@ -12,9 +12,7 @@ def configured_rsshub_host() -> str:
     return host
 
 
-def is_fixed_rsshub_endpoint(
-    url: str, *, route: str, allowed_hosts: frozenset[str]
-) -> bool:
+def is_fixed_rsshub_endpoint(url: str, *, route: str, allowed_hosts: frozenset[str]) -> bool:
     return any(
         allowed_hosts == frozenset({host}) and url == f"http://{host}:1200{route}"
         for host in RSSHUB_HOSTS
