@@ -3,7 +3,7 @@ layer: Plan
 scope: issue
 doc_no: "036"
 title: SearXNG新闻搜索执行计划
-status: in_progress
+status: completed
 version: v1.1
 date: 2026-09-30
 owner: HotKey Team
@@ -29,7 +29,7 @@ depends_on: ["031", "033"]
 - [x] CHK-036-001 → API-001：扩展 `backend/tests/unit/test_keyword_search_adapters.py`，覆盖引擎失败与合法空、非 JSON、慢响应、重复页、没有 publishedDate。
 - [x] CHK-036-002 → DATA-001/JOB-001：新增隔离的 `backend/tests/integration/test_news_search_replay.py`，验证 URL 身份、窗过滤、部分页入库、预算停止、重放和请求页数对账。
 - [x] CHK-036-003 → AC-002-002/004：真实本机引擎产生可打开原帖，记录实际引擎与 JSON 结果、Job/内容版本/窗口；第二次扫描不重复身份。外部引擎不可用时来源保持失败并显示原因。
-- [ ] CHK-036-004 → OPS-001/API-001：分别从两种主机的预设构造真实适配器，受控 JSON 请求验证 `/search`、引擎和计量；未准入主机、端口/路径/query/凭据变体或不一致白名单被拒绝。真实 PostgreSQL/Kafka 重放继续核对身份、预算与部分覆盖。
+- [x] CHK-036-004 → OPS-001/API-001：分别从两种主机的预设构造真实适配器，受控 JSON 请求验证 `/search`、引擎和计量；未准入主机、端口/路径/query/凭据变体或不一致白名单被拒绝。真实 PostgreSQL/Kafka 重放继续核对身份、预算与部分覆盖。证据见 EV-002-054。
 
 2026-09-30 容器入口修复范围：隔离 Compose Worker 对 `127.0.0.1:8888` TCP 连接失败、对 `host.docker.internal:8888` 成功；旧适配器和预设均固定容器自身回环地址。先保存三项失败回归，再按上述固定入口合同修复。此为 Plan058 扩围的运行准备，不发真实搜索请求、不提高已耗尽的每日预算；A 同主题短窗未通过前不开始 B。
 
@@ -46,3 +46,5 @@ depends_on: ["031", "033"]
 - [x] CHK-036-G6-001：登记AC-002-002/004的本来源结果；持续窗由009。
 
 2026-09-27 技术、受控重放与两轮真实本机引擎证据见 Acceptance 002 EV-002-019。真实 MSN 抽样原帖可打开，前后两轮分别入库 7 条而稳定身份总数仍 7，实际引擎在 Job 检查点，尾段均为 `partial/unverified_terminal`。代码提交 `95c17f94` 的远端 backend/contract/runtime 均成功，backend **884 passed、8 skipped**，固定 `hotkey_test` 用例由远端覆盖，G4 通过。本卡按单来源边界 `completed`；父级四来源和连续 72 小时仍由 009 汇合。
+
+2026-09-30 容器入口修复见 Acceptance 002 EV-002-054：两主机受控请求和真实 PostgreSQL/Kafka 重放 **2 passed**，来源/预设/Feed 单测 **113 passed**。提交 `278ee8b440caedbff3a51930ebb18201e6113365` 的远端 backend **1089 passed、8 skipped、2 warnings**，contract/runtime 均成功；CHK-036-004 与修复发布门禁通过，本卡恢复 `completed`。本轮没有真实搜索请求，Plan058 A 同主题短窗及 B 扩围仍待验收。
