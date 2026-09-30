@@ -14,6 +14,7 @@ from connections.schemas import SourceEntryPoint
 from core.schemas import InputModel, OutputModel
 from evidence.schemas import AdmittedSourcePayload, DataClass
 from jobs.schemas import CollectionScanKind
+from monitors.schemas import MonitorRuleSetInput, MonitorRuleSetView, SourceKeyInput
 from sources.contracts import CommentsRequest, SearchRequest, SourceCapability
 
 
@@ -519,3 +520,37 @@ class AnalysisCommentContentView(OutputModel):
     comment_content_id: UUID
     comment_version_id: UUID
     text: str
+
+
+class ContentSamplePreviewInput(MonitorRuleSetInput):
+    source_keys: list[SourceKeyInput] = Field(default_factory=list, max_length=32)
+
+
+class ContentRuleSampleView(OutputModel):
+    content_id: UUID
+    observation_id: UUID
+    content_version_id: UUID
+    source_key: str
+    title: str | None
+    body_excerpt: str | None
+    excerpt_truncated: bool
+    published_at: datetime | None
+    observed_at: datetime
+    matched: bool
+    matched_any: list[str]
+    matched_all: list[str]
+    excluded_by: list[str]
+
+
+class ContentSamplePreviewView(OutputModel):
+    rules: MonitorRuleSetView
+    rule_basis: Literal["draft"]
+    source_keys: list[str]
+    starts_at: datetime
+    ends_at: datetime
+    sample_limit: Literal[20]
+    sample_status: Literal["available", "insufficient_samples"]
+    truncated: bool
+    samples: list[ContentRuleSampleView]
+    external_requests: Literal[0]
+    model_requests: Literal[0]

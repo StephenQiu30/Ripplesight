@@ -156,3 +156,21 @@ export async function previewMonitorTopic(
     ...(options || {}),
   });
 }
+
+/** 用已有内容预览草稿关键词 只读取当前 owner 最近七天可读的内容样本; 不保存主题、不创建任务或请求来源/模型。 POST /api/topics/sample-preview */
+export async function previewMonitorTopicSamples(
+  body: HotKeyAPI.ContentSamplePreviewInput,
+  options?: import("@/request").RequestOptions,
+) {
+  return request<HotKeyAPI.ContentSamplePreviewView>(
+    "/api/topics/sample-preview",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      data: body,
+      ...(options || {}),
+    },
+  );
+}

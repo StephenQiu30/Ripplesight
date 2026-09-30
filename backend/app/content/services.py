@@ -61,6 +61,9 @@ from content.schemas import (
     ContentRecordDetailView,
     ContentRecordSummaryView,
     ContentRelationType,
+    ContentRuleSampleView,
+    ContentSamplePreviewInput,
+    ContentSamplePreviewView,
     ContentTextOrigin,
     ContentTextScope,
     ContentTruncationReason,
@@ -90,11 +93,13 @@ from jobs.services import (
     load_content_job_contexts,
     load_recent_comment_job_targets_in_transaction,
 )
+from monitors.schemas import MonitorRuleSetView
 from monitors.services import (
     ActiveTopicScan,
     MonitorScheduleService,
     evaluate_monitor_rules,
     load_content_topic_contexts_in_transaction,
+    normalize_monitor_rules,
 )
 from sources.adapters.web_targets import normalize_web_url
 from sources.contracts import SourceCapability
@@ -418,6 +423,121 @@ class ContentService:
     def __init__(self, session: Session, *, clock: Clock | None = None) -> None:
         self._session = session
         self._clock = clock or (lambda: datetime.now(UTC))
+
+    def preview_rule_samples(
+        self, *, owner_id: UUID, command: ContentSamplePreviewInput
+    ) -> ContentSamplePreviewView:
+        rules = normalize_monitor_rules(
+            match_any=command.match_any, match_all=command.match_all, exclude=command.exclude
+        )
+        now = self._clock()
+        starts_at = now - timedelta(days=7)
+        source_keys = list(dict.fromkeys(command.source_keys))
+        self._session.rollback()
+        with self._session.begin():
+            statement = (
+                select(
+                    ContentRecord.id.label("content_id"),
+                    ContentRecord.source_key,
+                    ContentObservation.id.label("observation_id"),
+                    ContentVersion.id.label("content_version_id"),
+                    ContentObservation.published_at,
+                    ContentObservation.observed_at,
+                    ContentObservation.received_at,
+                    ContentVersion.title,
+                    ContentVersion.body,
+                    func.row_number()
+                    .over(
+                        partition_by=ContentRecord.id,
+                        order_by=(
+                            ContentObservation.observed_at.desc(),
+                            ContentObservation.received_at.desc(),
+                            ContentObservation.id.desc(),
+                        ),
+                    )
+                    .label("position"),
+                )
+                .join(
+                    ContentObservation,
+                    and_(
+                        ContentObservation.owner_id == ContentRecord.owner_id,
+                        ContentObservation.content_id == ContentRecord.id,
+                    ),
+                )
+                .join(
+                    ContentVersion,
+                    and_(
+                        ContentVersion.owner_id == ContentObservation.owner_id,
+                        ContentVersion.content_id == ContentObservation.content_id,
+                        ContentVersion.id == ContentObservation.content_version_id,
+                    ),
+                )
+                .where(
+                    ContentRecord.owner_id == owner_id,
+                    ContentRecord.object_type.in_(("post", "webpage")),
+                    ContentObservation.observed_at >= starts_at,
+                    ContentObservation.observed_at < now,
+                    ContentObservation.received_at <= now,
+                    ContentObservation.id.in_(
+                        readable_resource_ids_query(
+                            owner_id=owner_id, resource_type=_RESOURCE_TYPE, now=now
+                        )
+                    ),
+                    or_(ContentVersion.title.is_not(None), ContentVersion.body.is_not(None)),
+                )
+            )
+            if source_keys:
+                statement = statement.where(ContentRecord.source_key.in_(source_keys))
+            candidates = statement.subquery()
+            rows = self._session.execute(
+                select(candidates)
+                .where(candidates.c.position == 1)
+                .order_by(
+                    candidates.c.observed_at.desc(),
+                    candidates.c.received_at.desc(),
+                    candidates.c.observation_id.desc(),
+                )
+                .limit(21)
+            ).all()
+            samples = []
+            for row in rows[:20]:
+                result = evaluate_monitor_rules(
+                    rules, "\n".join(part for part in (row.title, row.body) if part)
+                )
+                samples.append(
+                    ContentRuleSampleView(
+                        content_id=row.content_id,
+                        observation_id=row.observation_id,
+                        content_version_id=row.content_version_id,
+                        source_key=row.source_key,
+                        title=row.title[:300] if row.title else None,
+                        body_excerpt=row.body[:1200] if row.body else None,
+                        excerpt_truncated=len(row.title or "") > 300 or len(row.body or "") > 1200,
+                        published_at=row.published_at,
+                        observed_at=row.observed_at,
+                        matched=result.matched,
+                        matched_any=list(result.matched_any),
+                        matched_all=list(result.matched_all),
+                        excluded_by=list(result.excluded_by),
+                    )
+                )
+            return ContentSamplePreviewView(
+                rules=MonitorRuleSetView(
+                    match_any=list(rules.match_any),
+                    match_all=list(rules.match_all),
+                    exclude=list(rules.exclude),
+                ),
+                rule_basis="draft",
+                source_keys=source_keys,
+                starts_at=starts_at,
+                ends_at=now,
+                sample_limit=20,
+                sample_status="available" if samples else "insufficient_samples",
+                truncated=len(rows) > 20,
+                samples=samples,
+                external_requests=0,
+                model_requests=0,
+            )
 
     def readable_post_for_comment_run_in_transaction(
         self, *, owner_id: UUID, content_id: UUID, now: datetime

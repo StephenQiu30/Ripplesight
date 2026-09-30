@@ -1,6 +1,6 @@
 # HotKey 文档索引
 
-更新日期：2026-09-30。目标是关注 AI 等方向、发现事件、观察升温与阅读讨论；当前先收尾可追溯的信息获取、来源覆盖与本机 Codex 相关性。Research048 已承接到当前 PRD，新增设计/Plan 合同待补；日报、周报、Obsidian 和推送分别后验，飞书暂缓。现行文档见下表；旧专项文件已删除，历史原文可从 Git 历史（提交 `88c4854c` 及更早）查看。
+更新日期：2026-09-30。目标是关注 AI 等方向、发现事件、观察升温与阅读讨论；当前先收尾可追溯的信息获取、来源覆盖与本机 Codex 相关性。Research048 已承接到当前 PRD，已有内容样本预览由 Design002/Plan059 实现，其余新增合同待补；日报、周报、Obsidian 和推送分别后验，飞书暂缓。现行文档见下表；旧专项文件已删除，历史原文可从 Git 历史（提交 `88c4854c` 及更早）查看。
 
 ## 1. 现行文档与阶段路径
 
@@ -15,13 +15,13 @@
 | [PRD 006 M5 推送](prd/006-推送需求.md) | 目标/投递页面、状态、SMTP与飞书；Plan024—026、044 | approved v1.0 |
 | [PRD 007 M6 扩展能力](prd/007-扩展能力需求.md) | 导出/告警/账号、来源许可与逐能力证据；Plan027—030、045—050、053—054（准入不等于实现） | approved v1.1；新增合同待补 |
 | [Design 001 热点舆情监控平台总设计](design/001-热点舆情监控平台总体设计.md) | 架构、跨里程碑约束、共享决策与风险；共享维护Plan051、055—057 | accepted v4.0 |
-| [Design 002 M1 信息获取主链路](design/002-信息获取主链路设计.md) | 到期/预算/计量、接口、分析与验收合同 | accepted v1.3；待实施细则 |
+| [Design 002 M1 信息获取主链路](design/002-信息获取主链路设计.md) | 到期/预算/计量、接口、分析与验收合同 | accepted v1.4；059预览完成，其余待细则 |
 | [Design 003 M2 本人账号B站试点](design/003-本人账号B站试点设计.md) | 三类版本、同轮缓存、停用/恢复 | accepted v1.1；待实施细则 |
 | [Design 004 M3 事件与热度](design/004-事件与热度设计.md) | 表/事务/接口、公式、并发与事件页面 | accepted v1.3；Plan014 受控技术切片，M3 未验收 |
 | [Design 005 M4 报告与知识库](design/005-报告与知识库设计.md) | 两阶段冻结、笔记冲突保护、检索与回答 | accepted v1.2；待实施细则 |
 | [Design 006 M5 推送](design/006-推送设计.md) | 收件身份、unknown审计、目标页面与SMTP | accepted v1.1；待实施细则 |
 | [Design 007 M6 扩展能力](design/007-扩展能力设计.md) | 告警/账号/导出合同与逐来源准入 | accepted v1.1；待实施细则 |
-| [执行 Plan 索引 001—058](plan/README.md) | 逐Issue清单、技术依赖、AC矩阵和实施顺序 | 058 A/B 待演示；逐卡状态见 BACKLOG |
+| [执行 Plan 索引 001—059](plan/README.md) | 逐Issue清单、技术依赖、AC矩阵和实施顺序 | 059 只读预览完成；058 A/B 待演示；逐卡状态见 BACKLOG |
 | [Acceptance 001 共享运行门槛](acceptance/001-共享运行门槛验收.md) | Plan051 同库/Schema 恢复与回退证据 | failed；TECH-001-051 限本次库通过，其他共享门槛与产品 AC 待验 |
 | [Acceptance 002 M1 信息获取主链路](acceptance/002-信息获取主链路验收.md) | M1 逐卡技术与真实证据、尚未通过的产品条件 | failed；父级 AC 待 Plan009 汇合 |
 | [Acceptance 003 M2 本人账号 B 站试点](acceptance/003-本人账号B站试点验收.md) | Plan010/011 受控证据与后续 M2 缺口 | failed；真实来源恢复与连续窗口未验 |
@@ -33,7 +33,7 @@
 
 阅读顺序：总 Design 001 → 对应 M1—M6 Design/Epic 002—007 → PRD 001—007 → [Plan 索引](plan/README.md) → 对应单 Issue Plan。需求/设计编号与执行 Plan 编号独立；旧计划原文从 Git 历史查阅。
 
-本次产品定位与需求更新可先读 Research048 → PRD001 §1/§7.2/§9 → 对应子 PRD 的新 FR/AC → [新增合同待补责任](plan/README.md#调研新增需求的实施合同边界)。表内 accepted Design 是既有实施基线，未自动覆盖 Research048 新增条文；approved 需求不代表实施就绪或验收通过。Plan058 A/B 与已有 Acceptance 结论保持。
+本次产品定位与需求更新可先读 Research048 → PRD001 §1/§7.2/§9 → 对应子 PRD 的新 FR/AC → [新增合同待补责任](plan/README.md#调研新增需求的实施合同边界)。Design002 v1.4 仅新增 Plan059 样本预览合同，其他 accepted Design 未自动覆盖 Research048 新增条文；approved 需求不代表实施就绪或验收通过。Plan058 A/B 与已有 Acceptance 结论保持。
 
 ## 2. 历史编号
 
@@ -110,6 +110,6 @@ Plan 048—053 在阶段 3 与同主题 Design/PRD 对齐，原 `Sxx-Txx`、验�
 
 ## 4. 编号与阶段迁移
 
-- 除索引 `README.md` 外，正式文档使用 `NNN-中文主题.md` 文件名与现行同类文档的 YAML 元数据、章节结构。Design/Epic与PRD为001—007，执行Plan独立编号001—058，后续取059。Research 独立续编号，历史最高047，本轮新增048，后续取049；Research048与Plan048、历史PRD048不是同一文档。Plan001是主题规则Issue；旧里程碑Plan和本轮修改前的30卡从Git追溯。002/007/030按收窄后的职责更名，责任迁移详见Plan索引；既有BR/FR/NFR/AC编号及产品含义不变，研究新增编号单独追踪。
+- 除索引 `README.md` 外，正式文档使用 `NNN-中文主题.md` 文件名与现行同类文档的 YAML 元数据、章节结构。Design/Epic与PRD为001—007，执行Plan独立编号001—059，后续取060。Research 独立续编号，历史最高047，本轮新增048，后续取049；Research048与Plan048、历史PRD048不是同一文档。Plan001是主题规则Issue；旧里程碑Plan和本轮修改前的30卡从Git追溯。002/007/030按收窄后的职责更名，责任迁移详见Plan索引；既有BR/FR/NFR/AC编号及产品含义不变，研究新增编号单独追踪。
 - PRD 048—053 在阶段 2、Plan 048—053 在阶段 3 分别与同主题 002—007 对齐；后续新里程碑或独立专项依本台账续编号。
 - 里程碑验收记录放 `acceptance/`，按源 PRD/Design 的 002—007 编号命名，不按单 Issue Plan 编号；未形成记录的产品 AC 保持待验收。

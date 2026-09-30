@@ -7,10 +7,12 @@ from fastapi import APIRouter, Query, Response, status
 
 from api.dependencies import (
     AuthenticatedIdentityDependency,
+    ContentServiceDependency,
     CsrfProtectedIdentityDependency,
     MonitorTopicRunServiceDependency,
     MonitorTopicServiceDependency,
 )
+from content.schemas import ContentSamplePreviewInput, ContentSamplePreviewView
 from core.schemas import ErrorView, PageView
 from monitors.schemas import (
     MonitorTopicCreateInput,
@@ -110,6 +112,27 @@ def preview_monitor_topic(
     preview = service.preview_topic(command=payload)
     response.headers["cache-control"] = "no-store"
     return preview
+
+
+@router.post(
+    "/sample-preview",
+    operation_id="previewMonitorTopicSamples",
+    response_model=ContentSamplePreviewView,
+    status_code=status.HTTP_200_OK,
+    summary="用已有内容预览草稿关键词",
+    description="只读取当前 owner 最近七天可读的内容样本; 不保存主题、不创建任务或请求来源/模型。",
+    responses={
+        key: value for key, value in _WRITE_RESPONSES.items() if key in (401, 403, 422, 500)
+    },
+)
+def preview_monitor_topic_samples(
+    payload: ContentSamplePreviewInput,
+    response: Response,
+    service: ContentServiceDependency,
+    identity: CsrfProtectedIdentityDependency,
+) -> ContentSamplePreviewView:
+    response.headers["cache-control"] = "no-store"
+    return service.preview_rule_samples(owner_id=identity.view.user.id, command=payload)
 
 
 @router.get(
