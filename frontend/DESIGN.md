@@ -35,3 +35,4 @@
 - 动效遵循 `prefers-reduced-motion`。
 - 页面必须完成桌面和窄屏浏览器检查。
 - 生产镜像使用 standalone、非 root、只读文件系统和 `/health` 健康检查。
+- CSP nonce 由 `src/proxy.ts` 每请求生成；需要客户端交互的 HTML 入口必须按请求渲染。主题创建页在服务端入口等待 Next.js `connection()`，保持客户端会话/来源校验；生产脚本 nonce 必须与本次 CSP 一致，HTML 不使用共享缓存。生产镜像的 runtime 检查与浏览器冷进入均需通过。

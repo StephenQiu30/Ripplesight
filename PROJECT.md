@@ -65,6 +65,8 @@ HotKey/
 
 Web 设计固定为组件优先的无边框系统：App Router 页面只组合页面专属组件、按功能领域分类的复用组件与 shadcn/Radix 基础组件；默认信息表面通过留白、排版和语义背景分层。布局只使用 Tailwind 命名尺度和 `sm/md/lg/xl/2xl` 标准响应式层级，不使用原始像素值或任意布局尺寸。输入、焦点、错误与浮层保留必要轮廓；加载、路由错误、全局错误、404 与进程健康状态都有统一边界。组件归属、复用范围、目标路径、数据来源和状态覆盖必须在对应切片 Design 阶段明确。
 
+Web 的 CSP nonce 由 `frontend/src/proxy.ts` 每请求生成，需要客户端交互的 HTML 入口须按请求渲染。主题创建的服务端 page 等待 Next.js `connection()`，沿用原客户端会话与来源校验；生产 HTML 的脚本 nonce 必须与当前响应 CSP 相同，不使用共享缓存。runtime workflow 从生产镜像校验响应与脚本，浏览器冷进入验证交互，不能只检查 `/health`。
+
 ### Python 后端与基础设施
 
 架构固定为模块化单体，按业务领域分组；Router 处理 HTTP，Service 处理业务与事务，Pydantic Schema 定义契约，SQLAlchemy Model 定义持久化。Repository 按需引入。完整目录、文件职责、依赖方向和事务边界由本文固定；AGENTS.md 负责把这些决策转成实现门禁和验证命令。

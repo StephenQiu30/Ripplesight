@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 
 import { TopicForm } from "@/app/monitors/new/components/topic-form";
 
@@ -7,6 +8,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function NewMonitorTopicPage() {
+export default async function NewMonitorTopicPage() {
+  await connection();
   return <TopicForm />;
 }
