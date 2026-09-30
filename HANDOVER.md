@@ -1,14 +1,16 @@
 # HotKey Server 交接
 
-更新日期：2026-09-28。本文件只记录当前实现快照（≤5 KB）；需求见 [PRD 001 v5.0](docs/prd/001-热点舆情监控平台需求.md)，Epic 设计见 [Design 001 v4.0](docs/design/001-热点舆情监控平台总体设计.md) 及对应 Design，任务与证据见 [逐 Issue Plan 索引](docs/plan/README.md) 和 [BACKLOG](BACKLOG.md)。
+更新日期：2026-09-30。本文件只记录当前实现快照（≤5 KB）；需求见 [PRD 001 v5.0](docs/prd/001-热点舆情监控平台需求.md)，Epic 设计见 [Design 001 v4.0](docs/design/001-热点舆情监控平台总体设计.md) 及对应 Design，任务与证据见 [逐 Issue Plan 索引](docs/plan/README.md) 和 [BACKLOG](BACKLOG.md)。
 
 ## 当前边界
 
-- 信息获取是当前核心：四关键词来源 HN Algolia、Google News 搜索 RSS、本机 SearXNG `duckduckgo news`、本机 RSSHub `/36kr/newsflashes`；六个 RSSHub 公开热榜；HN 评论父链、来源 × 能力 × 时间窗覆盖和本机 Codex 相关性。M1 须同窗连续 72 小时真实验收。日报/周报、Obsidian 与推送各自后验，飞书暂缓。
-- 单 owner 登录、主题、连接、内容、Outbox/Kafka/Worker、预算、备份、统一错误契约及 Web 工作台已有代码。宿主机单 Worker 已注册 `webpage.collect`、`keyword.search`、`source.comments`、`source.hotlist`、`analysis.annotate`、`events.cluster`、`report.daily`、`notification.send`、`knowledge.export`；独立调度进程已存在。事件候选与稳定身份已有受控技术切片，开关默认关闭；Plan014 v1.3 审查修复代码待本轮 PostgreSQL 回归，真实三平台、人工修订、热度和页面未验收。SMTP 仍待实现。
+- 当前最终目标是整个核心链路 POC，范围见 PRD001 §1；先收尾四关键词来源、HN 评论、六榜、相关性分析、阅读/覆盖与任务恢复的 M1 闭环。009/013 连续72小时与正式指标后置。日报/周报、Obsidian、知识库检索/问答和推送是后续非核心能力，不进当前排期；真实 Codex 请求暂停。
+- 单 owner 登录、主题、连接、内容、Outbox/Kafka/Worker、预算、备份、统一错误契约及 Web 工作台已有代码。宿主机单 Worker 已注册 `webpage.collect`、`keyword.search`、`source.comments`、`source.hotlist`、`analysis.annotate`、`events.cluster`、`report.daily`、`notification.send`、`knowledge.export`；独立调度进程已存在。Plan014 候选、稳定身份与 R1—R5 修复已通过受控 PostgreSQL 和远端技术门禁（EV-004-002），开关默认关闭；人工修订、热度、页面和真实三平台未验收。SMTP 待实现。
 - 本人账号来源本轮仅 B 站试点。MediaCrawler 固定补丁及独立 CDP 资料记录在 `~/Desktop/Docker/mediacrawler-start-local/`，HotKey 从宿主机启动子进程；评论只读同轮缓存的一级评论每帖 ≤20 条。固定提交现为 `1bd07bc`，普通非零退出不再误归认证失效；三类版本证据、风控停用与本人确认恢复已有受控验证。修复后尚未真实采集或恢复，开关关闭；不把离线回放称为接入成功。
 
 ## 证据快照
+
+2026-09-30 评论修复：无有效来源尾段证据、根/回复采样截断均保留部分覆盖与停止原因，重复去重不算截断。隔离 PostgreSQL/Kafka 专项 46 passed、后端全量 1062 passed/14 skipped，未发送真实来源或模型请求；范围见 Acceptance002 EV-002-051，完整核心 POC 仍待同库闭环。
 
 2026-09-26 的可重建开发库 `hotkey_p1` 约 4 小时运行：四来源分别入库 Google News 365、SearXNG 94、HN 61、36Kr 8；六榜 59 快照，最近两小时 23 成功、1 失败；Codex 738 标注中相关字段为空 3 条。HN 45 线程来自较早且已重建的库，不可与当前库合并。四来源和六榜尚无连续 72 小时产品验收；开发库结果仅证明所述真实运行范围。B 站新建库离线回放与旧失败运行均不满足 AC-113/115/122。
 
@@ -27,4 +29,4 @@
 
 ## 下一步
 
-现行Plan为001—052：先001/002/005与051准备，033/032后做031/003/040，再四来源/评论/六榜、覆盖指标和页面，最后009同窗72小时。依赖图、FR/NFR/AC覆盖与具体交付见Plan索引；编号不是执行顺序。按Design002 §3.1/Design001 §6.2审查stash `paused: partial P2-2b + A7b implementation (2026-09-26)`，不得直接恢复为已完成代码。M2版本/风控可技术准备，真实运行仍需本人核查。M6准入046—050不替代平台实现，获准后从053续建。当前只修订文档；所有代码提交、推送须先有用户明确授权。
+现行 Plan 为001—057。038覆盖/截断修复技术通过；下一步核对005/040/041分析与阅读，再在同库短窗核对003/032/004/006/034的失败、重试、计量和缺口，并补评论真实样本和进程恢复；复用已有来源、六榜与调度产物。M2需本人核查，M3按014→015→016→042独立推进；日报、周报和知识库继续后置，009/013不在本轮启动。不得整体恢复旧stash或把准入研究当平台实现；新来源获准后从058续建。各卡证据、真实缺口与产品AC分别记录，提交/推送按当前会话授权执行。
