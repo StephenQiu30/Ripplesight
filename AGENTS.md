@@ -22,6 +22,7 @@
 - `frontend/` 是唯一 Web 前端，采用 pnpm、Next.js App Router、React、TypeScript、Tailwind CSS、shadcn/ui、Radix UI、Axios、ESLint 和 Prettier。工作台入口由 `frontend/src/app/` 管理；公开产品页与 SEO 路由必须以真实可公开内容为基础，登录工作台使用 `noindex`，不可加入 sitemap。
 - 品牌资产只保留唯一母版，页面图标通过 Next.js Metadata API 引用。
 - Next 配置位于 `frontend/next.config.ts`，页面 CSP 使用 `frontend/src/proxy.ts` 的逐请求 nonce。浏览器对 `/api/*` 的请求保持同源，Compose 服务环境将 `HOTKEY_API_ORIGIN` 指向 `http://backend:8080`，本机开发默认 `http://127.0.0.1:8867`；容器内 Web 端口固定为 `8080`。生产镜像使用 standalone 输出和非 root 用户，生产文件系统保持只读。
+- 需要客户端交互的 HTML 入口须按请求渲染，使当前 CSP nonce 注入框架与页面脚本；主题创建页使用 Next.js `connection()`。生产 HTML 不使用共享缓存，不放宽 CSP 绕过静态优化问题。runtime 门禁核对每次响应的脚本 nonce 与 CSP 一致、跨请求 nonce 不复用，并用浏览器冷进入核对会话检查和交互。
 - 独立客户端仓库固定为同级 `hotkey-app`，使用 Flutter + Dart；Web 只在本仓库 `frontend/` 实现。两个仓库各自维护根 PROJECT.md 与 HANDOVER.md。
 - Web 依赖统一由 pnpm 管理，提交 pnpm-lock.yaml 并在 package.json 声明 packageManager；不混用 npm/yarn 锁文件。
 - Web 设计固定为组件优先的无边框系统：路由组合页面组件、按功能领域分类的复用组件与 ui 组件，默认信息表面不用装饰性边框；输入、焦点、错误与浮层保留必要轮廓。布局只使用 Tailwind 命名尺度和 `sm/md/lg/xl/2xl` 响应式层级，禁止原始像素值和任意布局尺寸。前端不建立独立 `scripts/` 目录，使用 ESLint、TypeScript、Prettier、生产构建和代码审查维护这些约束。

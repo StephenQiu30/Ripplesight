@@ -65,6 +65,53 @@ jobs:
       - name: Start the isolated runtime
         run: docker compose --project-name hotkey-ci up --detach --wait postgres redis kafka backend frontend
 
+      - name: Verify production page CSP nonces
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import urllib.request
+          from html.parser import HTMLParser
+
+          class Scripts(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.nonces = []
+
+              def handle_starttag(self, tag, attrs):
+                  values = dict(attrs)
+                  if tag == "script" and values.get("type", "").lower() in (
+                      "", "module", "text/javascript", "application/javascript"
+                  ):
+                      self.nonces.append(values.get("nonce"))
+
+          origin = "http://127.0.0.1:" + os.environ["HOTKEY_WEB_PORT"]
+          failures = []
+          for path in ("/login", "/monitors/new"):
+              previous_nonce = None
+              for request_number in (1, 2):
+                  with urllib.request.urlopen(origin + path, timeout=15) as response:
+                      html = response.read().decode()
+                      csp = response.headers.get("Content-Security-Policy", "")
+                      cache = response.headers.get("Cache-Control", "").lower()
+                  match = re.search(r"'nonce-([^']+)'", csp)
+                  nonce = match.group(1) if match else None
+                  scripts = Scripts()
+                  scripts.feed(html)
+                  mismatches = sum(value != nonce or not value for value in scripts.nonces)
+                  cache_private = "no-store" in cache and "s-maxage" not in cache and "public" not in cache
+                  fresh = nonce is not None and nonce != previous_nonce
+                  policy_strict = "'strict-dynamic'" in csp and "'unsafe-inline'" not in csp and "'unsafe-eval'" not in csp
+                  valid = bool(scripts.nonces) and mismatches == 0 and cache_private and fresh and policy_strict
+                  print(json.dumps({"path": path, "request": request_number, "scripts": len(scripts.nonces), "nonce_mismatches": mismatches, "private_no_store": cache_private, "fresh_nonce": fresh, "strict_policy": policy_strict, "passed": valid}))
+                  if not valid:
+                      failures.append(path + " request " + str(request_number))
+                  previous_nonce = nonce
+          if failures:
+              raise SystemExit("Production CSP rendering failed: " + ", ".join(failures))
+          PY
+
       - name: Verify dependencies, proxy, and idle Worker
         run: |
           test "$(docker compose --project-name hotkey-ci exec -T postgres psql -X --set ON_ERROR_STOP=on --username hotkey --dbname hotkey --tuples-only --no-align --command 'SELECT current_database()')" = "hotkey"
