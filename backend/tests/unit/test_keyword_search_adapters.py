@@ -459,18 +459,30 @@ def test_36kr_factory_requires_newsflashes_on_local_rsshub() -> None:
         )
 
 
-def test_web_search_factory_requires_local_fixed_engine() -> None:
+@pytest.mark.parametrize("host", ["127.0.0.1", "host.docker.internal"])
+def test_web_search_factory_requires_local_fixed_engine(host: str) -> None:
     adapter = _factory(
         "news_search",
-        base_url="http://127.0.0.1:8888",
+        base_url=f"http://{host}:8888",
         engines=("duckduckgo news",),
-        allowed_hosts=("127.0.0.1",),
+        allowed_hosts=(host,),
     )
 
     assert isinstance(adapter, WebSearchAdapter)
     assert adapter.source_key == "news_search"
-    assert adapter._search_url == "http://127.0.0.1:8888/search"
-    assert adapter._engines == "duckduckgo news"
+    seen: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"results": [], "unresponsive_engines": []})
+
+    adapter._transport = httpx.MockTransport(respond)
+    page = adapter.fetch_page(_news_search_request())
+    assert page.request_count == 1
+    assert seen[0].url.host == host
+    assert seen[0].url.port == 8888
+    assert seen[0].url.path == "/search"
+    assert seen[0].url.params["engines"] == "duckduckgo news"
     with pytest.raises(ValueError, match=r"allowlisted|SearXNG"):
         _factory(
             "news_search",
@@ -484,6 +496,30 @@ def test_web_search_factory_requires_local_fixed_engine() -> None:
             base_url="http://127.0.0.1:8888",
             engines=("duckduckgo news", "bing news"),
             allowed_hosts=("127.0.0.1",),
+        )
+
+
+@pytest.mark.parametrize(
+    ("base_url", "allowed_hosts"),
+    [
+        ("http://host.docker.internal:8889", ("host.docker.internal",)),
+        ("https://host.docker.internal:8888", ("host.docker.internal",)),
+        ("http://host.docker.internal:8888/search", ("host.docker.internal",)),
+        ("http://host.docker.internal:8888/?q=AI", ("host.docker.internal",)),
+        ("http://user@host.docker.internal:8888", ("host.docker.internal",)),
+        ("http://host.docker.internal:8888", ("127.0.0.1",)),
+        ("http://host.docker.internal:8888", ("127.0.0.1", "host.docker.internal")),
+    ],
+)
+def test_web_search_factory_rejects_changes_to_fixed_endpoint(
+    base_url: str, allowed_hosts: tuple[str, ...]
+) -> None:
+    with pytest.raises(ValueError):
+        _factory(
+            "news_search",
+            base_url=base_url,
+            engines=("duckduckgo news",),
+            allowed_hosts=allowed_hosts,
         )
 
 

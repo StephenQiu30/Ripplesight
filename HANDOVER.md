@@ -19,7 +19,7 @@
 | 组件 | 入口/边界 |
 |---|---|
 | HotKey | 根 `docker-compose.yml`；API `127.0.0.1:8867`，Web `127.0.0.1:3000`；在 `backend/app/` 下运行 `uvicorn main:create_app --factory`、`python -m worker`、`python -m worker.scheduler` |
-| RSSHub、SearXNG | 分别在 `~/Desktop/Docker/rsshub-start-local/`、`~/Desktop/Docker/searxng-start-local/` 独立 Compose；端口 `1200`、`8888` |
+| RSSHub、SearXNG | 分别在 `~/Desktop/Docker/rsshub-start-local/`、`~/Desktop/Docker/searxng-start-local/` 独立 Compose；固定端口 `1200`、`8888`，宿主机进程主机 `127.0.0.1`、Compose `host.docker.internal`；主机设置仅接受二者，重新应用预设后升连接版本 |
 | Firecrawl | 独立本地编排；公开网页业务结果单独验收 |
 | MediaCrawler | `~/Desktop/Docker/mediacrawler-start-local/` 保留补丁、资料和运行说明；HotKey B 站入口是宿主机子进程、`127.0.0.1` 独立 CDP 端口 |
 | Codex | 本机 app-server，分析模型由 `HOTKEY_AI_MODEL` 配置，不发付费模型请求 |

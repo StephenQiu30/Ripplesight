@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
+import os
 import re
+import subprocess
+import sys
 from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
@@ -37,6 +41,53 @@ _RSS_WITH_AUTHOR = b"""<?xml version="1.0" encoding="UTF-8"?>
 <guid>post-1</guid><pubDate>Fri, 25 Sep 2026 08:00:00 GMT</pubDate>
 <description>Daily update</description><author>Reporter</author>
 </item></channel></rss>"""
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "host.docker.internal"])
+def test_news_search_preset_reaches_the_configured_fixed_host(host: str) -> None:
+    process = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import json
+import httpx
+from connections.presets import NEWS_SEARCH_PRESET
+from connections.schemas import SourceConnectionConfig
+from content.discovery_execution import build_search_adapter_factory
+from sources.contracts import SearchRequest
+config = SourceConnectionConfig.model_validate(dict(NEWS_SEARCH_PRESET.config))
+adapter = build_search_adapter_factory('news_search', config)(lambda _: True, lambda: False, 1, 5)
+seen = []
+def respond(request):
+    seen.append(str(request.url.copy_with(query=None)))
+    return httpx.Response(200, json={'results': [], 'unresponsive_engines': []})
+adapter._transport = httpx.MockTransport(respond)
+page = adapter.fetch_page(SearchRequest(source_key='news_search', query='AI', page_size=2))
+print(json.dumps({'endpoint': seen[0], 'requests': page.request_count}))
+""",
+        ],
+        env=os.environ | {"HOTKEY_SEARXNG_HOST": host, "PYTHONPATH": "app"},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert json.loads(process.stdout) == {
+        "endpoint": f"http://{host}:8888/search",
+        "requests": 1,
+    }
+
+
+def test_news_search_preset_rejects_unapproved_configured_host() -> None:
+    process = subprocess.run(
+        [sys.executable, "-c", "import connections.presets"],
+        env=os.environ | {"HOTKEY_SEARXNG_HOST": "searxng.example.com", "PYTHONPATH": "app"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert process.returncode != 0
+    assert "HOTKEY_SEARXNG_HOST" in process.stderr
 
 
 def test_optional_execution_policy_binds_python_none_as_sql_null() -> None:
