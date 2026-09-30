@@ -302,10 +302,13 @@ def test_container_rsshub_endpoint_reaches_hotlist_executor(runtime: HotlistRunt
     job_id = _accept(runtime, runtime.due_at)
     _execute(runtime, job_id, _page(runtime.due_at + timedelta(minutes=2), entries=1))
     with runtime.engine.connect() as connection:
-        assert connection.execute(
-            text("SELECT entry_count FROM hotlist_snapshots WHERE job_id=:job"),
-            {"job": job_id},
-        ).scalar_one() == 1
+        assert (
+            connection.execute(
+                text("SELECT entry_count FROM hotlist_snapshots WHERE job_id=:job"),
+                {"job": job_id},
+            ).scalar_one()
+            == 1
+        )
 
 
 def test_parser_or_transport_failure_does_not_create_empty_snapshot(
