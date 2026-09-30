@@ -179,7 +179,13 @@ def test_manual_comments_kafka_redelivery_keeps_threads_budget_and_offset(
             assert session.execute(
                 text("SELECT status, requests_sent, items_saved FROM jobs WHERE id = :job_id"),
                 {"job_id": job_id},
-            ).one() == ("succeeded", 1, 2)
+            ).one() == ("partially_succeeded", 1, 2)
+            assert session.execute(
+                text(
+                    "SELECT status, stop_reason FROM coverage_windows WHERE last_job_id = :job_id"
+                ),
+                {"job_id": job_id},
+            ).one() == ("partial", "unverified_terminal")
             assert (
                 session.scalar(
                     text("SELECT count(*) FROM processed_messages WHERE job_id = :job_id"),
