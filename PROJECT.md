@@ -1,6 +1,6 @@
 # HotKey Server 项目与技术选型
 
-更新日期：2026-10-01。本文固定仓库边界、技术栈、后端目录、API 契约和运行约束。产品需求见 [PRD 001](docs/prd/001-热点舆情监控平台需求.md)，Epic 设计见 [Design 001](docs/design/001-热点舆情监控平台总体设计.md) 及 Design 002—007，逐 Issue 执行计划见 [Plan 索引](docs/plan/README.md)。用户最新决定：当前 Demo 删除登录、注册与用户体系，直接进入业务页面；实施归 Plan061。未来 ToC 账户要求延后，不作为 Demo 门禁。
+更新日期：2026-10-01。本文固定仓库边界、技术栈、后端目录、API 契约和运行约束。产品需求见 [PRD 001](docs/prd/001-热点舆情监控平台需求.md)，设计见 [Design 001](docs/design/001-热点舆情监控平台总体设计.md) 及 Design 002—007，当前执行计划见 [Plan 索引](docs/plan/README.md)。当前 Demo 已删除登录、注册与用户体系，直接进入业务页面，访问合同见 Design001 §9.2。未来 ToC 账户要求延后，不作为 Demo 门禁。
 
 ## 1. 定位与仓库边界
 
@@ -17,7 +17,7 @@ HotKey/
 │   ├── HANDOVER.md       # 当前实现快照（≤ 5 KB）
 │   ├── backend/          # Python API、Worker、CLI
 │   ├── frontend/         # Next.js Web 工作台
-│   └── docs/             # PRD、Design/Epic、逐 Issue Plan、验收记录
+│   └── docs/             # PRD、Design、当前执行 Plan、验收记录
 └── hotkey-app/            # Flutter 客户端（暂停）
 ```
 
@@ -40,7 +40,7 @@ HotKey/
 
 ### 1.3 当前实现边界（2026-10-01）
 
-当前实施 [Plan061](docs/plan/061-Demo用户体系与历史依赖清理执行计划.md)：删除身份模块、身份 API、登录注册页、会话守卫、密码依赖与部署初始化配置。业务表的 `owner_id`/`created_by` 暂保留为内部历史分区 UUID，移除其身份表外键，保留业务复合外键、幂等与预算约束；不创建假用户、默认会话或认证开关。
+当前 Demo 已删除身份模块、身份 API、登录注册页、会话守卫、密码依赖与部署初始化配置，现行合同见 [Design001 §9.2](docs/design/001-热点舆情监控平台总体设计.md#92-当前-demo-的访问与数据分区)。业务表的 `owner_id`/`created_by` 暂保留为内部历史分区 UUID，移除其身份表外键，保留业务复合外键、幂等与预算约束；不创建假用户、默认会话或认证开关。
 
 `db/demo.py`汇总全部已注册业务表owner_id：新Schema空库用`00000000-0000-4000-8000-000000000001`，唯一分区复用，多分区503 `demo_scope_conflict`，不取第一行或合并。业务为空且有旧身份表的Schema（含身份表空表）也明确拒绝。API/CLI共用解析，Worker沿用任务分区。读取无Cookie；写入固定`X-HotKey-CSRF: 1`，缺失/错误403 `csrf_invalid`，无CSRF Cookie/token。保持同源无跨域；仅用于本机/受控Demo，不提供公共用户权限。
 
@@ -197,7 +197,7 @@ Demo 删除 `pwdlib`、身份配置和身份 CLI，不保留未来登录适配�
 2. 业务变更与 Outbox 写入同一 PostgreSQL 事务。独立发布器可靠地发送到 Kafka；消费者允许重复读取，以消息 ID、数据库唯一约束和业务状态保证幂等。
 3. 消费者在业务事务提交后提交连续完成位置的 offset；处理并发时不得越过尚未完成的记录。Kafka 事务不能直接保证 PostgreSQL 副作用的原子性。[Kafka 消息交付语义](https://kafka.apache.org/41/design/design/)
 4. Redis 的数据丢失不能导致任务或证据丢失。缓存设有效期与失效规则；限流故障时采用明确的保守策略。执行权、不可超额预算与撤权不能只依赖 Redis 锁或缓存。
-5. `worker/` 维护 Kafka 客户端和消费者生命周期，`jobs/` 维护任务状态机；入口 `python -m worker`。031 已实现 outbox、手动 offset、inbox、租约/checkpoint 和有限调度恢复；039 S01 将受理消息升级为 `hotkey.jobs.accepted.v2`；009 S01—S03 已交付持久受理、owner 隔离读取、进度/取消、结构化失败、有限持久重试、到期 Outbox、重放防重和手动重试。Plan032 的采集周期由 Job 领取事务拥有，周期请求数约束单轮上限，累计请求数与来源/全局账本持续增长；`content` 只消费 `jobs` 给出的周期事实。047 S02 已登记固定 `webpage.collect` 处理器并通过真实 Kafka/Firecrawl 持久结果和恢复验证；其他 kind 没有处理器时必须持久失败后确认，不能把排队记录或空 Worker 当作业务执行成功。
+5. `worker/` 维护 Kafka 客户端和消费者生命周期，`jobs/` 维护任务状态机；入口 `python -m worker`。已有 Outbox、手动 offset、inbox、租约/checkpoint、有限调度恢复和 `hotkey.jobs.accepted.v2` 消息；持久受理、内部分区读取、进度/取消、结构化失败、有限持久重试、到期 Outbox、重放防重及手动重试已有历史技术证据，不代表当前009正式验收已通过。032 的采集周期由 Job 领取事务拥有，周期请求数约束单轮上限，累计请求数与来源/全局账本持续增长；`content` 只消费 `jobs` 给出的周期事实。固定 `webpage.collect` 处理器已登记，历史 Kafka/Firecrawl 持久结果与恢复证据不代表其他平台接入；其他 kind 没有处理器时必须持久失败后确认，不能把排队记录或空 Worker 当作业务执行成功。
 6. API、Worker 各自创建数据库连接池和消息客户端，Session 不跨线程/任务共享。同步数据库调用不直接放入异步路由。
 7. FastAPI 从路由装饰器、类型注解和 Pydantic 模型自动生成 `/openapi.json`。它是唯一 API 契约视图；Swagger UI、Scalar、Umi OpenAPI 和 Flutter 客户端共用该地址，不维护独立契约文件。客户端由生成命令更新，CI 负责自动生成与差异检查。
 8. 数据库结构只由 `backend/database/schema.sql` 定义，SQLAlchemy Model 必须与其同批更新。`schema.sql` 自身以 `BEGIN`/`COMMIT` 保证完整 DDL 原子性；CI 的 psql stdin 和 Compose 官方 entrypoint 挂载均依赖此事务，显式 `--single-transaction` 可额外使用。只对全新空库执行，失败后核对没有部分业务表。当前不支持存量库自动就地升级；保留数据时采用备份、全新建库、完整建表和校验后导入流程。
@@ -208,7 +208,7 @@ Demo 删除 `pwdlib`、身份配置和身份 CLI，不保留未来登录适配�
 
 - 只采集公开或获授权的数据；遵守平台频率限制；凭据和登录态只存服务端，不进前端、日志和代码库。
 - 本轮逐来源验收四个关键词来源（HN Algolia、Google News 搜索 RSS、本机 SearXNG 的 `duckduckgo news`、本机 RSSHub `/36kr/newsflashes`）、六个公开 RSSHub 热榜，以及本人账号 B 站试点。B 站使用宿主机 MediaCrawler 子进程和 `~/Desktop/Docker/mediacrawler-start-local/` 的固定补丁记录、独立 CDP 资料；微博等登录平台后续逐项准入。搜索、帖子、评论、热榜分别验收，不以公开热榜代替登录内容。
-- 来源频次、请求与模型调用经来源预设及 037 预算账本设置硬上限。预设执行策略按连接版本存于 `source_connection_versions.execution_policy` 非秘密 JSONB，来源预算按 owner/source/metric/窗口规则保持稳定身份；升版不返还已用额度。`schema.sql` 的新增列仅用于全新空库，保留库先经 051 恢复。模型仅经本机 Codex app-server，不发付费模型请求。X 仅用官方 API，凭据与月度上限未确认前禁止真实请求。
+- 来源频次、请求与模型调用经来源预设及既有预算账本设置硬上限。预设执行策略按连接版本存于 `source_connection_versions.execution_policy` 非秘密 JSONB，来源预算按 owner/source/metric/窗口规则保持稳定身份；升版不返还已用额度。`schema.sql` 的新增列仅用于全新空库，保留库先满足 Design001 §6.3 同版本恢复合同。模型仅经本机 Codex app-server，不发付费模型请求。X 仅用官方 API，凭据与月度上限未确认前禁止真实请求。
 - 模型适配器归 `ai/adapters/`，供应商可替换。报告中的数字一律由数据库计算，模型只负责判断和写作，正文的数字与链接须通过校验。
 - 外部正文按不可信内容处理：进入模型时放入分隔的数据区，模型输出只接受结构化字段。
 - 复用现有 MinIO。不更换 PostgreSQL 镜像，不引入向量库或搜索引擎（DEC-001-208）。
@@ -220,18 +220,18 @@ Demo 删除 `pwdlib`、身份配置和身份 CLI，不保留未来登录适配�
 
 ## 5. 实施与验证
 
-按 [Plan 索引](docs/plan/README.md) 的单 Issue 推进：计划评审先固定文件/接口/数据/调度/测试与验收合同 → 核对技术依赖和代码漂移 → 失败测试 → 实现 → 回归 → 阶段验收记录。核心契约未定不得列为实施就绪；真实账号/费用/渠道条件仅阻塞对应步骤。架构或数据库变化同步所属Design/Epic、总Design001与本文。
+当前排期且需要持续协调或独立验收的工作按 [Plan 索引](docs/plan/README.md) 推进；未来能力保留需求和设计，启动时再确定执行步骤。Plan 引用现行 Design，明确本轮差异、依赖与完成条件，不重复全量文件/接口/数据合同和多套 Checklist。小修复无需另建计划，仍先复现实际故障再实现、按影响范围回归并记录证据。核心契约未定不得列为实施就绪；真实账号/费用/渠道条件仅阻塞对应步骤。架构或数据库变化同步所属 Design、总 Design001 与本文。
 
-现行逐Issue计划001—058的持久化/任务细则见Design001 §4、子Design及Plan索引：到期窗口与采集周期归jobs，事件事实归events，报告设置唯一读取/写入`monitor_topics.report_time`、`report_timezone`、`weekly_report_enabled`，冻结和导出归reports，不新增`report_schedules`；原始导出归content，告警/投递审计归notifications，账号归monitors，检索投影/回答归knowledge。055—057仅承接共享底座回归/冻结，均不代表产品验收；不创建额外共享层、服务或存储桶。新增router按目标路径独立注册，现有 `/api/v1/reports` 由Plan018统一到 `/api/reports` 并同步生成客户端。新任务硬截止见Design001，真实依赖和保留库恢复仍按既有门槛验证。
+持久化与任务合同见 Design001 §4 和子 Design：到期窗口与采集周期归 jobs，事件事实归 events，报告设置唯一读取/写入 `monitor_topics.report_time`、`report_timezone`、`weekly_report_enabled`，冻结和导出归 reports，不新增 `report_schedules`；原始导出归 content，告警/投递审计归 notifications，指定来源账号追踪归 monitors，检索投影/回答归 knowledge。上述后置能力未因此实施或通过。HTTP/OpenAPI/生成客户端与 CI 按 AGENTS 日常维护；生命周期引用保护、删除审计和浏览器冻结边界见 Design001，真实回归缺口留在 BACKLOG。不创建额外共享层、服务或存储桶。新增 router 按目标路径独立注册，后续报告实施需按 Design005 将现有 `/api/v1/reports` 统一到 `/api/reports` 并同步生成客户端。任务硬截止、真实依赖和保留库恢复仍按现行门槛验证。
 
-Plan 031 的 `backend/app/monitors/runs.py` 专管主题手动采集的 owner 校验、幂等重放、来源逐项受理及 Job/Outbox 事务；`monitors/services.py` 保留主题和调度投影，`worker/scheduler.py` 负责到期领取与事实入账。前端主题页专属入口位于 `frontend/src/app/monitors/[topicId]/components/topic-run-actions.tsx`，只使用生成的 API 客户端。
+`backend/app/monitors/runs.py` 专管主题手动采集的内部分区校验、幂等重放、来源逐项受理及 Job/Outbox 事务；`monitors/services.py` 保留主题和调度投影，`worker/scheduler.py` 负责到期领取与事实入账。前端主题页专属入口位于 `frontend/src/app/monitors/[topicId]/components/topic-run-actions.tsx`，只使用生成的 API 客户端。
 
-Plan 001 的主题采集版本在 `monitor_topic_versions` 固定关键词组、排序后的来源键和主题请求间隔；`monitor_topics` 与 `monitor_schedules` 保存当前投影，既有 Job 的配置版本不随更新重释。只改显示名称或报告/推送偏好不生成采集版本。来源保存须有已应用搜索预设及当前准入/运行策略；恢复还检查可用来源预算，真实采集可用性仍须逐来源验收。
+主题采集版本在 `monitor_topic_versions` 固定关键词组、排序后的来源键和主题请求间隔；`monitor_topics` 与 `monitor_schedules` 保存当前投影，既有 Job 的配置版本不随更新重释。只改显示名称或报告/推送偏好不生成采集版本。来源保存须有已应用搜索预设及当前准入/运行策略；恢复还检查可用来源预算，真实采集可用性仍须逐来源验收。
 
-`collection_due_windows` 属于 jobs 的持久到期事实，唯一键为 `(owner_id, schedule_key, due_at)`，允许未受理窗口没有 Job；`coverage_windows`、内容观察、资源尝试和预算账本仍分别保存执行事实。Plan 033 提供领域只读 DTO，Plan 031 才把调度受理写入同一事务，Plan 004 消费查询。
+`collection_due_windows` 属于 jobs 的持久到期事实，唯一键为 `(owner_id, schedule_key, due_at)`，允许未受理窗口没有 Job；`coverage_windows`、内容观察、资源尝试和预算账本仍分别保存执行事实。领域提供只读 DTO，调度受理在同一事务写入到期事实与 Job/Outbox，覆盖服务消费查询。
 
 交付前执行后端 Ruff、mypy、pytest、OpenAPI 漂移与客户端生成检查，以及前端 ESLint、Prettier、类型检查、生产构建和浏览器验证。数据库和消息行为用隔离的真实 PostgreSQL/Redis/Kafka 验证。适配器用固定样本做契约测试，并以一次真实请求冒烟；模拟数据不能算采集成功。
 
 ## 6. 维护
 
-PROJECT.md 是技术、架构、目录、API 契约和数据库约束的事实源；AGENTS.md 只补充实现门禁和命令，两者不得冲突。产品需求以总 PRD 001 和对应里程碑 PRD 为准；Epic 边界在 Design，任务实施规格在单 Issue Plan；BACKLOG 是唯一进度看板（≤ 10 KB），HANDOVER 保持 ≤ 5 KB，均不追加流水账。
+PROJECT.md 是技术、架构、目录、API 契约和数据库约束的事实源；AGENTS.md 只补充实现门禁和命令，两者不得冲突。产品需求以总 PRD 001 和对应能力 PRD 为准；现行合同在 Design，当前排期的步骤在 Plan，证据与结论在 Acceptance。完成或合并的有效合同归入 Design，后置工作回归需求、设计和 BACKLOG，保留未通过条件后移除多余计划。历史原文由 Git 查阅；文档索引不复制版本、状态或验收矩阵。BACKLOG 是唯一进度看板（≤ 10 KB），HANDOVER 保持 ≤ 5 KB，均不追加流水账；小修复和普通文档整理不强制另建 Plan。

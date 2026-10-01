@@ -25,7 +25,7 @@
 
 `request.ts` 写请求固定 `X-HotKey-CSRF: 1`；代理不转发 Cookie/Authorization 或 Set-Cookie，业务失败就地显示并支持重试，不跳登录。CSP nonce、动态交互入口和 `noindex` 保持。
 
-访问规则见 [Design001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md)，文件和验证见 [Plan061](../docs/plan/061-Demo用户体系与历史依赖清理执行计划.md)。未来 ToC 登录需求后置，不保留组件或配置骨架。
+访问规则见 [Design001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md#92-当前-demo-的访问与数据分区)，验证边界见 [共享验收](../docs/acceptance/001-共享运行门槛验收.md)。未来 ToC 登录需求后置，不保留组件或配置骨架。
 
 ## API 与状态
 
