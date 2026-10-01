@@ -1,13 +1,16 @@
 "use client";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import Link from "next/link";
+import { useState } from "react";
+import { ChevronDownIcon } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Field,
   FieldContent,
@@ -19,8 +22,15 @@ import {
   FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { KeywordGroupField } from "./keyword-group-field";
 import { type TopicFieldErrors } from "./topic-validation";
 
 export type TopicSourceOption = {
@@ -58,56 +68,31 @@ export function selectableTopicSources(
     ];
   });
   const availableKeys = new Set(available.map((source) => source.sourceKey));
-  const unavailableSelections = selectedSourceKeys
-    .filter((sourceKey) => !availableKeys.has(sourceKey))
-    .map((sourceKey) => ({
-      sourceKey,
-      displayName: `${sourceKey}（当前不可用）`,
-      selectable: false,
-      reason: "当前来源不在搜索能力列表中，请取消选择。",
-    }));
-  return [...available, ...unavailableSelections];
+  return [
+    ...available,
+    ...selectedSourceKeys
+      .filter((key) => !availableKeys.has(key))
+      .map((key) => ({
+        sourceKey: key,
+        displayName: `${key}（当前不可用）`,
+        selectable: false,
+        reason: "当前来源不在搜索能力列表中，请取消选择。",
+      })),
+  ];
 }
 
 type TopicSettingsFieldsProps = {
   sourceOptions: TopicSourceOption[];
   sourceKeys: string[];
   onSourceKeysChange: (value: string[]) => void;
-  collectionIntervalSeconds: number;
-  onCollectionIntervalSecondsChange: (value: number) => void;
-  reportTime: string;
-  onReportTimeChange: (value: string) => void;
-  weeklyReportEnabled: boolean;
-  onWeeklyReportEnabledChange: (value: boolean) => void;
-  notificationTargets: string;
-  onNotificationTargetsChange: (value: string) => void;
   disabled: boolean;
   fieldErrors?: TopicFieldErrors;
 };
-
-export function parseNotificationTargetNames(value: string): string[] {
-  return Array.from(
-    new Set(
-      value
-        .split("\n")
-        .map((item) => item.trim())
-        .filter(Boolean),
-    ),
-  );
-}
 
 export function TopicSettingsFields({
   sourceOptions,
   sourceKeys,
   onSourceKeysChange,
-  collectionIntervalSeconds,
-  onCollectionIntervalSecondsChange,
-  reportTime,
-  onReportTimeChange,
-  weeklyReportEnabled,
-  onWeeklyReportEnabledChange,
-  notificationTargets,
-  onNotificationTargetsChange,
   disabled,
   fieldErrors = {},
 }: TopicSettingsFieldsProps) {
@@ -118,162 +103,226 @@ export function TopicSettingsFields({
         : sourceKeys.filter((item) => item !== sourceKey),
     );
   }
-
   return (
-    <Card className="bg-muted gap-6 rounded-2xl py-5 sm:py-7">
-      <CardHeader className="px-5 sm:px-7">
-        <CardTitle asChild>
-          <h2>运行设置</h2>
-        </CardTitle>
-        <CardDescription className="leading-6">
-          只有已应用预设且支持搜索的来源可被保存。新建主题仍保持暂停。
-        </CardDescription>
-      </CardHeader>
+    <FieldSet disabled={disabled}>
+      <FieldLegend variant="label">信息来源</FieldLegend>
+      <FieldDescription>
+        选择你想持续关注的来源。也可以先保存，之后再配置。
+      </FieldDescription>
+      {sourceOptions.length > 0 ? (
+        <FieldGroup className="gap-5">
+          {sourceOptions.map((source) => {
+            const unavailable =
+              !source.selectable && !sourceKeys.includes(source.sourceKey);
+            return (
+              <Field
+                key={source.sourceKey}
+                orientation="horizontal"
+                data-disabled={disabled || unavailable}
+                data-invalid={Boolean(fieldErrors.source_keys)}
+              >
+                <Checkbox
+                  id={`source-${source.sourceKey}`}
+                  checked={sourceKeys.includes(source.sourceKey)}
+                  onCheckedChange={(checked) =>
+                    toggleSource(source.sourceKey, checked === true)
+                  }
+                  disabled={disabled || unavailable}
+                  aria-invalid={Boolean(fieldErrors.source_keys)}
+                  aria-describedby={
+                    fieldErrors.source_keys
+                      ? "source-selection-error"
+                      : `source-${source.sourceKey}-description`
+                  }
+                />
+                <FieldContent>
+                  <FieldLabel htmlFor={`source-${source.sourceKey}`}>
+                    {source.displayName}
+                  </FieldLabel>
+                  <FieldDescription
+                    id={`source-${source.sourceKey}-description`}
+                  >
+                    {source.reason}
+                  </FieldDescription>
+                </FieldContent>
+              </Field>
+            );
+          })}
+        </FieldGroup>
+      ) : (
+        <FieldDescription>
+          还没有可选来源。先到来源设置应用搜索预设，或保存后再设置。
+        </FieldDescription>
+      )}
+      {fieldErrors.source_keys ? (
+        <FieldError id="source-selection-error">
+          {fieldErrors.source_keys}
+        </FieldError>
+      ) : null}
+      <Button asChild variant="link" className="w-fit px-0">
+        <Link href="/sources">管理来源</Link>
+      </Button>
+    </FieldSet>
+  );
+}
 
-      <CardContent className="flex flex-col gap-6 px-5 sm:px-7">
-        <FieldSet disabled={disabled}>
-          <FieldLegend variant="label">采集来源</FieldLegend>
-          {fieldErrors.source_keys ? (
-            <FieldError>{fieldErrors.source_keys}</FieldError>
-          ) : null}
-          {sourceOptions.length > 0 ? (
-            <FieldGroup className="grid gap-2 sm:grid-cols-2">
-              {sourceOptions.map((source) => (
-                <Field
-                  key={source.sourceKey}
-                  orientation="horizontal"
-                  data-disabled={disabled}
-                  className="bg-background rounded-lg px-3 py-2.5"
-                >
-                  <Checkbox
-                    id={`source-${source.sourceKey}`}
-                    checked={sourceKeys.includes(source.sourceKey)}
-                    onCheckedChange={(checked) =>
-                      toggleSource(source.sourceKey, checked === true)
-                    }
-                    disabled={
-                      disabled ||
-                      (!source.selectable &&
-                        !sourceKeys.includes(source.sourceKey))
-                    }
-                  />
-                  <FieldContent>
-                    <FieldLabel
-                      htmlFor={`source-${source.sourceKey}`}
-                      className="font-normal"
-                    >
-                      {source.displayName}
-                      <span className="text-muted-foreground ml-1 font-mono text-xs">
-                        {source.sourceKey}
-                      </span>
-                    </FieldLabel>
-                    <FieldDescription>{source.reason}</FieldDescription>
-                  </FieldContent>
-                </Field>
-              ))}
-            </FieldGroup>
-          ) : (
-            <FieldDescription>
-              尚无搜索来源。请先在来源能力页应用获准的搜索来源预设。
-            </FieldDescription>
-          )}
-        </FieldSet>
+const INTERVALS = [
+  { value: 600, label: "每 10 分钟" },
+  { value: 1800, label: "每 30 分钟" },
+  { value: 3600, label: "每小时" },
+  { value: 86400, label: "每天" },
+];
 
-        <FieldGroup className="grid gap-5 sm:grid-cols-2">
+type TopicAdvancedFieldsProps = {
+  matchAll: string;
+  onMatchAllChange: (value: string) => void;
+  exclude: string;
+  onExcludeChange: (value: string) => void;
+  collectionIntervalSeconds: number;
+  onCollectionIntervalSecondsChange: (value: number) => void;
+  disabled: boolean;
+  fieldErrors?: TopicFieldErrors;
+};
+
+export function TopicAdvancedFields({
+  matchAll,
+  onMatchAllChange,
+  exclude,
+  onExcludeChange,
+  collectionIntervalSeconds,
+  onCollectionIntervalSecondsChange,
+  disabled,
+  fieldErrors = {},
+}: TopicAdvancedFieldsProps) {
+  const [open, setOpen] = useState(
+    Boolean(matchAll || exclude || collectionIntervalSeconds !== 1800),
+  );
+  const [customInterval, setCustomInterval] = useState(
+    !INTERVALS.some((item) => item.value === collectionIntervalSeconds),
+  );
+  const hasError = Boolean(
+    fieldErrors.match_all ||
+    fieldErrors.exclude ||
+    fieldErrors.collection_interval_seconds,
+  );
+  return (
+    <Collapsible
+      open={open || hasError}
+      onOpenChange={setOpen}
+      disabled={disabled}
+    >
+      <CollapsibleTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="navigation"
+          className="w-full justify-between"
+          disabled={disabled}
+        >
+          进阶设置 <ChevronDownIcon data-icon="inline-end" />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-6">
+        <FieldGroup>
+          <KeywordGroupField
+            id="match-all"
+            label="全部包含"
+            description="每个关键词都需要出现；留空则不增加限制。"
+            value={matchAll}
+            onChange={onMatchAllChange}
+            disabled={disabled}
+            error={fieldErrors.match_all}
+          />
+          <KeywordGroupField
+            id="exclude"
+            label="排除"
+            description="包含任意排除词的内容将被过滤。"
+            value={exclude}
+            onChange={onExcludeChange}
+            disabled={disabled}
+            error={fieldErrors.exclude}
+          />
           <Field
             data-disabled={disabled}
             data-invalid={Boolean(fieldErrors.collection_interval_seconds)}
           >
-            <FieldLabel htmlFor="collection-interval">
-              采集频率（秒）
-            </FieldLabel>
-            <Input
-              id="collection-interval"
-              type="number"
-              min={600}
-              max={86400}
-              step={60}
-              value={collectionIntervalSeconds}
-              onChange={(event) =>
-                onCollectionIntervalSecondsChange(event.target.valueAsNumber)
+            <FieldLabel htmlFor="collection-frequency">更新频率</FieldLabel>
+            <Select
+              value={
+                customInterval ? "custom" : String(collectionIntervalSeconds)
               }
               disabled={disabled}
-              required
-              aria-invalid={Boolean(fieldErrors.collection_interval_seconds)}
-            />
-            <FieldDescription>
-              允许 600—86400 秒，默认 1800 秒。
+              onValueChange={(value) => {
+                setCustomInterval(value === "custom");
+                if (value !== "custom")
+                  onCollectionIntervalSecondsChange(Number(value));
+              }}
+            >
+              <SelectTrigger
+                id="collection-frequency"
+                className="w-full"
+                aria-invalid={Boolean(fieldErrors.collection_interval_seconds)}
+                aria-describedby="collection-frequency-description"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {INTERVALS.map((item) => (
+                    <SelectItem key={item.value} value={String(item.value)}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="custom">自定义间隔</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <FieldDescription id="collection-frequency-description">
+              实际采集也会遵循来源自身的频次限制。
             </FieldDescription>
             {fieldErrors.collection_interval_seconds ? (
-              <FieldError>{fieldErrors.collection_interval_seconds}</FieldError>
+              <FieldError id="collection-frequency-error">
+                {fieldErrors.collection_interval_seconds}
+              </FieldError>
             ) : null}
           </Field>
-          <Field
-            data-disabled={disabled}
-            data-invalid={Boolean(fieldErrors.report_time)}
-          >
-            <FieldLabel htmlFor="report-time">每日报告时间</FieldLabel>
-            <Input
-              id="report-time"
-              type="time"
-              value={reportTime}
-              onChange={(event) => onReportTimeChange(event.target.value)}
-              disabled={disabled}
-              aria-invalid={Boolean(fieldErrors.report_time)}
-            />
-            <FieldDescription>
-              固定使用 Asia/Shanghai 时区；留空使用 09:00。
-            </FieldDescription>
-            {fieldErrors.report_time ? (
-              <FieldError>{fieldErrors.report_time}</FieldError>
-            ) : null}
-          </Field>
-        </FieldGroup>
-
-        <Field
-          orientation="horizontal"
-          data-disabled={disabled}
-          className="justify-between"
-        >
-          <FieldContent>
-            <FieldLabel htmlFor="weekly-report">生成周报</FieldLabel>
-            <FieldDescription>
-              仅保存偏好；周报流水线将在后续任务实现。
-            </FieldDescription>
-          </FieldContent>
-          <Switch
-            id="weekly-report"
-            checked={weeklyReportEnabled}
-            onCheckedChange={onWeeklyReportEnabledChange}
-            disabled={disabled}
-            aria-label="生成周报"
-          />
-        </Field>
-
-        <Field
-          data-disabled={disabled}
-          data-invalid={Boolean(fieldErrors.notification_target_names)}
-        >
-          <FieldLabel htmlFor="notification-targets">推送目标名称</FieldLabel>
-          <Textarea
-            id="notification-targets"
-            value={notificationTargets}
-            onChange={(event) =>
-              onNotificationTargetsChange(event.target.value)
-            }
-            disabled={disabled}
-            maxLength={2579}
-            placeholder={"飞书舆情群\n市场日报邮箱"}
-            aria-invalid={Boolean(fieldErrors.notification_target_names)}
-          />
-          <FieldDescription>
-            每行一个名称，最多 20 个；本阶段暂不校验目标是否已经配置。
-          </FieldDescription>
-          {fieldErrors.notification_target_names ? (
-            <FieldError>{fieldErrors.notification_target_names}</FieldError>
+          {customInterval ? (
+            <Field
+              data-disabled={disabled}
+              data-invalid={Boolean(fieldErrors.collection_interval_seconds)}
+            >
+              <FieldLabel htmlFor="collection-interval">
+                采集频率（秒）
+              </FieldLabel>
+              <Input
+                id="collection-interval"
+                type="number"
+                min={600}
+                max={86400}
+                step={1}
+                value={
+                  Number.isNaN(collectionIntervalSeconds)
+                    ? ""
+                    : collectionIntervalSeconds
+                }
+                onChange={(event) =>
+                  onCollectionIntervalSecondsChange(event.target.valueAsNumber)
+                }
+                disabled={disabled}
+                aria-invalid={Boolean(fieldErrors.collection_interval_seconds)}
+                aria-describedby={
+                  fieldErrors.collection_interval_seconds
+                    ? "collection-frequency-error"
+                    : "collection-interval-description"
+                }
+              />
+              <FieldDescription id="collection-interval-description">
+                填写 600—86400 之间的整数秒。
+              </FieldDescription>
+            </Field>
           ) : null}
-        </Field>
-      </CardContent>
-    </Card>
+        </FieldGroup>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

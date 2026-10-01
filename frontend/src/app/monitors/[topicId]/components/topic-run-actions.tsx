@@ -2,10 +2,25 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
-import { LoaderCircleIcon, PlayIcon } from "lucide-react";
+import { ChevronDownIcon, PlayIcon } from "lucide-react";
 
 import { runMonitorTopic } from "@/api/jiankongzhuti";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/components/ui/field";
+import { Spinner } from "@/components/ui/spinner";
 import { ApiRequestError } from "@/request";
 
 type RunRequest = (
@@ -80,11 +95,11 @@ export function TopicRunResult({
   sourceNames: Record<string, string>;
 }) {
   return (
-    <div className="space-y-3" role="status">
+    <div className="flex flex-col gap-3" role="status">
       <p className="text-sm font-medium">
         已按规则版本 v{result.topic_version} 处理
       </p>
-      <ul className="divide-border divide-y text-sm">
+      <ul className="flex flex-col gap-4 text-sm">
         {result.sources.map((source) => (
           <li key={source.source_key} className="py-3 first:pt-0 last:pb-0">
             <span className="font-medium">
@@ -125,7 +140,10 @@ export function TopicRunActions({
   const [result, setResult] = useState<HotKeyAPI.MonitorTopicRunView | null>(
     null,
   );
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{
+    message: string;
+    requestId?: string;
+  } | null>(null);
   const controller = useRef(
     createManualRunController((topicId, input) =>
       runMonitorTopic({ topic_id: topicId }, input),
@@ -151,17 +169,20 @@ export function TopicRunActions({
       setResult(await controller.current.run(topic.id, selected));
     } catch (cause) {
       if (cause instanceof ApiRequestError) {
-        setError(
-          cause.code === "topic_not_ready"
-            ? "当前所选来源均未受理。请检查来源就绪状态、静默时段和预算。"
-            : cause.code === "idempotency_conflict"
-              ? "请求编号与先前的来源选择冲突，请重新选择后再试。"
-              : cause.message,
-        );
+        setError({
+          requestId: cause.requestId,
+          message:
+            cause.code === "topic_not_ready"
+              ? "当前所选来源均未受理。请检查来源就绪状态、静默时段和预算。"
+              : cause.code === "idempotency_conflict"
+                ? "请求编号与先前的来源选择冲突，请重新选择后再试。"
+                : cause.message,
+        });
       } else {
-        setError(
-          cause instanceof Error ? cause.message : "采集请求失败，请重试。",
-        );
+        setError({
+          message:
+            cause instanceof Error ? cause.message : "采集请求失败，请重试。",
+        });
       }
     } finally {
       setPending(false);
@@ -169,88 +190,103 @@ export function TopicRunActions({
   }
 
   return (
-    <section
-      className="bg-muted mt-4 rounded-2xl p-5"
-      aria-labelledby="topic-run-title"
-    >
-      <h2 id="topic-run-title" className="text-sm font-medium">
-        手动采集
-      </h2>
-      <p className="text-muted-foreground mt-2 text-sm leading-5">
-        按当前已保存的规则版本发起一次采集。结果会列出每个来源的任务或跳过原因。
-      </p>
-      {topic.status !== "active" ? (
-        <p className="mt-4 text-sm" role="status">
-          {topic.status === "paused"
-            ? "主题已暂停，请先恢复。"
-            : "已归档主题无法采集。"}
+    <Collapsible>
+      <CollapsibleTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="navigation"
+          className="w-full justify-between"
+        >
+          手动采集
+          <ChevronDownIcon data-icon="inline-end" />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-4">
+        <p className="text-muted-foreground text-sm leading-6">
+          按已保存的规则采集一次，查看每个来源的受理结果。
         </p>
-      ) : topic.source_keys.length === 0 ? (
-        <p className="mt-4 text-sm" role="status">
-          请先选择并保存来源。
-        </p>
-      ) : (
-        <>
-          <fieldset
-            className="mt-4 space-y-2"
-            disabled={pending || disabled || result !== null}
-          >
-            <legend className="text-sm font-medium">本次来源</legend>
-            {topic.source_keys.map((sourceKey) => (
-              <label
-                key={sourceKey}
-                className="flex min-h-10 items-center gap-2 text-sm"
-              >
-                <input
-                  type="checkbox"
-                  checked={selected.includes(sourceKey)}
-                  onChange={() => toggleSource(sourceKey)}
-                  className="accent-primary size-4"
-                />
-                {sourceNames[sourceKey] ?? sourceKey}
-              </label>
-            ))}
-          </fieldset>
-          {result ? (
-            <div className="mt-4 space-y-3">
-              <TopicRunResult result={result} sourceNames={sourceNames} />
+        {topic.status !== "active" ? (
+          <p className="mt-4 text-sm" role="status">
+            {topic.status === "paused"
+              ? "主题已暂停，请先恢复。"
+              : "已归档主题无法采集。"}
+          </p>
+        ) : topic.source_keys.length === 0 ? (
+          <p className="mt-4 text-sm" role="status">
+            请先选择并保存来源。
+          </p>
+        ) : (
+          <>
+            <FieldSet
+              className="mt-6"
+              disabled={pending || disabled || result !== null}
+            >
+              <FieldLegend variant="label">本次来源</FieldLegend>
+              <FieldGroup>
+                {topic.source_keys.map((key) => (
+                  <Field
+                    key={key}
+                    orientation="horizontal"
+                    data-disabled={pending || disabled || result !== null}
+                  >
+                    <Checkbox
+                      id={`run-source-${key}`}
+                      checked={selected.includes(key)}
+                      onCheckedChange={() => toggleSource(key)}
+                      disabled={pending || disabled || result !== null}
+                    />
+                    <FieldLabel htmlFor={`run-source-${key}`}>
+                      {sourceNames[key] ?? key}
+                    </FieldLabel>
+                  </Field>
+                ))}
+              </FieldGroup>
+            </FieldSet>
+            {result ? (
+              <div className="mt-6 flex flex-col gap-4">
+                <TopicRunResult result={result} sourceNames={sourceNames} />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="navigation"
+                  disabled={disabled}
+                  onClick={() => {
+                    controller.current.reset();
+                    setResult(null);
+                  }}
+                >
+                  发起新一轮
+                </Button>
+              </div>
+            ) : (
               <Button
                 type="button"
-                variant="secondary"
-                className="w-full"
-                onClick={() => {
-                  controller.current.reset();
-                  setResult(null);
-                }}
+                size="navigation"
+                className="mt-6"
+                disabled={pending || disabled || selected.length === 0}
+                onClick={() => void submit()}
               >
-                发起新一轮
+                {pending ? (
+                  <Spinner data-icon="inline-start" aria-hidden="true" />
+                ) : (
+                  <PlayIcon data-icon="inline-start" />
+                )}
+                {pending ? "正在受理" : "立即采集"}
               </Button>
-            </div>
-          ) : (
-            <Button
-              type="button"
-              className="mt-4 w-full"
-              disabled={pending || disabled || selected.length === 0}
-              onClick={() => void submit()}
-            >
-              {pending ? (
-                <LoaderCircleIcon
-                  className="animate-spin motion-reduce:animate-none"
-                  aria-hidden="true"
-                />
-              ) : (
-                <PlayIcon data-icon="inline-start" aria-hidden="true" />
-              )}
-              {pending ? "正在受理" : "立即采集"}
-            </Button>
-          )}
-          {error ? (
-            <p role="alert" className="text-destructive mt-3 text-sm">
-              {error}
-            </p>
-          ) : null}
-        </>
-      )}
-    </section>
+            )}
+            {error ? (
+              <Alert variant="destructive" className="mt-4">
+                <AlertTitle>采集未受理</AlertTitle>
+                <AlertDescription>
+                  {error.message}
+                  {error.requestId ? <p>请求编号：{error.requestId}</p> : null}
+                </AlertDescription>
+              </Alert>
+            ) : null}
+          </>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

@@ -2,7 +2,7 @@
 
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { LoaderCircleIcon, SearchCheckIcon } from "lucide-react";
+import { SearchCheckIcon } from "lucide-react";
 
 import {
   previewMonitorTopic,
@@ -20,7 +20,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Spinner } from "@/components/ui/spinner";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiRequestError } from "@/request";
 
@@ -168,8 +170,9 @@ function TopicRulePreviewDialog({
       <DialogTrigger asChild>
         <Button
           type="button"
-          variant="secondary"
-          className="w-full"
+          variant="outline"
+          size="navigation"
+          className="w-fit"
           disabled={disabled}
         >
           <SearchCheckIcon data-icon="inline-start" />
@@ -187,7 +190,7 @@ function TopicRulePreviewDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
+        <div className="flex flex-col gap-3">
           <Button
             type="button"
             variant="secondary"
@@ -195,9 +198,9 @@ function TopicRulePreviewDialog({
             disabled={disabled || sampleState.status === "loading"}
           >
             {sampleState.status === "loading" ? (
-              <LoaderCircleIcon className="animate-spin" aria-hidden="true" />
+              <Spinner data-icon="inline-start" aria-hidden="true" />
             ) : (
-              <SearchCheckIcon aria-hidden="true" />
+              <SearchCheckIcon data-icon="inline-start" aria-hidden="true" />
             )}
             {sampleState.status === "loading"
               ? "正在读取样本"
@@ -208,20 +211,18 @@ function TopicRulePreviewDialog({
             条可读内容；未选择来源时读取全部已有来源。包含未命中与排除样本，只说明本地草稿匹配。
           </p>
           {sampleState.status === "error" ? (
-            <div
-              role="alert"
-              className="bg-destructive/10 rounded-lg p-3 text-sm"
-            >
-              <p>{sampleState.message}</p>
-              {sampleState.requestId ? (
-                <p className="mt-1 text-xs">
-                  请求编号：{sampleState.requestId}
-                </p>
-              ) : null}
-            </div>
+            <Alert variant="destructive">
+              <AlertTitle>样本暂时不可用</AlertTitle>
+              <AlertDescription>
+                {sampleState.message}
+                {sampleState.requestId ? (
+                  <p>请求编号：{sampleState.requestId}</p>
+                ) : null}
+              </AlertDescription>
+            </Alert>
           ) : null}
           {sampleState.status === "ready" ? (
-            <div className="space-y-3" aria-live="polite">
+            <div className="flex flex-col gap-3" aria-live="polite">
               <p className="text-muted-foreground text-xs leading-5">
                 {new Date(sampleState.preview.starts_at).toLocaleString(
                   "zh-CN",
@@ -250,7 +251,7 @@ function TopicRulePreviewDialog({
                 sampleState.preview.samples.map((item) => (
                   <article
                     key={item.observation_id}
-                    className="bg-muted space-y-2 rounded-xl p-4 text-sm"
+                    className="bg-muted flex flex-col gap-2 rounded-xl p-4 text-sm"
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant={item.matched ? "secondary" : "outline"}>
@@ -298,44 +299,43 @@ function TopicRulePreviewDialog({
           ) : null}
         </div>
 
-        <form className="space-y-4" onSubmit={handlePreview}>
-          <div className="space-y-2">
-            <Label htmlFor="preview-sample-title">标题样本</Label>
-            <Textarea
-              id="preview-sample-title"
-              value={sampleTitle}
-              onChange={(event) => setSampleTitle(event.target.value)}
-              maxLength={500}
-              required
-              placeholder="例如：AI Agent 开源模型发布"
-            />
-          </div>
-          <Button type="submit" disabled={state.status === "loading"}>
-            {state.status === "loading" ? (
-              <LoaderCircleIcon className="animate-spin" aria-hidden="true" />
-            ) : (
-              <SearchCheckIcon data-icon="inline-start" />
-            )}
-            {state.status === "loading" ? "正在检查" : "检查标题"}
-          </Button>
+        <form onSubmit={handlePreview}>
+          <FieldGroup>
+            <Field data-disabled={state.status === "loading"}>
+              <FieldLabel htmlFor="preview-sample-title">标题样本</FieldLabel>
+              <Textarea
+                id="preview-sample-title"
+                value={sampleTitle}
+                onChange={(event) => setSampleTitle(event.target.value)}
+                maxLength={500}
+                disabled={state.status === "loading"}
+                required
+                placeholder="例如：AI Agent 开源模型发布"
+              />
+            </Field>
+            <Button type="submit" disabled={state.status === "loading"}>
+              {state.status === "loading" ? (
+                <Spinner data-icon="inline-start" aria-hidden="true" />
+              ) : (
+                <SearchCheckIcon data-icon="inline-start" />
+              )}
+              {state.status === "loading" ? "正在检查" : "检查标题"}
+            </Button>
+          </FieldGroup>
         </form>
 
         {state.status === "error" ? (
-          <div
-            className="bg-destructive/10 rounded-lg p-3 text-sm"
-            role="alert"
-          >
-            <p>{state.message}</p>
-            {state.requestId ? (
-              <p className="mt-1 font-mono text-xs">
-                请求编号：{state.requestId}
-              </p>
-            ) : null}
-          </div>
+          <Alert variant="destructive">
+            <AlertTitle>规则预览未完成</AlertTitle>
+            <AlertDescription>
+              {state.message}
+              {state.requestId ? <p>请求编号：{state.requestId}</p> : null}
+            </AlertDescription>
+          </Alert>
         ) : null}
 
         {state.status === "ready" && sample ? (
-          <div className="space-y-4" aria-live="polite">
+          <div className="flex flex-col gap-4" aria-live="polite">
             <div className="bg-muted rounded-xl p-4">
               <div className="flex items-center gap-2">
                 <Badge variant={sample.matched ? "secondary" : "outline"}>
@@ -351,7 +351,7 @@ function TopicRulePreviewDialog({
                   </span>
                 ) : null}
               </div>
-              <dl className="text-muted-foreground mt-4 space-y-2 text-xs leading-5">
+              <dl className="text-muted-foreground mt-4 flex flex-col gap-2 text-xs leading-5">
                 <div>
                   <dt className="text-foreground font-medium">本次任意命中</dt>
                   <dd>{sample.matched_any.join("、") || "无"}</dd>
@@ -367,7 +367,7 @@ function TopicRulePreviewDialog({
                   </dd>
                 </div>
               </dl>
-              <dl className="text-muted-foreground mt-4 space-y-2 text-xs leading-5">
+              <dl className="text-muted-foreground mt-4 flex flex-col gap-2 text-xs leading-5">
                 <div>
                   <dt className="text-foreground font-medium">任意命中</dt>
                   <dd>
@@ -387,7 +387,7 @@ function TopicRulePreviewDialog({
               </dl>
             </div>
 
-            <div className="ring-foreground/10 rounded-xl p-4 text-sm ring-1">
+            <div className="p-4 text-sm">
               <p className="font-medium">查询与预算影响</p>
               <p className="text-muted-foreground mt-2 leading-6">
                 本地别名匹配：

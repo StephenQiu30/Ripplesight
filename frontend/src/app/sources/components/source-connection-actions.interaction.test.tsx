@@ -14,6 +14,7 @@ vi.mock("@/api/laiyuannengli", () => ({ updateSourceConnection }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
 
 import { SourceConnectionActions } from "./source-connection-actions";
+import { ApiRequestError } from "@/request";
 
 afterEach(() => {
   cleanup();
@@ -57,5 +58,108 @@ describe("Bilibili safety recovery", () => {
       { expected_version: 3, status: "active", owner_confirmed: true },
     );
     await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
+  });
+  it("cancels a confirmation without changing the connection", async () => {
+    render(<SourceConnectionActions platform={platform} onChanged={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "重新启用" }));
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(updateSourceConnection).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "重新启用" }),
+    );
+  });
+
+  it("reenables a configured public source without a credential requirement", async () => {
+    const onChanged = vi.fn().mockResolvedValue(undefined);
+    render(
+      <SourceConnectionActions
+        platform={{
+          ...platform,
+          source_key: "hackernews",
+          display_name: "Hacker News",
+          safety_stop_reason: null,
+        }}
+        onChanged={onChanged}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "重新启用" }));
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "确认" }));
+    await waitFor(() =>
+      expect(updateSourceConnection).toHaveBeenCalledWith(
+        { source_key: "hackernews" },
+        { expected_version: 3, status: "active", owner_confirmed: false },
+      ),
+    );
+    expect(onChanged).toHaveBeenCalledOnce();
+  });
+
+  it("configures a public web connection with explicit hosts and the current version", async () => {
+    render(
+      <SourceConnectionActions
+        platform={{
+          ...platform,
+          source_key: "web",
+          display_name: "公开网页",
+          status: "unconfigured",
+          connection_version: null,
+          connection_status: null,
+          safety_stop_reason: null,
+          allowed_hosts: [],
+        }}
+        onChanged={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+    const configure = screen.getByRole("button", { name: "配置连接" });
+    expect((configure as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByRole("textbox", { name: "允许访问的域名" }), {
+      target: { value: "example.com\nnews.example.com" },
+    });
+    fireEvent.click(configure);
+    fireEvent.click(screen.getByRole("button", { name: "确认" }));
+    await waitFor(() =>
+      expect(updateSourceConnection).toHaveBeenCalledWith(
+        { source_key: "web" },
+        {
+          expected_version: 0,
+          status: "active",
+          owner_confirmed: false,
+          allowed_hosts: ["example.com", "news.example.com"],
+        },
+      ),
+    );
+  });
+
+  it("shows a version conflict without automatically repeating the write", async () => {
+    const onChanged = vi.fn().mockResolvedValue(undefined);
+    updateSourceConnection.mockRejectedValueOnce(
+      new ApiRequestError({
+        kind: "http",
+        status: 409,
+        message: "连接版本已变化，请刷新后重试。",
+        requestId: "source-version-conflict",
+      }),
+    );
+    render(
+      <SourceConnectionActions
+        platform={{
+          ...platform,
+          source_key: "hackernews",
+          safety_stop_reason: null,
+        }}
+        onChanged={onChanged}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "重新启用" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认" }));
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "source-version-conflict",
+    );
+    expect(updateSourceConnection).toHaveBeenCalledOnce();
+    expect(onChanged).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "刷新状态" }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
+    expect(updateSourceConnection).toHaveBeenCalledOnce();
   });
 });

@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRightIcon, CircleAlertIcon } from "lucide-react";
+import { ArrowRightIcon, CircleAlertIcon, RotateCcwIcon } from "lucide-react";
 
 import { listContinuousFailureIssues } from "@/api/caijirenwu";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/request";
@@ -33,6 +34,7 @@ function capabilityLabel(capability: HotKeyAPI.SourceCapability): string {
 
 function formatTime(value: string): string {
   return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
     dateStyle: "medium",
     timeStyle: "medium",
   }).format(new Date(value));
@@ -49,9 +51,10 @@ export function JobHealthSummaryView({ state }: { state: IssueState }) {
 
   if (state.status === "error") {
     return (
-      <p className="text-destructive mt-8 text-sm" role="alert">
-        连续失败摘要暂不可用，任务历史仍可查看。{state.message}
-      </p>
+      <Alert variant="destructive" className="mt-8">
+        <AlertTitle>连续失败摘要暂不可用</AlertTitle>
+        <AlertDescription>任务历史仍可查看。{state.message}</AlertDescription>
+      </Alert>
     );
   }
 
@@ -64,14 +67,17 @@ export function JobHealthSummaryView({ state }: { state: IssueState }) {
   }
 
   return (
-    <section className="mt-8 space-y-3" aria-labelledby="job-issues-title">
+    <section
+      className="mt-8 flex flex-col gap-6"
+      aria-labelledby="job-issues-title"
+    >
       <h2 id="job-issues-title" className="text-lg font-medium">
         需要处理
       </h2>
       {state.issues.map((issue) => (
         <article
           key={issue.latest_failed_job_id}
-          className="bg-destructive/10 rounded-2xl p-5 sm:flex sm:items-start sm:justify-between sm:gap-6 sm:p-6"
+          className="flex flex-col items-start gap-4 py-4 sm:flex-row sm:justify-between sm:gap-6"
         >
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -113,17 +119,18 @@ export function JobHealthSummaryView({ state }: { state: IssueState }) {
 
 export function JobHealthSummary() {
   const [state, setState] = useState<IssueState>({ status: "loading" });
+  const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
-    let isCurrent = true;
-    void listContinuousFailureIssues()
+    const controller = new AbortController();
+    void listContinuousFailureIssues({ signal: controller.signal })
       .then((issues) => {
-        if (isCurrent) {
+        if (!controller.signal.aborted) {
           setState({ status: "ready", issues });
         }
       })
       .catch((error: unknown) => {
-        if (!isCurrent) {
+        if (controller.signal.aborted) {
           return;
         }
 
@@ -134,9 +141,26 @@ export function JobHealthSummary() {
         });
       });
     return () => {
-      isCurrent = false;
+      controller.abort();
     };
-  }, []);
+  }, [retryToken]);
 
-  return <JobHealthSummaryView state={state} />;
+  return (
+    <>
+      <JobHealthSummaryView state={state} />
+      {state.status === "error" ? (
+        <Button
+          className="mt-3"
+          variant="outline"
+          onClick={() => {
+            setState({ status: "loading" });
+            setRetryToken((value) => value + 1);
+          }}
+        >
+          <RotateCcwIcon data-icon="inline-start" />
+          重试摘要
+        </Button>
+      ) : null}
+    </>
+  );
 }

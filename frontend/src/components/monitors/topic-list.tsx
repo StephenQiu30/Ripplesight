@@ -1,160 +1,263 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { ArchiveIcon, LoaderCircleIcon, RotateCcwIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowRightIcon, RotateCcwIcon } from "lucide-react";
 
 import { listMonitorTopics } from "@/api/jiankongzhuti";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Field, FieldLabel } from "@/components/ui/field";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemTitle,
+} from "@/components/ui/item";
+import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { ApiRequestError } from "@/request";
 
+type Failure = { message: string; requestId?: string };
 type TopicListState =
   | { status: "loading" }
-  | { status: "ready"; topics: HotKeyAPI.MonitorTopicView[] }
-  | { status: "error"; message: string; requestId?: string };
+  | {
+      status: "ready";
+      topics: HotKeyAPI.MonitorTopicView[];
+      nextCursor: string | null;
+    }
+  | ({ status: "error" } & Failure);
+
+function toFailure(error: unknown): Failure {
+  return {
+    message:
+      error instanceof ApiRequestError
+        ? error.message
+        : "关注列表加载失败，请稍后重试。",
+    requestId: error instanceof ApiRequestError ? error.requestId : undefined,
+  };
+}
 
 export function TopicList() {
   const [includeArchived, setIncludeArchived] = useState(false);
+  const [reloadVersion, setReloadVersion] = useState(0);
   const [state, setState] = useState<TopicListState>({ status: "loading" });
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState<Failure | null>(null);
+  const generation = useRef(0);
+  const firstController = useRef<AbortController | null>(null);
+  const moreController = useRef<AbortController | null>(null);
+  const morePending = useRef(false);
 
-  async function load() {
+  useEffect(() => {
+    const current = ++generation.current;
+    const controller = new AbortController();
+    firstController.current = controller;
+    void listMonitorTopics(
+      { include_archived: includeArchived, limit: 20 },
+      { signal: controller.signal },
+    )
+      .then((page) => {
+        if (current === generation.current && !controller.signal.aborted)
+          setState({
+            status: "ready",
+            topics: page.items,
+            nextCursor: page.next_cursor,
+          });
+      })
+      .catch((error: unknown) => {
+        if (current === generation.current && !controller.signal.aborted)
+          setState({ status: "error", ...toFailure(error) });
+      });
+    return () => {
+      controller.abort();
+      moreController.current?.abort();
+    };
+  }, [includeArchived, reloadVersion]);
+
+  function resetList(archived: boolean = includeArchived) {
+    ++generation.current;
+    firstController.current?.abort();
+    moreController.current?.abort();
+    morePending.current = false;
+    setLoadingMore(false);
+    setMoreError(null);
     setState({ status: "loading" });
+    if (archived === includeArchived) setReloadVersion((value) => value + 1);
+    else setIncludeArchived(archived);
+  }
+
+  async function loadMore() {
+    if (state.status !== "ready" || !state.nextCursor || morePending.current)
+      return;
+    const current = generation.current;
+    const cursor = state.nextCursor;
+    const controller = new AbortController();
+    moreController.current = controller;
+    morePending.current = true;
+    setLoadingMore(true);
+    setMoreError(null);
     try {
-      const page = await listMonitorTopics({
-        include_archived: includeArchived,
-        limit: 50,
-      });
-      setState({ status: "ready", topics: page.items });
+      const page = await listMonitorTopics(
+        { include_archived: includeArchived, limit: 20, cursor },
+        { signal: controller.signal },
+      );
+      if (current !== generation.current || controller.signal.aborted) return;
+      setState((previous) =>
+        previous.status === "ready"
+          ? {
+              status: "ready",
+              topics: Array.from(
+                new Map(
+                  [...previous.topics, ...page.items].map((topic) => [
+                    topic.id,
+                    topic,
+                  ]),
+                ).values(),
+              ),
+              nextCursor: page.next_cursor,
+            }
+          : previous,
+      );
     } catch (error) {
-      setState({
-        status: "error",
-        message:
-          error instanceof ApiRequestError
-            ? error.message
-            : "主题列表加载失败。",
-        requestId:
-          error instanceof ApiRequestError ? error.requestId : undefined,
-      });
+      if (current === generation.current && !controller.signal.aborted)
+        setMoreError(toFailure(error));
+    } finally {
+      if (current === generation.current) {
+        morePending.current = false;
+        setLoadingMore(false);
+      }
     }
   }
 
-  useEffect(() => {
-    let isCurrent = true;
-    void listMonitorTopics({ include_archived: includeArchived, limit: 50 })
-      .then((page) => {
-        if (isCurrent) {
-          setState({ status: "ready", topics: page.items });
-        }
-      })
-      .catch((error: unknown) => {
-        if (!isCurrent) {
-          return;
-        }
-
-        setState({
-          status: "error",
-          message:
-            error instanceof ApiRequestError
-              ? error.message
-              : "主题列表加载失败。",
-          requestId:
-            error instanceof ApiRequestError ? error.requestId : undefined,
-        });
-      });
-    return () => {
-      isCurrent = false;
-    };
-  }, [includeArchived]);
-
   return (
     <section className="mt-10" aria-labelledby="monitor-topics-heading">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 id="monitor-topics-heading" className="text-xl font-semibold">
-            监控主题
-          </h2>
-        </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => setIncludeArchived((value) => !value)}
-        >
-          <ArchiveIcon data-icon="inline-start" />
-          {includeArchived ? "隐藏已归档" : "显示已归档"}
-        </Button>
-      </div>
-
-      {state.status === "loading" ? (
-        <div className="text-muted-foreground mt-5 flex items-center gap-2 text-sm">
-          <LoaderCircleIcon
-            className="size-4 animate-spin"
-            aria-hidden="true"
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+        <h2 id="monitor-topics-heading" className="text-xl font-normal">
+          我的关注
+        </h2>
+        <Field orientation="horizontal" className="w-fit">
+          <Switch
+            id="include-archived"
+            checked={includeArchived}
+            onCheckedChange={(checked) => resetList(checked)}
           />
-          正在读取主题
+          <FieldLabel htmlFor="include-archived">显示已归档</FieldLabel>
+        </Field>
+      </div>
+      {state.status === "loading" ? (
+        <div
+          className="text-muted-foreground flex items-center gap-3 text-sm"
+          role="status"
+        >
+          <Spinner />
+          正在读取关注
         </div>
       ) : null}
-
       {state.status === "error" ? (
-        <div
-          className="bg-destructive/10 mt-5 rounded-xl p-4 text-sm"
-          role="alert"
-        >
-          <p>{state.message}</p>
-          {state.requestId ? (
-            <p className="mt-1 font-mono text-xs">
-              请求编号：{state.requestId}
-            </p>
-          ) : null}
+        <Alert variant="destructive">
+          <AlertTitle>暂时无法读取关注</AlertTitle>
+          <AlertDescription>
+            {state.message}
+            {state.requestId ? <p>请求编号：{state.requestId}</p> : null}
+          </AlertDescription>
           <Button
             type="button"
-            variant="secondary"
-            size="sm"
-            className="mt-3"
-            onClick={() => void load()}
+            variant="outline"
+            size="navigation"
+            onClick={() => resetList()}
           >
             <RotateCcwIcon data-icon="inline-start" />
             重新加载
           </Button>
-        </div>
+        </Alert>
       ) : null}
-
       {state.status === "ready" && state.topics.length === 0 ? (
-        <div className="bg-muted mt-5 rounded-2xl px-6 py-10 text-center">
-          <p className="font-medium">尚无监控主题</p>
-          <p className="text-muted-foreground mt-2 text-sm">
-            先保存本地规则，保存不会发起采集。
-          </p>
-        </div>
+        <Empty>
+          <EmptyHeader>
+            <EmptyTitle>还没有关注的话题</EmptyTitle>
+            <EmptyDescription>
+              创建一个关注，设置关键词和信息来源。
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button asChild size="hero">
+              <Link href="/monitors/new">创建关注</Link>
+            </Button>
+          </EmptyContent>
+        </Empty>
       ) : null}
-
       {state.status === "ready" && state.topics.length > 0 ? (
-        <div className="mt-6 grid gap-5 md:grid-cols-2">
+        <ItemGroup>
           {state.topics.map((topic) => (
-            <Link
-              key={topic.id}
-              href={`/monitors/${topic.id}`}
-              className="bg-muted hover:bg-accent focus-visible:ring-ring rounded-2xl p-7 transition-colors focus-visible:ring-2 focus-visible:outline-none"
-            >
-              <Badge
-                variant={topic.status === "archived" ? "outline" : "secondary"}
-              >
-                {topic.status === "archived"
-                  ? "已归档"
-                  : topic.status === "active"
-                    ? "运行中"
-                    : "已暂停"}
-              </Badge>
-              <h3 className="mt-8 text-2xl font-semibold tracking-tight">
-                {topic.name}
-              </h3>
-              <p className="text-muted-foreground mt-5 text-sm">
-                查看关键词与来源 →
-              </p>
-            </Link>
+            <div key={topic.id} role="listitem">
+              <Item asChild>
+                <Link href={`/monitors/${topic.id}`}>
+                  <ItemContent>
+                    <ItemTitle>
+                      {topic.name}
+                      <Badge variant="secondary">
+                        {topic.status === "archived"
+                          ? "已归档"
+                          : topic.status === "active"
+                            ? "关注中"
+                            : "已暂停"}
+                      </Badge>
+                    </ItemTitle>
+                    <ItemDescription>
+                      {[...topic.rules.match_any, ...topic.rules.match_all]
+                        .slice(0, 3)
+                        .join(" · ") || "查看关键词"}{" "}
+                      ·{" "}
+                      {topic.source_keys.length
+                        ? `${topic.source_keys.length} 个来源`
+                        : "待设置来源"}
+                    </ItemDescription>
+                  </ItemContent>
+                  <ItemActions>
+                    <ArrowRightIcon aria-hidden="true" />
+                  </ItemActions>
+                </Link>
+              </Item>
+            </div>
           ))}
-        </div>
+        </ItemGroup>
+      ) : null}
+      {moreError ? (
+        <Alert variant="destructive" className="mt-6">
+          <AlertTitle>更多关注暂时无法读取</AlertTitle>
+          <AlertDescription>
+            {moreError.message}
+            {moreError.requestId ? (
+              <p>请求编号：{moreError.requestId}</p>
+            ) : null}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {state.status === "ready" && state.nextCursor ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="navigation"
+          className="mt-8"
+          onClick={() => void loadMore()}
+          disabled={loadingMore}
+        >
+          {loadingMore ? (
+            <Spinner data-icon="inline-start" aria-hidden="true" />
+          ) : null}
+          {loadingMore ? "正在读取" : moreError ? "重试加载更多" : "加载更多"}
+        </Button>
       ) : null}
     </section>
   );

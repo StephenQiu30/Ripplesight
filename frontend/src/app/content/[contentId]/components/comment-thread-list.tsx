@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ExternalLinkIcon, RotateCcwIcon } from "lucide-react";
+import { ChevronDownIcon, ExternalLinkIcon, RotateCcwIcon } from "lucide-react";
 
 import { listContentComments } from "@/api/zuopinziliao";
 import { CommentRefreshAction } from "@/app/content/[contentId]/components/comment-refresh-action";
@@ -10,6 +10,13 @@ import {
   formatTime,
   safeExternalHref,
 } from "@/app/content/components/content-presenters";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/request";
@@ -36,6 +43,8 @@ function useCommentPage(postId: string, rootId: string | null) {
   const [loadingMore, setLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const request = useRef<AbortController | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   const fetchPage = useCallback(
     (cursor?: string, signal?: AbortSignal) =>
@@ -53,8 +62,10 @@ function useCommentPage(postId: string, rootId: string | null) {
 
   useEffect(() => {
     const controller = new AbortController();
+    request.current = controller;
     void fetchPage(undefined, controller.signal)
       .then((page) => {
+        if (controller.signal.aborted) return;
         setState({
           status: "ready",
           items: page.items,
@@ -67,20 +78,15 @@ function useCommentPage(postId: string, rootId: string | null) {
         setState(toError(error));
       });
     return () => controller.abort();
-  }, [fetchPage]);
+  }, [fetchPage, reloadToken]);
 
-  async function reload() {
+  function reload() {
+    request.current?.abort();
+    loadingMoreRef.current = false;
+    setLoadingMore(false);
+    setLoadMoreError(null);
     setState({ status: "loading" });
-    try {
-      const page = await fetchPage();
-      setState({
-        status: "ready",
-        items: page.items,
-        nextCursor: page.next_cursor,
-      });
-    } catch (error) {
-      setState(toError(error));
-    }
+    setReloadToken((value) => value + 1);
   }
 
   async function loadMore() {
@@ -90,19 +96,24 @@ function useCommentPage(postId: string, rootId: string | null) {
       loadingMoreRef.current
     )
       return;
+    const controller = request.current;
+    if (!controller || controller.signal.aborted) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
     setLoadMoreError(null);
     try {
-      const page = await fetchPage(state.nextCursor);
+      const page = await fetchPage(state.nextCursor, controller.signal);
+      if (controller.signal.aborted) return;
       setState({
         status: "ready",
         items: [...state.items, ...page.items],
         nextCursor: page.next_cursor,
       });
     } catch (error) {
+      if (controller.signal.aborted) return;
       setLoadMoreError(toError(error).message);
     } finally {
+      if (controller.signal.aborted) return;
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
@@ -150,7 +161,7 @@ export function CommentCard({
   const relationNotice = parentRelationLabel(comment.parent_relation_status);
 
   return (
-    <article className="bg-muted rounded-2xl p-5">
+    <article className="py-4">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant={observation ? "secondary" : "outline"}>
           {observation ? "已保存评论" : "关系占位"}
@@ -213,11 +224,12 @@ function PageNotice({
   }
   if (state.status === "error") {
     return (
-      <div className="bg-destructive/10 mt-4 rounded-2xl p-5">
-        <p role="alert" className="text-sm">
+      <Alert variant="destructive" className="mt-4">
+        <AlertTitle>评论读取失败</AlertTitle>
+        <AlertDescription>
           {state.message}
           {state.requestId ? ` 请求编号：${state.requestId}` : null}
-        </p>
+        </AlertDescription>
         <Button
           type="button"
           variant="secondary"
@@ -227,11 +239,13 @@ function PageNotice({
           <RotateCcwIcon data-icon="inline-start" />
           重新加载
         </Button>
-      </div>
+      </Alert>
     );
   }
   return state.items.length === 0 ? (
-    <p className="text-muted-foreground mt-4 text-sm">{emptyText}</p>
+    <Empty className="mt-6">
+      <EmptyDescription>{emptyText}</EmptyDescription>
+    </Empty>
   ) : null;
 }
 
@@ -281,7 +295,7 @@ function CommentBranch({
       : [],
   );
   return (
-    <div className="mt-3 space-y-3 pl-3 sm:pl-6">
+    <div className="mt-3 flex flex-col gap-6 pl-3 sm:pl-6">
       <PageNotice
         state={page.state}
         onRetry={() => void page.reload()}
@@ -317,22 +331,20 @@ function CommentRoot({
 }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <div>
+    <Collapsible open={expanded} onOpenChange={setExpanded}>
       <CommentCard comment={root} />
       {root.has_replies ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="mt-2"
-          aria-expanded={expanded}
-          onClick={() => setExpanded((current) => !current)}
-        >
-          {expanded ? "收起回复" : "查看已保存回复"}
-        </Button>
+        <CollapsibleTrigger asChild>
+          <Button type="button" variant="ghost" size="sm" className="mt-2">
+            {expanded ? "收起回复" : "查看已保存回复"}
+            <ChevronDownIcon data-icon="inline-end" />
+          </Button>
+        </CollapsibleTrigger>
       ) : null}
-      {expanded ? <CommentBranch postId={postId} root={root} /> : null}
-    </div>
+      <CollapsibleContent>
+        {expanded ? <CommentBranch postId={postId} root={root} /> : null}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -353,7 +365,7 @@ export function CommentThreadList({ postId }: { postId: string }) {
         emptyText="暂无可读评论；当前为空不代表来源没有评论。"
       />
       {page.state.status === "ready" ? (
-        <div className="mt-4 space-y-4">
+        <div className="mt-6 flex flex-col gap-8">
           {page.state.items.map((root) => (
             <CommentRoot key={root.content_id} postId={postId} root={root} />
           ))}

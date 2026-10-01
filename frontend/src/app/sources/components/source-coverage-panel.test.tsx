@@ -141,8 +141,6 @@ describe("coverage facts", () => {
     expect(list).toContain("错过到期");
     expect(list).toContain("未尝试");
     expect(list).toContain("1 段未确认缺口");
-    expect(list).toContain("未知");
-    expect(list).toContain("0");
 
     const detail = renderToStaticMarkup(
       createElement(CoverageWindowDetail, { row: windowRow, onClose: vi.fn() }),
@@ -152,6 +150,8 @@ describe("coverage facts", () => {
     expect(detail).toContain("v3");
     expect(detail).toContain("Job 固定连接版本");
     expect(detail).toContain("budget_exhausted");
+    expect(detail).toContain("未知");
+    expect(detail).toContain(">0</dd>");
     expect(detail).not.toContain("/jobs/null");
   });
 

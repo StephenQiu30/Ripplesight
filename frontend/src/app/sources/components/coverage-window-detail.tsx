@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
 import {
   admissionLabel,
@@ -34,15 +35,14 @@ function RecordLinks({ row }: { row: HotKeyAPI.CollectionCoverageView }) {
         ) : row.content_ids.length === 0 ? (
           <p className="text-muted-foreground mt-2 text-sm">明确为 0 条</p>
         ) : (
-          <ul className="mt-2 space-y-2 text-sm">
+          <ul className="mt-2 flex flex-col gap-2 text-sm">
             {row.content_ids.map((contentId) => (
               <li key={contentId}>
-                <Link
-                  className="text-primary underline-offset-4 hover:underline"
-                  href={`/content/${contentId}`}
-                >
-                  查看内容 {contentId.slice(0, 8)}
-                </Link>
+                <Button asChild variant="link" size="sm">
+                  <Link href={`/content/${contentId}`}>
+                    查看内容 {contentId.slice(0, 8)}
+                  </Link>
+                </Button>
               </li>
             ))}
           </ul>
@@ -55,15 +55,16 @@ function RecordLinks({ row }: { row: HotKeyAPI.CollectionCoverageView }) {
         ) : row.snapshot_ids.length === 0 ? (
           <p className="text-muted-foreground mt-2 text-sm">明确为 0 个</p>
         ) : (
-          <ul className="mt-2 space-y-2 text-sm">
+          <ul className="mt-2 flex flex-col gap-2 text-sm">
             {row.snapshot_ids.map((snapshotId) => (
               <li key={snapshotId}>
-                <Link
-                  className="text-primary underline-offset-4 hover:underline"
-                  href={`/hotlists?source=${encodeURIComponent(row.source_key)}&snapshot=${encodeURIComponent(snapshotId)}`}
-                >
-                  查看快照 {snapshotId.slice(0, 8)}
-                </Link>
+                <Button asChild variant="link" size="sm">
+                  <Link
+                    href={`/hotlists?source=${encodeURIComponent(row.source_key)}&snapshot=${encodeURIComponent(snapshotId)}`}
+                  >
+                    查看快照 {snapshotId.slice(0, 8)}
+                  </Link>
+                </Button>
               </li>
             ))}
           </ul>
@@ -84,7 +85,7 @@ export function CoverageWindowDetail({
     <section
       id="coverage-detail"
       aria-labelledby="coverage-detail-heading"
-      className="bg-muted mt-8 scroll-mt-8 rounded-2xl p-5 sm:p-8"
+      className="flex flex-col"
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -124,7 +125,7 @@ export function CoverageWindowDetail({
       </div>
 
       {row.admission_reason || row.stop_reason ? (
-        <div className="mt-5 space-y-2 text-sm">
+        <div className="mt-5 flex flex-col gap-2 text-sm">
           {row.admission_reason ? (
             <p>受理原因：{row.admission_reason}</p>
           ) : null}
@@ -142,7 +143,7 @@ export function CoverageWindowDetail({
         </Button>
       )}
 
-      <dl className="mt-8 grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
+      <dl className="mt-8 grid gap-x-6 gap-y-5 sm:grid-cols-2">
         <Fact label="窗口起点" value={coverageTime(row.window_start)} />
         <Fact label="窗口终点" value={coverageTime(row.window_end)} />
         <Fact
@@ -170,7 +171,7 @@ export function CoverageWindowDetail({
         <Fact label="主题 ID" value={row.topic_id ?? "未知"} />
       </dl>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-2">
+      <div className="mt-8 grid gap-8 sm:grid-cols-2">
         <div>
           <h4 className="font-medium">任务尝试</h4>
           {row.attempts === null ? (
@@ -178,7 +179,7 @@ export function CoverageWindowDetail({
           ) : row.attempts.length === 0 ? (
             <p className="text-muted-foreground mt-2 text-sm">明确为 0 次</p>
           ) : (
-            <ul className="mt-3 space-y-2 text-sm">
+            <ul className="mt-3 flex flex-col gap-2 text-sm">
               {row.attempts.map((attempt) => (
                 <li key={attempt.attempt_id}>
                   周期 {attempt.collection_cycle_no} ·{" "}
@@ -205,7 +206,7 @@ export function CoverageWindowDetail({
         </div>
       </div>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-2">
+      <div className="mt-8 grid gap-8 sm:grid-cols-2">
         <div>
           <h4 className="font-medium">资源预算</h4>
           {row.budgets === null ? (
@@ -213,7 +214,7 @@ export function CoverageWindowDetail({
           ) : row.budgets.length === 0 ? (
             <p className="text-muted-foreground mt-2 text-sm">明确为 0 项</p>
           ) : (
-            <ul className="mt-3 space-y-3 text-sm">
+            <ul className="mt-3 flex flex-col gap-3 text-sm">
               {row.budgets.map((budget) => (
                 <li key={`${budget.budget_key}:${budget.policy_version}`}>
                   <span className="font-medium">
@@ -235,7 +236,7 @@ export function CoverageWindowDetail({
               暂无已记录缺口；覆盖结论仍以窗口状态为准。
             </p>
           ) : (
-            <ul className="mt-3 space-y-3 text-sm">
+            <ul className="mt-3 flex flex-col gap-3 text-sm">
               {row.gaps.map((gap, index) => (
                 <li key={`${gap.starts_at}:${index}`}>
                   {coverageTime(gap.starts_at)} → {coverageTime(gap.ends_at)}
@@ -249,7 +250,8 @@ export function CoverageWindowDetail({
         </div>
       </div>
 
-      <div className="mt-8 border-t pt-6">
+      <div className="mt-8 flex flex-col gap-6">
+        <Separator />
         <RecordLinks row={row} />
       </div>
     </section>

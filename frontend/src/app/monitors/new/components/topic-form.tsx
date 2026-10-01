@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { ArrowLeftIcon, ArrowRightIcon, LoaderCircleIcon } from "lucide-react";
+import { ArrowRightIcon, RotateCcwIcon } from "lucide-react";
 
 import { createMonitorTopic } from "@/api/jiankongzhuti";
 import { listSourceCapabilities } from "@/api/laiyuannengli";
@@ -13,8 +13,8 @@ import {
 } from "@/components/monitors/keyword-group-field";
 import { TopicRulePreview } from "@/components/monitors/topic-rule-preview";
 import {
-  parseNotificationTargetNames,
   selectableTopicSources,
+  TopicAdvancedFields,
   TopicSettingsFields,
   type TopicSourceOption,
 } from "@/components/monitors/topic-settings-fields";
@@ -23,18 +23,9 @@ import {
   tryBeginTopicSubmission,
   type TopicFieldErrors,
 } from "@/components/monitors/topic-validation";
-import { PageState } from "@/components/system/page-state";
+import { WorkspaceHeader } from "@/components/navigation/workspace-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   Field,
   FieldDescription,
@@ -43,6 +34,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { ApiRequestError } from "@/request";
 
 type SubmissionError = {
@@ -50,30 +42,38 @@ type SubmissionError = {
   requestId?: string;
   fields?: TopicFieldErrors;
 };
-
 type SourcesState =
   | { status: "loading" }
   | { status: "ready"; sourceOptions: TopicSourceOption[] }
   | { status: "error"; message: string; requestId?: string };
 
 function toSubmissionError(error: unknown): SubmissionError {
-  if (error instanceof ApiRequestError) {
-    if (error.code === "keyword_group_conflict") {
-      return { message: "同一个关键词不能同时放在包含组与排除组中。" };
-    }
-    if (error.code === "invalid_monitor_rules") {
-      return { message: "至少填写一个“任意命中”或“全部包含”关键词。" };
-    }
-    if (error.code === "source_preset_not_applied") {
-      return { message: "所选来源缺少已应用搜索预设、准入或启用的执行策略。" };
-    }
-    return {
-      message: error.message,
-      requestId: error.requestId,
-      fields: readTopicFieldErrors(error),
-    };
-  }
-  return { message: "主题保存失败，请稍后重试。" };
+  if (!(error instanceof ApiRequestError))
+    return { message: "关注保存失败，请稍后重试。" };
+  const message =
+    error.code === "keyword_group_conflict"
+      ? "同一个关键词不能同时放在包含组与排除组中。"
+      : error.code === "invalid_monitor_rules"
+        ? "至少填写一个“任意命中”或“全部包含”关键词。"
+        : error.code === "source_preset_not_applied"
+          ? "所选来源缺少已应用搜索预设、准入或启用的执行策略。"
+          : error.message;
+  return {
+    message,
+    requestId: error.requestId,
+    fields: readTopicFieldErrors(error),
+  };
+}
+
+function toSourcesError(error: unknown): SourcesState {
+  return {
+    status: "error",
+    message:
+      error instanceof ApiRequestError
+        ? error.message
+        : "来源配置加载失败，请稍后重试。",
+    requestId: error instanceof ApiRequestError ? error.requestId : undefined,
+  };
 }
 
 export function TopicForm() {
@@ -88,9 +88,6 @@ export function TopicForm() {
   const [sourceKeys, setSourceKeys] = useState<string[]>([]);
   const [collectionIntervalSeconds, setCollectionIntervalSeconds] =
     useState(1800);
-  const [reportTime, setReportTime] = useState("09:00");
-  const [weeklyReportEnabled, setWeeklyReportEnabled] = useState(false);
-  const [notificationTargets, setNotificationTargets] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const [submissionError, setSubmissionError] =
@@ -99,90 +96,64 @@ export function TopicForm() {
   useEffect(() => {
     let isCurrent = true;
     void listSourceCapabilities()
-      .then((sourcePage) => {
-        if (isCurrent) {
+      .then((page) => {
+        if (isCurrent)
           setSourcesState({
             status: "ready",
-            sourceOptions: selectableTopicSources(sourcePage.items),
+            sourceOptions: selectableTopicSources(page.items),
           });
-        }
       })
       .catch((error: unknown) => {
-        if (!isCurrent) {
-          return;
-        }
-        if (error instanceof ApiRequestError) {
-          setSourcesState({
-            status: "error",
-            message: error.message,
-            requestId: error.requestId,
-          });
-        } else {
-          setSourcesState({
-            status: "error",
-            message: "来源配置加载失败，请稍后重试。",
-          });
-        }
+        if (isCurrent) setSourcesState(toSourcesError(error));
       });
     return () => {
       isCurrent = false;
     };
   }, []);
 
+  async function reloadSources() {
+    setSourcesState({ status: "loading" });
+    try {
+      const page = await listSourceCapabilities();
+      setSourcesState({
+        status: "ready",
+        sourceOptions: selectableTopicSources(page.items),
+      });
+    } catch (error) {
+      setSourcesState(toSourcesError(error));
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!tryBeginTopicSubmission(submittingRef)) {
-      return;
-    }
+    if (!tryBeginTopicSubmission(submittingRef)) return;
     const any = parseKeywordLines(matchAny);
     const all = parseKeywordLines(matchAll);
-    if (any.length === 0 && all.length === 0) {
-      setSubmissionError({
-        message: "至少填写一个“任意命中”或“全部包含”关键词。",
-        fields: { match_any: "至少填写一个包含关键词。" },
-      });
-      submittingRef.current = false;
-      return;
-    }
-    const targetNames = parseNotificationTargetNames(notificationTargets);
+    const fields: TopicFieldErrors = {};
+    if (!name.trim()) fields.name = "请填写关注名称。";
+    if (!any.length && !all.length)
+      fields.match_any = "至少填写一个包含关键词。";
     if (
       !Number.isInteger(collectionIntervalSeconds) ||
       collectionIntervalSeconds < 600 ||
       collectionIntervalSeconds > 86400
-    ) {
-      setSubmissionError({
-        message: "采集频率必须是 600—86400 之间的整数秒。",
-        fields: {
-          collection_interval_seconds: "请输入 600—86400 之间的整数秒。",
-        },
-      });
+    )
+      fields.collection_interval_seconds = "请输入 600—86400 之间的整数秒。";
+    if (Object.keys(fields).length) {
+      setSubmissionError({ message: "请检查填写的内容。", fields });
       submittingRef.current = false;
       return;
     }
-    if (
-      targetNames.length > 20 ||
-      targetNames.some((item) => item.length > 128)
-    ) {
-      setSubmissionError({
-        message: "推送目标最多 20 个，每个名称不超过 128 个字符。",
-      });
-      submittingRef.current = false;
-      return;
-    }
-
     setIsSubmitting(true);
     setSubmissionError(null);
     try {
       const payload: HotKeyAPI.MonitorTopicCreateInput = {
-        name,
+        name: name.trim(),
         match_any: any,
         match_all: all,
         exclude: parseKeywordLines(exclude),
         source_keys: sourceKeys,
         collection_interval_seconds: collectionIntervalSeconds,
-        report_time: reportTime || "09:00",
-        weekly_report_enabled: weeklyReportEnabled,
-        notification_target_names: targetNames,
       };
       const topic = await createMonitorTopic(payload);
       router.replace(`/monitors/${topic.id}`);
@@ -195,212 +166,151 @@ export function TopicForm() {
     }
   }
 
-  if (sourcesState.status === "loading") {
-    return (
-      <PageState
-        eyebrow="监控主题"
-        title="正在准备创建页"
-        description="正在读取可用来源与配置。"
-      />
-    );
-  }
-
-  if (sourcesState.status === "error") {
-    return (
-      <PageState
-        eyebrow="加载失败"
-        title="暂时无法打开创建页"
-        description={
-          sourcesState.requestId
-            ? `${sourcesState.message} 请求编号：${sourcesState.requestId}`
-            : sourcesState.message
-        }
-        action={
-          <Button type="button" onClick={() => window.location.reload()}>
-            重新加载
-          </Button>
-        }
-      />
-    );
-  }
-
   return (
     <div className="bg-background min-h-screen">
-      <header className="mx-auto flex h-16 max-w-5xl items-center px-5 sm:px-8 xl:px-0">
-        <Button asChild variant="ghost" size="navigation">
-          <Link href="/events">
-            <ArrowLeftIcon data-icon="inline-start" />
-            返回工作台
-          </Link>
+      <WorkspaceHeader current="topics" />
+      <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-20 xl:px-0">
+        <Button asChild variant="ghost" size="navigation" className="mb-10">
+          <Link href="/events">返回我的关注</Link>
         </Button>
-      </header>
-
-      <main className="mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-14 xl:px-0">
-        <Badge variant="secondary">监控主题</Badge>
-        <h1 className="mt-5 text-3xl font-semibold tracking-tight sm:text-4xl">
-          新建主题
-        </h1>
-        <p className="text-muted-foreground mt-3 max-w-2xl text-sm leading-6">
-          先保存可解释的本地规则。新主题保持暂停；保存不会发起采集。
-        </p>
-
-        <form
-          className="mt-10 grid gap-8 lg:grid-cols-3"
-          onSubmit={handleSubmit}
-        >
-          <div className="flex flex-col gap-8 lg:col-span-2">
-            <Card className="bg-muted rounded-2xl py-5 sm:py-7">
-              <CardContent className="px-5 sm:px-7">
-                <Field
-                  data-disabled={isSubmitting}
-                  data-invalid={Boolean(submissionError?.fields?.name)}
-                >
-                  <FieldLabel htmlFor="topic-name">主题名称</FieldLabel>
-                  <Input
-                    id="topic-name"
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    disabled={isSubmitting}
-                    minLength={1}
-                    maxLength={80}
-                    required
-                    aria-invalid={Boolean(submissionError?.fields?.name)}
-                    autoFocus
-                    placeholder="例如：品牌召回"
-                  />
-                  <FieldDescription>
-                    名称用于辨认主题，允许重名；采集规则或来源设置变化才会生成新版本。
+        <div className="grid gap-12 md:grid-cols-2 md:gap-16">
+          <section>
+            <p className="text-muted-foreground text-sm">创建关注</p>
+            <h1 className="mt-5 text-4xl leading-tight font-normal tracking-tight sm:text-5xl">
+              从你关心的
+              <br />
+              事情开始。
+            </h1>
+            <p className="text-muted-foreground mt-6 max-w-sm text-sm leading-7">
+              选好关键词和信息来源，以适合自己的节奏了解新的变化。
+            </p>
+          </section>
+          <form onSubmit={handleSubmit} noValidate aria-busy={isSubmitting}>
+            <FieldGroup className="gap-8">
+              <Field
+                data-disabled={isSubmitting}
+                data-invalid={Boolean(submissionError?.fields?.name)}
+              >
+                <FieldLabel htmlFor="topic-name">主题名称</FieldLabel>
+                <Input
+                  id="topic-name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  disabled={isSubmitting}
+                  minLength={1}
+                  maxLength={80}
+                  required
+                  placeholder="例如：AI 产品与工具"
+                  aria-invalid={Boolean(submissionError?.fields?.name)}
+                  aria-describedby={
+                    submissionError?.fields?.name
+                      ? "topic-name-error"
+                      : "topic-name-description"
+                  }
+                />
+                {submissionError?.fields?.name ? (
+                  <FieldError id="topic-name-error">
+                    {submissionError.fields.name}
+                  </FieldError>
+                ) : (
+                  <FieldDescription id="topic-name-description">
+                    起一个容易辨认的名字，之后可以随时修改。
                   </FieldDescription>
-                  {submissionError?.fields?.name ? (
-                    <FieldError>{submissionError.fields.name}</FieldError>
-                  ) : null}
+                )}
+              </Field>
+              <KeywordGroupField
+                id="match-any"
+                label="想关注的关键词"
+                description="任意一个词出现即可。每行填写一个，组合筛选可在进阶设置中调整。"
+                value={matchAny}
+                onChange={setMatchAny}
+                disabled={isSubmitting}
+                error={submissionError?.fields?.match_any}
+              />
+              {sourcesState.status === "ready" ? (
+                <TopicSettingsFields
+                  sourceOptions={sourcesState.sourceOptions}
+                  sourceKeys={sourceKeys}
+                  onSourceKeysChange={setSourceKeys}
+                  disabled={isSubmitting}
+                  fieldErrors={submissionError?.fields}
+                />
+              ) : sourcesState.status === "loading" ? (
+                <Field>
+                  <FieldLabel>信息来源</FieldLabel>
+                  <FieldDescription>
+                    正在读取来源配置。你可以先填写关键词。
+                  </FieldDescription>
+                  <Spinner aria-label="正在读取来源" />
                 </Field>
-              </CardContent>
-            </Card>
-
-            <Card className="gap-6 rounded-2xl py-5 sm:py-7">
-              <CardHeader className="px-5 sm:px-7">
-                <CardTitle asChild>
-                  <h2>匹配规则</h2>
-                </CardTitle>
-                <CardDescription>用关键词界定需要关注的讨论。</CardDescription>
-              </CardHeader>
-              <CardContent className="px-5 sm:px-7">
-                <FieldGroup className="gap-6">
-                  <KeywordGroupField
-                    id="match-any"
-                    label="任意命中"
-                    description="其中任意一个关键词出现即可；与“全部包含”同时填写时，两组条件都要满足。"
-                    value={matchAny}
-                    onChange={setMatchAny}
+              ) : (
+                <Alert variant="destructive">
+                  <AlertTitle>信息来源暂时不可用</AlertTitle>
+                  <AlertDescription>
+                    {sourcesState.message}
+                    {sourcesState.requestId ? (
+                      <p>请求编号：{sourcesState.requestId}</p>
+                    ) : null}
+                    <p>可以先保存关注，之后再配置来源。</p>
+                  </AlertDescription>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="navigation"
                     disabled={isSubmitting}
-                    error={submissionError?.fields?.match_any}
-                  />
-                  <KeywordGroupField
-                    id="match-all"
-                    label="全部包含"
-                    description="这里的每个关键词都必须出现。该组为空时不会额外限制。"
-                    value={matchAll}
-                    onChange={setMatchAll}
-                    disabled={isSubmitting}
-                    error={submissionError?.fields?.match_all}
-                  />
-                  <KeywordGroupField
-                    id="exclude"
-                    label="排除"
-                    description="任一排除词命中都会优先剔除结果。不要与包含组填写相同关键词。"
-                    value={exclude}
-                    onChange={setExclude}
-                    disabled={isSubmitting}
-                    error={submissionError?.fields?.exclude}
-                  />
-                </FieldGroup>
-              </CardContent>
-            </Card>
-
-            <TopicSettingsFields
-              sourceOptions={sourcesState.sourceOptions}
-              sourceKeys={sourceKeys}
-              onSourceKeysChange={setSourceKeys}
-              collectionIntervalSeconds={collectionIntervalSeconds}
-              onCollectionIntervalSecondsChange={setCollectionIntervalSeconds}
-              reportTime={reportTime}
-              onReportTimeChange={setReportTime}
-              weeklyReportEnabled={weeklyReportEnabled}
-              onWeeklyReportEnabledChange={setWeeklyReportEnabled}
-              notificationTargets={notificationTargets}
-              onNotificationTargetsChange={setNotificationTargets}
-              disabled={isSubmitting}
-              fieldErrors={submissionError?.fields}
-            />
-          </div>
-
-          <aside className="lg:sticky lg:top-8 lg:self-start">
-            <Card className="bg-muted gap-0 rounded-2xl py-5">
-              <CardHeader className="px-5">
-                <CardTitle asChild>
-                  <h2>保存后的状态</h2>
-                </CardTitle>
-                <CardDescription>新建主题不会立即发起采集。</CardDescription>
-              </CardHeader>
-              <CardContent className="px-5">
-                <dl className="text-muted-foreground mt-4 flex flex-col gap-3 text-sm">
-                  <div className="flex justify-between gap-4">
-                    <dt>运行状态</dt>
-                    <dd className="text-foreground">已暂停</dd>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <dt>来源</dt>
-                    <dd className="text-foreground">
-                      {sourceKeys.length > 0
-                        ? `${sourceKeys.length} 个`
-                        : "待选择"}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <dt>规则版本</dt>
-                    <dd className="text-foreground">v1</dd>
-                  </div>
-                </dl>
-                {submissionError ? (
-                  <Alert variant="destructive" className="mt-5">
-                    <AlertTitle>无法保存主题</AlertTitle>
-                    <AlertDescription>
-                      {submissionError.message}
-                      {submissionError.requestId ? (
-                        <p className="mt-1 font-mono text-xs opacity-80">
-                          请求编号：{submissionError.requestId}
-                        </p>
-                      ) : null}
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-                <div className="mt-5">
-                  <TopicRulePreview
-                    matchAny={matchAny}
-                    matchAll={matchAll}
-                    exclude={exclude}
-                    sourceKeys={sourceKeys}
-                    disabled={isSubmitting}
-                  />
-                </div>
-              </CardContent>
-              <CardFooter className="bg-transparent px-5 pt-5">
-                <Button className="w-full" size="lg" disabled={isSubmitting}>
+                    onClick={() => void reloadSources()}
+                  >
+                    <RotateCcwIcon data-icon="inline-start" />
+                    重新读取来源
+                  </Button>
+                </Alert>
+              )}
+              <TopicAdvancedFields
+                matchAll={matchAll}
+                onMatchAllChange={setMatchAll}
+                exclude={exclude}
+                onExcludeChange={setExclude}
+                collectionIntervalSeconds={collectionIntervalSeconds}
+                onCollectionIntervalSecondsChange={setCollectionIntervalSeconds}
+                disabled={isSubmitting}
+                fieldErrors={submissionError?.fields}
+              />
+              {submissionError ? (
+                <Alert variant="destructive">
+                  <AlertTitle>无法保存关注</AlertTitle>
+                  <AlertDescription>
+                    {submissionError.message}
+                    {submissionError.requestId ? (
+                      <p>请求编号：{submissionError.requestId}</p>
+                    ) : null}
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+              <Field
+                orientation="horizontal"
+                className="flex-wrap justify-between gap-3"
+              >
+                <TopicRulePreview
+                  matchAny={matchAny}
+                  matchAll={matchAll}
+                  exclude={exclude}
+                  sourceKeys={sourceKeys}
+                  disabled={isSubmitting}
+                />
+                <Button type="submit" size="hero" disabled={isSubmitting}>
                   {isSubmitting ? (
-                    <LoaderCircleIcon
-                      className="animate-spin"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <ArrowRightIcon data-icon="inline-end" />
-                  )}
-                  {isSubmitting ? "正在保存" : "保存主题"}
+                    <Spinner data-icon="inline-start" aria-hidden="true" />
+                  ) : null}
+                  {isSubmitting ? "正在保存" : "保存关注"}
+                  <ArrowRightIcon data-icon="inline-end" />
                 </Button>
-              </CardFooter>
-            </Card>
-          </aside>
-        </form>
+              </Field>
+              <FieldDescription>
+                保存后保持暂停。准备好后可在关注详情开始运行。
+              </FieldDescription>
+            </FieldGroup>
+          </form>
+        </div>
       </main>
     </div>
   );

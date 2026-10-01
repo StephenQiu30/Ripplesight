@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
   BanIcon,
+  ChevronDownIcon,
   RefreshCwIcon,
   RotateCcwIcon,
 } from "lucide-react";
@@ -15,6 +16,13 @@ import {
   getCollectionJob,
   retryCollectionJob,
 } from "@/api/caijirenwu";
+import { WorkspaceHeader } from "@/components/navigation/workspace-header";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { PageState } from "@/components/system/page-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -114,6 +122,7 @@ function formatTime(value: string | null): string {
     return "—";
   }
   return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
     dateStyle: "medium",
     timeStyle: "medium",
   }).format(new Date(value));
@@ -121,9 +130,9 @@ function formatTime(value: string | null): string {
 
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <dt className="text-muted-foreground text-sm">{label}</dt>
-      <dd className="mt-1 text-base font-medium">{value}</dd>
+      <dd className="mt-1 text-base font-medium break-words">{value}</dd>
     </div>
   );
 }
@@ -161,10 +170,10 @@ export function JobSourceFreshness({
 }) {
   return (
     <section className="mt-8" aria-labelledby="source-freshness-title">
-      <h2 id="source-freshness-title" className="text-xl font-semibold">
+      <h2 id="source-freshness-title" className="text-xl font-medium">
         来源时效
       </h2>
-      <div className="bg-muted mt-4 rounded-2xl p-6 sm:p-8">
+      <div className="mt-6">
         <dl className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
           <DetailItem
             label="最近尝试"
@@ -246,10 +255,10 @@ export function JobCycleTiming({ job }: { job: HotKeyAPI.JobStatusView }) {
 
   return (
     <section className="mt-10" aria-labelledby="job-cycle-title">
-      <h2 id="job-cycle-title" className="text-xl font-semibold">
+      <h2 id="job-cycle-title" className="text-xl font-medium">
         任务时间与采集周期
       </h2>
-      <div className="bg-muted mt-4 rounded-2xl p-6 sm:p-8">
+      <div className="mt-6">
         <dl className="grid gap-x-8 gap-y-6 sm:grid-cols-2 xl:grid-cols-3">
           <DetailItem label="采集周期" value={cycleLabel} />
           <DetailItem label="周期开始" value={cycleStarted} />
@@ -296,8 +305,8 @@ export function JobResult({
 }) {
   return (
     <section className="mt-10">
-      <h2 className="text-xl font-semibold">已写入结果</h2>
-      <div className="bg-muted mt-4 rounded-2xl p-6 sm:p-8">
+      <h2 className="text-xl font-medium">已写入结果</h2>
+      <div className="mt-6">
         <p className="text-base font-medium">{savedDescription}</p>
         <p className="text-muted-foreground mt-2 text-sm leading-6">
           最后进度时间：{formatTime(updatedAt)}。
@@ -330,7 +339,7 @@ export function JobCoverageWindows({
 
   return (
     <section className="mt-8" aria-labelledby="coverage-windows-title">
-      <h2 id="coverage-windows-title" className="text-xl font-semibold">
+      <h2 id="coverage-windows-title" className="text-xl font-medium">
         采集窗口记录
       </h2>
       <p className="text-muted-foreground mt-2 text-sm leading-6">
@@ -340,7 +349,7 @@ export function JobCoverageWindows({
         {windows.map((window) => (
           <li
             key={window.id}
-            className="bg-muted grid gap-3 rounded-2xl p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:p-6"
+            className="flex flex-col items-start gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
           >
             <div>
               <p className="font-medium">
@@ -369,17 +378,21 @@ export function JobDetail({ jobId }: JobDetailProps) {
   const [isCancelling, setIsCancelling] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [actionError, setActionError] = useState<ActionError | null>(null);
+  const request = useRef<AbortController | null>(null);
+  const actionPending = useRef(false);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
-    let current = true;
-    void getCollectionJob({ job_id: jobId })
+    const controller = new AbortController();
+    request.current = controller;
+    void getCollectionJob({ job_id: jobId }, { signal: controller.signal })
       .then((job) => {
-        if (current) {
+        if (!controller.signal.aborted) {
           setState({ status: "ready", job });
         }
       })
       .catch((error: unknown) => {
-        if (!current) {
+        if (controller.signal.aborted) {
           return;
         }
         if (
@@ -392,66 +405,94 @@ export function JobDetail({ jobId }: JobDetailProps) {
         }
       });
     return () => {
-      current = false;
+      controller.abort();
+      request.current?.abort();
     };
-  }, [jobId]);
+  }, [jobId, reloadToken]);
 
   async function refresh() {
-    if (isRefreshing) {
-      return;
-    }
+    if (actionPending.current) return;
+    actionPending.current = true;
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
     setIsRefreshing(true);
     setActionError(null);
     try {
-      const job = await getCollectionJob({ job_id: jobId });
+      const job = await getCollectionJob(
+        { job_id: jobId },
+        { signal: controller.signal },
+      );
+      if (controller.signal.aborted) return;
       setState({ status: "ready", job });
     } catch (error) {
+      if (controller.signal.aborted) return;
       setActionError(
         error instanceof ApiRequestError
-          ? { message: error.message, requestId: error.requestId }
+          ? {
+              message: `${error.message} 当前显示的是上次读取的状态。`,
+              requestId: error.requestId,
+            }
           : { message: "刷新失败，当前显示的是上次读取的状态。" },
       );
     } finally {
+      actionPending.current = false;
       setIsRefreshing(false);
     }
   }
 
   async function cancel() {
-    if (isCancelling) {
-      return;
-    }
+    if (actionPending.current) return;
+    actionPending.current = true;
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
     setIsCancelling(true);
     setActionError(null);
     try {
-      const job = await cancelCollectionJob({ job_id: jobId });
+      const job = await cancelCollectionJob(
+        { job_id: jobId },
+        { signal: controller.signal },
+      );
+      if (controller.signal.aborted) return;
       setState({ status: "ready", job });
     } catch (error) {
+      if (controller.signal.aborted) return;
       setActionError(
         error instanceof ApiRequestError
           ? { message: error.message, requestId: error.requestId }
           : { message: "取消失败，请重试。" },
       );
     } finally {
+      actionPending.current = false;
       setIsCancelling(false);
     }
   }
 
   async function retry() {
-    if (isRetrying) {
-      return;
-    }
+    if (actionPending.current) return;
+    actionPending.current = true;
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
     setIsRetrying(true);
     setActionError(null);
     try {
-      const job = await retryCollectionJob({ job_id: jobId });
+      const job = await retryCollectionJob(
+        { job_id: jobId },
+        { signal: controller.signal },
+      );
+      if (controller.signal.aborted) return;
       setState({ status: "ready", job });
     } catch (error) {
+      if (controller.signal.aborted) return;
       setActionError(
         error instanceof ApiRequestError
           ? { message: error.message, requestId: error.requestId }
           : { message: "重试提交失败，请检查任务状态后再试。" },
       );
     } finally {
+      actionPending.current = false;
       setIsRetrying(false);
     }
   }
@@ -459,6 +500,7 @@ export function JobDetail({ jobId }: JobDetailProps) {
   if (state.status === "loading") {
     return (
       <PageState
+        navigation={<WorkspaceHeader current="jobs" />}
         eyebrow="任务详情"
         title="正在读取任务"
         description="正在读取持久状态与已保存的结果范围。"
@@ -469,9 +511,10 @@ export function JobDetail({ jobId }: JobDetailProps) {
   if (state.status === "not-found") {
     return (
       <PageState
+        navigation={<WorkspaceHeader current="jobs" />}
         eyebrow="任务不可用"
         title="没有找到这个任务"
-        description="任务不存在，或当前使用者无权查看。"
+        description="任务不存在或已不可读。"
         action={
           <Button asChild variant="secondary">
             <Link href="/events">
@@ -490,11 +533,18 @@ export function JobDetail({ jobId }: JobDetailProps) {
       : state.message;
     return (
       <PageState
+        navigation={<WorkspaceHeader current="jobs" />}
         eyebrow="加载失败"
         title="暂时无法读取任务"
         description={description}
         action={
-          <Button type="button" onClick={() => window.location.reload()}>
+          <Button
+            type="button"
+            onClick={() => {
+              setState({ status: "loading" });
+              setReloadToken((value) => value + 1);
+            }}
+          >
             <RotateCcwIcon data-icon="inline-start" />
             重新加载
           </Button>
@@ -513,26 +563,13 @@ export function JobDetail({ jobId }: JobDetailProps) {
 
   return (
     <div className="bg-background min-h-screen">
-      <header className="mx-auto flex h-16 max-w-5xl items-center justify-between px-5 sm:px-8 xl:px-0">
-        <Button asChild variant="ghost" size="navigation">
-          <Link href="/events">
-            <ArrowLeftIcon data-icon="inline-start" />
-            返回工作台
-          </Link>
-        </Button>
-        <span className="text-muted-foreground hidden font-mono text-xs sm:inline">
-          {job.id}
-        </span>
-      </header>
+      <WorkspaceHeader current="jobs" />
 
-      <main className="mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-14 xl:px-0">
+      <main className="mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-14">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-muted-foreground font-mono text-xs tracking-wider uppercase">
-              Collection job
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-3xl font-normal tracking-tight sm:text-4xl">
                 采集任务
               </h1>
               <Badge
@@ -546,8 +583,7 @@ export function JobDetail({ jobId }: JobDetailProps) {
               </Badge>
             </div>
             <p className="text-muted-foreground mt-3 text-sm">
-              配置 {job.observation.configuration_ref} · 版本{" "}
-              {job.observation.configuration_version}
+              受理后在这里查看采集进度与结果。
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -555,7 +591,7 @@ export function JobDetail({ jobId }: JobDetailProps) {
               type="button"
               variant="secondary"
               onClick={() => void refresh()}
-              disabled={isRefreshing}
+              disabled={isRefreshing || isCancelling || isRetrying}
             >
               <RefreshCwIcon data-icon="inline-start" />
               {isRefreshing ? "正在刷新" : "刷新状态"}
@@ -565,7 +601,7 @@ export function JobDetail({ jobId }: JobDetailProps) {
                 type="button"
                 variant="secondary"
                 onClick={() => void cancel()}
-                disabled={isCancelling}
+                disabled={isRefreshing || isCancelling || isRetrying}
               >
                 <BanIcon data-icon="inline-start" />
                 {isCancelling ? "正在取消" : "取消任务"}
@@ -579,7 +615,7 @@ export function JobDetail({ jobId }: JobDetailProps) {
               <Button
                 type="button"
                 onClick={() => void retry()}
-                disabled={isRetrying}
+                disabled={isRefreshing || isCancelling || isRetrying}
               >
                 <RotateCcwIcon data-icon="inline-start" />
                 {isRetrying ? "正在提交" : "重试任务"}
@@ -589,88 +625,76 @@ export function JobDetail({ jobId }: JobDetailProps) {
         </div>
 
         {job.cancellation ? (
-          <section
-            className={
-              job.cancellation.timed_out
-                ? "bg-destructive/10 mt-8 rounded-2xl p-5"
-                : "bg-muted mt-8 rounded-2xl p-5"
-            }
+          <Alert
+            variant={job.cancellation.timed_out ? "destructive" : "default"}
+            className="mt-8"
             aria-live="polite"
           >
-            <h2 className="font-medium">
+            <AlertTitle>
               {job.cancellation.timed_out ? "取消收尾已超时" : "已收到取消请求"}
-            </h2>
-            <p className="text-muted-foreground mt-2 text-sm leading-6">
+            </AlertTitle>
+            <AlertDescription>
               系统不会发起新的来源请求；已在途响应仍会按截止时间保存。
               {job.cancellation.deadline_at
                 ? ` 截止时间：${formatTime(job.cancellation.deadline_at)}。`
                 : " 当前任务无需等待在途请求。"}
-            </p>
-          </section>
+            </AlertDescription>
+          </Alert>
         ) : null}
-
         {job.failure ? (
-          <section
-            className="bg-destructive/10 mt-8 rounded-2xl p-5"
-            aria-live="polite"
-          >
-            <h2 className="font-medium">
-              {FAILURE_LABELS[job.failure.category]}
-            </h2>
-            <p className="text-muted-foreground mt-2 text-sm leading-6">
-              {job.failure.next_action} 错误代码：{job.failure.error_code}。
-            </p>
-            <p className="text-muted-foreground mt-1 text-sm leading-6">
-              发生时间：{formatTime(job.failure.occurred_at)}。
-              {job.next_run_at
-                ? ` 下次尝试：${formatTime(job.next_run_at)}。`
-                : " 当前没有自动重试计划。"}
-            </p>
-          </section>
+          <Alert variant="destructive" className="mt-8" aria-live="polite">
+            <AlertTitle>{FAILURE_LABELS[job.failure.category]}</AlertTitle>
+            <AlertDescription>
+              <p>
+                {job.failure.next_action} 错误代码：{job.failure.error_code}。
+              </p>
+              <p>
+                发生时间：{formatTime(job.failure.occurred_at)}。
+                {job.next_run_at
+                  ? ` 下次尝试：${formatTime(job.next_run_at)}。`
+                  : " 当前没有自动重试计划。"}
+              </p>
+            </AlertDescription>
+          </Alert>
         ) : null}
-
-        {job.source_freshness ? (
-          <JobSourceFreshness freshness={job.source_freshness} />
-        ) : null}
-
-        <JobCoverageWindows windows={job.coverage_windows ?? []} />
 
         {actionError ? (
-          <p role="alert" className="text-destructive mt-5 text-sm">
-            {actionError.message}
-            {actionError.requestId
-              ? ` 请求编号：${actionError.requestId}`
-              : null}
-          </p>
+          <Alert variant="destructive" className="mt-5">
+            <AlertTitle>操作未完成</AlertTitle>
+            <AlertDescription>
+              {actionError.message}
+              {actionError.requestId
+                ? ` 请求编号：${actionError.requestId}`
+                : null}
+            </AlertDescription>
+          </Alert>
         ) : null}
 
         <section
           className="mt-10 grid gap-4 sm:grid-cols-3"
           aria-label="任务进度"
         >
-          <div className="bg-muted rounded-2xl p-6">
+          <div className="py-4">
             <p className="text-muted-foreground text-sm">当前阶段</p>
-            <p className="mt-2 text-2xl font-semibold">
+            <p className="mt-2 text-xl font-medium">
               {job.progress.stage
                 ? STAGE_LABELS[job.progress.stage]
                 : "尚未开始"}
             </p>
           </div>
-          <div className="bg-muted rounded-2xl p-6">
+          <div className="py-4">
             <p className="text-muted-foreground text-sm">已发请求</p>
-            <p className="mt-2 text-2xl font-semibold">
+            <p className="mt-2 text-xl font-medium">
               {job.progress.requests_sent}
             </p>
           </div>
-          <div className="bg-muted rounded-2xl p-6">
+          <div className="py-4">
             <p className="text-muted-foreground text-sm">已保存结果</p>
-            <p className="mt-2 text-2xl font-semibold">
+            <p className="mt-2 text-xl font-medium">
               {job.progress.items_saved}
             </p>
           </div>
         </section>
-
-        <JobCycleTiming job={job} />
 
         <JobResult
           resultContentId={job.result_content_id}
@@ -678,27 +702,65 @@ export function JobDetail({ jobId }: JobDetailProps) {
           updatedAt={job.progress.updated_at}
         />
 
-        <section className="mt-10" aria-labelledby="job-facts-title">
-          <h2 id="job-facts-title" className="text-xl font-semibold">
-            执行信息
-          </h2>
-          <dl className="mt-5 grid gap-x-8 gap-y-6 sm:grid-cols-2">
-            <DetailItem label="任务类型" value={job.kind} />
-            <DetailItem
-              label="来源能力"
-              value={job.observation.source_capability ?? "未指定"}
-            />
-            <DetailItem label="创建时间" value={formatTime(job.created_at)} />
-            <DetailItem label="开始时间" value={formatTime(job.started_at)} />
-            <DetailItem label="完成时间" value={formatTime(job.completed_at)} />
-            <DetailItem
-              label="计划时间"
-              value={formatTime(job.scheduled_for_at)}
-            />
-            <DetailItem label="下次尝试" value={formatTime(job.next_run_at)} />
-            <DetailItem label="重试次数" value={String(job.retry_count)} />
-          </dl>
-        </section>
+        <Collapsible className="mt-10">
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost">
+              执行与覆盖记录
+              <ChevronDownIcon data-icon="inline-end" />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <JobCycleTiming job={job} />
+            {job.source_freshness ? (
+              <JobSourceFreshness freshness={job.source_freshness} />
+            ) : null}
+
+            <JobCoverageWindows windows={job.coverage_windows ?? []} />
+
+            <section className="mt-10" aria-labelledby="job-facts-title">
+              <h2 id="job-facts-title" className="text-xl font-medium">
+                执行信息
+              </h2>
+              <dl className="mt-5 grid gap-x-8 gap-y-6 sm:grid-cols-2">
+                <DetailItem label="任务编号" value={job.id} />
+                <DetailItem
+                  label="配置"
+                  value={job.observation.configuration_ref}
+                />
+                <DetailItem
+                  label="配置版本"
+                  value={String(job.observation.configuration_version)}
+                />
+                <DetailItem label="任务类型" value={job.kind} />
+                <DetailItem
+                  label="来源能力"
+                  value={job.observation.source_capability ?? "未指定"}
+                />
+                <DetailItem
+                  label="创建时间"
+                  value={formatTime(job.created_at)}
+                />
+                <DetailItem
+                  label="开始时间"
+                  value={formatTime(job.started_at)}
+                />
+                <DetailItem
+                  label="完成时间"
+                  value={formatTime(job.completed_at)}
+                />
+                <DetailItem
+                  label="计划时间"
+                  value={formatTime(job.scheduled_for_at)}
+                />
+                <DetailItem
+                  label="下次尝试"
+                  value={formatTime(job.next_run_at)}
+                />
+                <DetailItem label="重试次数" value={String(job.retry_count)} />
+              </dl>
+            </section>
+          </CollapsibleContent>
+        </Collapsible>
       </main>
     </div>
   );

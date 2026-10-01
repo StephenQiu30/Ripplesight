@@ -2,6 +2,10 @@
 
 技术栈：pnpm、Next.js App Router、React、TypeScript、shadcn/ui、Radix UI、Tailwind CSS、Axios、ESLint、Prettier。
 
+首页方案 1 直接实现在 `src/app/components/`，采用 Vercel 黑白留白风格。“创建关注”进入现有 `/monitors/new`，“我的关注”进入 `/events`；来源能力、主题配置及保存复用现有生成 API。指南和示例只提供简短说明。
+
+业务页面按当前 Swagger 重建：关注的基础设置包含名称、关键词和来源，进阶规则与频率按需展开；来源页优先配置，覆盖信息放在二级页签。相关内容、热榜、采集记录及已有报告只呈现真实接口结果，移除没有接口的事件聚合占位与非核心偏好表单。共用导航位于 `src/components/navigation/`，不增加第二套页面或请求层。
+
 ## 运行
 
 ```bash
@@ -50,6 +54,8 @@ pnpm openapi:generate
 `@umijs/openapi` 1.14.1 只从 200/201 选择返回模型；配置会在生成器内存中把缺少 200/201 的 202 schema 暴露给其类型解析，运行时 OpenAPI 和真实 HTTP 202 语义保持不变。禁止为规避该限制手改生成文件或在服务端虚报 200。
 
 生成结果直接写入 `src/api/`，统一调用 `src/request.ts`。请求封装负责凭据、超时、响应数据提取以及错误标准化。
+
+来源配置 API 仅支持已有连接的状态更新；来源预设由维护者使用后端 CLI 应用。网页不会模拟预设设置或将任务受理显示为采集完成。API 不可用时就地显示错误和重试，创建页保留可填写的草稿。
 
 ## 检查
 

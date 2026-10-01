@@ -1,11 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRightIcon, RotateCcwIcon } from "lucide-react";
 
 import { listCollectionJobs } from "@/api/caijirenwu";
-import { BrandLockup } from "@/components/brand/brand-lockup";
+import { WorkspaceHeader } from "@/components/navigation/workspace-header";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { PageState } from "@/components/system/page-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -75,6 +81,7 @@ function formatTime(value: string | null): string {
     return "—";
   }
   return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
     dateStyle: "medium",
     timeStyle: "medium",
   }).format(new Date(value));
@@ -94,10 +101,10 @@ function statusVariant(
 
 export function JobHistoryCard({ job }: { job: HotKeyAPI.JobHistoryItemView }) {
   return (
-    <article className="bg-muted rounded-2xl p-5 sm:flex sm:items-center sm:justify-between sm:gap-6 sm:p-6">
+    <article className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-8">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline">{jobKindLabel(job.kind)}</Badge>
+          <h2 className="text-lg font-medium">{jobKindLabel(job.kind)}</h2>
           <Badge variant={statusVariant(job.status)}>
             {STATUS_LABELS[job.status]}
           </Badge>
@@ -118,7 +125,7 @@ export function JobHistoryCard({ job }: { job: HotKeyAPI.JobHistoryItemView }) {
           {job.next_run_at ? ` · 下次运行 ${formatTime(job.next_run_at)}` : ""}
         </p>
       </div>
-      <Button asChild variant="secondary" size="sm" className="mt-5 sm:mt-0">
+      <Button asChild variant="ghost" size="sm" className="self-start">
         <Link href={`/jobs/${job.id}`}>
           查看详情
           <ArrowRightIcon data-icon="inline-end" />
@@ -146,14 +153,16 @@ export function JobHistoryContent({
   return (
     <>
       {items.length === 0 ? (
-        <section className="bg-muted mt-8 rounded-2xl px-6 py-14 text-center sm:px-10">
-          <h2 className="text-lg font-medium">尚无任务记录</h2>
-          <p className="text-muted-foreground mx-auto mt-2 max-w-md text-sm leading-6">
-            当前账号还没有任务记录。提交采集任务后，状态和进度会显示在这里。
-          </p>
-        </section>
+        <Empty className="mt-12">
+          <EmptyHeader>
+            <EmptyTitle>尚无任务记录</EmptyTitle>
+            <EmptyDescription>
+              提交采集任务后，状态和进度会显示在这里。
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
-        <div className="mt-8 space-y-3">
+        <div className="mt-8 flex flex-col gap-6">
           {items.map((job) => (
             <JobHistoryCard key={job.id} job={job} />
           ))}
@@ -185,12 +194,16 @@ export function JobHistory() {
   const [state, setState] = useState<HistoryState>({ status: "loading" });
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const request = useRef<AbortController | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  const loadingMoreRef = useRef(false);
 
   useEffect(() => {
-    let isCurrent = true;
-    void listCollectionJobs({ limit: 20 })
+    const controller = new AbortController();
+    request.current = controller;
+    void listCollectionJobs({ limit: 20 }, { signal: controller.signal })
       .then((page) => {
-        if (isCurrent) {
+        if (!controller.signal.aborted) {
           setState({
             status: "ready",
             items: page.items,
@@ -199,68 +212,75 @@ export function JobHistory() {
         }
       })
       .catch((error: unknown) => {
-        if (!isCurrent) {
+        if (controller.signal.aborted) {
           return;
         }
 
         setState(toErrorState(error));
       });
     return () => {
-      isCurrent = false;
+      controller.abort();
     };
-  }, []);
+  }, [reloadToken]);
 
-  async function reload() {
+  function reload() {
+    request.current?.abort();
+    loadingMoreRef.current = false;
+    setIsLoadingMore(false);
+    setLoadMoreError(null);
     setState({ status: "loading" });
-    try {
-      const page = await listCollectionJobs({ limit: 20 });
-      setState({
-        status: "ready",
-        items: page.items,
-        nextCursor: page.next_cursor,
-      });
-    } catch (error) {
-      setState(toErrorState(error));
-    }
+    setReloadToken((value) => value + 1);
   }
 
   async function loadMore() {
     if (
       state.status !== "ready" ||
       state.nextCursor === null ||
-      isLoadingMore
+      loadingMoreRef.current
     ) {
       return;
     }
+    const controller = request.current;
+    if (!controller || controller.signal.aborted) return;
+    loadingMoreRef.current = true;
     setIsLoadingMore(true);
     setLoadMoreError(null);
     try {
-      const page = await listCollectionJobs({
-        cursor: state.nextCursor,
-        limit: 20,
-      });
+      const page = await listCollectionJobs(
+        {
+          cursor: state.nextCursor,
+          limit: 20,
+        },
+        { signal: controller.signal },
+      );
+      if (controller.signal.aborted) return;
       setState({
         status: "ready",
         items: [...state.items, ...page.items],
         nextCursor: page.next_cursor,
       });
     } catch (error) {
+      if (controller.signal.aborted) return;
       setLoadMoreError(
         error instanceof ApiRequestError
           ? error.message
           : "后续任务加载失败，请重试。",
       );
     } finally {
-      setIsLoadingMore(false);
+      if (!controller.signal.aborted) {
+        loadingMoreRef.current = false;
+        setIsLoadingMore(false);
+      }
     }
   }
 
   if (state.status === "loading") {
     return (
       <PageState
+        navigation={<WorkspaceHeader current="jobs" />}
         eyebrow="任务记录"
         title="正在读取任务"
-        description="正在读取当前账号的持久任务记录。"
+        description="正在读取已保存的任务记录。"
       />
     );
   }
@@ -268,6 +288,7 @@ export function JobHistory() {
   if (state.status === "error") {
     return (
       <PageState
+        navigation={<WorkspaceHeader current="jobs" />}
         eyebrow="加载失败"
         title="暂时无法读取任务记录"
         description={
@@ -287,18 +308,10 @@ export function JobHistory() {
 
   return (
     <div className="bg-background min-h-screen">
-      <header className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-8 xl:px-16 2xl:px-0">
-        <BrandLockup href="/events" />
-        <Button asChild variant="ghost" size="navigation">
-          <Link href="/events">返回工作台</Link>
-        </Button>
-      </header>
+      <WorkspaceHeader current="jobs" />
 
-      <main className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16 xl:px-16 2xl:px-0">
-        <p className="text-muted-foreground font-mono text-xs tracking-wider uppercase">
-          Jobs
-        </p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
+      <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
+        <h1 className="mt-3 text-3xl font-normal tracking-tight sm:text-4xl">
           任务记录
         </h1>
         <p className="text-muted-foreground mt-4 max-w-2xl leading-7">

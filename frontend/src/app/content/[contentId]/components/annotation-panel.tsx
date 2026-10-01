@@ -1,12 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import { ChevronDownIcon } from "lucide-react";
 
 import { formatTime } from "@/app/content/components/content-presenters";
+import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -53,7 +62,7 @@ export function AnnotationResult({
 }) {
   if (annotation === null) {
     return (
-      <div className="bg-muted mt-4 rounded-2xl p-6">
+      <div className="mt-6 py-4">
         <Badge variant="outline">暂无标注记录</Badge>
         <p className="text-muted-foreground mt-3 text-sm leading-6">
           此主题、正文版本、规则与提示词组合尚无分析结果；不能将无记录当作不相关。
@@ -74,7 +83,7 @@ export function AnnotationResult({
           : "标注无效";
 
   return (
-    <article className="bg-muted mt-4 rounded-2xl p-6">
+    <article className="mt-6 py-4">
       <div className="flex flex-wrap items-center gap-2">
         <Badge
           variant={
@@ -103,7 +112,7 @@ export function AnnotationResult({
             </p>
           ) : null}
           {annotation.viewpoints.length > 0 ? (
-            <ul className="mt-3 list-disc space-y-1 pl-5 text-sm leading-6">
+            <ul className="mt-3 flex list-disc flex-col gap-1 pl-5 text-sm leading-6">
               {annotation.viewpoints.map((viewpoint, index) => (
                 <li key={`${index}-${viewpoint}`} className="break-words">
                   {viewpoint}
@@ -166,53 +175,53 @@ export function AnnotationPanel({
         </p>
       ) : (
         <>
-          <div className="mt-4 flex flex-wrap gap-4">
-            <div className="space-y-2">
-              <span className="text-muted-foreground block text-sm">
-                监控主题
-              </span>
+          <FieldGroup className="mt-6 grid gap-4 sm:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor="analysis-topic">监控主题</FieldLabel>
               <Select value={topicId} onValueChange={setTopicId}>
-                <SelectTrigger aria-label="选择监控主题" className="max-w-full">
+                <SelectTrigger id="analysis-topic" className="w-full min-w-0">
                   <SelectValue placeholder="选择主题" />
                 </SelectTrigger>
                 <SelectContent>
-                  {content.analysis_topics.map((item) => (
-                    <SelectItem key={item.topic_id} value={item.topic_id}>
-                      {item.topic_name} · 规则 v{item.current_rule_version}
-                    </SelectItem>
-                  ))}
+                  <SelectGroup>
+                    {content.analysis_topics.map((item) => (
+                      <SelectItem key={item.topic_id} value={item.topic_id}>
+                        {item.topic_name} · 规则 v{item.current_rule_version}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
             {content.version_history.length > 0 ? (
-              <div className="space-y-2">
-                <span className="text-muted-foreground block text-sm">
-                  正文版本
-                </span>
+              <Field>
+                <FieldLabel htmlFor="analysis-version">正文版本</FieldLabel>
                 <Select value={versionId} onValueChange={setVersionId}>
                   <SelectTrigger
-                    aria-label="选择正文版本"
-                    className="max-w-full"
+                    id="analysis-version"
+                    className="w-full min-w-0"
                   >
                     <SelectValue placeholder="选择版本" />
                   </SelectTrigger>
                   <SelectContent>
-                    {content.version_history.map((item) => (
-                      <SelectItem
-                        key={item.content_version.id}
-                        value={item.content_version.id}
-                      >
-                        {item.content_version.id === currentVersionId
-                          ? "当前正文"
-                          : "历史正文"}{" "}
-                        ·{formatTime(item.last_observed_at)}
-                      </SelectItem>
-                    ))}
+                    <SelectGroup>
+                      {content.version_history.map((item) => (
+                        <SelectItem
+                          key={item.content_version.id}
+                          value={item.content_version.id}
+                        >
+                          {item.content_version.id === currentVersionId
+                            ? "当前正文"
+                            : "历史正文"}{" "}
+                          ·{formatTime(item.last_observed_at)}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
-              </div>
+              </Field>
             ) : null}
-          </div>
+          </FieldGroup>
           {topic && versionId ? (
             <>
               {!isCurrentVersion ? (
@@ -225,19 +234,26 @@ export function AnnotationPanel({
                 historical={!isCurrentVersion}
               />
               {selection && selection.historical.length > 0 ? (
-                <div className="mt-6">
-                  <h3 className="font-medium">旧规则或提示词结果</h3>
-                  <p className="text-muted-foreground mt-1 text-sm">
-                    以下记录不能替代当前版本的分析结论。
-                  </p>
-                  {selection.historical.map((item) => (
-                    <AnnotationResult
-                      key={item.id}
-                      annotation={item}
-                      historical
-                    />
-                  ))}
-                </div>
+                <Collapsible className="mt-6">
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost">
+                      旧规则或提示词结果
+                      <ChevronDownIcon data-icon="inline-end" />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <p className="text-muted-foreground mt-1 text-sm">
+                      以下记录不能替代当前版本的分析结论。
+                    </p>
+                    {selection.historical.map((item) => (
+                      <AnnotationResult
+                        key={item.id}
+                        annotation={item}
+                        historical
+                      />
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
               ) : null}
             </>
           ) : (

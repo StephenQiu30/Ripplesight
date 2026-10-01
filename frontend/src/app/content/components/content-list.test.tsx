@@ -1,9 +1,30 @@
+// @vitest-environment happy-dom
+
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const api = vi.hoisted(() => ({
+  list: vi.fn(),
+  sources: vi.fn(),
+  topics: vi.fn(),
+}));
+vi.mock("@/api/zuopinziliao", () => ({ listContentRecords: api.list }));
+vi.mock("@/api/laiyuannengli", () => ({ listSourceCapabilities: api.sources }));
+vi.mock("@/api/jiankongzhuti", () => ({ listMonitorTopics: api.topics }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 import {
   ContentAnalysisStatus,
+  ContentList,
   TimelineBasis,
   contentListParams,
 } from "./content-list";
@@ -100,5 +121,96 @@ describe("content list filters", () => {
         }),
       ),
     ).toContain("暂无标注记录");
+  });
+});
+
+beforeEach(() => {
+  api.sources.mockResolvedValue({ items: [], next_cursor: null });
+  api.topics.mockResolvedValue({ items: [], next_cursor: null });
+});
+afterEach(() => {
+  cleanup();
+  vi.resetAllMocks();
+});
+
+const laterContent = {
+  ...content,
+  id: "second-content",
+  external_id: "second-record",
+};
+
+describe("content list request recovery", () => {
+  it("keeps records after append failure and retries the same cursor", async () => {
+    api.list.mockResolvedValueOnce({
+      items: [content],
+      next_cursor: "page-two",
+    });
+    api.list.mockRejectedValueOnce(new Error("network failure"));
+    api.list.mockResolvedValueOnce({
+      items: [laterContent],
+      next_cursor: null,
+    });
+    render(createElement(ContentList));
+    await screen.findByRole("link", { name: content.external_id });
+    fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
+    await screen.findByText("后续作品加载失败，请重试。");
+    expect(
+      screen.getByRole("link", { name: content.external_id }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
+    await screen.findByRole("link", { name: laterContent.external_id });
+    expect(
+      screen.getByRole("link", { name: content.external_id }),
+    ).toBeTruthy();
+    expect(
+      api.list.mock.calls.slice(1).map(([params]) => params.cursor),
+    ).toEqual(["page-two", "page-two"]);
+    expect(screen.queryByRole("button", { name: "加载更多" })).toBeNull();
+  });
+
+  it("cancels an in-flight append when filters change and ignores its late response", async () => {
+    let resolveOld!: (
+      value: HotKeyAPI.PageViewContentRecordSummaryView_,
+    ) => void;
+    api.list.mockResolvedValueOnce({
+      items: [content],
+      next_cursor: "page-two",
+    });
+    api.list.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOld = resolve;
+        }),
+    );
+    api.list.mockResolvedValueOnce({
+      items: [laterContent],
+      next_cursor: null,
+    });
+    render(createElement(ContentList));
+    await screen.findByRole("link", { name: content.external_id });
+    fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
+    const oldSignal = api.list.mock.calls[1][1].signal as AbortSignal;
+    fireEvent.click(screen.getByRole("button", { name: "筛选" }));
+    fireEvent.change(screen.getByLabelText("开始日期"), {
+      target: { value: "2026-09-27" },
+    });
+    fireEvent.change(screen.getByLabelText("结束日期（含）"), {
+      target: { value: "2026-09-28" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "应用筛选" }));
+    await screen.findByRole("link", { name: laterContent.external_id });
+    expect(oldSignal.aborted).toBe(true);
+    await act(async () => {
+      resolveOld({
+        items: [{ ...content, id: "stale", external_id: "stale-record" }],
+        next_cursor: null,
+      });
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole("link", { name: "stale-record" })).toBeNull(),
+    );
+    expect(
+      screen.getByRole("link", { name: laterContent.external_id }),
+    ).toBeTruthy();
   });
 });

@@ -120,4 +120,66 @@ describe("Demo topic editing", () => {
     expect((name as HTMLInputElement).value).toBe("尚未保存的草稿");
     expect(api.push).not.toHaveBeenCalled();
   });
+
+  it("keeps saved report preferences while removing their controls from the core form", async () => {
+    const saved = {
+      ...topic,
+      report_time: "18:45:00",
+      weekly_report_enabled: true,
+      notification_target_names: ["已有日报邮箱"],
+    };
+    api.get.mockResolvedValueOnce(saved);
+    api.update.mockResolvedValueOnce(saved);
+    render(<TopicEditor topicId={topic.id} />);
+    await screen.findByLabelText("主题名称");
+    expect(screen.queryByLabelText("每日报告时间")).toBeNull();
+    expect(screen.queryByLabelText("生成周报")).toBeNull();
+    expect(screen.queryByLabelText("推送目标名称")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith(
+        { topic_id: topic.id },
+        expect.objectContaining({
+          expected_version: 1,
+          report_time: "18:45:00",
+          weekly_report_enabled: true,
+          notification_target_names: ["已有日报邮箱"],
+        }),
+      ),
+    );
+  });
+
+  it("opens advanced settings for a 422 field error and blocks duplicate writes", async () => {
+    let reject!: (error: unknown) => void;
+    api.update.mockImplementationOnce(
+      () =>
+        new Promise((_, fail) => {
+          reject = fail;
+        }),
+    );
+    render(<TopicEditor topicId={topic.id} />);
+    await screen.findByLabelText("主题名称");
+    expect(screen.queryByLabelText("全部包含")).toBeNull();
+    const save = screen.getByRole("button", { name: "保存修改" });
+    fireEvent.click(save);
+    fireEvent.click(save);
+    expect(api.update).toHaveBeenCalledTimes(1);
+    reject(
+      new ApiRequestError({
+        kind: "http",
+        status: 422,
+        code: "request_validation_failed",
+        message: "输入不符合要求",
+        details: [
+          {
+            location: ["body", "match_all", 0],
+            message: "关键词过长",
+            type: "string_too_long",
+          },
+        ],
+      }),
+    );
+    expect(await screen.findByLabelText("全部包含")).toBeTruthy();
+    expect(screen.getByText("关键词过长")).toBeTruthy();
+  });
 });

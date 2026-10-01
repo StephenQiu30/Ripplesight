@@ -1,48 +1,49 @@
+import Image from "next/image";
 import Link from "next/link";
-import { ArrowRightIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
-export function HeroSection() {
-  return (
-    <section className="relative isolate overflow-hidden px-5 pt-24 pb-16 sm:px-8 sm:pt-32 sm:pb-24 lg:pt-36 xl:px-16 2xl:px-0">
-      <div aria-hidden="true" className="hero-wash absolute inset-0 -z-20" />
-      <div
-        aria-hidden="true"
-        className="absolute top-12 right-0 -z-10 aspect-square w-full max-w-2xl opacity-60 sm:top-0 sm:opacity-100"
-      >
-        <div className="hero-ripple absolute inset-0 rounded-full" />
-        <div className="hero-ripple absolute inset-12 rounded-full" />
-        <div className="hero-ripple absolute inset-24 rounded-full" />
-        <div className="hero-ripple absolute inset-40 rounded-full" />
-        <div className="bg-background absolute top-1/2 left-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-lg shadow-white" />
-      </div>
+type HeroSectionProps = {
+  onExample: (trigger: HTMLElement) => void;
+};
 
-      <div className="mx-auto max-w-7xl">
-        <div className="max-w-4xl">
-          <h1 className="text-4xl leading-tight font-semibold tracking-tighter text-balance sm:text-6xl lg:text-7xl">
-            <span className="block">从一个关键词，</span>
-            <span className="block">看见正在发生的变化</span>
-          </h1>
-          <p className="text-muted-foreground mt-8 max-w-2xl text-lg leading-8 text-pretty sm:text-xl sm:leading-9">
-            设定你关心的品牌、产品或话题，持续汇集相关讨论；沿着来源和时间，看清变化如何发生。
-          </p>
-          <div className="mt-10 flex flex-wrap items-center gap-6">
-            <Button asChild size="xl">
-              <Link href="/monitors/new">
-                设置监控主题
-                <ArrowRightIcon data-icon="inline-end" />
-              </Link>
-            </Button>
-            <Link
-              href="#how-it-works"
-              className="text-muted-foreground hover:text-foreground focus-visible:ring-ring rounded-sm text-sm underline underline-offset-4 transition-colors focus-visible:ring-2 focus-visible:outline-none"
-            >
-              了解如何追踪
-            </Link>
-          </div>
+export function HeroSection({ onExample }: HeroSectionProps) {
+  return (
+    <main className="relative mx-auto flex w-full max-w-384 flex-col items-start gap-9 px-5 pt-14 pb-12 sm:px-8 md:min-h-108 md:flex-1 md:flex-row md:items-center md:justify-between md:gap-0 md:pt-0 md:pb-16 2xl:min-h-125 2xl:px-7">
+      <div className="relative max-w-full md:w-3/5">
+        <h1 className="text-3xl leading-snug font-light tracking-tight sm:text-4xl md:text-5xl md:leading-tight xl:text-6xl 2xl:text-7xl">
+          关注你在意的，
+          <br />
+          看见新的变化。
+        </h1>
+        <div className="mt-7 flex items-center gap-3 md:mt-8 md:gap-3.5">
+          <Button asChild size="hero">
+            <Link href="/monitors/new">创建关注</Link>
+          </Button>
+          <Button
+            variant="outline"
+            size="hero"
+            onClick={(event) => onExample(event.currentTarget)}
+          >
+            看看示例
+          </Button>
         </div>
       </div>
-    </section>
+      <Image
+        src="/brand/hero-brand-soft.png"
+        alt=""
+        aria-hidden="true"
+        width={366}
+        height={366}
+        preload
+        sizes="(min-width:1536px) 368px, (min-width:1280px) 320px, 256px"
+        className="pointer-events-none -mt-4 -mb-3 size-64 self-center object-contain md:absolute md:top-1/2 md:left-11/20 md:-mt-8 md:mb-0 md:-translate-x-1/2 md:-translate-y-1/2 lg:left-1/2 xl:size-80 2xl:size-92"
+      />
+      <div className="relative flex flex-col gap-2 text-sm leading-relaxed md:w-56 md:gap-3.5 md:text-base xl:w-72 xl:text-lg 2xl:w-88 2xl:text-xl">
+        <p>选择你关心的话题</p>
+        <p>简单设置，持续关注</p>
+        <p>沿着来源，理解变化</p>
+      </div>
+    </main>
   );
 }
