@@ -18,7 +18,7 @@ pnpm dev
 
 写请求由 `src/request.ts` 设置固定 `X-HotKey-CSRF: 1`，无需 Cookie/token。Next 同源代理不转发旧 Cookie/Authorization，也不向浏览器透传 Set-Cookie；加载、空、错误/重试、草稿冲突及请求编号继续有效。
 
-页面访问合同见 [Design 001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md)，清理归 [Plan061](../docs/plan/061-Demo用户体系与历史依赖清理执行计划.md)；API 从同版本后端 OpenAPI 生成，不手写端点。
+页面访问合同见 [Design001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md#92-当前-demo-的访问与数据分区)，验证边界见 [共享验收](../docs/acceptance/001-共享运行门槛验收.md)；API 从同版本后端 OpenAPI 生成，不手写端点。
 
 未来 ToC 的用户名密码、GitHub App、邮箱验证码和无感登录需求后置。当前 Demo 保持 `noindex`、生产 CSP nonce 和动态交互入口。
 
