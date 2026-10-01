@@ -6,7 +6,7 @@ on:
     paths:
       - "backend/**"
       - "frontend/**"
-      - "docker-compose.yml"
+      - "docker-compose*.yml"
       - ".env.example"
       - ".github/workflows/runtime.yml"
   pull_request:
@@ -14,7 +14,7 @@ on:
     paths:
       - "backend/**"
       - "frontend/**"
-      - "docker-compose.yml"
+      - "docker-compose*.yml"
       - ".env.example"
       - ".github/workflows/runtime.yml"
 
@@ -32,6 +32,9 @@ jobs:
     env:
       HOTKEY_API_PORT: "8867"
       HOTKEY_POSTGRES_PASSWORD: runtime_ci_only
+      HOTKEY_DATABASE_URL: postgresql+psycopg://hotkey:runtime_ci_only@postgres:5432/hotkey
+      HOTKEY_REDIS_URL: redis://redis:6379/0
+      HOTKEY_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       HOTKEY_WEB_PORT: "3000"
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
@@ -53,16 +56,72 @@ jobs:
         working-directory: frontend
         run: pnpm install --frozen-lockfile
 
-      - name: Create an isolated crawler secret
-        run: echo "HOTKEY_SEARXNG_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-
-      - name: Validate and build the unique Compose stack
+      - name: Verify application parity and infrastructure separation
         run: |
-          docker compose --project-name hotkey-ci config --quiet
-          docker compose --project-name hotkey-ci build backend frontend
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import tempfile
+          from pathlib import Path
+
+          environment = {key: value for key, value in os.environ.items() if not key.startswith(("HOTKEY_", "COMPOSE_"))}
+          def config(path, env_file):
+              selected_environment = dict(environment, HOTKEY_COMPOSE_ENV_FILE=str(env_file))
+              result = subprocess.check_output(
+                  ["docker", "compose", "--project-name", "hotkey-parity", "--env-file", str(env_file), "-f", path,
+                   "--profile", "*", "config", "--format", "json"], env=selected_environment, text=True
+              )
+              return json.loads(result)
+
+          with tempfile.TemporaryDirectory() as directory:
+              development = Path(directory) / "development.env"
+              production = Path(directory) / "production.env"
+              template = Path(".env.example").read_text()
+              development.write_text(template)
+              production.write_text(template.replace("CHANGE_ME_URL_SAFE", "production_test_only"))
+              local = config("docker-compose.yml", development)
+              prod = config("docker-compose-prod.yml", production)
+              infra = config("docker-compose-env.yml", development)
+              assert set(local["services"]) == {"backend", "frontend", "worker", "browser", "browser-egress", "cli"}
+              assert set(infra["services"]) == {"postgres", "redis", "kafka"}
+              assert "volumes" not in local
+              for name in ("backend", "worker", "cli"):
+                  local_url = local["services"][name]["environment"]["HOTKEY_DATABASE_URL"]
+                  prod_url = prod["services"][name]["environment"]["HOTKEY_DATABASE_URL"]
+                  assert local_url != prod_url
+                  prod["services"][name]["environment"]["HOTKEY_DATABASE_URL"] = local_url
+                  assert not {"postgres", "redis", "kafka"}.intersection(local["services"][name].get("depends_on", {}))
+              # Compose expands x-anchors into services but does not copy the anchors via include.
+              local = {key: value for key, value in local.items() if not key.startswith("x-")}
+              prod = {key: value for key, value in prod.items() if not key.startswith("x-")}
+              assert local == prod, "Development and production application definitions differ"
+              # A canary development file must not supply missing production credentials.
+              isolated = Path(directory) / "isolated"
+              isolated.mkdir()
+              for filename in ("docker-compose.yml", "docker-compose-prod.yml"):
+                  (isolated / filename).write_text(Path(filename).read_text())
+              (isolated / ".env").write_text(
+                  template.replace("HOTKEY_SOURCE_CREDENTIALS={}",
+                                   'HOTKEY_SOURCE_CREDENTIALS={"x":"development_canary"}')
+                          .replace("HOTKEY_BROWSER_WS_URL=", "HOTKEY_BROWSER_WS_URL=ws://development-canary")
+              )
+              isolated_production = isolated / ".env.prod"
+              isolated_production.write_text("HOTKEY_DATABASE_URL=postgresql+psycopg://fake:fake@postgres:5432/prod\n")
+              isolated_config = config(str(isolated / "docker-compose-prod.yml"), isolated_production)
+              isolated_env = isolated_config["services"]["backend"]["environment"]
+              assert isolated_env["HOTKEY_SOURCE_CREDENTIALS"] == "{}"
+              assert isolated_env["HOTKEY_BROWSER_WS_URL"] == ""
+          print("Application parity, infrastructure separation, and production secret isolation passed")
+          PY
+
+      - name: Validate and build the application with isolated infrastructure
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci config --quiet
+          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci build backend frontend
 
       - name: Start the isolated runtime
-        run: docker compose --project-name hotkey-ci up --detach --wait postgres redis kafka backend frontend
+        run: docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci up --detach --wait postgres redis kafka backend frontend
 
       - name: Verify production page CSP nonces
         run: |
@@ -113,28 +172,28 @@ jobs:
 
       - name: Verify dependencies, proxy, and idle Worker
         run: |
-          test "$(docker compose --project-name hotkey-ci exec -T postgres psql -X --set ON_ERROR_STOP=on --username hotkey --dbname hotkey --tuples-only --no-align --command 'SELECT current_database()')" = "hotkey"
-          test "$(docker compose --project-name hotkey-ci exec -T redis redis-cli ping)" = "PONG"
-          docker compose --project-name hotkey-ci exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server 127.0.0.1:9092 --list
-          test "$(docker compose --project-name hotkey-ci exec -T postgres psql -X --username hotkey --dbname hotkey --tuples-only --no-align --command "SELECT to_regclass('public.identity_users') IS NULL AND to_regclass('public.identity_sessions') IS NULL")" = "t"
+          test "$(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T postgres psql -X --set ON_ERROR_STOP=on --username hotkey --dbname hotkey --tuples-only --no-align --command 'SELECT current_database()')" = "hotkey"
+          test "$(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T redis redis-cli ping)" = "PONG"
+          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server 127.0.0.1:9092 --list
+          test "$(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T postgres psql -X --username hotkey --dbname hotkey --tuples-only --no-align --command "SELECT to_regclass('public.identity_users') IS NULL AND to_regclass('public.identity_sessions') IS NULL")" = "t"
           curl --fail --silent http://127.0.0.1:8867/api/health
           curl --fail --silent http://127.0.0.1:8867/api/ready
           curl --fail --silent http://127.0.0.1:3000/health
           curl --fail --silent http://127.0.0.1:3000/api/health
-          docker compose --project-name hotkey-ci --profile worker up --detach --wait --wait-timeout 30 worker
+          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci --profile worker up --detach --wait --wait-timeout 30 worker
           for _ in {1..15}; do
-            if docker compose --project-name hotkey-ci logs --no-color worker 2>&1 | grep --fixed-strings worker_started; then
+            if docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci logs --no-color worker 2>&1 | grep --fixed-strings worker_started; then
               break
             fi
             sleep 1
           done
-          docker compose --project-name hotkey-ci logs --no-color worker 2>&1 | grep --fixed-strings worker_started
-          docker compose --project-name hotkey-ci --profile worker stop worker
-          docker compose --project-name hotkey-ci run --rm cli | grep Usage
-          test "$(docker compose --project-name hotkey-ci exec -T backend id -u)" = "10001"
-          test "$(docker compose --project-name hotkey-ci exec -T frontend id -u)" = "1001"
-          test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' $(docker compose --project-name hotkey-ci ps --quiet backend))" = "true"
-          test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' $(docker compose --project-name hotkey-ci ps --quiet frontend))" = "true"
+          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci logs --no-color worker 2>&1 | grep --fixed-strings worker_started
+          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci --profile worker stop worker
+          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci run --rm cli | grep Usage
+          test "$(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T backend id -u)" = "10001"
+          test "$(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T frontend id -u)" = "1001"
+          test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' $(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci ps --quiet backend))" = "true"
+          test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' $(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci ps --quiet frontend))" = "true"
 
       - name: Verify anonymous Demo access and the write boundary
         run: |
@@ -190,7 +249,7 @@ jobs:
           PYTHON
 
       - name: Record one bounded resource snapshot
-        run: docker stats --no-stream $(docker compose --project-name hotkey-ci ps --quiet)
+        run: docker stats --no-stream $(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci ps --quiet)
 
       - name: Verify the generated client against the deployed API
         env:
@@ -199,8 +258,8 @@ jobs:
 
       - name: Print service logs after failure
         if: failure()
-        run: docker compose --project-name hotkey-ci logs --no-color
+        run: docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci logs --no-color
 
       - name: Remove the isolated runtime
         if: always()
-        run: docker compose --project-name hotkey-ci down --volumes --remove-orphans
+        run: docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci down --volumes --remove-orphans

@@ -91,7 +91,7 @@ Web的CSP nonce由`proxy.ts`每请求生成，交互HTML按请求渲染。主题
 | Redis | 缓存、限流和可重建临时状态；关键权限、预算与任务状态仍有数据库依据 |
 | Kafka | 任务事件与异步消息传输，由 Python Worker 消费 |
 | MinIO | 复用既有对象存储，保存有权限与保留期约束的文件及证据 |
-| Docker Compose | 根 `docker-compose.yml` 编排 HotKey 应用；RSSHub、SearXNG 由同级 `Docker` 服务集合编排；Compose Worker 通过 `host.docker.internal` 访问宿主机 RSSHub 固定 1200 端口与 SearXNG 固定 8888 端口，宿主机 Worker 使用 `127.0.0.1`；`HOTKEY_RSSHUB_HOST/HOTKEY_SEARXNG_HOST` 仅选这两个主机并冻结到来源连接版本，路由和引擎保持固定；Firecrawl、MediaCrawler 各有本地入口 |
+| Docker Compose | 根 `docker-compose.yml` 只编排 HotKey 应用，`docker-compose-prod.yml` 通过 include 复用相同服务定义；`docker-compose-env.yml` 单独编排 PostgreSQL/Redis/Kafka，本地开发默认复用已有环境、不启动该文件；开发与生产分别由未跟踪的 `.env`/`.env.prod` 注入连接信息与密钥；RSSHub、SearXNG 由同级 `Docker` 服务集合编排；Compose Worker 通过 `host.docker.internal` 访问宿主机 RSSHub 固定 1200 端口与 SearXNG 固定 8888 端口，宿主机 Worker 使用 `127.0.0.1`；`HOTKEY_RSSHUB_HOST/HOTKEY_SEARXNG_HOST` 仅选这两个主机并冻结到来源连接版本，路由和引擎保持固定；Firecrawl、MediaCrawler 各有本地入口 |
 | Ruff + mypy + pytest | 格式/静态检查、类型、单元/集成/架构验证 |
 | uv | 依赖、虚拟环境与 `uv.lock`，按锁文件安装 |
 | HTTPX + Tenacity | HTTP 客户端与有界重试 |

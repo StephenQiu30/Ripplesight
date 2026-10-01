@@ -24,7 +24,7 @@ Plan038部分覆盖修复受控通过（EV-002-051），真实分页、旧帖新
 
 | 组件 | 入口与边界 |
 |---|---|
-| HotKey | 根docker-compose.yml；默认API 127.0.0.1:8867、Web 127.0.0.1:3000，实际端口以本地配置为准；backend/app下运行uvicorn main:create_app --factory、python -m worker、python -m worker.scheduler |
+| HotKey | 根docker-compose.yml只启动应用，docker-compose-prod.yml复用相同定义并显式使用.env.prod，docker-compose-env.yml按需启动环境（本地默认不启动）；默认API 127.0.0.1:8867、Web 127.0.0.1:3000，实际端口以本地配置为准；backend/app下运行uvicorn main:create_app --factory、python -m worker、python -m worker.scheduler |
 | RSSHub / SearXNG | ~/Desktop/Docker下各自*-start-local独立Compose，固定端口1200/8888；主机仅127.0.0.1或host.docker.internal，重新应用预设后升连接版本 |
 | Firecrawl / MediaCrawler | 独立本地编排与资料；公开网页和平台采集分别验收，B站采用宿主机子进程及独立CDP |
 | Codex / Obsidian | 本机app-server，HOTKEY_AI_MODEL选模型，不发付费请求；vault为~/Desktop/Markdown/Obsidian，仅写HotKey/，真实写入另验 |

@@ -21,32 +21,51 @@ Demo 用于本机或受控演示环境，写请求使用固定 `X-HotKey-CSRF: 1
 
 未来 ToC 的用户名密码、GitHub App、邮箱验证码和无感登录需求后置，实施前重新设计和验收；当前访问与数据合同见 [Design 001 §9.2](docs/design/001-热点舆情监控平台总体设计.md)。
 
-## 快速启动本地底座
+## 启动服务
 
-需要 Docker 与 Docker Compose。以下命令在本仓库根目录执行，会创建本地 PostgreSQL、Redis、Kafka、API 和 Web 容器；首次启动需要构建镜像。请先在**本地未跟踪**的 `.env` 中设置 URL 安全的随机数据库密码。不要提交 `.env` 或把凭据粘贴到 Issue。
+需要 Docker Compose 2.20.0 或更新版本。三份编排的职责如下：
+
+| 文件 | 职责 |
+| --- | --- |
+| `docker-compose.yml` | 启动 API/Web；Worker、Browser/出口代理、CLI 保留按需 profile |
+| `docker-compose-env.yml` | 单独启动 PostgreSQL/Redis/Kafka，本地开发默认不启动 |
+| `docker-compose-prod.yml` | 通过 include 复用全部应用定义，以独立密钥启动生产服务 |
+
+本地开发复用已运行的环境。首次使用复制模板；已有 `.env` 只补齐连接项，不覆盖现有密钥。配置完整 `HOTKEY_DATABASE_URL`、`HOTKEY_REDIS_URL` 和 `HOTKEY_KAFKA_BOOTSTRAP_SERVERS`，容器访问宿主机使用 `host.docker.internal`。Kafka 的 advertised listeners 也必须能从应用容器访问。旧配置只有 `HOTKEY_POSTGRES_PASSWORD` 时，需要补充完整数据库 URL，指向准备使用的已有库。
 
 ```bash
 cp .env.example .env
-# 编辑 .env，设置 HOTKEY_POSTGRES_PASSWORD
-docker compose config --quiet
-docker compose build
-docker compose up --detach --wait
+# 编辑 .env：设置已有环境的连接地址与密钥
+docker compose --env-file .env config --quiet
+docker compose --env-file .env up --detach --build --wait
 ```
 
-启动后可打开 [业务页面](http://127.0.0.1:3000/events)，通过以下接口核对 API 底座。API 默认位于 `127.0.0.1:8867`，接口文档位于 `/docs` 和 `/scalar`；端口可在本地 `.env` 中调整。使用当前完整 Schema 的空库验证 Demo，保留运行库需遵守备份、导入与回退要求。
+启动后打开 [业务页面](http://127.0.0.1:3000/events)，API 默认位于 `127.0.0.1:8867`，接口文档位于 `/docs` 和 `/scalar`。开发与生产的服务、镜像、命令、profile、端口规则、资源和安全限制相同，生产入口仅复用定义并使用独立项目名；连接信息与密钥由各自环境文件注入。
 
 ```bash
-curl --fail http://127.0.0.1:8867/api/health
-curl --fail http://127.0.0.1:8867/api/ready
+cp .env.example .env.prod
+# 编辑 .env.prod：设置生产连接信息与独立密钥
+docker compose --env-file .env.prod -f docker-compose-prod.yml config --quiet
+docker compose --env-file .env.prod -f docker-compose-prod.yml up --detach --build --wait
 ```
 
-Worker 是按需 profile，可在底座启动后运行：
+生产命令始终显式指定 `--env-file .env.prod`，避免默认加载本地 `.env`。API/Web 在两种环境均只绑定 localhost，由已有反向代理接入。两份应用 Compose 都不会创建数据库、缓存或 Kafka。
+
+仅在没有可复用环境、确实需要全新基础设施时，才运行环境文件：
 
 ```bash
-docker compose --profile worker up --detach worker
+docker compose --env-file .env -f docker-compose-env.yml up --detach --wait
 ```
 
-这套 Compose 启动步骤只验证本地底座。RSSHub/SearXNG 由宿主机独立运行；Compose Worker 的 `HOTKEY_RSSHUB_HOST/HOTKEY_SEARXNG_HOST` 默认 `host.docker.internal`，分别访问固定 1200/8888 端口，宿主机 Worker 使用 `127.0.0.1`。预设只接受这两个主机、固定路由与 SearXNG 的 `duckduckgo news` 引擎；主机选择写入连接版本，已有连接需重新应用预设后生效。周期调度与实际采集还需要按来源配置外部服务、准入与预算，并完成对应的真实验收；现有 Compose 没有独立调度服务。不要对已有业务数据库直接执行 `backend/database/schema.sql`，它仅用于**全新空库**。停止服务请用 `docker compose down`；不要随意添加 `--volumes`，这会删除本地数据卷。更详细的开发与运行说明见 [后端 README](backend/README.md) 和 [Web README](frontend/README.md)。
+环境编排保留原 `hotkey` 项目名与三个持久卷名，只在全新 PostgreSQL 空卷初始化完整 Schema；宿主机端口默认为 PG `5432`、Redis `6379`、Kafka `19092`。已有端口占用时继续复用现有服务。若应用也使用该环境，可将 `.env` 的数据库 URL 指向 `postgres:5432/hotkey`（密码与 `HOTKEY_POSTGRES_PASSWORD` 一致），Redis 指向 `redis:6379/0`、Kafka 指向 `kafka:9092`，并用同一个组合命令管理其生命周期：
+
+```bash
+docker compose --env-file .env -f docker-compose.yml -f docker-compose-env.yml up --detach --build --wait
+```
+
+Worker 保留按需 profile；当前 P1 仍使用宿主机 Worker，避免并行消费者争抢消息。需要容器 Worker 的受控环境可执行 `docker compose --env-file .env --profile worker up --detach worker`；生产命令同样加上 `--env-file .env.prod -f docker-compose-prod.yml`。CLI 使用 `docker compose --env-file .env run --rm cli`，Browser 使用 `--profile browser`，其授权与出口门槛保持有效。
+
+RSSHub/SearXNG、Firecrawl、MinIO 和 MediaCrawler 继续使用既有独立环境；RSSHub/SearXNG 的 Compose 主机默认 `host.docker.internal`，固定端口为 1200/8888。现有 Compose 没有独立调度服务。上述启动与健康检查只验证运行底座，真实来源、模型与产品闭环仍需单独验收。不要对已有业务库执行 `backend/database/schema.sql`。停止时使用与启动相同的文件、环境和项目参数执行 `down`，不要添加 `--volumes` 或 `--remove-orphans`；分开启动的应用与环境共用默认网络时，全部停止后再移除网络。详细说明见 [后端 README](backend/README.md) 和 [Web README](frontend/README.md)。
 
 ## 技术与文档
 

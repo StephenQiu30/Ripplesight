@@ -1,0 +1,9 @@
+# Use: docker compose --env-file .env.prod -f docker-compose-prod.yml up --detach --build --wait
+# Keep all application services in one source; no production-only overrides.
+name: hotkey-prod
+
+include:
+  - path: ./docker-compose.yml
+    # Include must not fall back to the development .env for missing variables.
+    # CI can select a temporary credential file without touching real secrets.
+    env_file: ${HOTKEY_COMPOSE_ENV_FILE:-.env.prod}
