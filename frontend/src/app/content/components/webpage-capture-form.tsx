@@ -7,7 +7,13 @@ import { ArrowRightIcon, LoaderCircleIcon } from "lucide-react";
 import { createCollectionJob } from "@/api/caijirenwu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
 import { ApiRequestError } from "@/request";
 
 type SubmissionError = {
@@ -103,7 +109,7 @@ export function WebPageCaptureForm() {
   }
 
   return (
-    <section className="bg-muted mt-8 rounded-2xl p-5 sm:p-6">
+    <section className="flex flex-col gap-6">
       <div className="max-w-3xl">
         <h2 className="text-lg font-medium">添加网页</h2>
         <p className="text-muted-foreground mt-2 text-sm leading-6">
@@ -112,13 +118,16 @@ export function WebPageCaptureForm() {
       </div>
 
       <form
-        className="mt-5"
+        className="flex flex-col gap-5"
         noValidate
         onSubmit={(event) => void handleSubmit(event)}
       >
-        <Label htmlFor="webpage-url">网页地址</Label>
-        <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-start">
-          <div className="min-w-0 flex-1">
+        <FieldGroup>
+          <Field
+            data-invalid={Boolean(fieldError)}
+            data-disabled={isSubmitting}
+          >
+            <FieldLabel htmlFor="webpage-url">网页地址</FieldLabel>
             <Input
               id="webpage-url"
               name="url"
@@ -144,15 +153,12 @@ export function WebPageCaptureForm() {
               required
             />
             {fieldError ? (
-              <p
-                id="webpage-url-error"
-                role="alert"
-                className="text-destructive mt-2 text-sm"
-              >
-                {fieldError}
-              </p>
+              <FieldError id="webpage-url-error">{fieldError}</FieldError>
             ) : null}
-          </div>
+            <FieldDescription>
+              提交后进入任务页查看受理状态，受理不表示已采集完成。
+            </FieldDescription>
+          </Field>
           <Button
             type="submit"
             size="lg"
@@ -174,7 +180,7 @@ export function WebPageCaptureForm() {
               </>
             )}
           </Button>
-        </div>
+        </FieldGroup>
         {submissionError ? (
           <p role="alert" className="text-destructive mt-3 text-sm">
             {submissionError.message}

@@ -67,20 +67,20 @@ export function ReportMarkdown({
     ]),
   );
   return (
-    <article className="mt-10 min-w-0 space-y-3 break-words">
+    <article className="mt-10 flex min-w-0 flex-col gap-4 break-words">
       {report.body_markdown.split("\n").map((line, index) => {
         const text = line.trim();
         if (!text) return null;
         if (text.startsWith("# ")) {
           return (
-            <h2 key={index} className="pt-4 text-2xl font-semibold">
+            <h2 key={index} className="pt-4 text-2xl font-medium">
               {inlineContent(text.slice(2), citations)}
             </h2>
           );
         }
         if (text.startsWith("## ")) {
           return (
-            <h3 key={index} className="pt-4 text-xl font-semibold">
+            <h3 key={index} className="pt-4 text-xl font-medium">
               {inlineContent(text.slice(3), citations)}
             </h3>
           );

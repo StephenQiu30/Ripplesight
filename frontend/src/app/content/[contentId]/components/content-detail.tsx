@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowLeftIcon, ExternalLinkIcon, RotateCcwIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  ChevronDownIcon,
+  ExternalLinkIcon,
+  RotateCcwIcon,
+} from "lucide-react";
 
 import { getContentRecord } from "@/api/zuopinziliao";
 import { AnnotationPanel } from "@/app/content/[contentId]/components/annotation-panel";
@@ -23,6 +28,13 @@ import {
   visibilityStatusLabel,
   visibilityStatusNotice,
 } from "@/app/content/components/content-presenters";
+import { WorkspaceHeader } from "@/components/navigation/workspace-header";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageState } from "@/components/system/page-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -56,7 +68,7 @@ function ContentVersionSection({
         <h2 id="content-heading" className="text-xl font-medium">
           正文与上下文
         </h2>
-        <div className="bg-muted mt-4 rounded-2xl p-6">
+        <div className="mt-6">
           <p className="font-medium">未取得正文</p>
           <p className="text-muted-foreground mt-2 text-sm leading-6">
             当前观察没有可用正文版本；未知不等于空正文。
@@ -72,7 +84,7 @@ function ContentVersionSection({
       <h2 id="content-heading" className="text-xl font-medium">
         正文与上下文
       </h2>
-      <div className="bg-muted mt-4 rounded-2xl p-6">
+      <div className="mt-6">
         <div className="flex flex-wrap gap-2">
           <Badge variant="secondary">
             {contentScopeLabel(version.text_scope)}
@@ -102,18 +114,26 @@ function ContentVersionSection({
           </p>
         ) : null}
         {version.text_origin_ref ? (
-          <p className="text-muted-foreground mt-2 font-mono text-xs break-all">
-            提取依据：{version.text_origin_ref}
-          </p>
+          <Collapsible className="mt-4">
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm">
+                提取依据
+                <ChevronDownIcon data-icon="inline-end" />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="text-muted-foreground mt-2 font-mono text-xs break-all">
+              {version.text_origin_ref}
+            </CollapsibleContent>
+          </Collapsible>
         ) : null}
       </div>
 
       {version.relations.length > 0 ? (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="mt-6 grid gap-6 sm:grid-cols-2">
           {version.relations.map((relation) => (
             <article
               key={`${relation.relation_type}:${relation.target_native_scope ?? ""}:${relation.target_external_id}`}
-              className="border-border rounded-2xl border p-5"
+              className="py-4"
             >
               <Badge variant="outline">
                 {relationTypeLabel(relation.relation_type)}
@@ -166,7 +186,7 @@ function VisibilitySummary({
       <h2 id="visibility-heading" className="text-xl font-medium">
         当前来源状态
       </h2>
-      <div className="bg-muted mt-4 rounded-2xl p-6">
+      <div className="mt-6">
         {visibility ? (
           <>
             <div className="flex flex-wrap items-center gap-2">
@@ -204,12 +224,9 @@ function VersionHistory({
       <p className="text-muted-foreground mt-2 text-sm leading-6">
         按来源观察时间排序；稳定版本 ID 可供后续分析引用。
       </p>
-      <div className="mt-4 grid gap-3">
+      <div className="mt-6 flex flex-col gap-6">
         {history.map((entry) => (
-          <article
-            key={entry.content_version.id}
-            className="bg-muted rounded-2xl p-5"
-          >
+          <article key={entry.content_version.id} className="py-4">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary">
                 {contentScopeLabel(entry.content_version.text_scope)}
@@ -254,9 +271,9 @@ function VisibilityHistory({
       <h2 id="visibility-history-heading" className="text-xl font-medium">
         来源状态历史
       </h2>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="mt-6 grid gap-6 sm:grid-cols-2">
         {history.map((entry) => (
-          <article key={entry.id} className="bg-muted rounded-2xl p-5">
+          <article key={entry.id} className="py-4">
             <Badge variant={visibilityBadgeVariant(entry.status)}>
               {visibilityStatusLabel(entry.status)}
             </Badge>
@@ -273,17 +290,21 @@ function VisibilityHistory({
 
 export function ContentDetail({ contentId }: ContentDetailProps) {
   const [state, setState] = useState<DetailState>({ status: "loading" });
+  const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
-    let isCurrent = true;
-    void getContentRecord({ content_id: contentId })
+    const controller = new AbortController();
+    void getContentRecord(
+      { content_id: contentId },
+      { signal: controller.signal },
+    )
       .then((content) => {
-        if (isCurrent) {
+        if (!controller.signal.aborted) {
           setState({ status: "ready", content });
         }
       })
       .catch((error: unknown) => {
-        if (!isCurrent) {
+        if (controller.signal.aborted) {
           return;
         }
         if (
@@ -304,13 +325,14 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
         }
       });
     return () => {
-      isCurrent = false;
+      controller.abort();
     };
-  }, [contentId]);
+  }, [contentId, retryToken]);
 
   if (state.status === "loading") {
     return (
       <PageState
+        navigation={<WorkspaceHeader current="content" />}
         eyebrow="作品资料"
         title="正在读取作品"
         description="正在读取已保存的作品身份、最近观察与发现依据。"
@@ -321,9 +343,10 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
   if (state.status === "not-found") {
     return (
       <PageState
+        navigation={<WorkspaceHeader current="content" />}
         eyebrow="作品不可用"
         title="没有找到这个作品"
-        description="作品不存在、已不可读，或当前使用者无权查看。"
+        description="作品不存在或已不可读。"
         action={
           <Button asChild variant="secondary">
             <Link href="/content">
@@ -339,6 +362,7 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
   if (state.status === "error") {
     return (
       <PageState
+        navigation={<WorkspaceHeader current="content" />}
         eyebrow="加载失败"
         title="暂时无法读取作品"
         description={
@@ -347,7 +371,13 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
             : state.message
         }
         action={
-          <Button type="button" onClick={() => window.location.reload()}>
+          <Button
+            type="button"
+            onClick={() => {
+              setState({ status: "loading" });
+              setRetryToken((value) => value + 1);
+            }}
+          >
             <RotateCcwIcon data-icon="inline-start" />
             重新加载
           </Button>
@@ -360,146 +390,154 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
   const observation = content.latest_observation;
   const canonicalHref = safeExternalHref(observation.canonical_url);
 
+  const title = observation.content_version?.title ?? content.external_id;
   return (
     <div className="bg-background min-h-screen">
-      <header className="mx-auto flex h-16 max-w-5xl items-center px-5 sm:px-8 xl:px-0">
-        <Button asChild variant="ghost" size="navigation">
+      <WorkspaceHeader current="content" />
+      <main className="mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-14">
+        <Button asChild variant="ghost" size="sm">
           <Link href="/content">
             <ArrowLeftIcon data-icon="inline-start" />
             返回作品列表
           </Link>
         </Button>
-      </header>
-
-      <main className="mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-14 xl:px-0">
-        <p className="text-muted-foreground font-mono text-xs tracking-wider uppercase">
-          Content record
-        </p>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-semibold tracking-tight break-all sm:text-4xl">
-            {content.external_id}
-          </h1>
-          <Badge variant="outline">{content.source_key}</Badge>
-          <Badge
-            variant={
-              hasUnknownMetrics(observation.metrics) ? "outline" : "secondary"
-            }
-          >
-            {hasUnknownMetrics(observation.metrics)
-              ? "部分指标未知"
-              : "指标已记录"}
-          </Badge>
-        </div>
-        <p className="text-muted-foreground mt-4 text-sm leading-6">
-          当前展示最近一条仍可读取的观察；读取不会刷新来源，也不会用 0
-          填补未知值。
-        </p>
-
-        <VisibilitySummary visibility={content.current_visibility} />
-
-        <section aria-labelledby="identity-heading" className="mt-10">
-          <h2 id="identity-heading" className="text-xl font-medium">
-            作品身份
-          </h2>
-          <dl className="bg-muted mt-4 grid gap-6 rounded-2xl p-6 sm:grid-cols-2">
-            <DetailItem label="来源" value={content.source_key} />
-            <DetailItem label="对象类型" value={content.object_type} />
-            <DetailItem
-              label="原生作用域"
-              value={content.native_scope ?? "未知"}
-            />
-            <DetailItem
-              label="作者原生 ID"
-              value={observation.author_external_id ?? "未知"}
-            />
-            <DetailItem
-              label="发布时间"
-              value={formatTime(observation.published_at)}
-            />
-            <DetailItem
-              label="观察时间"
-              value={formatTime(observation.observed_at)}
-            />
-          </dl>
+        <h1 className="mt-8 text-3xl font-normal tracking-tight break-words sm:text-4xl">
+          {title}
+        </h1>
+        <div className="text-muted-foreground mt-4 flex flex-wrap items-center gap-3 text-sm">
+          <span>{content.source_key}</span>
+          <span>
+            {formatTime(observation.published_at ?? observation.observed_at)}
+          </span>
+          {hasUnknownMetrics(observation.metrics) ? (
+            <span>部分指标未知</span>
+          ) : null}
           {canonicalHref ? (
-            <Button asChild variant="outline" className="mt-4">
+            <Button asChild variant="ghost" size="sm">
               <a href={canonicalHref} target="_blank" rel="noreferrer">
                 打开原文
                 <ExternalLinkIcon data-icon="inline-end" />
               </a>
             </Button>
           ) : (
-            <p className="text-muted-foreground mt-4 text-sm">原文链接未知</p>
+            <span>原文链接未知</span>
           )}
-        </section>
+        </div>
+        <Tabs defaultValue="body" className="mt-10 min-w-0">
+          <TabsList className="max-w-full">
+            <TabsTrigger value="body">正文</TabsTrigger>
+            {content.object_type === "post" ? (
+              <TabsTrigger value="comments">评论</TabsTrigger>
+            ) : null}
+            <TabsTrigger value="analysis">分析</TabsTrigger>
+            <TabsTrigger value="records">记录</TabsTrigger>
+          </TabsList>
+          <TabsContent value="body">
+            <ContentVersionSection
+              version={observation.content_version ?? null}
+            />
+            <VisibilitySummary visibility={content.current_visibility} />
+          </TabsContent>
+          {content.object_type === "post" ? (
+            <TabsContent value="comments">
+              <CommentThreadList
+                key={`comments-${content.id}`}
+                postId={content.id}
+              />
+            </TabsContent>
+          ) : null}
+          <TabsContent value="analysis">
+            <AnnotationPanel
+              key={`annotation-${content.id}`}
+              content={content}
+            />
+          </TabsContent>
+          <TabsContent value="records">
+            <p className="text-muted-foreground mt-8 text-sm">
+              读取已保存的观察，不会刷新来源。未知指标保留为未知。
+            </p>
+            <section aria-labelledby="identity-heading" className="mt-10">
+              <h2 id="identity-heading" className="text-xl font-medium">
+                作品身份
+              </h2>
+              <dl className="mt-6 grid gap-6 sm:grid-cols-2">
+                <DetailItem label="来源" value={content.source_key} />
+                <DetailItem label="对象类型" value={content.object_type} />
+                <DetailItem
+                  label="原生作用域"
+                  value={content.native_scope ?? "未知"}
+                />
+                <DetailItem
+                  label="作者原生 ID"
+                  value={observation.author_external_id ?? "未知"}
+                />
+                <DetailItem
+                  label="发布时间"
+                  value={formatTime(observation.published_at)}
+                />
+                <DetailItem
+                  label="观察时间"
+                  value={formatTime(observation.observed_at)}
+                />
+              </dl>
+            </section>
+            <VersionHistory history={content.version_history} />
 
-        <ContentVersionSection version={observation.content_version ?? null} />
+            <VisibilityHistory history={content.visibility_history} />
 
-        <AnnotationPanel key={`annotation-${content.id}`} content={content} />
-
-        {content.object_type === "post" ? (
-          <CommentThreadList
-            key={`comments-${content.id}`}
-            postId={content.id}
-          />
-        ) : null}
-
-        <VersionHistory history={content.version_history} />
-
-        <VisibilityHistory history={content.visibility_history} />
-
-        <section aria-labelledby="metrics-heading" className="mt-10">
-          <h2 id="metrics-heading" className="text-xl font-medium">
-            最近指标观察
-          </h2>
-          <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {METRIC_LABELS.map(([key, label]) => (
-              <div key={key} className="bg-muted rounded-2xl p-5">
-                <dt className="text-muted-foreground text-sm">{label}</dt>
-                <dd className="mt-2 text-2xl font-semibold tabular-nums">
-                  {formatMetric(observation.metrics[key])}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-
-        <section aria-labelledby="discoveries-heading" className="mt-10">
-          <h2 id="discoveries-heading" className="text-xl font-medium">
-            发现依据
-          </h2>
-          <p className="text-muted-foreground mt-2 text-sm">
-            同一作品可由多个任务发现；以下仅显示仍有可读观察的任务关系。
-          </p>
-          <div className="mt-4 grid gap-3">
-            {content.discoveries.map((discovery) => (
-              <article
-                key={discovery.job_id}
-                className="bg-muted rounded-2xl p-5"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="font-medium break-words">
-                      {discovery.configuration_ref}
-                    </h3>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      配置版本 v{discovery.configuration_version}
-                    </p>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {scanKindLabel(discovery.scan_kind)}
-                    </p>
+            <section aria-labelledby="metrics-heading" className="mt-10">
+              <h2 id="metrics-heading" className="text-xl font-medium">
+                最近指标观察
+              </h2>
+              <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {METRIC_LABELS.map(([key, label]) => (
+                  <div key={key} className="py-4">
+                    <dt className="text-muted-foreground text-sm">{label}</dt>
+                    <dd className="mt-2 text-2xl font-semibold tabular-nums">
+                      {formatMetric(observation.metrics[key])}
+                    </dd>
                   </div>
-                  <Badge variant="outline">
-                    {formatTime(discovery.first_observed_at)}
-                  </Badge>
-                </div>
-                <Button asChild variant="ghost" size="sm" className="mt-3">
-                  <Link href={`/jobs/${discovery.job_id}`}>查看采集任务</Link>
-                </Button>
-              </article>
-            ))}
-          </div>
-        </section>
+                ))}
+              </dl>
+            </section>
+
+            <section aria-labelledby="discoveries-heading" className="mt-10">
+              <h2 id="discoveries-heading" className="text-xl font-medium">
+                发现依据
+              </h2>
+              <p className="text-muted-foreground mt-2 text-sm">
+                同一作品可由多个任务发现；以下仅显示仍有可读观察的任务关系。
+              </p>
+              <div className="mt-6 flex flex-col gap-6">
+                {content.discoveries.map((discovery) => (
+                  <article key={discovery.job_id} className="py-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="font-medium break-words">
+                          {discovery.configuration_ref}
+                        </h3>
+                        <p className="text-muted-foreground mt-1 text-xs">
+                          配置版本 v{discovery.configuration_version}
+                        </p>
+                        <p className="text-muted-foreground mt-1 text-xs">
+                          {scanKindLabel(discovery.scan_kind)}
+                        </p>
+                      </div>
+                      <Badge variant="outline">
+                        {formatTime(discovery.first_observed_at)}
+                      </Badge>
+                    </div>
+                    <Button asChild variant="ghost" size="sm" className="mt-3">
+                      <Link href={`/jobs/${discovery.job_id}`}>
+                        查看采集任务
+                      </Link>
+                    </Button>
+                  </article>
+                ))}
+              </div>
+            </section>
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );

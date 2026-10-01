@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ArrowDownIcon,
   ArrowRightIcon,
@@ -16,8 +16,24 @@ import {
   listHotlistSnapshots,
   listHotlistSources,
 } from "@/api/rebang";
-import { safeExternalHref } from "@/app/content/components/content-presenters";
-import { BrandLockup } from "@/components/brand/brand-lockup";
+
+import { WorkspaceHeader } from "@/components/navigation/workspace-header";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PageState } from "@/components/system/page-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -65,6 +81,18 @@ type DetailState =
       forbidden: boolean;
     };
 
+function safeExternalHref(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? url.href
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function readError(error: unknown, fallback: string) {
   return error instanceof ApiRequestError
     ? { message: error.message, requestId: error.requestId }
@@ -108,17 +136,14 @@ function InlineState({
   action?: ReactNode;
 }) {
   return (
-    <section
-      aria-label={title}
-      className="bg-muted mt-10 rounded-2xl p-6 sm:p-8"
-    >
-      <Badge variant="secondary">{eyebrow}</Badge>
-      <h2 className="mt-4 text-xl font-semibold">{title}</h2>
-      <p className="text-muted-foreground mt-2 max-w-xl text-sm leading-6">
-        {description}
-      </p>
-      {action ? <div className="mt-6">{action}</div> : null}
-    </section>
+    <Empty className="mt-12">
+      <EmptyHeader>
+        <p className="text-muted-foreground text-sm">{eyebrow}</p>
+        <EmptyTitle>{title}</EmptyTitle>
+        <EmptyDescription>{description}</EmptyDescription>
+      </EmptyHeader>
+      {action}
+    </Empty>
   );
 }
 
@@ -130,14 +155,17 @@ export function SnapshotDetail({
   return (
     <section aria-label="热榜快照" className="mt-10">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <h2 className="text-2xl font-semibold tracking-tight">
+        <h2 className="text-xl font-medium tracking-tight">
           {formatHotlistTime(snapshot.observed_at)}
         </h2>
         <Badge variant="secondary">{snapshot.entry_count} 条</Badge>
         {(snapshot.gap_count ?? 0) > 0 ? (
-          <Badge variant="destructive">
-            此前 {snapshot.gap_count} 个采集窗口无快照
-          </Badge>
+          <Alert className="mt-4">
+            <AlertTitle>快照有缺口</AlertTitle>
+            <AlertDescription>
+              此前 {snapshot.gap_count} 个采集窗口无快照
+            </AlertDescription>
+          </Alert>
         ) : null}
       </div>
       <p className="text-muted-foreground mt-3 text-sm leading-6">
@@ -154,20 +182,20 @@ export function SnapshotDetail({
         </Link>
       ) : null}
       {snapshot.entry_count === 0 ? (
-        <div className="bg-muted mt-8 rounded-2xl px-6 py-12">
-          <h3 className="text-lg font-medium">本次观察到空榜</h3>
-          <p className="text-muted-foreground mt-2 text-sm">
-            这是一条成功的零条目快照。
-          </p>
-        </div>
+        <Empty className="mt-8">
+          <EmptyHeader>
+            <EmptyTitle>本次观察到空榜</EmptyTitle>
+            <EmptyDescription>这是一条成功的零条目快照。</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
-        <ol className="mt-8 space-y-3">
+        <ol className="mt-10 flex flex-col gap-8">
           {snapshot.items.map((entry) => {
             const originalHref = safeExternalHref(entry.url);
             return (
-              <li key={entry.rank} className="bg-muted rounded-2xl p-5 sm:p-6">
+              <li key={entry.rank} className="py-4">
                 <div className="flex items-start gap-4">
-                  <span className="font-mono text-xl font-semibold tabular-nums">
+                  <span className="text-muted-foreground w-8 shrink-0 text-xl tabular-nums">
                     {entry.rank}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -254,15 +282,20 @@ export function HotlistWorkspace() {
   const [moreError, setMoreError] = useState<string | null>(null);
   const [historyRefresh, setHistoryRefresh] = useState(0);
   const [detailRefresh, setDetailRefresh] = useState(0);
+  const historyRequest = useRef<AbortController | null>(null);
+  const detailRequest = useRef<AbortController | null>(null);
+  const historyMorePending = useRef(false);
+  const entriesMorePending = useRef(false);
 
   useEffect(() => {
-    let current = true;
-    void listHotlistSources()
+    const controller = new AbortController();
+    void listHotlistSources({ signal: controller.signal })
       .then((page) => {
-        if (current) setSources({ status: "ready", items: page.items });
+        if (!controller.signal.aborted)
+          setSources({ status: "ready", items: page.items });
       })
       .catch((error: unknown) => {
-        if (!current) return;
+        if (controller.signal.aborted) return;
 
         setSources({
           status: "error",
@@ -270,7 +303,7 @@ export function HotlistWorkspace() {
         });
       });
     return () => {
-      current = false;
+      controller.abort();
     };
   }, []);
 
@@ -284,18 +317,22 @@ export function HotlistWorkspace() {
   useEffect(() => {
     if (!activeSource || !applied) return;
     const controller = new AbortController();
+    historyRequest.current = controller;
+    historyMorePending.current = false;
     void listHotlistSnapshots(
       { source_key: activeSource, limit: 20 },
       { signal: controller.signal },
     )
       .then((page) => {
-        if (!controller.signal.aborted)
-          setHistory({
-            status: "ready",
-            sourceKey: activeSource,
-            items: page.items,
-            nextCursor: page.next_cursor,
-          });
+        if (controller.signal.aborted) return;
+        setLoadingHistoryMore(false);
+        setMoreError(null);
+        setHistory({
+          status: "ready",
+          sourceKey: activeSource,
+          items: page.items,
+          nextCursor: page.next_cursor,
+        });
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
@@ -317,18 +354,22 @@ export function HotlistWorkspace() {
   useEffect(() => {
     if (!activeSource || !selectedSnapshot) return;
     const controller = new AbortController();
+    detailRequest.current = controller;
+    entriesMorePending.current = false;
     void resolveSnapshotRequest(
       activeSource,
       selectedSnapshot,
       controller.signal,
     )
       .then((snapshot) => {
-        if (snapshot && !controller.signal.aborted)
-          setDetail({
-            status: "ready",
-            snapshotId: selectedSnapshot,
-            value: snapshot,
-          });
+        if (!snapshot || controller.signal.aborted) return;
+        setLoadingEntriesMore(false);
+        setMoreError(null);
+        setDetail({
+          status: "ready",
+          snapshotId: selectedSnapshot,
+          value: snapshot,
+        });
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
@@ -346,11 +387,22 @@ export function HotlistWorkspace() {
   }, [activeSource, selectedSnapshot, detailRefresh]);
 
   function selectSource(sourceKey: string) {
+    historyRequest.current?.abort();
+    detailRequest.current?.abort();
+    historyMorePending.current = false;
+    entriesMorePending.current = false;
+    setLoadingHistoryMore(false);
+    setLoadingEntriesMore(false);
+    setMoreError(null);
     router.replace(`/hotlists?source=${encodeURIComponent(sourceKey)}`);
   }
 
   function selectSnapshot(snapshotId: string) {
     if (!activeSource) return;
+    detailRequest.current?.abort();
+    entriesMorePending.current = false;
+    setLoadingEntriesMore(false);
+    setMoreError(null);
     router.replace(
       `/hotlists?source=${encodeURIComponent(activeSource)}&snapshot=${encodeURIComponent(snapshotId)}`,
     );
@@ -361,17 +413,25 @@ export function HotlistWorkspace() {
       !activeSource ||
       history?.status !== "ready" ||
       history.sourceKey !== activeSource ||
-      !history.nextCursor
+      !history.nextCursor ||
+      historyMorePending.current
     )
       return;
+    const controller = historyRequest.current;
+    if (!controller || controller.signal.aborted) return;
+    historyMorePending.current = true;
     setLoadingHistoryMore(true);
     setMoreError(null);
     try {
-      const page = await listHotlistSnapshots({
-        source_key: activeSource,
-        cursor: history.nextCursor,
-        limit: 20,
-      });
+      const page = await listHotlistSnapshots(
+        {
+          source_key: activeSource,
+          cursor: history.nextCursor,
+          limit: 20,
+        },
+        { signal: controller.signal },
+      );
+      if (controller.signal.aborted) return;
       setHistory((current) =>
         current?.status === "ready" && current.sourceKey === activeSource
           ? {
@@ -382,9 +442,13 @@ export function HotlistWorkspace() {
           : current,
       );
     } catch (error) {
+      if (controller.signal.aborted) return;
       setMoreError(readError(error, "后续历史加载失败，请重试。").message);
     } finally {
-      setLoadingHistoryMore(false);
+      if (!controller.signal.aborted) {
+        historyMorePending.current = false;
+        setLoadingHistoryMore(false);
+      }
     }
   }
 
@@ -394,18 +458,26 @@ export function HotlistWorkspace() {
       !selectedSnapshot ||
       detail?.status !== "ready" ||
       detail.snapshotId !== selectedSnapshot ||
-      !detail.value.next_cursor
+      !detail.value.next_cursor ||
+      entriesMorePending.current
     )
       return;
+    const controller = detailRequest.current;
+    if (!controller || controller.signal.aborted) return;
+    entriesMorePending.current = true;
     setLoadingEntriesMore(true);
     setMoreError(null);
     try {
-      const page = await getHistoricalHotlistSnapshot({
-        source_key: activeSource,
-        snapshot_id: selectedSnapshot,
-        cursor: detail.value.next_cursor,
-        limit: 20,
-      });
+      const page = await getHistoricalHotlistSnapshot(
+        {
+          source_key: activeSource,
+          snapshot_id: selectedSnapshot,
+          cursor: detail.value.next_cursor,
+          limit: 20,
+        },
+        { signal: controller.signal },
+      );
+      if (controller.signal.aborted) return;
       setDetail((current) =>
         current?.status === "ready" && current.snapshotId === selectedSnapshot
           ? {
@@ -419,15 +491,20 @@ export function HotlistWorkspace() {
           : current,
       );
     } catch (error) {
+      if (controller.signal.aborted) return;
       setMoreError(readError(error, "后续榜位加载失败，请重试。").message);
     } finally {
-      setLoadingEntriesMore(false);
+      if (!controller.signal.aborted) {
+        entriesMorePending.current = false;
+        setLoadingEntriesMore(false);
+      }
     }
   }
 
   if (sources.status === "loading")
     return (
       <PageState
+        navigation={<WorkspaceHeader current="hotlists" />}
         eyebrow="热榜历史"
         title="正在加载来源"
         description="正在读取已应用的热榜来源。"
@@ -436,6 +513,7 @@ export function HotlistWorkspace() {
   if (sources.status === "error")
     return (
       <PageState
+        navigation={<WorkspaceHeader current="hotlists" />}
         eyebrow="加载失败"
         title="暂时无法打开热榜"
         description={
@@ -454,50 +532,50 @@ export function HotlistWorkspace() {
 
   return (
     <div className="bg-background min-h-screen">
-      <header className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-8 xl:px-16 2xl:px-0">
-        <BrandLockup href="/events" compactOnMobile />
-        <Button asChild variant="ghost">
-          <Link href="/events">返回工作台</Link>
-        </Button>
-      </header>
-      <main className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16 xl:px-16 2xl:px-0">
-        <p className="text-muted-foreground text-sm">信息获取 / 热榜</p>
-        <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">
-          六榜历史
+      <WorkspaceHeader current="hotlists" />
+      <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
+        <h1 className="mt-3 text-3xl font-normal tracking-tight sm:text-4xl">
+          热榜
         </h1>
         <p className="text-muted-foreground mt-4 max-w-2xl leading-7">
-          按来源查看每次真实快照、排名变化和命中主题。观察时间与来源发布时间分开记录。
+          选择来源，查看已保存的热榜与排名变化。
         </p>
-        <nav aria-label="热榜来源" className="mt-8 flex flex-wrap gap-2">
-          {SOURCES.map((source) => {
-            const available = sources.items.some(
-              (item) => item.source_key === source.key,
-            );
-            return (
-              <Button
-                key={source.key}
-                type="button"
-                variant={source.key === activeSource ? "default" : "secondary"}
-                onClick={() => selectSource(source.key)}
-                aria-current={source.key === activeSource ? "page" : undefined}
-              >
-                {source.label}
-                {available ? "" : " · 未应用"}
-              </Button>
-            );
-          })}
-        </nav>
+        {sources.items.length > 0 ? (
+          <FieldGroup className="mt-8 max-w-sm">
+            <Field>
+              <FieldLabel htmlFor="hotlist-source">来源</FieldLabel>
+              <Select value={activeSource ?? ""} onValueChange={selectSource}>
+                <SelectTrigger id="hotlist-source" className="w-full">
+                  <SelectValue placeholder="选择来源" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {sources.items.map((source) => (
+                      <SelectItem
+                        key={source.source_key}
+                        value={source.source_key}
+                      >
+                        {SOURCES.find((item) => item.key === source.source_key)
+                          ?.label ?? source.source_key}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+          </FieldGroup>
+        ) : null}
         {!activeSource || sources.items.length === 0 ? (
           <InlineState
             eyebrow="尚无来源"
             title="还没有应用热榜来源"
-            description="应用热榜来源后，这里会显示真实采集的历史快照。"
+            description="热榜来源配置并成功采集后，这里会显示历史快照。"
           />
         ) : !applied ? (
           <InlineState
             eyebrow="来源不可用"
             title="此来源尚未应用"
-            description="请在来源状态中应用该热榜，再查看快照。"
+            description="该热榜尚未配置。请选择已启用的来源，或查看来源设置。"
             action={
               <Button asChild>
                 <Link href="/sources">查看来源状态</Link>
@@ -527,7 +605,10 @@ export function HotlistWorkspace() {
           />
         ) : history?.status !== "ready" ||
           history.sourceKey !== activeSource ? (
-          <div aria-label="正在读取历史快照" className="mt-10 space-y-3">
+          <div
+            aria-label="正在读取历史快照"
+            className="mt-10 flex flex-col gap-3"
+          >
             <Skeleton className="h-12 w-full" />
             <Skeleton className="h-28 w-full" />
           </div>
@@ -589,7 +670,10 @@ export function HotlistWorkspace() {
                 }
               />
             ) : (
-              <div aria-label="正在读取榜位" className="mt-10 space-y-3">
+              <div
+                aria-label="正在读取榜位"
+                className="mt-10 flex flex-col gap-3"
+              >
                 <Skeleton className="h-28 w-full" />
                 <Skeleton className="h-28 w-full" />
               </div>

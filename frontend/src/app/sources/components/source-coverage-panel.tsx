@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { RotateCcwIcon } from "lucide-react";
+import { RotateCcwIcon, XIcon } from "lucide-react";
 
 import {
   getCollectionCoverage,
@@ -13,7 +13,38 @@ import { listSourceCapabilities } from "@/api/laiyuannengli";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiRequestError } from "@/request";
 
@@ -173,7 +204,11 @@ export function coverageQueryFromDraft(draft: CoverageDraft): {
 }
 
 export function coverageUrl(query: CoverageQuery, windowId?: string): string {
-  const params = new URLSearchParams({ start: query.start, end: query.end });
+  const params = new URLSearchParams({
+    tab: "coverage",
+    start: query.start,
+    end: query.end,
+  });
   if (query.sourceKey) params.set("source_key", query.sourceKey);
   if (query.capability) params.set("capability", query.capability);
   if (windowId) params.set("window", windowId);
@@ -245,27 +280,23 @@ function QueryFailure({
   onRetry: () => void;
 }) {
   return (
-    <div className="bg-muted mt-5 rounded-2xl p-5" role="alert">
-      <h3 className="font-medium">
+    <Alert variant="destructive" className="mt-5">
+      <AlertTitle>
         {failure.kind === "forbidden" ? "记录不存在或无权查看" : title}
-      </h3>
-      <p className="text-muted-foreground mt-2 text-sm">
-        {failure.message}
-        {failure.requestId ? ` 请求编号：${failure.requestId}` : ""}
-      </p>
-      {failure.kind === "error" ? (
-        <Button
-          className="mt-4"
-          type="button"
-          size="sm"
-          variant="secondary"
-          onClick={onRetry}
-        >
-          <RotateCcwIcon data-icon="inline-start" />
-          重新加载
-        </Button>
-      ) : null}
-    </div>
+      </AlertTitle>
+      <AlertDescription>
+        <p>
+          {failure.message}
+          {failure.requestId ? ` 请求编号：${failure.requestId}` : ""}
+        </p>
+        {failure.kind === "error" ? (
+          <Button type="button" size="sm" variant="outline" onClick={onRetry}>
+            <RotateCcwIcon data-icon="inline-start" />
+            重新加载
+          </Button>
+        ) : null}
+      </AlertDescription>
+    </Alert>
   );
 }
 
@@ -301,66 +332,72 @@ function MetricSummary({
         热榜相位未完成冻结验证时，延迟结论与成功桶比例仅供核对。
       </p>
       {value.sources.length === 0 ? (
-        <p className="bg-muted mt-4 rounded-2xl p-5 text-sm">
-          当前筛选没有逐来源指标样本。
-        </p>
+        <Empty className="mt-4">
+          <EmptyHeader>
+            <EmptyTitle>暂无指标样本</EmptyTitle>
+            <EmptyDescription>当前筛选没有逐来源指标样本。</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {value.sources.map((source) => (
-            <article
-              key={`${source.source_key}:${source.capability}`}
-              className="bg-muted rounded-2xl p-5"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <h4 className="font-medium">
-                  {source.source_key} · {capabilityLabel(source.capability)}
-                </h4>
-                <Badge
-                  variant={
-                    source.timing.result === "failed"
-                      ? "destructive"
-                      : "outline"
-                  }
-                >
-                  {TIMING_LABELS[source.timing.result]}
-                </Badge>
-              </div>
-              <p className="mt-3 text-sm">
-                到期 {source.timing.due_count} · 排除{" "}
-                {source.timing.excluded_count} · 超时{" "}
-                {source.timing.timeout_count}
-              </p>
-              <p className="text-muted-foreground mt-1 text-sm">
-                中位延迟：
-                {source.timing.median_seconds === null
-                  ? "未知"
-                  : `${source.timing.median_seconds} 秒`}
-                {source.timing.median_seconds === null &&
-                source.timing.median_lower_bound_seconds !== null
-                  ? `（下界 ${source.timing.median_lower_bound_seconds} 秒）`
-                  : ""}
-              </p>
-              {source.hotlist ? (
-                <p className="text-muted-foreground mt-2 text-sm">
-                  热榜桶：成功 {source.hotlist.success_count} / 应到{" "}
-                  {source.hotlist.expected_count}
-                  {source.hotlist.phase_verified
-                    ? " · 相位已验证"
-                    : " · 相位未验证"}
+            <Card key={`${source.source_key}:${source.capability}`}>
+              <CardHeader>
+                <CardTitle asChild>
+                  <h4>
+                    {source.source_key} · {capabilityLabel(source.capability)}
+                  </h4>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <Badge
+                    variant={
+                      source.timing.result === "failed"
+                        ? "destructive"
+                        : "outline"
+                    }
+                  >
+                    {TIMING_LABELS[source.timing.result]}
+                  </Badge>
+                </div>
+                <p className="mt-3 text-sm">
+                  到期 {source.timing.due_count} · 排除{" "}
+                  {source.timing.excluded_count} · 超时{" "}
+                  {source.timing.timeout_count}
                 </p>
-              ) : null}
-              {source.exclusions.length > 0 ? (
-                <p className="text-muted-foreground mt-2 text-xs">
-                  排除依据：
-                  {source.exclusions
-                    .map(
-                      (item) =>
-                        `${item.reason} · ${item.evidence_id.slice(0, 8)}`,
-                    )
-                    .join("；")}
+                <p className="text-muted-foreground mt-1 text-sm">
+                  中位延迟：
+                  {source.timing.median_seconds === null
+                    ? "未知"
+                    : `${source.timing.median_seconds} 秒`}
+                  {source.timing.median_seconds === null &&
+                  source.timing.median_lower_bound_seconds !== null
+                    ? `（下界 ${source.timing.median_lower_bound_seconds} 秒）`
+                    : ""}
                 </p>
-              ) : null}
-            </article>
+                {source.hotlist ? (
+                  <p className="text-muted-foreground mt-2 text-sm">
+                    热榜桶：成功 {source.hotlist.success_count} / 应到{" "}
+                    {source.hotlist.expected_count}
+                    {source.hotlist.phase_verified
+                      ? " · 相位已验证"
+                      : " · 相位未验证"}
+                  </p>
+                ) : null}
+                {source.exclusions.length > 0 ? (
+                  <p className="text-muted-foreground mt-2 text-xs">
+                    排除依据：
+                    {source.exclusions
+                      .map(
+                        (item) =>
+                          `${item.reason} · ${item.evidence_id.slice(0, 8)}`,
+                      )
+                      .join("；")}
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
@@ -408,6 +445,8 @@ export function SourceCoveragePanel() {
     error: string | null;
   } | null>(null);
   const pageController = useRef<AbortController | null>(null);
+  const detailOrigin = useRef<HTMLElement | null>(null);
+  const refreshButton = useRef<HTMLButtonElement | null>(null);
   const requestKey = `${queryKey}:${refreshCount}`;
   const detailKey = `${selectedWindow ?? ""}:${detailRefreshCount}`;
   const loadingMore =
@@ -564,18 +603,43 @@ export function SourceCoveragePanel() {
   const visibleMetrics = metrics?.key === requestKey ? metrics : null;
   const visibleDetail = detail?.key === detailKey ? detail : null;
 
+  const closeDetail = () => {
+    if (applied) router.replace(coverageUrl(applied), { scroll: false });
+    else {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("window");
+      router.replace(`/sources?${params.toString()}`, { scroll: false });
+    }
+  };
+  const sourceOptions = sources.some(
+    (source) => source.source_key === draft.sourceKey,
+  )
+    ? sources.map((source) => ({
+        key: source.source_key,
+        label: source.display_name,
+      }))
+    : [
+        ...sources.map((source) => ({
+          key: source.source_key,
+          label: source.display_name,
+        })),
+        ...(draft.sourceKey
+          ? [{ key: draft.sourceKey, label: draft.sourceKey }]
+          : []),
+      ];
+
   return (
     <section
       id="coverage"
       aria-labelledby="source-coverage-heading"
-      className="mt-12"
+      className="flex flex-col gap-6"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 id="source-coverage-heading" className="text-2xl font-semibold">
+      <div className="flex flex-col gap-2">
+        <h2 id="source-coverage-heading" className="text-xl font-medium">
           采集覆盖
         </h2>
-        <p className="text-muted-foreground text-xs">
-          时间输入与列表显示均为北京时间
+        <p className="text-muted-foreground max-w-2xl text-sm leading-6">
+          查看来源在指定时间内的采集记录。时间输入与列表均为北京时间。
         </p>
       </div>
       {sourcesFailure ? (
@@ -585,178 +649,258 @@ export function SourceCoveragePanel() {
           onRetry={() => setSourcesRefresh((count) => count + 1)}
         />
       ) : null}
-      <form
-        onSubmit={applyFilters}
-        className="bg-muted mt-5 grid gap-4 rounded-2xl p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-5"
-      >
-        <div className="space-y-2">
-          <Label htmlFor="coverage-source">来源</Label>
-          <Input
-            id="coverage-source"
-            list="coverage-source-options"
-            value={draft.sourceKey}
-            onChange={(event) =>
-              changeDraft({ sourceKey: event.target.value.trim() })
-            }
-            placeholder="全部来源"
-          />
-          <datalist id="coverage-source-options">
-            {sources.map((source) => (
-              <option key={source.source_key} value={source.source_key}>
-                {source.display_name}
-              </option>
-            ))}
-          </datalist>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="coverage-capability">能力</Label>
-          <select
-            id="coverage-capability"
-            className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-            value={draft.capability}
-            onChange={(event) =>
-              changeDraft({
-                capability: event.target.value as CoverageDraft["capability"],
-              })
-            }
-          >
-            <option value="">全部能力</option>
-            <option value="search">检索</option>
-            <option value="author_posts">作者作品</option>
-            <option value="comments">评论</option>
-            <option value="replies">回复</option>
-            <option value="page_content">页面正文</option>
-            <option value="hotlist">热榜</option>
-          </select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="coverage-start">开始 · 北京时间</Label>
-          <Input
-            id="coverage-start"
-            type="datetime-local"
-            value={draft.startLocal}
-            onChange={(event) =>
-              changeDraft({ startLocal: event.target.value })
-            }
-            required
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="coverage-end">结束 · 北京时间</Label>
-          <Input
-            id="coverage-end"
-            type="datetime-local"
-            value={draft.endLocal}
-            onChange={(event) => changeDraft({ endLocal: event.target.value })}
-            required
-          />
-        </div>
-        <div className="flex items-end">
-          <Button type="submit" className="w-full">
-            查询窗口
-          </Button>
-        </div>
-        {validation ? (
-          <p
-            className="text-destructive sm:col-span-2 lg:col-span-5"
-            role="alert"
-          >
-            {validation}
-          </p>
-        ) : null}
-      </form>
-
-      {!applied ? (
-        <div className="bg-muted mt-6 rounded-2xl p-6" role="status">
-          {searchParams.get("start") || searchParams.get("end")
-            ? "URL 中的时间或筛选条件无效；请重新选择时间并查询。"
-            : "正在准备最近 24 小时的覆盖查询…"}
-        </div>
-      ) : (
-        <>
-          <div className="mt-10 flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-semibold">到期窗口</h3>
-              <p className="text-muted-foreground mt-1 text-sm">
-                没有 Job 的到期点仍保留；未知计数不显示为 0。
-              </p>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={() => setRefreshCount((count) => count + 1)}
+      <form onSubmit={applyFilters}>
+        <FieldGroup className="grid gap-5 sm:grid-cols-2">
+          <Field>
+            <FieldLabel htmlFor="coverage-source">来源</FieldLabel>
+            <Select
+              value={draft.sourceKey || "all"}
+              onValueChange={(value) =>
+                changeDraft({ sourceKey: value === "all" ? "" : value })
+              }
             >
-              <RotateCcwIcon data-icon="inline-start" />
-              刷新
-            </Button>
-          </div>
-          {!visibleList ? (
-            <div aria-label="正在读取覆盖窗口" className="mt-5 space-y-3">
-              <Skeleton className="h-16 w-full rounded-2xl" />
-              <Skeleton className="h-16 w-full rounded-2xl" />
-              <Skeleton className="h-16 w-full rounded-2xl" />
-            </div>
-          ) : visibleList.status === "error" ? (
-            <QueryFailure
-              title="覆盖窗口加载失败"
-              failure={visibleList.failure}
-              onRetry={() => setRefreshCount((count) => count + 1)}
+              <SelectTrigger id="coverage-source" className="w-full">
+                <SelectValue placeholder="全部来源" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="all">全部来源</SelectItem>
+                  {sourceOptions.map((source) => (
+                    <SelectItem key={source.key} value={source.key}>
+                      {source.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="coverage-capability">能力</FieldLabel>
+            <Select
+              value={draft.capability || "all"}
+              onValueChange={(value) =>
+                changeDraft({
+                  capability:
+                    value === "all"
+                      ? ""
+                      : (value as HotKeyAPI.SourceCapability),
+                })
+              }
+            >
+              <SelectTrigger id="coverage-capability" className="w-full">
+                <SelectValue placeholder="全部能力" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="all">全部能力</SelectItem>
+                  {CAPABILITIES.map((capability) => (
+                    <SelectItem key={capability} value={capability}>
+                      {capabilityLabel(capability)}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field data-invalid={!!validation}>
+            <FieldLabel htmlFor="coverage-start">开始 · 北京时间</FieldLabel>
+            <Input
+              id="coverage-start"
+              type="datetime-local"
+              value={draft.startLocal}
+              onChange={(event) =>
+                changeDraft({ startLocal: event.target.value })
+              }
+              required
+              aria-invalid={!!validation}
+              aria-describedby={validation ? "coverage-validation" : undefined}
             />
-          ) : visibleList.items.length === 0 ? (
-            <div className="bg-muted mt-5 rounded-2xl p-6">
-              <h4 className="font-medium">此筛选下暂无到期窗口</h4>
-              <p className="text-muted-foreground mt-2 text-sm">
-                这只表示账本没有对应到期记录，不代表来源采集完整。
-              </p>
+          </Field>
+          <Field data-invalid={!!validation}>
+            <FieldLabel htmlFor="coverage-end">结束 · 北京时间</FieldLabel>
+            <Input
+              id="coverage-end"
+              type="datetime-local"
+              value={draft.endLocal}
+              onChange={(event) =>
+                changeDraft({ endLocal: event.target.value })
+              }
+              required
+              aria-invalid={!!validation}
+              aria-describedby={validation ? "coverage-validation" : undefined}
+            />
+          </Field>
+          <Field className="sm:col-span-2">
+            <FieldDescription>
+              时间范围不超过 31 天，包含起点，不包含终点。
+            </FieldDescription>
+            {validation ? (
+              <FieldError id="coverage-validation">{validation}</FieldError>
+            ) : null}
+            <div>
+              <Button type="submit">查询窗口</Button>
             </div>
-          ) : (
-            <>
-              {visibleList.items.some(
-                (row) =>
-                  !["complete", "empty"].includes(row.coverage_status) ||
-                  row.gaps.length > 0,
-              ) ? (
-                <p role="status" className="text-muted-foreground mt-5 text-sm">
-                  列表含未完成、失败或未确认缺口的窗口，请逐项打开核对。
-                </p>
-              ) : null}
-              <CoverageWindowTable
-                items={visibleList.items}
-                selectedId={selectedWindow}
-                onSelect={(id) =>
-                  router.replace(coverageUrl(applied, id), { scroll: false })
-                }
+          </Field>
+        </FieldGroup>
+      </form>
+      {!applied ? (
+        <Alert>
+          <AlertTitle>请确认查询条件</AlertTitle>
+          <AlertDescription>
+            {searchParams.get("start") || searchParams.get("end")
+              ? "URL 中的时间或筛选条件无效；请重新选择时间并查询。"
+              : "正在准备最近 24 小时的覆盖查询…"}
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <Tabs defaultValue="windows" className="gap-6">
+          <TabsList variant="line" aria-label="覆盖结果">
+            <TabsTrigger value="windows">到期窗口</TabsTrigger>
+            <TabsTrigger value="metrics">指标核对</TabsTrigger>
+          </TabsList>
+          <TabsContent value="windows">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <p className="text-muted-foreground max-w-lg text-sm leading-6">
+                没有任务的到期记录仍保留；未知计数不显示为 0。
+              </p>
+              <Button
+                ref={refreshButton}
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setRefreshCount((count) => count + 1)}
+              >
+                <RotateCcwIcon data-icon="inline-start" />
+                刷新
+              </Button>
+            </div>
+            {!visibleList ? (
+              <div
+                aria-label="正在读取覆盖窗口"
+                className="mt-5 flex flex-col gap-3"
+              >
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+              </div>
+            ) : visibleList.status === "error" ? (
+              <QueryFailure
+                title="覆盖窗口加载失败"
+                failure={visibleList.failure}
+                onRetry={() => setRefreshCount((count) => count + 1)}
               />
-              {visibleList.nextCursor ? (
-                <div className="mt-6 flex justify-center">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={loadingMore}
-                    onClick={() => void loadMore()}
+            ) : visibleList.items.length === 0 ? (
+              <Empty className="mt-5">
+                <EmptyHeader>
+                  <EmptyTitle>此筛选下暂无到期窗口</EmptyTitle>
+                  <EmptyDescription>
+                    这只表示账本没有对应到期记录，不代表来源采集完整。
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : (
+              <>
+                {visibleList.items.some(
+                  (row) =>
+                    !["complete", "empty"].includes(row.coverage_status) ||
+                    row.gaps.length > 0,
+                ) ? (
+                  <p
+                    role="status"
+                    className="text-muted-foreground mt-5 text-sm"
                   >
-                    {loadingMore ? "正在加载" : "加载更多"}
-                  </Button>
-                </div>
-              ) : null}
-              {moreError ? (
-                <p
-                  className="text-destructive mt-3 text-center text-sm"
-                  role="alert"
-                >
-                  {moreError}
-                </p>
-              ) : null}
-            </>
-          )}
-
-          {selectedWindow ? (
-            !visibleDetail ? (
-              <Skeleton
-                aria-label="正在读取窗口详情"
-                className="mt-8 h-64 w-full rounded-2xl"
+                    列表含未完成、失败或未确认缺口的窗口，请逐项打开核对。
+                  </p>
+                ) : null}
+                <CoverageWindowTable
+                  items={visibleList.items}
+                  selectedId={selectedWindow}
+                  onSelect={(id) => {
+                    detailOrigin.current =
+                      document.activeElement instanceof HTMLElement
+                        ? document.activeElement
+                        : null;
+                    router.replace(coverageUrl(applied, id), { scroll: false });
+                  }}
+                />
+                {visibleList.nextCursor ? (
+                  <div className="mt-6 flex justify-center">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={loadingMore}
+                      onClick={() => void loadMore()}
+                    >
+                      {loadingMore ? "正在加载…" : "加载更多"}
+                    </Button>
+                  </div>
+                ) : null}
+                {moreError ? (
+                  <Alert variant="destructive" className="mt-3">
+                    <AlertTitle>后续窗口加载失败</AlertTitle>
+                    <AlertDescription>{moreError}</AlertDescription>
+                  </Alert>
+                ) : null}
+              </>
+            )}
+          </TabsContent>
+          <TabsContent value="metrics">
+            {!visibleMetrics ? (
+              <div
+                aria-label="正在读取逐来源指标"
+                className="grid gap-3 sm:grid-cols-2"
+              >
+                <Skeleton className="h-36" />
+                <Skeleton className="h-36" />
+              </div>
+            ) : visibleMetrics.status === "error" ? (
+              <QueryFailure
+                title="逐来源指标加载失败"
+                failure={visibleMetrics.failure}
+                onRetry={() => setRefreshCount((count) => count + 1)}
               />
+            ) : (
+              <MetricSummary value={visibleMetrics.value} />
+            )}
+          </TabsContent>
+        </Tabs>
+      )}
+      <Sheet
+        open={!!selectedWindow}
+        onOpenChange={(open) => {
+          if (!open) closeDetail();
+        }}
+      >
+        <SheetContent
+          showCloseButton={false}
+          className="overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-2xl"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            (detailOrigin.current?.isConnected
+              ? detailOrigin.current
+              : refreshButton.current
+            )?.focus();
+          }}
+        >
+          <SheetHeader className="pr-14">
+            <SheetTitle>覆盖详情</SheetTitle>
+            <SheetDescription>
+              查看真实采集记录、未确认缺口和关联内容。
+            </SheetDescription>
+          </SheetHeader>
+          <SheetClose asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="absolute top-3 right-3"
+              aria-label="关闭覆盖详情"
+            >
+              <XIcon data-icon="inline-start" />
+            </Button>
+          </SheetClose>
+          <div className="px-4 pb-8">
+            {!visibleDetail ? (
+              <Skeleton aria-label="正在读取窗口详情" className="h-64 w-full" />
             ) : visibleDetail.status === "error" ? (
               <QueryFailure
                 title="窗口详情加载失败"
@@ -764,52 +908,29 @@ export function SourceCoveragePanel() {
                 onRetry={() => setDetailRefreshCount((count) => count + 1)}
               />
             ) : applied && !windowMatchesQuery(visibleDetail.value, applied) ? (
-              <div className="bg-muted mt-8 rounded-2xl p-6" role="alert">
-                <h3 className="font-medium">窗口不属于当前筛选</h3>
-                <p className="text-muted-foreground mt-2 text-sm">
+              <Alert>
+                <AlertTitle>窗口不属于当前筛选</AlertTitle>
+                <AlertDescription>
                   请调整筛选条件，或关闭此详情。
-                </p>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  className="mt-4"
-                  onClick={() =>
-                    router.replace(coverageUrl(applied), { scroll: false })
-                  }
-                >
-                  关闭详情
-                </Button>
-              </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={closeDetail}
+                  >
+                    关闭详情
+                  </Button>
+                </AlertDescription>
+              </Alert>
             ) : (
               <CoverageWindowDetail
                 row={visibleDetail.value}
-                onClose={() =>
-                  router.replace(coverageUrl(applied), { scroll: false })
-                }
+                onClose={closeDetail}
               />
-            )
-          ) : null}
-
-          {!visibleMetrics ? (
-            <div
-              aria-label="正在读取逐来源指标"
-              className="mt-10 grid gap-3 md:grid-cols-2"
-            >
-              <Skeleton className="h-36 rounded-2xl" />
-              <Skeleton className="h-36 rounded-2xl" />
-            </div>
-          ) : visibleMetrics.status === "error" ? (
-            <QueryFailure
-              title="逐来源指标加载失败"
-              failure={visibleMetrics.failure}
-              onRetry={() => setRefreshCount((count) => count + 1)}
-            />
-          ) : (
-            <MetricSummary value={visibleMetrics.value} />
-          )}
-        </>
-      )}
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </section>
   );
 }

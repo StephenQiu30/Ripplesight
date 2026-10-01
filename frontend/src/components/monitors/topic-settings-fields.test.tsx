@@ -6,6 +6,7 @@ import { KeywordGroupField } from "./keyword-group-field";
 import {
   selectableTopicSources,
   TopicSettingsFields,
+  TopicAdvancedFields,
 } from "./topic-settings-fields";
 
 const entry: HotKeyAPI.SourceEntryPointView = {
@@ -59,14 +60,6 @@ describe("topic source settings", () => {
         sourceOptions: restricted,
         sourceKeys: [],
         onSourceKeysChange: vi.fn(),
-        collectionIntervalSeconds: 1800,
-        onCollectionIntervalSecondsChange: vi.fn(),
-        reportTime: "09:00",
-        onReportTimeChange: vi.fn(),
-        weeklyReportEnabled: false,
-        onWeeklyReportEnabledChange: vi.fn(),
-        notificationTargets: "",
-        onNotificationTargetsChange: vi.fn(),
         disabled: false,
       }),
     );
@@ -88,18 +81,13 @@ describe("topic source settings", () => {
     expect(keyword).toContain("关键词过长");
     expect(keyword).toContain('aria-invalid="true"');
     const settings = renderToStaticMarkup(
-      createElement(TopicSettingsFields, {
-        sourceOptions: [],
-        sourceKeys: [],
-        onSourceKeysChange: vi.fn(),
+      createElement(TopicAdvancedFields, {
+        matchAll: "",
+        onMatchAllChange: vi.fn(),
+        exclude: "",
+        onExcludeChange: vi.fn(),
         collectionIntervalSeconds: 599,
         onCollectionIntervalSecondsChange: vi.fn(),
-        reportTime: "",
-        onReportTimeChange: vi.fn(),
-        weeklyReportEnabled: false,
-        onWeeklyReportEnabledChange: vi.fn(),
-        notificationTargets: "",
-        onNotificationTargetsChange: vi.fn(),
         disabled: false,
         fieldErrors: { collection_interval_seconds: "必须不少于 600" },
       }),

@@ -15,7 +15,7 @@ export default function ErrorBoundary({ reset }: ErrorBoundaryProps) {
     <PageState
       eyebrow="暂时不可用"
       title="页面没有正常完成加载。"
-      description="当前操作没有丢失。请重新尝试；如果问题持续存在，再检查服务状态。"
+      description="请重新尝试；如果问题持续存在，再检查服务状态。"
       action={
         <Button type="button" onClick={reset} size="lg">
           重新尝试

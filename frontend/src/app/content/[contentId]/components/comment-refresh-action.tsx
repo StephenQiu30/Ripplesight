@@ -93,6 +93,7 @@ export function CommentRefreshAction({ postId }: { postId: string }) {
   const operation = useRef(new CommentRefreshOperation());
   const [state, setState] = useState<RefreshState>({ status: "loading" });
   const [submitting, setSubmitting] = useState(false);
+  const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -100,9 +101,10 @@ export function CommentRefreshAction({ postId }: { postId: string }) {
       { content_id: postId },
       { signal: controller.signal },
     )
-      .then((readiness) =>
-        setState({ status: "ready", readiness, message: null }),
-      )
+      .then((readiness) => {
+        if (!controller.signal.aborted)
+          setState({ status: "ready", readiness, message: null });
+      })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
 
@@ -111,11 +113,11 @@ export function CommentRefreshAction({ postId }: { postId: string }) {
           message:
             error instanceof ApiRequestError
               ? `${error.message}${error.requestId ? ` 请求编号：${error.requestId}` : ""}`
-              : "评论更新资格暂不可用，请重新加载页面。",
+              : "评论更新资格暂不可用，请重试。",
         });
       });
     return () => controller.abort();
-  }, [postId]);
+  }, [postId, retryToken]);
 
   async function refresh() {
     if (state.status !== "ready" || !state.readiness.available) return;
@@ -166,9 +168,21 @@ export function CommentRefreshAction({ postId }: { postId: string }) {
   if (state.status === "loading") return null;
   if (state.status === "error") {
     return (
-      <p role="alert" className="text-destructive mt-4 text-sm">
-        {state.message}
-      </p>
+      <div className="mt-4 flex flex-col items-start gap-3">
+        <p role="alert" className="text-destructive text-sm">
+          {state.message}
+        </p>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setState({ status: "loading" });
+            setRetryToken((value) => value + 1);
+          }}
+        >
+          <RotateCcwIcon data-icon="inline-start" />
+          重试
+        </Button>
+      </div>
     );
   }
   if (state.status === "accepted") {

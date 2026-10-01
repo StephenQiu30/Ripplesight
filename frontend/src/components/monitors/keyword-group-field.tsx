@@ -42,16 +42,18 @@ export function KeywordGroupField({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         disabled={disabled}
-        rows={4}
+        rows={3}
         maxLength={5_000}
         placeholder="每行一个关键词"
-        aria-describedby={`${id}-description`}
+        aria-describedby={
+          error ? `${id}-error ${id}-description` : `${id}-description`
+        }
         aria-invalid={Boolean(error)}
       />
       <FieldDescription id={`${id}-description`}>
         {description} 当前 {count}/50 个关键词。
       </FieldDescription>
-      {error ? <FieldError>{error}</FieldError> : null}
+      {error ? <FieldError id={`${id}-error`}>{error}</FieldError> : null}
     </Field>
   );
 }

@@ -151,6 +151,25 @@ afterEach(() => {
 
 describe("source coverage interaction", () => {
   it("keeps the new filter visible when an old source response finishes late", async () => {
+    vi.mocked(listSourceCapabilities).mockResolvedValue({
+      items: [
+        {
+          source_key: "new_source",
+          display_name: "新来源",
+          rollout_role: "candidate",
+          status: "available",
+          connection_version: 1,
+          connection_id: "connection-1",
+          connection_status: "active",
+          has_credentials: false,
+          credential_configured: false,
+          credential_update_available: false,
+          allowed_hosts: ["example.com"],
+          capabilities: [],
+        },
+      ],
+      next_cursor: null,
+    });
     let finishOld!: (page: HotKeyAPI.PageViewCollectionCoverageView_) => void;
     vi.mocked(listCollectionCoverage).mockImplementation(({ source_key }) =>
       source_key === "old_source"
@@ -163,9 +182,10 @@ describe("source coverage interaction", () => {
     render(<SourceCoveragePanel />);
     await waitFor(() => expect(finishOld).toBeTypeOf("function"));
 
-    fireEvent.change(screen.getByLabelText("来源"), {
-      target: { value: "new_source" },
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "来源" }), {
+      key: "Enter",
     });
+    fireEvent.click(await screen.findByRole("option", { name: "新来源" }));
     fireEvent.click(screen.getByRole("button", { name: "查询窗口" }));
 
     await waitFor(() => expect(navigation.href).toContain("new_source"));

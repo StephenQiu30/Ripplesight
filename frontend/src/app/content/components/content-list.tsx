@@ -8,36 +8,58 @@ import {
   useRef,
   useState,
 } from "react";
-import { ArrowRightIcon, ExternalLinkIcon, RotateCcwIcon } from "lucide-react";
-
+import {
+  ArrowRightIcon,
+  FilterIcon,
+  PlusIcon,
+  RotateCcwIcon,
+} from "lucide-react";
 import { listContentRecords } from "@/api/zuopinziliao";
 import { listMonitorTopics } from "@/api/jiankongzhuti";
 import { listSourceCapabilities } from "@/api/laiyuannengli";
 import {
   contentScopeLabel,
   contentScopeNotice,
-  formatMetric,
   formatTime,
-  hasUnknownMetrics,
-  safeExternalHref,
   visibilityStatusLabel,
   visibilityStatusNotice,
 } from "@/app/content/components/content-presenters";
 import { WebPageCaptureForm } from "@/app/content/components/webpage-capture-form";
-import { BrandLockup } from "@/components/brand/brand-lockup";
+import { WorkspaceHeader } from "@/components/navigation/workspace-header";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ApiRequestError } from "@/request";
 
 type ContentListState =
@@ -77,20 +99,23 @@ type FilterOptions =
     }
   | { status: "error" };
 
-async function fetchFilterOptions(): Promise<
-  Extract<FilterOptions, { status: "ready" }>
-> {
+async function fetchFilterOptions(
+  signal?: AbortSignal,
+): Promise<Extract<FilterOptions, { status: "ready" }>> {
   const [sourcePage, topics] = await Promise.all([
-    listSourceCapabilities(),
+    listSourceCapabilities({ signal }),
     (async () => {
       const all: HotKeyAPI.MonitorTopicView[] = [];
       let cursor: string | null = null;
       do {
-        const page = await listMonitorTopics({
-          include_archived: true,
-          limit: 50,
-          ...(cursor ? { cursor } : {}),
-        });
+        const page = await listMonitorTopics(
+          {
+            include_archived: true,
+            limit: 50,
+            ...(cursor ? { cursor } : {}),
+          },
+          { signal },
+        );
         all.push(...page.items);
         cursor = page.next_cursor;
       } while (cursor !== null);
@@ -202,191 +227,68 @@ function toErrorState(
     : { status: "error", message: "作品资料加载失败，请稍后重试。" };
 }
 
-function ContentStatus({
-  content,
-}: {
-  content: HotKeyAPI.ContentRecordSummaryView;
-}) {
-  return hasUnknownMetrics(content.latest_observation.metrics) ? (
-    <Badge variant="outline">部分指标未知</Badge>
-  ) : (
-    <Badge variant="secondary">指标已记录</Badge>
-  );
-}
-
-function VisibilityStatus({
-  visibility,
-}: {
-  visibility: HotKeyAPI.ContentVisibilityView | null;
-}) {
-  if (visibility === null) {
-    return <Badge variant="outline">来源状态未观察</Badge>;
-  }
-  const variant =
-    visibility.status === "visible"
-      ? "secondary"
-      : visibility.status === "deleted" || visibility.status === "restricted"
-        ? "destructive"
-        : "outline";
-  return (
-    <Badge variant={variant}>{visibilityStatusLabel(visibility.status)}</Badge>
-  );
-}
-
-function VisibilityNotice({
-  visibility,
-}: {
-  visibility: HotKeyAPI.ContentVisibilityView | null;
-}) {
-  if (visibility === null || visibility.status === "visible") {
-    return null;
-  }
-  return (
-    <p className="text-muted-foreground mt-2 text-xs leading-5">
-      {visibilityStatusNotice(visibility.status)}
-    </p>
-  );
-}
-
-function OriginalContentLink({
-  canonicalUrl,
-}: {
-  canonicalUrl: string | null;
-}) {
-  const href = safeExternalHref(canonicalUrl);
-  if (href === null) {
-    return null;
-  }
-
-  return (
-    <a
-      className="text-muted-foreground mt-3 inline-flex items-center gap-1 text-xs underline underline-offset-4"
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-    >
-      打开原文
-      <ExternalLinkIcon className="size-3" aria-hidden="true" />
-    </a>
-  );
-}
-
-function PrimaryMetrics({ metrics }: { metrics: HotKeyAPI.ContentMetricView }) {
-  return (
-    <span className="text-muted-foreground text-xs leading-5">
-      点赞 {formatMetric(metrics.like_count)} · 评论{" "}
-      {formatMetric(metrics.comment_count)} · 转发{" "}
-      {formatMetric(metrics.repost_count)}
-    </span>
-  );
-}
-
-function ContentVersionSummary({
-  version,
-}: {
-  version: HotKeyAPI.ContentVersionView | null;
-}) {
-  if (version === null) {
-    return <p className="text-muted-foreground mt-2 text-xs">未取得正文</p>;
-  }
-  const preview = version.title ?? version.body;
-  const notice = contentScopeNotice(version.text_scope);
-  return (
-    <div className="mt-2 min-w-0">
-      <Badge variant="secondary">{contentScopeLabel(version.text_scope)}</Badge>
-      {preview ? (
-        <p className="mt-2 line-clamp-2 text-sm break-words whitespace-pre-wrap">
-          {preview}
-        </p>
-      ) : null}
-      {notice ? (
-        <p className="text-muted-foreground mt-1 line-clamp-2 text-xs">
-          {notice}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function LoadingContentList() {
-  return (
-    <div aria-label="正在读取作品资料" className="mt-8 space-y-3">
-      {[0, 1, 2].map((item) => (
-        <Skeleton key={item} className="h-24 w-full rounded-2xl" />
-      ))}
-    </div>
-  );
-}
-
 export function ContentList() {
   const [state, setState] = useState<ContentListState>({ status: "loading" });
   const [options, setOptions] = useState<FilterOptions>({ status: "loading" });
   const [draft, setDraft] = useState<ContentFilters>(EMPTY_FILTERS);
   const [applied, setApplied] = useState<ContentFilters>(EMPTY_FILTERS);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [filterError, setFilterError] = useState<string | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
-  const requestGeneration = useRef(0);
+  const dataRequest = useRef<AbortController | null>(null);
+  const optionRequest = useRef<AbortController | null>(null);
+  const loadingMore = useRef(false);
 
-  const loadOptions = useCallback(async () => {
-    setOptions({ status: "loading" });
-    try {
-      setOptions(await fetchFilterOptions());
-    } catch {
-      setOptions({ status: "error" });
-    }
-  }, []);
-
-  const load = useCallback(async (filters: ContentFilters) => {
-    const generation = ++requestGeneration.current;
-    setState({ status: "loading" });
-    setIsLoadingMore(false);
-    setLoadMoreError(null);
-    try {
-      const page = await listContentRecords(contentListParams(filters));
-      if (generation !== requestGeneration.current) return;
-      setState({
-        status: "ready",
-        items: page.items,
-        nextCursor: page.next_cursor,
+  const loadOptions = useCallback(() => {
+    optionRequest.current?.abort();
+    const controller = new AbortController();
+    optionRequest.current = controller;
+    return fetchFilterOptions(controller.signal)
+      .then((result) => {
+        if (!controller.signal.aborted) setOptions(result);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setOptions({ status: "error" });
       });
-    } catch (error) {
-      if (generation !== requestGeneration.current) return;
-
-      setState(toErrorState(error));
-    }
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    const generation = ++requestGeneration.current;
-    void listContentRecords(contentListParams(EMPTY_FILTERS))
+  const load = useCallback((filters: ContentFilters) => {
+    dataRequest.current?.abort();
+    const controller = new AbortController();
+    dataRequest.current = controller;
+    return listContentRecords(contentListParams(filters), {
+      signal: controller.signal,
+    })
       .then((page) => {
-        if (active && generation === requestGeneration.current) {
+        if (!controller.signal.aborted)
           setState({
             status: "ready",
             items: page.items,
             nextCursor: page.next_cursor,
           });
-        }
       })
       .catch((error: unknown) => {
-        if (!active || generation !== requestGeneration.current) return;
-        setState(toErrorState(error));
+        if (!controller.signal.aborted) setState(toErrorState(error));
       });
-    void fetchFilterOptions()
-      .then((value) => {
-        if (active) setOptions(value);
-      })
-      .catch(() => {
-        if (!active) return;
-        setOptions({ status: "error" });
-      });
-    return () => {
-      active = false;
-      requestGeneration.current += 1;
-    };
   }, []);
+
+  useEffect(() => {
+    void load(EMPTY_FILTERS);
+    void loadOptions();
+    return () => {
+      dataRequest.current?.abort();
+      optionRequest.current?.abort();
+    };
+  }, [load, loadOptions]);
+
+  function reload(filters: ContentFilters) {
+    loadingMore.current = false;
+    setState({ status: "loading" });
+    setIsLoadingMore(false);
+    setLoadMoreError(null);
+    void load(filters);
+  }
 
   function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -394,28 +296,27 @@ export function ContentList() {
       contentListParams(draft);
       setFilterError(null);
       setApplied(draft);
-      void load(draft);
+      setFilterOpen(false);
+      reload(draft);
     } catch (error) {
       setFilterError(error instanceof Error ? error.message : "筛选条件无效。");
     }
   }
 
   async function loadMore() {
-    if (
-      state.status !== "ready" ||
-      state.nextCursor === null ||
-      isLoadingMore
-    ) {
+    if (state.status !== "ready" || !state.nextCursor || loadingMore.current)
       return;
-    }
+    const controller = dataRequest.current;
+    if (!controller || controller.signal.aborted) return;
+    loadingMore.current = true;
     setIsLoadingMore(true);
     setLoadMoreError(null);
-    const generation = requestGeneration.current;
     try {
       const page = await listContentRecords(
         contentListParams(applied, state.nextCursor),
+        { signal: controller.signal },
       );
-      if (generation !== requestGeneration.current) return;
+      if (controller.signal.aborted) return;
       setState((current) =>
         current.status === "ready"
           ? {
@@ -426,341 +327,348 @@ export function ContentList() {
           : current,
       );
     } catch (error) {
-      if (generation !== requestGeneration.current) return;
-
-      setLoadMoreError(
-        error instanceof ApiRequestError
-          ? error.message
-          : "后续作品加载失败，请重试。",
-      );
+      if (!controller.signal.aborted)
+        setLoadMoreError(
+          error instanceof ApiRequestError
+            ? error.message
+            : "后续作品加载失败，请重试。",
+        );
     } finally {
-      if (generation === requestGeneration.current) setIsLoadingMore(false);
+      if (!controller.signal.aborted) {
+        loadingMore.current = false;
+        setIsLoadingMore(false);
+      }
     }
   }
 
+  const filtered = Object.values(applied).some(Boolean);
   return (
     <div className="bg-background min-h-screen">
-      <header className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-8 xl:px-16 2xl:px-0">
-        <BrandLockup href="/events" />
-        <Button asChild variant="ghost" size="navigation">
-          <Link href="/events">返回工作台</Link>
-        </Button>
-      </header>
-
-      <main className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16 xl:px-16 2xl:px-0">
-        <p className="text-muted-foreground font-mono text-xs tracking-wider uppercase">
-          Content
-        </p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-          作品资料
-        </h1>
-        <p className="text-muted-foreground mt-4 max-w-2xl leading-7">
-          查看已持久保存且仍可读的作品身份、正文边界与最近观察。摘要、截断和未知保持原语义，读取不会触发来源请求。
-        </p>
-
-        <WebPageCaptureForm />
-
-        <form
-          onSubmit={applyFilters}
-          aria-label="筛选作品资料"
-          className="bg-muted mt-8 rounded-2xl p-5 sm:p-6"
-        >
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="font-medium">筛选已保存的作品</h2>
-              <p className="text-muted-foreground mt-1 text-xs leading-5">
-                日期按北京时间，结束日期包含当日；无发布时间时按首次发现时间筛选。
-              </p>
-            </div>
-            {options.status === "error" ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => void loadOptions()}
-              >
-                重试加载筛选项
-              </Button>
-            ) : null}
-          </div>
-          <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-            <div className="space-y-2">
-              <Label htmlFor="content-source">来源</Label>
-              <select
-                id="content-source"
-                value={draft.sourceKey}
-                onChange={(event) =>
-                  setDraft({ ...draft, sourceKey: event.target.value })
-                }
-                disabled={options.status !== "ready"}
-                className="border-input bg-background focus-visible:ring-ring h-10 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
-              >
-                <option value="">全部来源</option>
-                {options.status === "ready"
-                  ? options.sources.map((source) => (
-                      <option key={source.source_key} value={source.source_key}>
-                        {source.display_name}
-                      </option>
-                    ))
-                  : null}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="content-topic">主题</Label>
-              <select
-                id="content-topic"
-                value={draft.topicId}
-                onChange={(event) =>
-                  setDraft({
-                    ...draft,
-                    topicId: event.target.value,
-                    analysisState: "",
-                  })
-                }
-                disabled={options.status !== "ready"}
-                className="border-input bg-background focus-visible:ring-ring h-10 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
-              >
-                <option value="">全部主题</option>
-                {options.status === "ready"
-                  ? options.topics.map((topic) => (
-                      <option key={topic.id} value={topic.id}>
-                        {topic.name}
-                        {topic.status === "archived" ? "（已归档）" : ""}
-                      </option>
-                    ))
-                  : null}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="content-start-date">开始日期</Label>
-              <Input
-                id="content-start-date"
-                type="date"
-                value={draft.startDate}
-                onChange={(event) =>
-                  setDraft({ ...draft, startDate: event.target.value })
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="content-end-date">结束日期（含）</Label>
-              <Input
-                id="content-end-date"
-                type="date"
-                value={draft.endDate}
-                onChange={(event) =>
-                  setDraft({ ...draft, endDate: event.target.value })
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="content-analysis-state">标注状态</Label>
-              <select
-                id="content-analysis-state"
-                value={draft.analysisState}
-                onChange={(event) =>
-                  setDraft({
-                    ...draft,
-                    analysisState: event.target.value as AnalysisFilter,
-                  })
-                }
-                disabled={!draft.topicId}
-                className="border-input bg-background focus-visible:ring-ring h-10 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
-              >
-                <option value="">全部状态</option>
-                <option value="missing">暂无标注记录</option>
-                <option value="pending">等待标注</option>
-                <option value="failed">标注失败</option>
-                <option value="invalid">标注无效</option>
-                <option value="valid">已有有效结论</option>
-              </select>
-            </div>
-          </div>
-          {options.status === "error" ? (
-            <p role="alert" className="text-destructive mt-3 text-sm">
-              来源和主题暂时无法加载，日期筛选仍可使用。
+      <WorkspaceHeader current="content" />
+      <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
+        <div className="flex flex-wrap items-end justify-between gap-6">
+          <div className="flex max-w-xl flex-col gap-4">
+            <h1 className="text-3xl font-normal tracking-tight sm:text-4xl">
+              作品资料
+            </h1>
+            <p className="text-muted-foreground leading-7">
+              阅读已保存的内容，查看评论与主题分析。
             </p>
-          ) : null}
-          {filterError ? (
-            <p role="alert" className="text-destructive mt-3 text-sm">
-              {filterError}
-            </p>
-          ) : null}
-          <div className="mt-5 flex flex-wrap items-center gap-3">
-            <Button type="submit">应用筛选</Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                setDraft(EMPTY_FILTERS);
-                setApplied(EMPTY_FILTERS);
-                setFilterError(null);
-                void load(EMPTY_FILTERS);
-              }}
-            >
-              清除筛选
-            </Button>
-            {JSON.stringify(draft) !== JSON.stringify(applied) ? (
-              <span className="text-muted-foreground text-xs">
-                条件尚未应用
-              </span>
-            ) : null}
           </div>
-        </form>
-
+          <div className="flex flex-wrap gap-3">
+            <Dialog open={filterOpen} onOpenChange={setFilterOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <FilterIcon data-icon="inline-start" />
+                  筛选{filtered ? " · 已应用" : ""}
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-h-svh overflow-y-auto sm:max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>筛选作品资料</DialogTitle>
+                  <DialogDescription>
+                    日期按北京时间，结束日期包含当日。日期范围最多 31 天。
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={applyFilters} aria-label="筛选作品资料">
+                  <FieldGroup>
+                    <Field>
+                      <FieldLabel htmlFor="content-source">来源</FieldLabel>
+                      <Select
+                        value={draft.sourceKey || "all"}
+                        onValueChange={(value) =>
+                          setDraft({
+                            ...draft,
+                            sourceKey: value === "all" ? "" : value,
+                          })
+                        }
+                        disabled={options.status !== "ready"}
+                      >
+                        <SelectTrigger id="content-source" className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value="all">全部来源</SelectItem>
+                            {options.status === "ready"
+                              ? options.sources.map((source) => (
+                                  <SelectItem
+                                    key={source.source_key}
+                                    value={source.source_key}
+                                  >
+                                    {source.display_name}
+                                  </SelectItem>
+                                ))
+                              : null}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="content-topic">主题</FieldLabel>
+                      <Select
+                        value={draft.topicId || "all"}
+                        onValueChange={(value) =>
+                          setDraft({
+                            ...draft,
+                            topicId: value === "all" ? "" : value,
+                            analysisState: "",
+                          })
+                        }
+                        disabled={options.status !== "ready"}
+                      >
+                        <SelectTrigger id="content-topic" className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value="all">全部主题</SelectItem>
+                            {options.status === "ready"
+                              ? options.topics.map((topic) => (
+                                  <SelectItem key={topic.id} value={topic.id}>
+                                    {topic.name}
+                                    {topic.status === "archived"
+                                      ? "（已归档）"
+                                      : ""}
+                                  </SelectItem>
+                                ))
+                              : null}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="content-start-date">
+                        开始日期
+                      </FieldLabel>
+                      <Input
+                        id="content-start-date"
+                        type="date"
+                        value={draft.startDate}
+                        onChange={(event) =>
+                          setDraft({ ...draft, startDate: event.target.value })
+                        }
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="content-end-date">
+                        结束日期（含）
+                      </FieldLabel>
+                      <Input
+                        id="content-end-date"
+                        type="date"
+                        value={draft.endDate}
+                        onChange={(event) =>
+                          setDraft({ ...draft, endDate: event.target.value })
+                        }
+                      />
+                    </Field>
+                    <Field data-disabled={!draft.topicId}>
+                      <FieldLabel htmlFor="content-analysis-state">
+                        标注状态
+                      </FieldLabel>
+                      <Select
+                        value={draft.analysisState || "all"}
+                        onValueChange={(value) =>
+                          setDraft({
+                            ...draft,
+                            analysisState:
+                              value === "all" ? "" : (value as AnalysisFilter),
+                          })
+                        }
+                        disabled={!draft.topicId}
+                      >
+                        <SelectTrigger
+                          id="content-analysis-state"
+                          className="w-full"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value="all">全部状态</SelectItem>
+                            <SelectItem value="missing">
+                              暂无标注记录
+                            </SelectItem>
+                            <SelectItem value="pending">等待标注</SelectItem>
+                            <SelectItem value="failed">标注失败</SelectItem>
+                            <SelectItem value="invalid">标注无效</SelectItem>
+                            <SelectItem value="valid">已有有效结论</SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <FieldDescription>
+                        选择主题后可筛选其分析状态。
+                      </FieldDescription>
+                    </Field>
+                    {options.status === "error" ? (
+                      <FieldError>
+                        来源和主题暂时无法加载，日期筛选仍可使用。
+                        <Button
+                          type="button"
+                          variant="link"
+                          onClick={() => void loadOptions()}
+                        >
+                          重试加载筛选项
+                        </Button>
+                      </FieldError>
+                    ) : null}
+                    {filterError ? (
+                      <FieldError>{filterError}</FieldError>
+                    ) : null}
+                    <div className="flex flex-wrap gap-3">
+                      <Button type="submit">应用筛选</Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          setDraft(EMPTY_FILTERS);
+                          setApplied(EMPTY_FILTERS);
+                          setFilterError(null);
+                          setFilterOpen(false);
+                          reload(EMPTY_FILTERS);
+                        }}
+                      >
+                        清除筛选
+                      </Button>
+                    </div>
+                  </FieldGroup>
+                </form>
+              </DialogContent>
+            </Dialog>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button>
+                  <PlusIcon data-icon="inline-start" />
+                  添加网页
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-h-svh overflow-y-auto sm:max-w-lg">
+                <DialogHeader className="sr-only">
+                  <DialogTitle>添加网页</DialogTitle>
+                  <DialogDescription>
+                    提交网页地址创建采集任务。
+                  </DialogDescription>
+                </DialogHeader>
+                <WebPageCaptureForm />
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+        {state.status === "loading" ? (
+          <div
+            aria-label="正在读取作品资料"
+            className="mt-12 flex flex-col gap-6"
+          >
+            {[0, 1, 2].map((item) => (
+              <Skeleton key={item} className="h-24 w-full" />
+            ))}
+          </div>
+        ) : null}
         {state.status === "error" ? (
-          <section className="bg-destructive/10 mt-8 rounded-2xl p-6 sm:p-8">
-            <h2 className="text-lg font-medium">暂时无法读取作品</h2>
-            <p className="text-muted-foreground mt-2 text-sm leading-6">
+          <Alert variant="destructive" className="mt-12">
+            <AlertTitle>暂时无法读取作品</AlertTitle>
+            <AlertDescription>
               {state.message}
               {state.requestId ? ` 请求编号：${state.requestId}` : null}
-            </p>
-            <Button className="mt-5" onClick={() => void load(applied)}>
-              <RotateCcwIcon data-icon="inline-start" />
-              重新加载
-            </Button>
-          </section>
+              <Button variant="outline" onClick={() => reload(applied)}>
+                <RotateCcwIcon data-icon="inline-start" />
+                重新加载
+              </Button>
+            </AlertDescription>
+          </Alert>
         ) : null}
-
-        {state.status === "loading" ? <LoadingContentList /> : null}
-
         {state.status === "ready" && state.items.length === 0 ? (
-          <section className="bg-muted mt-8 rounded-2xl px-6 py-14 text-center sm:px-10">
-            <h2 className="text-lg font-medium">当前条件下没有可读作品</h2>
-            <p className="text-muted-foreground mx-auto mt-2 max-w-md text-sm leading-6">
-              完成受控采集并持久保存后，作品会显示在这里；当前为空不代表来源返回了零结果。
-            </p>
-          </section>
+          <Empty className="mt-12">
+            <EmptyHeader>
+              <EmptyTitle>当前条件下没有可读作品</EmptyTitle>
+              <EmptyDescription>
+                完成采集并保存后，作品会显示在这里；当前为空不代表来源返回了零结果。
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : null}
-
         {state.status === "ready" && state.items.length > 0 ? (
           <>
-            <div className="mt-8 hidden md:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>作品身份</TableHead>
-                    <TableHead>最近观察</TableHead>
-                    <TableHead>指标</TableHead>
-                    <TableHead>发现依据</TableHead>
-                    <TableHead className="text-right">查看</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {state.items.map((content) => (
-                    <TableRow key={content.id}>
-                      <TableCell className="max-w-xs whitespace-normal">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="outline">{content.source_key}</Badge>
-                          <ContentStatus content={content} />
-                          <ContentAnalysisStatus content={content} />
-                          <VisibilityStatus
-                            visibility={content.current_visibility}
-                          />
-                        </div>
-                        <p className="mt-2 font-mono text-xs break-all">
-                          {content.external_id}
+            <section
+              aria-label="作品列表"
+              className="mt-12 flex flex-col gap-10"
+            >
+              {state.items.map((content) => {
+                const version = content.latest_observation.content_version;
+                const title =
+                  version?.title || version?.body || content.external_id;
+                const source =
+                  options.status === "ready"
+                    ? (options.sources.find(
+                        (item) => item.source_key === content.source_key,
+                      )?.display_name ?? content.source_key)
+                    : content.source_key;
+                const notice = version
+                  ? contentScopeNotice(version.text_scope)
+                  : "未取得正文";
+                return (
+                  <article
+                    key={content.id}
+                    className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:gap-8"
+                  >
+                    <div className="flex min-w-0 flex-col gap-3">
+                      <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                        <span>{source}</span>
+                        <TimelineBasis content={content} />
+                        <ContentAnalysisStatus content={content} />
+                      </div>
+                      <h2 className="line-clamp-2 text-xl leading-8 font-medium break-words">
+                        <Link href={`/content/${content.id}`}>{title}</Link>
+                      </h2>
+                      {version?.title && version.body ? (
+                        <p className="text-muted-foreground line-clamp-2 max-w-2xl text-sm leading-6 break-words">
+                          {version.body}
                         </p>
-                        <ContentVersionSummary
-                          version={
-                            content.latest_observation.content_version ?? null
-                          }
-                        />
-                        <VisibilityNotice
-                          visibility={content.current_visibility}
-                        />
-                        <p className="text-muted-foreground mt-1 text-xs">
-                          作者：
-                          {content.latest_observation.author_external_id ??
-                            "未知"}
+                      ) : null}
+                      <div className="flex flex-wrap items-center gap-3">
+                        {version ? (
+                          <Badge variant="secondary">
+                            {contentScopeLabel(version.text_scope)}
+                          </Badge>
+                        ) : null}
+                        {content.current_visibility &&
+                        content.current_visibility.status !== "visible" ? (
+                          <Badge variant="outline">
+                            {visibilityStatusLabel(
+                              content.current_visibility.status,
+                            )}
+                          </Badge>
+                        ) : null}
+                      </div>
+                      {notice ? (
+                        <p className="text-muted-foreground text-xs leading-5">
+                          {notice}
                         </p>
-                      </TableCell>
-                      <TableCell className="whitespace-normal">
-                        <p>
-                          {formatTime(content.latest_observation.observed_at)}
+                      ) : null}
+                      {content.current_visibility &&
+                      content.current_visibility.status !== "visible" ? (
+                        <p className="text-muted-foreground text-xs leading-5">
+                          {visibilityStatusNotice(
+                            content.current_visibility.status,
+                          )}
                         </p>
-                        <p className="text-muted-foreground mt-1 text-xs">
-                          发布：
-                          {formatTime(content.latest_observation.published_at)}
-                        </p>
-                        <p className="text-muted-foreground mt-1 text-xs">
-                          <TimelineBasis content={content} />
-                        </p>
-                      </TableCell>
-                      <TableCell className="max-w-xs whitespace-normal">
-                        <PrimaryMetrics
-                          metrics={content.latest_observation.metrics}
-                        />
-                      </TableCell>
-                      <TableCell>{content.discovery_count}</TableCell>
-                      <TableCell className="text-right">
-                        <Button asChild variant="ghost" size="sm">
-                          <Link href={`/content/${content.id}`}>
-                            详情
-                            <ArrowRightIcon data-icon="inline-end" />
-                          </Link>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            <div className="mt-8 grid gap-3 md:hidden">
-              {state.items.map((content) => (
-                <article key={content.id} className="bg-muted rounded-2xl p-5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline">{content.source_key}</Badge>
-                    <ContentStatus content={content} />
-                    <ContentAnalysisStatus content={content} />
-                    <VisibilityStatus visibility={content.current_visibility} />
-                  </div>
-                  <h2 className="mt-4 font-mono text-sm font-medium break-all">
-                    {content.external_id}
-                  </h2>
-                  <ContentVersionSummary
-                    version={content.latest_observation.content_version ?? null}
-                  />
-                  <VisibilityNotice visibility={content.current_visibility} />
-                  <p className="text-muted-foreground mt-2 text-xs">
-                    作者：
-                    {content.latest_observation.author_external_id ?? "未知"}
-                  </p>
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    观察于 {formatTime(content.latest_observation.observed_at)}
-                  </p>
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    <TimelineBasis content={content} />
-                  </p>
-                  <p className="mt-3">
-                    <PrimaryMetrics
-                      metrics={content.latest_observation.metrics}
-                    />
-                  </p>
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                    <span className="text-muted-foreground text-xs">
-                      {content.discovery_count} 条发现依据
-                    </span>
-                    <Button asChild variant="secondary" size="sm">
+                      ) : null}
+                    </div>
+                    <Button asChild variant="ghost" className="self-start">
                       <Link href={`/content/${content.id}`}>
                         查看详情
                         <ArrowRightIcon data-icon="inline-end" />
                       </Link>
                     </Button>
-                  </div>
-                  <OriginalContentLink
-                    canonicalUrl={content.latest_observation.canonical_url}
-                  />
-                </article>
-              ))}
-            </div>
-
+                  </article>
+                );
+              })}
+            </section>
             {state.nextCursor ? (
-              <div className="mt-8 flex justify-center">
+              <div className="mt-12 flex justify-center">
                 <Button
-                  type="button"
-                  variant="secondary"
+                  variant="outline"
                   onClick={() => void loadMore()}
                   disabled={isLoadingMore}
                 >
@@ -769,10 +677,7 @@ export function ContentList() {
               </div>
             ) : null}
             {loadMoreError ? (
-              <p
-                role="alert"
-                className="text-destructive mt-3 text-center text-sm"
-              >
+              <p role="alert" className="text-destructive mt-4 text-sm">
                 {loadMoreError}
               </p>
             ) : null}

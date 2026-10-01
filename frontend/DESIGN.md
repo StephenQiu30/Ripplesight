@@ -19,7 +19,22 @@
 
 每个切片在 Design 阶段记录组件名称、所属领域、复用范围、目标路径、数据来源及正常、空、加载、部分、错误和无权限状态。
 
-## Demo 访问
+## 当前首页切片
+
+方案 1 在本目录实现，使用 Vercel 黑白留白风格；不增加独立应用、业务状态层或额外配置流程。首页的“创建关注”进入现有 `/monitors/new`，“我的关注”进入 `/events`。主题创建、修改、来源准入与保存使用当前 OpenAPI 生成 API；示例只用于说明，不显示为真实采集结果。
+
+| 组件                           | 领域与复用范围        | 路径                                       | 数据与状态                                                |
+| ------------------------------ | --------------------- | ------------------------------------------ | --------------------------------------------------------- |
+| HomeContent                    | 首页专属组合          | src/app/components/home-content.tsx        | 静态内容与说明浮层开关；无业务 API                        |
+| SiteHeader                     | 首页专属导航          | src/app/components/site-header.tsx         | 品牌、官方菜单、现有路由链接与指南入口                    |
+| HeroSection                    | 首页专属主视觉        | src/app/components/hero-section.tsx        | 选定文案、装饰品牌图、创建链接与示例入口                  |
+| CapabilityOverview             | 首页专属指南/示例说明 | src/app/components/capability-overview.tsx | 静态说明；官方 Dialog 打开、关闭及键盘焦点                |
+| BrandLockup / BrandMark        | 跨页面品牌            | src/components/brand/brand-lockup.tsx      | 复用 src/app/icon.png 母版；无 API 状态                   |
+| Button / Dialog / DropdownMenu | 跨页面官方基础组件    | src/components/ui/                         | 保留官方 Radix 语义和交互；必要的首页尺寸变体使用命名尺度 |
+
+装饰主视觉位于 `public/brand/hero-brand-soft.png`，是既定品牌的阴影展示资产，不作为第二套品牌母版。布局使用现有 Tailwind 尺度与标准断点。首页无加载、空、部分或权限状态；业务页面保留当前加载、空、错误重试及成功状态。
+
+## Demo 访问规则
 
 当前 Demo 直接进入 `/events`，删除 `/login`、`/register`、独占 auth 组件和身份先行请求；页面不显示账户信息或退出入口。`EventsWorkspace` 使用主题API，`TopicForm` 使用来源能力API，覆盖加载、空、错误重试与业务成功。来源授权/凭据和内容原生身份保留。
 
@@ -35,7 +50,7 @@
 - Umi OpenAPI 将端点和类型直接生成到 `src/api/`。
 - 所有生成请求统一使用 `src/request.ts`，页面不得手写端点或创建第二套 HTTP 客户端。
 - App Router 统一提供 loading、error、global-error 和 not-found 边界。
-- `src/components/system/page-state.tsx` 中的 `PageState` 处理页面错误、空态、无权限和恢复操作。
+- `src/components/system/page-state.tsx` 中的 `PageState` 处理页面错误、空态、无权限和恢复操作。业务页通过 `navigation` 保留 `WorkspaceHeader`，读取失败时仍可切换页面；不在状态组件内部请求业务数据。
 
 ## 可访问性与运行
 
@@ -44,3 +59,27 @@
 - 页面必须完成桌面和窄屏浏览器检查。
 - 生产镜像使用 standalone、非 root、只读文件系统和 `/health` 健康检查。
 - CSP nonce 由 `src/proxy.ts` 每请求生成；需要客户端交互的 HTML 入口必须按请求渲染。主题创建页在服务端入口等待 Next.js `connection()`，保持来源校验；生产脚本 nonce 必须与本次 CSP 一致，HTML 不使用共享缓存。生产镜像的 runtime 检查与浏览器冷进入均需通过。
+
+## 当前业务页面重建
+
+清理旧业务页的密集布局、无接口的事件脉络占位与报告/通知偏好表单。保留正式 Next.js 脚手架、首页、生成客户端、Axios 传输和 CSP；不复制原型。Swagger 的唯一源为 FastAPI 路由/Pydantic，临时导出的 OpenAPI 仅供生成校验，不成为手维护文件。页面只调用 `src/api/` 中的生成操作。
+
+| 组件                                                                             | 领域与复用范围                   | 目标路径                                                                 | 数据来源与状态覆盖                                                                                                                       |
+| -------------------------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| WorkspaceHeader                                                                  | 多个业务页的导航                 | src/components/navigation/workspace-header.tsx                           | 静态真实路由；桌面导航、移动官方菜单与当前页语义                                                                                         |
+| EventsWorkspace / TopicList                                                      | 关注入口 / 列表                  | src/app/events/components/；src/components/monitors/topic-list.tsx       | listMonitorTopics；加载、空、分页、归档筛选、错误重试                                                                                    |
+| TopicForm / TopicEditor                                                          | 创建 / 编辑专属                  | src/app/monitors/new/components/；src/app/monitors/[topicId]/components/ | create/get/update/clone/pause/resume/archiveMonitorTopic；来源加载、字段422、版本冲突、重复提交、保存状态                                |
+| KeywordGroupField / TopicSettingsFields / TopicRulePreview / TopicAdvancedFields | 创建与编辑复用                   | src/components/monitors/                                                 | generated MonitorTopic 输入与预览；关键词、可选进阶规则、来源准入、请求间隔；预览不采集                                                  |
+| TopicRunActions                                                                  | 编辑页专属运行入口               | src/app/monitors/[topicId]/components/topic-run-actions.tsx              | runMonitorTopic；逐来源受理/拒绝、幂等、任务跳转，受理不表示完成                                                                         |
+| SourcesWorkspace / SourceSettings / SourceConnectionActions                      | 来源配置专属                     | src/app/sources/components/                                              | listSourceCapabilities / updateSourceConnection；加载、禁用、凭据与准入理由、错误重试与写入反馈；预设仍由维护者CLI应用，没有网页写入端点 |
+| SourceCoveragePanel / CoverageWindowTable / CoverageWindowDetail                 | 来源页二级覆盖信息               | src/app/sources/components/                                              | generated collection coverage；筛选、分页、空、部分、缺口、错误与详情；官方 Tabs/Sheet 渐进展示                                          |
+| ContentList / WebpageCaptureForm / ContentDetail                                 | 内容列表与详情专属               | src/app/content/components/；src/app/content/[contentId]/components/     | list/getContentRecord / createCollectionJob；分页、空、错误、真实证据；网页受理不冒充已采集                                              |
+| AnnotationPanel / CommentRefreshAction / CommentThreadList                       | 内容详情专属                     | src/app/content/[contentId]/components/                                  | 当前内容标注与评论/就绪/运行 API；缺失、部分、失败、读取与受理状态                                                                       |
+| HotlistWorkspace / SnapshotSelector                                              | 热榜页专属                       | src/app/hotlists/components/                                             | listHotlistSources / list/get snapshots；来源选择、历史分页、合法空、错误和快照状态                                                      |
+| JobHistory / JobHealthSummary / JobDetail                                        | 任务列表与详情专属               | src/app/jobs/components/；src/app/jobs/[jobId]/components/               | list/get/cancel/retryCollectionJob / listContinuousFailureIssues；筛选、分页、失败读取、取消重试与终态                                   |
+| ReportList / ReportResults / ReportDetail / ReportDetailContent / ReportMarkdown | 已有报告读取专属，非核心二级入口 | src/app/reports/components/；src/app/reports/[reportId]/components/      | list/getReport；只读分页、空、错误和实际状态，无新生成/投递配置                                                                          |
+| Collapsible / Empty / Item / Spinner                                             | 多页官方基础组件                 | src/components/ui/                                                       | 官方Radix折叠、空态、列表和加载组件；不承载业务状态                                                                                      |
+
+配置第一层只呈现名称、关键词与来源，进阶规则/频率按需展开。编辑隐藏的既有报告偏好按原值传回，避免覆盖数据。来源主入口是配置，覆盖/技术字段二级展示。所有页面沿用语义颜色、命名尺度、官方表单/浮层/菜单；不新增数据状态框架。业务入口继续动态渲染、`noindex`，取消请求不显示为业务失败。
+
+本片新增导航为 `src/components/navigation/workspace-header.tsx`；来源组合与设置分别为 `src/app/sources/components/sources-workspace.tsx`、`source-settings.tsx`，替代并删除旧 `source-capability-matrix.tsx`。`TopicAdvancedFields` 导出在既有 `src/components/monitors/topic-settings-fields.tsx`；报告查询/详情局部组合留在各自原文件中，不放到公共层。官方基础组件新增 `collapsible.tsx`、`empty.tsx`、`item.tsx`、`spinner.tsx`，只提供实际使用的交互原语。

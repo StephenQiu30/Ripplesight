@@ -43,7 +43,8 @@ describe("job history content", () => {
     );
 
     expect(html).toContain("尚无任务记录");
-    expect(html).toContain("当前账号还没有任务记录");
+    expect(html).toContain("提交采集任务后");
+    expect(html).not.toContain("当前账号");
     expect(html).not.toContain("加载更多");
   });
 

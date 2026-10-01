@@ -3,6 +3,14 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
   Table,
   TableBody,
   TableCell,
@@ -107,10 +115,7 @@ export function CoverageWindowTable({
             <TableRow>
               <TableHead>计划到期 · 北京时间</TableHead>
               <TableHead>来源 / 能力</TableHead>
-              <TableHead>受理</TableHead>
-              <TableHead>覆盖</TableHead>
-              <TableHead className="text-right">请求 / 页</TableHead>
-              <TableHead className="text-right">入库 / 去重</TableHead>
+              <TableHead>采集状态</TableHead>
               <TableHead>
                 <span className="sr-only">操作</span>
               </TableHead>
@@ -124,26 +129,18 @@ export function CoverageWindowTable({
                   row.window_id === selectedId ? "selected" : undefined
                 }
               >
-                <TableCell className="font-medium">
-                  {coverageTime(row.due_at)}
-                </TableCell>
+                <TableCell>{coverageTime(row.due_at)}</TableCell>
                 <TableCell>
                   <span className="block font-medium">{row.source_key}</span>
                   <span className="text-muted-foreground text-xs">
                     {capabilityLabel(row.capability)}
                   </span>
                 </TableCell>
-                <TableCell>{admissionLabel(row.admission_state)}</TableCell>
                 <TableCell>
-                  <CoverageStatus row={row} />
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {coverageCount(row.request_count)} /{" "}
-                  {coverageCount(row.page_count)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {coverageCount(row.inserted_count)} /{" "}
-                  {coverageCount(row.deduplicated_count)}
+                  <div className="flex flex-col gap-2">
+                    <p>{admissionLabel(row.admission_state)}</p>
+                    <CoverageStatus row={row} />
+                  </div>
                 </TableCell>
                 <TableCell>
                   <Button
@@ -164,53 +161,33 @@ export function CoverageWindowTable({
 
       <div className="mt-6 grid gap-3 md:hidden">
         {items.map((row) => (
-          <article
+          <Card
             key={row.window_id}
-            className="bg-muted rounded-2xl p-5"
             aria-label={`${row.source_key} ${coverageTime(row.due_at)} 覆盖窗口`}
           >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 className="font-medium">
+            <CardHeader>
+              <CardTitle asChild>
+                <h3>
                   {row.source_key} · {capabilityLabel(row.capability)}
                 </h3>
-                <p className="text-muted-foreground mt-1 text-sm">
-                  {coverageTime(row.due_at)}
-                </p>
-              </div>
+              </CardTitle>
+              <CardDescription>{coverageTime(row.due_at)}</CardDescription>
+              <CardAction>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onSelect(row.window_id)}
+                >
+                  查看详情
+                </Button>
+              </CardAction>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">
+              <p>{admissionLabel(row.admission_state)}</p>
               <CoverageStatus row={row} />
-            </div>
-            <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <dt className="text-muted-foreground">受理</dt>
-                <dd>{admissionLabel(row.admission_state)}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">请求 / 页</dt>
-                <dd>
-                  {coverageCount(row.request_count)} /{" "}
-                  {coverageCount(row.page_count)}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">入库</dt>
-                <dd>{coverageCount(row.inserted_count)}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">去重</dt>
-                <dd>{coverageCount(row.deduplicated_count)}</dd>
-              </div>
-            </dl>
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="mt-5"
-              onClick={() => onSelect(row.window_id)}
-            >
-              查看详情
-            </Button>
-          </article>
+            </CardContent>
+          </Card>
         ))}
       </div>
     </>

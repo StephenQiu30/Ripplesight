@@ -71,6 +71,8 @@ HotKey/
 
 Web 设计固定为组件优先的无边框系统：App Router 页面只组合页面专属组件、按功能领域分类的复用组件与 shadcn/Radix 基础组件；默认信息表面通过留白、排版和语义背景分层。布局只使用 Tailwind 命名尺度和 `sm/md/lg/xl/2xl` 标准响应式层级，不使用原始像素值或任意布局尺寸。输入、焦点、错误与浮层保留必要轮廓；加载、路由错误、全局错误、404 与进程健康状态都有统一边界。组件归属、复用范围、目标路径、数据来源和状态覆盖必须在对应切片 Design 阶段明确。
 
+当前 Web 页面以 FastAPI 生成的 OpenAPI 为准，保留 Vercel 黑白留白首页；关注、来源、内容、热榜、任务与已有报告读取使用生成客户端。`frontend/src/components/navigation/workspace-header.tsx` 仅复用业务导航；不创建通用资源框架，未有接口的事件聚合占位和非核心报告/通知配置从当前界面移除。
+
 Web的CSP nonce由`proxy.ts`每请求生成，交互HTML按请求渲染。主题创建page等待`connection()`，客户端只读取来源能力；生产脚本nonce须与响应CSP相同，不共享HTML缓存。runtime核对脚本/响应，浏览器冷进入验证交互，不能只检查健康。
 
 ### Python 后端与基础设施

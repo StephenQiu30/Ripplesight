@@ -2,21 +2,33 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { RotateCcwIcon } from "lucide-react";
-
+import { ChevronDownIcon, RotateCcwIcon } from "lucide-react";
 import { getReport } from "@/api/ribao";
-import { PageState } from "@/components/system/page-state";
+import { WorkspaceHeader } from "@/components/navigation/workspace-header";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ApiRequestError } from "@/request";
-
 import { ReportMarkdown } from "./report-markdown";
 
 type DetailState =
   | { status: "loading" }
   | { status: "ready"; report: HotKeyAPI.ReportDetailView }
   | { status: "not-found" }
-  | { status: "error"; message: string; requestId?: string };
+  | { status: "error"; message: string };
 
 function safeHttpUrl(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -30,7 +42,7 @@ function safeHttpUrl(url: string | null | undefined): string | null {
   }
 }
 
-function reportTime(value: string): string {
+function reportTime(value: string) {
   return new Intl.DateTimeFormat("zh-CN", {
     timeZone: "Asia/Shanghai",
     dateStyle: "medium",
@@ -39,146 +51,157 @@ function reportTime(value: string): string {
 }
 
 export function ReportDetail({ reportId }: { reportId: string }) {
+  return <ReportDetailContent key={reportId} reportId={reportId} />;
+}
+
+function ReportDetailContent({ reportId }: { reportId: string }) {
   const [state, setState] = useState<DetailState>({ status: "loading" });
   const [retryKey, setRetryKey] = useState(0);
-
   useEffect(() => {
-    let current = true;
-    void getReport({ report_id: reportId })
+    const current = new AbortController();
+    void getReport({ report_id: reportId }, { signal: current.signal })
       .then((report) => {
-        if (current) setState({ status: "ready", report });
+        if (!current.signal.aborted) setState({ status: "ready", report });
       })
       .catch((error: unknown) => {
-        if (!current) return;
-        if (error instanceof ApiRequestError && error.status === 404) {
-          setState({ status: "not-found" });
-        } else {
-          setState({
-            status: "error",
-            message:
-              error instanceof ApiRequestError
-                ? error.message
-                : "报告加载失败，请稍后重试。",
-            requestId:
-              error instanceof ApiRequestError ? error.requestId : undefined,
-          });
-        }
+        if (current.signal.aborted) return;
+        setState(
+          error instanceof ApiRequestError && error.status === 404
+            ? { status: "not-found" }
+            : {
+                status: "error",
+                message:
+                  error instanceof ApiRequestError
+                    ? `${error.message}${error.requestId ? ` 请求编号：${error.requestId}` : ""}`
+                    : "报告加载失败，请稍后重试。",
+              },
+        );
       });
-    return () => {
-      current = false;
-    };
+    return () => current.abort();
   }, [reportId, retryKey]);
-
-  if (state.status === "loading") {
-    return (
-      <PageState
-        eyebrow="日报"
-        title="正在加载"
-        description="正在读取报告内容。"
-      />
-    );
-  }
-  if (state.status === "not-found") {
-    return (
-      <PageState
-        eyebrow="日报"
-        title="报告不存在"
-        description="报告已不可访问，或当前账号没有查看权限。"
-        action={
-          <Button asChild>
-            <Link href="/reports">返回报告列表</Link>
-          </Button>
-        }
-      />
-    );
-  }
-  if (state.status === "error") {
-    return (
-      <PageState
-        eyebrow="日报"
-        title="暂时无法读取报告"
-        description={
-          state.requestId
-            ? `${state.message} 请求编号：${state.requestId}`
-            : state.message
-        }
-        action={
-          <Button
-            onClick={() => {
-              setState({ status: "loading" });
-              setRetryKey((key) => key + 1);
-            }}
-          >
-            <RotateCcwIcon data-icon="inline-start" />
-            重试
-          </Button>
-        }
-      />
-    );
-  }
-
-  const report = state.report;
+  const report = state.status === "ready" ? state.report : null;
   return (
-    <main className="mx-auto min-h-screen w-full max-w-4xl min-w-0 px-5 py-8 sm:px-8 sm:py-12">
-      <Link
-        href="/reports"
-        className="text-muted-foreground text-sm underline underline-offset-4"
-      >
-        返回报告列表
-      </Link>
-      <div className="mt-8 flex flex-wrap items-center gap-2">
-        <Badge variant="secondary">
-          {report.generator === "model" ? "模型版" : "模板版"}
-        </Badge>
-        <Badge variant="outline">第 {report.version} 版</Badge>
-      </div>
-      <h1 className="mt-4 text-3xl font-semibold break-words">
-        {report.topic_name}日报
-      </h1>
-      <dl className="text-muted-foreground mt-4 grid gap-2 text-sm sm:grid-cols-2">
-        <div>
-          <dt className="inline">窗口：</dt>
-          <dd className="inline">
-            {reportTime(report.window_start)} 至 {reportTime(report.window_end)}
-          </dd>
-        </div>
-        <div>
-          <dt className="inline">截止：</dt>
-          <dd className="inline">{reportTime(report.cutoff_at)}</dd>
-        </div>
-      </dl>
-      <ReportMarkdown report={report} />
-      {report.citations.length > 0 ? (
-        <section aria-labelledby="report-citations" className="mt-12 min-w-0">
-          <h2 id="report-citations" className="text-xl font-semibold">
-            原帖引用
-          </h2>
-          <ul className="mt-4 space-y-2">
-            {report.citations.map((citation) => {
-              const url = safeHttpUrl(citation.url);
-              return (
-                <li key={citation.citation} className="min-w-0 break-words">
-                  <span className="text-muted-foreground mr-2">
-                    [{citation.citation}]
-                  </span>
-                  {url ? (
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="break-all underline underline-offset-4"
-                    >
-                      {citation.title}
-                    </a>
-                  ) : (
-                    citation.title
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ) : null}
-    </main>
+    <div className="bg-background min-h-screen">
+      <WorkspaceHeader current="reports" />
+      <main className="mx-auto max-w-4xl px-5 py-12 sm:px-8 sm:py-16">
+        <Button asChild variant="ghost" className="mb-8">
+          <Link href="/reports">返回报告列表</Link>
+        </Button>
+        {state.status === "loading" ? (
+          <div aria-label="正在读取报告内容" className="flex flex-col gap-5">
+            <Skeleton className="h-10 w-2/3" />
+            <Skeleton className="h-60 w-full" />
+          </div>
+        ) : null}
+        {state.status === "not-found" ? (
+          <Empty className="py-16">
+            <EmptyHeader>
+              <EmptyTitle>报告不存在</EmptyTitle>
+              <EmptyDescription>
+                没有找到可读取的报告，请返回列表查看已有报告。
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button asChild>
+                <Link href="/reports">查看已有报告</Link>
+              </Button>
+            </EmptyContent>
+          </Empty>
+        ) : null}
+        {state.status === "error" ? (
+          <Alert variant="destructive">
+            <AlertTitle>暂时无法读取报告</AlertTitle>
+            <AlertDescription>
+              <p>{state.message}</p>
+              <Button
+                variant="outline"
+                className="mt-4"
+                onClick={() => {
+                  setState({ status: "loading" });
+                  setRetryKey((key) => key + 1);
+                }}
+              >
+                <RotateCcwIcon data-icon="inline-start" />
+                重新加载
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {report ? (
+          <>
+            <Badge variant="secondary">
+              {report.kind === "weekly" ? "周报" : "日报"}
+            </Badge>
+            <h1 className="mt-4 text-3xl font-medium tracking-tight break-words sm:text-4xl">
+              {report.topic_name}
+            </h1>
+            <p className="text-muted-foreground mt-4 text-sm leading-6">
+              {reportTime(report.window_start)} 至{" "}
+              {reportTime(report.window_end)}
+            </p>
+            <ReportMarkdown report={report} />
+            <Collapsible className="mt-12">
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost">
+                  版本与引用
+                  <ChevronDownIcon data-icon="inline-end" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-6 flex flex-col gap-6">
+                <dl className="text-muted-foreground grid gap-4 text-sm sm:grid-cols-2">
+                  <div>
+                    <dt>生成版本</dt>
+                    <dd className="text-foreground mt-1">
+                      第 {report.version} 版 ·{" "}
+                      {report.generator === "model" ? "模型版" : "模板版"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>资料截止</dt>
+                    <dd className="text-foreground mt-1">
+                      {reportTime(report.cutoff_at)}
+                    </dd>
+                  </div>
+                </dl>
+                {report.citations.length ? (
+                  <section aria-labelledby="report-citations">
+                    <h2 id="report-citations" className="font-medium">
+                      原帖引用
+                    </h2>
+                    <ul className="mt-4 flex flex-col gap-3">
+                      {report.citations.map((citation) => {
+                        const url = safeHttpUrl(citation.url);
+                        return (
+                          <li
+                            key={citation.citation}
+                            className="text-sm break-words"
+                          >
+                            <span className="text-muted-foreground mr-2">
+                              [{citation.citation}]
+                            </span>
+                            {url ? (
+                              <a
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="break-all underline underline-offset-4"
+                              >
+                                {citation.title}
+                              </a>
+                            ) : (
+                              citation.title
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                ) : null}
+              </CollapsibleContent>
+            </Collapsible>
+          </>
+        ) : null}
+      </main>
+    </div>
   );
 }

@@ -1,9 +1,11 @@
 "use client";
 
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -11,6 +13,7 @@ import {
 
 export function formatHotlistTime(value: string): string {
   return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
@@ -35,30 +38,27 @@ export function SnapshotSelector({
 }: SnapshotSelectorProps) {
   return (
     <div className="flex flex-wrap items-end gap-3">
-      <div className="min-w-56 flex-1 sm:flex-none">
-        <label
-          className="text-muted-foreground mb-2 block text-sm"
-          htmlFor="snapshot-select"
-        >
-          观察时间
-        </label>
+      <Field className="min-w-0 flex-1 sm:max-w-sm">
+        <FieldLabel htmlFor="snapshot-select">观察时间</FieldLabel>
         <Select value={selectedId} onValueChange={onSelect}>
           <SelectTrigger id="snapshot-select" className="h-11 w-full">
             <SelectValue placeholder="选择历史快照" />
           </SelectTrigger>
           <SelectContent>
-            {snapshots.map((snapshot) => (
-              <SelectItem
-                key={snapshot.snapshot_id}
-                value={snapshot.snapshot_id}
-              >
-                {formatHotlistTime(snapshot.observed_at)} ·{" "}
-                {snapshot.entry_count} 条
-              </SelectItem>
-            ))}
+            <SelectGroup>
+              {snapshots.map((snapshot) => (
+                <SelectItem
+                  key={snapshot.snapshot_id}
+                  value={snapshot.snapshot_id}
+                >
+                  {formatHotlistTime(snapshot.observed_at)} ·{" "}
+                  {snapshot.entry_count} 条
+                </SelectItem>
+              ))}
+            </SelectGroup>
           </SelectContent>
         </Select>
-      </div>
+      </Field>
       {nextCursor ? (
         <Button
           type="button"
