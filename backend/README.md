@@ -41,15 +41,16 @@ psql -X --set ON_ERROR_STOP=on \
 
 当前不支持对存量数据库自动就地升级。需要保留数据时，先完成备份与恢复演练，再新建数据库、应用完整 `schema.sql` 并导入经过校验的数据；禁止对现有旧库直接执行该文件。
 
-仓库根 `docker-compose.yml` 是唯一编排。复制根 `.env.example` 为未跟踪的 `.env` 并设置 URL-safe 数据库密码后，从根目录执行：
+仓库根 `docker-compose.yml` 只编排应用，默认连接已有 PostgreSQL/Redis/Kafka，不启动环境服务。复制根 `.env.example` 为未跟踪的 `.env`，填写完整数据库 URL、Redis URL、Kafka 地址与密钥后，从根目录执行：
 
 ```bash
-docker compose config --quiet
-docker compose build
-docker compose up --detach --wait
+docker compose --env-file .env config --quiet
+docker compose --env-file .env up --detach --build --wait
 ```
 
-Compose 仅在全新 PostgreSQL 数据卷中通过官方初始化目录运行 `schema.sql`；普通停止不删除持久卷。Worker 与 CLI 是按需 profile，分别使用 `docker compose run --rm worker` 和 `docker compose run --rm cli`。验证直接使用 Compose 与各依赖官方 CLI，不建立额外脚本。
+生产入口 `docker-compose-prod.yml` 通过 include 复用相同服务定义，使用 `docker compose --env-file .env.prod -f docker-compose-prod.yml up --detach --build --wait`。需要 Compose 2.20.0+；开发与生产的应用镜像、profile、命令和安全限制一致，连接信息与密钥分开注入。
+
+`docker-compose-env.yml` 仅在需要全新环境时显式启动；本地开发默认复用已有环境。它保留原持久卷名，仅在全新 PostgreSQL 空卷通过官方初始化目录运行 `schema.sql`。连接和组合启动方法见[根 README](../README.md#启动服务)。Worker 与 CLI 保留按需 profile；当前 P1 使用宿主机 Worker，受控环境才显式启动容器 Worker。普通停止不删除持久卷，验证直接使用 Compose 与各依赖官方 CLI。
 
 已配置的运行环境可用以下有界命令执行一批到期扫描与 Redis/MinIO 在线副本清理；它不会创建或启动新的依赖服务：
 
@@ -57,7 +58,7 @@ Compose 仅在全新 PostgreSQL 数据卷中通过官方初始化目录运行 `s
 docker compose run --rm cli lifecycle cleanup-once --limit 100
 ```
 
-来源凭据只由维护者写入未跟踪的 `backend/.env`（Compose 使用根 `.env`）中的 `HOTKEY_SOURCE_CREDENTIALS` JSON 映射，键仅允许 `x`、`douyin`，值为对应获授权凭据，默认 `{}`。不要把真实值放入命令参数、聊天、Git 或日志。修改后只替换现有 API/Worker 进程，再从 `/sources` 确认配置或替换；页面不提供秘密输入/回读。数据库只存不可逆指纹引用，移除或替换环境值会使原连接需重新授权。停用不删除历史资料，重新启用产生新版本并重新验证；配置完成不等于获准采集或能力可用。
+来源凭据只由维护者写入未跟踪的 `backend/.env`（开发 Compose 使用根 `.env`，生产显式使用根 `.env.prod`）中的 `HOTKEY_SOURCE_CREDENTIALS` JSON 映射，键仅允许 `x`、`douyin`，值为对应获授权凭据，默认 `{}`。不要把真实值放入命令参数、聊天、Git 或日志。修改后只替换现有 API/Worker 进程，再从 `/sources` 确认配置或替换；页面不提供秘密输入/回读。数据库只存不可逆指纹引用，移除或替换环境值会使原连接需重新授权。停用不删除历史资料，重新启用产生新版本并重新验证；配置完成不等于获准采集或能力可用。
 
 来源维护者完成一次显式探测后，可在现有环境登记稳定结果：
 

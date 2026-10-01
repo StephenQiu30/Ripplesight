@@ -62,4 +62,4 @@ pnpm build
 
 生产镜像监听 `8080`，使用 standalone 输出、非 root 用户和只读文件系统。
 
-仓库根 `docker-compose.yml` 是唯一完整运行入口；Web 默认绑定 `127.0.0.1:3000`，并在容器网络中代理至 API。端口可通过根 `.env` 调整。
+仓库根 `docker-compose.yml` 启动应用，默认复用已有环境；`docker-compose-prod.yml` 复用相同应用定义，通过显式 `--env-file .env.prod` 启动生产服务。环境依赖单独归 `docker-compose-env.yml`，本地开发默认不启动；Web 默认绑定 `127.0.0.1:3000`，并在容器网络中代理至 API。端口可通过根 `.env` 调整。

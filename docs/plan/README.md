@@ -229,7 +229,7 @@
 | `version`、preset/连接及业务CLI | `backend/app/cli/commands.py` | 061删identity命令，业务共用Demo分区；来源安全保持 | 061；cli/connections域 | 001/002/003 |
 | 来源、Job与内容用户页面 | `frontend/src/app/{sources,jobs,content}/` | 现有列表/详情测试；034/041新增业务阅读，单网页表单归057 | 各路由所有者；034/041/057 | 002 / FR-002-003/007 |
 | 后端/契约/前端/运行CI | `.github/workflows/{backend,contract,frontend,runtime}.yml` | 现有工作流；本轮未触发远端最终CI，运行门禁不等于来源旅程 | CI；056 | 001 / NFR-001-104/107 |
-| Compose底座与API/Web镜像 | `docker-compose.yml`、`backend/Dockerfile`、`frontend/Dockerfile` | 现有编排；051需同库恢复，057浏览器出口另验 | 部署；051/056/057按变更范围 | 001 / NFR-001-104/106/107 |
+| Compose底座与API/Web镜像 | `docker-compose{,-env,-prod}.yml`、`backend/Dockerfile`、`frontend/Dockerfile` | 现有编排；051需同库恢复，057浏览器出口另验 | 部署；051/056/057按变更范围 | 001 / NFR-001-104/106/107 |
 | X只读适配与作者解析 | `backend/app/sources/adapters/{x_api,x_user_lookup}.py` | 既有MockTransport受控测试；无凭据/月度上限，零真实请求 | sources；047准入代码台账，获准后新实施卡 | 007 / FR-007-004、AC-007-003 |
 
 当前48张业务DDL表归属按各Issue/Design/SPEC管理，证据/谱系、预算/任务及061历史分区共享边界已明确。台账不代表真实来源或产品AC通过。
@@ -248,7 +248,7 @@
 | `backend/app/monitors/services.py`、`reports/services.py` | monitors设置/报告冻结；001→031→043→018→019 | `monitor_topics`三字段唯一设置源，冻结版本不漂移 |
 | `backend/app/api/router.py`、`dependencies.py` | api装配；各业务路由按Issue顺序，056最后核契约 | operation_id/错误模型/权限、运行OpenAPI与客户端同批 |
 | `frontend/src/api/`、`src/request.ts` | 业务Issue只生成/消费；056维护传输/生成门禁 | 从同提交运行Schema重生、C/F与CI最终结果，无手改 |
-| `.github/workflows/*.yml`、`docker-compose.yml` | 056维护CI、051恢复、057浏览器出口 | 文件差异单卡审查，不删除持久卷；最终Schema/客户端/运行门禁复验 |
+| `.github/workflows/*.yml`、`docker-compose{,-env,-prod}.yml` | 056维护CI、051恢复、057浏览器出口 | 文件差异单卡审查，不删除持久卷；最终Schema/客户端/运行门禁复验 |
 
 061接续当前共享文件，删除身份Schema/配置/API/CLI/页面依赖，同步客户端与CI；旧库不改，新Schema在隔离空库验证。已完成Plan中的身份前置、会话/CSRF协议和旧证据按历史保留，当前统一由061/Design001 §9.2替代，不批量重写历史实施记录。精确文件见061，不覆盖其他切片。
 
