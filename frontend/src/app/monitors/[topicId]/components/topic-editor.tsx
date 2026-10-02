@@ -57,7 +57,6 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { WorkspaceHeader } from "@/components/navigation/workspace-header";
 import { Spinner } from "@/components/ui/spinner";
 import { ApiRequestError } from "@/request";
 
@@ -337,7 +336,6 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
   if (state.status === "loading") {
     return (
       <PageState
-        navigation={<WorkspaceHeader current="topics" />}
         eyebrow="监控主题"
         title="正在读取主题"
         description="正在读取当前规则版本与持久状态。"
@@ -347,7 +345,6 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
   if (state.status === "not-found") {
     return (
       <PageState
-        navigation={<WorkspaceHeader current="topics" />}
         eyebrow="主题不可用"
         title="没有找到这个主题"
         description="主题不存在，或当前使用者无权查看。"
@@ -362,7 +359,6 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
   if (state.status === "error") {
     return (
       <PageState
-        navigation={<WorkspaceHeader current="topics" />}
         eyebrow="加载失败"
         title="暂时无法读取主题"
         description={
@@ -383,212 +379,209 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
   const { topic } = state;
   const formDisabled = isBusy || topic.status === "archived";
   return (
-    <div className="bg-background min-h-screen">
-      <WorkspaceHeader current="topics" />
-      <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-20 xl:px-0">
-        <Button asChild variant="ghost" size="navigation" className="mb-10">
-          <Link href="/topics">返回我的关注</Link>
-        </Button>
-        <div className="grid gap-12 md:grid-cols-2 md:gap-16">
-          <section>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">
-                {topic.status === "archived"
-                  ? "已归档"
-                  : topic.status === "active"
-                    ? "运行中"
-                    : "已暂停"}
-              </Badge>
-              <span className="text-muted-foreground text-sm">
-                版本 v{topic.current_version}
-              </span>
-            </div>
-            <h1 className="mt-5 text-4xl leading-tight font-normal tracking-tight sm:text-5xl">
-              编辑关注
-            </h1>
-            <p className="text-muted-foreground mt-6 max-w-sm text-sm leading-7">
-              调整关键词和来源，让关注更贴近你在意的事情。保存不会立即开始采集。
-            </p>
-            <div className="mt-8 flex flex-wrap gap-2">
-              {topic.status === "active" ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="navigation"
-                  disabled={isBusy}
-                  onClick={() => void runLifecycleAction("pause")}
-                >
-                  <PauseIcon data-icon="inline-start" />
-                  暂停关注
-                </Button>
-              ) : topic.status === "paused" ? (
-                <Button
-                  type="button"
-                  size="navigation"
-                  disabled={isBusy}
-                  onClick={() => void runLifecycleAction("resume")}
-                >
-                  <PlayIcon data-icon="inline-start" />
-                  开始关注
-                </Button>
-              ) : null}
+    <div>
+      <Button asChild variant="ghost" size="navigation" className="mb-10">
+        <Link href="/topics">返回我的关注</Link>
+      </Button>
+      <div className="grid gap-12 md:grid-cols-2 md:gap-16">
+        <section>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary">
+              {topic.status === "archived"
+                ? "已归档"
+                : topic.status === "active"
+                  ? "运行中"
+                  : "已暂停"}
+            </Badge>
+            <span className="text-muted-foreground text-sm">
+              版本 v{topic.current_version}
+            </span>
+          </div>
+          <h1 className="mt-5 text-4xl leading-tight font-normal tracking-tight sm:text-5xl">
+            编辑关注
+          </h1>
+          <p className="text-muted-foreground mt-6 max-w-sm text-sm leading-7">
+            调整关键词和来源，让关注更贴近你在意的事情。保存不会立即开始采集。
+          </p>
+          <div className="mt-8 flex flex-wrap gap-2">
+            {topic.status === "active" ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="navigation"
+                disabled={isBusy}
+                onClick={() => void runLifecycleAction("pause")}
+              >
+                <PauseIcon data-icon="inline-start" />
+                暂停关注
+              </Button>
+            ) : topic.status === "paused" ? (
+              <Button
+                type="button"
+                size="navigation"
+                disabled={isBusy}
+                onClick={() => void runLifecycleAction("resume")}
+              >
+                <PlayIcon data-icon="inline-start" />
+                开始关注
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              size="navigation"
+              disabled={isBusy}
+              onClick={() => void runLifecycleAction("clone")}
+            >
+              <CopyIcon data-icon="inline-start" />
+              复制
+            </Button>
+            {topic.status !== "archived" ? (
               <Button
                 type="button"
                 variant="ghost"
                 size="navigation"
                 disabled={isBusy}
-                onClick={() => void runLifecycleAction("clone")}
+                onClick={() => void runLifecycleAction("archive")}
               >
-                <CopyIcon data-icon="inline-start" />
-                复制
+                <ArchiveIcon data-icon="inline-start" />
+                归档
               </Button>
-              {topic.status !== "archived" ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="navigation"
-                  disabled={isBusy}
-                  onClick={() => void runLifecycleAction("archive")}
-                >
-                  <ArchiveIcon data-icon="inline-start" />
-                  归档
-                </Button>
+            ) : null}
+          </div>
+          <div className="mt-10">
+            <TopicRunActions
+              key={`${topic.id}:${topic.current_version}:${topic.source_keys.join(",")}`}
+              topic={topic}
+              sourceNames={Object.fromEntries(
+                sourceOptions.map((source) => [
+                  source.sourceKey,
+                  source.displayName,
+                ]),
+              )}
+              disabled={isBusy}
+            />
+          </div>
+        </section>
+        <form onSubmit={handleSubmit} noValidate aria-busy={isBusy}>
+          <FieldGroup className="gap-8">
+            <Field
+              data-disabled={formDisabled}
+              data-invalid={Boolean(feedback?.fields?.name)}
+            >
+              <FieldLabel htmlFor="topic-name">主题名称</FieldLabel>
+              <Input
+                id="topic-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                disabled={formDisabled}
+                minLength={1}
+                maxLength={80}
+                required
+                aria-invalid={Boolean(feedback?.fields?.name)}
+                aria-describedby={
+                  feedback?.fields?.name ? "topic-name-error" : undefined
+                }
+              />
+              {feedback?.fields?.name ? (
+                <FieldError id="topic-name-error">
+                  {feedback.fields.name}
+                </FieldError>
               ) : null}
-            </div>
-            <div className="mt-10">
-              <TopicRunActions
-                key={`${topic.id}:${topic.current_version}:${topic.source_keys.join(",")}`}
-                topic={topic}
-                sourceNames={Object.fromEntries(
-                  sourceOptions.map((source) => [
-                    source.sourceKey,
-                    source.displayName,
-                  ]),
-                )}
+            </Field>
+            <KeywordGroupField
+              id="match-any"
+              label="想关注的关键词"
+              description="任意一个词出现即可。每行填写一个关键词。"
+              value={matchAny}
+              onChange={setMatchAny}
+              disabled={formDisabled}
+              error={feedback?.fields?.match_any}
+            />
+            <TopicSettingsFields
+              sourceOptions={sourceOptions}
+              sourceKeys={sourceKeys}
+              onSourceKeysChange={setSourceKeys}
+              disabled={formDisabled}
+              fieldErrors={feedback?.fields}
+            />
+            <TopicAdvancedFields
+              key={`${topic.id}:${topic.current_version}`}
+              matchAll={matchAll}
+              onMatchAllChange={setMatchAll}
+              exclude={exclude}
+              onExcludeChange={setExclude}
+              collectionIntervalSeconds={collectionIntervalSeconds}
+              onCollectionIntervalSecondsChange={setCollectionIntervalSeconds}
+              disabled={formDisabled}
+              fieldErrors={feedback?.fields}
+            />
+            {feedback ? (
+              <Alert
+                role={feedback.kind === "success" ? "status" : "alert"}
+                variant={
+                  feedback.kind === "success" ? "default" : "destructive"
+                }
+              >
+                {feedback.kind === "success" ? <CheckCircle2Icon /> : null}
+                <AlertTitle>
+                  {feedback.kind === "success"
+                    ? "已保存"
+                    : feedback.kind === "conflict"
+                      ? "需要重新确认"
+                      : "操作未完成"}
+                </AlertTitle>
+                <AlertDescription>
+                  {feedback.message}
+                  {feedback.requestId ? (
+                    <p>请求编号：{feedback.requestId}</p>
+                  ) : null}
+                </AlertDescription>
+                {feedback.kind === "conflict" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="navigation"
+                    disabled={isBusy}
+                    onClick={() => void loadTopic()}
+                  >
+                    <RefreshCwIcon data-icon="inline-start" />
+                    重新读取
+                  </Button>
+                ) : null}
+              </Alert>
+            ) : null}
+            <Field
+              orientation="horizontal"
+              className="flex-wrap justify-between gap-3"
+              data-disabled={formDisabled}
+            >
+              <TopicRulePreview
+                matchAny={matchAny}
+                matchAll={matchAll}
+                exclude={exclude}
+                sourceKeys={sourceKeys}
                 disabled={isBusy}
               />
-            </div>
-          </section>
-          <form onSubmit={handleSubmit} noValidate aria-busy={isBusy}>
-            <FieldGroup className="gap-8">
-              <Field
-                data-disabled={formDisabled}
-                data-invalid={Boolean(feedback?.fields?.name)}
-              >
-                <FieldLabel htmlFor="topic-name">主题名称</FieldLabel>
-                <Input
-                  id="topic-name"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  disabled={formDisabled}
-                  minLength={1}
-                  maxLength={80}
-                  required
-                  aria-invalid={Boolean(feedback?.fields?.name)}
-                  aria-describedby={
-                    feedback?.fields?.name ? "topic-name-error" : undefined
-                  }
-                />
-                {feedback?.fields?.name ? (
-                  <FieldError id="topic-name-error">
-                    {feedback.fields.name}
-                  </FieldError>
-                ) : null}
-              </Field>
-              <KeywordGroupField
-                id="match-any"
-                label="想关注的关键词"
-                description="任意一个词出现即可。每行填写一个关键词。"
-                value={matchAny}
-                onChange={setMatchAny}
-                disabled={formDisabled}
-                error={feedback?.fields?.match_any}
-              />
-              <TopicSettingsFields
-                sourceOptions={sourceOptions}
-                sourceKeys={sourceKeys}
-                onSourceKeysChange={setSourceKeys}
-                disabled={formDisabled}
-                fieldErrors={feedback?.fields}
-              />
-              <TopicAdvancedFields
-                key={`${topic.id}:${topic.current_version}`}
-                matchAll={matchAll}
-                onMatchAllChange={setMatchAll}
-                exclude={exclude}
-                onExcludeChange={setExclude}
-                collectionIntervalSeconds={collectionIntervalSeconds}
-                onCollectionIntervalSecondsChange={setCollectionIntervalSeconds}
-                disabled={formDisabled}
-                fieldErrors={feedback?.fields}
-              />
-              {feedback ? (
-                <Alert
-                  role={feedback.kind === "success" ? "status" : "alert"}
-                  variant={
-                    feedback.kind === "success" ? "default" : "destructive"
-                  }
-                >
-                  {feedback.kind === "success" ? <CheckCircle2Icon /> : null}
-                  <AlertTitle>
-                    {feedback.kind === "success"
-                      ? "已保存"
-                      : feedback.kind === "conflict"
-                        ? "需要重新确认"
-                        : "操作未完成"}
-                  </AlertTitle>
-                  <AlertDescription>
-                    {feedback.message}
-                    {feedback.requestId ? (
-                      <p>请求编号：{feedback.requestId}</p>
-                    ) : null}
-                  </AlertDescription>
-                  {feedback.kind === "conflict" ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="navigation"
-                      disabled={isBusy}
-                      onClick={() => void loadTopic()}
-                    >
-                      <RefreshCwIcon data-icon="inline-start" />
-                      重新读取
-                    </Button>
-                  ) : null}
-                </Alert>
-              ) : null}
-              <Field
-                orientation="horizontal"
-                className="flex-wrap justify-between gap-3"
-                data-disabled={formDisabled}
-              >
-                <TopicRulePreview
-                  matchAny={matchAny}
-                  matchAll={matchAll}
-                  exclude={exclude}
-                  sourceKeys={sourceKeys}
-                  disabled={isBusy}
-                />
-                <Button type="submit" size="hero" disabled={formDisabled}>
-                  {pendingAction === "save" ? (
-                    <Spinner data-icon="inline-start" aria-hidden="true" />
-                  ) : (
-                    <SaveIcon data-icon="inline-start" />
-                  )}
-                  {pendingAction === "save" ? "正在保存" : "保存修改"}
-                </Button>
-              </Field>
-              <FieldDescription>
-                {topic.readiness_status === "pending_source_selection"
-                  ? "还未选择来源。保存后可以继续配置。"
-                  : topic.readiness_status === "pending_source_readiness"
-                    ? "来源尚待就绪，请在来源设置中核查。"
-                    : "开始关注前，会再次检查来源与预算。"}
-              </FieldDescription>
-            </FieldGroup>
-          </form>
-        </div>
-      </main>
+              <Button type="submit" size="hero" disabled={formDisabled}>
+                {pendingAction === "save" ? (
+                  <Spinner data-icon="inline-start" aria-hidden="true" />
+                ) : (
+                  <SaveIcon data-icon="inline-start" />
+                )}
+                {pendingAction === "save" ? "正在保存" : "保存修改"}
+              </Button>
+            </Field>
+            <FieldDescription>
+              {topic.readiness_status === "pending_source_selection"
+                ? "还未选择来源。保存后可以继续配置。"
+                : topic.readiness_status === "pending_source_readiness"
+                  ? "来源尚待就绪，请在来源设置中核查。"
+                  : "开始关注前，会再次检查来源与预算。"}
+            </FieldDescription>
+          </FieldGroup>
+        </form>
+      </div>
     </div>
   );
 }

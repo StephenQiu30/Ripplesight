@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { listReportEditions, requestReportEdition } from "@/api/rizhouyuekan";
-import { WorkspaceHeader } from "@/components/navigation/workspace-header";
+
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,8 +80,7 @@ export function EditionList() {
 
   return (
     <>
-      <WorkspaceHeader current="editions" />
-      <main className="mx-auto max-w-6xl px-5 py-12 sm:px-8">
+      <div>
         <h1 className="text-3xl font-medium tracking-tight">日周月刊</h1>
         <p className="text-muted-foreground mt-4 leading-7">
           按北京时间的完整自然刊期编选资讯，阅读来源、关键事实和历史修订。
@@ -199,7 +198,7 @@ export function EditionList() {
             ) : null}
           </aside>
         </div>
-      </main>
+      </div>
     </>
   );
 }

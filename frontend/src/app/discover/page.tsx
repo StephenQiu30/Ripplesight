@@ -123,7 +123,7 @@ export default async function DiscoverPage({
   return (
     <>
       <PublicationNavigation />
-      <main className="mx-auto max-w-6xl px-5 py-10 sm:px-8">
+      <div>
         <h1 className="text-3xl font-medium tracking-tight">值得关注的资讯</h1>
         <form method="get" className="my-7 flex flex-wrap items-end gap-3">
           <label className="space-y-2 text-xs">
@@ -280,7 +280,7 @@ export default async function DiscoverPage({
             <SavedItems />
           </aside>
         </div>
-      </main>
+      </div>
     </>
   );
 }

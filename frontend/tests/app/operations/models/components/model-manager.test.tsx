@@ -22,9 +22,7 @@ vi.mock("@/api/moxingpeizhi", () => ({
   switchAiCapabilityModel: api.switchModel,
   acknowledgeAiCostCircuit: api.ack,
 }));
-vi.mock("@/components/navigation/workspace-header", () => ({
-  WorkspaceHeader: () => <nav>工作区</nav>,
-}));
+
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();

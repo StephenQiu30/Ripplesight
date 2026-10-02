@@ -12,9 +12,7 @@ vi.mock("@/api/zhandiziliao", () => ({
   getOperatorSiteConfiguration: api.get,
   saveOperatorSiteConfiguration: api.save,
 }));
-vi.mock("@/components/navigation/workspace-header", () => ({
-  WorkspaceHeader: () => null,
-}));
+
 import { SiteManager } from "@/app/site/manage/components/site-manager";
 const current = {
   revision: 1,

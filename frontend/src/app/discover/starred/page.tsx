@@ -11,10 +11,10 @@ export default async function StarredPage() {
   return (
     <>
       <PublicationNavigation />
-      <main className="mx-auto max-w-4xl px-5 py-10 sm:px-8">
+      <div>
         <h1 className="mb-8 text-3xl font-medium">收藏与阅读记录</h1>
         <SavedItems full />
-      </main>
+      </div>
     </>
   );
 }

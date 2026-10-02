@@ -14,7 +14,7 @@ import {
   reviewEditorialSourceGroupBacklog,
   updateEditorialSourceProfile,
 } from "@/api/bianjilaiyuan";
-import { WorkspaceHeader } from "@/components/navigation/workspace-header";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -311,8 +311,7 @@ export function EditorialSourceManager() {
   }
   return (
     <>
-      <WorkspaceHeader current="editorial-sources" />
-      <main className="mx-auto max-w-6xl space-y-8 px-5 py-12 sm:px-8">
+      <div className="space-y-8">
         <div>
           <h1 className="text-3xl font-medium">编辑来源配置</h1>
           <p className="text-muted-foreground mt-3">
@@ -798,7 +797,7 @@ export function EditorialSourceManager() {
             </Link>
           </p>
         )}
-      </main>
+      </div>
     </>
   );
 }

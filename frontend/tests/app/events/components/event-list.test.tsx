@@ -20,9 +20,6 @@ vi.mock("@/app/events/components/event-hot-list", () => ({
 }));
 vi.mock("@/api/jiankongzhuti", () => ({ listMonitorTopics: api.topics }));
 vi.mock("@/api/laiyuannengli", () => ({ listSourceCapabilities: api.sources }));
-vi.mock("@/components/navigation/workspace-header", () => ({
-  WorkspaceHeader: () => <nav>工作区导航</nav>,
-}));
 
 import { EventList } from "@/app/events/components/event-list";
 

@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 
 export function SourcesReading({ data }: { data: HotKeyAPI.SourcesView }) {
   return (
-    <main className="mx-auto max-w-6xl space-y-10 px-5 py-12 sm:px-8">
+    <div className="space-y-10">
       <header className="max-w-3xl space-y-4">
         <p className="text-muted-foreground text-sm">模型榜</p>
         <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
@@ -58,6 +58,6 @@ export function SourcesReading({ data }: { data: HotKeyAPI.SourcesView }) {
           </div>
         </section>
       ))}
-    </main>
+    </div>
   );
 }

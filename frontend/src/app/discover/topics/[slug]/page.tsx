@@ -74,7 +74,7 @@ export default async function TopicPage({
   return (
     <>
       <PublicationNavigation />
-      <main className="mx-auto max-w-4xl px-5 py-10 sm:px-8">
+      <div>
         <Link href="/discover/topics" className="text-muted-foreground text-sm">
           ← 全部专题
         </Link>
@@ -117,7 +117,7 @@ export default async function TopicPage({
             </Button>
           ) : null}
         </nav>
-      </main>
+      </div>
     </>
   );
 }

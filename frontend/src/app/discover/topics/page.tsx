@@ -32,7 +32,7 @@ export default async function PublicTopicsPage() {
   return (
     <>
       <PublicationNavigation />
-      <main className="mx-auto max-w-6xl space-y-10 px-5 py-10 sm:px-8">
+      <div className="space-y-10">
         <header>
           <h1 className="text-3xl font-medium">行业专题</h1>
           <p className="text-muted-foreground mt-3 text-sm">
@@ -63,7 +63,7 @@ export default async function PublicTopicsPage() {
             </div>
           </section>
         ))}
-      </main>
+      </div>
     </>
   );
 }

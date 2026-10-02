@@ -12,7 +12,7 @@ import {
 
 export function RulesReading({ data }: { data: HotKeyAPI.RulesView }) {
   return (
-    <main className="mx-auto max-w-6xl space-y-10 px-5 py-12 sm:px-8">
+    <div className="space-y-10">
       <header className="max-w-3xl space-y-4">
         <p className="text-muted-foreground text-sm">模型榜</p>
         <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
@@ -140,6 +140,6 @@ export function RulesReading({ data }: { data: HotKeyAPI.RulesView }) {
           查看上游方法
         </a>
       </p>
-    </main>
+    </div>
   );
 }

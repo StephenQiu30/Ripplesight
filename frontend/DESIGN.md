@@ -2,7 +2,7 @@
 
 ## 视觉
 
-- 使用 Geist；Geist Mono 仅用于数据和技术标识。
+- 使用 Geist；Geist Mono 仅用于数据和技术标识。字体装配集中在 `src/layout/layout-fonts.ts`，根 HTML 和全局恢复页复用相同字体变量。
 - 颜色、字体和圆角统一定义在 `src/app/globals.css`，业务组件只使用语义令牌。
 - 页面通过留白、排版和表面明度建立层级，静态信息区不使用装饰性边框。
 - 输入、选择、错误、键盘焦点和浮层保留必要轮廓。
@@ -13,6 +13,8 @@
 - shadcn/Radix 基础组件放在 `src/components/ui/`。
 - 跨页面复用组件按功能领域放在 `src/components/<feature>/`。
 - 页面专属组件放在对应 `src/app/<route>/components/`；根页面使用 `src/app/components/`。
+- 全站外壳统一在独立 `src/layout/`：BasicLayout 在根 App Router layout 装配，BasicHeader、BasicFooter 和共用 UsageGuide 在同目录。外壳使用 `h-dvh` 的 flex 布局，头尾不收缩，正文 main 独立滚动；所有页面的头尾及正文统一 `max-w-7xl`、`px-5 sm:px-8`，正文 `py-10 sm:py-12`。仅保留一个 main，页面组件不再设置全屏高度、页面级最大宽度和外侧内边距；内部表单、文章、表格按内容保留合理尺度。路由切换重置正文滚动，提供跳到正文的键盘入口；打印恢复正常流并隐藏头尾。
+- LayoutContainer 是头尾和正文的唯一宽度定义；三处 region 同时预留对称的稳定滚动条槽，长页/短页切换不会产生容器宽度偏移。阅读进度通过布局提供的滚动节点保存与恢复，保留本机数据格式。
 - 不创建 `features`、`common`、`patterns` 或 `shared` 目录。
 - `page.tsx` 只处理页面入口、数据边界和组件组合。
 - 组件至少被两个页面稳定复用后才能迁入 `src/components/<feature>/`。
@@ -23,14 +25,14 @@
 
 方案 1 在本目录实现，使用 Vercel 黑白留白风格；不增加独立应用、业务状态层或额外配置流程。首页的“创建关注”进入现有 `/monitors/new`，“我的关注”进入 `/topics`。主题创建、修改、来源准入与保存使用当前 OpenAPI 生成 API；示例只用于说明，不显示为真实采集结果。
 
-| 组件                           | 领域与复用范围        | 路径                                       | 数据与状态                                                |
-| ------------------------------ | --------------------- | ------------------------------------------ | --------------------------------------------------------- |
-| HomeContent                    | 首页专属组合          | src/app/components/home-content.tsx        | 静态内容与说明浮层开关；无业务 API                        |
-| SiteHeader                     | 首页专属导航          | src/app/components/site-header.tsx         | 品牌、官方菜单、现有路由链接与指南入口                    |
-| HeroSection                    | 首页专属主视觉        | src/app/components/hero-section.tsx        | 选定文案、装饰品牌图、创建链接与示例入口                  |
-| CapabilityOverview             | 首页专属指南/示例说明 | src/app/components/capability-overview.tsx | 静态说明；官方 Dialog 打开、关闭及键盘焦点                |
-| BrandLockup / BrandMark        | 跨页面品牌            | src/components/brand/brand-lockup.tsx      | 复用 src/app/icon.png 母版；无 API 状态                   |
-| Button / Dialog / DropdownMenu | 跨页面官方基础组件    | src/components/ui/                         | 保留官方 Radix 语义和交互；必要的首页尺寸变体使用命名尺度 |
+| 组件                                    | 领域与复用范围       | 路径                                  | 数据与状态                                                           |
+| --------------------------------------- | -------------------- | ------------------------------------- | -------------------------------------------------------------------- |
+| HomeContent                             | 首页专属组合         | src/app/components/home-content.tsx   | 静态内容与说明浮层开关；无业务 API                                   |
+| BasicLayout / BasicHeader / BasicFooter | 全站页面骨架与导航   | src/layout/                           | 唯一正文滚动区、路由选中态、品牌、共用指南与真实站点链接；桌面及窄屏 |
+| UsageGuide                              | 首页和导航复用的说明 | src/layout/usage-guide.tsx            | 静态指南/示例 Dialog，关闭后返回触发器焦点                           |
+| HeroSection                             | 首页专属主视觉       | src/app/components/hero-section.tsx   | 选定文案、装饰品牌图、创建链接与示例入口                             |
+| BrandLockup / BrandMark                 | 跨页面品牌           | src/components/brand/brand-lockup.tsx | 复用 src/app/icon.png 母版；无 API 状态                              |
+| Button / Dialog / DropdownMenu          | 跨页面官方基础组件   | src/components/ui/                    | 保留官方 Radix 语义和交互；必要的首页尺寸变体使用命名尺度            |
 
 装饰主视觉位于 `public/brand/hero-brand-soft.png`，是既定品牌的阴影展示资产，不作为第二套品牌母版。布局使用现有 Tailwind 尺度与标准断点。首页无加载、空、部分或权限状态；业务页面保留当前加载、空、错误重试及成功状态。
 
@@ -54,13 +56,14 @@
 - Agent 页专属 `SelectedSnapshotDownload` 位于 `src/app/agent/components/selected-snapshot-download.tsx`，使用生成的 `getSelectedPublicationSnapshot` 下载 JSON 快照，覆盖加载、错误和再次下载；不手写 API 地址。
 - 测试统一在 `tests/`，按原业务路径组织 `app/`、`components/`，根配置测试归 `tests/config/`；`src/` 只放业务源码和生成客户端。Vitest 仅扫描 tests，生产类型检查及 Docker 构建排除测试；独立测试 TypeScript 配置继续检查所有测试，ESLint 拒绝业务目录中的测试或测试依赖。
 - App Router 统一提供 loading、error、global-error 和 not-found 边界。
-- `src/components/system/page-state.tsx` 中的 `PageState` 处理页面错误、空态、无权限和恢复操作。业务页通过 `navigation` 保留 `WorkspaceHeader`，读取失败时仍可切换页面；不在状态组件内部请求业务数据。
+- `src/components/system/page-state.tsx` 中的 `PageState` 只处理正文错误、空态、无权限和恢复操作。加载、错误和404沿用根 BasicLayout，读取失败时主导航及页脚继续存在；global-error 替代根布局时独立装配 BasicLayout。不在状态组件内部请求业务数据。
 
 ## 可访问性与运行
 
 - 交互支持键盘焦点，装饰图形使用 `aria-hidden`，状态区域提供语义名称。
 - 动效遵循 `prefers-reduced-motion`。
 - 页面必须完成桌面和窄屏浏览器检查。
+- 本机开发页关闭 Next.js devIndicators，避免开发工具浮标覆盖固定页脚；终端与浏览器开发日志仍可用于诊断。
 - 生产镜像使用 standalone、非 root、只读文件系统和 `/health` 健康检查。
 - CSP nonce 由 `src/proxy.ts` 每请求生成；需要客户端交互的 HTML 入口必须按请求渲染。主题创建页在服务端入口等待 Next.js `connection()`，保持来源校验；生产脚本 nonce 必须与本次 CSP 一致，HTML 不使用共享缓存。生产镜像的 runtime 检查与浏览器冷进入均需通过。
 
@@ -70,7 +73,7 @@
 
 | 组件                                                                             | 领域与复用范围                   | 目标路径                                                                 | 数据来源与状态覆盖                                                                                                                       |
 | -------------------------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| WorkspaceHeader                                                                  | 多个业务页的导航                 | src/components/navigation/workspace-header.tsx                           | 静态真实路由；桌面导航、移动官方菜单与当前页语义                                                                                         |
+| BasicHeader                                                                      | 全站主导航                       | src/layout/basic-header.tsx                                              | 静态真实路由；统一桌面/手机导航、路由匹配与当前页语义，指南 Dialog                                                                       |
 | TopicsWorkspace / TopicList                                                      | 关注入口 / 列表                  | src/app/topics/components/；src/components/monitors/topic-list.tsx       | listMonitorTopics；加载、空、分页、归档筛选、错误重试                                                                                    |
 | EventList / EventHotList                                                         | 已确认事件列表与关注热度         | src/app/events/components/                                               | listEvents / listHotEvents；主题、来源与搜索筛选、游标分页、真实热度、加载、空、权限和错误重试                                           |
 | TopicForm / TopicEditor                                                          | 创建 / 编辑专属                  | src/app/monitors/new/components/；src/app/monitors/[topicId]/components/ | create/get/update/clone/pause/resume/archiveMonitorTopic；来源加载、字段422、版本冲突、重复提交、保存状态                                |
@@ -91,7 +94,7 @@
 
 ## 日周月刊
 
-`/editions`使用`src/app/editions/components/edition-list.tsx`，读取唯一生成客户端`rizhouyuekan.ts`，按日/周/月与刊期分页展示最新修订，接受有原因的补刊/新修订任务；加载、空、错误、409与unknown人工复核分别呈现。`/editions/[editionId]`使用专属edition-detail，按冻结条目与程序指标读正文，保留修订列表和历史标记，权限失效时整稿隐藏；不在页面触发模型。人工修订只允许已冻结引用，下载同一Markdown稿。旧`/reports`保留主题统计口径，通过导航区分。组件复用shadcn表单、按钮、空状态与原WorkspaceHeader，布局使用命名Tailwind尺度，无新共享层。
+`/editions`使用`src/app/editions/components/edition-list.tsx`，读取唯一生成客户端`rizhouyuekan.ts`，按日/周/月与刊期分页展示最新修订，接受有原因的补刊/新修订任务；加载、空、错误、409与unknown人工复核分别呈现。`/editions/[editionId]`使用专属edition-detail，按冻结条目与程序指标读正文，保留修订列表和历史标记，权限失效时整稿隐藏；不在页面触发模型。人工修订只允许已冻结引用，下载同一Markdown稿。旧`/reports`保留主题统计口径，通过导航区分。组件复用shadcn表单、按钮、空状态与根 BasicLayout，布局使用命名Tailwind尺度，无新共享层。
 
 ## 公开资讯与分发
 

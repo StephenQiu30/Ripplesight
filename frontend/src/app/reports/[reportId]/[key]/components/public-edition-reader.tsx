@@ -19,7 +19,7 @@ export function PublicEditionReader({
   const references = (ids: string[]) =>
     edition.entries.filter((entry) => ids.includes(entry.id));
   return (
-    <main className="mx-auto max-w-4xl space-y-9 px-5 py-10 sm:px-8">
+    <div className="space-y-9">
       <div className="text-muted-foreground flex flex-wrap gap-4 text-sm">
         <span>
           {labels[edition.kind]} · {edition.key}
@@ -106,6 +106,6 @@ export function PublicEditionReader({
         <EditionPrint />
         <PosterDownload target={{ kind: edition.kind, key: edition.key }} />
       </div>
-    </main>
+    </div>
   );
 }

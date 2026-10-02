@@ -7,7 +7,6 @@ import { EventHeat } from "./event-heat";
 import { EventMemberList } from "@/app/events/[eventId]/components/event-member-list";
 import { EventFacts } from "@/app/events/[eventId]/components/event-facts";
 import { EventCorrections } from "@/app/events/[eventId]/components/event-corrections";
-import { WorkspaceHeader } from "@/components/navigation/workspace-header";
 import { PageState } from "@/components/system/page-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -60,7 +59,6 @@ export function EventDetail({ eventId }: { eventId: string }) {
   if (state.status === "not-found" || state.status === "error")
     return (
       <PageState
-        navigation={<WorkspaceHeader current="events" />}
         eyebrow="事件读取"
         title={
           state.status === "not-found" ? "事件不存在或暂不可读" : "无法读取事件"
@@ -82,30 +80,27 @@ export function EventDetail({ eventId }: { eventId: string }) {
     );
 
   return (
-    <div className="bg-background min-h-screen">
-      <WorkspaceHeader current="events" />
-      <main className="mx-auto max-w-6xl px-5 py-12 sm:px-8 sm:py-16">
-        <div className="mb-8 flex flex-wrap justify-between gap-4">
-          <Button asChild variant="ghost">
-            <Link href="/events">返回事件列表</Link>
-          </Button>
-          <Button variant="outline" onClick={refresh}>
-            刷新事件详情
-          </Button>
+    <div>
+      <div className="mb-8 flex flex-wrap justify-between gap-4">
+        <Button asChild variant="ghost">
+          <Link href="/events">返回事件列表</Link>
+        </Button>
+        <Button variant="outline" onClick={refresh}>
+          刷新事件详情
+        </Button>
+      </div>
+      {state.status === "loading" ? (
+        <div aria-label="正在读取事件详情" className="space-y-6">
+          <Skeleton className="h-12 w-3/4" />
+          <Skeleton className="h-32 w-full" />
         </div>
-        {state.status === "loading" ? (
-          <div aria-label="正在读取事件详情" className="space-y-6">
-            <Skeleton className="h-12 w-3/4" />
-            <Skeleton className="h-32 w-full" />
-          </div>
-        ) : (
-          <EventReading
-            key={`${state.event.id}:${state.event.revision}`}
-            event={state.event}
-            onChanged={refresh}
-          />
-        )}
-      </main>
+      ) : (
+        <EventReading
+          key={`${state.event.id}:${state.event.revision}`}
+          event={state.event}
+          onChanged={refresh}
+        />
+      )}
     </div>
   );
 }

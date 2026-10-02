@@ -14,7 +14,6 @@ import {
   reviewCodexResetPost,
   reviewCodexResetScanGap,
 } from "@/api/zhongzhigonggao";
-import { WorkspaceHeader } from "@/components/navigation/workspace-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -332,494 +331,491 @@ export function CodexResetManager() {
   }
   const canWrite = !!token && !!reason.trim() && !busy;
   return (
-    <>
-      <WorkspaceHeader current="codex-resets" />
-      <main className="mx-auto max-w-6xl space-y-8 px-5 py-12 sm:px-8">
-        <div>
-          <h1 className="text-3xl font-medium">公告配置与人工复核</h1>
-          <p className="text-muted-foreground mt-3">
-            固定官方作者
-            thsottiaux。预测日程与确认到账分别记录，未知来源或模型请求需要人工复核。
-          </p>
-          <Link
-            href="/codex-resets"
-            className="mt-3 inline-block underline underline-offset-4"
-          >
-            返回公告日历
-          </Link>
-        </div>
-        <section
-          className="bg-muted/40 space-y-4 rounded-xl p-5"
-          aria-label="运营权限与原因"
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-3xl font-medium">公告配置与人工复核</h1>
+        <p className="text-muted-foreground mt-3">
+          固定官方作者
+          thsottiaux。预测日程与确认到账分别记录，未知来源或模型请求需要人工复核。
+        </p>
+        <Link
+          href="/codex-resets"
+          className="mt-3 inline-block underline underline-offset-4"
         >
-          <Label htmlFor="codex-operator">操作员令牌</Label>
-          <Input
-            id="codex-operator"
-            type="password"
-            autoComplete="off"
-            value={token}
-            onChange={(e) => changeToken(e.target.value)}
-          />
-          <p className="text-muted-foreground text-sm">
-            令牌仅用于当前页面内存。服务端未配置权限时，写入保持关闭。
-          </p>
-          <Label htmlFor="codex-reason">操作与复核原因</Label>
-          <Textarea
-            id="codex-reason"
-            value={reason}
-            maxLength={2000}
-            onChange={(e) => setReason(e.target.value)}
-          />
-          <div className="flex flex-wrap gap-3">
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() =>
-                void perform(async () =>
-                  applyMonitor(await getCodexResetConfiguration()),
-                )
-              }
-            >
-              重读配置
-            </Button>
-            <Button
-              disabled={!token || busy}
-              onClick={() => void perform(() => read())}
-            >
-              读取待复核与公告
-            </Button>
-            <Button variant="ghost" onClick={() => changeToken("")}>
-              清除令牌
-            </Button>
-          </div>
-        </section>
-        {error && (
-          <p role="alert" className="text-destructive break-words">
-            {error}
-          </p>
-        )}
-        {notice && <p role="status">{notice}</p>}
-        <section className="space-y-5" aria-label="官方监控配置">
-          <h2 className="text-xl font-medium">
-            {monitor
-              ? `监控修订 ${monitor.revision} · 配置版本 ${monitor.configuration_version}`
-              : loaded
-                ? "尚未配置公告监控"
-                : "正在读取配置…"}
-          </h2>
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="codex-author-id">官方作者外部 ID</Label>
-              <Input
-                id="codex-author-id"
-                value={configuration.author_external_id ?? ""}
-                maxLength={128}
-                onChange={(e) =>
-                  setConfiguration({
-                    ...configuration,
-                    author_external_id: e.target.value || null,
-                  })
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="codex-connection">批准的官方 X 连接 ID</Label>
-              <Input
-                id="codex-connection"
-                value={configuration.connection_id ?? ""}
-                onChange={(e) =>
-                  setConfiguration({
-                    ...configuration,
-                    connection_id: e.target.value || null,
-                  })
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="codex-connection-version">连接版本</Label>
-              <Input
-                id="codex-connection-version"
-                type="number"
-                min={1}
-                value={configuration.connection_version ?? 1}
-                onChange={(e) =>
-                  setConfiguration({
-                    ...configuration,
-                    connection_version: Number(e.target.value),
-                  })
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="codex-max-pages">单轮新帖子页上限</Label>
-              <Input
-                id="codex-max-pages"
-                type="number"
-                min={1}
-                max={5}
-                value={configuration.max_pages ?? 5}
-                onChange={(e) =>
-                  setConfiguration({
-                    ...configuration,
-                    max_pages: Number(e.target.value),
-                  })
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="codex-normal">正常扫描间隔（秒）</Label>
-              <Input
-                id="codex-normal"
-                type="number"
-                min={60}
-                value={configuration.normal_interval_seconds ?? 300}
-                readOnly
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="codex-hot">临近公告扫描间隔（秒）</Label>
-              <Input
-                id="codex-hot"
-                type="number"
-                min={60}
-                value={configuration.hot_interval_seconds ?? 180}
-                readOnly
-              />
-            </div>
-          </div>
-          {monitor && (
-            <label className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                checked={enabled}
-                onChange={(e) => setEnabled(e.target.checked)}
-              />
-              启用公告监控（仍需真实授权与预算）
-            </label>
-          )}
-          <Button disabled={!canWrite || !loaded} onClick={save}>
-            {monitor ? "保存公告配置" : "创建关闭公告监控"}
+          返回公告日历
+        </Link>
+      </div>
+      <section
+        className="bg-muted/40 space-y-4 rounded-xl p-5"
+        aria-label="运营权限与原因"
+      >
+        <Label htmlFor="codex-operator">操作员令牌</Label>
+        <Input
+          id="codex-operator"
+          type="password"
+          autoComplete="off"
+          value={token}
+          onChange={(e) => changeToken(e.target.value)}
+        />
+        <p className="text-muted-foreground text-sm">
+          令牌仅用于当前页面内存。服务端未配置权限时，写入保持关闭。
+        </p>
+        <Label htmlFor="codex-reason">操作与复核原因</Label>
+        <Textarea
+          id="codex-reason"
+          value={reason}
+          maxLength={2000}
+          onChange={(e) => setReason(e.target.value)}
+        />
+        <div className="flex flex-wrap gap-3">
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() =>
+              void perform(async () =>
+                applyMonitor(await getCodexResetConfiguration()),
+              )
+            }
+          >
+            重读配置
           </Button>
-          <p className="text-muted-foreground text-sm">
-            首次创建保持关闭。X
-            凭据、付费预算与模型开关由服务端批准，配置保存不会发起外部请求。
-          </p>
-        </section>
-        {monitor && (
-          <section className="space-y-4" aria-label="人工扫描">
-            <h2 className="text-xl font-medium">人工受理扫描</h2>
-            <Label htmlFor="codex-lookback">回看小时数</Label>
+          <Button
+            disabled={!token || busy}
+            onClick={() => void perform(() => read())}
+          >
+            读取待复核与公告
+          </Button>
+          <Button variant="ghost" onClick={() => changeToken("")}>
+            清除令牌
+          </Button>
+        </div>
+      </section>
+      {error && (
+        <p role="alert" className="text-destructive break-words">
+          {error}
+        </p>
+      )}
+      {notice && <p role="status">{notice}</p>}
+      <section className="space-y-5" aria-label="官方监控配置">
+        <h2 className="text-xl font-medium">
+          {monitor
+            ? `监控修订 ${monitor.revision} · 配置版本 ${monitor.configuration_version}`
+            : loaded
+              ? "尚未配置公告监控"
+              : "正在读取配置…"}
+        </h2>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="codex-author-id">官方作者外部 ID</Label>
             <Input
-              id="codex-lookback"
+              id="codex-author-id"
+              value={configuration.author_external_id ?? ""}
+              maxLength={128}
+              onChange={(e) =>
+                setConfiguration({
+                  ...configuration,
+                  author_external_id: e.target.value || null,
+                })
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="codex-connection">批准的官方 X 连接 ID</Label>
+            <Input
+              id="codex-connection"
+              value={configuration.connection_id ?? ""}
+              onChange={(e) =>
+                setConfiguration({
+                  ...configuration,
+                  connection_id: e.target.value || null,
+                })
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="codex-connection-version">连接版本</Label>
+            <Input
+              id="codex-connection-version"
               type="number"
               min={1}
-              max={168}
-              value={lookback}
-              onChange={(e) => setLookback(Number(e.target.value))}
+              value={configuration.connection_version ?? 1}
+              onChange={(e) =>
+                setConfiguration({
+                  ...configuration,
+                  connection_version: Number(e.target.value),
+                })
+              }
             />
-            <Button disabled={!canWrite || !monitor.enabled} onClick={poll}>
-              受理一次公告扫描
-            </Button>
-            {job && (
-              <p role="status">
-                任务已受理：
-                <Link
-                  href={`/jobs/${job.id}`}
-                  className="underline underline-offset-4"
-                >
-                  查看任务 {job.id}
-                </Link>
-              </p>
-            )}
-          </section>
-        )}
-        {!!gaps.length && (
-          <section className="space-y-4" aria-label="分页积压与未知请求">
-            <h2 className="text-xl font-medium">扫描缺口</h2>
-            {gaps.map((gap) => (
-              <article
-                key={gap.id}
-                className="bg-muted/30 space-y-3 rounded-xl p-5"
-              >
-                <p className="break-words">
-                  {gap.state} · {gap.failure_code ?? "未完成窗口"} · 配置版本{" "}
-                  {gap.configuration_version}
-                </p>
-                <p className="text-muted-foreground text-sm break-all">
-                  查询 {gap.query} ·{" "}
-                  {gap.has_resume_token ? "已保留分页凭证" : "无分页凭证"}
-                </p>
-                {gap.state !== "complete" && (
-                  <div className="flex flex-wrap gap-3">
-                    <Button
-                      variant="outline"
-                      disabled={!canWrite}
-                      onClick={() => reviewGap(gap, "retry")}
-                    >
-                      允许恢复此窗口
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      disabled={!canWrite}
-                      onClick={() => reviewGap(gap, "acknowledge")}
-                    >
-                      确认此缺口
-                    </Button>
-                  </div>
-                )}
-              </article>
-            ))}
-          </section>
-        )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="codex-max-pages">单轮新帖子页上限</Label>
+            <Input
+              id="codex-max-pages"
+              type="number"
+              min={1}
+              max={5}
+              value={configuration.max_pages ?? 5}
+              onChange={(e) =>
+                setConfiguration({
+                  ...configuration,
+                  max_pages: Number(e.target.value),
+                })
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="codex-normal">正常扫描间隔（秒）</Label>
+            <Input
+              id="codex-normal"
+              type="number"
+              min={60}
+              value={configuration.normal_interval_seconds ?? 300}
+              readOnly
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="codex-hot">临近公告扫描间隔（秒）</Label>
+            <Input
+              id="codex-hot"
+              type="number"
+              min={60}
+              value={configuration.hot_interval_seconds ?? 180}
+              readOnly
+            />
+          </div>
+        </div>
         {monitor && (
-          <section className="space-y-4" aria-label="帖子复核">
-            <h2 className="text-xl font-medium">源帖子复核 · 第 {page} 页</h2>
-            {posts.map((post) => (
-              <article
-                key={post.id}
-                className="bg-muted/30 space-y-3 rounded-xl p-5"
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+            />
+            启用公告监控（仍需真实授权与预算）
+          </label>
+        )}
+        <Button disabled={!canWrite || !loaded} onClick={save}>
+          {monitor ? "保存公告配置" : "创建关闭公告监控"}
+        </Button>
+        <p className="text-muted-foreground text-sm">
+          首次创建保持关闭。X
+          凭据、付费预算与模型开关由服务端批准，配置保存不会发起外部请求。
+        </p>
+      </section>
+      {monitor && (
+        <section className="space-y-4" aria-label="人工扫描">
+          <h2 className="text-xl font-medium">人工受理扫描</h2>
+          <Label htmlFor="codex-lookback">回看小时数</Label>
+          <Input
+            id="codex-lookback"
+            type="number"
+            min={1}
+            max={168}
+            value={lookback}
+            onChange={(e) => setLookback(Number(e.target.value))}
+          />
+          <Button disabled={!canWrite || !monitor.enabled} onClick={poll}>
+            受理一次公告扫描
+          </Button>
+          {job && (
+            <p role="status">
+              任务已受理：
+              <Link
+                href={`/jobs/${job.id}`}
+                className="underline underline-offset-4"
               >
-                <p className="break-words whitespace-pre-wrap">{post.text}</p>
-                <p className="text-muted-foreground text-sm">
-                  复核版本 {post.review_version} ·{" "}
-                  {post.failure_code ?? (post.reviewed ? "已复核" : "待处理")} ·
-                  失败 {post.failure_count}
-                </p>
-                <a
-                  href={post.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-sm underline underline-offset-4"
-                >
-                  官方原帖
-                </a>
+                查看任务 {job.id}
+              </Link>
+            </p>
+          )}
+        </section>
+      )}
+      {!!gaps.length && (
+        <section className="space-y-4" aria-label="分页积压与未知请求">
+          <h2 className="text-xl font-medium">扫描缺口</h2>
+          {gaps.map((gap) => (
+            <article
+              key={gap.id}
+              className="bg-muted/30 space-y-3 rounded-xl p-5"
+            >
+              <p className="break-words">
+                {gap.state} · {gap.failure_code ?? "未完成窗口"} · 配置版本{" "}
+                {gap.configuration_version}
+              </p>
+              <p className="text-muted-foreground text-sm break-all">
+                查询 {gap.query} ·{" "}
+                {gap.has_resume_token ? "已保留分页凭证" : "无分页凭证"}
+              </p>
+              {gap.state !== "complete" && (
                 <div className="flex flex-wrap gap-3">
                   <Button
                     variant="outline"
                     disabled={!canWrite}
-                    onClick={() => reviewPost(post, "reviewed")}
+                    onClick={() => reviewGap(gap, "retry")}
                   >
-                    标记已复核
+                    允许恢复此窗口
                   </Button>
                   <Button
                     variant="ghost"
                     disabled={!canWrite}
-                    onClick={() => reviewPost(post, "skip")}
+                    onClick={() => reviewGap(gap, "acknowledge")}
                   >
-                    跳过此帖子
+                    确认此缺口
                   </Button>
-                  {post.needs_review && (
-                    <Button
-                      disabled={!canWrite}
-                      onClick={() => reviewPost(post, "retry")}
-                    >
-                      明确允许再次识别
-                    </Button>
-                  )}
-                  {!!post.event_ids?.some((eventId) =>
-                    events.some((item) => item.id === eventId),
-                  ) && (
-                    <Button
-                      variant="outline"
-                      disabled={!token || busy}
-                      onClick={() => {
-                        setRelinkPost(post);
-                        setRelinkSource(
-                          events.find((item) =>
-                            post.event_ids?.includes(item.id),
-                          ) ?? null,
-                        );
-                        setRelinkTarget(null);
-                      }}
-                    >
-                      更改公告归属
-                    </Button>
-                  )}
                 </div>
-              </article>
-            ))}
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                disabled={busy || !token || page <= 1}
-                onClick={() => void perform(() => read(page - 1))}
-              >
-                上一页帖子
-              </Button>
-              <Button
-                variant="outline"
-                disabled={busy || !token || posts.length < 50}
-                onClick={() => void perform(() => read(page + 1))}
-              >
-                下一页帖子
-              </Button>
-            </div>
-          </section>
-        )}
-        {relinkPost && relinkSource && (
-          <section
-            className="bg-muted/30 space-y-4 rounded-xl p-5"
-            aria-label="帖子公告归属"
-          >
-            <h2 className="text-xl font-medium">更改帖子公告归属</h2>
-            <p className="text-sm leading-7">
-              帖子 {relinkPost.external_id}
-              ；两份公告均按打开表单时的修订提交。版本冲突后请重读并重新打开，不自动覆盖。
-            </p>
-            <Label htmlFor="codex-relink-source">原公告</Label>
-            <select
-              id="codex-relink-source"
-              value={relinkSource.id}
-              className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
-              disabled={busy}
-              onChange={(event) => {
-                setRelinkSource(
-                  events.find((item) => item.id === event.target.value) ?? null,
-                );
-                setRelinkTarget(null);
-              }}
+              )}
+            </article>
+          ))}
+        </section>
+      )}
+      {monitor && (
+        <section className="space-y-4" aria-label="帖子复核">
+          <h2 className="text-xl font-medium">源帖子复核 · 第 {page} 页</h2>
+          {posts.map((post) => (
+            <article
+              key={post.id}
+              className="bg-muted/30 space-y-3 rounded-xl p-5"
             >
-              {events
-                .filter((item) => relinkPost.event_ids?.includes(item.id))
-                .map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.title || item.id} · 修订 {item.revision}
-                  </option>
-                ))}
-            </select>
-            <p className="text-sm">原公告预期修订 {relinkSource.revision}</p>
-            <Label htmlFor="codex-relink-target">目标公告</Label>
-            <select
-              id="codex-relink-target"
-              value={relinkTarget?.id ?? ""}
-              className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
-              disabled={busy}
-              onChange={(event) =>
-                setRelinkTarget(
-                  events.find((item) => item.id === event.target.value) ?? null,
-                )
-              }
-            >
-              <option value="">解除此公告关联（不归入其他公告）</option>
-              {events
-                .filter((item) => item.id !== relinkSource.id)
-                .map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.title || item.id} · 修订 {item.revision}
-                  </option>
-                ))}
-            </select>
-            <p className="text-sm">
-              {relinkTarget
-                ? `目标公告预期修订 ${relinkTarget.revision}`
-                : "目标公告与目标修订均为空；仅解除原关联。"}
-            </p>
-            <p className="text-muted-foreground text-sm">
-              使用上方复核原因记录审计。此操作只修正帖子关联，不调用模型，不确认到账。
-            </p>
-            <div className="flex gap-3">
-              <Button disabled={!canWrite} onClick={relink}>
-                保存帖子归属
-              </Button>
-              <Button
-                variant="ghost"
-                disabled={busy}
-                onClick={() => setRelinkPost(null)}
+              <p className="break-words whitespace-pre-wrap">{post.text}</p>
+              <p className="text-muted-foreground text-sm">
+                复核版本 {post.review_version} ·{" "}
+                {post.failure_code ?? (post.reviewed ? "已复核" : "待处理")} ·
+                失败 {post.failure_count}
+              </p>
+              <a
+                href={post.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm underline underline-offset-4"
               >
-                关闭归属表单
-              </Button>
-            </div>
-          </section>
-        )}
-        {!!events.length && (
-          <section className="space-y-4" aria-label="公告日期与到账复核">
-            <h2 className="text-xl font-medium">公告日期与到账复核</h2>
-            {events.map((item) => (
-              <article
-                key={item.id}
-                className="bg-muted/30 space-y-3 rounded-xl p-5"
-              >
-                <p>
-                  {item.title ?? item.kind} · {item.status} · 修订{" "}
-                  {item.revision} · {item.withdrawn ? "已撤回" : "有效"}
-                </p>
+                官方原帖
+              </a>
+              <div className="flex flex-wrap gap-3">
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    setEvent(item);
-                    setPatch(JSON.stringify({ kind: item.kind }, null, 2));
-                    setReceiptDate(item.occurred_on ?? "");
-                    setReceiptTime("");
-                  }}
+                  disabled={!canWrite}
+                  onClick={() => reviewPost(post, "reviewed")}
                 >
-                  修订此公告
+                  标记已复核
                 </Button>
-              </article>
-            ))}
-          </section>
-        )}
-        {event && (
-          <section className="space-y-5" aria-label="公告修订表单">
-            <h2 className="text-xl font-medium">
-              修订公告 · 预期版本 {event.revision}
-            </h2>
-            <Label htmlFor="codex-event-json">公告修订 JSON</Label>
-            <Textarea
-              id="codex-event-json"
-              className="min-h-40 font-mono text-sm"
-              value={patch}
-              maxLength={65536}
-              onChange={(e) => setPatch(e.target.value)}
-            />
-            <p className="text-muted-foreground text-sm">
-              支持类型、明确日程与范围；时间填写带时区的 ISO
-              值。人工修改不会自动确认到账。
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <Button disabled={!canWrite} onClick={correctJson}>
-                保存公告修订
-              </Button>
+                <Button
+                  variant="ghost"
+                  disabled={!canWrite}
+                  onClick={() => reviewPost(post, "skip")}
+                >
+                  跳过此帖子
+                </Button>
+                {post.needs_review && (
+                  <Button
+                    disabled={!canWrite}
+                    onClick={() => reviewPost(post, "retry")}
+                  >
+                    明确允许再次识别
+                  </Button>
+                )}
+                {!!post.event_ids?.some((eventId) =>
+                  events.some((item) => item.id === eventId),
+                ) && (
+                  <Button
+                    variant="outline"
+                    disabled={!token || busy}
+                    onClick={() => {
+                      setRelinkPost(post);
+                      setRelinkSource(
+                        events.find((item) =>
+                          post.event_ids?.includes(item.id),
+                        ) ?? null,
+                      );
+                      setRelinkTarget(null);
+                    }}
+                  >
+                    更改公告归属
+                  </Button>
+                )}
+              </div>
+            </article>
+          ))}
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              disabled={busy || !token || page <= 1}
+              onClick={() => void perform(() => read(page - 1))}
+            >
+              上一页帖子
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy || !token || posts.length < 50}
+              onClick={() => void perform(() => read(page + 1))}
+            >
+              下一页帖子
+            </Button>
+          </div>
+        </section>
+      )}
+      {relinkPost && relinkSource && (
+        <section
+          className="bg-muted/30 space-y-4 rounded-xl p-5"
+          aria-label="帖子公告归属"
+        >
+          <h2 className="text-xl font-medium">更改帖子公告归属</h2>
+          <p className="text-sm leading-7">
+            帖子 {relinkPost.external_id}
+            ；两份公告均按打开表单时的修订提交。版本冲突后请重读并重新打开，不自动覆盖。
+          </p>
+          <Label htmlFor="codex-relink-source">原公告</Label>
+          <select
+            id="codex-relink-source"
+            value={relinkSource.id}
+            className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
+            disabled={busy}
+            onChange={(event) => {
+              setRelinkSource(
+                events.find((item) => item.id === event.target.value) ?? null,
+              );
+              setRelinkTarget(null);
+            }}
+          >
+            {events
+              .filter((item) => relinkPost.event_ids?.includes(item.id))
+              .map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.title || item.id} · 修订 {item.revision}
+                </option>
+              ))}
+          </select>
+          <p className="text-sm">原公告预期修订 {relinkSource.revision}</p>
+          <Label htmlFor="codex-relink-target">目标公告</Label>
+          <select
+            id="codex-relink-target"
+            value={relinkTarget?.id ?? ""}
+            className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
+            disabled={busy}
+            onChange={(event) =>
+              setRelinkTarget(
+                events.find((item) => item.id === event.target.value) ?? null,
+              )
+            }
+          >
+            <option value="">解除此公告关联（不归入其他公告）</option>
+            {events
+              .filter((item) => item.id !== relinkSource.id)
+              .map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.title || item.id} · 修订 {item.revision}
+                </option>
+              ))}
+          </select>
+          <p className="text-sm">
+            {relinkTarget
+              ? `目标公告预期修订 ${relinkTarget.revision}`
+              : "目标公告与目标修订均为空；仅解除原关联。"}
+          </p>
+          <p className="text-muted-foreground text-sm">
+            使用上方复核原因记录审计。此操作只修正帖子关联，不调用模型，不确认到账。
+          </p>
+          <div className="flex gap-3">
+            <Button disabled={!canWrite} onClick={relink}>
+              保存帖子归属
+            </Button>
+            <Button
+              variant="ghost"
+              disabled={busy}
+              onClick={() => setRelinkPost(null)}
+            >
+              关闭归属表单
+            </Button>
+          </div>
+        </section>
+      )}
+      {!!events.length && (
+        <section className="space-y-4" aria-label="公告日期与到账复核">
+          <h2 className="text-xl font-medium">公告日期与到账复核</h2>
+          {events.map((item) => (
+            <article
+              key={item.id}
+              className="bg-muted/30 space-y-3 rounded-xl p-5"
+            >
+              <p>
+                {item.title ?? item.kind} · {item.status} · 修订 {item.revision}{" "}
+                · {item.withdrawn ? "已撤回" : "有效"}
+              </p>
               <Button
                 variant="outline"
-                disabled={!canWrite}
-                onClick={() => correct({ withdrawn: !event.withdrawn })}
+                onClick={() => {
+                  setEvent(item);
+                  setPatch(JSON.stringify({ kind: item.kind }, null, 2));
+                  setReceiptDate(item.occurred_on ?? "");
+                  setReceiptTime("");
+                }}
               >
-                {event.withdrawn ? "恢复撤回公告" : "撤回此公告"}
+                修订此公告
               </Button>
-            </div>
-            <div className="grid gap-5 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="codex-receipt-date">
-                  人工核验到账日期（北京）
-                </Label>
-                <Input
-                  id="codex-receipt-date"
-                  type="date"
-                  value={receiptDate}
-                  onChange={(e) => setReceiptDate(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="codex-receipt-time">
-                  人工核验到账时间（北京）
-                </Label>
-                <Input
-                  id="codex-receipt-time"
-                  type="datetime-local"
-                  value={receiptTime}
-                  onChange={(e) => setReceiptTime(e.target.value)}
-                />
-              </div>
-            </div>
-            <Button
-              disabled={!canWrite || !receiptDate || !receiptTime}
-              onClick={receipt}
-            >
-              保存人工到账核验
+            </article>
+          ))}
+        </section>
+      )}
+      {event && (
+        <section className="space-y-5" aria-label="公告修订表单">
+          <h2 className="text-xl font-medium">
+            修订公告 · 预期版本 {event.revision}
+          </h2>
+          <Label htmlFor="codex-event-json">公告修订 JSON</Label>
+          <Textarea
+            id="codex-event-json"
+            className="min-h-40 font-mono text-sm"
+            value={patch}
+            maxLength={65536}
+            onChange={(e) => setPatch(e.target.value)}
+          />
+          <p className="text-muted-foreground text-sm">
+            支持类型、明确日程与范围；时间填写带时区的 ISO
+            值。人工修改不会自动确认到账。
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <Button disabled={!canWrite} onClick={correctJson}>
+              保存公告修订
             </Button>
-          </section>
-        )}
-      </main>
-    </>
+            <Button
+              variant="outline"
+              disabled={!canWrite}
+              onClick={() => correct({ withdrawn: !event.withdrawn })}
+            >
+              {event.withdrawn ? "恢复撤回公告" : "撤回此公告"}
+            </Button>
+          </div>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="codex-receipt-date">
+                人工核验到账日期（北京）
+              </Label>
+              <Input
+                id="codex-receipt-date"
+                type="date"
+                value={receiptDate}
+                onChange={(e) => setReceiptDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="codex-receipt-time">
+                人工核验到账时间（北京）
+              </Label>
+              <Input
+                id="codex-receipt-time"
+                type="datetime-local"
+                value={receiptTime}
+                onChange={(e) => setReceiptTime(e.target.value)}
+              />
+            </div>
+          </div>
+          <Button
+            disabled={!canWrite || !receiptDate || !receiptTime}
+            onClick={receipt}
+          >
+            保存人工到账核验
+          </Button>
+        </section>
+      )}
+    </div>
   );
 }

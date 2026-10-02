@@ -31,7 +31,7 @@ export function BoardReading({
       ? "/leaderboard"
       : `/leaderboard/category/${data.board.key}`;
   return (
-    <main className="mx-auto max-w-6xl space-y-10 px-5 py-12 sm:px-8">
+    <div className="space-y-10">
       <header className="max-w-3xl space-y-4">
         <p className="text-muted-foreground text-sm">公开评测共识</p>
         <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
@@ -233,6 +233,6 @@ export function BoardReading({
           </ul>
         </section>
       ) : null}
-    </main>
+    </div>
   );
 }

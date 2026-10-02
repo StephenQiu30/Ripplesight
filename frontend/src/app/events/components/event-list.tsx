@@ -6,7 +6,6 @@ import { listEvents } from "@/api/shijian";
 import { EventHotList } from "./event-hot-list";
 import { listMonitorTopics } from "@/api/jiankongzhuti";
 import { listSourceCapabilities } from "@/api/laiyuannengli";
-import { WorkspaceHeader } from "@/components/navigation/workspace-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -99,85 +98,82 @@ export function EventList() {
   }
 
   return (
-    <div className="bg-background min-h-screen">
-      <WorkspaceHeader current="events" />
-      <main className="mx-auto max-w-6xl px-5 py-12 sm:px-8 sm:py-16">
-        <div className="flex flex-wrap items-end justify-between gap-5">
-          <div>
-            <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
-              已确认事件
-            </h1>
-            <p className="text-muted-foreground mt-4 leading-7">
-              阅读已归并的事件与对应的固定版本证据。
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            onClick={() => setRefresh((value) => value + 1)}
-          >
-            刷新事件
-          </Button>
-        </div>
-        <form
-          onSubmit={applyFilters}
-          className="mt-8 grid items-end gap-5 sm:grid-cols-2 lg:grid-cols-4"
-        >
-          <Field>
-            <FieldLabel htmlFor="event-query">搜索事件</FieldLabel>
-            <Input
-              id="event-query"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              maxLength={200}
-              placeholder="标题或证据正文"
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="event-topic">关注主题</FieldLabel>
-            <Select value={topicId} onValueChange={setTopicId}>
-              <SelectTrigger id="event-topic" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部关注</SelectItem>
-                {topics.map((topic) => (
-                  <SelectItem key={topic.id} value={topic.id}>
-                    {topic.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="event-source">证据来源</FieldLabel>
-            <Select value={sourceKey} onValueChange={setSourceKey}>
-              <SelectTrigger id="event-source" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部来源</SelectItem>
-                {sources.map((source) => (
-                  <SelectItem key={source.source_key} value={source.source_key}>
-                    {source.display_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Button type="submit">应用筛选</Button>
-        </form>
-        <EventHotList topicId={params.topic_id ?? undefined} />
-        {optionsError ? (
-          <p role="status" className="text-muted-foreground mt-4 text-sm">
-            筛选选项暂时不可用，仍可搜索事件。刷新可重试。
+    <div>
+      <div className="flex flex-wrap items-end justify-between gap-5">
+        <div>
+          <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
+            已确认事件
+          </h1>
+          <p className="text-muted-foreground mt-4 leading-7">
+            阅读已归并的事件与对应的固定版本证据。
           </p>
-        ) : null}
-        <EventResults
-          key={`${JSON.stringify(params)}:${refresh}`}
-          params={params}
-          sources={sources}
-        />
-      </main>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => setRefresh((value) => value + 1)}
+        >
+          刷新事件
+        </Button>
+      </div>
+      <form
+        onSubmit={applyFilters}
+        className="mt-8 grid items-end gap-5 sm:grid-cols-2 lg:grid-cols-4"
+      >
+        <Field>
+          <FieldLabel htmlFor="event-query">搜索事件</FieldLabel>
+          <Input
+            id="event-query"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            maxLength={200}
+            placeholder="标题或证据正文"
+          />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="event-topic">关注主题</FieldLabel>
+          <Select value={topicId} onValueChange={setTopicId}>
+            <SelectTrigger id="event-topic" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部关注</SelectItem>
+              {topics.map((topic) => (
+                <SelectItem key={topic.id} value={topic.id}>
+                  {topic.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="event-source">证据来源</FieldLabel>
+          <Select value={sourceKey} onValueChange={setSourceKey}>
+            <SelectTrigger id="event-source" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部来源</SelectItem>
+              {sources.map((source) => (
+                <SelectItem key={source.source_key} value={source.source_key}>
+                  {source.display_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Button type="submit">应用筛选</Button>
+      </form>
+      <EventHotList topicId={params.topic_id ?? undefined} />
+      {optionsError ? (
+        <p role="status" className="text-muted-foreground mt-4 text-sm">
+          筛选选项暂时不可用，仍可搜索事件。刷新可重试。
+        </p>
+      ) : null}
+      <EventResults
+        key={`${JSON.stringify(params)}:${refresh}`}
+        params={params}
+        sources={sources}
+      />
     </div>
   );
 }

@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRightIcon, RotateCcwIcon } from "lucide-react";
 
 import { listCollectionJobs } from "@/api/caijirenwu";
-import { WorkspaceHeader } from "@/components/navigation/workspace-header";
 import {
   Empty,
   EmptyDescription,
@@ -277,7 +276,6 @@ export function JobHistory() {
   if (state.status === "loading") {
     return (
       <PageState
-        navigation={<WorkspaceHeader current="jobs" />}
         eyebrow="任务记录"
         title="正在读取任务"
         description="正在读取已保存的任务记录。"
@@ -288,7 +286,6 @@ export function JobHistory() {
   if (state.status === "error") {
     return (
       <PageState
-        navigation={<WorkspaceHeader current="jobs" />}
         eyebrow="加载失败"
         title="暂时无法读取任务记录"
         description={
@@ -307,27 +304,23 @@ export function JobHistory() {
   }
 
   return (
-    <div className="bg-background min-h-screen">
-      <WorkspaceHeader current="jobs" />
+    <div>
+      <h1 className="mt-3 text-3xl font-normal tracking-tight sm:text-4xl">
+        任务记录
+      </h1>
+      <p className="text-muted-foreground mt-4 max-w-2xl leading-7">
+        查看任务状态与已持久保存的进度。
+      </p>
 
-      <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
-        <h1 className="mt-3 text-3xl font-normal tracking-tight sm:text-4xl">
-          任务记录
-        </h1>
-        <p className="text-muted-foreground mt-4 max-w-2xl leading-7">
-          查看任务状态与已持久保存的进度。
-        </p>
+      <JobHealthSummary />
 
-        <JobHealthSummary />
-
-        <JobHistoryContent
-          items={state.items}
-          nextCursor={state.nextCursor}
-          isLoadingMore={isLoadingMore}
-          loadMoreError={loadMoreError}
-          onLoadMore={() => void loadMore()}
-        />
-      </main>
+      <JobHistoryContent
+        items={state.items}
+        nextCursor={state.nextCursor}
+        isLoadingMore={isLoadingMore}
+        loadMoreError={loadMoreError}
+        onLoadMore={() => void loadMore()}
+      />
     </div>
   );
 }

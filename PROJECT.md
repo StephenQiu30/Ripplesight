@@ -77,7 +77,7 @@ publication已创建并登记架构门禁：持有来源公开许可版本、仅
 
 前端测试统一放 `frontend/tests/`，按 `app/`、`components/` 等对应业务目录组织；配置测试放 `tests/config/`，传输与 CSP 测试放测试目录根。`src/` 禁止放测试文件或导入测试框架/测试目录。Vitest 只发现独立测试目录；生产 TypeScript 与 Docker 构建排除测试，`tsconfig.test.json` 单独检查测试类型，`pnpm typecheck` 同时执行两套检查。后端继续使用既有 `backend/tests/`。独立 `hotkey-prototype` 的内存样例已由正式前端承接，停止维护并移出工作区；清理前保存源码、选定设计图和 QA 资料的离线恢复归档，不删除独立 server/app 项目。
 
-页面归`src/app/`，专属组件放路由`components/`；跨页面按明确领域归`components/<feature>/`，shadcn归`components/ui/`，不建立features/common/patterns/shared层。浏览器调用同源`/api/*`，`HOTKEY_API_ORIGIN`仅供服务端代理；Demo分区/写入头与错误契约由后端维护。根DESIGN仅视觉参考，执行规范为frontend/DESIGN及对应切片Design。
+页面归`src/app/`，专属组件放路由`components/`；跨页面按明确领域归`components/<feature>/`，shadcn归`components/ui/`，不建立features/common/patterns/shared层。用户于2026-10-02要求公共页面外壳集中在独立 `frontend/src/layout/`：`BasicLayout` 由根 App Router layout 接入，`BasicHeader`/`BasicFooter` 统一导航、品牌和站点信息。外壳占满动态视口，Header/Footer 不随正文滚动；唯一 main 滚动区及头尾通过 LayoutContainer 使用同一 `max-w-7xl` 和 `px-5 sm:px-8`，正文统一 `py-10 sm:py-12`。各路由只组合正文，不重复页面级 main、头尾、视口高度、容器最大宽度或外侧边距；文章、表单等内部阅读尺度保留。加载/错误/404使用同一外壳，global-error 独立恢复同一外壳；打印时恢复正常文档流并隐藏头尾。阅读进度通过 `useLayoutScrollContainer` 使用真实正文容器，保留现有本机存储结构，不再读取窗口滚动位置。浏览器调用同源`/api/*`，`HOTKEY_API_ORIGIN`仅供服务端代理；Demo分区/写入头与错误契约由后端维护。根DESIGN仅视觉参考，执行规范为frontend/DESIGN及对应切片Design。
 
 当前 Demo 不实现身份 IP 限流、GitHub 回调或验证码代理链路。现有 API 代理的截止、脱敏错误、请求 ID 与必要安全头继续有效。
 

@@ -7,7 +7,7 @@ import {
   getOperatorSiteConfiguration,
   saveOperatorSiteConfiguration,
 } from "@/api/zhandiziliao";
-import { WorkspaceHeader } from "@/components/navigation/workspace-header";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -157,8 +157,7 @@ export function SiteManager() {
   }
   return (
     <>
-      <WorkspaceHeader current="site" />
-      <main className="mx-auto max-w-3xl px-5 py-10 sm:px-8">
+      <div>
         <h1 className="text-3xl font-medium">站点联系设置</h1>
         <p className="text-muted-foreground mt-4 text-sm leading-7">
           运营令牌仅保存在当前页面内存。启用、更换和关闭均保存修订与原因；关闭后旧二维码链接不可读取。
@@ -324,7 +323,7 @@ export function SiteManager() {
             查看公开联系页
           </Link>
         </p>
-      </main>
+      </div>
     </>
   );
 }

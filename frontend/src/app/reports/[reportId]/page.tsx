@@ -86,13 +86,13 @@ export default async function ReportDetailPage({ params }: Parameters) {
     return (
       <>
         <PublicationNavigation />
-        <main className="mx-auto max-w-4xl space-y-5 px-5 py-10">
+        <div className="space-y-5">
           <h1 className="text-3xl font-medium">最新{labels[kind]}</h1>
           <p>当前还没有可公开的{labels[kind]}。</p>
           <Link href={`/reports/${kind}/archive`} className="underline">
             读取刊物历史
           </Link>
-        </main>
+        </div>
       </>
     );
   return (

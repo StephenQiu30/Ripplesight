@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ChevronDownIcon, RotateCcwIcon } from "lucide-react";
 import { getReport } from "@/api/ribao";
-import { WorkspaceHeader } from "@/components/navigation/workspace-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -81,127 +80,123 @@ function ReportDetailContent({ reportId }: { reportId: string }) {
   }, [reportId, retryKey]);
   const report = state.status === "ready" ? state.report : null;
   return (
-    <div className="bg-background min-h-screen">
-      <WorkspaceHeader current="reports" />
-      <main className="mx-auto max-w-4xl px-5 py-12 sm:px-8 sm:py-16">
-        <Button asChild variant="ghost" className="mb-8">
-          <Link href="/reports">返回报告列表</Link>
-        </Button>
-        {state.status === "loading" ? (
-          <div aria-label="正在读取报告内容" className="flex flex-col gap-5">
-            <Skeleton className="h-10 w-2/3" />
-            <Skeleton className="h-60 w-full" />
-          </div>
-        ) : null}
-        {state.status === "not-found" ? (
-          <Empty className="py-16">
-            <EmptyHeader>
-              <EmptyTitle>报告不存在</EmptyTitle>
-              <EmptyDescription>
-                没有找到可读取的报告，请返回列表查看已有报告。
-              </EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <Button asChild>
-                <Link href="/reports">查看已有报告</Link>
+    <div>
+      <Button asChild variant="ghost" className="mb-8">
+        <Link href="/reports">返回报告列表</Link>
+      </Button>
+      {state.status === "loading" ? (
+        <div aria-label="正在读取报告内容" className="flex flex-col gap-5">
+          <Skeleton className="h-10 w-2/3" />
+          <Skeleton className="h-60 w-full" />
+        </div>
+      ) : null}
+      {state.status === "not-found" ? (
+        <Empty className="py-16">
+          <EmptyHeader>
+            <EmptyTitle>报告不存在</EmptyTitle>
+            <EmptyDescription>
+              没有找到可读取的报告，请返回列表查看已有报告。
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button asChild>
+              <Link href="/reports">查看已有报告</Link>
+            </Button>
+          </EmptyContent>
+        </Empty>
+      ) : null}
+      {state.status === "error" ? (
+        <Alert variant="destructive">
+          <AlertTitle>暂时无法读取报告</AlertTitle>
+          <AlertDescription>
+            <p>{state.message}</p>
+            <Button
+              variant="outline"
+              className="mt-4"
+              onClick={() => {
+                setState({ status: "loading" });
+                setRetryKey((key) => key + 1);
+              }}
+            >
+              <RotateCcwIcon data-icon="inline-start" />
+              重新加载
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {report ? (
+        <>
+          <Badge variant="secondary">
+            {report.kind === "weekly" ? "周报" : "日报"}
+          </Badge>
+          <h1 className="mt-4 text-3xl font-medium tracking-tight break-words sm:text-4xl">
+            {report.topic_name}
+          </h1>
+          <p className="text-muted-foreground mt-4 text-sm leading-6">
+            {reportTime(report.window_start)} 至 {reportTime(report.window_end)}
+          </p>
+          <ReportMarkdown report={report} />
+          <Collapsible className="mt-12">
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost">
+                版本与引用
+                <ChevronDownIcon data-icon="inline-end" />
               </Button>
-            </EmptyContent>
-          </Empty>
-        ) : null}
-        {state.status === "error" ? (
-          <Alert variant="destructive">
-            <AlertTitle>暂时无法读取报告</AlertTitle>
-            <AlertDescription>
-              <p>{state.message}</p>
-              <Button
-                variant="outline"
-                className="mt-4"
-                onClick={() => {
-                  setState({ status: "loading" });
-                  setRetryKey((key) => key + 1);
-                }}
-              >
-                <RotateCcwIcon data-icon="inline-start" />
-                重新加载
-              </Button>
-            </AlertDescription>
-          </Alert>
-        ) : null}
-        {report ? (
-          <>
-            <Badge variant="secondary">
-              {report.kind === "weekly" ? "周报" : "日报"}
-            </Badge>
-            <h1 className="mt-4 text-3xl font-medium tracking-tight break-words sm:text-4xl">
-              {report.topic_name}
-            </h1>
-            <p className="text-muted-foreground mt-4 text-sm leading-6">
-              {reportTime(report.window_start)} 至{" "}
-              {reportTime(report.window_end)}
-            </p>
-            <ReportMarkdown report={report} />
-            <Collapsible className="mt-12">
-              <CollapsibleTrigger asChild>
-                <Button variant="ghost">
-                  版本与引用
-                  <ChevronDownIcon data-icon="inline-end" />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-6 flex flex-col gap-6">
-                <dl className="text-muted-foreground grid gap-4 text-sm sm:grid-cols-2">
-                  <div>
-                    <dt>生成版本</dt>
-                    <dd className="text-foreground mt-1">
-                      第 {report.version} 版 ·{" "}
-                      {report.generator === "model" ? "模型版" : "模板版"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>资料截止</dt>
-                    <dd className="text-foreground mt-1">
-                      {reportTime(report.cutoff_at)}
-                    </dd>
-                  </div>
-                </dl>
-                {report.citations.length ? (
-                  <section aria-labelledby="report-citations">
-                    <h2 id="report-citations" className="font-medium">
-                      原帖引用
-                    </h2>
-                    <ul className="mt-4 flex flex-col gap-3">
-                      {report.citations.map((citation) => {
-                        const url = safeHttpUrl(citation.url);
-                        return (
-                          <li
-                            key={citation.citation}
-                            className="text-sm break-words"
-                          >
-                            <span className="text-muted-foreground mr-2">
-                              [{citation.citation}]
-                            </span>
-                            {url ? (
-                              <a
-                                href={url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="break-all underline underline-offset-4"
-                              >
-                                {citation.title}
-                              </a>
-                            ) : (
-                              citation.title
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </section>
-                ) : null}
-              </CollapsibleContent>
-            </Collapsible>
-          </>
-        ) : null}
-      </main>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-6 flex flex-col gap-6">
+              <dl className="text-muted-foreground grid gap-4 text-sm sm:grid-cols-2">
+                <div>
+                  <dt>生成版本</dt>
+                  <dd className="text-foreground mt-1">
+                    第 {report.version} 版 ·{" "}
+                    {report.generator === "model" ? "模型版" : "模板版"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>资料截止</dt>
+                  <dd className="text-foreground mt-1">
+                    {reportTime(report.cutoff_at)}
+                  </dd>
+                </div>
+              </dl>
+              {report.citations.length ? (
+                <section aria-labelledby="report-citations">
+                  <h2 id="report-citations" className="font-medium">
+                    原帖引用
+                  </h2>
+                  <ul className="mt-4 flex flex-col gap-3">
+                    {report.citations.map((citation) => {
+                      const url = safeHttpUrl(citation.url);
+                      return (
+                        <li
+                          key={citation.citation}
+                          className="text-sm break-words"
+                        >
+                          <span className="text-muted-foreground mr-2">
+                            [{citation.citation}]
+                          </span>
+                          {url ? (
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="break-all underline underline-offset-4"
+                            >
+                              {citation.title}
+                            </a>
+                          ) : (
+                            citation.title
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              ) : null}
+            </CollapsibleContent>
+          </Collapsible>
+        </>
+      ) : null}
     </div>
   );
 }

@@ -1,22 +1,11 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 
 import { LocalThemeInitializer } from "@/components/publication/local-reading";
+import { BasicLayout } from "@/layout/basic-layout";
+import { layoutFontClassName } from "@/layout/layout-fonts";
 
 import "./globals.css";
-
-const geistSans = Geist({
-  subsets: ["latin"],
-  variable: "--font-geist-sans",
-  display: "swap",
-});
-
-const geistMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-geist-mono",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: {
@@ -33,11 +22,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html
       lang="zh-CN"
       data-scroll-behavior="smooth"
-      className={`${geistSans.variable} ${geistMono.variable}`}
+      className={layoutFontClassName}
     >
-      <body>
+      <body className="overflow-hidden print:overflow-visible">
         <LocalThemeInitializer />
-        {children}
+        <BasicLayout>{children}</BasicLayout>
       </body>
     </html>
   );
