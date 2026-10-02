@@ -146,7 +146,7 @@ describe("API route proxy", () => {
     ]);
   });
 
-  it("streams payloads and business headers without forwarding credentials", async () => {
+  it("streams payloads and only forwards identity cookies and allowed business headers", async () => {
     let receivedBody = "";
     let receivedAuthorization = "";
     let receivedCookie = "";
@@ -163,7 +163,11 @@ describe("API route proxy", () => {
         response.writeHead(206, {
           "Content-Disposition": 'attachment; filename="hotkey.bin"',
           "Content-Type": "application/octet-stream",
-          "Set-Cookie": "session=renewed; HttpOnly",
+          "Set-Cookie": [
+            "session=discarded; HttpOnly",
+            "hotkey_session=renewed; HttpOnly; SameSite=Lax",
+            "hotkey_csrf=csrf-renewed; SameSite=Lax",
+          ],
           "X-Request-ID": "b64c7bc5-cf50-47ad-aa7d-82e5951d537a",
         });
         response.end(Buffer.from([0, 1, 2, 3]));
@@ -178,7 +182,8 @@ describe("API route proxy", () => {
           body: "payload",
           headers: {
             Authorization: "Bearer test-token",
-            Cookie: "session=test-session",
+            Cookie:
+              "session=discarded; hotkey_session=test-session; hotkey_csrf=test-csrf; hotkey_oauth=browser-binding",
             "Content-Type": "text/plain",
             "X-Forwarded-Host": "attacker.invalid",
           },
@@ -197,17 +202,55 @@ describe("API route proxy", () => {
       expect(response.headers.get("content-disposition")).toContain(
         "hotkey.bin",
       );
-      expect(response.headers.get("set-cookie")).toBeNull();
+      expect(response.headers.getSetCookie()).toEqual([
+        "hotkey_session=renewed; HttpOnly; SameSite=Lax",
+        "hotkey_csrf=csrf-renewed; SameSite=Lax",
+      ]);
       expect(response.headers.get("x-request-id")).toBe(
         "b64c7bc5-cf50-47ad-aa7d-82e5951d537a",
       );
       expect(receivedBody).toBe("payload");
       expect(receivedAuthorization).toBe("");
-      expect(receivedCookie).toBe("");
+      expect(receivedCookie).toBe(
+        "hotkey_session=test-session; hotkey_csrf=test-csrf; hotkey_oauth=browser-binding",
+      );
       expect(receivedForwarded).toBe("");
     } finally {
       await close(server);
     }
+  });
+
+  it("preserves a GitHub callback redirect and every allowed Set-Cookie", async () => {
+    const headers = new Headers({
+      Location: "/topics",
+      "Cache-Control": "no-store",
+    });
+    headers.append("Set-Cookie", "hotkey_session=session; HttpOnly");
+    headers.append("Set-Cookie", "hotkey_csrf=csrf");
+    headers.append("Set-Cookie", "hotkey_oauth=; Max-Age=0");
+    headers.append("Set-Cookie", "unrelated=discarded");
+    const upstream = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 303, headers }));
+    vi.stubGlobal("fetch", upstream);
+    const response = await route.GET(
+      new Request(
+        "http://web.test/api/identity/github/callback?state=state&code=code",
+        { headers: { Cookie: "hotkey_oauth=binding" } },
+      ),
+      { params: Promise.resolve({ path: ["identity", "github", "callback"] }) },
+    );
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/topics");
+    expect(response.headers.getSetCookie()).toEqual([
+      "hotkey_session=session; HttpOnly",
+      "hotkey_csrf=csrf",
+      "hotkey_oauth=; Max-Age=0",
+    ]);
+    expect(upstream.mock.calls[0][1].redirect).toBe("manual");
+    expect(upstream.mock.calls[0][1].headers.get("cookie")).toBe(
+      "hotkey_oauth=binding",
+    );
   });
 
   it("returns a safe 502 with a proxy-owned request id when upstream is unavailable", async () => {

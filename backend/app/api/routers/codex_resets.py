@@ -7,9 +7,9 @@ from fastapi import APIRouter, Path, Query, Response, status
 
 from api.dependencies import (
     CodexResetServiceDependency,
-    DemoScopeDependency,
     OperatorScopeDependency,
     OperatorWriteScopeDependency,
+    UserScopeDependency,
 )
 from core.schemas import ErrorView
 from jobs.schemas import JobView
@@ -222,7 +222,7 @@ def correct_event(
 def get_configuration(
     response: Response,
     service: CodexResetServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
 ) -> MonitorView | None:
     result = service.get_existing_monitor(owner_id=scope_id)
     response.headers["cache-control"] = "no-store"
@@ -241,7 +241,7 @@ def get_configuration(
 def get_snapshot(
     response: Response,
     service: CodexResetServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
     include_withdrawn: bool = False,
 ) -> ResetSnapshot | None:
     monitor = service.get_existing_monitor(owner_id=scope_id)
@@ -268,7 +268,7 @@ def get_snapshot(
 def get_recent(
     response: Response,
     service: CodexResetServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
 ) -> ResetSnapshot | None:
     monitor = service.get_existing_monitor(owner_id=scope_id)
     result = (
@@ -292,7 +292,7 @@ def get_recent(
 def get_version(
     response: Response,
     service: CodexResetServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
 ) -> ResetVersionView | None:
     monitor = service.get_existing_monitor(owner_id=scope_id)
     result = (
@@ -314,7 +314,7 @@ def get_version(
 def list_posts(
     response: Response,
     service: CodexResetServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
     page: Annotated[int, Query(ge=1, le=1000)] = 1,
     filter_key: Literal["all", "relevant", "pending", "review"] = "all",
 ) -> list[ResetPostView]:

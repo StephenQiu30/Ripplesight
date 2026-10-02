@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Path, Query, Response, status
 
-from api.dependencies import DemoScopeDependency, HotlistServiceDependency
+from api.dependencies import HotlistServiceDependency, UserScopeDependency
 from content.schemas import HotlistSnapshotSummaryView, HotlistSnapshotView, HotlistSourceView
 from core.schemas import ErrorView, PageView
 
@@ -30,7 +30,7 @@ _READ_RESPONSES: dict[int | str, dict[str, Any]] = {
 def list_hotlist_sources(
     response: Response,
     service: HotlistServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
 ) -> PageView[HotlistSourceView]:
     items = service.list_sources(owner_id=scope_id)
     response.headers["cache-control"] = "no-store"
@@ -52,7 +52,7 @@ def list_hotlist_snapshots(
     ],
     response: Response,
     service: HotlistServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
     cursor: UUID | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> PageView[HotlistSnapshotSummaryView]:
@@ -85,7 +85,7 @@ def get_historical_hotlist_snapshot(
     snapshot_id: UUID,
     response: Response,
     service: HotlistServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
     cursor: Annotated[int | None, Query(ge=1, le=100)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> HotlistSnapshotView:
@@ -118,7 +118,7 @@ def get_hotlist_snapshot(
     ],
     response: Response,
     service: HotlistServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
     cursor: Annotated[int | None, Query(ge=1, le=100)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> HotlistSnapshotView:

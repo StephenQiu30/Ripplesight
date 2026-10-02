@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
-from tests.conftest import TEST_DATABASE_TRUNCATE
+from tests.conftest import TEST_DATABASE_TRUNCATE, authenticate_test_client, authenticated_owner_id
 
 from connections.presets import SOURCE_PRESETS
 from connections.services import (
@@ -19,7 +19,6 @@ from connections.services import (
 )
 from core.config import Settings
 from core.errors import ApplicationError
-from db.demo import resolve_demo_scope
 from jobs.schemas import JobAcceptanceInput
 from jobs.services import JobService
 from main import create_app
@@ -45,6 +44,7 @@ def monitor_topic_client() -> Iterator[TestClient]:
         connection.execute(text(_TRUNCATE))
     try:
         with TestClient(create_app(settings)) as client:
+            authenticate_test_client(client)
             yield client
     finally:
         with engine.begin() as connection:
@@ -52,13 +52,13 @@ def monitor_topic_client() -> Iterator[TestClient]:
         engine.dispose()
 
 
-def _demo_scope(client: TestClient) -> UUID:
+def _user_scope(client: TestClient) -> UUID:
     with client.app.state.session_factory() as session:
-        return resolve_demo_scope(session)
+        return authenticated_owner_id(session)
 
 
 def _csrf_headers(client: TestClient) -> dict[str, str]:
-    return {"X-HotKey-CSRF": "1"}
+    return {"X-HotKey-CSRF": client.cookies["hotkey_csrf"]}
 
 
 def _topic_payload() -> dict[str, object]:
@@ -73,7 +73,7 @@ def _topic_payload() -> dict[str, object]:
 def test_topic_create_edit_and_reopen_preserve_immutable_versions(
     monitor_topic_client: TestClient,
 ) -> None:
-    _demo_scope(monitor_topic_client)
+    _user_scope(monitor_topic_client)
 
     created = monitor_topic_client.post(
         "/api/topics",
@@ -125,7 +125,7 @@ def test_topic_create_edit_and_reopen_preserve_immutable_versions(
 def test_stale_topic_edit_conflicts_without_partial_version(
     monitor_topic_client: TestClient,
 ) -> None:
-    _demo_scope(monitor_topic_client)
+    _user_scope(monitor_topic_client)
     created = monitor_topic_client.post(
         "/api/topics",
         headers=_csrf_headers(monitor_topic_client),
@@ -161,10 +161,10 @@ def test_stale_topic_edit_conflicts_without_partial_version(
 def test_source_and_interval_changes_create_immutable_topic_snapshots(
     monitor_topic_client: TestClient,
 ) -> None:
-    _demo_scope(monitor_topic_client)
+    _user_scope(monitor_topic_client)
     factory = monitor_topic_client.app.state.session_factory
     with factory.begin() as session:
-        owner_id = resolve_demo_scope(session)
+        owner_id = authenticated_owner_id(session)
         SourcePresetService(session).apply_in_transaction(
             owner_id=owner_id, preset=SOURCE_PRESETS["hackernews"]
         )
@@ -207,7 +207,7 @@ def test_source_and_interval_changes_create_immutable_topic_snapshots(
 def test_unapplied_search_source_cannot_be_selected_or_resumed(
     monitor_topic_client: TestClient,
 ) -> None:
-    _demo_scope(monitor_topic_client)
+    _user_scope(monitor_topic_client)
     rejected = monitor_topic_client.post(
         "/api/topics",
         headers=_csrf_headers(monitor_topic_client),
@@ -222,10 +222,10 @@ def test_unapplied_search_source_cannot_be_selected_or_resumed(
 def test_source_selection_rejects_revoked_access_policy(
     monitor_topic_client: TestClient,
 ) -> None:
-    _demo_scope(monitor_topic_client)
+    _user_scope(monitor_topic_client)
     factory = monitor_topic_client.app.state.session_factory
     with factory.begin() as session:
-        owner_id = resolve_demo_scope(session)
+        owner_id = authenticated_owner_id(session)
         SourcePresetService(session).apply_in_transaction(
             owner_id=owner_id, preset=SOURCE_PRESETS["hackernews"]
         )
@@ -249,10 +249,10 @@ def test_source_selection_rejects_revoked_access_policy(
 def test_resume_rejects_unavailable_source_budget(
     monitor_topic_client: TestClient,
 ) -> None:
-    _demo_scope(monitor_topic_client)
+    _user_scope(monitor_topic_client)
     factory = monitor_topic_client.app.state.session_factory
     with factory.begin() as session:
-        owner_id = resolve_demo_scope(session)
+        owner_id = authenticated_owner_id(session)
         SourcePresetService(session).apply_in_transaction(
             owner_id=owner_id, preset=SOURCE_PRESETS["hackernews"]
         )
@@ -282,10 +282,10 @@ def test_resume_rejects_unavailable_source_budget(
 def test_active_topic_cannot_enable_a_new_source_without_budget(
     monitor_topic_client: TestClient,
 ) -> None:
-    _demo_scope(monitor_topic_client)
+    _user_scope(monitor_topic_client)
     factory = monitor_topic_client.app.state.session_factory
     with factory.begin() as session:
-        owner_id = resolve_demo_scope(session)
+        owner_id = authenticated_owner_id(session)
         for source_key in ("hackernews", "google_news"):
             SourcePresetService(session).apply_in_transaction(
                 owner_id=owner_id, preset=SOURCE_PRESETS[source_key]
@@ -337,7 +337,7 @@ def test_active_topic_cannot_enable_a_new_source_without_budget(
 def test_name_only_edit_keeps_rule_version_and_owner_filter_hides_topic(
     monitor_topic_client: TestClient,
 ) -> None:
-    _demo_scope(monitor_topic_client)
+    _user_scope(monitor_topic_client)
     created = monitor_topic_client.post(
         "/api/topics",
         headers=_csrf_headers(monitor_topic_client),
@@ -379,7 +379,7 @@ def test_name_only_edit_keeps_rule_version_and_owner_filter_hides_topic(
 def test_conflicting_keyword_groups_are_rejected_without_persistence(
     monitor_topic_client: TestClient,
 ) -> None:
-    _demo_scope(monitor_topic_client)
+    _user_scope(monitor_topic_client)
 
     rejected = monitor_topic_client.post(
         "/api/topics",
@@ -399,7 +399,7 @@ def test_topic_routes_enforce_csrf_and_hidden_missing_boundary(
 ) -> None:
     assert monitor_topic_client.get("/api/topics").status_code == 200
 
-    _demo_scope(monitor_topic_client)
+    _user_scope(monitor_topic_client)
     missing_csrf = monitor_topic_client.post("/api/topics", json=_topic_payload())
     assert missing_csrf.status_code == 403
     created = monitor_topic_client.post(
@@ -417,7 +417,7 @@ def test_topic_routes_enforce_csrf_and_hidden_missing_boundary(
 def test_topic_list_clone_and_archive_keep_independent_history(
     monitor_topic_client: TestClient,
 ) -> None:
-    _demo_scope(monitor_topic_client)
+    _user_scope(monitor_topic_client)
     created = monitor_topic_client.post(
         "/api/topics",
         headers=_csrf_headers(monitor_topic_client),
@@ -425,7 +425,7 @@ def test_topic_list_clone_and_archive_keep_independent_history(
     )
     factory = monitor_topic_client.app.state.session_factory
     with factory() as session:
-        owner_id = resolve_demo_scope(session)
+        owner_id = authenticated_owner_id(session)
         JobService(session).accept(
             owner_id=owner_id,
             command=JobAcceptanceInput(
@@ -499,7 +499,7 @@ def test_topic_list_clone_and_archive_keep_independent_history(
 def test_topic_lifecycle_is_idempotent_and_resume_requires_ready_source(
     monitor_topic_client: TestClient,
 ) -> None:
-    _demo_scope(monitor_topic_client)
+    _user_scope(monitor_topic_client)
     created = monitor_topic_client.post(
         "/api/topics",
         headers=_csrf_headers(monitor_topic_client),
@@ -521,7 +521,7 @@ def test_topic_lifecycle_is_idempotent_and_resume_requires_ready_source(
     assert resumed.json()["code"] == "topic_not_ready"
     factory = monitor_topic_client.app.state.session_factory
     with factory.begin() as session:
-        owner_id = resolve_demo_scope(session)
+        owner_id = authenticated_owner_id(session)
         SourcePresetService(session).apply_in_transaction(
             owner_id=owner_id, preset=SOURCE_PRESETS["hackernews"]
         )
@@ -630,10 +630,10 @@ print(",".join(states))
 def test_removing_all_sources_records_automatic_topic_pause(
     monitor_topic_client: TestClient,
 ) -> None:
-    _demo_scope(monitor_topic_client)
+    _user_scope(monitor_topic_client)
     factory = monitor_topic_client.app.state.session_factory
     with factory.begin() as session:
-        owner_id = resolve_demo_scope(session)
+        owner_id = authenticated_owner_id(session)
         SourcePresetService(session).apply_in_transaction(
             owner_id=owner_id, preset=SOURCE_PRESETS["hackernews"]
         )
@@ -681,13 +681,12 @@ def test_topic_preview_is_local_explainable_and_side_effect_free(
         "exclude": ["招聘"],
         "sample_titles": ["brand 召回招聘", "BRAND 召回公告"],
     }
-    missing_session = monitor_topic_client.post(
-        "/api/topics/preview",
-        headers={"X-HotKey-CSRF": "1"},
-        json=payload,
-    )
-    assert missing_session.status_code == 200
-    _demo_scope(monitor_topic_client)
+    with TestClient(monitor_topic_client.app) as anonymous:
+        missing_session = anonymous.post(
+            "/api/topics/preview", headers={"X-HotKey-CSRF": "1"}, json=payload
+        )
+        assert missing_session.status_code == 401
+    _user_scope(monitor_topic_client)
 
     preview = monitor_topic_client.post(
         "/api/topics/preview",
@@ -750,11 +749,11 @@ def test_every_builtin_source_preset_applies_against_the_real_schema(
     monitor_topic_client: TestClient,
 ) -> None:
     """Preset config keys and capabilities must satisfy the database CHECK constraints."""
-    _demo_scope(monitor_topic_client)
+    _user_scope(monitor_topic_client)
     factory = monitor_topic_client.app.state.session_factory
     for preset in SOURCE_PRESETS.values():
         with factory.begin() as session:
-            owner_id = resolve_demo_scope(session)
+            owner_id = authenticated_owner_id(session)
             applied = SourcePresetService(session).apply_in_transaction(
                 owner_id=owner_id, preset=preset
             )
@@ -764,10 +763,10 @@ def test_every_builtin_source_preset_applies_against_the_real_schema(
 def test_bilibili_pause_is_not_cleared_by_preset_reapply(
     monitor_topic_client: TestClient,
 ) -> None:
-    _demo_scope(monitor_topic_client)
+    _user_scope(monitor_topic_client)
     factory = monitor_topic_client.app.state.session_factory
     with factory.begin() as session:
-        owner_id = resolve_demo_scope(session)
+        owner_id = authenticated_owner_id(session)
         applied = SourcePresetService(session).apply_in_transaction(
             owner_id=owner_id, preset=SOURCE_PRESETS["bilibili"]
         )

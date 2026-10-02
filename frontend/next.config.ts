@@ -24,7 +24,6 @@ const nextConfig: NextConfig = {
       "/events/:id/poster.svg",
       "/llms.txt",
       "/agent.md",
-      "/robots.txt",
       "/hotkey-indexnow-key.txt",
       "/og/site.png",
       "/og/pages/:page.png",
@@ -35,11 +34,6 @@ const nextConfig: NextConfig = {
       "/og/reports/:kind/:key.png",
       "/og/posters/reports/:kind/:key.png",
       "/og/topics/:slug.png",
-      "/sitemap.xml",
-      "/sitemaps/items-:shard.xml",
-      "/sitemaps/stories-:shard.xml",
-      "/sitemaps/reports-:shard.xml",
-      "/sitemaps/topics-:shard.xml",
       "/mcp",
     ];
     return {

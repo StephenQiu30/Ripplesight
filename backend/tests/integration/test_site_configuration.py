@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 from pydantic import SecretStr
 from sqlalchemy import text
+from tests.conftest import authenticated_owner_id
 from tests.integration.test_editorial_execution import (
     NOW,
     ControlledClient,
@@ -38,9 +39,11 @@ def test_contact_configuration_cas_replay_and_disabled_old_image(
 ) -> None:
     settings = editorial_client.app.state.settings
     settings.operator_token = SecretStr("controlled-site-operator-token-32-bytes")
+    with editorial_client.app.state.session_factory() as session:
+        settings.public_contact_owner_id = authenticated_owner_id(session)
     headers = {
         "X-HotKey-Operator-Token": settings.operator_token.get_secret_value(),
-        "X-HotKey-CSRF": "1",
+        "X-HotKey-CSRF": editorial_client.cookies["hotkey_csrf"],
     }
     assert editorial_client.get("/api/operations/site").status_code == 401
     public = editorial_client.get("/api/site/contact")

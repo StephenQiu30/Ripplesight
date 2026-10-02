@@ -29,10 +29,10 @@ from content.schemas import KeywordDiscoveryRunInput
 from content.services import CommentScanService
 from core.config import get_settings
 from core.logging import configure_logging
-from db.demo import resolve_demo_scope
 
 # The scheduler is its own process; import the canonical registry to resolve ORM foreign keys.
 from db.metadata import metadata as _registered_metadata  # noqa: F401
+from db.owners import list_owner_ids_in_transaction
 from db.session import create_db_engine, create_session_factory
 from events.consolidation import EventConsolidationService
 from events.digest import EventDigestService
@@ -798,8 +798,11 @@ def _registered_scheduler_scans() -> tuple[SchedulerScan, ...]:
         SchedulerScan(
             name="indexnow",
             run_in_transaction=lambda session, now: (
-                enqueue_due_indexnow_in_transaction(
-                    session, owner_id=resolve_demo_scope(session), now=now, settings=get_settings()
+                sum(
+                    enqueue_due_indexnow_in_transaction(
+                        session, owner_id=owner, now=now, settings=get_settings()
+                    )
+                    for owner in list_owner_ids_in_transaction(session)
                 )
                 if get_settings().indexnow_enabled
                 else 0
@@ -814,12 +817,15 @@ def _registered_scheduler_scans() -> tuple[SchedulerScan, ...]:
         SchedulerScan(
             name="publication-media",
             run_in_transaction=lambda session, now: (
-                enqueue_due_media_in_transaction(
-                    session,
-                    owner_id=resolve_demo_scope(session),
-                    now=now,
-                    enabled=True,
-                    allow_external_requests=True,
+                sum(
+                    enqueue_due_media_in_transaction(
+                        session,
+                        owner_id=owner,
+                        now=now,
+                        enabled=True,
+                        allow_external_requests=True,
+                    )
+                    for owner in list_owner_ids_in_transaction(session)
                 )
                 if (
                     get_settings().media_mirror_enabled
@@ -845,8 +851,11 @@ def _registered_scheduler_scans() -> tuple[SchedulerScan, ...]:
         SchedulerScan(
             name="leaderboard",
             run_in_transaction=lambda session, now: (
-                enqueue_due_leaderboard_in_transaction(
-                    session, now, enabled=True, owner_id=resolve_demo_scope(session)
+                sum(
+                    enqueue_due_leaderboard_in_transaction(
+                        session, now, enabled=True, owner_id=owner
+                    )
+                    for owner in list_owner_ids_in_transaction(session)
                 )
                 if get_settings().leaderboard_enabled
                 else 0

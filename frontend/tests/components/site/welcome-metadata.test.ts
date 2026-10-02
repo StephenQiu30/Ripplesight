@@ -1,0 +1,58 @@
+import { afterEach, expect, it, vi } from "vitest";
+
+import robots from "@/app/robots";
+import sitemap from "@/app/sitemap";
+import { welcomeMetadata } from "@/components/site/welcome-metadata";
+import nextConfig from "../../../next.config";
+
+afterEach(() => vi.unstubAllEnvs());
+
+it("generates canonical and sharing metadata for the configured welcome site", () => {
+  vi.stubEnv("NEXT_PUBLIC_SITE_ORIGIN", "https://welcome.example");
+  const data = welcomeMetadata("/", "知微见澜", "从关键词开始持续关注。");
+  expect(data.robots).toEqual({ index: true, follow: true });
+  expect(data.alternates?.canonical).toBe("https://welcome.example/");
+  expect(data.openGraph).toMatchObject({
+    url: "https://welcome.example/",
+    siteName: "知微见澜 Ripplesight",
+    type: "website",
+  });
+});
+
+it("includes only the welcome and public explanation pages in the native sitemap", () => {
+  vi.stubEnv("NEXT_PUBLIC_SITE_ORIGIN", "https://welcome.example");
+  expect(sitemap().map((entry) => new URL(entry.url).pathname)).toEqual([
+    "/",
+    "/about",
+    "/privacy",
+    "/terms",
+    "/contact",
+    "/changelog",
+  ]);
+  expect(robots().rules).toMatchObject({
+    userAgent: "*",
+    allow: "/",
+    disallow: expect.arrayContaining([
+      "/login",
+      "/api/",
+      "/topics",
+      "/discover",
+      "/leaderboard",
+      "/account",
+    ]),
+  });
+});
+
+it("keeps robots and sitemap served by Next instead of rewriting to business exports", async () => {
+  const configured = await nextConfig.rewrites?.();
+  if (!configured || Array.isArray(configured))
+    throw new Error("Expected structured export rewrites");
+  expect(
+    (configured.beforeFiles ?? []).some(
+      (entry) =>
+        entry.source === "/robots.txt" ||
+        entry.source === "/sitemap.xml" ||
+        entry.source.startsWith("/sitemaps/"),
+    ),
+  ).toBe(false);
+});

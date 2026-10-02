@@ -36,6 +36,7 @@ jobs:
       HOTKEY_REDIS_URL: redis://redis:6379/0
       HOTKEY_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       HOTKEY_WEB_PORT: "3000"
+      HOTKEY_WEB_ORIGIN: http://127.0.0.1:3000
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@v4
@@ -123,7 +124,7 @@ jobs:
       - name: Start the isolated runtime
         run: docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci up --detach --wait postgres redis kafka backend frontend
 
-      - name: Verify production page CSP nonces
+      - name: Verify production welcome and login CSP nonces
         run: |
           python3 - <<'PY'
           import json
@@ -146,7 +147,7 @@ jobs:
 
           origin = "http://127.0.0.1:" + os.environ["HOTKEY_WEB_PORT"]
           failures = []
-          for path in ("/events", "/monitors/new"):
+          for path in ("/", "/login"):
               previous_nonce = None
               for request_number in (1, 2):
                   with urllib.request.urlopen(origin + path, timeout=15) as response:
@@ -175,7 +176,7 @@ jobs:
           test "$(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T postgres psql -X --set ON_ERROR_STOP=on --username hotkey --dbname hotkey --tuples-only --no-align --command 'SELECT current_database()')" = "hotkey"
           test "$(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T redis redis-cli ping)" = "PONG"
           docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server 127.0.0.1:9092 --list
-          test "$(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T postgres psql -X --username hotkey --dbname hotkey --tuples-only --no-align --command "SELECT to_regclass('public.identity_users') IS NULL AND to_regclass('public.identity_sessions') IS NULL")" = "t"
+          test "$(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T postgres psql -X --username hotkey --dbname hotkey --tuples-only --no-align --command "SELECT to_regclass('public.identity_users') IS NOT NULL AND to_regclass('public.identity_sessions') IS NOT NULL")" = "t"
           curl --fail --silent http://127.0.0.1:8867/api/health
           curl --fail --silent http://127.0.0.1:8867/api/ready
           curl --fail --silent http://127.0.0.1:3000/health
@@ -195,16 +196,43 @@ jobs:
           test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' $(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci ps --quiet backend))" = "true"
           test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' $(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci ps --quiet frontend))" = "true"
 
-      - name: Verify anonymous Demo access and the write boundary
+      - name: Create an isolated runtime account
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T backend python - <<'PYTHON'
+          from core.config import get_settings
+          from db.session import create_db_engine, create_session_factory
+          from identity.services import IdentityService
+
+          settings = get_settings()
+          engine = create_db_engine(settings)
+          try:
+              with create_session_factory(engine)() as session:
+                  IdentityService(session, settings).create_account(
+                      username="runtime.reader", password="runtime-ci-password-only-2026"
+                  )
+          finally:
+              engine.dispose()
+          PYTHON
+
+      - name: Verify welcome, real login, private pages, and session CSRF
         run: |
           python3 - <<'PYTHON'
+          import http.cookiejar
           import json
+          import re
           import urllib.error
+          import urllib.parse
           import urllib.request
+          from html.parser import HTMLParser
 
           origin = "http://127.0.0.1:3000"
+          jar = http.cookiejar.CookieJar()
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, request, response, code, message, headers, url):
+                  return None
+          opener = urllib.request.build_opener(NoRedirect, urllib.request.HTTPCookieProcessor(jar))
 
-          def request(path, method="GET", payload=None, csrf=None):
+          def request(path, method="GET", payload=None, csrf=None, request_origin=None):
               headers = {}
               body = None
               if payload is not None:
@@ -212,40 +240,81 @@ jobs:
                   headers["Content-Type"] = "application/json"
               if csrf is not None:
                   headers["X-HotKey-CSRF"] = csrf
+              if request_origin is not None:
+                  headers["Origin"] = request_origin
               req = urllib.request.Request(origin + path, data=body, headers=headers, method=method)
               try:
-                  response = urllib.request.urlopen(req, timeout=15)
+                  response = opener.open(req, timeout=15)
               except urllib.error.HTTPError as error:
                   response = error
               with response:
-                  status, response_headers, content = response.status, response.headers, response.read()
-              assert "Set-Cookie" not in response_headers
-              return status, response_headers, content
+                  return response.status, response.headers, response.read()
 
-          assert request("/api/topics")[0] == 200
-          assert request("/api/source-capabilities")[0] == 200
-          for path in ("/login", "/register", "/api/identity/session", "/api/identity/workspace"):
-              assert request(path)[0] == 404, path
-          for path in ("/api/identity/initialize", "/api/identity/sessions"):
-              assert request(path, method="POST", payload={})[0] == 404, path
-          payload = {"name": "Runtime Demo topic", "match_any": ["AI"], "match_all": [], "exclude": []}
-          for csrf in (None, "wrong"):
-              status, _, content = request("/api/topics", method="POST", payload=payload, csrf=csrf)
-              assert status == 403
-              assert json.loads(content)["code"] == "csrf_invalid"
-          status, headers, content = request("/api/topics", method="POST", payload=payload, csrf="1")
-          assert status == 201
+          assert request("/")[0] == request("/login")[0] == 200
+          status, _, content = request("/sitemap.xml")
+          assert status == 200 and content.count(b"<loc>") == 6
+          assert b"<loc>http://127.0.0.1:3000/</loc>" in content
+          assert b"/topics" not in content and b"/login" not in content
+          status, _, content = request("/robots.txt")
+          assert status == 200 and b"Disallow: /topics" in content
+          assert b"Sitemap: http://127.0.0.1:3000/sitemap.xml" in content
+          assert request("/api/identity/options")[0] == 200
+          for path in ("/api/topics", "/api/source-capabilities", "/api/identity/session", "/api/leaderboard/rules", "/api/__exports/feed.xml"):
+              status, _, content = request(path)
+              assert status == 401 and json.loads(content)["code"] == "invalid_session", path
+          for path in ("/events", "/monitors/new", "/leaderboard"):
+              status, headers, _ = request(path)
+              assert status == 307
+              target = urllib.parse.urlsplit(headers["Location"])
+              assert target.path == "/login"
+              assert urllib.parse.parse_qs(target.query)["returnTo"] == [path]
+          credentials = {"username": "runtime.reader", "password": "runtime-ci-password-only-2026"}
+          assert request("/api/identity/sessions", "POST", credentials, "1", "http://attacker.invalid")[0] == 403
+          assert request("/api/identity/sessions", "POST", credentials, "wrong", origin)[0] == 403
+          status, headers, content = request("/api/identity/sessions", "POST", credentials, "1", origin)
+          assert status == 200, content
+          assert len(headers.get_all("Set-Cookie")) == 2
+          csrf = next(cookie.value for cookie in jar if cookie.name == "hotkey_csrf")
+          assert request("/api/identity/session")[0] == 200
+          payload = {"name": "Runtime personal topic", "match_any": ["AI"], "match_all": [], "exclude": []}
+          for invalid in (None, "wrong", "1"):
+              status, _, content = request("/api/topics", "POST", payload, invalid, origin)
+              assert status == 403 and json.loads(content)["code"] == "csrf_invalid"
+          status, headers, content = request("/api/topics", "POST", payload, csrf, origin)
+          assert status == 201, content
           topic = json.loads(content)
-          status, _, content = request(headers["Location"])
-          assert status == 200 and json.loads(content) == topic
-          status, _, content = request("/api/topics")
-          assert status == 200 and len(json.loads(content)["items"]) == 1
+          assert json.loads(request(headers["Location"])[2]) == topic
+          assert len(json.loads(request("/api/topics")[2])["items"]) == 1
+
+          class Scripts(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.nonces = []
+              def handle_starttag(self, tag, attrs):
+                  values = dict(attrs)
+                  if tag == "script" and values.get("type", "").lower() in ("", "module", "text/javascript", "application/javascript"):
+                      self.nonces.append(values.get("nonce"))
+          for path in ("/events", "/monitors/new"):
+              previous = None
+              for _ in range(2):
+                  status, headers, html = request(path)
+                  assert status == 200, path
+                  csp = headers.get("Content-Security-Policy", "")
+                  nonce = re.search(r"'nonce-([^']+)'", csp).group(1)
+                  scripts = Scripts()
+                  scripts.feed(html.decode())
+                  assert scripts.nonces and all(value == nonce for value in scripts.nonces)
+                  assert nonce != previous
+                  assert "no-store" in headers.get("Cache-Control", "").lower()
+                  previous = nonce
+          assert request("/api/identity/session", "DELETE", csrf=csrf, request_origin=origin)[0] == 204
+          assert request("/api/topics")[0] == 401
           with urllib.request.urlopen("http://127.0.0.1:8867/openapi.json", timeout=15) as response:
               schema = json.load(response)
-          assert not any(path.startswith("/api/identity") for path in schema["paths"])
-          assert not schema.get("components", {}).get("securitySchemes")
-          assert not any(name.startswith("Identity") for name in schema["components"]["schemas"])
-          print(json.dumps({"anonymous_reads": True, "csrf_write_boundary": True, "removed_identity": True}))
+          assert "/api/identity/sessions" in schema["paths"]
+          assert schema["components"]["securitySchemes"]["SessionCookie"] == {"type": "apiKey", "in": "cookie", "name": "hotkey_session"}
+          assert schema["paths"]["/api/topics"]["get"]["security"]
+          print(json.dumps({"public_welcome": True, "anonymous_denied": True, "password_login": True, "session_csrf": True, "private_page_nonce": True, "logout": True}))
           PYTHON
 
       - name: Record one bounded resource snapshot

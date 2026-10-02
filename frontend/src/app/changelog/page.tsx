@@ -1,15 +1,23 @@
-import type { Metadata } from "next";
 import { connection } from "next/server";
 import { InformationPage } from "@/components/site/information-page";
+import { welcomeMetadata } from "@/components/site/welcome-metadata";
 
-export const metadata: Metadata = {
-  title: "变更记录",
-  robots: { index: false, follow: false },
-};
+export const metadata = welcomeMetadata(
+  "/changelog",
+  "变更记录",
+  "查看知微见澜公开欢迎页、登录和信息监控工作区的更新记录。",
+);
 export default async function ChangelogPage() {
   await connection();
   return (
     <InformationPage title="变更记录">
+      <h2 className="text-foreground text-lg font-medium">
+        2026-10-02 · 欢迎页与个人工作区
+      </h2>
+      <p>
+        首页作为公开产品介绍页，登录后进入业务工作区。账号密码、GitHub
+        与邮箱验证码共用账户会话，所有页面沿用统一布局、字体与固定头尾。
+      </p>
       <h2 className="text-foreground text-lg font-medium">
         2026-10-02 · 全量业务移植进行中
       </h2>

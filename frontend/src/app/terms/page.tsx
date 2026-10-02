@@ -1,17 +1,18 @@
-import type { Metadata } from "next";
 import { connection } from "next/server";
 import { InformationPage } from "@/components/site/information-page";
+import { welcomeMetadata } from "@/components/site/welcome-metadata";
 
-export const metadata: Metadata = {
-  title: "使用与内容许可",
-  robots: { index: false, follow: false },
-};
+export const metadata = welcomeMetadata(
+  "/terms",
+  "使用与内容许可",
+  "了解知微见澜的信息使用范围、来源追溯与内容再分发许可。",
+);
 export default async function TermsPage() {
   await connection();
   return (
     <InformationPage title="使用与内容许可">
       <p>
-        本地 Demo
+        知微见澜
         用于信息监控、来源追溯和受控验证。页面结果保留来源链接；模型生成的标题、摘要、译文和事件关系可能需要人工核对，预测时间不表示额度已到账。
       </p>
       <p>

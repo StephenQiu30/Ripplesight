@@ -1,10 +1,10 @@
 # HotKey Server 项目与技术选型
 
-更新日期：2026-10-02。本文固定仓库边界、技术栈、后端目录、API 契约和运行约束。产品需求见 [PRD 001](docs/prd/001-热点舆情监控平台需求.md)，设计见 [Design 001](docs/design/001-热点舆情监控平台总体设计.md) 及 Design 002—007，当前执行计划见 [Plan 索引](docs/plan/README.md)。当前 Demo 已删除登录、注册与用户体系，直接进入业务页面，访问合同见 Design001 §9.2。未来 ToC 账户要求延后，不作为 Demo 门禁。
+更新日期：2026-10-02。本文固定仓库边界、技术栈、后端目录、API 契约和运行约束。产品需求见 [PRD 001](docs/prd/001-热点舆情监控平台需求.md)，设计见 [Design 001](docs/design/001-热点舆情监控平台总体设计.md) 及 Design 002—007，当前执行计划见 [Plan 索引](docs/plan/README.md)。用户2026-10-02决定公开首页作为SEO Welcome，业务页面登录后进入；账号密码、GitHub App与邮箱验证码共用真实会话，现行访问合同见 Design001 §9.2，实施见 Plan063。
 
 ## 1. 定位与仓库边界
 
-HotKey 是 ToC 信息监控产品，帮助关注 AI 等专业方向的用户发现具体事件、观察升温和进展、阅读原文与讨论。当前 Demo 不建立账户、会话或登录入口，直接使用主题、来源、内容和任务页面。未来产品阶段的用户名密码、GitHub App、邮箱验证码与无感登录需求保留为后续需求，另行定标实现合同。公开资料调研、代码/受控测试、真实来源和产品验收分别记录。
+HotKey 是 ToC 信息监控产品，帮助关注 AI 等专业方向的用户发现具体事件、观察升温和进展、阅读原文与讨论。公开欢迎页介绍产品；用户通过账号密码、GitHub App或邮箱验证码登录后进入主题、来源、内容和任务页面。身份与产品数据由服务端校验，第三方授权与真实邮件核收分别验收。公开资料调研、代码/受控测试、真实来源和产品验收分别记录。
 
 HotKey 当前以**可信的信息获取**为核心：按主题持续取得可追溯的帖子、评论与六个公开热榜，显示来源 × 能力 × 时间窗的覆盖和缺口，并由本机 Codex 判断相关性。最终交付目标是整个核心链路的 POC；先按 Plan058 在一个主题、HN 搜索和一榜上完成最小演示，再扩为四关键词来源和六榜的 M1 短窗 Demo；范围以 PRD001 §1 为准。日报、周报、Obsidian、知识库检索/问答、报告导出和渠道投递属于非核心后续能力，飞书推送暂缓。当前来源验证仍使用本机基础设施，来源软件许可和平台授权范围不因 ToC 定位而扩大。本仓库同时维护 Python 后端与 Web 前端；同级 `hotkey-app`（Flutter）暂停。
 
@@ -25,7 +25,7 @@ HotKey/
 
 ### 1.1 用户与交付结果
 
-当前 Demo 访问 `/events` 直接进入业务页面，不要求部署密钥、用户名、密码或 Cookie。报告接收方与平台采集账号仍分别归推送和来源连接管理。POC 成功标准是同一环境下配置、采集、持久化、分析状态、阅读、覆盖和失败恢复可操作且可追溯；真实来源与受控模型分别出结论。
+公开 `/` 作为SEO Welcome，默认系统入口 `/topics`；未登录访问任何系统页面先进入 `/login`，成功后回到安全的站内原目标。报告接收方与平台采集账号仍分别归推送和来源连接管理。POC 成功标准是同一环境下配置、采集、持久化、分析状态、阅读、覆盖和失败恢复可操作且可追溯；真实来源与受控模型分别出结论。
 
 ### 1.2 能力里程碑
 
@@ -40,20 +40,22 @@ HotKey/
 
 ### 1.3 当前实现边界（2026-10-02）
 
-当前 Demo 已删除身份模块、身份 API、登录注册页、会话守卫、密码依赖与部署初始化配置，现行合同见 [Design001 §9.2](docs/design/001-热点舆情监控平台总体设计.md#92-当前-demo-的访问与数据分区)。业务表的 `owner_id`/`created_by` 暂保留为内部历史分区 UUID，移除其身份表外键，保留业务复合外键、幂等与预算约束；不创建假用户、默认会话或认证开关。
+用户2026-10-02的新决定覆盖此前匿名Demo：公开首页和关于、隐私、条款、联系、变更说明保留公开，登录页不索引，其余工作区页面（含现有“更多”导航）必须验证真实数据库会话。API业务读写同样检查身份；运营令牌继续作为额外权限，不由普通登录替代。
 
-`db/demo.py`汇总全部已注册业务表owner_id：新Schema空库用`00000000-0000-4000-8000-000000000001`，唯一分区复用，多分区503 `demo_scope_conflict`，不取第一行或合并。业务为空且有旧身份表的Schema（含身份表空表）也明确拒绝。API/CLI共用解析，Worker沿用任务分区。读取无Cookie；写入固定`X-HotKey-CSRF: 1`，缺失/错误403 `csrf_invalid`，无CSRF Cookie/token。保持同源无跨域；仅用于本机/受控Demo，不提供公共用户权限。
+`identity/`拥有账户、不可逆密码哈希、12小时固定有效且可撤销的数据库会话、GitHub授权状态及邮箱一次验证码。GitHub/邮箱首次验证成功创建个人账户；账号密码只登录已有账户。账户UUID作为业务owner_id，列表、详情、写入和任务保留原领域归属检查，不创建组织或租户框架。历史UUID不自动归给首个注册者；维护CLI必须显式指定原分区与账户映射，保留业务数据、复合外键、预算及幂等。后台调度按合法owner枚举或显式owner执行；不再把多用户当单分区拒绝。
 
-新完整 Schema 只对全新空库应用；现有数据库不删表、不改约束、不清空数据。有业务数据的单分区旧库可沿用原 UUID；旧备份按原代码及 Schema 恢复，正式重建仍遵守 §3 的备份/导入/校验门槛。
+会话Cookie为HttpOnly、SameSite=Lax，生产Secure；CSRF Cookie与header绑定当前会话，公开登录操作校验同源Origin及固定自定义头。代理仅转发HotKey身份Cookie和对应Set-Cookie，拒绝任意Authorization及伪造转发头；SSR通过生成API逐请求携带限定Cookie，不在全局Axios默认值保存用户凭据。GitHub状态绑定浏览器、单次使用并验证已验证主邮箱；OTP为6位、5分钟、单次使用、最多5次错误，发送有冷却和频率限制。GitHub/SMTP配置缺失时明确返回不可用，不伪造成功或创建默认会话。
 
-原获取、标注、日报、通知和Obsidian任务保留；062新增六类编辑来源、分阶段精选/中文写作/全文翻译、事实纠错/热度、日周月刊、模型榜、Codex公告、公开投影/媒体与维护任务，复用原Job/Outbox/Kafka，全部领域API/Worker/页面已接。相应技术证据见Acceptance001，真实验收仍待完成。SMTP实现默认关闭，通知目标默认关闭，unknown只能人工确认。历史约四小时记录不证明M1连续72小时；B站修复后真实采集、真实三平台归并和产品AC仍未通过。当前状态以BACKLOG与逐卡Acceptance为准。
+完整 `schema.sql` 继续是唯一DDL源，启动不建表。现有hotkey库先备份并验证恢复，在新空库应用完整Schema及校验导入，再保留可回退旧库切换；不就地删业务数据或把完整DDL覆盖现有库。真实OAuth、邮件核收及历史账户映射不由受控测试代替。
+
+原获取、标注、日报、通知和Obsidian任务保留；062新增六类编辑来源、分阶段精选/中文写作/全文翻译、事实纠错/热度、日周月刊、模型榜、Codex公告、公开投影/媒体与维护任务，复用原Job/Outbox/Kafka，全部领域API/Worker/页面已接。相应技术证据见Acceptance001，真实验收仍待完成。报告推送SMTP实现默认关闭，通知目标默认关闭，unknown只能人工确认。历史约四小时记录不证明M1连续72小时；B站修复后真实采集、真实三平台归并和产品AC仍未通过。当前状态以BACKLOG与逐卡Acceptance为准。
 
 
 ### 1.4 完整业务范围
 
 完整范围包含信息获取、编辑分析、事件、报告、公开分发、模型榜、Codex 公告、分享海报和运营维护，采用 Python/FastAPI、Next.js、Kafka。范围见 [PRD046](docs/prd/046-AIHOT全量业务迁移需求.md)，所有权、版本和事务合同见 [Design048](docs/design/048-AIHOT全量迁移架构与兼容设计.md)。[Plan062](docs/plan/062-AIHOT全量业务迁移执行计划.md) 承接剩余真实验证；058/032/038/009/014 的专项验收与未通过条件继续保留。
 
-analysis/events/content/reports/monitors/notifications 维护所属业务；publication 持有统一可发布投影与出口，leaderboard 持有模型身份/快照/排名，operations 持有独立运营认证、反馈与维护编排。以上领域均已注册架构验证。原 HotKey 主题、评论、原生榜单、覆盖、预算、证据、任务恢复与 Obsidian 保留。迁移不上 Node/Fastify/pg-boss 第二后端，不复制手写 OpenAPI；收费调用和状态接既有底座。业务 Demo 匿名与运营认证分别处理。真实来源/模型/渠道、数据库保留、预算及外部启用边界不自动放开。
+analysis/events/content/reports/monitors/notifications 维护所属业务；publication 持有统一可发布投影与出口，leaderboard 持有模型身份/快照/排名，operations 持有独立运营认证、反馈与维护编排。以上领域均已注册架构验证。原 HotKey 主题、评论、原生榜单、覆盖、预算、证据、任务恢复与 Obsidian 保留。迁移不上 Node/Fastify/pg-boss 第二后端，不复制手写 OpenAPI；收费调用和状态接既有底座。业务用户会话与运营额外认证分别处理。真实来源/模型/渠道、数据库保留、预算及外部启用边界不自动放开。
 
 publication已创建并登记架构门禁：持有来源公开许可版本、仅引用固定正文的投影、修订审计、精选epoch与分页重投；读取复核正文/人工版本/许可和撤回。原始内容及编辑分析分别由content与analysis经DTO提供，本域不另存正文，不建立第二个Job/投递队列。RSS、MCP、Markdown、SEO和海报使用同一准入投影。
 
@@ -77,13 +79,13 @@ publication已创建并登记架构门禁：持有来源公开许可版本、仅
 
 前端测试统一放 `frontend/tests/`，按 `app/`、`components/` 等对应业务目录组织；配置测试放 `tests/config/`，传输与 CSP 测试放测试目录根。`src/` 禁止放测试文件或导入测试框架/测试目录。Vitest 只发现独立测试目录；生产 TypeScript 与 Docker 构建排除测试，`tsconfig.test.json` 单独检查测试类型，`pnpm typecheck` 同时执行两套检查。后端继续使用既有 `backend/tests/`。独立 `hotkey-prototype` 的内存样例已由正式前端承接，停止维护并移出工作区；清理前保存源码、选定设计图和 QA 资料的离线恢复归档，不删除独立 server/app 项目。
 
-页面归`src/app/`，专属组件放路由`components/`；跨页面按明确领域归`components/<feature>/`，shadcn归`components/ui/`，不建立features/common/patterns/shared层。用户于2026-10-02要求公共页面外壳集中在独立 `frontend/src/layout/`：`BasicLayout` 由根 App Router layout 接入，`BasicHeader`/`BasicFooter` 统一导航、品牌和站点信息。外壳占满动态视口，Header/Footer 不随正文滚动；唯一 main 滚动区及头尾通过 LayoutContainer 使用同一 `max-w-7xl` 和 `px-5 sm:px-8`，正文统一 `py-10 sm:py-12`。各路由只组合正文，不重复页面级 main、头尾、视口高度、容器最大宽度或外侧边距；文章、表单等内部阅读尺度保留。加载/错误/404使用同一外壳，global-error 独立恢复同一外壳；打印时恢复正常文档流并隐藏头尾。阅读进度通过 `useLayoutScrollContainer` 使用真实正文容器，保留现有本机存储结构，不再读取窗口滚动位置。浏览器调用同源`/api/*`，`HOTKEY_API_ORIGIN`仅供服务端代理；Demo分区/写入头与错误契约由后端维护。根DESIGN仅视觉参考，执行规范为frontend/DESIGN及对应切片Design。
+页面归`src/app/`，专属组件放路由`components/`；跨页面按明确领域归`components/<feature>/`，shadcn归`components/ui/`，不建立features/common/patterns/shared层。用户于2026-10-02要求公共页面外壳集中在独立 `frontend/src/layout/`：`BasicLayout` 由根 App Router layout 接入，`BasicHeader`/`BasicFooter` 统一导航、品牌和站点信息。外壳占满动态视口，Header/Footer 不随正文滚动；唯一 main 滚动区及头尾通过 LayoutContainer 使用同一 `max-w-7xl` 和 `px-5 sm:px-8`，正文统一 `py-10 sm:py-12`。各路由只组合正文，不重复页面级 main、头尾、视口高度、容器最大宽度或外侧边距；文章、表单等内部阅读尺度保留。加载/错误/404使用同一外壳，global-error 独立恢复同一外壳；打印时恢复正常文档流并隐藏头尾。阅读进度通过 `useLayoutScrollContainer` 使用真实正文容器，保留现有本机存储结构，不再读取窗口滚动位置。浏览器调用同源`/api/*`，`HOTKEY_API_ORIGIN`仅供服务端代理；账户会话/CSRF与错误契约由后端维护。根DESIGN仅视觉参考，执行规范为frontend/DESIGN及对应切片Design。
 
-当前 Demo 不实现身份 IP 限流、GitHub 回调或验证码代理链路。现有 API 代理的截止、脱敏错误、请求 ID 与必要安全头继续有效。
+身份认证实施同源校验、IP/账号频率限制、GitHub回调与邮箱验证码；认证邮件独立于报告投递启用状态。现有 API 代理的截止、脱敏错误、请求 ID 与必要安全头继续有效。
 
 Web 设计固定为组件优先的无边框系统：App Router 页面只组合页面专属组件、按功能领域分类的复用组件与 shadcn/Radix 基础组件；默认信息表面通过留白、排版和语义背景分层。布局只使用 Tailwind 命名尺度和 `sm/md/lg/xl/2xl` 标准响应式层级，不使用原始像素值或任意布局尺寸。输入、焦点、错误与浮层保留必要轮廓；加载、路由错误、全局错误、404 与进程健康状态都有统一边界。组件归属、复用范围、目标路径、数据来源和状态覆盖必须在对应切片 Design 阶段明确。
 
-当前 Web 页面以 FastAPI 生成的 OpenAPI 为准，保留 Vercel 黑白留白首页；关注、来源、内容、热榜、任务与已有报告读取使用生成客户端。`frontend/src/components/navigation/workspace-header.tsx` 仅复用业务导航；不创建通用资源框架，未有接口的事件聚合占位和非核心报告/通知配置从当前界面移除。
+当前 Web 页面以 FastAPI 生成的 OpenAPI 为准，保留 Vercel 黑白留白首页；关注、来源、内容、热榜、任务与已有报告读取使用生成客户端。`frontend/src/layout/basic-header.tsx` 区分公开站点与已登录工作区导航；不创建通用资源框架，未有接口的事件聚合占位和非核心报告/通知配置从当前界面移除。
 
 Web的CSP nonce由`proxy.ts`每请求生成，交互HTML按请求渲染。主题创建page等待`connection()`，客户端只读取来源能力；生产脚本nonce须与响应CSP相同，不共享HTML缓存。runtime核对脚本/响应，浏览器冷进入验证交互，不能只检查健康。
 
@@ -131,7 +133,7 @@ backend/
 │   ├── main.py                    # 唯一 create_app 与 lifespan 装配
 │   ├── api/
 │   │   ├── router.py              # 唯一 HTTP 路由汇总点
-│   │   ├── dependencies.py        # DB Session、Demo分区和Service注入
+│   │   ├── dependencies.py        # DB Session、账户会话和Service注入
 │   │   ├── docs.py                # Swagger/Scalar 文档注册
 │   │   ├── middleware.py          # request ID、访问日志等 HTTP 横切逻辑
 │   │   ├── exception_handlers.py  # 全局异常到 HTTP 错误响应的映射
@@ -171,7 +173,7 @@ backend/
 目录规则如下：
 
 - `main.py` 只创建 FastAPI 应用、注册 lifespan、路由、中间件和异常处理器；不放业务规则。
-- `api/routers/`只处理HTTP参数、Demo分区/写入头依赖、状态码和响应模型；不导入SQLAlchemy、业务Service实现、Worker或消息客户端。
+- `api/routers/`只处理HTTP参数、真实身份/CSRF依赖、状态码和响应模型；不导入SQLAlchemy、业务Service实现、Worker或消息客户端。
 - 领域 Service 负责业务用例和事务；跨领域原子写入使用同一 Session，内层函数不得自行提交。
 - Schema 不依赖 ORM、Session 或 FastAPI；Model 只负责持久化映射；Adapter 只封装外部系统差异。
 - `worker/` 和 `cli/` 调用领域 Service，不复制 HTTP 层或业务规则。Worker 父进程独占 Kafka Consumer、offset 与任务终结；`worker/execution.py` 只监督单个 `spawn` 子进程，子进程自行创建数据库资源，不接收父进程 Session、Engine、Kafka Consumer 或网络连接。
@@ -205,11 +207,11 @@ FastAPI 路由装饰器、类型注解和 Pydantic 模型是唯一可编辑的 A
 
 本规范参考 [FastAPI 多文件应用指南](https://fastapi.tiangolo.com/tutorial/bigger-applications/)、[FastAPI 错误处理指南](https://fastapi.tiangolo.com/tutorial/handling-errors/)、[FastAPI Lifespan 指南](https://fastapi.tiangolo.com/advanced/events/)、[FastAPI 官方全栈模板](https://github.com/fastapi/full-stack-fastapi-template) 和 [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457.html)。这些资料用于确认框架机制和通用协议；目录、事实源和版本策略以本文为准。
 
-Demo 删除 `pwdlib`、身份配置和身份 CLI，不保留未来登录适配器或通用认证框架。来源与模型服务凭据继续保存在服务端。Web 固定 Node.js 24.19.0、Next.js 16.3.5、React 19.2.8 与 pnpm 12.3.4。
+身份密码使用 `pwdlib[argon2]`，GitHub和SMTP适配器归 `identity/adapters/`，身份维护CLI复用现有cli，不引入通用认证框架。来源与模型服务凭据继续保存在服务端。Web 固定 Node.js 24.19.0、Next.js 16.3.5、React 19.2.8 与 pnpm 12.3.4。
 
 ## 3. 数据与任务执行边界
 
-1. API路由负责HTTP、Demo分区/写入头与输入输出，经注入调用领域服务；服务管理事务，SQLAlchemy映射持久化。
+1. API路由负责HTTP、真实身份/CSRF与输入输出，经注入调用领域服务；服务管理事务，SQLAlchemy映射持久化。
 2. 业务变更与 Outbox 写入同一 PostgreSQL 事务。独立发布器可靠地发送到 Kafka；消费者允许重复读取，以消息 ID、数据库唯一约束和业务状态保证幂等。
 3. 消费者在业务事务提交后提交连续完成位置的 offset；处理并发时不得越过尚未完成的记录。Kafka 事务不能直接保证 PostgreSQL 副作用的原子性。[Kafka 消息交付语义](https://kafka.apache.org/41/design/design/)
 4. Redis 的数据丢失不能导致任务或证据丢失。缓存设有效期与失效规则；限流故障时采用明确的保守策略。执行权、不可超额预算与撤权不能只依赖 Redis 锁或缓存。
@@ -231,7 +233,7 @@ Demo 删除 `pwdlib`、身份配置和身份 CLI，不保留未来登录适配�
 - 知识库是本地 Obsidian vault（`HOTKEY_OBSIDIAN_VAULT_PATH`，默认 `~/Desktop/Markdown/Obsidian`）的 `HotKey/` 子目录；HotKey 单向写入管理区块，原子写，不覆盖用户区块（[Design 005 第 3.3 节](docs/design/005-报告与知识库设计.md)）。
 - 流水线由独立调度进程 `python -m worker.scheduler` 扫表驱动（DEC-001-203）；当前 M1/M2 只在宿主机运行一个 `python -m worker`，Compose 中的 worker 服务不启动（DEC-001-205）。
 - 模型按原 Job 冻结的能力配置经 AiService 适配 Codex app-server 或明确启用的兼容接口，采用 override→环境配置→默认配置。凭据、模型兼容性及预算分别复核；embedding 使用独立配置。Codex 子进程只接最小环境变量（DEC-001-207）；配置成功不能代替真实模型验收。
-- 推送秘密只从环境变量读取（DEC-001-210）；SMTP 已实现且默认关闭，飞书真实送达暂缓，渠道送达不阻断信息获取或报告生成。
+- 推送秘密只从环境变量读取（DEC-001-210）；报告推送SMTP 已实现且默认关闭，飞书真实送达暂缓，渠道送达不阻断信息获取或报告生成。
 - 冻结（保留代码，不再扩展、不作前置门禁）：032 备份 S03+、033 公平派发/熔断、028 S02+、029 S03、039 S02+、040、042 B0、010 历史回补、Flutter App。移出范围：044、045。
 
 ## 5. 实施与验证
@@ -252,13 +254,13 @@ Demo 删除 `pwdlib`、身份配置和身份 CLI，不保留未来登录适配�
 
 PROJECT.md 是技术、架构、目录、API 契约和数据库约束的事实源；AGENTS.md 只补充实现门禁和命令，两者不得冲突。产品需求以总 PRD 001 和对应能力 PRD 为准；现行合同在 Design，当前排期的步骤在 Plan，证据与结论在 Acceptance。完成或合并的有效合同归入 Design，后置工作回归需求、设计和 BACKLOG，保留未通过条件后移除多余计划。历史原文由 Git 查阅；文档索引不复制版本、状态或验收矩阵。BACKLOG 是唯一进度看板（≤ 10 KB），HANDOVER 保持 ≤ 5 KB，均不追加流水账；小修复和普通文档整理不强制另建 Plan。
 
-`operations` 是全量迁移实际维护领域，承接反馈、私有附件、操作审计、健康心跳和人工词典版本；只通过现有业务DTO编排任务/来源/预算/备份恢复，不建立第二任务或身份系统。运营token与匿名Demo分离，写入另核CSRF、actor/operation_id/版本；默认关闭，不能指定任意owner。选择评测事实归`analysis/evaluation_models.py`与`evaluation_services.py`，通过原AiService和预算，运营只读其DTO；真实模型仍暂停。
+`operations` 是全量迁移实际维护领域，承接反馈、私有附件、操作审计、健康心跳和人工词典版本；只通过现有业务DTO编排任务/来源/预算/备份恢复，不建立第二任务或身份系统。运营token与用户会话分离，写入另核CSRF、actor/operation_id/版本；默认关闭，不能指定任意owner。选择评测事实归`analysis/evaluation_models.py`与`evaluation_services.py`，通过原AiService和预算，运营只读其DTO；真实模型仍暂停。
 
 AI用途与供应商仍共用ai唯一调用账本；adapter显式component_key控制原ResourceComponentPolicy准入，embedding和未来兼容供应商不得借Codex组件许可。IndexNow保存已接收URL的资格位于原OperatorAuditOperation回执；每天按audit时间/ID/路径连续500项复验当前资格，变化才重新发送canonical，全部复验不加载供应商响应正文。没有额外模型、投递或SEO队列。
 
 全量公开日周月刊的`report_edition_schedules`只保存每种完整刊期的有界扫描游标，不保存主题报告偏好；原`monitor_topics.report_time/report_timezone/weekly_report_enabled`仍是主题偏好的唯一来源。先检查最新完整刊期，再持续推进旧刊空洞，停机后不会被反复扫描最早旧刊阻塞。
 
-全量阅读Web路径登记：`/discover`为资讯入口，`/items/[contentId]`为固定版本/许可正文，`/agent`为五工具与Markdown接入说明，`/feeds`为RSS订阅选择，`/publication/manage`为独立operator许可/投影维护；保留已有`/`监控首页。路由专属组件在各页面components，明确跨页复用放`src/components/publication/`（卡片、读取错误、海报下载）；不复制网络客户端，唯一生成gongkaifabu/gongkaifenfa。所有入口覆盖加载/空/失败重试、partial/unknown、许可收紧与403/409，公开Demo仍noindex。
+全量阅读Web路径登记：`/discover`为资讯入口，`/items/[contentId]`为固定版本/许可正文，`/agent`为五工具与Markdown接入说明，`/feeds`为RSS订阅选择，`/publication/manage`为独立operator许可/投影维护；`/`为公开SEO Welcome，`/topics`为登录后工作区。路由专属组件在各页面components，明确跨页复用放`src/components/publication/`（卡片、读取错误、海报下载）；不复制网络客户端，唯一生成gongkaifabu/gongkaifenfa。所有入口覆盖加载/空/失败重试、partial/unknown、许可收紧与403/409，所有业务工作区页面始终noindex，公开Welcome和说明按Design001 §9.2索引。
 
 
 本轮全量迁移补充边界见Design048：content/editorial_rendered_*持同ContentVersion正式格式与媒体事实；publication/media_mirror_*只持原Job/Evidence镜像引用，MinIO客户端归evidence/adapters/media_storage.py和进程生命周期；jobs/source_scopes.py只读真实任务收集范围DTO。新增Web `/discover/stories/[eventId]`是全成员许可通过的公开详情，`/editorial-sources`是六类源配置与运行，组件归其路由，全部接唯一运行OpenAPI。父进程续租、按启用handler计算Kafka窗口以及独立进程心跳/外部watchdog按Design048，不引入第二队列或事实源。
@@ -274,3 +276,5 @@ AI用途与供应商仍共用ai唯一调用账本；adapter显式component_key�
 海报二维码使用离线qrcode 8.2及Pillow编码当前许可canonical URL，固定纠错M和完整quiet zone；字体/OFL与移植MIT均保留。6h语义回溯以真实供应商/embeddings向量与同模型/维度cosine为依据，向量由events持有并沿原AiCall/Job/预算恢复，源码在ai/adapters/embeddings.py与events/embedding_execution.py，默认embeddings及AI均关闭。source.icons源图标只缓存已准入的源素材，复用Evidence/MinIO与原Jobs/预算，不在GET解析网站或请求头像。
 
 来源试抓由sources/editorial_preview_*编排原Job/预算与OpsAudit，connections仅提供当前CAS/许可typed准入。离线样本、原来源异步试抓及未知人工核对使用唯一运行OpenAPI；不创建正式SourceRun或第二正文库。外部批次上限50，私有来源token与HMAC盐分开，滚动60秒同owner/真实peer共10次受理，由jobs/external_ingress.py读原Job并持advisory事务锁；connections持原SourceRun逐条回执与原内容Writer，GET不重新摄入。编辑来源写与人工重新分析也用独立operator+CSRF，分类/公开推荐理由与私有审计原因分开。
+
+身份目录职责：`backend/app/identity/` 保存账户、会话、验证码、OAuth状态及身份服务/适配器；`api/routers/identity.py`只负责HTTP与Cookie，`db/metadata.py`登记模型。前端`src/components/auth/`保存跨页认证合同，`app/login/components/`保存登录组合；系统身份守卫使用生成客户端。欢迎页、登录及工作区共用BasicLayout、字体、语义颜色和官方组件。

@@ -409,7 +409,7 @@ def test_heat_api_read_is_no_store_and_source_role_write_requires_operator(event
     assert event_read_client.get("/api/events/attention-sources").status_code == 200
     denied = event_read_client.put(
         "/api/events/attention-sources",
-        headers={"X-HotKey-CSRF": "1"},
+        headers={"X-HotKey-CSRF": event_read_client.cookies["hotkey_csrf"]},
         json={
             "source_key": "x",
             "selector_kind": "source",

@@ -68,6 +68,16 @@ function createUpstreamHeaders(request: Request): Headers {
       headers.append(name, value);
     }
   });
+  const cookies = (request.headers.get("cookie") ?? "")
+    .split(";")
+    .map((cookie) => cookie.trim())
+    .filter((cookie) =>
+      /^(?:hotkey_session|hotkey_csrf|hotkey_oauth)=[A-Za-z0-9._~-]*$/.test(
+        cookie,
+      ),
+    )
+    .join("; ");
+  if (cookies) headers.set("cookie", cookies);
   return headers;
 }
 
@@ -79,6 +89,11 @@ function createClientHeaders(upstream: Response): Headers {
       headers.append(name, value);
     }
   });
+  for (const cookie of upstream.headers.getSetCookie()) {
+    if (/^(?:hotkey_session|hotkey_csrf|hotkey_oauth)=/.test(cookie)) {
+      headers.append("set-cookie", cookie);
+    }
+  }
   return headers;
 }
 

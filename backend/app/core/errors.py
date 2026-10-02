@@ -19,6 +19,19 @@ class ErrorCategory(StrEnum):
 
 ERROR_CATEGORIES: Mapping[str, ErrorCategory] = MappingProxyType(
     {
+        "invalid_credentials": ErrorCategory.AUTHENTICATION,
+        "invalid_session": ErrorCategory.AUTHENTICATION,
+        "invalid_email_code": ErrorCategory.AUTHENTICATION,
+        "invalid_oauth_state": ErrorCategory.AUTHENTICATION,
+        "github_authentication_failed": ErrorCategory.AUTHENTICATION,
+        "credentials_verification_required": ErrorCategory.AUTHORIZATION,
+        "identity_link_conflict": ErrorCategory.CONFLICT,
+        "username_unavailable": ErrorCategory.CONFLICT,
+        "auth_rate_limited": ErrorCategory.RATE_LIMITED,
+        "auth_dependency_unavailable": ErrorCategory.DEPENDENCY_UNAVAILABLE,
+        "github_login_unavailable": ErrorCategory.DEPENDENCY_UNAVAILABLE,
+        "email_login_unavailable": ErrorCategory.DEPENDENCY_UNAVAILABLE,
+        "email_delivery_unavailable": ErrorCategory.DEPENDENCY_UNAVAILABLE,
         "connection_disabled": ErrorCategory.CONFLICT,
         "invalid_ai_input": ErrorCategory.INVALID_INPUT,
         "ai_configuration_conflict": ErrorCategory.CONFLICT,
@@ -81,7 +94,6 @@ ERROR_CATEGORIES: Mapping[str, ErrorCategory] = MappingProxyType(
         "comments_budget_exhausted": ErrorCategory.CONFLICT,
         "csrf_invalid": ErrorCategory.AUTHORIZATION,
         "database_unavailable": ErrorCategory.DEPENDENCY_UNAVAILABLE,
-        "demo_scope_conflict": ErrorCategory.DEPENDENCY_UNAVAILABLE,
         "idempotency_conflict": ErrorCategory.CONFLICT,
         "job_not_cancellable": ErrorCategory.CONFLICT,
         "job_not_retryable": ErrorCategory.CONFLICT,

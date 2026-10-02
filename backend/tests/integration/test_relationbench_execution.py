@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import select
 from tests.integration.test_ai_calls import _enable_ai_budget
-from tests.integration.test_content_records import _demo_scope
+from tests.integration.test_content_records import _user_scope
 from tests.integration.test_event_reading import event_read_client  # noqa: F401
 
 from ai.models import AiCall
@@ -69,7 +69,7 @@ def _queued(client):
             },
         }
     )
-    owner = _demo_scope(client)
+    owner = _user_scope(client)
     factory = client.app.state.session_factory
     _enable_ai_budget(factory.kw["bind"], owner)
     command = RelationBenchGoldInput(
@@ -163,7 +163,7 @@ def test_relationbench_unsaved_answer_is_unknown_and_never_rebought(event_read_c
 
 
 def test_relationbench_offline_metrics_errors_same_cases_and_owner_scoping(event_read_client):
-    owner = _demo_scope(event_read_client)
+    owner = _user_scope(event_read_client)
     factory = event_read_client.app.state.session_factory
     relations = ("SAME_OCCURRENCE", "SAME_STORY", "UNRELATED", "ROUNDUP")
     cases = [_case(str(index), relation) for index, relation in enumerate(relations)]

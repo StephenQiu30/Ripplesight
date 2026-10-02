@@ -2,12 +2,14 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { useIdentitySession } from "@/components/auth/session-context";
 
 type HeroSectionProps = {
   onExample: (trigger: HTMLElement) => void;
 };
 
 export function HeroSection({ onExample }: HeroSectionProps) {
+  const session = useIdentitySession();
   return (
     <section
       className="relative flex w-full flex-col items-start gap-9 pt-10 pb-8 md:min-h-108 md:flex-1 md:flex-row md:items-center md:justify-between md:gap-0 md:pt-0 md:pb-12 2xl:min-h-125"
@@ -21,7 +23,9 @@ export function HeroSection({ onExample }: HeroSectionProps) {
         </h1>
         <div className="mt-7 flex items-center gap-3 md:mt-8 md:gap-3.5">
           <Button asChild size="hero">
-            <Link href="/monitors/new">创建关注</Link>
+            <Link href={session ? "/topics" : "/login"}>
+              {session ? "进入系统" : "开始使用"}
+            </Link>
           </Button>
           <Button
             variant="outline"

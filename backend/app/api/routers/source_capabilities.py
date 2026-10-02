@@ -5,8 +5,8 @@ from typing import Any
 from fastapi import APIRouter, Response, status
 
 from api.dependencies import (
-    DemoScopeDependency,
     SourceConnectionServiceDependency,
+    UserScopeDependency,
 )
 from connections.schemas import SourcePlatformView
 from core.schemas import ErrorView, PageView
@@ -32,7 +32,7 @@ _RESPONSES: dict[int | str, dict[str, Any]] = {
 def list_source_capabilities(
     response: Response,
     service: SourceConnectionServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
 ) -> PageView[SourcePlatformView]:
     response.headers["cache-control"] = "no-store"
     return PageView(

@@ -29,7 +29,7 @@ from connections.editorial_services import list_editorial_source_health_in_trans
 from content.operations_reading import load_ingestion_health_in_transaction
 from content.services import ContentObservationCleanup
 from core.config import Settings
-from db.demo import resolve_demo_scope
+from db.owners import list_owner_ids_in_transaction
 from evidence.adapters.cache import RedisCacheCleanup
 from evidence.adapters.minio import MinioObjectCleanup
 from evidence.schemas import CleanupTargetKind
@@ -122,7 +122,15 @@ def enqueue_due_maintenance_in_transaction(
         raise RuntimeError("maintenance scheduling requires aware caller transaction")
     if not settings.operations_maintenance_enabled:
         return 0
-    owner = resolve_demo_scope(session)
+    return sum(
+        _enqueue_owner_maintenance_in_transaction(session, owner=owner, now=now, settings=settings)
+        for owner in list_owner_ids_in_transaction(session)
+    )
+
+
+def _enqueue_owner_maintenance_in_transaction(
+    session: Session, *, owner: UUID, now: datetime, settings: Settings
+) -> int:
     accepted = 0
     for action, interval in MAINTENANCE_INTERVALS.items():
         # An external process executes watchdog; a Scheduler task cannot prove its own loss.

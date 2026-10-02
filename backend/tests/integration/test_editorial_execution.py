@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
+from tests.conftest import authenticate_test_client
 from tests.integration.test_ai_calls import _enable_ai_budget
 from tests.integration.test_content_search import _seed_posts
 
@@ -93,6 +94,7 @@ def editorial_client() -> Iterator[TestClient]:
             )
         )
     ) as client:
+        authenticate_test_client(client)
         yield client
 
 
@@ -343,7 +345,7 @@ def test_http_admission_and_outbox_are_atomic_and_generated_result_contract_is_t
         ).status_code
         == 403
     )
-    headers = {**token, "X-HotKey-CSRF": "1"}
+    headers = {**token, "X-HotKey-CSRF": editorial_client.cookies["hotkey_csrf"]}
     response = editorial_client.post(
         f"/api/editorial/contents/{run.content_id}/runs",
         params={"source_key": "x"},

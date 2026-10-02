@@ -20,8 +20,8 @@
 
 - 每个实现切片开始前先明确技术选择与目录职责，列明新增、修改、移动和生成文件；不先写文件后找目录。
 - 技术选择已有用户决定的直接沿用；影响本片的部署、费用、平台范围或新框架等未决项，先给出选项和影响询问用户，未答复不执行依赖该决定的工作。普通实现细节按已定规范处理，不重复确认已确定的技术栈。
-- 用户最新决定（2026-10-01）：当前 Demo 不需要登录、注册或用户体系，现行访问合同见 Design001 §9.2，身份代码、页面、配置和业务登录依赖已清理。此前用户名密码、GitHub App、邮箱验证码、无感登录保留为未来 ToC 需求，不保留实现骨架，不阻塞 Demo。业务 `owner_id`/`created_by` 是内部历史分区 UUID；新 Schema 无身份表与身份外键，已有库不就地删表。API/CLI 使用 `db/demo.py` 的单分区解析，不创建假用户或会话；读取无 Cookie，写入固定 `X-HotKey-CSRF: 1`，多个分区明确拒绝。来源登录态、采集授权、预算与任务幂等照常保留。
-- 用户已明确（2026-09-30）：最终目标是整个核心链路的 POC 验证，当前先收尾 M1；范围与退出条件以 PRD001 §1“当前核心链路 POC 边界”为准。先按 Plan058 在一个主题、HN 公开搜索和一榜上完成首次可演示的同库最小闭环，再逐项扩至四关键词来源、HN 评论和六榜的完整 M1 短窗 Demo；相关性分析状态、阅读、覆盖和任务恢复均须有可核对证据。最小闭环不代替扩围或产品验收；M1/M2 真实 72 小时及正式指标后置。日报、周报、Obsidian、知识库检索/问答、报告导出与报告渠道投递保留为非核心后续能力，不进入当前排期或阻塞核心链路。MediaCrawler 本人 B 站试点仍限个人/非商业研究，采用宿主机子进程，补丁和独立 CDP 资料记录在 `~/Desktop/Docker/mediacrawler-start-local/`；这是该来源许可/试点边界，不是 ToC 产品账户限制。遇验证、登录失效或访问频繁立即停用并由本人核查后人工恢复。复用现有 MinIO、本地 Firecrawl+Playwright、RSSHub、SearXNG；真实 Codex 请求仍暂停，模型不发起付费请求。飞书暂缓，报告 SMTP 待实现，未来登录验证码邮件独立于报告渠道；X 在凭据与月度上限未确认前禁止真实请求。来源频次与模型调用经来源预设及既有预算账本设置硬上限。
+- 用户最新决定（2026-10-02）覆盖此前匿名Demo：公开SEO Welcome，账号密码、GitHub与邮箱验证码登录后进入工作区。真实账户、会话、API权限和CSRF按Design001 §9.2执行；新用户个人数据隔离，历史分区仅显式维护映射，禁止默认账号/默认会话或首个注册者取得历史数据。运营令牌与来源授权继续独立校验。新增identity目录、模型、适配器、CLI、错误和OpenAPI安全声明须登记并通过架构/契约检查；GitHub和邮件配置缺失时明确不可用。测试固定独立tests目录，真实OAuth与邮件核收另记证据。
+- 用户已明确（2026-09-30）：最终目标是整个核心链路的 POC 验证，当前先收尾 M1；范围与退出条件以 PRD001 §1“当前核心链路 POC 边界”为准。先按 Plan058 在一个主题、HN 公开搜索和一榜上完成首次可演示的同库最小闭环，再逐项扩至四关键词来源、HN 评论和六榜的完整 M1 短窗 Demo；相关性分析状态、阅读、覆盖和任务恢复均须有可核对证据。最小闭环不代替扩围或产品验收；M1/M2 真实 72 小时及正式指标后置。日报、周报、Obsidian、知识库检索/问答、报告导出与报告渠道投递保留为非核心后续能力，不进入当前排期或阻塞核心链路。MediaCrawler 本人 B 站试点仍限个人/非商业研究，采用宿主机子进程，补丁和独立 CDP 资料记录在 `~/Desktop/Docker/mediacrawler-start-local/`；这是该来源许可/试点边界，不是 ToC 产品账户限制。遇验证、登录失效或访问频繁立即停用并由本人核查后人工恢复。复用现有 MinIO、本地 Firecrawl+Playwright、RSSHub、SearXNG；真实 Codex 请求仍暂停，模型不发起付费请求。飞书暂缓，报告 SMTP 待实现，登录验证码邮件独立于报告渠道；X 在凭据与月度上限未确认前禁止真实请求。来源频次与模型调用经来源预设及既有预算账本设置硬上限。
 - 新后端模块、前端功能目录必须登记职责并纳入全源码/依赖检查；门禁重新实现并验证前，不得声称已覆盖新模块。
 - 按业务切片创建目录，不提前创建空模块。来源适配器放sources/adapters，MinIO适配器放evidence/adapters，模型SDK适配器放ai/adapters；业务状态仍由业务模块持有。前端页面使用 `frontend/src/app`，页面专属组件放对应路由的 `components/`，跨页面复用组件按明确功能领域放 `frontend/src/components/<feature>/`，shadcn 基础组件放 `components/ui/`。用户于2026-10-02指定独立 `frontend/src/layout/` 保存 BasicLayout、BasicHeader、BasicFooter 与共用指南；根布局统一装配，业务路由不重复外壳和主导航。Header/Footer 固定在视口两端，中间唯一 main 滚动；统一容器宽度/边距、保留内部表单/阅读宽度，含加载/错误/404与 global-error 恢复；打印恢复正常流。不创建 `features`、`common`、`patterns` 或 `shared` 层；生成客户端固定在 `src/api`，Axios 封装固定在 `src/request.ts`。
 
@@ -39,7 +39,7 @@
 - 用户最新决定（2026-10-02）：所有前端业务请求必须调用 `frontend/src/api/` 内的 Umi OpenAPI 生成函数，统一接入 Axios 封装 `frontend/src/request.ts`。业务源码不得直接导入 Axios、调用 fetch/XHR 或传输 request，也不得手写下载 API URL；仅可从 request 导入错误类和请求选项类型。ESLint 执行该边界，生成目录以 OpenAPI 漂移检查验证。透明同源代理和传输层只承担基础设施职责，其测试按确切路径检查，不给业务目录放宽规则。
 - `docs/` 保留现行需求、设计、当前排期的执行计划和证据摘要。完成或合并 Plan 的有效合同进入 Design；后置工作回到 PRD/Design/BACKLOG，未通过条件保留，再删除多余执行文档。历史调研、迁移过程和截图从 Git 查询，编号不复用。`docs/README.md` 只维护入口与简短承接关系，状态只写 BACKLOG，证据只写 Acceptance；普通文档整理不新增 Plan 或验收文档。删除计划不表示需求取消或功能完成。
 - 修改前阅读相关设计和测试。行为变化先验证失败，再实现；修复需针对实际故障验证。
-- API路由负责协议、Demo分区/写入头和验证；业务服务负责事务，SQLAlchemy模型负责持久化。禁止路由直接SQL或发布消息。
+- API路由负责协议、真实身份/CSRF和验证；业务服务负责事务，SQLAlchemy模型负责持久化。禁止路由直接SQL或发布消息。
 - Session 不跨线程或任务共享。同步数据库端点使用同步路由；各 API/Worker 进程独立拥有连接池和消息客户端，禁止跨进程继承连接。
 - 业务服务只能直接导入本领域ORM模型；跨领域读取使用所属模块提供的函数/DTO，跨领域原子写显式传入同一Session。禁止为绕过边界建立全局repository或共享models目录。
 - 顶层模块只在当前切片真实创建时登记；architecture测试不得预先白名单未来模块。新增模块必须先以失败测试证明未登记代码会被拒绝。
@@ -71,7 +71,7 @@
 - 最外层业务用例提交或回滚事务；依赖注入只管理 Session 创建与释放。跨领域原子写共用 Session，内层函数不自行提交。HTTP 和 Worker 各自装配服务，业务服务不依赖 HTTP 上下文。
 - 后端工程及 Compose HTTP 服务均为 `backend`，作为普通应用运行，不构建独立安装包；禁止恢复 `server/` 别名。部署入口为 `main:create_app`。
 - 应用代码统一放在 `backend/app/`；禁止在 app 下增加 hotkey 或 app 包装层；`main.py` 只做应用工厂和 lifespan 装配；`api/router.py` 汇总路由，`api/routers/*.py` 按资源组织，依赖和 HTTP 横切逻辑分别在 dependencies.py、middleware.py、exception_handlers.py。
-- 已登记的 `monitors/`、`jobs/`、`connections/`、`content/` 领域在对应切片落地时拥有各自 models.py、schemas.py、services.py。`db/demo.py` 只解析内部历史数据分区，不导入业务 ORM、建表或提供通用仓储；`identity/` 从 Demo 登记中删除。禁止预先创建空领域包，也禁止用通用 Workspace/BaseService 聚合无关领域。
+- 已登记的 `monitors/`、`jobs/`、`connections/`、`content/` 领域在对应切片落地时拥有各自 models.py、schemas.py、services.py。`db/owners.py` 只通过身份领域DTO枚举维护所需的真实用户分区，不导入业务 ORM、建表或提供通用仓储；`identity/`重新登记并拥有账户、会话、验证码与OAuth状态。禁止预先创建空领域包，也禁止用通用 Workspace/BaseService 聚合无关领域。
 - `core/` 只放配置、通用错误、输入输出基类和时间函数，不反向依赖业务模块。`db/` 拥有 DeclarativeBase、连接池及元数据注册；`audit/` 承载跨领域审计。`jobs/execution.py` 维护执行状态机，`worker/messaging.py` 对接 Kafka，`worker/execution.py` 监督单个任务子进程的总截止与有界终止；`worker/app.py` 装配消费者和父进程数据库终结，Kafka Consumer/offset 仅属于父进程。任务子进程使用 multiprocessing `spawn` 并自行创建数据库资源，禁止传入父进程的 Session、Engine、Kafka Consumer 或网络连接。运行目录为 backend/app，Worker 入口为 `python -m worker`（由 `worker/__main__.py` 承接）；不得沿用 Celery 启动命令。
 - 路由禁止导入 SQLAlchemy、业务 models、services 实现、执行器或消息组件；只能通过 `api/dependencies.py` 注入服务。禁止经 request.app.state 在路由中绕过业务服务读写数据库或发布任务。服务、模型、Schema 不导入 FastAPI/Starlette/HTTP 路由；Schema 不导入 ORM 或数据库资源。
 - 每个HTTP操作必须有唯一人工`operation_id`、tag、成功状态和Pydantic响应模型；错误响应按操作显式声明，不在应用级虚报所有状态码。输入继承严格Input并给集合、字符串、页大小和正文设置上限。游标不得泄漏内部数据，应有明确的校验和分页边界。
@@ -157,7 +157,7 @@ backend/
 │   ├── main.py                    # 唯一 create_app 与 lifespan 装配
 │   ├── api/
 │   │   ├── router.py              # 注册所有 HTTP 路由
-│   │   ├── dependencies.py        # DB Session、Demo分区和服务注入
+│   │   ├── dependencies.py        # DB Session、身份会话和服务注入
 │   │   ├── docs.py                # 接口文档 UI 注册
 │   │   ├── middleware.py          # 请求 ID 和访问日志
 │   │   ├── exception_handlers.py  # 业务异常转 HTTP 响应
@@ -217,7 +217,7 @@ backend/
 | 层 | 允许依赖 | 禁止事项 |
 |---|---|---|
 | Router | Schema、API 依赖别名 | SQLAlchemy、直接导入或构造 Service、发布消息 |
-| API dependencies | Session 工厂、Service、Demo分区与写入头 | 业务编排、自动提交事务 |
+| API dependencies | Session 工厂、Service、账户会话与CSRF | 业务编排、自动提交事务 |
 | Service | 本领域 ORM/Repository、Schema、显式领域服务、适配器契约 | HTTP 上下文、直接访问其他领域 ORM、循环依赖 |
 | Schema | Pydantic、标准类型、公共 Schema | ORM、Session、FastAPI |
 | Model/Repository | SQLAlchemy、db 基类、本领域数据结构 | HTTP、调用上层 Service、独立 commit |
@@ -280,9 +280,9 @@ frontend/src/
 - 前端运行 ESLint、TypeScript、Prettier 和生产构建；页面变更完成桌面与窄屏浏览器检查。
 - 文档变更检查路径、命名和规则一致性。规划目录不代表代码已经存在，测试目标不代表已经通过。
 
-全量迁移维护切片新增`operations/`实际领域，主责/事务/鉴权见Design048：反馈及冷却、私有附件、审计、心跳和词典版本；模型注册与canonical schema同一窗口核对。`analysis/evaluation_*`归分析领域，运营通过DTO调用；付费评测关闭。运营读写使用独立token，不恢复ToC登录。全量公开刊期的scan游标只负责补刊，不替代主题报告配置。
+全量迁移维护切片新增`operations/`实际领域，主责/事务/鉴权见Design048：反馈及冷却、私有附件、审计、心跳和词典版本；模型注册与canonical schema同一窗口核对。`analysis/evaluation_*`归分析领域，运营通过DTO调用；付费评测关闭。运营读写要求当前用户会话和独立token，普通登录不替代运营权限。全量公开刊期的scan游标只负责补刊，不替代主题报告配置。
 
-全量阅读Web路径登记：`/discover`为资讯入口，`/items/[contentId]`为固定版本/许可正文，`/agent`为五工具与Markdown接入说明，`/feeds`为RSS订阅选择，`/publication/manage`为独立operator许可/投影维护；保留已有`/`监控首页。路由专属组件在各页面components，明确跨页复用放`src/components/publication/`（卡片、读取错误、海报下载）；不复制网络客户端，唯一生成gongkaifabu/gongkaifenfa。所有入口覆盖加载/空/失败重试、partial/unknown、许可收紧与403/409，公开Demo仍noindex。
+全量阅读Web路径登记：`/discover`为资讯入口，`/items/[contentId]`为固定版本/许可正文，`/agent`为五工具与Markdown接入说明，`/feeds`为RSS订阅选择，`/publication/manage`为独立operator许可/投影维护；`/`为公开SEO Welcome，`/topics`为登录后工作区。路由专属组件在各页面components，明确跨页复用放`src/components/publication/`（卡片、读取错误、海报下载）；不复制网络客户端，唯一生成gongkaifabu/gongkaifenfa。所有入口覆盖加载/空/失败重试、partial/unknown、许可收紧与403/409，所有业务工作区页面始终noindex，公开Welcome和说明按Design001 §9.2索引。
 
 本轮已登记content/editorial_rendered_*、publication/media_mirror_*及jobs/source_scopes.py职责见PROJECT/Design048；同版本格式和媒体事实要同事务且纳入内容指纹，跨域只用typed读取，禁止来源receipt复制正文。新公开详情`/discover/stories/[eventId]`须ALL成员许可成立；`/editorial-sources`沿用唯一客户端和独立运营写入。MinIO客户端纯构造并在所属进程关闭，GET禁止外采。长任务监督续租只改当前执行权，不能续取消或伪造请求；Kafka显式轮询窗口不足要拒绝。
 
@@ -295,3 +295,5 @@ frontend/src/
 publication/share_images.py仅消费实时许可DTO生成固定尺寸PNG；assets/og-fonts唯一承载有完整OFL许可的NotoSansSC固定子集，不重复品牌资产或引入远程字体请求。分享图片和海报在ETag/304前仍复验全部正文权限，撤回返回404。
 
 真实embedding仅走ai/adapters/embeddings.py的/embeddings合同；events向量不复制付费回执账本，冻结模型/维度/输入版本并经原Job+AiCall恢复，unknown不重发。source.icons缓存仅源图标素材，当前source准入、公开权、Evidence可读性在网络提交/写入/GET均重新核对，真实外采默认关闭；沿已有media fetch/codec/storage和预算实现，不复制队列。
+
+`identity/`负责账户、密码、数据库会话、GitHub状态与邮箱验证码；身份适配器不得导入ORM，Router不得直接导入Service/Model。前端SSR、页面守卫及业务页面均调用生成API，代理仅允许HotKey身份Cookie。所有非公开工作区HTML含预取请求均验证真实会话，默认noindex；公开首页及站点说明使用真实站点origin的canonical/OG，原生robots/sitemap只列公开路径。

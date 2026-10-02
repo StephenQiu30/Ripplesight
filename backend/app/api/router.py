@@ -10,6 +10,7 @@ from api.routers.editorial_sources import router as editorial_sources_router
 from api.routers.events import router as events_router
 from api.routers.health import router as health_router
 from api.routers.hotlists import router as hotlists_router
+from api.routers.identity import router as identity_router
 from api.routers.leaderboard import router as leaderboard_router
 from api.routers.monitor_topics import router as monitor_topics_router
 from api.routers.operations import feedback_router
@@ -23,28 +24,30 @@ from api.routers.site import router as site_router
 from api.routers.source_capabilities import router as source_capabilities_router
 from api.routers.source_connections import router as source_connections_router
 from api.routers.translations import router as translations_router
+from core.schemas import ErrorView
 
 api_router = APIRouter(prefix="/api")
-api_router.include_router(ai_models_router)
+api_router.include_router(identity_router)
+api_router.include_router(ai_models_router, responses={401: {"model": ErrorView}})
 api_router.include_router(health_router)
-api_router.include_router(hotlists_router)
-api_router.include_router(collection_jobs_router)
-api_router.include_router(collection_coverage_router)
-api_router.include_router(content_records_router)
-api_router.include_router(editorial_router)
-api_router.include_router(editorial_sources_router)
-api_router.include_router(translations_router)
-api_router.include_router(events_router)
-api_router.include_router(leaderboard_router)
-api_router.include_router(codex_resets_router)
-api_router.include_router(monitor_topics_router)
-api_router.include_router(operations_router)
-api_router.include_router(feedback_router)
-api_router.include_router(reports_router)
-api_router.include_router(report_editions_router)
-api_router.include_router(publication_router)
-api_router.include_router(publication_editions_router)
-api_router.include_router(publication_media_router)
+api_router.include_router(hotlists_router, responses={401: {"model": ErrorView}})
+api_router.include_router(collection_jobs_router, responses={401: {"model": ErrorView}})
+api_router.include_router(collection_coverage_router, responses={401: {"model": ErrorView}})
+api_router.include_router(content_records_router, responses={401: {"model": ErrorView}})
+api_router.include_router(editorial_router, responses={401: {"model": ErrorView}})
+api_router.include_router(editorial_sources_router, responses={401: {"model": ErrorView}})
+api_router.include_router(translations_router, responses={401: {"model": ErrorView}})
+api_router.include_router(events_router, responses={401: {"model": ErrorView}})
+api_router.include_router(leaderboard_router, responses={401: {"model": ErrorView}})
+api_router.include_router(codex_resets_router, responses={401: {"model": ErrorView}})
+api_router.include_router(monitor_topics_router, responses={401: {"model": ErrorView}})
+api_router.include_router(operations_router, responses={401: {"model": ErrorView}})
+api_router.include_router(feedback_router, responses={401: {"model": ErrorView}})
+api_router.include_router(reports_router, responses={401: {"model": ErrorView}})
+api_router.include_router(report_editions_router, responses={401: {"model": ErrorView}})
+api_router.include_router(publication_router, responses={401: {"model": ErrorView}})
+api_router.include_router(publication_editions_router, responses={401: {"model": ErrorView}})
+api_router.include_router(publication_media_router, responses={401: {"model": ErrorView}})
 api_router.include_router(site_router)
-api_router.include_router(source_capabilities_router)
-api_router.include_router(source_connections_router)
+api_router.include_router(source_capabilities_router, responses={401: {"model": ErrorView}})
+api_router.include_router(source_connections_router, responses={401: {"model": ErrorView}})

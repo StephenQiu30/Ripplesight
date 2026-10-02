@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from db.demo import DEFAULT_DEMO_SCOPE_ID
+from identity.models import IdentityUser
 from publication.schedule import enqueue_due_publication_in_transaction
 from publication.schemas import SourcePolicyInput
 from publication.services import PublicationService
@@ -18,10 +18,23 @@ def test_projection_schedule_is_bounded_fair_and_pending_replays_do_not_fork() -
         pytest.skip("requires isolated PostgreSQL")
     engine = create_engine(url)
     sessions = sessionmaker(engine)
-    owner = DEFAULT_DEMO_SCOPE_ID
+    owner = uuid4()
     now = datetime.now(UTC)
     try:
         with sessions.begin() as session:
+            session.add(
+                IdentityUser(
+                    id=owner,
+                    username=f"schedule.{owner.hex}",
+                    email=None,
+                    github_user_id=None,
+                    password_hash=None,
+                    credential_version=1,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.flush()
             for index in range(25):
                 PublicationService(session).save_source_policy_in_transaction(
                     owner_id=owner,

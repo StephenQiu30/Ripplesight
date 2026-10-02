@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from api.dependencies import get_demo_write_scope, get_job_service, get_webpage_collection_service
+from api.dependencies import get_job_service, get_user_write_scope, get_webpage_collection_service
 from core.config import Settings
 from main import create_app
 
@@ -19,7 +19,7 @@ def test_collection_job_contract_only_exposes_registered_worker_handler() -> Non
         )
     )
     accepted: list[bool] = []
-    app.dependency_overrides[get_demo_write_scope] = uuid4
+    app.dependency_overrides[get_user_write_scope] = uuid4
     app.dependency_overrides[get_webpage_collection_service] = lambda: object()
     app.dependency_overrides[get_job_service] = lambda: SimpleNamespace(
         accept=lambda **_: accepted.append(True) or SimpleNamespace(id=uuid4())

@@ -13,6 +13,7 @@ import {
 import { BasicFooter } from "./basic-footer";
 import { BasicHeader } from "./basic-header";
 import { LayoutContainer } from "./layout-container";
+import { IdentitySessionProvider } from "@/components/auth/session-context";
 
 const LayoutScrollContext = createContext<RefObject<HTMLElement | null> | null>(
   null,
@@ -22,7 +23,13 @@ export function useLayoutScrollContainer() {
   return useContext(LayoutScrollContext);
 }
 
-export function BasicLayout({ children }: { children: ReactNode }) {
+export function BasicLayout({
+  children,
+  session = null,
+}: {
+  children: ReactNode;
+  session?: HotKeyAPI.IdentitySessionView | null;
+}) {
   const pathname = usePathname();
   const mainRef = useRef<HTMLElement>(null);
 
@@ -31,27 +38,29 @@ export function BasicLayout({ children }: { children: ReactNode }) {
   }, [pathname]);
 
   return (
-    <LayoutScrollContext.Provider value={mainRef}>
-      <div className="bg-background flex h-dvh flex-col overflow-hidden print:h-auto print:overflow-visible">
-        <a
-          href="#main-content"
-          className="bg-background text-foreground sr-only rounded-md px-4 py-3 focus:not-sr-only focus:fixed focus:top-3 focus:left-5 focus:z-50"
-        >
-          跳到正文
-        </a>
-        <BasicHeader />
-        <main
-          id="main-content"
-          ref={mainRef}
-          tabIndex={-1}
-          className="layout-region min-h-0 flex-1 overflow-y-auto overscroll-y-contain scroll-smooth focus-visible:outline-none motion-reduce:scroll-auto print:overflow-visible"
-        >
-          <LayoutContainer className="flex min-h-full flex-col py-10 sm:py-12 print:block print:py-0">
-            {children}
-          </LayoutContainer>
-        </main>
-        <BasicFooter />
-      </div>
-    </LayoutScrollContext.Provider>
+    <IdentitySessionProvider session={session}>
+      <LayoutScrollContext.Provider value={mainRef}>
+        <div className="bg-background flex h-dvh flex-col overflow-hidden print:h-auto print:overflow-visible">
+          <a
+            href="#main-content"
+            className="bg-background text-foreground sr-only rounded-md px-4 py-3 focus:not-sr-only focus:fixed focus:top-3 focus:left-5 focus:z-50"
+          >
+            跳到正文
+          </a>
+          <BasicHeader />
+          <main
+            id="main-content"
+            ref={mainRef}
+            tabIndex={-1}
+            className="layout-region min-h-0 flex-1 overflow-y-auto overscroll-y-contain scroll-smooth focus-visible:outline-none motion-reduce:scroll-auto print:overflow-visible"
+          >
+            <LayoutContainer className="flex min-h-full flex-col py-10 sm:py-12 print:block print:py-0">
+              {children}
+            </LayoutContainer>
+          </main>
+          <BasicFooter />
+        </div>
+      </LayoutScrollContext.Provider>
+    </IdentitySessionProvider>
   );
 }

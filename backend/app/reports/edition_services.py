@@ -18,7 +18,7 @@ from content.editorial_reading import require_editorial_content_permission_in_tr
 from content.schemas import EventContentReadReference
 from core.config import Settings
 from core.errors import ApplicationError
-from db.demo import resolve_demo_scope
+from db.owners import list_owner_ids_in_transaction
 from jobs.execution import ExecutionLease, JobCompletion, JobExecutionFailure, JobExecutionService
 from jobs.schemas import (
     JobAcceptanceInput,
@@ -436,7 +436,16 @@ class EditionService:
     def enqueue_due_in_transaction(self, *, now: datetime, limit: int = 8) -> int:
         if not self.session.in_transaction() or not 1 <= limit <= 100:
             raise ValueError("edition scheduling requires a bounded caller transaction")
-        owner = resolve_demo_scope(self.session)
+        accepted = 0
+        for owner in list_owner_ids_in_transaction(self.session):
+            if accepted >= limit:
+                break
+            accepted += self._enqueue_owner_due_in_transaction(
+                owner=owner, now=now, limit=limit - accepted
+            )
+        return accepted
+
+    def _enqueue_owner_due_in_transaction(self, *, owner: UUID, now: datetime, limit: int) -> int:
         accepted = 0
         kinds: tuple[EditionKind, ...] = ("daily", "weekly", "monthly")
         for kind in kinds:

@@ -7,6 +7,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
+from tests.conftest import authenticated_owner_id
 from tests.integration.test_monitor_topics import _csrf_headers
 from tests.integration.test_topic_runs import _ready_topic
 from tests.integration.test_topic_runs import monitor_topic_client as _topic_client  # noqa: F401
@@ -17,7 +18,6 @@ from content.comments_execution import CommentsExecutor
 from content.schemas import CommentManualRunInput, PersistContentPostInput
 from content.services import ContentService
 from core.errors import ApplicationError
-from db.demo import resolve_demo_scope
 from evidence.schemas import AdmittedSourcePayload, DataClass
 from jobs.execution import JobExecutionService, MessageReference
 from jobs.models import Job
@@ -52,7 +52,7 @@ def _seed_old_hn_post(client: TestClient) -> UUID:
     now = datetime.now(UTC)
     factory = client.app.state.session_factory
     with factory() as session:
-        owner_id = resolve_demo_scope(session)
+        owner_id = authenticated_owner_id(session)
         connection_id, connection_version = session.execute(
             text(
                 "SELECT id, current_version FROM source_connections WHERE source_key = 'hackernews'"
@@ -492,7 +492,7 @@ def test_old_hn_root_is_revisited_and_new_reply_keeps_direct_parent(
 
     next_round_at = now + timedelta(hours=6, minutes=1)
     with client.app.state.session_factory() as session:
-        owner_id = resolve_demo_scope(session)
+        owner_id = authenticated_owner_id(session)
         accepted = CommentManualRunService(session, clock=lambda: next_round_at).run(
             owner_id=owner_id,
             content_id=content_id,

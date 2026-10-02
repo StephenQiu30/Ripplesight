@@ -14,6 +14,7 @@ from confluent_kafka import Consumer, KafkaError, Producer
 from confluent_kafka.admin import AdminClient, NewTopic
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
+from tests.conftest import create_test_account
 
 from analysis.prompts import ANALYSIS_PROMPT_VERSION
 from analysis.schemas import AnnotationResultState, AnnotationStatus, AnnotationWrite
@@ -60,6 +61,7 @@ def analysis_case() -> Iterator[AnalysisCase]:
     now = datetime(2026, 9, 27, 12, tzinfo=UTC)
     old = now - timedelta(days=4)
     with sessions() as session, session.begin():
+        create_test_account(session, owner_id=owner_id)
         session.execute(
             text(
                 "INSERT INTO monitor_topics "

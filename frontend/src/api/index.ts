@@ -2,6 +2,7 @@
 /* eslint-disable */
 // API 更新时间：
 // API 唯一标识：
+import * as identity from "./identity";
 import * as moxingpeizhi from "./moxingpeizhi";
 import * as xitongzhuangtai from "./xitongzhuangtai";
 import * as rebang from "./rebang";
@@ -26,6 +27,7 @@ import * as zhandiziliao from "./zhandiziliao";
 import * as laiyuannengli from "./laiyuannengli";
 import * as gongkaifenfa from "./gongkaifenfa";
 export default {
+  identity,
   moxingpeizhi,
   xitongzhuangtai,
   rebang,

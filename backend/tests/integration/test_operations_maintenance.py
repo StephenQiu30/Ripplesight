@@ -10,7 +10,7 @@ import pytest
 from pydantic import SecretStr
 from sqlalchemy import create_engine, select
 from sqlalchemy.engine import make_url
-from tests.integration.test_content_records import _demo_scope
+from tests.integration.test_content_records import _user_scope
 from tests.integration.test_event_reading import event_read_client  # noqa: F401
 
 from db.metadata import metadata
@@ -57,7 +57,7 @@ def _accept(client, owner, action, *, backup_id=None):
 def test_actual_heartbeat_and_external_watchdog_complete_original_job_without_worker(
     event_read_client,
 ):
-    owner = _demo_scope(event_read_client)
+    owner = _user_scope(event_read_client)
     factory = event_read_client.app.state.session_factory
     reporter = ProcessHeartbeatReporter(factory, role="api")
     reporter.beat()
@@ -89,7 +89,7 @@ def test_maintenance_schedules_actual_jobs_once_and_keeps_external_watchdog_dist
     event_read_client,
 ):
     client = event_read_client
-    owner = _demo_scope(client)
+    owner = _user_scope(client)
     factory = client.app.state.session_factory
     settings = client.app.state.settings.model_copy(update={"operations_maintenance_enabled": True})
     now = datetime.now(UTC)
@@ -109,7 +109,7 @@ def test_maintenance_schedules_actual_jobs_once_and_keeps_external_watchdog_dist
 def test_recovery_redispatches_original_job_without_reopening_unknown_terminal_jobs(
     event_read_client,
 ):
-    owner = _demo_scope(event_read_client)
+    owner = _user_scope(event_read_client)
     factory = event_read_client.app.state.session_factory
     now = datetime.now(UTC)
     with factory() as session, session.begin():
@@ -159,7 +159,7 @@ def test_operations_unknown_delivery_is_not_sent_again_and_can_be_operator_resol
     event_read_client,
     action,
 ):
-    owner = _demo_scope(event_read_client)
+    owner = _user_scope(event_read_client)
     factory = event_read_client.app.state.session_factory
     now = datetime.now(UTC)
     with factory() as session:
@@ -244,7 +244,7 @@ def restore_database_url() -> Iterator[SecretStr]:
 def test_backup_and_isolated_restore_verify_real_dump_and_all_registered_tables(
     event_read_client, tmp_path, restore_database_url
 ):
-    owner = _demo_scope(event_read_client)
+    owner = _user_scope(event_read_client)
     factory = event_read_client.app.state.session_factory
     settings = event_read_client.app.state.settings.model_copy(
         update={

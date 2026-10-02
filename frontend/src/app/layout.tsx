@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { LocalThemeInitializer } from "@/components/publication/local-reading";
 import { BasicLayout } from "@/layout/basic-layout";
 import { layoutFontClassName } from "@/layout/layout-fonts";
+import { readLayoutSession } from "@/components/auth/layout-session";
 
 import "./globals.css";
 
@@ -15,9 +16,15 @@ export const metadata: Metadata = {
   description:
     "设定你关心的品牌、产品或话题，持续汇集相关讨论，沿着来源和时间看清变化如何发生。",
   applicationName: "知微见澜 Ripplesight",
+  robots: { index: false, follow: false },
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const session = await readLayoutSession();
   return (
     <html
       lang="zh-CN"
@@ -26,7 +33,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     >
       <body className="overflow-hidden print:overflow-visible">
         <LocalThemeInitializer />
-        <BasicLayout>{children}</BasicLayout>
+        <BasicLayout session={session}>{children}</BasicLayout>
       </body>
     </html>
   );

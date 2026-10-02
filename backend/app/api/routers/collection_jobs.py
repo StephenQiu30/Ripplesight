@@ -6,9 +6,9 @@ from uuid import UUID
 from fastapi import APIRouter, Query, Response, status
 
 from api.dependencies import (
-    DemoScopeDependency,
-    DemoWriteScopeDependency,
     JobServiceDependency,
+    UserScopeDependency,
+    UserWriteScopeDependency,
     WebPageCollectionServiceDependency,
 )
 from core.schemas import ErrorView, JobAcceptedView, PageView
@@ -48,7 +48,7 @@ def create_collection_job(
     payload: WebPageCollectionJobInput,
     response: Response,
     webpage_service: WebPageCollectionServiceDependency,
-    scope_id: DemoWriteScopeDependency,
+    scope_id: UserWriteScopeDependency,
 ) -> JobAcceptedView:
     job = webpage_service.accept_job(
         owner_id=scope_id,
@@ -72,7 +72,7 @@ def create_collection_job(
 def list_collection_jobs(
     response: Response,
     service: JobServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
     cursor: UUID | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> PageView[JobHistoryItemView]:
@@ -100,7 +100,7 @@ def list_collection_jobs(
 def list_continuous_failure_issues(
     response: Response,
     service: JobServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
 ) -> list[JobContinuousFailureIssueView]:
     issues = service.list_continuous_failure_issues(owner_id=scope_id)
     response.headers["cache-control"] = "no-store"
@@ -120,7 +120,7 @@ def get_collection_job(
     job_id: UUID,
     response: Response,
     service: JobServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
 ) -> JobStatusView:
     job = service.get_status(owner_id=scope_id, job_id=job_id)
     response.headers["cache-control"] = "no-store"
@@ -147,7 +147,7 @@ def cancel_collection_job(
     job_id: UUID,
     response: Response,
     service: JobServiceDependency,
-    scope_id: DemoWriteScopeDependency,
+    scope_id: UserWriteScopeDependency,
 ) -> JobStatusView:
     job = service.request_cancel(owner_id=scope_id, job_id=job_id)
     response.headers["cache-control"] = "no-store"
@@ -174,7 +174,7 @@ def retry_collection_job(
     job_id: UUID,
     response: Response,
     service: JobServiceDependency,
-    scope_id: DemoWriteScopeDependency,
+    scope_id: UserWriteScopeDependency,
 ) -> JobStatusView:
     job = service.request_retry(owner_id=scope_id, job_id=job_id)
     response.headers["location"] = f"/api/jobs/{job.id}"

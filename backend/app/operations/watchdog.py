@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from core.config import Settings, get_settings
 from core.logging import configure_logging
-from db.demo import resolve_demo_scope
 from db.metadata import metadata as _registered_metadata  # noqa: F401
+from db.owners import list_owner_ids_in_transaction
 from db.session import create_db_engine, create_session_factory
 from jobs.execution import (
     JobExecutionFailure,
@@ -33,9 +33,15 @@ def run_watchdog_once(sessions: sessionmaker[Session], settings: Settings) -> bo
     """Execute the watchdog independently when the Kafka worker or scheduler is down."""
     if not settings.operations_maintenance_enabled:
         return False
+    with sessions() as session, session.begin():
+        owners = list_owner_ids_in_transaction(session)
+    results = [_run_owner_watchdog(sessions, settings, owner) for owner in owners]
+    return any(results)
+
+
+def _run_owner_watchdog(sessions: sessionmaker[Session], settings: Settings, owner: UUID) -> bool:
     now = datetime.now(UTC)
     with sessions() as session:
-        owner = resolve_demo_scope(session)
         accepted = OperationsService(session, maintenance_enabled=True).enqueue_maintenance(
             owner_id=owner,
             command=MaintenanceInput(

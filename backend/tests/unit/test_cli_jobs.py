@@ -57,13 +57,15 @@ def test_job_reliability_cli_prints_read_only_snapshot_json(monkeypatch) -> None
         job_commands, "create_session_factory", lambda _engine: lambda: FakeSession()
     )
     monkeypatch.setattr(job_commands, "JobObservationService", FakeObservationService)
-    monkeypatch.setattr(job_commands, "resolve_demo_scope", lambda _session: owner_id)
+    monkeypatch.setattr(job_commands, "require_owner_id", lambda _session, _identifier: owner_id)
 
     result = CliRunner().invoke(
         app,
         [
             "jobs",
             "reliability-snapshot",
+            "--user-id",
+            "b5ab52fc-feb5-409a-a2c4-92b208db9c2e",
             "--window-start",
             start.isoformat(),
             "--window-end",
@@ -99,6 +101,8 @@ def test_job_reliability_cli_rejects_timestamps_without_timezone(monkeypatch) ->
         [
             "jobs",
             "reliability-snapshot",
+            "--user-id",
+            "b5ab52fc-feb5-409a-a2c4-92b208db9c2e",
             "--window-start",
             "2026-09-24T12:00:00",
             "--window-end",
@@ -110,7 +114,7 @@ def test_job_reliability_cli_rejects_timestamps_without_timezone(monkeypatch) ->
     assert engine_opened is False
 
 
-def test_job_reliability_cli_fails_closed_when_demo_partition_is_ambiguous(monkeypatch) -> None:
+def test_job_reliability_cli_fails_closed_when_account_does_not_exist(monkeypatch) -> None:
     engine = MagicMock()
     session = MagicMock()
     session.__enter__.return_value = session
@@ -121,8 +125,8 @@ def test_job_reliability_cli_fails_closed_when_demo_partition_is_ambiguous(monke
     monkeypatch.setattr(job_commands, "JobObservationService", None)
     monkeypatch.setattr(
         job_commands,
-        "resolve_demo_scope",
-        lambda _session: (_ for _ in ()).throw(ApplicationError("demo_scope_conflict")),
+        "require_owner_id",
+        lambda _session, _identifier: (_ for _ in ()).throw(ApplicationError("resource_not_found")),
     )
 
     result = CliRunner().invoke(
@@ -130,6 +134,8 @@ def test_job_reliability_cli_fails_closed_when_demo_partition_is_ambiguous(monke
         [
             "jobs",
             "reliability-snapshot",
+            "--user-id",
+            "b5ab52fc-feb5-409a-a2c4-92b208db9c2e",
             "--window-start",
             "2026-09-24T12:00:00Z",
             "--window-end",
@@ -138,5 +144,5 @@ def test_job_reliability_cli_fails_closed_when_demo_partition_is_ambiguous(monke
     )
 
     assert result.exit_code == 1
-    assert "demo_scope_conflict" in result.stderr
+    assert "resource_not_found" in result.stderr
     engine.dispose.assert_called_once()

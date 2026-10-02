@@ -6,10 +6,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Path, Query, Response, status
 
 from api.dependencies import (
-    DemoScopeDependency,
     OperatorScopeDependency,
     OperatorWriteScopeDependency,
     PublicationServiceDependency,
+    UserScopeDependency,
 )
 from core.schemas import ErrorView
 from publication.group_schemas import (
@@ -99,7 +99,7 @@ ReadingFiltersDependency = Annotated[PublicReadingFilters, Depends(_reading_filt
 def reading_timeline(
     response: Response,
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
     filters: ReadingFiltersDependency,
     limit: Annotated[int, Query(ge=1, le=40)] = 20,
     cursor: Annotated[str | None, Query(max_length=4096)] = None,
@@ -120,7 +120,7 @@ def fact_reports(
     fact_id: UUID,
     response: Response,
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
     filters: ReadingFiltersDependency,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     cursor: Annotated[str | None, Query(max_length=4096)] = None,
@@ -149,7 +149,7 @@ def developments(
     event_id: UUID,
     response: Response,
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
     filters: ReadingFiltersDependency,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     cursor: Annotated[str | None, Query(max_length=4096)] = None,
@@ -175,7 +175,7 @@ def developments(
     responses=_READ_ERRORS,
 )
 def topic_directory(
-    response: Response, service: PublicationServiceDependency, owner_id: DemoScopeDependency
+    response: Response, service: PublicationServiceDependency, owner_id: UserScopeDependency
 ) -> PublicTopicDirectoryView:
     _reading_headers(response)
     return service.topic_directory(owner_id=owner_id)
@@ -193,7 +193,7 @@ def topic_page(
     slug: Annotated[str, Path(min_length=1, max_length=64)],
     response: Response,
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
     page: Annotated[int, Query(ge=1, le=100000)] = 1,
 ) -> PublicTopicPageView:
     _reading_headers(response)
@@ -212,7 +212,7 @@ def topic_page(
 def list_items(
     response: Response,
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
     window: Literal["24h", "7d"] = "24h",
     mode: Literal["selected", "all"] = "selected",
     by: Literal["timeline", "published"] = "timeline",
@@ -258,7 +258,7 @@ def public_edition(
     key: Annotated[str, Path(min_length=7, max_length=10)],
     response: Response,
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
 ) -> PublicEditionView:
     _reading_headers(response)
     return service.edition(owner_id=owner_id, kind=kind, key=key)
@@ -277,7 +277,7 @@ def site_item(
     content_id: UUID,
     response: Response,
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
 ) -> PublicItemDetailView:
     _reading_headers(response)
     return service.detail(owner_id=owner_id, content_id=content_id)
@@ -296,7 +296,7 @@ def public_item(
     content_id: UUID,
     response: Response,
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
 ) -> PublicItemDetailView:
     _reading_headers(response)
     return service.detail(owner_id=owner_id, content_id=content_id, redistribute=True)
@@ -314,7 +314,7 @@ def public_item(
 def snapshot(
     response: Response,
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
     limit: Annotated[int, Query(ge=1, le=100)] = 100,
     cursor: Annotated[str | None, Query(max_length=4096)] = None,
 ) -> SelectedSnapshotView:
@@ -336,7 +336,7 @@ def changes(
     since: Annotated[int, Query(ge=0)],
     response: Response,
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
     limit: Annotated[int, Query(ge=1, le=100)] = 100,
 ) -> SelectedChangesPage:
     _reading_headers(response)
@@ -355,7 +355,7 @@ def changes(
 def hot(
     response: Response,
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
 ) -> PublicStoriesPage:
     _reading_headers(response)
@@ -375,7 +375,7 @@ def story(
     event_id: UUID,
     response: Response,
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
 ) -> PublicStoryView:
     _reading_headers(response)
     return service.story(owner_id=owner_id, event_id=event_id)

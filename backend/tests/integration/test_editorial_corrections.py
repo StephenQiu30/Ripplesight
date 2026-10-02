@@ -33,7 +33,7 @@ def test_partial_human_fields_clear_to_original_automatic_evidence_without_new_a
     settings.operator_token = SecretStr("controlled-editorial-operator-token-32-bytes")
     headers = {
         "X-HotKey-Operator-Token": settings.operator_token.get_secret_value(),
-        "X-HotKey-CSRF": "1",
+        "X-HotKey-CSRF": editorial_client.cookies["hotkey_csrf"],
     }
     path = f"/api/editorial/runs/{run.id}/corrections"
     original = editorial_client.get(f"/api/editorial/runs/{run.id}").json()
@@ -122,7 +122,7 @@ def test_clear_command_cannot_hide_simultaneous_replacements(editorial_client: T
     settings.operator_token = SecretStr("controlled-editorial-operator-token-32-bytes")
     headers = {
         "X-HotKey-Operator-Token": settings.operator_token.get_secret_value(),
-        "X-HotKey-CSRF": "1",
+        "X-HotKey-CSRF": editorial_client.cookies["hotkey_csrf"],
     }
     response = editorial_client.post(
         f"/api/editorial/runs/{run.id}/corrections",
@@ -151,7 +151,7 @@ def test_operator_rerun_preserves_fixed_content_and_queue_and_rejects_anonymous_
     settings.operator_token = SecretStr("controlled-editorial-operator-token-32-bytes")
     headers = {
         "X-HotKey-Operator-Token": settings.operator_token.get_secret_value(),
-        "X-HotKey-CSRF": "1",
+        "X-HotKey-CSRF": editorial_client.cookies["hotkey_csrf"],
     }
     corrected = editorial_client.post(
         f"/api/editorial/runs/{run.id}/corrections",
@@ -175,7 +175,10 @@ def test_operator_rerun_preserves_fixed_content_and_queue_and_rejects_anonymous_
         "stages": "all",
     }
     assert (
-        editorial_client.post(path, headers={"X-HotKey-CSRF": "1"}, json=command).status_code == 401
+        editorial_client.post(
+            path, headers={"X-HotKey-CSRF": editorial_client.cookies["hotkey_csrf"]}, json=command
+        ).status_code
+        == 401
     )
     assert (
         editorial_client.post(
@@ -204,7 +207,7 @@ def test_operator_rerun_preserves_fixed_content_and_queue_and_rejects_anonymous_
     assert (
         editorial_client.put(
             "/api/editorial/sources/x",
-            headers={"X-HotKey-CSRF": "1"},
+            headers={"X-HotKey-CSRF": editorial_client.cookies["hotkey_csrf"]},
             json={
                 "operation_id": str(uuid4()),
                 "expected_revision": 1,

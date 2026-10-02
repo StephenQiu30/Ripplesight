@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
-from api.dependencies import DemoScopeDependency, ReportServiceDependency
+from api.dependencies import ReportServiceDependency, UserScopeDependency
 from core.schemas import ErrorView, PageView
 from reports.schemas import ReportDetailView, ReportKind, ReportSummaryView
 
@@ -34,7 +34,7 @@ _READ_RESPONSES: dict[int | str, dict[str, Any]] = {
 def list_reports(
     response: Response,
     service: ReportServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
     topic_id: UUID | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
@@ -72,7 +72,7 @@ def get_report(
     report_id: UUID,
     response: Response,
     service: ReportServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
 ) -> ReportDetailView:
     report = service.get_report(owner_id=scope_id, report_id=report_id)
     response.headers["cache-control"] = "no-store"

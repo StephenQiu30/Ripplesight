@@ -37,7 +37,7 @@ export async function generateMetadata({
       title: edition.title,
       description: edition.lead,
       alternates: { canonical: edition.canonical_url ?? undefined },
-      robots: { index: edition.indexable, follow: edition.indexable },
+      robots: { index: false, follow: false },
       openGraph: {
         title: edition.title,
         description: edition.lead,

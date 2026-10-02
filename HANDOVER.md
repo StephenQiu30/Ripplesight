@@ -6,19 +6,19 @@
 
 Python/FastAPI、Next.js、PostgreSQL、Redis、Kafka 和 MinIO 承载主题、来源、内容/评论、分析、事实/事件、热度、日周月刊、公开投影与分发、模型榜、Codex 公告、通知、知识库和运营维护。API、Worker、CLI、调度和页面使用同一领域合同、Job/Outbox 及调用/预算账本；没有第二套后端或队列。
 
-Demo 不建立登录、注册、账户或会话。业务读取无需 Cookie，写入使用固定 `X-HotKey-CSRF: 1`；owner_id/created_by 仅为内部分区 UUID。空库使用固定分区、单分区复用、多分区拒绝；运营令牌和来源凭据分别管理。
+公开首页为SEO Welcome，工作区经账号密码、GitHub或邮箱验证码登录；身份、会话与CSRF按Design001 §9.2/Plan063恢复。新用户独立分区，历史数据不授首个注册者；运营令牌和来源授权分别保留。SMTP复用本机Video配置，真实第三方与收件证据独立验收。
 
 HN 新任务要求连接配置匹配当前完整预设；缺少 comment_scan 的配置须显式重新应用预设并产生新版本。已受理任务继续使用其冻结版本，不据当前配置改写历史任务。
 
 前端业务请求统一使用 `@umijs/openapi` 生成的 `src/api/` 和 Axios `src/request.ts`，ESLint 拒绝手写请求及直接传输调用。SSR origin 在传输层统一解析，页面不重复配置；业务选项不能覆盖生成方法、地址或参数。精选快照下载已改用生成函数。
 
-前端 62 份测试统一迁入 `frontend/tests/`，生产类型检查与 Docker 上下文排除测试，测试类型独立检查；ESLint 拒绝测试散放及业务导入测试依赖。后端仍使用 `backend/tests/`。独立内存 prototype 已移出工作区，源码、选定设计及 QA 资料已校验归档，原目录保留在本机废纸篓可恢复。
+前端测试统一放入 `frontend/tests/`，生产类型检查与 Docker 上下文排除测试，测试类型独立检查；ESLint 拒绝测试散放及业务导入测试依赖。后端仍使用 `backend/tests/`。独立内存 prototype 已移出工作区，源码、选定设计及 QA 资料已校验归档，原目录保留在本机废纸篓可恢复。
 
 全站外壳统一在 `frontend/src/layout/`：BasicLayout 装配 Header/Footer 和唯一正文滚动区，LayoutContainer 统一宽度、边距与滚动条留白；头尾固定在视口两端。各路由只组合正文，阅读位置跟随正文容器；加载、错误、404、全局恢复和打印遵守同一视觉合同。
 
 ## 本地运行
 
-业务库统一为 `hotkey`，112 表结构来自完整 schema.sql。本机 API 为 `127.0.0.1:8867`，Web 当前为 `127.0.0.1:3001`；Swagger `/docs`、Scalar `/scalar`、契约 `/openapi.json`。本机 backend/.env 与根 Compose .env 均已指向同一业务库，密钥不入 Git。API 和 Web 已启动；Worker/调度按需单独启动。
+业务库统一为 `hotkey`，114 表结构来自完整 schema.sql；身份升级前已恢复验证112表备份，新库导入核对原4条记录后切换。本机 API 为 `127.0.0.1:8867`，Web 为 `127.0.0.1:3001`；Swagger `/docs`、Scalar `/scalar`、契约 `/openapi.json`。本机 backend/.env 与根 Compose .env 指向同一业务库，密钥不入 Git。API 和 Web 已启动；Worker/调度按需单独启动。
 
 根 docker-compose.yml 只编排应用，生产文件复用相同定义并显式使用 .env.prod；docker-compose-env.yml 仅在需要独立基础环境时使用。PostgreSQL/Redis/Kafka、MinIO、Firecrawl、RSSHub/SearXNG 复用既有服务；本次未删除其他项目数据库或持久卷。
 
@@ -28,7 +28,7 @@ HN 新任务要求连接配置匹配当前完整预设；缺少 comment_scan 的
 
 Plan062 只保留真实验证与缺陷修复；058 短窗 A 未通过、B 未开始，032 人工重试、038 真实 HN 分页/旧帖新回复、009 同窗 72 小时与保留库恢复、014 真实归并条件继续保留。受控技术、真实来源/供应商和产品验收分别判断。原主题周报与扫描解耦、知识库问答、质量统计与独立灾备的缺口见 BACKLOG 及所属 PRD。
 
-真实 Codex 和付费调用仍暂停；来源准入、版本化预设、许可和预算上限保持有效。X 凭据/月度上限未确认前禁止真实请求；SMTP 默认关闭，飞书暂缓，发送 unknown 只允许人工确认。公开分发逐次复验所有成员许可、人工版本和撤回状态。
+真实 Codex 和付费调用仍暂停；来源准入、版本化预设、许可和预算上限保持有效。X 凭据/月度上限未确认前禁止真实请求；报告推送SMTP默认关闭；登录SMTP已配置，飞书暂缓，发送 unknown 只允许人工确认。公开分发逐次复验所有成员许可、人工版本和撤回状态。
 
 B 站仅限本人账号、个人非商业研究的 MediaCrawler 宿主机试点；固定补丁与独立 CDP 资料在 ~/Desktop/Docker/mediacrawler-start-local/。同轮一级评论每帖最多 20 条；遇验证、失效或频繁访问立即停用，本人核查后恢复。开关关闭，真实修复采集与恢复尚未通过。通用 Browser 保持冻结，probe 不代表业务平台接入。
 

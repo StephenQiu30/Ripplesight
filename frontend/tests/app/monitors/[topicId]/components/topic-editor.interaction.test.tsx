@@ -104,9 +104,9 @@ describe("Demo topic editing", () => {
       new ApiRequestError({
         kind: "http",
         status: 503,
-        code: "demo_scope_conflict",
-        message: "历史数据分区冲突",
-        requestId: "request-demo-scope",
+        code: "database_unavailable",
+        message: "依赖服务暂时不可用",
+        requestId: "request-dependency",
       }),
     );
     render(<TopicEditor topicId={topic.id} />);
@@ -115,10 +115,12 @@ describe("Demo topic editing", () => {
     fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain(
-        "request-demo-scope",
+        "request-dependency",
       ),
     );
-    expect(screen.getByRole("alert").textContent).toContain("历史数据分区冲突");
+    expect(screen.getByRole("alert").textContent).toContain(
+      "依赖服务暂时不可用",
+    );
     expect((name as HTMLInputElement).value).toBe("尚未保存的草稿");
     expect(api.push).not.toHaveBeenCalled();
   });

@@ -56,7 +56,7 @@ plan: docs/plan/062-AIHOT全量业务迁移执行计划.md
 
 Next.js 保留已有首页、同源 Axios、nonce/CSP、生成客户端和 Tailwind 命名尺度。关注配置与真实事件阅读分为 `/topics` 与 `/events`；旧入口只在新页面和导航核对后切换。阅读、搜索、事件/热度、报告归档、榜单/模型详情、公告日历、收藏、Agent、运营后台、分享等组件按真实领域分别设计路径/状态/数据来源，不搬入上游 features/shared 层或复制第二套 API 客户端。
 
-运营认证独立于匿名 Demo：公共投影只读，运营写入需运营身份与 CSRF，来源/模型秘密只留服务端。未具备受保护管理与私有材料隔离前，不对公网发布当前 Demo。固定模型配置按能力记录有效版本、用量与错误，切换不偷偷重判历史。反馈上传、海报/媒体、导入导出有大小/类型/主机/路径约束，失败可见；下载副本不能承诺远程抹除。
+运营认证独立于个人账户会话：欢迎页与说明公开，其余业务页面登录后访问并始终 noindex；投影读取沿用内容许可，运营写入同时需运营身份与 CSRF，来源/模型秘密只留服务端。未具备受保护管理与私有材料隔离前，不对公网发布当前 Demo。固定模型配置按能力记录有效版本、用量与错误，切换不偷偷重判历史。反馈上传、海报/媒体、导入导出有大小/类型/主机/路径约束，失败可见；下载副本不能承诺远程抹除。
 
 ## 5. 验证与切换
 
@@ -72,7 +72,7 @@ Next.js 保留已有首页、同源 Axios、nonce/CSP、生成客户端和 Tailw
 
 刷新必须从唯一 Job/Worker 入口调用并提供持久预算的 client factory，每个请求（含分页和重定向）先取得执行权/预算，成功或失败均由统一账本结算；默认关闭外部请求且默认回调拒绝，不因可解析固定样本自动启用。抓取最多两路并发，Session 只在原线程写入；每来源 savepoint 与 last_ok_at 保留，空结果和未授权强制前的异常减半结果不能替换已有证据。一次采集器可能产出多来源状态，状态中的 request_count 不应相加作为实际网络消费。每六小时的刷新任务、硬截止、重启、取消与预算接线归现有 jobs/worker。GET 页面/API 不抓取、不求解、不生成。
 
-五个只读操作由 FastAPI 自动契约生成到 `src/api/moxingbang.ts`；六个 Next.js 路由按请求服务端渲染，保持现行匿名 Demo 的 noindex 和 nonce/CSP，不修改既有首页。组件设计如下。
+五个只读操作由 FastAPI 自动契约生成到 `src/api/moxingbang.ts`；六个 Next.js 路由按请求服务端渲染，保持登录工作区的 noindex 和 nonce/CSP，首页按 Design001 §9.2 作为公开 SEO Welcome。组件设计如下。
 
 | 组件 | 领域、范围与路径 | 数据与状态 |
 |---|---|---|
@@ -94,7 +94,7 @@ Next.js 保留已有首页、同源 Axios、nonce/CSP、生成客户端和 Tailw
 
 精选 epoch/sequence 与修订同事务串行分配，cursor 绑定 owner、窗口、筛选与 epoch；旧 epoch冲突要求重建快照。ledger只存修订/操作引用，输出upsert必须再核当前投影，已撤回或许可失效转remove，旧payload不可绕过live guard。所有GET零抓取/零模型/零求解/零业务写入。报告候选冻结 publication/许可/analysis/material/event/fact 全部版本，生成提交与读取必须再次逐项复验，缺失即invalid；翻译 grant 按同一固定版本判定精选public+站内全文。
 
-`exports.py` 提供摘要/全文/全部/分类 RSS、单篇与 Agent Markdown、sitemap/robots/llms/结构化SEO；XML/Markdown转义、来源署名、稳定 GUID、明确原始时间与缺项，全文RSS另核再分发权。`mcp.py` 提供固定开源五工具只读合同和 bounded JSON-RPC，不能把线上八工具宣传当已移植验收。HTTP接口由唯一FastAPI入口装配；ETag从实时可见结果生成且不共享含旧正文的长缓存，撤回与许可收紧不返回过期304。图像分享只用受控短投影，不能多读许可正文。全文、译文、媒体和索引授权与公开摘要分别核对，当前业务Demo继续noindex。
+`exports.py` 提供摘要/全文/全部/分类 RSS、单篇与 Agent Markdown、sitemap/robots/llms/结构化SEO；XML/Markdown转义、来源署名、稳定 GUID、明确原始时间与缺项，全文RSS另核再分发权。`mcp.py` 提供固定开源五工具只读合同和 bounded JSON-RPC，不能把线上八工具宣传当已移植验收。HTTP接口由唯一FastAPI入口装配；ETag从实时可见结果生成且不共享含旧正文的长缓存，撤回与许可收紧不返回过期304。图像分享只用受控短投影，不能多读许可正文。全文、译文、媒体和索引授权与公开摘要分别核对，当前业务工作区登录后访问并始终noindex。
 
 ## 分析全链路实现合同
 
@@ -126,7 +126,7 @@ Next.js 保留已有首页、同源 Axios、nonce/CSP、生成客户端和 Tailw
 
 `codex_execution.py` 提供本域只读 due DTO 与 Worker 装配器。due 读取在调度事务内返回现有启用监控的不可变配置版本、正常/热窗频率和到期点；Job、ledger、Outbox 仍由既有调度入口受理。executor 使用 PostgreSQL tick advisory lock 覆盖采集、识别和通知准备；来源 factory 必须经来源域准入和逐请求预算，只返回官方 DTO 适配器，缺省未授权。Worker 注入 lease/epoch guard，在采集与模型写回、模型调用前及 verified 事务再核执行权；取消、租约失效或配置变化不能修改公共事件。通知 sink 只向既有通知服务幂等受理 intent，不代表发送成功；没有投递装配时结果为 partial，unknown 继续由唯一投递账本人工确认。
 
-Next `/codex-resets` 保留匿名 Demo、noindex、按请求 nonce 和生成客户端。读取入口不创建/开启监控，不增加无权限保护的写操作。页面状态及组件如下。
+Next `/codex-resets` 采用真实账户会话、noindex、按请求 nonce 和生成客户端。读取入口不创建/开启监控，不增加无权限保护的写操作。页面状态及组件如下。
 
 | 组件 | 领域、范围与路径 | 数据与状态 |
 |---|---|---|
@@ -157,16 +157,16 @@ X 固定官方 API、不移入 SocialData；冻结查询与页 token 的积压�
 
 ## 运营与评测实施合同
 
-运营编排实际包名固定为 `operations`，承接上表 administration 职责；`analysis/evaluation_*` 持有 SelectBench 评测事实。运营认证使用独立 `HOTKEY_OPERATOR_TOKEN`，默认未配置关闭；constant-time 校验后仅解析既有唯一 Demo 分区，不能由请求指定 owner。读取需运营 token，写入还要求 `X-HotKey-CSRF:1`；token 仅内存输入和服务端配置，不进入浏览器持久存储、DTO、审计或日志。撤销通过替换/移除服务端配置并重启加载，生效后旧 token 在下一请求失效；页面退出清当前内存上下文，不宣称撤销服务端密钥或提供会话TTL，匿名业务阅读不增加登录要求。
+运营编排实际包名固定为 `operations`，承接上表 administration 职责；`analysis/evaluation_*` 持有 SelectBench 评测事实。运营认证在个人会话之外继续使用独立 `HOTKEY_OPERATOR_TOKEN`，默认未配置关闭；constant-time 校验后仅解析既有唯一 Demo 分区，不能由请求指定 owner。读取需运营 token，写入还要求 `X-HotKey-CSRF:1`；token 仅内存输入和服务端配置，不进入浏览器持久存储、DTO、审计或日志。撤销通过替换/移除服务端配置并重启加载，生效后旧 token 在下一请求失效；页面退出清当前内存上下文，不宣称撤销服务端密钥或提供会话TTL，个人账户验证不替代独立运营权限。
 
-六项运营事实分别是匿名反馈、来源冷却/禁止、私有附件、幂等审计操作、进程心跳和不可变词表版本。反馈按 operation_id+输入hash 幂等，持久冷却跨重启有效；HMAC 处理来源标识，不存 IP/UA 原文，密钥无配置时明确关闭提交。反馈文字5000字、可选邮箱200字和页面URL500字；截图限8MiB、PNG/JPEG/WebP/GIF且核验实际格式/尺寸，私有读取需要运营身份。状态修订/屏蔽/关闭要求预期版本与原因；处理结束可删除正文/联系信息/附件，保留无正文审计。外转至内部渠道保持独立开关、Job和回执，不能在匿名HTTP提交中隐式发送。
+六项运营事实分别是账户反馈、来源冷却/禁止、私有附件、幂等审计操作、进程心跳和不可变词表版本。反馈按 operation_id+输入hash 幂等，持久冷却跨重启有效；HMAC 处理来源标识，不存 IP/UA 原文，密钥无配置时明确关闭提交。反馈文字5000字、可选邮箱200字和页面URL500字；截图限8MiB、PNG/JPEG/WebP/GIF且核验实际格式/尺寸，私有读取需要运营身份。状态修订/屏蔽/关闭要求预期版本与原因；处理结束可删除正文/联系信息/附件，保留无正文审计。外转至内部渠道保持独立开关、Job和回执，不能在HTTP反馈提交中隐式发送。
 
 SelectBench 两表保存不可变评测run和按model/case的gold、decision、score、错误和模型回执；离线导入必须严格同gold集合、prompt/version/hash/模型配置，程序复算TP/FP/FN/TN/错误和分层结果，不信任导入summary。收费评测统一AiService且默认关闭，真实预算/运行/恢复证据分开记录。修改词表/主体/分类生成新版本，旧内容不自动重判；分析请求通过所属领域DTO消费有效版本。
 
 | 组件 | 所属/路径 | 数据与状态 |
 | --- | --- | --- |
 | OperationsWorkspace | `frontend/src/app/operations/components/operations-workspace.tsx` | 独立运营认证、loading/disabled/unauthorized/error，真实Job/coverage/来源/预算/反馈/审计/心跳 DTO |
-| FeedbackForm | `frontend/src/app/feedback/components/feedback-form.tsx` | 匿名CSRF提交、相同opid重试、持久冷却、附件拒绝和成功编号，无隐式渠道发送 |
+| FeedbackForm | `frontend/src/app/feedback/components/feedback-form.tsx` | 真实会话与CSRF提交、相同opid重试、持久冷却、附件拒绝和成功编号，无隐式渠道发送 |
 | SourceIdentityEditor | `frontend/src/app/operations/components/source-identity-editor.tsx` | 来源角色/selector/机构与组身份、expected_revision冲突；不触发采集 |
 | SelectBenchReading | `frontend/src/app/operations/components/selectbench-reading.tsx` | 严格导入、离线复算、同case横向对比/分层/误判/错误，不把导入报告当真实付费模型验收 |
 

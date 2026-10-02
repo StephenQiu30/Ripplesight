@@ -2,9 +2,9 @@
 
 技术栈：pnpm、Next.js App Router、React、TypeScript、shadcn/ui、Radix UI、Tailwind CSS、Axios、ESLint、Prettier。
 
-首页方案 1 直接实现在 `src/app/components/`，采用 Vercel 黑白留白风格。“创建关注”进入现有 `/monitors/new`，“我的关注”进入 `/events`；来源能力、主题配置及保存复用现有生成 API。指南和示例只提供简短说明。
+首页方案 1 实现在 `src/app/components/`，采用 Vercel 黑白留白风格，作为公开 SEO Welcome。主入口“开始使用”进入 `/login`，登录后默认进入 `/topics`；来源能力、主题配置及保存复用生成 API。指南和示例只提供简短说明。
 
-业务页面按当前 Swagger 重建：关注的基础设置包含名称、关键词和来源，进阶规则与频率按需展开；来源页优先配置，覆盖信息放在二级页签。相关内容、热榜、采集记录及已有报告只呈现真实接口结果，移除没有接口的事件聚合占位与非核心偏好表单。共用导航位于 `src/components/navigation/`，不增加第二套页面或请求层。
+业务页面按当前 Swagger 重建：关注的基础设置包含名称、关键词和来源，进阶规则与频率按需展开；来源页优先配置，覆盖信息放在二级页签。相关内容、热榜、采集记录及已有报告只呈现真实接口结果。共用外壳位于 `src/layout/`，固定头尾与正文滚动区，各页面共享宽度、边距、字体与语义颜色。
 
 ## 运行
 
@@ -14,17 +14,17 @@ pnpm install
 pnpm dev
 ```
 
-浏览器请求统一使用同源 `/api/*`，`src/app/api/[[...path]]/route.ts` 根据服务端 `HOTKEY_API_ORIGIN` 转发；`src/proxy.ts` 只负责 CSP nonce。
+浏览器请求统一使用同源 `/api/*`，`src/app/api/[[...path]]/route.ts` 根据服务端 `HOTKEY_API_ORIGIN` 转发；`src/proxy.ts` 负责 CSP nonce 与真实会话验证，包含深链接与预取。私有 SSR 请求统一由 Axios 封装转发限定 Cookie。
 
-## Demo 业务入口
+## 公开页面与登录工作区
 
-当前 Demo 直接访问 `/events`，登录、注册及用户体系删除。业务页面不读取身份、不显示账户/退出操作，也不因错误跳往登录页。来源授权和凭据状态仍由来源页面显示。
+公开页面为首页、关于、隐私、条款、联系与变更说明，保留 SEO metadata、robots 和 sitemap。`/login` 提供账号密码、GitHub、邮箱验证码三种方式；第三方与邮件可用性读取实际服务配置。登录后才能访问原“更多”中的工作区页面，默认进入 `/topics` 或安全站内原目标。工作区始终 noindex，沿用原导航与统一 BasicLayout；账户菜单支持退出及 `/account` 凭据设置。来源授权与凭据仍独立处理。
 
-写请求由 `src/request.ts` 设置固定 `X-HotKey-CSRF: 1`，无需 Cookie/token。Next 同源代理不转发旧 Cookie/Authorization，也不向浏览器透传 Set-Cookie；加载、空、错误/重试、草稿冲突及请求编号继续有效。
+账户会话由后端验证并通过 HttpOnly Cookie 保存；同源代理仅转发 HotKey 身份 Cookie 与对应 Set-Cookie，写入使用现行 CSRF 合同。登录服务故障显示可恢复状态，不将网络失败当成退出。所有登录、邮箱验证、OAuth 开始、退出和凭据设置调用 Umi 生成的 identity API，不手写请求。
 
-页面访问合同见 [Design001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md#92-当前-demo-的访问与数据分区)，验证边界见 [共享验收](../docs/acceptance/001-共享运行门槛验收.md)；API 从同版本后端 OpenAPI 生成，不手写端点。
+页面访问合同见 [Design001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md#92-公开欢迎页登录与个人数据访问)，实施见 [Plan063](../docs/plan/063-公开欢迎页与三种登录执行计划.md)，验证边界见 [共享验收](../docs/acceptance/001-共享运行门槛验收.md)。
 
-未来 ToC 的用户名密码、GitHub App、邮箱验证码和无感登录需求后置。当前 Demo 保持 `noindex`、生产 CSP nonce 和动态交互入口。
+公开 metadata 的 origin 使用 `NEXT_PUBLIC_SITE_ORIGIN` 或服务端 `HOTKEY_WEB_ORIGIN`，本机默认为 `http://127.0.0.1:3001`；部署时设置实际站点地址。robots 与 sitemap 不列出登录或业务路由。交互 HTML 保持逐请求 CSP nonce。
 
 ## 目录
 
@@ -36,7 +36,7 @@ src/
 ├── components/<feature>/ # 跨页面复用组件
 ├── layout/               # BasicLayout、统一 Header/Footer、容器和共用指南
 ├── lib/                  # 纯工具
-├── proxy.ts              # CSP nonce
+├── proxy.ts              # 真实会话门禁与 CSP nonce
 └── request.ts            # Axios 请求封装
 ```
 

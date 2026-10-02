@@ -356,9 +356,9 @@ def test_saved_provider_receipt_resumes_without_a_second_external_request(
 def test_target_enabled_inside_scan_window_waits_for_next_frozen_window(editorial_client):
     from datetime import UTC, datetime
 
-    from tests.integration.test_content_records import _demo_scope
+    from tests.integration.test_content_records import _user_scope
 
-    owner = _demo_scope(editorial_client)
+    owner = _user_scope(editorial_client)
     sessions = editorial_client.app.state.session_factory
     start = datetime.fromtimestamp(int(NOW.timestamp()) // 300 * 300, UTC)
     enabled = start + timedelta(seconds=11)
@@ -705,12 +705,12 @@ def test_codex_recognition_admits_into_the_same_ledger_and_late_withdrawal_block
 
 
 def test_operator_target_api_is_closed_without_token_and_uses_revision_cas(editorial_client):
-    from tests.integration.test_content_records import _demo_scope
+    from tests.integration.test_content_records import _user_scope
 
     from core.errors import ApplicationError
     from notifications.schemas import TargetSaveInput
 
-    owner = _demo_scope(editorial_client)
+    owner = _user_scope(editorial_client)
     editorial_client.app.state.settings = editorial_client.app.state.settings.model_copy(
         update={"operator_token": None}
     )
@@ -743,7 +743,7 @@ def test_operator_target_api_is_closed_without_token_and_uses_revision_cas(edito
         ).status_code
         == 403
     )
-    headers["X-HotKey-CSRF"] = "1"
+    headers["X-HotKey-CSRF"] = editorial_client.cookies["hotkey_csrf"]
     accepted = editorial_client.put(
         "/api/operations/notification-targets",
         headers=headers,

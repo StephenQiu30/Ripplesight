@@ -23,26 +23,36 @@
 
 ## 当前首页切片
 
-方案 1 在本目录实现，使用 Vercel 黑白留白风格；不增加独立应用、业务状态层或额外配置流程。首页的“创建关注”进入现有 `/monitors/new`，“我的关注”进入 `/topics`。主题创建、修改、来源准入与保存使用当前 OpenAPI 生成 API；示例只用于说明，不显示为真实采集结果。
+方案 1 在本目录实现，使用 Vercel 黑白留白风格；不增加独立应用、业务状态层或额外配置流程。首页主入口通过 `/login` 进入系统，已登录后创建关注使用现有 `/monitors/new`。主题创建、修改、来源准入与保存使用当前 OpenAPI 生成 API；示例只用于说明，不显示为真实采集结果。
 
 | 组件                                    | 领域与复用范围       | 路径                                  | 数据与状态                                                           |
 | --------------------------------------- | -------------------- | ------------------------------------- | -------------------------------------------------------------------- |
 | HomeContent                             | 首页专属组合         | src/app/components/home-content.tsx   | 静态内容与说明浮层开关；无业务 API                                   |
 | BasicLayout / BasicHeader / BasicFooter | 全站页面骨架与导航   | src/layout/                           | 唯一正文滚动区、路由选中态、品牌、共用指南与真实站点链接；桌面及窄屏 |
 | UsageGuide                              | 首页和导航复用的说明 | src/layout/usage-guide.tsx            | 静态指南/示例 Dialog，关闭后返回触发器焦点                           |
-| HeroSection                             | 首页专属主视觉       | src/app/components/hero-section.tsx   | 选定文案、装饰品牌图、创建链接与示例入口                             |
+| HeroSection                             | 首页专属主视觉       | src/app/components/hero-section.tsx   | 选定文案、装饰品牌图、登录/系统入口与示例说明                        |
 | BrandLockup / BrandMark                 | 跨页面品牌           | src/components/brand/brand-lockup.tsx | 复用 src/app/icon.png 母版；无 API 状态                              |
 | Button / Dialog / DropdownMenu          | 跨页面官方基础组件   | src/components/ui/                    | 保留官方 Radix 语义和交互；必要的首页尺寸变体使用命名尺度            |
 
 装饰主视觉位于 `public/brand/hero-brand-soft.png`，是既定品牌的阴影展示资产，不作为第二套品牌母版。布局使用现有 Tailwind 尺度与标准断点。首页无加载、空、部分或权限状态；业务页面保留当前加载、空、错误重试及成功状态。
 
-## Demo 访问规则
+## 公开Welcome与登录工作区
 
-当前 Demo 直接进入 `/topics`，删除 `/login`、`/register`、独占 auth 组件和身份先行请求；页面不显示账户信息或退出入口。`TopicsWorkspace` 使用主题API，`TopicForm` 使用来源能力API，覆盖加载、空、错误重试与业务成功。来源授权/凭据和内容原生身份保留。
+`/`保留既定黑白留白主视觉作为SEO Welcome，公开Header只显示站点说明/指南及登录入口，不显示工作区菜单；主操作“开始使用”进入 `/login`，登录后默认 `/topics` 或安全站内原目标。已登录工作区保留原“更多”导航、统一容器、固定头尾及唯一正文滚动区，显示账户和退出。公开说明仅about/privacy/terms/contact/changelog，公开文案不读取个人业务统计；login默认noindex，工作区始终noindex，robots/sitemap只列公开路径。
 
-`request.ts` 写请求固定 `X-HotKey-CSRF: 1`；代理不转发 Cookie/Authorization 或 Set-Cookie，业务失败就地显示并支持重试，不跳登录。CSP nonce、动态交互入口和 `noindex` 保持。
+登录专属组件归 `src/app/login/components/`，跨页会话/账户与守卫归 `src/components/auth/`；全部类型和请求来自Umi生成的identity API。账号密码、GitHub App、邮箱验证码共用真实数据库会话，覆盖加载/不可用/字段错误/限流/取消/成功/网络重试。业务深链接和prefetch均先验证会话，网络失败不能当成已退出；SSR按请求转发限定Cookie，代理只转发HotKey身份Cookie/Set-Cookie。保持官方shadcn/Radix表单、按钮、菜单、无装饰边框、语义颜色及命名尺度。
 
-访问规则见 [Design001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md#92-当前-demo-的访问与数据分区)，验证边界见 [共享验收](../docs/acceptance/001-共享运行门槛验收.md)。未来 ToC 登录需求后置，不保留组件或配置骨架。
+访问与数据隔离合同见 [Design001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md#92-公开欢迎页登录与个人数据访问)，实施见Plan063；真实第三方授权/邮件核收不由受控测试代替。
+
+| 组件                                  | 领域与复用范围       | 目标路径                                                               | 数据与状态                                                                                                                                   |
+| ------------------------------------- | -------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| LoginForm                             | 登录页专属           | src/app/login/components/login-form.tsx                                | getLoginOptions、createIdentitySession、sendEmailLoginCode、verifyEmailLoginCode、startGithubLogin；读取/不可用/字段错误/限流/取消/成功/重试 |
+| CredentialsForm                       | 账户设置专属         | src/app/account/components/credentials-form.tsx                        | 当前生成会话、updateIdentityCredentials、已验证邮箱验证码；当前密码/首次设置/密码确认/保存/失效/错误/重新登录                                |
+| IdentitySessionProvider / AccountMenu | 全站会话与导航       | src/components/auth/                                                   | 消费proxy验证后的IdentitySessionView；退出真实会话后返回Welcome，失败保留当前账户                                                            |
+| access / layout-session               | 路由和服务端会话读取 | src/components/auth/                                                   | 公开路径、安全站内回跳、限定内部已验证会话头；不保存会话秘密或自行发请求                                                                     |
+| welcomeMetadata / robots / sitemap    | 公开SEO页面          | src/components/site/welcome-metadata.ts；src/app/robots.ts、sitemap.ts | 实际站点origin、canonical/OG；仅Welcome和公开说明入站点地图，工作区始终noindex                                                               |
+
+公开站点origin使用`NEXT_PUBLIC_SITE_ORIGIN`或服务端`HOTKEY_WEB_ORIGIN`，本机默认为3001；不调用私有业务API生成欢迎页元数据。登录页在上游会话验证故障时显示统一PageState和原安全目标重载操作，保持会话故障与未登录状态的区分。修改凭据成功204后撤销所有旧会话，页面回登录；验证码标识仅保存在组件内存中。
 
 ## API 与状态
 
@@ -73,7 +83,7 @@
 
 | 组件                                                                             | 领域与复用范围                   | 目标路径                                                                 | 数据来源与状态覆盖                                                                                                                       |
 | -------------------------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| BasicHeader                                                                      | 全站主导航                       | src/layout/basic-header.tsx                                              | 静态真实路由；统一桌面/手机导航、路由匹配与当前页语义，指南 Dialog                                                                       |
+| BasicHeader                                                                      | 全站主导航                       | src/layout/basic-header.tsx                                              | 静态真实会话与公开/工作区路由；统一桌面/手机导航、路由匹配与当前页语义，指南 Dialog                                                      |
 | TopicsWorkspace / TopicList                                                      | 关注入口 / 列表                  | src/app/topics/components/；src/components/monitors/topic-list.tsx       | listMonitorTopics；加载、空、分页、归档筛选、错误重试                                                                                    |
 | EventList / EventHotList                                                         | 已确认事件列表与关注热度         | src/app/events/components/                                               | listEvents / listHotEvents；主题、来源与搜索筛选、游标分页、真实热度、加载、空、权限和错误重试                                           |
 | TopicForm / TopicEditor                                                          | 创建 / 编辑专属                  | src/app/monitors/new/components/；src/app/monitors/[topicId]/components/ | create/get/update/clone/pause/resume/archiveMonitorTopic；来源加载、字段422、版本冲突、重复提交、保存状态                                |
@@ -90,7 +100,7 @@
 
 配置第一层只呈现名称、关键词与来源，进阶规则/频率按需展开。编辑隐藏的既有报告偏好按原值传回，避免覆盖数据。来源主入口是配置，覆盖/技术字段二级展示。所有页面沿用语义颜色、命名尺度、官方表单/浮层/菜单；不新增数据状态框架。业务入口继续动态渲染、`noindex`，取消请求不显示为业务失败。
 
-本片新增导航为 `src/components/navigation/workspace-header.tsx`；来源组合与设置分别为 `src/app/sources/components/sources-workspace.tsx`、`source-settings.tsx`，替代并删除旧 `source-capability-matrix.tsx`。`TopicAdvancedFields` 导出在既有 `src/components/monitors/topic-settings-fields.tsx`；报告查询/详情局部组合留在各自原文件中，不放到公共层。官方基础组件新增 `collapsible.tsx`、`empty.tsx`、`item.tsx`、`spinner.tsx`，只提供实际使用的交互原语。
+当前主导航为 `src/layout/basic-header.tsx`；来源组合与设置分别为 `src/app/sources/components/sources-workspace.tsx`、`source-settings.tsx`，替代并删除旧 `source-capability-matrix.tsx`。`TopicAdvancedFields` 导出在既有 `src/components/monitors/topic-settings-fields.tsx`；报告查询/详情局部组合留在各自原文件中，不放到公共层。官方基础组件新增 `collapsible.tsx`、`empty.tsx`、`item.tsx`、`spinner.tsx`，只提供实际使用的交互原语。
 
 ## 日周月刊
 

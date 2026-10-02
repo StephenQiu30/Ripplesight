@@ -7,9 +7,9 @@ from fastapi import APIRouter, Response
 
 from analysis.translation_schemas import TranslationRequestInput, TranslationRunView
 from api.dependencies import (
-    DemoScopeDependency,
-    DemoWriteScopeDependency,
     TranslationServiceDependency,
+    UserScopeDependency,
+    UserWriteScopeDependency,
 )
 from core.schemas import ErrorView
 
@@ -39,7 +39,7 @@ def request_translation(
     command: TranslationRequestInput,
     response: Response,
     service: TranslationServiceDependency,
-    owner: DemoWriteScopeDependency,
+    owner: UserWriteScopeDependency,
 ) -> TranslationRunView:
     response.headers["cache-control"] = "no-store"
     return service.request(owner_id=owner, content_id=content_id, command=command)
@@ -57,7 +57,7 @@ def get_translation(
     run_id: UUID,
     response: Response,
     service: TranslationServiceDependency,
-    owner: DemoScopeDependency,
+    owner: UserScopeDependency,
 ) -> TranslationRunView:
     response.headers["cache-control"] = "no-store"
     return service.get(owner_id=owner, run_id=run_id)

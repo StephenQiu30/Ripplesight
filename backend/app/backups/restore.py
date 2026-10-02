@@ -17,8 +17,9 @@ from sqlalchemy.exc import ArgumentError, SQLAlchemyError
 from backups.adapters.minio import ObjectArchiveError
 from backups.adapters.postgres import BackupToolError, PostgresDumpAdapter
 from backups.schemas import BackupManifest, EvidenceObjectState
-from db.demo import DEFAULT_DEMO_SCOPE_ID
 from db.metadata import metadata
+
+_RESTORE_PROBE_SCOPE_ID = UUID("00000000-0000-4000-8000-000000000001")
 
 
 class BackupRestoreError(RuntimeError):
@@ -211,7 +212,7 @@ class BackupRestoreService:
                     connection.execute(
                         topics.insert().values(
                             id=probe_id,
-                            owner_id=DEFAULT_DEMO_SCOPE_ID,
+                            owner_id=_RESTORE_PROBE_SCOPE_ID,
                             name="restore-probe",
                             created_at=now,
                             updated_at=now,

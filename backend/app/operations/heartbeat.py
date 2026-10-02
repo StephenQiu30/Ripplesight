@@ -11,7 +11,7 @@ from uuid import uuid4
 import structlog
 from sqlalchemy.orm import Session, sessionmaker
 
-from db.demo import resolve_demo_scope
+from db.owners import list_owner_ids_in_transaction
 from operations.services import record_process_heartbeat_in_transaction
 
 
@@ -42,9 +42,8 @@ class ProcessHeartbeatReporter:
     def beat(self, *, state: Literal["alive", "stopping", "error"] = "alive") -> None:
         if not self._enabled:
             return
-        with self._sessions() as session:
-            owner = resolve_demo_scope(session)
-            with session.begin():
+        with self._sessions() as session, session.begin():
+            for owner in list_owner_ids_in_transaction(session):
                 record_process_heartbeat_in_transaction(
                     session,
                     owner_id=owner,

@@ -43,6 +43,29 @@ HTTP_ERRORS: Mapping[int, PublicError] = {
     504: PublicError(504, "upstream_timeout", "上游服务响应超时"),
 }
 APPLICATION_ERRORS: Mapping[str, PublicError] = {
+    "invalid_credentials": PublicError(401, "invalid_credentials", "账号或密码错误"),
+    "invalid_session": PublicError(401, "invalid_session", "请登录后继续"),
+    "invalid_email_code": PublicError(401, "invalid_email_code", "验证码无效或已过期"),
+    "invalid_oauth_state": PublicError(401, "invalid_oauth_state", "授权已失效,请重新登录"),
+    "github_authentication_failed": PublicError(
+        401, "github_authentication_failed", "GitHub授权未完成"
+    ),
+    "credentials_verification_required": PublicError(
+        403, "credentials_verification_required", "请验证当前密码或邮箱后修改凭据"
+    ),
+    "identity_link_conflict": PublicError(
+        409, "identity_link_conflict", "登录身份无法关联到当前账户"
+    ),
+    "username_unavailable": PublicError(409, "username_unavailable", "用户名无法使用"),
+    "auth_rate_limited": PublicError(429, "auth_rate_limited", "登录请求过于频繁,请稍后重试"),
+    "auth_dependency_unavailable": PublicError(
+        503, "auth_dependency_unavailable", "登录服务暂时不可用"
+    ),
+    "github_login_unavailable": PublicError(503, "github_login_unavailable", "GitHub登录尚未配置"),
+    "email_login_unavailable": PublicError(503, "email_login_unavailable", "邮箱登录尚未配置"),
+    "email_delivery_unavailable": PublicError(
+        503, "email_delivery_unavailable", "验证码邮件暂时无法发送"
+    ),
     "invalid_ai_input": PublicError(422, "invalid_ai_input", "模型能力配置不符合当前要求"),
     "ai_configuration_conflict": PublicError(
         409, "ai_configuration_conflict", "模型能力配置已变化,请重新读取当前版本"
@@ -183,9 +206,6 @@ APPLICATION_ERRORS: Mapping[str, PublicError] = {
     ),
     "csrf_invalid": PublicError(403, "csrf_invalid", "请求安全校验失败"),
     "database_unavailable": PublicError(503, "database_unavailable", "数据库暂不可用"),
-    "demo_scope_conflict": PublicError(
-        503, "demo_scope_conflict", "Demo 数据分区冲突, 请检查数据库"
-    ),
     "idempotency_conflict": PublicError(409, "idempotency_conflict", "操作标识已用于其他请求"),
     "job_not_cancellable": PublicError(409, "job_not_cancellable", "任务当前状态不可取消"),
     "job_not_retryable": PublicError(409, "job_not_retryable", "任务当前状态不可重试"),
@@ -380,6 +400,10 @@ def register_exception_handlers(app: FastAPI) -> None:
         if error.code == "external_source_rate_limited":
             seconds = error.context.get("retry_after_seconds")
             if isinstance(seconds, int) and not isinstance(seconds, bool) and 0 <= seconds <= 60:
+                headers = {"retry-after": str(seconds)}
+        if error.code == "auth_rate_limited":
+            seconds = error.context.get("retry_after_seconds")
+            if isinstance(seconds, int) and not isinstance(seconds, bool) and 1 <= seconds <= 3600:
                 headers = {"retry-after": str(seconds)}
         return _error_response(request, APPLICATION_ERRORS[error.code], headers=headers)
 

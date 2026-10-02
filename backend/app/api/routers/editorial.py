@@ -13,10 +13,10 @@ from analysis.editorial_schemas import (
     EditorialSourceView,
 )
 from api.dependencies import (
-    DemoScopeDependency,
     EditorialServiceDependency,
     OperatorScopeDependency,
     OperatorWriteScopeDependency,
+    UserScopeDependency,
 )
 from core.schemas import ErrorView
 
@@ -44,7 +44,7 @@ _WRITE_ERRORS = {
     summary="读取来源的编辑分析配置",
 )
 def list_sources(
-    response: Response, service: EditorialServiceDependency, owner: DemoScopeDependency
+    response: Response, service: EditorialServiceDependency, owner: UserScopeDependency
 ) -> list[EditorialSourceView]:
     response.headers["cache-control"] = "no-store"
     return service.list_sources(owner_id=owner)
@@ -126,7 +126,7 @@ def get_run(
     run_id: UUID,
     response: Response,
     service: EditorialServiceDependency,
-    owner: DemoScopeDependency,
+    owner: UserScopeDependency,
 ) -> EditorialRunView:
     response.headers["cache-control"] = "no-store"
     return service.get_run(owner_id=owner, run_id=run_id)

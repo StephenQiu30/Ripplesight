@@ -2,15 +2,21 @@ import os
 import re
 import sys
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
+from sqlalchemy.orm import Session
 
 from core.config import Settings
 from db.metadata import Base
+from identity.models import IdentityUser
+from identity.services import IdentityService
 from main import create_app
 
 _BACKEND_ROOT = str(Path(__file__).resolve().parent.parent)
@@ -19,6 +25,50 @@ if _BACKEND_ROOT not in sys.path:
 
 TEST_DATABASE_TABLES = ", ".join(f'"{name}"' for name in sorted(Base.metadata.tables))
 TEST_DATABASE_TRUNCATE = f"TRUNCATE {TEST_DATABASE_TABLES} CASCADE"
+
+
+def create_test_account(session: Session, *, owner_id: UUID | None = None) -> IdentityUser:
+    """Persist an explicit account for a business fixture in its existing transaction."""
+    identifier = owner_id or uuid4()
+    user = session.get(IdentityUser, identifier)
+    if user is None:
+        now = datetime.now(UTC)
+        user = IdentityUser(
+            id=identifier,
+            username=f"reader.{identifier.hex}",
+            email=None,
+            github_user_id=None,
+            password_hash=None,
+            credential_version=1,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(user)
+        session.flush()
+    return user
+
+
+def authenticate_test_client(client: TestClient, *, owner_id: UUID | None = None) -> UUID:
+    """Explicit business fixtures use persisted sessions, with no dependency override."""
+    settings = client.app.state.settings
+    with client.app.state.session_factory.begin() as session:
+        user = create_test_account(session, owner_id=owner_id)
+        created = IdentityService(session, settings)._new_session(user, datetime.now(UTC))
+    client.cookies.clear()
+    client.cookies.set("hotkey_session", created.session_token)
+    client.cookies.set("hotkey_csrf", created.csrf_token)
+    client.headers["Origin"] = settings.web_origin
+    return user.id
+
+
+def authenticated_owner_id(session: Session) -> UUID:
+    """Existing single-account business fixtures identify their explicit test account."""
+    with session.get_bind().connect() as connection:
+        return connection.execute(text("SELECT id FROM identity_users")).scalar_one()
+
+
+def authenticated_headers(client: TestClient) -> dict[str, str]:
+    return {"X-HotKey-CSRF": client.cookies["hotkey_csrf"], "Origin": client.headers["Origin"]}
 
 
 def validate_test_database_url(value: str) -> None:

@@ -17,7 +17,6 @@ from analysis.evaluation_schemas import (
     SelectBenchRunView,
 )
 from api.dependencies import (
-    DemoWriteScopeDependency,
     NotificationOperatorServiceDependency,
     NotificationTargetServiceDependency,
     OperationsServiceDependency,
@@ -25,6 +24,7 @@ from api.dependencies import (
     OperatorWriteScopeDependency,
     SelectBenchServiceDependency,
     SessionDependency,
+    UserWriteScopeDependency,
 )
 from core.config import Settings
 from core.schemas import ErrorView, PageView
@@ -158,7 +158,7 @@ def submit_feedback(
     request: Request,
     response: Response,
     service: OperationsServiceDependency,
-    scope_id: DemoWriteScopeDependency,
+    scope_id: UserWriteScopeDependency,
 ) -> FeedbackSubmissionView:
     result = service.submit_feedback(
         owner_id=scope_id,
