@@ -11,7 +11,8 @@ x-backend-environment: &backend-environment
   HOTKEY_SOURCE_CREDENTIALS: '${HOTKEY_SOURCE_CREDENTIALS:-{}}'
   HOTKEY_BROWSER_ENABLED: ${HOTKEY_BROWSER_ENABLED:-false}
   HOTKEY_BROWSER_WS_URL: ${HOTKEY_BROWSER_WS_URL:-}
-  HOTKEY_WEB_ORIGIN: ${HOTKEY_WEB_ORIGIN:-http://127.0.0.1:3000}
+  HOTKEY_WEB_ORIGIN: ${HOTKEY_WEB_ORIGIN:-http://127.0.0.1:8666}
+  HOTKEY_WEB_BASE_URL: ${HOTKEY_WEB_BASE_URL:-http://127.0.0.1:8666}
   HOTKEY_SESSION_TTL_SECONDS: ${HOTKEY_SESSION_TTL_SECONDS:-43200}
   HOTKEY_GITHUB_CLIENT_ID: ${HOTKEY_GITHUB_CLIENT_ID:-}
   HOTKEY_GITHUB_CLIENT_SECRET: ${HOTKEY_GITHUB_CLIENT_SECRET:-}
@@ -40,7 +41,7 @@ services:
   backend:
     <<: *backend-service
     ports:
-      - 127.0.0.1:${HOTKEY_API_PORT:-8867}:8080
+      - 127.0.0.1:${HOTKEY_API_PORT:-8667}:8080
     healthcheck:
       test:
         [
@@ -66,7 +67,7 @@ services:
     image: ${HOTKEY_FRONTEND_IMAGE:-hotkey-frontend:local}
     environment:
       HOTKEY_API_ORIGIN: http://backend:8080
-      HOTKEY_WEB_ORIGIN: ${HOTKEY_WEB_ORIGIN:-http://127.0.0.1:3000}
+      HOTKEY_WEB_ORIGIN: ${HOTKEY_WEB_ORIGIN:-http://127.0.0.1:8666}
     depends_on:
       backend:
         condition: service_healthy
@@ -76,7 +77,7 @@ services:
       - /app/.next/cache
       - /tmp
     ports:
-      - 127.0.0.1:${HOTKEY_WEB_PORT:-3000}:8080
+      - 127.0.0.1:${HOTKEY_WEB_PORT:-8666}:8080
     restart: unless-stopped
     deploy:
       resources:

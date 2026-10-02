@@ -1,4 +1,4 @@
-const DEFAULT_API_ORIGIN = "http://127.0.0.1:8867";
+const DEFAULT_API_ORIGIN = "http://127.0.0.1:8667";
 const API_TIMEOUT_MS = 15_000;
 
 const REQUEST_HEADER_BLOCKLIST = new Set([

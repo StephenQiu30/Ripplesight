@@ -236,7 +236,7 @@ export async function request<T>(
   const response = await client.request<T>({
     baseURL:
       typeof window === "undefined"
-        ? (process.env.HOTKEY_API_ORIGIN ?? "http://127.0.0.1:8867")
+        ? (process.env.HOTKEY_API_ORIGIN ?? "http://127.0.0.1:8667")
         : "/",
     ...config,
     url,

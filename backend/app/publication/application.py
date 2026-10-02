@@ -76,7 +76,7 @@ class PublicationApplicationService:
         self,
         session: Session,
         *,
-        origin: str = "http://127.0.0.1:8867",
+        origin: str = "http://127.0.0.1:8667",
         indexing_enabled: bool = False,
     ) -> None:
         self.session, self.origin, self.indexing_enabled = session, origin, indexing_enabled

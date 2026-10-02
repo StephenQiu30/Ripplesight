@@ -30,7 +30,7 @@ export function preserveAcceptedResponseTypes<Document extends OpenApiDocument>(
 
 export default {
   schemaPath:
-    process.env.HOTKEY_OPENAPI_URL ?? "http://127.0.0.1:8867/openapi.json",
+    process.env.HOTKEY_OPENAPI_URL ?? "http://127.0.0.1:8667/openapi.json",
   serversPath: "./src",
   projectName: "api",
   requestLibPath: "@/request",
