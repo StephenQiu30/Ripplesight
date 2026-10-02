@@ -24,12 +24,6 @@ IMAGE_WIDTHS = {
     "image-1200": 1200,
     "image-1600": 1600,
 }
-RESPONSIVE_MODES = {
-    "avatar": ("avatar-48", "avatar-96"),
-    "card": ("image-336", "image-720"),
-    "body": ("image-720", "image-1200", "image-1600"),
-    "hero": ("image-720", "image-1200", "image-1600"),
-}
 MAX_IMAGE_PIXELS = 50_000_000
 MAX_ANIMATION_PIXELS = 200_000_000
 _SVG_TAGS = {

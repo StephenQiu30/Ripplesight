@@ -21,9 +21,9 @@
 
 每个切片在 Design 阶段记录组件名称、所属领域、复用范围、目标路径、数据来源及正常、空、加载、部分、错误和无权限状态。
 
-## 当前首页切片
+## 首页
 
-方案 1 在本目录实现，使用 Vercel 黑白留白风格；不增加独立应用、业务状态层或额外配置流程。首页主入口通过 `/login` 进入系统，已登录后创建关注使用现有 `/monitors/new`。主题创建、修改、来源准入与保存使用当前 OpenAPI 生成 API；示例只用于说明，不显示为真实采集结果。
+首页在本目录实现，使用 Vercel 黑白留白风格；不增加独立应用、业务状态层或额外配置流程。首页主入口通过 `/login` 进入系统，已登录后创建关注使用现有 `/monitors/new`。主题创建、修改、来源准入与保存使用当前 OpenAPI 生成 API；示例只用于说明，不显示为真实采集结果。
 
 | 组件                                    | 领域与复用范围       | 路径                                  | 数据与状态                                                           |
 | --------------------------------------- | -------------------- | ------------------------------------- | -------------------------------------------------------------------- |
@@ -42,27 +42,38 @@
 
 登录专属组件归 `src/app/login/components/`，跨页会话/账户与守卫归 `src/components/auth/`；全部类型和请求来自Umi生成的identity API。账号密码、GitHub App、邮箱验证码共用真实数据库会话，覆盖加载/不可用/字段错误/限流/取消/成功/网络重试。业务深链接和prefetch均先验证会话，网络失败不能当成已退出；SSR按请求转发限定Cookie，代理只转发HotKey身份Cookie/Set-Cookie。保持官方shadcn/Radix表单、按钮、菜单、无装饰边框、语义颜色及命名尺度。
 
-访问与数据隔离合同见 [Design001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md#92-公开欢迎页登录与个人数据访问)，实施见Plan063；真实第三方授权/邮件核收不由受控测试代替。
+登录页采用用户选定的 Product Design 方案 1：桌面左侧品牌短句与浅灰涟漪图片，右侧登录表单；窄屏优先表单，隐藏装饰故事区域。登录方式不使用 Tab，账号密码为默认表单，邮箱验证码与 GitHub 在主按钮下方作为同尺寸按钮；邮箱表单保留返回账号密码的按钮。不可用方式保留禁用按钮和明确说明，密码显示切换不改变认证合同。
+
+密码表单接受邮箱或用户名，沿用生成接口的username字段。邮箱验证结果按has_password分支：已有密码继续原安全目标，缺密码进入账户首次设置。首次设置显示已验证邮箱、新密码与确认密码，内部保留原用户名；超过新近验证期限时切换至绑定邮箱验证码复核，保留已填信息和安全returnTo。已有密码账户保留用户名及当前密码/邮箱验证码维护。凭据保存成功返回轮换后的真实会话，首次设置继续工作区，常规修改留在账户设置显示成功；取消或晚到响应不能触发导航。
+
+| 组件                              | 领域与复用范围       | 目标路径                                                             | 数据与状态                                                                      |
+| --------------------------------- | -------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| LoginExperience / LoginBrandStory | 登录页专属组合与装饰 | src/app/login/components/login-experience.tsx；login-brand-story.tsx | 静态文案与 public/brand/login-ripple.png；桌面/窄屏，不读取业务统计             |
+| LoginForm                         | 登录页专属认证组合   | src/app/login/components/login-form.tsx                              | 原生成 identity API；方式按钮、密码显示、验证码、加载/不可用/失败/取消/安全回跳 |
+
+GitHub 按钮使用官方 GitHub-Mark 栅格素材 `public/brand/github-mark.png`；品牌母版继续为 `src/app/icon.png`。涟漪为独立装饰图，不作为另一份品牌母版；不添加新网络层、服务或页面外壳。
+
+访问与数据隔离合同见 [Design001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md#92-公开欢迎页登录与个人数据访问)；真实第三方授权/邮件核收不由受控测试代替。
 
 | 组件                                  | 领域与复用范围       | 目标路径                                                               | 数据与状态                                                                                                                                   |
 | ------------------------------------- | -------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | LoginForm                             | 登录页专属           | src/app/login/components/login-form.tsx                                | getLoginOptions、createIdentitySession、sendEmailLoginCode、verifyEmailLoginCode、startGithubLogin；读取/不可用/字段错误/限流/取消/成功/重试 |
-| CredentialsForm                       | 账户设置专属         | src/app/account/components/credentials-form.tsx                        | 当前生成会话、updateIdentityCredentials、已验证邮箱验证码；当前密码/首次设置/密码确认/保存/失效/错误/重新登录                                |
+| CredentialsForm                       | 账户设置专属         | src/app/account/components/credentials-form.tsx                        | 当前生成会话、has_password、updateIdentityCredentials、已验证邮箱验证码；首次设置/密码确认/当前密码或邮箱证明/期限/保存轮换/错误/安全回跳    |
 | IdentitySessionProvider / AccountMenu | 全站会话与导航       | src/components/auth/                                                   | 消费proxy验证后的IdentitySessionView；退出真实会话后返回Welcome，失败保留当前账户                                                            |
 | access / layout-session               | 路由和服务端会话读取 | src/components/auth/                                                   | 公开路径、安全站内回跳、限定内部已验证会话头；不保存会话秘密或自行发请求                                                                     |
 | welcomeMetadata / robots / sitemap    | 公开SEO页面          | src/components/site/welcome-metadata.ts；src/app/robots.ts、sitemap.ts | 实际站点origin、canonical/OG；仅Welcome和公开说明入站点地图，工作区始终noindex                                                               |
 
-公开站点origin使用`NEXT_PUBLIC_SITE_ORIGIN`或服务端`HOTKEY_WEB_ORIGIN`，本机默认为3001；不调用私有业务API生成欢迎页元数据。登录页在上游会话验证故障时显示统一PageState和原安全目标重载操作，保持会话故障与未登录状态的区分。修改凭据成功204后撤销所有旧会话，页面回登录；验证码标识仅保存在组件内存中。
+公开站点origin使用`NEXT_PUBLIC_SITE_ORIGIN`或服务端`HOTKEY_WEB_ORIGIN`，本机固定Web8666/API8667，默认origin为`http://127.0.0.1:8666`；不调用私有业务API生成欢迎页元数据。登录页在上游会话验证故障时显示统一PageState和原安全目标重载操作，保持会话故障与未登录状态的区分。修改凭据成功200后撤销所有旧会话并建立当前新会话；已登录无密码账户访问登录页也进入设置步骤。验证码标识仅保存在组件内存中。
 
 ## API 与状态
 
-- 公共协议遵循 PROJECT.md 与 AGENTS.md 的现行契约；运行 OpenAPI、类型化资源和 ErrorView 共同门禁已接入。旧 Design 046 全局异常与响应契约已删除，046 S03 历史证据保留于 Git 和共享验收；本文件仅细化 Web 消费与展示，不另定义返回模型。
+- 公共协议遵循 PROJECT.md 与 AGENTS.md 的现行契约；运行 OpenAPI、类型化资源和 ErrorView 共同门禁已接入。本文件仅细化 Web 消费与展示，不另定义返回模型。
 - 资源、分页、受理 DTO 和 ErrorView 来自同提交运行时 OpenAPI；错误读取 details，请求 ID 支持响应头/body 回退。HTTP、网络、超时、取消和协议失败分开；204 与文件不解析为 JSON，失败任务查询与合法空结果保持正常读取语义。
 - 传输层不全局弹提示、不按 message 分支、不自动重试写操作。字段错误就地显示，页面失败保留恢复入口，操作结果使用适当短时反馈；旧数据刷新失败要标明过期。
 - Umi OpenAPI 将端点和类型直接生成到 `src/api/`。
 - 所有生成请求统一使用 `src/request.ts`，页面不得手写端点或创建第二套 HTTP 客户端。
 - ESLint 拒绝业务源码直接导入传输函数/HTTP 客户端或调用网络原语；页面可使用生成函数、传输错误类和请求选项类型。透明同源代理只做通用转发，生成代码只由生成器更新。
-- 浏览器同源与 SSR 后端 origin 由 `src/request.ts` 统一解析，移除页面重复 baseURL 和 `publicationApiOptions`；业务请求选项只允许头、取消、响应格式和超时，生成的方法/URL/参数不能被覆盖。
+- 浏览器同源与 SSR 后端 origin 由 `src/request.ts` 统一解析，业务请求选项只允许头、取消、响应格式和超时，生成的方法/URL/参数不能被覆盖。
 - Agent 页专属 `SelectedSnapshotDownload` 位于 `src/app/agent/components/selected-snapshot-download.tsx`，使用生成的 `getSelectedPublicationSnapshot` 下载 JSON 快照，覆盖加载、错误和再次下载；不手写 API 地址。
 - 测试统一在 `tests/`，按原业务路径组织 `app/`、`components/`，根配置测试归 `tests/config/`；`src/` 只放业务源码和生成客户端。Vitest 仅扫描 tests，生产类型检查及 Docker 构建排除测试；独立测试 TypeScript 配置继续检查所有测试，ESLint 拒绝业务目录中的测试或测试依赖。
 - App Router 统一提供 loading、error、global-error 和 not-found 边界。
@@ -75,11 +86,11 @@
 - 页面必须完成桌面和窄屏浏览器检查。
 - 本机开发页关闭 Next.js devIndicators，避免开发工具浮标覆盖固定页脚；终端与浏览器开发日志仍可用于诊断。
 - 生产镜像使用 standalone、非 root、只读文件系统和 `/health` 健康检查。
-- CSP nonce 由 `src/proxy.ts` 每请求生成；需要客户端交互的 HTML 入口必须按请求渲染。主题创建页在服务端入口等待 Next.js `connection()`，保持来源校验；生产脚本 nonce 必须与本次 CSP 一致，HTML 不使用共享缓存。生产镜像的 runtime 检查与浏览器冷进入均需通过。
+- CSP nonce 由 `src/proxy.ts` 每请求生成；需要客户端交互的 HTML 入口必须按请求渲染。主题创建页在服务端入口等待 Next.js `connection()`，保持来源校验；生产脚本 nonce 必须与当前请求 CSP 一致，HTML 不使用共享缓存。生产镜像的 runtime 检查与浏览器冷进入均需通过。
 
-## 当前业务页面重建
+## 业务页面
 
-清理旧业务页的密集布局、无接口的事件脉络占位与报告/通知偏好表单。保留正式 Next.js 脚手架、首页、生成客户端、Axios 传输和 CSP；不复制原型。Swagger 的唯一源为 FastAPI 路由/Pydantic，临时导出的 OpenAPI 仅供生成校验，不成为手维护文件。页面只调用 `src/api/` 中的生成操作。
+业务页面使用正式 Next.js、生成客户端、Axios 和 CSP。Swagger 的唯一源为 FastAPI 路由/Pydantic，临时导出的 OpenAPI 仅供生成校验，不成为手维护文件。页面只调用 `src/api/` 中的生成操作。
 
 | 组件                                                                             | 领域与复用范围                   | 目标路径                                                                 | 数据来源与状态覆盖                                                                                                                       |
 | -------------------------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
@@ -100,7 +111,7 @@
 
 配置第一层只呈现名称、关键词与来源，进阶规则/频率按需展开。编辑隐藏的既有报告偏好按原值传回，避免覆盖数据。来源主入口是配置，覆盖/技术字段二级展示。所有页面沿用语义颜色、命名尺度、官方表单/浮层/菜单；不新增数据状态框架。业务入口继续动态渲染、`noindex`，取消请求不显示为业务失败。
 
-当前主导航为 `src/layout/basic-header.tsx`；来源组合与设置分别为 `src/app/sources/components/sources-workspace.tsx`、`source-settings.tsx`，替代并删除旧 `source-capability-matrix.tsx`。`TopicAdvancedFields` 导出在既有 `src/components/monitors/topic-settings-fields.tsx`；报告查询/详情局部组合留在各自原文件中，不放到公共层。官方基础组件新增 `collapsible.tsx`、`empty.tsx`、`item.tsx`、`spinner.tsx`，只提供实际使用的交互原语。
+主导航归 `src/layout/basic-header.tsx`；任务路由内的 `job-presenters.ts` 复用时间/状态/能力展示，报告详情路由内的 `report-links.ts` 复用安全 HTTP URL 规则；两者均无请求与状态所有权。
 
 ## 日周月刊
 

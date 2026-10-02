@@ -26,6 +26,7 @@ import { PageState } from "@/components/system/page-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/request";
+import { STATUS_LABELS, formatTime } from "../../components/job-presenters";
 
 type JobDetailProps = {
   jobId: string;
@@ -40,16 +41,6 @@ type DetailState =
 type ActionError = {
   message: string;
   requestId?: string;
-};
-
-const STATUS_LABELS: Record<HotKeyAPI.JobControlStatus, string> = {
-  queued: "排队中",
-  running: "执行中",
-  cancelling: "取消中",
-  succeeded: "已完成",
-  partially_succeeded: "部分完成",
-  failed: "失败",
-  cancelled: "已取消",
 };
 
 const STAGE_LABELS: Record<HotKeyAPI.JobStage, string> = {
@@ -114,17 +105,6 @@ function toErrorState(
     };
   }
   return { status: "error", message: "任务状态加载失败，请稍后重试。" };
-}
-
-function formatTime(value: string | null): string {
-  if (value === null) {
-    return "—";
-  }
-  return new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    dateStyle: "medium",
-    timeStyle: "medium",
-  }).format(new Date(value));
 }
 
 function DetailItem({ label, value }: { label: string; value: string }) {

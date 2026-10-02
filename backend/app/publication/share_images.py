@@ -13,7 +13,6 @@ from PIL import Image, ImageDraw, ImageFont
 
 from publication.exports import safe_link
 
-TEMPLATE_VERSION = "hotkey-share-1"
 _FONTS = Path(__file__).with_name("assets") / "og-fonts"
 
 

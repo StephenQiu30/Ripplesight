@@ -535,16 +535,6 @@ class SourceIconService:
             )
         )
 
-    def get_by_source_key(self, *, owner_id: UUID, source_key: str) -> SourceIconView | None:
-        self.session.rollback()
-        with self.session.begin():
-            profile_id = self.profile_id_by_source_key_in_transaction(
-                owner_id=owner_id, source_key=source_key
-            )
-            if profile_id is None:
-                return None
-            return self.read_in_transaction(owner_id=owner_id, profile_id=profile_id)
-
 
 def read_source_icon_urls_in_transaction(
     session: Session, *, owner_id: UUID, source_keys: tuple[str, ...], now: datetime

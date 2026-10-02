@@ -15,6 +15,7 @@ import { PageState } from "@/components/system/page-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/request";
+import { STATUS_LABELS, capabilityLabel, formatTime } from "./job-presenters";
 
 import { JobHealthSummary } from "./job-health-summary";
 
@@ -26,16 +27,6 @@ type HistoryState =
       nextCursor: string | null;
     }
   | { status: "error"; message: string; requestId?: string };
-
-const STATUS_LABELS: Record<HotKeyAPI.JobControlStatus, string> = {
-  queued: "排队中",
-  running: "执行中",
-  cancelling: "取消中",
-  succeeded: "已完成",
-  partially_succeeded: "部分完成",
-  failed: "失败",
-  cancelled: "已取消",
-};
 
 function toErrorState(
   error: unknown,
@@ -56,34 +47,6 @@ function jobKindLabel(kind: string): string {
     default:
       return kind;
   }
-}
-
-function capabilityLabel(capability: HotKeyAPI.SourceCapability): string {
-  switch (capability) {
-    case "search":
-      return "检索";
-    case "author_posts":
-      return "作者作品";
-    case "comments":
-      return "评论";
-    case "replies":
-      return "回复";
-    case "page_content":
-      return "页面正文";
-    case "hotlist":
-      return "热榜";
-  }
-}
-
-function formatTime(value: string | null): string {
-  if (value === null) {
-    return "—";
-  }
-  return new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    dateStyle: "medium",
-    timeStyle: "medium",
-  }).format(new Date(value));
 }
 
 function statusVariant(
