@@ -19,8 +19,8 @@ from identity.schemas import (
     EmailCodeInput,
     GithubAuthorizationInput,
     GithubAuthorizationView,
-    IdentityCredentialsInput,
     IdentityCredentialsUpdateInput,
+    IdentityPasswordLoginInput,
     IdentitySessionView,
     LoginOptionsView,
     VerifyEmailCodeInput,
@@ -100,7 +100,7 @@ def options(response: Response, service: IdentityServiceDependency) -> LoginOpti
     responses=_AUTH_ERRORS,
 )
 def password_login(
-    payload: IdentityCredentialsInput,
+    payload: IdentityPasswordLoginInput,
     request: Request,
     response: Response,
     service: IdentityServiceDependency,
@@ -292,8 +292,8 @@ def github_callback(
 @router.put(
     "/credentials",
     operation_id="updateIdentityCredentials",
-    status_code=204,
-    response_model=None,
+    status_code=200,
+    response_model=IdentitySessionView,
     responses={**_AUTH_ERRORS, 409: {"model": ErrorView}},
 )
 def update_credentials(
@@ -302,6 +302,9 @@ def update_credentials(
     response: Response,
     service: IdentityServiceDependency,
     identity: CsrfProtectedIdentityDependency,
-) -> None:
-    service.update_credentials(identity=identity, command=payload, client_ip=_client_ip(request))
-    _clear_cookies(response, service)
+) -> IdentitySessionView:
+    created = service.update_credentials(
+        identity=identity, command=payload, client_ip=_client_ip(request)
+    )
+    _set_cookies(response, service, created)
+    return created.view

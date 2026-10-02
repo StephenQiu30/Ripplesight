@@ -13,6 +13,7 @@ const SESSION = {
   user: {
     id: "bd0ae74e-23c8-456a-8b60-0905031e39bc",
     username: "reader",
+    has_password: true,
     email: null,
   },
   expires_at: "2026-10-03T00:00:00Z",
@@ -180,5 +181,55 @@ describe("authenticated navigation and CSP", () => {
     expect(first).toMatch(/'nonce-[^']+'/);
     expect(second).toMatch(/'nonce-[^']+'/);
     expect(first).not.toBe(second);
+  });
+
+  it.each([
+    ["/content?state=unread", "/content?state=unread"],
+    ["//attacker.invalid", "/topics"],
+  ])(
+    "routes an authenticated email-only account through password setup at login",
+    async (returnTo, expected) => {
+      getIdentitySession.mockResolvedValue({
+        ...SESSION,
+        user: {
+          ...SESSION.user,
+          email: "reader@example.com",
+          has_password: false,
+        },
+      });
+      const url = new URL("https://hotkey.test/login");
+      url.searchParams.set("returnTo", returnTo);
+      const response = await proxy(
+        new NextRequest(url, { headers: { Cookie: "hotkey_session=token" } }),
+      );
+      const target = new URL(response.headers.get("location")!);
+      expect(target.pathname).toBe("/account");
+      expect(target.searchParams.get("setup")).toBe("1");
+      expect(target.searchParams.get("returnTo")).toBe(expected);
+      expect(response.headers.get("set-cookie")).toBeNull();
+    },
+  );
+
+  it("continues to let an authenticated email-only account open existing workspace pages", async () => {
+    getIdentitySession.mockResolvedValue({
+      ...SESSION,
+      user: { ...SESSION.user, has_password: false },
+    });
+    const response = await proxy(
+      new NextRequest("https://hotkey.test/topics", {
+        headers: { Cookie: "hotkey_session=token" },
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("preserves the original workspace target when a session expires during password setup", async () => {
+    const url = new URL("https://hotkey.test/account?setup=1");
+    url.searchParams.set("returnTo", "/jobs/job-1?state=failed");
+    const response = await proxy(new NextRequest(url));
+    const login = new URL(response.headers.get("location")!);
+    expect(login.pathname).toBe("/login");
+    expect(login.searchParams.get("returnTo")).toBe("/jobs/job-1?state=failed");
   });
 });

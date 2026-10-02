@@ -101,7 +101,12 @@ class IdentityService:
     @staticmethod
     def _view(user: IdentityUser, expires_at: datetime) -> IdentitySessionView:
         return IdentitySessionView(
-            user=IdentityUserView(id=user.id, username=user.username, email=user.email),
+            user=IdentityUserView(
+                id=user.id,
+                username=user.username,
+                email=user.email,
+                has_password=user.password_hash is not None,
+            ),
             expires_at=expires_at,
         )
 
@@ -130,7 +135,13 @@ class IdentityService:
         now = datetime.now(UTC)
         with self.session.begin():
             user = self.session.scalar(
-                select(IdentityUser).where(IdentityUser.username == username).with_for_update()
+                select(IdentityUser)
+                .where(
+                    IdentityUser.email == username
+                    if "@" in username
+                    else IdentityUser.username == username
+                )
+                .with_for_update()
             )
             stored = user.password_hash if user and user.password_hash else _DUMMY_PASSWORD_HASH
             valid, replacement = _PASSWORD_HASH.verify_and_update(password, stored)
@@ -295,7 +306,7 @@ class IdentityService:
         identity: AuthenticatedIdentity,
         command: IdentityCredentialsUpdateInput,
         client_ip: str,
-    ) -> None:
+    ) -> CreatedIdentitySession:
         verified_email = None
         self._store().limit_password(f"credentials:{identity.view.user.id}", client_ip)
         if command.challenge_id is not None and command.code is not None:
@@ -309,11 +320,22 @@ class IdentityService:
         now = datetime.now(UTC)
         try:
             with self.session.begin():
-                user = self.session.get(IdentityUser, identity.view.user.id, with_for_update=True)
-                active = self.session.get(IdentitySession, identity.session_id)
+                user = self.session.get(
+                    IdentityUser,
+                    identity.view.user.id,
+                    with_for_update=True,
+                    populate_existing=True,
+                )
+                active = self.session.get(
+                    IdentitySession,
+                    identity.session_id,
+                    with_for_update=True,
+                    populate_existing=True,
+                )
                 if (
                     user is None
                     or active is None
+                    or active.user_id != user.id
                     or active.revoked_at is not None
                     or active.expires_at <= now
                     or active.credential_version != user.credential_version
@@ -328,7 +350,7 @@ class IdentityService:
                     valid = _PASSWORD_HASH.verify(current, user.password_hash)
                     if not valid and (verified_email is None or verified_email != user.email):
                         raise ApplicationError("credentials_verification_required")
-                elif now - identity.created_at > timedelta(minutes=5) and (
+                elif now - active.created_at > timedelta(minutes=5) and (
                     verified_email is None or verified_email != user.email
                 ):
                     raise ApplicationError("credentials_verification_required")
@@ -337,6 +359,7 @@ class IdentityService:
                 user.credential_version += 1
                 user.updated_at = now
                 self._revoke_all(user.id, now)
+                return self._new_session(user, now)
         except IntegrityError:
             raise ApplicationError("username_unavailable") from None
 

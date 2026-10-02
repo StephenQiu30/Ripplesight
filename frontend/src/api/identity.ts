@@ -7,7 +7,7 @@ export async function updateIdentityCredentials(
   body: HotKeyAPI.IdentityCredentialsUpdateInput,
   options?: import("@/request").RequestOptions,
 ) {
-  return request<any>("/api/identity/credentials", {
+  return request<HotKeyAPI.IdentitySessionView>("/api/identity/credentials", {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
@@ -118,7 +118,7 @@ export async function deleteIdentitySession(
 
 /** Password Login POST /api/identity/sessions */
 export async function createIdentitySession(
-  body: HotKeyAPI.IdentityCredentialsInput,
+  body: HotKeyAPI.IdentityPasswordLoginInput,
   options?: import("@/request").RequestOptions,
 ) {
   return request<HotKeyAPI.IdentitySessionView>("/api/identity/sessions", {

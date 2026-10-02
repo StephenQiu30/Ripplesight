@@ -3,7 +3,7 @@ import { connection } from "next/server";
 import { headers } from "next/headers";
 
 import { safeReturnTo } from "@/components/auth/access";
-import { LoginForm } from "./components/login-form";
+import { LoginExperience } from "./components/login-experience";
 import { PageState } from "@/components/system/page-state";
 import { Button } from "@/components/ui/button";
 
@@ -41,5 +41,5 @@ export default async function LoginPage({
         }
       />
     );
-  return <LoginForm returnTo={returnTo} oauthFailed={!!params.error} />;
+  return <LoginExperience returnTo={returnTo} oauthFailed={!!params.error} />;
 }

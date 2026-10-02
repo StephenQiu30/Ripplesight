@@ -3044,13 +3044,6 @@ declare namespace HotKeyAPI {
     latest_observed_at: string | null;
   };
 
-  type IdentityCredentialsInput = {
-    /** Username */
-    username: string;
-    /** Password */
-    password: string;
-  };
-
   type IdentityCredentialsUpdateInput = {
     /** Username */
     username: string;
@@ -3062,6 +3055,13 @@ declare namespace HotKeyAPI {
     challenge_id?: string | null;
     /** Code */
     code?: string | null;
+  };
+
+  type IdentityPasswordLoginInput = {
+    /** Username 已验证邮箱或已有用户名 */
+    username: string;
+    /** Password */
+    password: string;
   };
 
   type IdentitySessionView = {
@@ -3077,6 +3077,8 @@ declare namespace HotKeyAPI {
     username: string;
     /** Email */
     email: string | null;
+    /** Has Password */
+    has_password: boolean;
   };
 
   type ingestExternalEditorialSourceParams = {

@@ -24,6 +24,7 @@ const session: HotKeyAPI.IdentitySessionView = {
   user: {
     id: "00000000-0000-4000-8000-000000000002",
     username: "reader",
+    has_password: true,
     email: null,
   },
   expires_at: "2100-01-01T00:00:00Z",

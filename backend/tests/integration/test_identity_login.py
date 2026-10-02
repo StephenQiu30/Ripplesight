@@ -19,6 +19,7 @@ from core.errors import ApplicationError
 from identity.adapters.github import GitHubAdapter
 from identity.adapters.verification_store import VerificationStore
 from identity.models import IdentitySession, IdentityUser
+from identity.schemas import IdentityCredentialsUpdateInput
 from identity.services import IdentityService
 from main import create_app
 
@@ -98,7 +99,12 @@ def test_password_session_cookie_digest_csrf_and_logout(identity_app) -> None:
     assert client.get("/feed.xml").status_code == 401
     assert client.get("/api/leaderboard/rules").status_code == 401
     response = login(client, "Owner.One")
-    assert response.json()["user"] == {"id": str(owner), "username": "owner.one", "email": None}
+    assert response.json()["user"] == {
+        "id": str(owner),
+        "username": "owner.one",
+        "email": None,
+        "has_password": True,
+    }
     cookies = response.headers.get_list("set-cookie")
     assert len(cookies) == 2 and "HttpOnly" in cookies[0] and "SameSite=lax" in cookies[0]
     assert "Max-Age=43200" in cookies[0] and "HttpOnly" not in cookies[1]
@@ -166,7 +172,7 @@ def test_login_origin_unknown_password_and_attempt_limit(identity_app) -> None:
 
 
 def test_email_real_redis_single_use_and_first_password_then_revocation(identity_app) -> None:
-    _app, client, mail, _store = identity_app
+    app, client, mail, _store = identity_app
     challenge = client.post(
         "/api/identity/email/challenges",
         headers={"X-HotKey-CSRF": "1"},
@@ -181,6 +187,8 @@ def test_email_real_redis_single_use_and_first_password_then_revocation(identity
     result = client.post("/api/identity/email/sessions", headers={"X-HotKey-CSRF": "1"}, json=value)
     assert result.status_code == 200, result.text
     owner = UUID(result.json()["user"]["id"])
+    assert result.json()["user"]["email"] == "new.user@example.com"
+    assert result.json()["user"]["has_password"] is False
     assert client.get("/api/topics").json()["items"] == []
     assert (
         client.post(
@@ -189,17 +197,210 @@ def test_email_real_redis_single_use_and_first_password_then_revocation(identity
         == 401
     )
     old_token = client.cookies.get("hotkey_session")
+    old_csrf = client.cookies.get("hotkey_csrf")
+    no_password = client.post(
+        "/api/identity/sessions",
+        headers={"X-HotKey-CSRF": "1"},
+        json={"username": "new.user@example.com", "password": PASSWORD},
+    )
+    assert no_password.status_code == 401 and no_password.json()["code"] == "invalid_credentials"
     updated = client.put(
         "/api/identity/credentials",
         headers=write_headers(client),
         json={"username": "new.user", "password": PASSWORD},
     )
-    assert updated.status_code == 204, updated.text
-    assert not client.cookies.get("hotkey_session")
-    client.cookies.set("hotkey_session", old_token)
-    assert client.get("/api/identity/session").status_code == 401
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["user"] == {
+        "id": str(owner),
+        "username": "new.user",
+        "email": "new.user@example.com",
+        "has_password": True,
+    }
+    assert updated.headers["cache-control"] == "no-store"
+    assert client.cookies.get("hotkey_session") != old_token
+    assert client.cookies.get("hotkey_csrf") != old_csrf
+    assert client.get("/api/identity/session").json() == updated.json()
+    assert (
+        client.get(
+            "/api/identity/session", headers={"Cookie": f"hotkey_session={old_token}"}
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/api/topics",
+            headers={"X-HotKey-CSRF": old_csrf},
+            json={"name": "stale csrf", "match_any": ["AI"], "match_all": [], "exclude": []},
+        ).status_code
+        == 403
+    )
+    with app.state.session_factory() as session:
+        user = session.get(IdentityUser, owner)
+        assert user.password_hash is not None and user.password_hash != PASSWORD
+        assert user.credential_version == 2
+        rows = session.scalars(
+            select(IdentitySession).where(IdentitySession.user_id == owner)
+        ).all()
+        assert len(rows) == 2
+        assert sum(row.revoked_reason == "password_changed" for row in rows) == 1
+        assert sum(row.revoked_at is None and row.credential_version == 2 for row in rows) == 1
     client.cookies.clear()
     assert UUID(login(client, "new.user").json()["user"]["id"]) == owner
+    client.cookies.clear()
+    assert UUID(login(client, " New.User@Example.COM ").json()["user"]["id"]) == owner
+
+
+def test_email_password_login_accepts_long_email_and_preserves_uniform_denials(
+    identity_app,
+) -> None:
+    app, client, _mail, _store = identity_app
+    email = "account@" + "a" * 63 + ".example.com"
+    owner = create_account(app, "long.email.user", email=email)
+    assert UUID(login(client, email).json()["user"]["id"]) == owner
+    client.cookies.clear()
+    for identifier, password in (
+        ("long.email.user", "a wrong and long password"),
+        (email, "a wrong and long password"),
+        ("missing.user", PASSWORD),
+        ("missing@example.com", PASSWORD),
+    ):
+        denied = client.post(
+            "/api/identity/sessions",
+            headers={"X-HotKey-CSRF": "1"},
+            json={"username": identifier, "password": password},
+        )
+        assert denied.status_code == 401 and denied.json()["code"] == "invalid_credentials"
+        assert not client.cookies.get("hotkey_session")
+
+
+def test_first_password_requires_fresh_database_session_or_bound_email_verification(
+    identity_app,
+) -> None:
+    app, client, mail, store = identity_app
+    email = "stale.first@example.com"
+    with app.state.session_factory() as session:
+        created = IdentityService(session, app.state.settings)._verified_login(
+            email=email, github_user_id=None
+        )
+        stale_identity = IdentityService(session, app.state.settings).authenticate(
+            created.session_token
+        )
+    client.cookies.set("hotkey_session", created.session_token)
+    client.cookies.set("hotkey_csrf", created.csrf_token)
+    with app.state.session_factory() as session, session.begin():
+        session.execute(
+            update(IdentitySession)
+            .where(IdentitySession.user_id == created.view.user.id)
+            .values(created_at=datetime.now(UTC) - timedelta(minutes=6))
+        )
+    command = IdentityCredentialsUpdateInput(username="stale.first", password=PASSWORD)
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ApplicationError, match="credentials_verification_required"),
+    ):
+        IdentityService(session, app.state.settings, verification=store).update_credentials(
+            identity=stale_identity, command=command, client_ip="127.0.0.1"
+        )
+    denied = client.put(
+        "/api/identity/credentials",
+        headers=write_headers(client),
+        json=command.model_dump(mode="json") | {"password": PASSWORD},
+    )
+    assert denied.status_code == 403
+    assert client.get("/api/identity/session").json()["user"]["has_password"] is False
+    challenge = client.post(
+        "/api/identity/email/challenges", headers=write_headers(client), json={"email": email}
+    )
+    assert challenge.status_code == 200, challenge.text
+    updated = client.put(
+        "/api/identity/credentials",
+        headers=write_headers(client),
+        json={
+            "username": "stale.first",
+            "password": PASSWORD,
+            "challenge_id": challenge.json()["challenge_id"],
+            "code": mail.codes[email],
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["user"]["has_password"] is True
+    assert client.get("/api/identity/session").json() == updated.json()
+
+
+def test_first_password_conflicting_username_rolls_back_hash_version_and_session(
+    identity_app,
+) -> None:
+    app, client, _mail, _store = identity_app
+    create_account(app, "claimed.username")
+    with app.state.session_factory() as session:
+        created = IdentityService(session, app.state.settings)._verified_login(
+            email="conflict@example.com", github_user_id=None
+        )
+    client.cookies.set("hotkey_session", created.session_token)
+    client.cookies.set("hotkey_csrf", created.csrf_token)
+    conflict = client.put(
+        "/api/identity/credentials",
+        headers=write_headers(client),
+        json={"username": "claimed.username", "password": PASSWORD},
+    )
+    assert conflict.status_code == 409 and conflict.json()["code"] == "username_unavailable"
+    assert client.cookies.get("hotkey_session") == created.session_token
+    assert client.get("/api/identity/session").json()["user"]["has_password"] is False
+    with app.state.session_factory() as session:
+        user = session.get(IdentityUser, created.view.user.id)
+        assert user.password_hash is None and user.credential_version == 1
+        rows = session.scalars(
+            select(IdentitySession).where(IdentitySession.user_id == user.id)
+        ).all()
+        assert len(rows) == 1 and rows[0].revoked_at is None
+
+
+@pytest.mark.parametrize(
+    "change", ["ownership", "revoked", "expired", "credential_version", "user_version"]
+)
+def test_password_setup_rechecks_current_session_in_database(identity_app, change: str) -> None:
+    app, _client, _mail, store = identity_app
+    other = create_account(app, "other.account")
+    with app.state.session_factory() as session:
+        created = IdentityService(session, app.state.settings)._verified_login(
+            email="recheck@example.com", github_user_id=None
+        )
+        identity = IdentityService(session, app.state.settings).authenticate(created.session_token)
+    changes = {
+        "ownership": {"user_id": other},
+        "revoked": {"revoked_at": datetime.now(UTC), "revoked_reason": "logout"},
+        "expired": {
+            "created_at": datetime.now(UTC) - timedelta(hours=2),
+            "expires_at": datetime.now(UTC) - timedelta(hours=1),
+        },
+        "credential_version": {"credential_version": 2},
+    }
+    with app.state.session_factory() as session, session.begin():
+        if change == "user_version":
+            session.execute(
+                update(IdentityUser)
+                .where(IdentityUser.id == created.view.user.id)
+                .values(credential_version=2)
+            )
+        else:
+            session.execute(
+                update(IdentitySession)
+                .where(IdentitySession.id == identity.session_id)
+                .values(**changes[change])
+            )
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ApplicationError, match="invalid_session"),
+    ):
+        IdentityService(session, app.state.settings, verification=store).update_credentials(
+            identity=identity,
+            command=IdentityCredentialsUpdateInput(username="recheck", password=PASSWORD),
+            client_ip="127.0.0.1",
+        )
+    with app.state.session_factory() as session:
+        user = session.get(IdentityUser, created.view.user.id)
+        assert user.password_hash is None
+        assert user.credential_version == (2 if change == "user_version" else 1)
 
 
 def test_email_wrong_attempts_binding_cooldown_and_parallel_replay(identity_app) -> None:
@@ -296,6 +497,8 @@ def test_expiry_and_current_password_maintenance_revoke_all_sessions(identity_ap
     owner = create_account(app, "maintained")
     login(client, "maintained")
     old = client.cookies.get("hotkey_session")
+    login(client, "maintained")
+    other_old = client.cookies.get("hotkey_session")
     response = client.put(
         "/api/identity/credentials",
         headers=write_headers(client),
@@ -311,9 +514,17 @@ def test_expiry_and_current_password_maintenance_revoke_all_sessions(identity_ap
             "current_password": PASSWORD,
         },
     )
-    assert changed.status_code == 204, changed.text
-    client.cookies.set("hotkey_session", old)
-    assert client.get("/api/identity/session").status_code == 401
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["user"]["has_password"] is True
+    assert client.cookies.get("hotkey_session") not in {old, other_old}
+    assert client.get("/api/identity/session").json() == changed.json()
+    for token in (old, other_old):
+        assert (
+            client.get(
+                "/api/identity/session", headers={"Cookie": f"hotkey_session={token}"}
+            ).status_code
+            == 401
+        )
 
     with app.state.session_factory() as session, session.begin():
         session.execute(
@@ -378,7 +589,9 @@ def test_credential_email_verification_is_bound_to_the_authenticated_account(ide
         headers=write_headers(client),
         json={"username": "email.maintained", "password": "replacement-password-123", **value},
     )
-    assert updated.status_code == 204, updated.text
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["user"]["has_password"] is True
+    assert client.get("/api/identity/session").json() == updated.json()
 
 
 def test_email_hmac_prevents_a_redis_address_change_from_logging_in_someone_else(

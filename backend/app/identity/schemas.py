@@ -1,11 +1,38 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from uuid import UUID
 
+from email_validator import EmailNotValidError, validate_email
 from pydantic import Field, SecretStr, field_validator
 
 from core.schemas import InputModel, OutputModel
+
+
+def _normalize_email(value: str) -> str:
+    try:
+        return validate_email(value.strip(), check_deliverability=False).normalized.lower()
+    except EmailNotValidError as error:
+        raise ValueError("invalid email address") from error
+
+
+class IdentityPasswordLoginInput(InputModel):
+    username: str = Field(
+        min_length=3,
+        max_length=254,
+        description="已验证邮箱或已有用户名",
+    )
+    password: SecretStr = Field(min_length=12, max_length=128)
+
+    @field_validator("username")
+    @classmethod
+    def normalize_identifier(cls, value: str) -> str:
+        if "@" in value:
+            return _normalize_email(value)
+        if len(value) > 64 or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value) is None:
+            raise ValueError("invalid username")
+        return value.lower()
 
 
 class IdentityCredentialsInput(InputModel):
@@ -22,6 +49,7 @@ class IdentityUserView(OutputModel):
     id: UUID
     username: str
     email: str | None
+    has_password: bool
 
 
 class IdentitySessionView(OutputModel):
@@ -41,12 +69,7 @@ class EmailCodeInput(InputModel):
     @field_validator("email")
     @classmethod
     def normalize_email(cls, value: str) -> str:
-        from email_validator import EmailNotValidError, validate_email
-
-        try:
-            return validate_email(value.strip(), check_deliverability=False).normalized.lower()
-        except EmailNotValidError as error:
-            raise ValueError("invalid email address") from error
+        return _normalize_email(value)
 
 
 class VerifyEmailCodeInput(InputModel):
