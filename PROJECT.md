@@ -75,6 +75,8 @@ publication已创建并登记架构门禁：持有来源公开许可版本、仅
 
 前端 API 文件和服务端类型统一由 `@umijs/openapi` 读取运行时 `/openapi.json`，生成至 `frontend/src/api/`；生成函数只接入 `frontend/src/request.ts` 的 Axios 封装。浏览器默认同源，SSR 的后端 origin 由该封装统一解析，页面不重复设置 baseURL；业务请求选项只提供头、取消、响应格式和超时，不覆盖生成操作的方法、地址和参数。业务页面、组件及工具不得手写请求、直接调用传输函数、创建 HTTP 客户端或修改生成物。ESLint 检查业务源码的请求边界；透明同源代理只负责通用转发，不承载业务端点。精选同步下载使用 `src/app/agent/components/selected-snapshot-download.tsx`，通过生成的 `getSelectedPublicationSnapshot` 取得数据后下载。
 
+前端测试统一放 `frontend/tests/`，按 `app/`、`components/` 等对应业务目录组织；配置测试放 `tests/config/`，传输与 CSP 测试放测试目录根。`src/` 禁止放测试文件或导入测试框架/测试目录。Vitest 只发现独立测试目录；生产 TypeScript 与 Docker 构建排除测试，`tsconfig.test.json` 单独检查测试类型，`pnpm typecheck` 同时执行两套检查。后端继续使用既有 `backend/tests/`。独立 `hotkey-prototype` 的内存样例已由正式前端承接，停止维护并移出工作区；清理前保存源码、选定设计图和 QA 资料的离线恢复归档，不删除独立 server/app 项目。
+
 页面归`src/app/`，专属组件放路由`components/`；跨页面按明确领域归`components/<feature>/`，shadcn归`components/ui/`，不建立features/common/patterns/shared层。浏览器调用同源`/api/*`，`HOTKEY_API_ORIGIN`仅供服务端代理；Demo分区/写入头与错误契约由后端维护。根DESIGN仅视觉参考，执行规范为frontend/DESIGN及对应切片Design。
 
 当前 Demo 不实现身份 IP 限流、GitHub 回调或验证码代理链路。现有 API 代理的截止、脱敏错误、请求 ID 与必要安全头继续有效。

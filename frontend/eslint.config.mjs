@@ -6,42 +6,47 @@ const requestMessage = "业务请求必须调用 src/api 中的 Umi OpenAPI 生�
 const httpLibraries =
   "^(?:axios|ky|got|superagent|undici|node-fetch|cross-fetch|umi-request|@umijs/request|(?:node:)?(?:http|https|http2|net|tls))(?:/.*)?$";
 const requestModule = "^(?:@/|\\.{1,2}/)(?:.*/)?request(?:\\.[cm]?[jt]s)?$";
-const transportTests = [
-  "src/request.test.ts",
-  "src/app/api/\\[\\[...path\\]\\]/route.test.ts",
-];
+const testLibraries =
+  "^(?:vitest|@testing-library/[^/]+|(?:node:)?test)(?:/.*)?$";
+const testDirectory = "(?:^|/)tests(?:/|$)";
+const testMessage = "测试只能放在独立 tests 目录，业务源码不得导入测试依赖。";
 const proxyRoute = "src/app/api/\\[\\[...path\\]\\]/route.ts";
+const testImports = [
+  { regex: testLibraries, message: testMessage },
+  { regex: testDirectory, message: testMessage },
+];
+const businessImports = [
+  ...testImports,
+  { regex: httpLibraries, message: requestMessage },
+  {
+    regex: requestModule,
+    allowImportNames: [
+      "ApiRequestError",
+      "ApiRequestErrorKind",
+      "RequestOptions",
+    ],
+    message: requestMessage,
+  },
+];
+
+function dynamicImportRestrictions(patterns) {
+  return patterns.map(({ regex, message }) => ({
+    selector: `ImportExpression[source.value=/${regex.replaceAll("/", "\\/")}/]`,
+    message,
+  }));
+}
 
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   {
     files: ["src/**/*.{js,jsx,ts,tsx,mjs,mts,cjs,cts}"],
-    ignores: ["src/request.ts", ...transportTests],
+    ignores: ["src/request.ts"],
     rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            { regex: httpLibraries, message: requestMessage },
-            {
-              regex: requestModule,
-              allowImportNames: [
-                "ApiRequestError",
-                "ApiRequestErrorKind",
-                "RequestOptions",
-              ],
-              message: requestMessage,
-            },
-          ],
-        },
-      ],
+      "no-restricted-imports": ["error", { patterns: businessImports }],
       "no-restricted-syntax": [
         "error",
-        ...[httpLibraries, requestModule].map((pattern) => ({
-          selector: `ImportExpression[source.value=/${pattern.replaceAll("/", "\\/")}/]`,
-          message: requestMessage,
-        })),
+        ...dynamicImportRestrictions(businessImports),
         {
           selector:
             "MemberExpression[property.name='sendBeacon'], MemberExpression[property.value='sendBeacon']",
@@ -52,7 +57,7 @@ const eslintConfig = defineConfig([
   },
   {
     files: ["src/**/*.{js,jsx,ts,tsx,mjs,mts,cjs,cts}"],
-    ignores: ["src/request.ts", proxyRoute, ...transportTests],
+    ignores: ["src/request.ts", proxyRoute],
     rules: {
       "no-restricted-globals": [
         "error",
@@ -65,6 +70,26 @@ const eslintConfig = defineConfig([
             }),
           ),
         },
+      ],
+    },
+  },
+  {
+    files: ["src/request.ts"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: testImports }],
+      "no-restricted-syntax": [
+        "error",
+        ...dynamicImportRestrictions(testImports),
+      ],
+    },
+  },
+  {
+    files: ["**/*.{test,spec}.{js,jsx,ts,tsx,mjs,mts,cjs,cts}"],
+    ignores: ["tests/**"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        { selector: "Program", message: testMessage },
       ],
     },
   },

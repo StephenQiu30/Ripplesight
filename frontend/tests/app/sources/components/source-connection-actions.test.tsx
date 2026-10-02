@@ -1,0 +1,70 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
+
+import { SourceConnectionActions } from "@/app/sources/components/source-connection-actions";
+
+const platform: HotKeyAPI.SourcePlatformView = {
+  source_key: "x",
+  display_name: "X",
+  rollout_role: "required",
+  status: "restricted",
+  connection_version: null,
+  connection_id: null,
+  connection_status: null,
+  has_credentials: false,
+  credential_configured: false,
+  credential_update_available: false,
+  allowed_hosts: [],
+  capabilities: [],
+};
+
+function render(value = platform) {
+  return renderToStaticMarkup(
+    createElement(SourceConnectionActions, {
+      platform: value,
+      onChanged: vi.fn(),
+    }),
+  );
+}
+
+describe("source connection controls", () => {
+  it("does not offer a secret input or enable absent server credentials", () => {
+    const html = render();
+    expect(html).toContain("请维护者先配置服务端凭据");
+    expect(html).toContain("disabled");
+    expect(html).not.toContain("<input");
+  });
+  it("keeps disabling available even when credentials have been removed", () => {
+    const html = render({
+      ...platform,
+      connection_version: 1,
+      connection_status: "active",
+    });
+    expect(html).toContain("停用连接");
+  });
+  it("offers replacement only when server credentials have changed", () => {
+    const html = render({
+      ...platform,
+      connection_version: 1,
+      connection_status: "active",
+      credential_configured: true,
+      credential_update_available: true,
+    });
+    expect(html).toContain("替换连接");
+  });
+  it("does not show a safety pause for an ordinary Bilibili process failure", () => {
+    const html = render({
+      ...platform,
+      source_key: "bilibili",
+      display_name: "B 站关键词与评论",
+      connection_version: 2,
+      connection_status: "active",
+      credential_configured: false,
+    });
+    expect(html).not.toContain("来源已暂停");
+    expect(html).not.toContain("本人核查");
+  });
+});

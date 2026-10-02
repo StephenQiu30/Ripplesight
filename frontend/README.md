@@ -41,6 +41,8 @@ src/
 
 不创建 `features`、`common`、`patterns`、`shared` 或 `scripts` 目录。复用组件按功能领域分类；页面组件保留在所属路由中。组件归属、复用范围、目标路径、数据来源和状态覆盖必须在 Design 阶段确定。
 
+所有测试统一放独立 `tests/`，其中 `app/`、`components/` 对应业务目录，`config/` 放 ESLint/OpenAPI 配置测试；传输与 CSP 测试放测试目录根。`src/` 和前端根不放测试文件，业务代码不导入测试框架或测试目录。`pnpm test` 只发现 tests，`pnpm typecheck` 同时检查生产和测试配置；生产构建及 Docker 上下文排除测试。独立内存 prototype 已由正式前端承接并退役。
+
 ## API
 
 启动后端后，直接读取其自动生成的 `/openapi.json` 生成客户端：
