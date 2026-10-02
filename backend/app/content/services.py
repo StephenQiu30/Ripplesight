@@ -6,7 +6,7 @@ import re
 from base64 import b64decode, urlsafe_b64encode
 from binascii import Error as Base64Error
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from urllib.parse import urlsplit
@@ -85,6 +85,7 @@ from evidence.services import (
     load_readable_resource_ids,
     readable_resource_ids_query,
 )
+from jobs.editorial_member import load_content_job_context_for_editorial_member_in_transaction
 from jobs.services import (
     ContentJobContext,
     JobService,
@@ -419,6 +420,17 @@ def _content_version_values(fields: Mapping[str, object]) -> _ContentVersionValu
     )
 
 
+def _content_search_terms(query: str | None) -> tuple[str, ...]:
+    if query is None:
+        return ()
+    if len(query) > 200 or "\x00" in query:
+        raise ApplicationError("invalid_content_filter")
+    terms = query.lower().split()
+    if len(terms) > 6:
+        raise ApplicationError("invalid_content_filter")
+    return tuple(sorted(set(terms)))
+
+
 class ContentService:
     def __init__(self, session: Session, *, clock: Clock | None = None) -> None:
         self._session = session
@@ -729,6 +741,8 @@ class ContentService:
         *,
         owner_id: UUID,
         command: PersistContentPostInput,
+        representation_fingerprint: bytes | None = None,
+        member_profile_id: UUID | None = None,
     ) -> ContentRecordDetailView:
         """Persist an admitted social post within the caller's page transaction."""
         now = self._clock()
@@ -756,6 +770,8 @@ class ContentService:
             observation_values=self._observation_values(fields),
             version_values=_content_version_values(fields),
             now=now,
+            representation_fingerprint=representation_fingerprint,
+            member_profile_id=member_profile_id,
         )
 
     def persist_comment(
@@ -1021,11 +1037,29 @@ class ContentService:
         version_values: _ContentVersionValues | None,
         now: datetime,
         identity_basis: str | None = None,
+        representation_fingerprint: bytes | None = None,
+        member_profile_id: UUID | None = None,
     ) -> ContentRecordDetailView:
-        job = load_content_job_context(
-            self._session,
-            owner_id=owner_id,
-            job_id=command.job_id,
+        if representation_fingerprint is not None:
+            if len(representation_fingerprint) != 32 or version_values is None:
+                raise ValueError("representation fingerprint requires a version and SHA-256")
+            version_values = replace(
+                version_values,
+                fingerprint=hashlib.sha256(
+                    b"content-representation-v1\x00"
+                    + version_values.fingerprint
+                    + representation_fingerprint
+                ).digest(),
+            )
+        job = (
+            load_content_job_context_for_editorial_member_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                job_id=command.job_id,
+                profile_id=member_profile_id,
+            )
+            if member_profile_id is not None
+            else load_content_job_context(self._session, owner_id=owner_id, job_id=command.job_id)
         )
         if (
             job is None
@@ -1268,9 +1302,11 @@ class ContentService:
         starts_at: datetime | None = None,
         ends_at: datetime | None = None,
         analysis_state: str | None = None,
+        q: str | None = None,
     ) -> tuple[list[ContentRecordSummaryView], str | None]:
         if not 1 <= limit <= 100:
             raise ValueError("limit must be between 1 and 100")
+        search_terms = _content_search_terms(q)
         if (
             (starts_at is None) != (ends_at is None)
             or (
@@ -1285,16 +1321,19 @@ class ContentService:
             or (analysis_state is not None and topic_id is None)
         ):
             raise ApplicationError("invalid_content_filter")
+        filter_scope: dict[str, object] = {
+            "owner_id": str(owner_id),
+            "topic_id": str(topic_id) if topic_id else None,
+            "source_key": source_key,
+            "starts_at": starts_at.astimezone(UTC).isoformat() if starts_at else None,
+            "ends_at": ends_at.astimezone(UTC).isoformat() if ends_at else None,
+            "analysis_state": analysis_state,
+        }
+        if search_terms:
+            filter_scope["search_terms"] = search_terms
         fingerprint = hashlib.sha256(
             json.dumps(
-                {
-                    "owner_id": str(owner_id),
-                    "topic_id": str(topic_id) if topic_id else None,
-                    "source_key": source_key,
-                    "starts_at": starts_at.astimezone(UTC).isoformat() if starts_at else None,
-                    "ends_at": ends_at.astimezone(UTC).isoformat() if ends_at else None,
-                    "analysis_state": analysis_state,
-                },
+                filter_scope,
                 sort_keys=True,
                 separators=(",", ":"),
             ).encode()
@@ -1361,6 +1400,26 @@ class ContentService:
                     content_ids={record.id for record in records},
                     now=now,
                 )
+                matched_version_ids: set[UUID] = set()
+                if search_terms:
+                    search_statement = select(ContentVersion.id).where(
+                        ContentVersion.owner_id == owner_id,
+                        ContentVersion.id.in_(
+                            {
+                                observation.content_version_id
+                                for observation, _ in projections.values()
+                                if observation.content_version_id is not None
+                            }
+                        ),
+                    )
+                    for term in search_terms:
+                        search_statement = search_statement.where(
+                            or_(
+                                func.lower(ContentVersion.title).contains(term, autoescape=True),
+                                func.lower(ContentVersion.body).contains(term, autoescape=True),
+                            )
+                        )
+                    matched_version_ids = set(self._session.scalars(search_statement).all())
                 discoveries = self._readable_discoveries(
                     owner_id=owner_id,
                     readable_jobs={content_id: item[1] for content_id, item in projections.items()},
@@ -1402,6 +1461,8 @@ class ContentService:
                     if projection is None:
                         continue
                     observation = projection[0]
+                    if search_terms and observation.content_version_id not in matched_version_ids:
+                        continue
                     content_discoveries = discoveries.get(record.id, [])
                     if (
                         topic_id is not None

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from hmac import compare_digest
 from typing import Annotated, cast
 from uuid import UUID
 
@@ -9,6 +10,12 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
+from ai.capability_services import AiCapabilityService
+from analysis.editorial_services import EditorialService
+from analysis.evaluation_services import SelectBenchService
+from analysis.translation_services import ContentTranslationService
+from connections.editorial_icon_services import SourceIconService
+from connections.editorial_services import EditorialSourceService
 from connections.services import SourceConnectionService
 from content.collection import WebPageCollectionService
 from content.comments import CommentManualRunService
@@ -16,11 +23,30 @@ from content.hotlist import HotlistService
 from content.services import ContentService
 from core.errors import ApplicationError, DependencyUnavailableError
 from db.demo import resolve_demo_scope
+from events.corrections import EventCorrectionService
+from events.facts import EventFactReadService
+from events.heat import EventHeatService
+from events.reads import EventReadService
 from jobs.coverage import CollectionCoverageQueryService
 from jobs.services import JobService
+from leaderboard.reads import LeaderboardReadService
+from monitors.codex_services import CodexResetService
 from monitors.runs import MonitorTopicRunService
 from monitors.services import MonitorTopicService
+from notifications.operator import NotificationOperatorService
+from notifications.services import NotificationTargetService
+from operations.services import OperationsService
+from operations.site_services import SiteConfigurationService
+from publication.application import PublicationApplicationService
+from publication.mcp import PublicationMcpService
+from publication.media_mirror_execution import MediaObjectStorage
+from publication.media_mirror_reading import PublicationMediaReadingService
+from publication.media_mirror_services import PublicationMediaService
+from publication.site_reading import PublicSiteReadingService
+from reports.edition_services import EditionService
 from reports.services import ReportService
+from sources.editorial_preview_services import EditorialSourcePreviewService
+from sources.icons_reading import SourceIconReadingService
 
 
 def get_session(request: Request) -> Generator[Session, None, None]:
@@ -35,6 +61,212 @@ def get_session(request: Request) -> Generator[Session, None, None]:
 
 
 SessionDependency = Annotated[Session, Depends(get_session)]
+
+
+def get_ai_capability_service(request: Request, session: SessionDependency) -> AiCapabilityService:
+    return AiCapabilityService(session, request.app.state.settings)
+
+
+AiCapabilityServiceDependency = Annotated[AiCapabilityService, Depends(get_ai_capability_service)]
+
+
+def get_source_icon_service(session: SessionDependency) -> SourceIconService:
+    return SourceIconService(session)
+
+
+SourceIconServiceDependency = Annotated[SourceIconService, Depends(get_source_icon_service)]
+
+
+def get_source_icon_reading_service(
+    request: Request, session: SessionDependency
+) -> SourceIconReadingService:
+    return SourceIconReadingService(session, getattr(request.app.state, "media_storage", None))
+
+
+SourceIconReadingServiceDependency = Annotated[
+    SourceIconReadingService, Depends(get_source_icon_reading_service)
+]
+
+
+def get_site_configuration_service(
+    request: Request, session: SessionDependency
+) -> SiteConfigurationService:
+    return SiteConfigurationService(session, request.app.state.settings)
+
+
+SiteConfigurationServiceDependency = Annotated[
+    SiteConfigurationService, Depends(get_site_configuration_service)
+]
+
+
+def get_public_site_reading_service(session: SessionDependency) -> PublicSiteReadingService:
+    return PublicSiteReadingService(session)
+
+
+PublicSiteReadingServiceDependency = Annotated[
+    PublicSiteReadingService, Depends(get_public_site_reading_service)
+]
+
+
+def get_selectbench_service(request: Request, session: SessionDependency) -> SelectBenchService:
+    return SelectBenchService(
+        session,
+        enabled=request.app.state.settings.selectbench_enabled,
+        settings=request.app.state.settings,
+    )
+
+
+SelectBenchServiceDependency = Annotated[SelectBenchService, Depends(get_selectbench_service)]
+
+
+def get_operations_service(request: Request, session: SessionDependency) -> OperationsService:
+    settings = request.app.state.settings
+    return OperationsService(
+        session,
+        feedback_secret=(
+            settings.feedback_hmac_secret.get_secret_value()
+            if settings.feedback_hmac_secret is not None
+            else None
+        ),
+        maintenance_enabled=settings.operations_maintenance_enabled,
+        feedback_forward_enabled=settings.feedback_forward_enabled,
+        backup_configured=(
+            settings.operations_backup_directory is not None
+            and settings.operations_restore_database_url is not None
+        ),
+    )
+
+
+OperationsServiceDependency = Annotated[OperationsService, Depends(get_operations_service)]
+
+
+def get_notification_target_service(session: SessionDependency) -> NotificationTargetService:
+    return NotificationTargetService(session)
+
+
+NotificationTargetServiceDependency = Annotated[
+    NotificationTargetService, Depends(get_notification_target_service)
+]
+
+
+def get_notification_operator_service(session: SessionDependency) -> NotificationOperatorService:
+    return NotificationOperatorService(session)
+
+
+NotificationOperatorServiceDependency = Annotated[
+    NotificationOperatorService, Depends(get_notification_operator_service)
+]
+
+
+def get_editorial_service(request: Request, session: SessionDependency) -> EditorialService:
+    return EditorialService(
+        session,
+        settings=request.app.state.settings,
+        indexing_enabled=request.app.state.settings.publication_indexing_enabled,
+    )
+
+
+EditorialServiceDependency = Annotated[EditorialService, Depends(get_editorial_service)]
+
+
+def get_translation_service(
+    request: Request, session: SessionDependency
+) -> ContentTranslationService:
+    return ContentTranslationService(
+        session,
+        settings=request.app.state.settings,
+        enabled=request.app.state.settings.ai_enabled,
+    )
+
+
+TranslationServiceDependency = Annotated[
+    ContentTranslationService, Depends(get_translation_service)
+]
+
+
+def get_editorial_source_service(
+    request: Request, session: SessionDependency
+) -> EditorialSourceService:
+    return EditorialSourceService(
+        session,
+        external_tokens=request.app.state.settings.editorial_external_tokens,
+        ingress_hmac_secret=request.app.state.settings.editorial_ingress_hmac_secret,
+    )
+
+
+EditorialSourceServiceDependency = Annotated[
+    EditorialSourceService, Depends(get_editorial_source_service)
+]
+
+
+def get_editorial_source_preview_service(
+    request: Request, session: SessionDependency
+) -> EditorialSourcePreviewService:
+    return EditorialSourcePreviewService(session, request.app.state.settings)
+
+
+EditorialSourcePreviewServiceDependency = Annotated[
+    EditorialSourcePreviewService, Depends(get_editorial_source_preview_service)
+]
+
+
+def get_edition_service(request: Request, session: SessionDependency) -> EditionService:
+    return EditionService(session, settings=request.app.state.settings)
+
+
+EditionServiceDependency = Annotated[EditionService, Depends(get_edition_service)]
+
+
+def get_publication_service(
+    request: Request, session: SessionDependency
+) -> PublicationApplicationService:
+    settings = request.app.state.settings
+    return PublicationApplicationService(
+        session,
+        origin=settings.web_base_url,
+        indexing_enabled=settings.publication_indexing_enabled,
+    )
+
+
+PublicationServiceDependency = Annotated[
+    PublicationApplicationService, Depends(get_publication_service)
+]
+
+
+def get_publication_mcp_service(
+    service: PublicationServiceDependency,
+) -> PublicationMcpService:
+    return PublicationMcpService(service)
+
+
+PublicationMcpServiceDependency = Annotated[
+    PublicationMcpService, Depends(get_publication_mcp_service)
+]
+
+
+def get_publication_media_service(
+    request: Request,
+    session: SessionDependency,
+) -> PublicationMediaService:
+    return PublicationMediaService(session, enabled=request.app.state.settings.media_mirror_enabled)
+
+
+PublicationMediaServiceDependency = Annotated[
+    PublicationMediaService, Depends(get_publication_media_service)
+]
+
+
+def get_publication_media_reading_service(
+    request: Request,
+    session: SessionDependency,
+) -> PublicationMediaReadingService:
+    storage = cast(MediaObjectStorage | None, getattr(request.app.state, "media_storage", None))
+    return PublicationMediaReadingService(session, storage)
+
+
+PublicationMediaReadingServiceDependency = Annotated[
+    PublicationMediaReadingService, Depends(get_publication_media_reading_service)
+]
 
 
 def require_database(session: SessionDependency) -> None:
@@ -138,11 +370,59 @@ def get_hotlist_service(session: SessionDependency) -> HotlistService:
 HotlistServiceDependency = Annotated[HotlistService, Depends(get_hotlist_service)]
 
 
-def get_report_service(session: SessionDependency) -> ReportService:
-    return ReportService(session)
+def get_report_service(request: Request, session: SessionDependency) -> ReportService:
+    return ReportService(session, settings=request.app.state.settings)
 
 
 ReportServiceDependency = Annotated[ReportService, Depends(get_report_service)]
+
+
+def get_event_read_service(session: SessionDependency) -> EventReadService:
+    return EventReadService(session)
+
+
+EventReadServiceDependency = Annotated[EventReadService, Depends(get_event_read_service)]
+
+
+def get_event_correction_service(session: SessionDependency) -> EventCorrectionService:
+    return EventCorrectionService(session)
+
+
+EventCorrectionServiceDependency = Annotated[
+    EventCorrectionService, Depends(get_event_correction_service)
+]
+
+
+def get_event_fact_read_service(session: SessionDependency) -> EventFactReadService:
+    return EventFactReadService(session)
+
+
+EventFactReadServiceDependency = Annotated[
+    EventFactReadService, Depends(get_event_fact_read_service)
+]
+
+
+def get_heat_service(session: SessionDependency) -> EventHeatService:
+    return EventHeatService(session)
+
+
+EventHeatServiceDependency = Annotated[EventHeatService, Depends(get_heat_service)]
+
+
+def get_leaderboard_read_service(session: SessionDependency) -> LeaderboardReadService:
+    return LeaderboardReadService(session)
+
+
+LeaderboardReadServiceDependency = Annotated[
+    LeaderboardReadService, Depends(get_leaderboard_read_service)
+]
+
+
+def get_codex_reset_service(request: Request, session: SessionDependency) -> CodexResetService:
+    return CodexResetService(session, settings=request.app.state.settings)
+
+
+CodexResetServiceDependency = Annotated[CodexResetService, Depends(get_codex_reset_service)]
 
 
 def get_demo_scope(session: SessionDependency) -> UUID:
@@ -162,3 +442,31 @@ def get_demo_write_scope(
 
 
 DemoWriteScopeDependency = Annotated[UUID, Depends(get_demo_write_scope)]
+
+
+def get_operator_scope(
+    request: Request,
+    scope_id: DemoScopeDependency,
+    token: Annotated[str | None, Header(alias="X-HotKey-Operator-Token")] = None,
+) -> UUID:
+    secret = request.app.state.settings.operator_token
+    if secret is None or not secret.get_secret_value():
+        raise ApplicationError("operator_disabled")
+    if token is None or not compare_digest(token.encode(), secret.get_secret_value().encode()):
+        raise ApplicationError("operator_authentication_required")
+    return scope_id
+
+
+OperatorScopeDependency = Annotated[UUID, Depends(get_operator_scope)]
+
+
+def get_operator_write_scope(
+    scope_id: OperatorScopeDependency,
+    csrf_header: Annotated[str | None, Header(alias="X-HotKey-CSRF")] = None,
+) -> UUID:
+    if csrf_header != "1":
+        raise ApplicationError("csrf_invalid")
+    return scope_id
+
+
+OperatorWriteScopeDependency = Annotated[UUID, Depends(get_operator_write_scope)]

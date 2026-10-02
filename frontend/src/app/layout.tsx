@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 
+import { LocalThemeInitializer } from "@/components/publication/local-reading";
+
 import "./globals.css";
 
 const geistSans = Geist({
@@ -33,7 +35,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       data-scroll-behavior="smooth"
       className={`${geistSans.variable} ${geistMono.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        <LocalThemeInitializer />
+        {children}
+      </body>
     </html>
   );
 }

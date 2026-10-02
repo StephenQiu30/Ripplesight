@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { proxy } from "./proxy";
 
 describe("Demo navigation and CSP", () => {
-  it.each(["/events", "/reports", "/monitors/new"])(
+  it.each(["/topics", "/events", "/reports", "/monitors/new"])(
     "opens %s without a session cookie and preserves the CSP",
     (path) => {
       const response = proxy(new NextRequest(`https://hotkey.test${path}`));

@@ -6,6 +6,12 @@
 
 总设计为 [Design 001](docs/design/001-热点舆情监控平台总体设计.md)，M1—M6 的 Design 002—007 定义各能力合同；需求为 [PRD 001](docs/prd/001-热点舆情监控平台需求.md) 与 PRD 002—007。只有当前已排期、需要持续协调、恢复或独立验收的工作保留 [Plan](docs/plan/README.md)；未来能力留在 PRD/Design/BACKLOG，启动时再写必要步骤。小修复沿用现行合同和适用检查，不强制新建计划。Plan 引用 Design，只写本轮差异、步骤、真实依赖与完成条件，不复制整份设计或重复 SPEC、Checklist、阶段门禁。关键契约未定不得声称实施就绪，技术依赖与真实授权条件分别列明。架构/数据库变化同步对应 Design 及总 Design001；实际证据写 Acceptance，未通过项如实保留。文档编号见 `docs/README.md`，历史编号不复用；计划逐项人工编写和审核，不用脚本生成或重编号。
 
+## 全量迁移执行决定（2026-10-02）
+
+用户已授权 AIHOT 全量业务迁移并明确保留 Python/Next.js/Kafka。读取 PRD046、Design048 和 Plan062 后按全部闭环连续推进，不以局部文档/算法/API/页面交付关闭全量任务。此前特有模块不排期和只先实现 M1 的开发范围由本次授权扩展，原真实验收与暂停付费/来源/渠道条件保持。新增 publication/leaderboard/administration 只有实际实现时创建，并以失败架构测试登记职责；不引入 Node 后端、pg-boss 或第二套状态/回执。共享文件串行汇合，已有未提交文档是本轮调研产物，不丢弃。具体工程门禁仍按下文执行。
+
+本轮publication实际实现已以未登记包的失败测试登记：只持许可/公开投影/修订与精选epoch，使用content/analysis/events领域DTO复核固定材料，所有异步重投复用jobs；禁止跨域ORM与重复原文/模型账本。出口必须逐次服从相同许可与撤回状态。
+
 ## 任务开始前的目录与选型门禁
 
 - 统一异常、响应和状态契约按本文件与 PROJECT.md 的现行规则执行；旧 046 的实现与通过证据从 Git 和 Acceptance 查阅。每次相关变更按影响范围验证现行 HTTP/OpenAPI/客户端合同，不为每份计划重复建立历史前置卡或阶段表。真实依赖未验证时不得声称通过，此门禁不额外要求逐项用户批准普通实现细节。
@@ -191,9 +197,9 @@ backend/
 | `evidence/` | 证据元数据、文件与 MinIO 适配器 |
 | `ai/` | 模型调用契约、SDK 适配器、调用记录与成本结算 |
 | `analysis/` | 相关性、摘要、情感与观点标注（已有代码；M1 相关性、M4 质量验收） |
-| `events/` | Plan014 候选/稳定身份已实现受控切片；热度快照、人工合并/拆分和事件页面待 M3 后续卡 |
-| `reports/` | 日报/周报生成、校验、存档（日报已有代码；M4 独立验收） |
-| `notifications/` | 推送渠道、订阅、发送记录（飞书已有代码；M5 暂缓，SMTP 待实现） |
+| `events/` | 候选、稳定身份、事实/纠错、热度、人工合并/拆分与事件阅读；M3 真实产品验收独立保留 |
+| `reports/` | 主题报告及公开日周月刊的生成、输入复验、修订与存档；M4 真实质量独立验收 |
+| `notifications/` | 推送渠道、订阅、发送记录与未知结果人工恢复；SMTP 已实现默认关闭，飞书真实送达暂缓 |
 | `knowledge/` | Obsidian 日报导出已有代码；M4 独立验收及 `pg_trgm` 检索与问答 |
 | `audit/` | 跨领域审计记录 |
 
@@ -266,3 +272,19 @@ frontend/src/
 - 数据库或消息改动必须验证回滚、重复消费和进程重启恢复；不能用 mock 通过代替真实集成验收。
 - 前端运行 ESLint、TypeScript、Prettier 和生产构建；页面变更完成桌面与窄屏浏览器检查。
 - 文档变更检查路径、命名和规则一致性。规划目录不代表代码已经存在，测试目标不代表已经通过。
+
+全量迁移维护切片新增`operations/`实际领域，主责/事务/鉴权见Design048：反馈及冷却、私有附件、审计、心跳和词典版本；模型注册与canonical schema同一窗口核对。`analysis/evaluation_*`归分析领域，运营通过DTO调用；付费评测关闭。运营读写使用独立token，不恢复ToC登录。全量公开刊期的scan游标只负责补刊，不替代主题报告配置。
+
+全量阅读Web路径登记：`/discover`为资讯入口，`/items/[contentId]`为固定版本/许可正文，`/agent`为五工具与Markdown接入说明，`/feeds`为RSS订阅选择，`/publication/manage`为独立operator许可/投影维护；保留已有`/`监控首页。路由专属组件在各页面components，明确跨页复用放`src/components/publication/`（卡片、读取错误、海报下载）；不复制网络客户端，唯一生成gongkaifabu/gongkaifenfa。所有入口覆盖加载/空/失败重试、partial/unknown、许可收紧与403/409，公开Demo仍noindex。
+
+本轮已登记content/editorial_rendered_*、publication/media_mirror_*及jobs/source_scopes.py职责见PROJECT/Design048；同版本格式和媒体事实要同事务且纳入内容指纹，跨域只用typed读取，禁止来源receipt复制正文。新公开详情`/discover/stories/[eventId]`须ALL成员许可成立；`/editorial-sources`沿用唯一客户端和独立运营写入。MinIO客户端纯构造并在所属进程关闭，GET禁止外采。长任务监督续租只改当前执行权，不能续取消或伪造请求；Kafka显式轮询窗口不足要拒绝。
+
+行业主题目录`/discover/topics`与`/discover/topics/[slug]`归publication，使用固定MIT主题定义和已许可主体信号，不替代原监控`/topics`。`publication/reading_groups.py`只派生公开故事/事实/单件阅读分组，`topics.py`只派生主题计数、分页与索引准入；不增加原始材料、事件事实或HTTP客户端。通知扫描与发送沿用原Job，跨域只能调用所属领域typed读取与同事务受理。
+
+站点设置operations/site_*仅持同owner联系/二维码、版本与显式开关；沿用运营audit和鉴权，不生成第二套账号。公开统计归publication且逐次核许可，说明/联系/设置路径见PROJECT；本机收藏`/discover/starred`只存ID，导入需限额/合法ID/版本校验，跨tab修改不得覆盖其他条目。
+
+公开刊期`/reports/[kind]/[key]`是publication读模型，禁止拼接内部历史稿或在GET执行付费生成；公开故事/刊期/专题的indexable服从当前ALL来源许可。IndexNow发送固定canonical引用，使用原Job、预算与运营审计；固定根验证路径只经既有公开分发路由及Next严格白名单转发。
+
+publication/share_images.py仅消费实时许可DTO生成固定尺寸PNG；assets/og-fonts唯一承载有完整OFL许可的NotoSansSC固定子集，不重复品牌资产或引入远程字体请求。分享图片和海报在ETag/304前仍复验全部正文权限，撤回返回404。
+
+真实embedding仅走ai/adapters/embeddings.py的/embeddings合同；events向量不复制付费回执账本，冻结模型/维度/输入版本并经原Job+AiCall恢复，unknown不重发。source.icons缓存仅源图标素材，当前source准入、公开权、Evidence可读性在网络提交/写入/GET均重新核对，真实外采默认关闭；沿已有media fetch/codec/storage和预算实现，不复制队列。

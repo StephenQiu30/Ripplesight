@@ -9,6 +9,32 @@ from analysis.models import ContentAnnotation
 from analysis.schemas import AnnotationResultState, ContentAnnotationReadView
 
 
+def report_annotations_readable_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    topic_id: UUID,
+    annotation_ids: tuple[UUID, ...],
+    content_version_ids: tuple[UUID, ...],
+) -> bool:
+    """Check frozen analysis identities without leaking annotation ORM to reports."""
+    if not session.in_transaction():
+        raise RuntimeError("report annotation reads require the caller's transaction")
+    versions = set(content_version_ids)
+    for start in range(0, len(annotation_ids), 500):
+        batch = set(annotation_ids[start : start + 500])
+        rows = session.execute(
+            select(ContentAnnotation.id, ContentAnnotation.content_version_id).where(
+                ContentAnnotation.owner_id == owner_id,
+                ContentAnnotation.topic_id == topic_id,
+                ContentAnnotation.id.in_(batch),
+            )
+        ).all()
+        if {row[0] for row in rows} != batch or any(row[1] not in versions for row in rows):
+            return False
+    return True
+
+
 def load_content_annotations_in_transaction(
     session: Session,
     *,

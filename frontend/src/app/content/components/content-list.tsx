@@ -75,6 +75,7 @@ type AnalysisFilter =
   "" | NonNullable<HotKeyAPI.listContentRecordsParams["analysis_state"]>;
 
 type ContentFilters = {
+  query?: string;
   sourceKey: string;
   topicId: string;
   startDate: string;
@@ -83,6 +84,7 @@ type ContentFilters = {
 };
 
 const EMPTY_FILTERS: ContentFilters = {
+  query: "",
   sourceKey: "",
   topicId: "",
   startDate: "",
@@ -129,6 +131,15 @@ export function contentListParams(
   filters: ContentFilters,
   cursor?: string,
 ): HotKeyAPI.listContentRecordsParams {
+  const rawQuery = filters.query ?? "";
+  const query = rawQuery.trim();
+  if (
+    rawQuery.length > 200 ||
+    rawQuery.includes("\u0000") ||
+    new Set(query.toLowerCase().split(/\s+/).filter(Boolean)).size > 6
+  ) {
+    throw new Error("搜索最多 200 字符、6 个不同词，多个词以空格分隔。");
+  }
   if (Boolean(filters.startDate) !== Boolean(filters.endDate)) {
     throw new Error("请选择完整的开始和结束日期。");
   }
@@ -155,6 +166,7 @@ export function contentListParams(
   }
   return {
     limit: 20,
+    ...(query ? { q: query } : {}),
     ...(cursor ? { cursor } : {}),
     ...(filters.sourceKey ? { source_key: filters.sourceKey } : {}),
     ...(filters.topicId ? { topic_id: filters.topicId } : {}),
@@ -372,6 +384,22 @@ export function ContentList() {
                 </DialogHeader>
                 <form onSubmit={applyFilters} aria-label="筛选作品资料">
                   <FieldGroup>
+                    <Field>
+                      <FieldLabel htmlFor="content-query">正文搜索</FieldLabel>
+                      <Input
+                        id="content-query"
+                        value={draft.query ?? ""}
+                        maxLength={200}
+                        placeholder="例如 OpenAI 模型"
+                        onChange={(event) =>
+                          setDraft({ ...draft, query: event.target.value })
+                        }
+                      />
+                      <FieldDescription>
+                        搜索已保存的标题和正文。最多 6
+                        个不同词，多个词以空格分隔并同时命中。
+                      </FieldDescription>
+                    </Field>
                     <Field>
                       <FieldLabel htmlFor="content-source">来源</FieldLabel>
                       <Select

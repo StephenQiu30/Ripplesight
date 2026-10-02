@@ -10,7 +10,13 @@ import pytest
 from sqlalchemy.orm import Session
 
 from core.config import Settings
-from knowledge.obsidian import BEGIN, END, daily_relative_path, write_daily_note
+from knowledge.obsidian import (
+    BEGIN,
+    END,
+    ObsidianWriteConflictError,
+    daily_relative_path,
+    write_daily_note,
+)
 from knowledge.schemas import DailyExportInput
 from knowledge.services import KnowledgeExportService, daily_object_id, export_operation_id
 
@@ -80,6 +86,70 @@ def test_same_content_does_not_change_mtime(tmp_path: Path) -> None:
     assert not second.written
     assert second.content_sha256 == first.content_sha256
     assert path.stat().st_mtime_ns == 1_000_000_000
+
+
+def test_user_edit_during_prepared_write_survives_and_temporary_file_is_removed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    note = _note()
+    first = write_daily_note(tmp_path, "HotKey", note, _object_id(note))
+    target = tmp_path / first.relative_path
+    user_text = target.read_text() + "\n刚写的个人笔记。\n"
+    original_fsync = os.fsync
+
+    def edit_during_fsync(fd: int) -> None:
+        original_fsync(fd)
+        target.write_text(user_text)
+
+    monkeypatch.setattr(os, "fsync", edit_during_fsync)
+    with pytest.raises(ObsidianWriteConflictError, match="changed before replacement"):
+        write_daily_note(
+            tmp_path,
+            "HotKey",
+            note.model_copy(update={"body_markdown": "第二版"}),
+            _object_id(note),
+            expected_content_sha256=first.content_sha256,
+        )
+    assert target.read_text() == user_text
+    assert not list(target.parent.glob(".hotkey-*"))
+
+
+def test_manual_managed_block_edit_is_not_overwritten_but_saved_export_can_replay(
+    tmp_path: Path,
+) -> None:
+    note = _note()
+    first = write_daily_note(tmp_path, "HotKey", note, _object_id(note))
+    target = tmp_path / first.relative_path
+    manual = target.read_text().replace("初版", "人工改动")
+    target.write_text(manual)
+    with pytest.raises(ObsidianWriteConflictError, match="recorded export"):
+        write_daily_note(
+            tmp_path,
+            "HotKey",
+            note.model_copy(update={"body_markdown": "第二版"}),
+            _object_id(note),
+            expected_content_sha256=first.content_sha256,
+        )
+    assert target.read_text() == manual
+    # A successful file write preceding a DB rollback is a recoverable receipt.
+    target.write_text(manual.replace("人工改动", "初版"))
+    updated = note.model_copy(update={"body_markdown": "第二版"})
+    written = write_daily_note(
+        tmp_path,
+        "HotKey",
+        updated,
+        _object_id(note),
+        expected_content_sha256=first.content_sha256,
+    )
+    assert written.written
+    replay = write_daily_note(
+        tmp_path,
+        "HotKey",
+        updated,
+        _object_id(note),
+        expected_content_sha256=first.content_sha256,
+    )
+    assert not replay.written and replay.content_sha256 == written.content_sha256
 
 
 def test_title_path_separators_and_parent_components_are_sanitized(tmp_path: Path) -> None:

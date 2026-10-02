@@ -10,7 +10,7 @@ from api.dependencies import DemoScopeDependency, ReportServiceDependency
 from core.schemas import ErrorView, PageView
 from reports.schemas import ReportDetailView, ReportKind, ReportSummaryView
 
-router = APIRouter(prefix="/v1/reports", tags=["日报"])
+router = APIRouter(prefix="/reports", tags=["日报"])
 
 _READ_RESPONSES: dict[int | str, dict[str, Any]] = {
     503: {"model": ErrorView, "description": "数据库不可用或 Demo 数据分区冲突"},
@@ -62,8 +62,10 @@ def list_reports(
     operation_id="getReport",
     response_model=ReportDetailView,
     status_code=status.HTTP_200_OK,
-    summary="读取日报详情",
-    description="按当前 Demo 分区读取指定定稿版本的 Markdown、窗口、截止时间和原帖引用。",
+    summary="读取主题报告详情",
+    description=(
+        "核对全部固定输入当前可读权限后,按 Demo 分区读取指定定稿版本、窗口、截止时间和引用。"
+    ),
     responses={404: {"model": ErrorView, "description": "报告不存在或不可访问"}, **_READ_RESPONSES},
 )
 def get_report(

@@ -1,0 +1,88 @@
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { connection } from "next/server";
+
+import { getPublicEditionNavigation } from "@/api/gongkaikanwumulu";
+import { getPublicEdition } from "@/api/gongkaifabu";
+import {
+  PublicationFailure,
+  PublicationNavigation,
+  publicationApiOptions,
+} from "@/components/publication/reading-parts";
+import { ApiRequestError } from "@/request";
+import { PublicEditionReader } from "./components/public-edition-reader";
+
+type Parameters = { params: Promise<{ reportId: string; key: string }> };
+function editionKind(value: string) {
+  if (value !== "daily" && value !== "weekly" && value !== "monthly")
+    notFound();
+  return value;
+}
+
+export async function generateMetadata({
+  params,
+}: Parameters): Promise<Metadata> {
+  const { reportId, key } = await params;
+  try {
+    const edition = await getPublicEdition(
+      { kind: editionKind(reportId), key },
+      publicationApiOptions,
+    );
+    return {
+      title: edition.title,
+      description: edition.lead,
+      robots: { index: edition.indexable, follow: edition.indexable },
+      alternates: { canonical: edition.canonical_url ?? undefined },
+      openGraph: {
+        title: edition.title,
+        description: edition.lead,
+        type: "article",
+        images: edition.canonical_url
+          ? [
+              {
+                url: new URL(
+                  `/og/reports/${edition.kind}/${encodeURIComponent(edition.key)}.png`,
+                  edition.canonical_url,
+                ).href,
+                width: 1200,
+                height: 630,
+              },
+            ]
+          : undefined,
+      },
+    };
+  } catch {
+    return { title: "刊期", robots: { index: false, follow: false } };
+  }
+}
+
+export default async function PublicEditionPage({ params }: Parameters) {
+  await connection();
+  const { reportId: rawKind, key } = await params;
+  const kind = editionKind(rawKind);
+  let edition: HotKeyAPI.PublicEditionView;
+  let navigation: HotKeyAPI.PublicEditionNavigationView;
+  try {
+    [edition, navigation] = await Promise.all([
+      getPublicEdition({ kind, key }, publicationApiOptions),
+      getPublicEditionNavigation({ kind, key }, publicationApiOptions),
+    ]);
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 404) notFound();
+    return (
+      <>
+        <PublicationNavigation />
+        <PublicationFailure
+          error={error}
+          href={`/reports/${kind}/${encodeURIComponent(key)}`}
+        />
+      </>
+    );
+  }
+  return (
+    <>
+      <PublicationNavigation />
+      <PublicEditionReader edition={edition} navigation={navigation} />
+    </>
+  );
+}

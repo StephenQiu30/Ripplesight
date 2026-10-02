@@ -73,7 +73,7 @@ def test_mediacrawler_defaults_fit_the_long_process_deadline() -> None:
         mediacrawler_enabled=True,
     )
     assert settings.job_lease_seconds == 250
-    assert settings.kafka_max_poll_interval_seconds == 255
+    assert settings.kafka_max_poll_interval_seconds == 615
 
 
 def test_mediacrawler_requires_a_long_enough_lease_and_poll_window() -> None:
@@ -93,7 +93,7 @@ def test_mediacrawler_requires_a_long_enough_lease_and_poll_window() -> None:
         database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
         mediacrawler_enabled=True,
         job_lease_seconds=250,
-        kafka_max_poll_interval_seconds=255,
+        kafka_max_poll_interval_seconds=615,
     )
     assert settings.job_process_execution_timeout_seconds("keyword.search", "bilibili") == 240
     assert settings.job_process_execution_timeout_seconds("source.comments", "bilibili") == 240
@@ -104,7 +104,7 @@ def test_mediacrawler_requires_a_long_enough_lease_and_poll_window() -> None:
 def test_disabled_mediacrawler_keeps_existing_lease_and_source_deadlines() -> None:
     settings = Settings(database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test")
     assert settings.job_lease_seconds == 75
-    assert settings.kafka_max_poll_interval_seconds == 120
+    assert settings.kafka_max_poll_interval_seconds == 615
     assert settings.job_process_execution_timeout_seconds("keyword.search", "bilibili") == 90
     with pytest.raises(ValidationError, match="job lease"):
         Settings(
@@ -123,7 +123,7 @@ def test_browser_deadline_fits_job_lease_and_kafka_poll_window() -> None:
     assert settings.browser_execution_timeout_seconds == 45
     assert settings.job_process_execution_timeout_seconds("webpage.collect") == 65
     assert settings.job_lease_seconds == 75
-    assert settings.kafka_max_poll_interval_seconds == 120
+    assert settings.kafka_max_poll_interval_seconds == 615
 
 
 def test_browser_deadline_cannot_exceed_job_lease_budget() -> None:
@@ -206,3 +206,233 @@ def test_unknown_job_kind_has_no_implicit_process_deadline() -> None:
 
     with pytest.raises(ValueError, match="unsupported job kind"):
         settings.job_process_execution_timeout_seconds("unknown.task")
+
+
+def test_migrated_jobs_keep_explicit_bounded_execution_deadlines() -> None:
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
+        ai_timeout_seconds=25,
+        embedding_timeout_seconds=12,
+    )
+    assert settings.job_process_execution_timeout_seconds("events.consolidate") == 130
+    assert settings.job_process_execution_timeout_seconds("events.embed") == 42
+    assert settings.job_process_execution_timeout_seconds("source.icons") == 600
+    assert not settings.embeddings_enabled and not settings.source_icons_enabled
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://api.example.com/v1",
+        "https://127.0.0.1/v1",
+        "https://[::1]/v1",
+        "https://localhost/v1",
+        "https://models.internal/v1",
+        "https://user:secret@api.example.com/v1",
+        "https://api.example.com/v1?key=secret",
+    ],
+)
+def test_embedding_endpoint_rejects_private_and_credential_urls(url: str) -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
+            embedding_base_url=url,
+        )
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"indexnow_key": "short"},
+        {"indexnow_key": "x" * 129},
+        {"indexnow_key": "not/a/key"},
+        {"web_base_url": "http://example.com"},
+        {"web_base_url": "https://127.0.0.1"},
+        {"web_base_url": "https://site.internal"},
+        {"web_base_url": "https://example.com/subpath"},
+    ],
+)
+def test_indexnow_external_submission_requires_a_public_root_and_valid_key(
+    overrides: dict[str, str],
+) -> None:
+    values = {
+        "indexnow_enabled": True,
+        "indexnow_external_requests_enabled": True,
+        "publication_indexing_enabled": True,
+        "indexnow_key": "controlled-public-proof-key",
+        "web_base_url": "https://example.com",
+        **overrides,
+    }
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
+            **values,
+        )
+
+
+@pytest.mark.parametrize(
+    ("enabled", "expected"),
+    [("ai_enabled", 6075), ("leaderboard_enabled", 4215)],
+)
+def test_long_business_jobs_require_a_real_kafka_poll_window(enabled: str, expected: int) -> None:
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
+        **{enabled: True},
+    )
+    assert settings.kafka_max_poll_interval_seconds == expected
+    with pytest.raises(ValidationError, match="Kafka max poll interval"):
+        Settings(
+            _env_file=None,
+            database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
+            kafka_max_poll_interval_seconds=expected - 1,
+            **{enabled: True},
+        )
+
+
+@pytest.mark.parametrize("cap", [True, "100", 0, -1, 10**12 + 1])
+def test_paid_caps_require_explicit_integer_prices(cap) -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
+            editorial_paid_caps_cny_micros={"jina_listing": cap},
+        )
+
+
+def test_restore_cannot_target_business_database_using_another_loopback_alias() -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            database_url="postgresql+psycopg://test:test@localhost:5432/hotkey_restore_same",
+            operations_restore_database_url="postgresql+psycopg://test:test@127.0.0.1:5432/hotkey_restore_same",
+        )
+
+
+def test_media_long_job_extends_derived_kafka_window_and_rejects_explicit_short_window() -> None:
+    url = "postgresql+psycopg://test:test@127.0.0.1/hotkey_test"
+    settings = Settings(database_url=url, media_mirror_enabled=True)
+    assert settings.job_process_execution_timeout_seconds("publication.media_mirror") == 4200
+    assert settings.kafka_max_poll_interval_seconds >= 4215
+    with pytest.raises(ValidationError):
+        Settings(database_url=url, media_mirror_enabled=True, kafka_max_poll_interval_seconds=615)
+
+
+def test_capability_catalog_extends_actual_execution_deadline_without_exposing_secrets() -> None:
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
+        ai_enabled=True,
+        ai_model_catalog={
+            "reasoner": {
+                "transport": "openai_compatible",
+                "provider_key": "controlled",
+                "model": "reasoner",
+                "base_url": "https://models.example.com/v1",
+                "api_key": "controlled-private-key",
+                "timeout_seconds": 600,
+            }
+        },
+        ai_capability_models={"groupReview": "reasoner"},
+    )
+    assert settings.ai_execution_timeout_seconds == 600
+    assert settings.job_process_execution_timeout_seconds("events.signals") == 2430
+    assert settings.job_process_execution_timeout_seconds("analysis.translate") == 12060
+    assert settings.kafka_max_poll_interval_seconds == 12075
+    assert "controlled-private-key" not in repr(settings)
+    assert "controlled-private-key" not in settings.model_dump_json()
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        {"timeout_seconds": 601},
+        {"base_url": "https://user:private@models.example.com/v1"},
+        {"extra": {"headers": {"Authorization": "private"}}},
+        {"currency": "CNY"},
+    ],
+)
+def test_capability_catalog_rejects_unbounded_or_ambiguous_provider_configuration(spec) -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
+            ai_model_catalog={
+                "candidate": {
+                    "transport": "openai_compatible",
+                    "provider_key": "controlled",
+                    "model": "candidate",
+                    **spec,
+                }
+            },
+        )
+
+
+@pytest.mark.parametrize(
+    "price",
+    [
+        {"embedding_currency": "USD"},
+        {"embedding_input_rate_micros_per_million": 1},
+        {"embedding_currency": "CNY", "embedding_input_rate_micros_per_million": -1},
+        {"embedding_currency": "USD", "embedding_input_rate_micros_per_million": "NaN"},
+    ],
+)
+def test_embedding_requires_a_finite_rate_in_its_original_currency(price) -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
+            **price,
+        )
+
+
+def test_unknown_embedding_price_and_explicit_free_price_are_distinct() -> None:
+    common = {"_env_file": None, "database_url": "postgresql+psycopg://t:t@127.0.0.1/hotkey_test"}
+    unknown = Settings(**common, embedding_currency="", embedding_input_rate_micros_per_million="")
+    assert unknown.embedding_currency is None
+    assert unknown.embedding_input_rate_micros_per_million is None
+    free = Settings(**common, embedding_currency="USD", embedding_input_rate_micros_per_million=0)
+    assert free.embedding_currency == "USD"
+    assert free.embedding_input_rate_micros_per_million == 0
+
+
+def test_approved_first_image_fetch_fits_the_editorial_process_deadline() -> None:
+    common = {
+        "_env_file": None,
+        "database_url": "postgresql+psycopg://t:t@127.0.0.1/hotkey_test",
+        "ai_enabled": True,
+    }
+    text = Settings(**common)
+    vision = Settings(**common, ai_vision_requests_enabled=True)
+    assert not text.ai_vision_requests_enabled
+    assert vision.job_process_execution_timeout_seconds("analysis.editorial") == (
+        text.job_process_execution_timeout_seconds("analysis.editorial") + 120
+    )
+    assert vision.kafka_max_poll_interval_seconds >= (
+        vision.job_process_execution_timeout_seconds("analysis.editorial") + 15
+    )
+
+
+@pytest.mark.parametrize(
+    "token", ["x", "a" * 31, "a" * 513, " " + "a" * 32, "change-me" * 8, "a" * 32]
+)
+def test_external_ingress_tokens_reject_weak_placeholder_and_secret_leaks(token: str) -> None:
+    from uuid import uuid4
+
+    with pytest.raises(ValidationError):
+        Settings(
+            database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
+            editorial_external_tokens={uuid4(): token},
+        )
+
+
+def test_external_ingress_token_is_server_only() -> None:
+    from uuid import uuid4
+
+    token = "controlled-external-token-valid-20261002-unique"
+    settings = Settings(
+        database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
+        editorial_external_tokens={uuid4(): token},
+    )
+    assert token not in repr(settings) and token not in settings.model_dump_json()

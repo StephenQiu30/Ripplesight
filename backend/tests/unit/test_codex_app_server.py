@@ -179,3 +179,25 @@ def test_timeout_kills_the_process_and_next_call_restarts(tmp_path: Path) -> Non
         with pytest.raises(AiCallError):
             client.complete(prompt="x", output_schema=_SCHEMA)
     assert [r.get("method") for r in _requests(log)].count("initialize") == 2
+
+
+def test_actual_image_turn_input_is_sent_to_codex_protocol(tmp_path: Path) -> None:
+    import io
+
+    from PIL import Image
+
+    from ai.schemas import AiImageInput
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (16, 16), "blue").save(buffer, format="PNG")
+    image = AiImageInput(body=buffer.getvalue(), content_type="image/png")
+    client, log = _client(tmp_path, "ok")
+    with client:
+        client.complete_multimodal(
+            prompt="Read the admitted first image", output_schema=_SCHEMA, images=(image,)
+        )
+    turn = next(item for item in _requests(log) if item.get("method") == "turn/start")
+    assert turn["params"]["input"] == [
+        {"type": "text", "text": "Read the admitted first image"},
+        {"type": "image", "url": image.data_url},
+    ]

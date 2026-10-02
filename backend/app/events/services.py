@@ -11,23 +11,44 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
-from ai.schemas import AiCallError, AiFailureCode
+from ai.schemas import AiCallError, AiCompletion, AiFailureCode, AiTokenUsage
 from ai.services import AiService, create_ai_client
+from analysis.event_reading import list_editorial_event_inputs_in_transaction
 from analysis.schemas import EventAnnotationRef
 from analysis.services import list_relevant_event_annotation_refs_in_transaction
+from content.event_reading import (
+    load_event_content_original_times_in_transaction,
+    load_event_member_content_in_transaction,
+    load_native_event_targets_in_transaction,
+)
+from content.report_reading import report_inputs_readable_in_transaction
+from content.schemas import EventContentReadReference
 from content.services import load_event_content_inputs_in_transaction
 from core.config import Settings
+from events.ai_execution import (
+    create_event_stage_client,
+    freeze_event_ai_scope_in_transaction,
+    load_verified_event_call_in_transaction,
+)
 from events.clustering import (
     EVENT_OUTPUT_SCHEMA,
     EVENT_PROMPT_VERSION,
-    append_candidates,
     build_event_prompt,
     candidate_fingerprint,
-    cluster_candidates,
+    plan_event_candidates,
 )
+from events.fact_models import EventGroupingAssessment, EventGroupingOverride
+from events.fact_writer import (
+    FactGroupingConflictError,
+    freeze_fact_context_in_transaction,
+    load_fact_context_in_transaction,
+    record_candidate_facts_in_transaction,
+)
+from events.facts import ensure_legacy_facts_in_transaction, invalidate_event_derived_in_transaction
+from events.heat import load_event_input_source_modes_in_transaction
 from events.models import Event, EventCandidate, EventMember
 from events.schemas import EventDecision, EventInput, EventTarget
-from jobs.execution import JobCompletion, JobExecutionFailure
+from jobs.execution import ExecutionLease, JobCompletion, JobExecutionFailure, JobExecutionService
 from jobs.schemas import (
     JobAcceptanceInput,
     JobFailureCategory,
@@ -36,16 +57,17 @@ from jobs.schemas import (
     JobStatus,
 )
 from jobs.services import JobService, load_job_execution_configuration
+from monitors.editorial_events import (
+    editorial_event_topic_id,
+    ensure_editorial_event_topic_in_transaction,
+)
 from monitors.services import MonitorTopicService, NormalizedMonitorRules, evaluate_monitor_rules
 
 EVENT_OPERATION_NAMESPACE = UUID("d6cd262b-5a2b-470d-a396-9e78968cfd92")
+MAX_NEW_SINGLETON_CANDIDATES_PER_SCAN = 100
 _RETRYABLE_CANDIDATE_ERRORS = {
     "ai_rate_limited",
     "ai_unavailable",
-    "ai_timeout",
-    "ai_invalid_output",
-    "ai_failed",
-    "invalid_model_output",
 }
 
 
@@ -59,10 +81,12 @@ def load_relevant_event_inputs_in_transaction(
     since: datetime,
     version_ids: Sequence[UUID] | None = None,
     exclude_assigned: bool = True,
+    now: datetime | None = None,
 ) -> tuple[EventInput, ...]:
     """Compose owner-scoped analysis, content and topic DTOs."""
     if not session.in_transaction() or since.tzinfo is None:
         raise RuntimeError("event input lookup requires a transaction and aware time")
+    now = now or datetime.now(UTC)
     result: list[EventInput] = []
     after = None
     for page_number in range(1, 11):
@@ -78,11 +102,88 @@ def load_relevant_event_inputs_in_transaction(
             structlog.get_logger("events").info(
                 "event_scan_truncated", pages_read=page_number, input_limit=2000, page_limit=10
             )
-            return tuple(result[:2000])
+            result = result[:2000]
+            break
         if page.next_after is None:
             break
         after = page.next_after
-    return tuple(result)
+    editorial_after = None
+    for _ in range(10):
+        editorial = list_editorial_event_inputs_in_transaction(
+            session,
+            since=since,
+            now=now,
+            version_ids=tuple(version_ids) if version_ids is not None else None,
+            after=editorial_after,
+            limit=1000,
+        )
+        for item in editorial.items:
+            topic_id = editorial_event_topic_id(item.owner_id)
+            if _protected_event_input(
+                session,
+                owner_id=item.owner_id,
+                topic_id=topic_id,
+                content_id=item.content_id,
+                exclude_assigned=exclude_assigned,
+            ):
+                continue
+            ensure_editorial_event_topic_in_transaction(session, owner_id=item.owner_id, now=now)
+            native = load_native_event_targets_in_transaction(
+                session,
+                owner_id=item.owner_id,
+                references=(EventContentReadReference(item.content_id, item.content_version_id),),
+                now=now,
+            )
+            result.append(
+                EventInput(
+                    owner_id=item.owner_id,
+                    topic_id=topic_id,
+                    content_id=item.content_id,
+                    content_version_id=item.content_version_id,
+                    source_key=item.source_key,
+                    title=item.title,
+                    body=item.summary or item.raw_body,
+                    first_seen_at=item.first_seen_at,
+                    first_seen_basis=item.first_seen_basis,
+                    matched_keywords=frozenset({"editorial-input"}),
+                    native_target_content_ids=native.get(item.content_version_id, frozenset()),
+                    editorial_frame=item.fact_frame,
+                    provenance_fingerprint=item.provenance_fingerprint,
+                )
+            )
+        if editorial.next_after is None or len(result) >= 4000:
+            break
+        editorial_after = editorial.next_after
+    return tuple(result[:4000])
+
+
+def _protected_event_input(
+    session: Session, *, owner_id: UUID, topic_id: UUID, content_id: UUID, exclude_assigned: bool
+) -> bool:
+    if (
+        session.scalar(
+            select(EventGroupingOverride.content_id).where(
+                EventGroupingOverride.owner_id == owner_id,
+                EventGroupingOverride.topic_id == topic_id,
+                EventGroupingOverride.content_id == content_id,
+                EventGroupingOverride.mode.in_(("standalone", "manual")),
+            )
+        )
+        is not None
+    ):
+        return True
+    return (
+        exclude_assigned
+        and session.scalar(
+            select(EventMember.id).where(
+                EventMember.owner_id == owner_id,
+                EventMember.topic_id == topic_id,
+                EventMember.content_id == content_id,
+                EventMember.removed_revision.is_(None),
+            )
+        )
+        is not None
+    )
 
 
 def _event_inputs_from_refs(
@@ -93,6 +194,23 @@ def _event_inputs_from_refs(
     exclude_assigned: bool,
 ) -> tuple[EventInput, ...]:
     assigned: set[tuple[UUID, UUID, UUID]] = set()
+    protected = (
+        {
+            (owner_id, topic_id, content_id)
+            for owner_id, topic_id, content_id in session.execute(
+                select(
+                    EventGroupingOverride.owner_id,
+                    EventGroupingOverride.topic_id,
+                    EventGroupingOverride.content_id,
+                ).where(
+                    EventGroupingOverride.content_id.in_([ref.content_id for ref in refs]),
+                    EventGroupingOverride.mode.in_(("standalone", "manual")),
+                )
+            )
+        }
+        if refs
+        else set()
+    )
     if exclude_assigned and refs:
         assigned = {
             (owner_id, topic_id, content_id)
@@ -104,7 +222,9 @@ def _event_inputs_from_refs(
             )
         }
     refs = tuple(
-        ref for ref in refs if (ref.owner_id, ref.topic_id, ref.content_id) not in assigned
+        ref
+        for ref in refs
+        if (ref.owner_id, ref.topic_id, ref.content_id) not in assigned | protected
     )
     by_owner: dict[UUID, set[UUID]] = {}
     for ref in refs:
@@ -114,6 +234,18 @@ def _event_inputs_from_refs(
             session, owner_id=owner, version_ids=tuple(ids), since=since
         )
         for owner, ids in by_owner.items()
+    }
+    native_targets = {
+        owner: load_native_event_targets_in_transaction(
+            session,
+            owner_id=owner,
+            references=tuple(
+                EventContentReadReference(item.content_id, item.content_version_id)
+                for item in items.values()
+            ),
+            now=datetime.now(UTC),
+        )
+        for owner, items in content.items()
     }
     topic_service = MonitorTopicService(session)
     topic_rules: dict[tuple[UUID, UUID], tuple[int, NormalizedMonitorRules]] = {}
@@ -153,6 +285,9 @@ def _event_inputs_from_refs(
                 first_seen_basis=source.first_seen_basis,
                 matched_keywords=keywords,
                 representative_comment_id=source.representative_comment_id,
+                native_target_content_ids=native_targets[ref.owner_id].get(
+                    source.content_version_id, frozenset()
+                ),
             )
         )
     return tuple(result)
@@ -180,34 +315,18 @@ def _load_event_targets(
             EventMember.removed_revision.is_(None),
         )
     ).all()
-    # Eligibility belongs to current member content times, not the event's lifetime.
-    content = load_event_content_inputs_in_transaction(
-        session,
-        owner_id=owner_id,
-        version_ids=tuple(member.content_version_id for member in members),
-        since=since,
-    )
-    _, rules, _ = MonitorTopicService(session).get_current_topic_rules_and_sources_in_transaction(
-        owner_id=owner_id, topic_id=topic_id
-    )
-    by_version: dict[UUID, EventInput] = {}
-    for source in content.values():
-        match = evaluate_monitor_rules(rules, f"{source.title} {source.body or ''}")
-        keywords = frozenset(match.matched_any + match.matched_all)
-        if match.matched and keywords:
-            by_version[source.content_version_id] = EventInput(
-                owner_id=owner_id,
-                topic_id=topic_id,
-                content_id=source.content_id,
-                content_version_id=source.content_version_id,
-                source_key=source.source_key,
-                title=source.title,
-                body=source.body,
-                first_seen_at=source.first_seen_at,
-                first_seen_basis=source.first_seen_basis,
-                matched_keywords=keywords,
-                representative_comment_id=source.representative_comment_id,
-            )
+    # Fixed context is evidence even if its source later created a newer version.
+    by_version = {
+        item.content_version_id: item
+        for item in _fixed_context_inputs(
+            session,
+            owner_id=owner_id,
+            topic_id=topic_id,
+            members=members,
+            since=since,
+            now=datetime.now(UTC),
+        )
+    }
     recent_members: dict[UUID, list[EventInput]] = {}
     for member in members:
         if member.content_version_id in by_version:
@@ -254,16 +373,184 @@ def _candidate_context_members(
     )
 
 
+def _fixed_context_inputs(
+    session: Session,
+    *,
+    owner_id: UUID,
+    topic_id: UUID,
+    members: Sequence[EventMember],
+    since: datetime,
+    now: datetime,
+    apply_topic_rules: bool = True,
+) -> tuple[EventInput, ...]:
+    references = tuple(
+        EventContentReadReference(
+            row.content_id, row.content_version_id, row.representative_comment_id
+        )
+        for row in members
+    )
+    readable = load_event_member_content_in_transaction(
+        session, owner_id=owner_id, references=references, now=now
+    )
+    times = load_event_content_original_times_in_transaction(
+        session, owner_id=owner_id, references=references
+    )
+    internal = topic_id == editorial_event_topic_id(owner_id)
+    rules = None
+    if not internal and apply_topic_rules:
+        _, rules, _ = MonitorTopicService(
+            session
+        ).get_current_topic_rules_and_sources_in_transaction(owner_id=owner_id, topic_id=topic_id)
+    result = []
+    for reference in references:
+        reading = readable.get(reference)
+        original = times.get(reference.content_version_id)
+        if (
+            reading is None
+            or original is None
+            or original.source_time < since
+            or reading.current_visibility is None
+            or reading.current_visibility.status != "visible"
+            or reading.representative_comment_state == "unavailable"
+        ):
+            continue
+        version = reading.observation.content_version
+        if version is None or not version.title:
+            continue
+        if rules is not None:
+            match = evaluate_monitor_rules(rules, f"{version.title} {version.body or ''}")
+            keywords = frozenset(match.matched_any + match.matched_all)
+            if not match.matched or not keywords:
+                continue
+        else:
+            keywords = frozenset({"editorial-input"})
+        result.append(
+            EventInput(
+                owner_id=owner_id,
+                topic_id=topic_id,
+                content_id=reading.id,
+                content_version_id=version.id,
+                source_key=reading.source_key,
+                title=version.title,
+                body=version.body,
+                first_seen_at=original.source_time,
+                first_seen_basis=original.basis,
+                matched_keywords=keywords,
+                representative_comment_id=reference.representative_comment_id,
+            )
+        )
+    return tuple(result)
+
+
+def _load_candidate_inputs(
+    session: Session, *, candidate: EventCandidate, now: datetime
+) -> tuple[EventInput, ...]:
+    expected = {UUID(value) for value in candidate.member_version_ids}
+    context = _candidate_context_members(session, candidate)
+    context_ids = {row.content_version_id for row in context}
+    additions = load_relevant_event_inputs_in_transaction(
+        session,
+        since=candidate.window_start - timedelta(microseconds=1),
+        now=now,
+        version_ids=tuple(expected - context_ids),
+        exclude_assigned=False,
+    )
+    fixed = (
+        _fixed_context_inputs(
+            session,
+            owner_id=candidate.owner_id,
+            topic_id=candidate.topic_id,
+            members=context,
+            since=candidate.window_start - timedelta(microseconds=1),
+            now=now,
+        )
+        if context
+        else ()
+    )
+    inputs = tuple(
+        item
+        for item in (*additions, *fixed)
+        if item.owner_id == candidate.owner_id and item.topic_id == candidate.topic_id
+    )
+    if not inputs:
+        return ()
+    references = tuple(
+        EventContentReadReference(
+            item.content_id, item.content_version_id, item.representative_comment_id
+        )
+        for item in inputs
+    )
+    readings = load_event_member_content_in_transaction(
+        session, owner_id=candidate.owner_id, references=references, now=now
+    )
+    versions = {item.content_version_id for item in inputs}
+    observations = set()
+    for reference in references:
+        reading = readings.get(reference)
+        if reading is None or reading.representative_comment_state == "unavailable":
+            return ()
+        observations.add(reading.observation.id)
+        if reading.representative_comment is not None:
+            comment_version = reading.representative_comment.observation.content_version
+            if comment_version is None:
+                return ()
+            versions.add(comment_version.id)
+            observations.add(reading.representative_comment.observation.id)
+    if not report_inputs_readable_in_transaction(
+        session,
+        owner_id=candidate.owner_id,
+        content_version_ids=tuple(versions),
+        observation_ids=tuple(observations),
+        now=now,
+    ):
+        return ()
+    return inputs
+
+
+def _candidate_material_matches(
+    session: Session, *, candidate: EventCandidate, members: Sequence[EventInput]
+) -> bool:
+    if candidate.prompt_version != EVENT_PROMPT_VERSION:
+        return True
+    requests = {
+        str(row.content_id): str(row.operation_id)
+        for row in session.scalars(
+            select(EventGroupingOverride).where(
+                EventGroupingOverride.owner_id == candidate.owner_id,
+                EventGroupingOverride.topic_id == candidate.topic_id,
+                EventGroupingOverride.content_id.in_([item.content_id for item in members]),
+                EventGroupingOverride.mode == "regroup_pending",
+            )
+        )
+    }
+    return (
+        candidate_fingerprint(
+            topic_id=candidate.topic_id,
+            members=members,
+            expected_event_revisions=candidate.expected_event_revisions,
+            regroup_requests=requests,
+        )
+        == candidate.input_fingerprint
+    )
+
+
 class EventCandidateService:
-    def __init__(self, session: Session, *, clock: Callable[[], datetime] | None = None) -> None:
+    def __init__(
+        self,
+        session: Session,
+        settings: Settings | None = None,
+        *,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
         self._session = session
+        self._settings = settings
         self._clock = clock or (lambda: datetime.now(UTC))
 
     def enqueue_due_in_transaction(self, *, now: datetime, ai_enabled: bool) -> int:
         if not self._session.in_transaction() or now.tzinfo is None:
             raise RuntimeError("event scan requires a transaction and aware time")
         inputs = load_relevant_event_inputs_in_transaction(
-            self._session, since=now - timedelta(hours=72)
+            self._session, since=now - timedelta(hours=72), now=now
         )
         by_topic: dict[tuple[UUID, UUID], list[EventInput]] = {}
         for item in inputs:
@@ -273,21 +560,60 @@ class EventCandidateService:
             targets = _load_event_targets(
                 self._session, owner_id=owner_id, topic_id=topic_id, since=now - timedelta(hours=72)
             )
-            appends = append_candidates(self._session, topic_inputs, targets)
-            matched = {item.content_version_id for members, _ in appends for item in members}
-            groups = [
-                (members, {str(target.event_id): target.revision}) for members, target in appends
-            ]
-            groups.extend(
-                (members, {})
-                for members in cluster_candidates(
-                    self._session,
-                    [item for item in topic_inputs if item.content_version_id not in matched],
+            regroup_requests = {
+                row.content_id: str(row.operation_id)
+                for row in self._session.scalars(
+                    select(EventGroupingOverride).where(
+                        EventGroupingOverride.owner_id == owner_id,
+                        EventGroupingOverride.topic_id == topic_id,
+                        EventGroupingOverride.mode == "regroup_pending",
+                    )
                 )
+            }
+            source_modes = load_event_input_source_modes_in_transaction(
+                self._session, owner_id=owner_id, inputs=topic_inputs, now=now
             )
+            # Without an embedding provider, discussion rematch only follows a verified
+            # native reference. Similar titles cannot substitute for the disabled 6h recall.
+            topic_inputs = [
+                item
+                for item in topic_inputs
+                if source_modes.get(item.content_version_id) != "isolated"
+                and (
+                    source_modes.get(item.content_version_id) != "signal"
+                    or item.first_seen_at >= now - timedelta(hours=48)
+                )
+            ]
+            groups = plan_event_candidates(
+                self._session,
+                topic_inputs,
+                targets,
+                regroup_content_ids=frozenset(regroup_requests),
+                native_only_version_ids=frozenset(
+                    item.content_version_id
+                    for item in topic_inputs
+                    if source_modes.get(item.content_version_id) == "signal"
+                ),
+            )
+            new_singletons = 0
             for members, revisions in groups:
+                if any(source_modes.get(item.content_version_id) == "isolated" for item in members):
+                    continue
+                if not revisions and all(
+                    source_modes.get(item.content_version_id) == "signal" for item in members
+                ):
+                    continue
+                if len(members) == 1 and new_singletons >= MAX_NEW_SINGLETON_CANDIDATES_PER_SCAN:
+                    break
                 fingerprint = candidate_fingerprint(
-                    topic_id=topic_id, members=members, expected_event_revisions=revisions
+                    topic_id=topic_id,
+                    members=members,
+                    expected_event_revisions=revisions,
+                    regroup_requests={
+                        str(item.content_id): regroup_requests[item.content_id]
+                        for item in members
+                        if item.content_id in regroup_requests
+                    },
                 )
                 candidate = self._session.scalar(
                     select(EventCandidate).where(
@@ -326,6 +652,8 @@ class EventCandidateService:
                     candidate = (
                         self._session.get(EventCandidate, created_id) if created_id else None
                     )
+                if len(members) == 1 and candidate is not None and candidate.job_id is None:
+                    new_singletons += 1
                 if (
                     candidate is None
                     or candidate.status != "pending"
@@ -349,7 +677,16 @@ class EventCandidateService:
                             configuration_ref=f"topic:{topic_id}",
                             configuration_version=int(version),
                         ),
-                        scope={"candidate_id": str(candidate.id)},
+                        scope={
+                            "candidate_id": str(candidate.id),
+                            **(
+                                freeze_event_ai_scope_in_transaction(
+                                    self._session, owner_id=owner_id, settings=self._settings
+                                )
+                                if self._settings is not None
+                                else {}
+                            ),
+                        },
                     ),
                 )
                 candidate.job_id = job.id
@@ -418,17 +755,10 @@ class EventCandidateService:
             context = _candidate_context_members(self._session, candidate)
             if not context or any(member.removed_revision is not None for member in context):
                 raise EventCandidateConflictError("manual_revision_conflict")
-        current = tuple(
-            item
-            for item in load_relevant_event_inputs_in_transaction(
-                self._session,
-                since=candidate.window_start - timedelta(microseconds=1),
-                version_ids=tuple(expected_ids),
-                exclude_assigned=False,
-            )
-            if item.owner_id == owner_id and item.topic_id == candidate.topic_id
-        )
+        current = _load_candidate_inputs(self._session, candidate=candidate, now=now)
         if {item.content_version_id for item in current} != expected_ids:
+            raise EventCandidateConflictError("input_changed")
+        if not _candidate_material_matches(self._session, candidate=candidate, members=current):
             raise EventCandidateConflictError("input_changed")
         context_ids = {member.content_version_id for member in context}
         additions = [item for item in current if item.content_version_id not in context_ids]
@@ -446,6 +776,15 @@ class EventCandidateService:
         )
         if assigned is not None:
             raise EventCandidateConflictError("manual_revision_conflict")
+        source_modes = load_event_input_source_modes_in_transaction(
+            self._session, owner_id=owner_id, inputs=current, now=now
+        )
+        if any(source_modes[item.content_version_id] == "isolated" for item in additions):
+            raise EventCandidateConflictError("source_role_changed")
+        if target is None and all(
+            source_modes[item.content_version_id] == "signal" for item in additions
+        ):
+            raise EventCandidateConflictError("signal_only")
         candidate.ai_call_id = ai_call_id
         candidate.updated_at = now
         if not decision.same_event:
@@ -453,6 +792,7 @@ class EventCandidateService:
             return None
         first = min(current, key=lambda item: item.first_seen_at)
         if target is not None:
+            ensure_legacy_facts_in_transaction(self._session, event=target, now=now)
             event_id = target.id
             target.revision += 1
             added_revision = target.revision
@@ -499,6 +839,38 @@ class EventCandidateService:
         candidate.event_id = event_id
         candidate.status = "confirmed"
         self._session.flush()
+        event = self._session.get(Event, event_id)
+        assert event is not None
+        try:
+            record_candidate_facts_in_transaction(
+                self._session,
+                candidate=candidate,
+                event=event,
+                decision=decision,
+                ai_call_id=ai_call_id,
+                now=now,
+                signal_version_ids=frozenset(
+                    identity for identity, mode in source_modes.items() if mode == "signal"
+                ),
+                input_frames={item.content_version_id: item.editorial_frame for item in current},
+                input_times={
+                    item.content_version_id: (item.first_seen_at, item.first_seen_basis)
+                    for item in current
+                },
+            )
+        except FactGroupingConflictError as error:
+            raise EventCandidateConflictError(str(error)) from error
+        if target is not None:
+            invalidate_event_derived_in_transaction(self._session, event=event, now=now)
+        for override in self._session.scalars(
+            select(EventGroupingOverride).where(
+                EventGroupingOverride.owner_id == owner_id,
+                EventGroupingOverride.topic_id == candidate.topic_id,
+                EventGroupingOverride.content_id.in_([item.content_id for item in additions]),
+                EventGroupingOverride.mode == "regroup_pending",
+            )
+        ):
+            self._session.delete(override)
         return event_id
 
     def fail_in_transaction(
@@ -520,6 +892,22 @@ class EventCandidateService:
             candidate.error_code = error_code
             candidate.ai_call_id = ai_call_id
             candidate.updated_at = now
+            assessment = self._session.scalar(
+                select(EventGroupingAssessment).where(
+                    EventGroupingAssessment.owner_id == owner_id,
+                    EventGroupingAssessment.candidate_id == candidate_id,
+                )
+            )
+            if assessment is not None:
+                assessment.status = (
+                    "stale"
+                    if error_code
+                    in {"input_changed", "manual_revision_conflict", "fact_revision_conflict"}
+                    else "failed"
+                )
+                assessment.error_code = error_code
+                assessment.ai_call_id = ai_call_id
+                assessment.updated_at = now
 
 
 class EventClusterExecutor:
@@ -534,15 +922,17 @@ class EventClusterExecutor:
         self._settings = settings
         self._clock = clock or (lambda: datetime.now(UTC))
 
-    def execute(self, message: JobMessage) -> JobCompletion:
+    def execute(self, message: JobMessage, lease: ExecutionLease | None = None) -> JobCompletion:
         if message.kind != "events.cluster":
             raise ValueError("event executor received another task kind")
         if not self._settings.events_cluster_enabled:
             raise self._failure(
                 "event_clustering_disabled", JobFailureCategory.CONFIGURATION_UNAVAILABLE
             )
+        completion: AiCompletion | None = None
         try:
             with self._sessions() as session, session.begin():
+                self._guard(session, lease)
                 configuration = load_job_execution_configuration(session, job_id=message.job_id)
                 if (
                     configuration is None
@@ -555,7 +945,11 @@ class EventClusterExecutor:
                 ):
                     raise ValueError("event job configuration does not match the message")
                 candidate_id = UUID(str(configuration.scope["candidate_id"]))
-                candidate = session.get(EventCandidate, candidate_id)
+                candidate = session.scalar(
+                    select(EventCandidate)
+                    .where(EventCandidate.id == candidate_id)
+                    .with_for_update()
+                )
                 if (
                     candidate is None
                     or candidate.owner_id != message.owner_id
@@ -577,48 +971,169 @@ class EventClusterExecutor:
                     raise self._failure(
                         "event_candidate_not_pending", JobFailureCategory.INVALID_INPUT
                     )
-                members = load_relevant_event_inputs_in_transaction(
-                    session,
-                    since=candidate.window_start - timedelta(microseconds=1),
-                    version_ids=tuple(UUID(value) for value in candidate.member_version_ids),
-                    exclude_assigned=not bool(candidate.expected_event_revisions),
-                )
-                members = tuple(
-                    item
-                    for item in members
-                    if item.owner_id == message.owner_id and item.topic_id == candidate.topic_id
-                )
+                members = _load_candidate_inputs(session, candidate=candidate, now=self._clock())
                 if {member.content_version_id for member in members} != {
                     UUID(value) for value in candidate.member_version_ids
                 }:
                     raise self._failure("event_input_changed", JobFailureCategory.INVALID_INPUT)
+                if not _candidate_material_matches(session, candidate=candidate, members=members):
+                    raise self._failure("event_input_changed", JobFailureCategory.INVALID_INPUT)
                 context = _candidate_context_members(session, candidate)
+                if any(member.removed_revision is not None for member in context):
+                    raise self._failure("event_input_changed", JobFailureCategory.INVALID_INPUT)
+                MonitorTopicService(session).lock_topic_for_event_commit_in_transaction(
+                    owner_id=message.owner_id, topic_id=candidate.topic_id
+                )
+                for target_id in sorted(candidate.expected_event_revisions):
+                    target = session.scalar(
+                        select(Event)
+                        .where(Event.owner_id == message.owner_id, Event.id == UUID(target_id))
+                        .with_for_update()
+                    )
+                    if (
+                        target is None
+                        or target.status != "active"
+                        or target.revision != (candidate.expected_event_revisions[target_id])
+                    ):
+                        raise self._failure("event_input_changed", JobFailureCategory.INVALID_INPUT)
+                    ensure_legacy_facts_in_transaction(session, event=target, now=self._clock())
+                assessment = session.scalar(
+                    select(EventGroupingAssessment)
+                    .where(
+                        EventGroupingAssessment.owner_id == message.owner_id,
+                        EventGroupingAssessment.candidate_id == candidate.id,
+                    )
+                    .with_for_update()
+                )
+                if assessment is not None and assessment.error_code in {
+                    "request_started",
+                    "result_unknown",
+                }:
+                    raise self._failure("event_result_unknown", JobFailureCategory.INVALID_RESPONSE)
+                if (
+                    assessment is not None
+                    and assessment.status == "pending"
+                    and assessment.error_code == "response_saved"
+                ):
+                    saved = assessment.decisions[0] if len(assessment.decisions) == 1 else {}
+                    output = saved.get("model_output")
+                    if not isinstance(output, dict) or assessment.ai_call_id is None:
+                        raise self._failure(
+                            "event_result_unknown", JobFailureCategory.INVALID_RESPONSE
+                        )
+                    saved_call = load_verified_event_call_in_transaction(
+                        session,
+                        owner_id=message.owner_id,
+                        job_id=message.job_id,
+                        call_id=assessment.ai_call_id,
+                        purpose="events.cluster",
+                    )
+                    if saved_call is None:
+                        raise self._failure(
+                            "event_result_unknown", JobFailureCategory.INVALID_RESPONSE
+                        )
+                    completion = AiCompletion(
+                        provider=saved_call.provider,
+                        model=saved_call.model,
+                        call_id=assessment.ai_call_id,
+                        output=output,
+                        usage=AiTokenUsage(),
+                        duration_ms=0,
+                    )
+                    fact_context = assessment.input_snapshot
+                else:
+                    fact_context = freeze_fact_context_in_transaction(
+                        session, candidate=candidate, now=self._clock()
+                    )
+                    assessment = session.scalar(
+                        select(EventGroupingAssessment).where(
+                            EventGroupingAssessment.candidate_id == candidate.id
+                        )
+                    )
+                    assert assessment is not None
+                    assessment.error_code, assessment.updated_at = "request_started", self._clock()
                 prompt = build_event_prompt(
                     members,
                     context_version_ids=tuple(member.content_version_id for member in context),
+                    fact_context=fact_context,
                 )
         except JobExecutionFailure as error:
             if error.error_code == "event_input_changed":
                 self._mark_failed(candidate_id, message.owner_id, "input_changed", None)
+            if error.error_code == "event_result_unknown":
+                self._mark_failed(candidate_id, message.owner_id, "result_unknown", None)
             raise
 
         try:
-            client = create_ai_client(self._settings)
-            try:
-                with self._sessions() as session:
-                    completion = AiService(session, client, clock=self._clock).complete(
-                        owner_id=message.owner_id,
-                        job_id=message.job_id,
-                        purpose="events.cluster",
-                        prompt_version=EVENT_PROMPT_VERSION,
-                        prompt=prompt,
-                        output_schema=EVENT_OUTPUT_SCHEMA,
+            if completion is None:
+                client = create_event_stage_client(
+                    self._sessions,
+                    owner_id=message.owner_id,
+                    job_id=message.job_id,
+                    purpose="events.cluster",
+                    settings=self._settings,
+                    legacy_factory=create_ai_client,
+                )
+                try:
+                    with self._sessions() as session:
+                        completion = (
+                            AiService(
+                                session,
+                                client,
+                                clock=self._clock,
+                                settings=self._settings,
+                                guard=(lambda current_session: self._guard(current_session, lease))
+                                if lease is not None
+                                else None,
+                                execution_epoch=lease.epoch if lease is not None else None,
+                            )
+                            .with_admission_guard(
+                                lambda current_session: self._ai_admission_guard(
+                                    current_session, message, lease, candidate_id, fact_context
+                                )
+                            )
+                            .complete(
+                                owner_id=message.owner_id,
+                                job_id=message.job_id,
+                                purpose="events.cluster",
+                                prompt_version=EVENT_PROMPT_VERSION,
+                                prompt=prompt,
+                                output_schema=EVENT_OUTPUT_SCHEMA,
+                            )
+                        )
+                finally:
+                    client.close()
+                # The complete response, not ledger metadata, is the recoverable stage.
+                with self._sessions() as session, session.begin():
+                    self._guard(session, lease)
+                    assessment = session.scalar(
+                        select(EventGroupingAssessment)
+                        .where(
+                            EventGroupingAssessment.owner_id == message.owner_id,
+                            EventGroupingAssessment.candidate_id == candidate_id,
+                        )
+                        .with_for_update()
                     )
-            finally:
-                client.close()
+                    if (
+                        assessment is None
+                        or assessment.status != "pending"
+                        or assessment.error_code != "request_started"
+                    ):
+                        raise self._failure("event_input_changed", JobFailureCategory.INVALID_INPUT)
+                    assessment.decisions = [{"model_output": completion.output}]
+                    assessment.ai_call_id = completion.call_id
+                    assessment.error_code, assessment.updated_at = "response_saved", self._clock()
+        except JobExecutionFailure as error:
+            if error.error_code == "event_input_changed":
+                self._mark_failed(candidate_id, message.owner_id, "input_changed", None)
+            raise
         except AiCallError as error:
+            unknown = error.code in {AiFailureCode.TIMEOUT, AiFailureCode.FAILED}
             self._mark_failed(
-                candidate_id, message.owner_id, f"ai_{error.code.value}", error.call_id
+                candidate_id,
+                message.owner_id,
+                "result_unknown" if unknown else f"ai_{error.code.value}",
+                error.call_id,
             )
             category = (
                 JobFailureCategory.RATE_LIMITED
@@ -629,7 +1144,10 @@ class EventClusterExecutor:
                 if error.code is AiFailureCode.INVALID_OUTPUT
                 else JobFailureCategory.TRANSIENT
             )
-            raise self._failure(f"event_ai_{error.code.value}", category) from error
+            raise self._failure(
+                "event_result_unknown" if unknown else f"event_ai_{error.code.value}",
+                JobFailureCategory.INVALID_RESPONSE if unknown else category,
+            ) from error
 
         try:
             decision = EventDecision.model_validate_json(json.dumps(completion.output))
@@ -644,6 +1162,7 @@ class EventClusterExecutor:
             raise RuntimeError("AI ledger returned no call id")
         try:
             with self._sessions() as session, session.begin():
+                self._guard(session, lease)
                 EventCandidateService(session, clock=self._clock).confirm_in_transaction(
                     candidate_id=candidate_id,
                     owner_id=message.owner_id,
@@ -656,6 +1175,86 @@ class EventClusterExecutor:
             self._mark_failed(candidate_id, message.owner_id, code, completion.call_id)
             raise self._failure(f"event_{code}", JobFailureCategory.INVALID_INPUT) from error
         return JobCompletion(status=JobStatus.SUCCEEDED)
+
+    def _guard(self, session: Session, lease: ExecutionLease | None) -> None:
+        if lease is not None:
+            JobExecutionService(
+                session, lease_seconds=self._settings.job_lease_seconds, clock=self._clock
+            ).require_current_lease_in_transaction(lease)
+
+    def _ai_admission_guard(
+        self,
+        session: Session,
+        message: JobMessage,
+        lease: ExecutionLease | None,
+        candidate_id: UUID,
+        fact_context: dict[str, object],
+    ) -> None:
+        self._guard(session, lease)
+        if lease is not None:
+            if lease.job_id != message.job_id:
+                raise self._failure("event_input_changed", JobFailureCategory.INVALID_INPUT)
+            JobExecutionService(
+                session, lease_seconds=self._settings.job_lease_seconds, clock=self._clock
+            ).require_current_operation_in_transaction(
+                lease, owner_id=message.owner_id, operation_id=message.operation_id
+            )
+        configuration = load_job_execution_configuration(session, job_id=message.job_id)
+        if (
+            configuration is None
+            or configuration.owner_id != message.owner_id
+            or configuration.operation_id != message.operation_id
+            or configuration.kind != message.kind
+            or configuration.observation.configuration_ref != message.configuration_ref
+            or configuration.observation.configuration_version != message.configuration_version
+            or configuration.scope.get("candidate_id") != str(candidate_id)
+        ):
+            raise self._failure("event_input_changed", JobFailureCategory.INVALID_INPUT)
+        candidate = session.scalar(
+            select(EventCandidate)
+            .where(EventCandidate.id == candidate_id, EventCandidate.owner_id == message.owner_id)
+            .with_for_update()
+        )
+        if candidate is None or candidate.job_id != message.job_id or candidate.status != "pending":
+            raise self._failure("event_input_changed", JobFailureCategory.INVALID_INPUT)
+        MonitorTopicService(session).lock_topic_for_event_commit_in_transaction(
+            owner_id=message.owner_id, topic_id=candidate.topic_id
+        )
+        members = _load_candidate_inputs(session, candidate=candidate, now=self._clock())
+        if (
+            {member.content_version_id for member in members}
+            != {UUID(value) for value in candidate.member_version_ids}
+            or not _candidate_material_matches(session, candidate=candidate, members=members)
+            or any(
+                member.removed_revision is not None
+                for member in _candidate_context_members(session, candidate)
+            )
+        ):
+            raise self._failure("event_input_changed", JobFailureCategory.INVALID_INPUT)
+        for identity, revision in sorted(candidate.expected_event_revisions.items()):
+            target = session.scalar(
+                select(Event)
+                .where(Event.owner_id == message.owner_id, Event.id == UUID(identity))
+                .with_for_update()
+            )
+            if target is None or target.status != "active" or target.revision != revision:
+                raise self._failure("event_input_changed", JobFailureCategory.INVALID_INPUT)
+        assessment = session.scalar(
+            select(EventGroupingAssessment)
+            .where(
+                EventGroupingAssessment.owner_id == message.owner_id,
+                EventGroupingAssessment.candidate_id == candidate_id,
+            )
+            .with_for_update()
+        )
+        if (
+            assessment is None
+            or assessment.status != "pending"
+            or assessment.error_code != "request_started"
+            or assessment.input_snapshot != fact_context
+            or load_fact_context_in_transaction(session, candidate=candidate) != fact_context
+        ):
+            raise self._failure("event_input_changed", JobFailureCategory.INVALID_INPUT)
 
     def _mark_failed(
         self, candidate_id: UUID, owner_id: UUID, code: str, call_id: UUID | None
@@ -675,5 +1274,5 @@ class EventClusterExecutor:
             category=category,
             occurred_at=self._clock(),
             next_action="检查候选、输入版本与模型预算后人工重试",
-            manual_retry_allowed=True,
+            manual_retry_allowed=code != "event_result_unknown",
         )

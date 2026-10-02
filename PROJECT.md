@@ -1,6 +1,6 @@
 # HotKey Server 项目与技术选型
 
-更新日期：2026-10-01。本文固定仓库边界、技术栈、后端目录、API 契约和运行约束。产品需求见 [PRD 001](docs/prd/001-热点舆情监控平台需求.md)，设计见 [Design 001](docs/design/001-热点舆情监控平台总体设计.md) 及 Design 002—007，当前执行计划见 [Plan 索引](docs/plan/README.md)。当前 Demo 已删除登录、注册与用户体系，直接进入业务页面，访问合同见 Design001 §9.2。未来 ToC 账户要求延后，不作为 Demo 门禁。
+更新日期：2026-10-02。本文固定仓库边界、技术栈、后端目录、API 契约和运行约束。产品需求见 [PRD 001](docs/prd/001-热点舆情监控平台需求.md)，设计见 [Design 001](docs/design/001-热点舆情监控平台总体设计.md) 及 Design 002—007，当前执行计划见 [Plan 索引](docs/plan/README.md)。当前 Demo 已删除登录、注册与用户体系，直接进入业务页面，访问合同见 Design001 §9.2。未来 ToC 账户要求延后，不作为 Demo 门禁。
 
 ## 1. 定位与仓库边界
 
@@ -38,7 +38,7 @@ HotKey/
 | M5 | SMTP 与暂缓的飞书按渠道分别验收 |
 | M6 | 告警、指定账号、导出增强及后续来源逐项准入 |
 
-### 1.3 当前实现边界（2026-10-01）
+### 1.3 当前实现边界（2026-10-02）
 
 当前 Demo 已删除身份模块、身份 API、登录注册页、会话守卫、密码依赖与部署初始化配置，现行合同见 [Design001 §9.2](docs/design/001-热点舆情监控平台总体设计.md#92-当前-demo-的访问与数据分区)。业务表的 `owner_id`/`created_by` 暂保留为内部历史分区 UUID，移除其身份表外键，保留业务复合外键、幂等与预算约束；不创建假用户、默认会话或认证开关。
 
@@ -46,8 +46,16 @@ HotKey/
 
 新完整 Schema 只对全新空库应用；现有数据库不删表、不改约束、不清空数据。有业务数据的单分区旧库可沿用原 UUID；旧备份按原代码及 Schema 恢复，正式重建仍遵守 §3 的备份/导入/校验门槛。
 
-宿主机 Worker 已注册 `webpage.collect`、`keyword.search`、`source.comments`、`source.hotlist`、`analysis.annotate`、`events.cluster`、`report.daily`、`notification.send`、`knowledge.export`；独立调度、四关键词来源、六榜、Codex 调用/标注、日报、Obsidian 日报导出和飞书发送均有代码与受控测试。Plan014 事件候选与稳定身份及 R1—R5 修复已通过受控 PostgreSQL 和远端技术门禁，开关默认关闭；人工修订、热度、事件页面和真实三平台归并仍待验证或实现。开发库约 4 小时运行仅证明有限真实范围，M1 连续 72 小时及各产品 AC 未通过。B 站修复后真实采集未做且开关关闭，SMTP 待实现。当前进度以 BACKLOG 与逐卡 Acceptance 为准；旧总 Plan 001 的历史证据从 Git 历史查阅。
+原获取、标注、日报、通知和Obsidian任务保留；062新增六类编辑来源、分阶段精选/中文写作/全文翻译、事实纠错/热度、日周月刊、模型榜、Codex公告、公开投影/媒体与维护任务，复用原Job/Outbox/Kafka，全部领域API/Worker/页面已接。相应技术证据见Acceptance001，真实验收仍待完成。SMTP实现默认关闭，通知目标默认关闭，unknown只能人工确认。历史约四小时记录不证明M1连续72小时；B站修复后真实采集、真实三平台归并和产品AC仍未通过。当前状态以BACKLOG与逐卡Acceptance为准。
 
+
+### 1.4 全量迁移决定（2026-10-02）
+
+用户确认完整迁移 AIHOT 全部业务，包含模型榜、Codex 重置公告、月报、分享海报、后台与运维，并选择保留 Python/FastAPI、Next.js、Kafka。范围见 [PRD046](docs/prd/046-AIHOT全量业务迁移需求.md)，所有权、版本/事务与兼容合同见 [Design048](docs/design/048-AIHOT全量迁移架构与兼容设计.md)，连续执行由 [Plan062](docs/plan/062-AIHOT全量业务迁移执行计划.md) 统筹。此前“特有模块可选、未来不排期”不再适用；原 058/032/038/009/014 的真实验收与未通过证据仍有效，不能被迁移任务改为通过。
+
+扩展现有 analysis/events/content/reports/monitors/notifications 等领域；按真实实现创建 publication（统一可发布投影与出口）、leaderboard（模型身份/快照/排名）及 operations（独立运营认证、反馈/维护编排）并注册验证，不提前创建空包。原 HotKey 主题、评论、原生榜单、覆盖、预算、证据、任务恢复与 Obsidian 保留。迁移不上 Node/Fastify/pg-boss 第二后端，不复制手写 OpenAPI；收费调用和状态接既有底座。业务 Demo 匿名与运营认证分别处理。真实来源/模型/渠道、数据库保留、预算及外部启用边界不自动放开。
+
+publication已创建并登记架构门禁：持有来源公开许可版本、仅引用固定正文的投影、修订审计、精选epoch与分页重投；读取复核正文/人工版本/许可和撤回。原始内容及编辑分析分别由content与analysis经DTO提供，本域不另存正文，不建立第二个Job/投递队列。RSS、MCP、Markdown、SEO和海报使用同一准入投影。
 
 ## 2. 固定技术栈
 
@@ -210,21 +218,21 @@ Demo 删除 `pwdlib`、身份配置和身份 CLI，不保留未来登录适配�
 
 - 只采集公开或获授权的数据；遵守平台频率限制；凭据和登录态只存服务端，不进前端、日志和代码库。
 - 本轮逐来源验收四个关键词来源（HN Algolia、Google News 搜索 RSS、本机 SearXNG 的 `duckduckgo news`、本机 RSSHub `/36kr/newsflashes`）、六个公开 RSSHub 热榜，以及本人账号 B 站试点。B 站使用宿主机 MediaCrawler 子进程和 `~/Desktop/Docker/mediacrawler-start-local/` 的固定补丁记录、独立 CDP 资料；微博等登录平台后续逐项准入。搜索、帖子、评论、热榜分别验收，不以公开热榜代替登录内容。
-- 来源频次、请求与模型调用经来源预设及既有预算账本设置硬上限。预设执行策略按连接版本存于 `source_connection_versions.execution_policy` 非秘密 JSONB，来源预算按 owner/source/metric/窗口规则保持稳定身份；升版不返还已用额度。`schema.sql` 的新增列仅用于全新空库，保留库先满足 Design001 §6.3 同版本恢复合同。模型仅经本机 Codex app-server，不发付费模型请求。X 仅用官方 API，凭据与月度上限未确认前禁止真实请求。
+- 来源频次、请求与模型调用经来源预设及既有预算账本设置硬上限。预设执行策略按连接版本存于 `source_connection_versions.execution_policy` 非秘密 JSONB，来源预算按 owner/source/metric/窗口规则保持稳定身份；升版不返还已用额度。`schema.sql` 的新增列仅用于全新空库，保留库先满足 Design001 §6.3 同版本恢复合同。模型经既有 AiService 与按能力冻结的适配器，真实 Codex 及付费模型请求仍暂停。X 仅用官方 API，凭据与月度上限未确认前禁止真实请求。
 - 模型适配器归 `ai/adapters/`，供应商可替换。报告中的数字一律由数据库计算，模型只负责判断和写作，正文的数字与链接须通过校验。
 - 外部正文按不可信内容处理：进入模型时放入分隔的数据区，模型输出只接受结构化字段。
 - 复用现有 MinIO。不更换 PostgreSQL 镜像，不引入向量库或搜索引擎（DEC-001-208）。
 - 知识库是本地 Obsidian vault（`HOTKEY_OBSIDIAN_VAULT_PATH`，默认 `~/Desktop/Markdown/Obsidian`）的 `HotKey/` 子目录；HotKey 单向写入管理区块，原子写，不覆盖用户区块（[Design 005 第 3.3 节](docs/design/005-报告与知识库设计.md)）。
 - 流水线由独立调度进程 `python -m worker.scheduler` 扫表驱动（DEC-001-203）；当前 M1/M2 只在宿主机运行一个 `python -m worker`，Compose 中的 worker 服务不启动（DEC-001-205）。
-- 模型经本机 Codex app-server，每个分析 Job 启动一次，只传最小环境变量（DEC-001-207）；模型名必须显式配置。
-- 推送秘密只从环境变量读取（DEC-001-210）；飞书暂缓，SMTP 后续独立实现，渠道送达不阻断信息获取或报告生成。
+- 模型按原 Job 冻结的能力配置经 AiService 适配 Codex app-server 或明确启用的兼容接口，采用 override→环境配置→默认配置。凭据、模型兼容性及预算分别复核；embedding 使用独立配置。Codex 子进程只接最小环境变量（DEC-001-207）；配置成功不能代替真实模型验收。
+- 推送秘密只从环境变量读取（DEC-001-210）；SMTP 已实现且默认关闭，飞书真实送达暂缓，渠道送达不阻断信息获取或报告生成。
 - 冻结（保留代码，不再扩展、不作前置门禁）：032 备份 S03+、033 公平派发/熔断、028 S02+、029 S03、039 S02+、040、042 B0、010 历史回补、Flutter App。移出范围：044、045。
 
 ## 5. 实施与验证
 
 当前排期且需要持续协调或独立验收的工作按 [Plan 索引](docs/plan/README.md) 推进；未来能力保留需求和设计，启动时再确定执行步骤。Plan 引用现行 Design，明确本轮差异、依赖与完成条件，不重复全量文件/接口/数据合同和多套 Checklist。小修复无需另建计划，仍先复现实际故障再实现、按影响范围回归并记录证据。核心契约未定不得列为实施就绪；真实账号/费用/渠道条件仅阻塞对应步骤。架构或数据库变化同步所属 Design、总 Design001 与本文。
 
-持久化与任务合同见 Design001 §4 和子 Design：到期窗口与采集周期归 jobs，事件事实归 events，报告设置唯一读取/写入 `monitor_topics.report_time`、`report_timezone`、`weekly_report_enabled`，冻结和导出归 reports，不新增 `report_schedules`；原始导出归 content，告警/投递审计归 notifications，指定来源账号追踪归 monitors，检索投影/回答归 knowledge。上述后置能力未因此实施或通过。HTTP/OpenAPI/生成客户端与 CI 按 AGENTS 日常维护；生命周期引用保护、删除审计和浏览器冻结边界见 Design001，真实回归缺口留在 BACKLOG。不创建额外共享层、服务或存储桶。新增 router 按目标路径独立注册，后续报告实施需按 Design005 将现有 `/api/v1/reports` 统一到 `/api/reports` 并同步生成客户端。任务硬截止、真实依赖和保留库恢复仍按现行门槛验证。
+持久化与任务合同见Design001 §4及子Design：到期窗口与采集周期归jobs，事件事实归events，原主题报告设置唯一读取/写入`monitor_topics.report_time`、`report_timezone`、`weekly_report_enabled`，冻结和导出归reports，不新增第二份主题设置；AIHOT公开刊期独立配置见Design048。原始导出归content，告警/投递审计归notifications，指定来源账号追踪归monitors，检索投影/回答归knowledge。实现与验收分别见BACKLOG和Acceptance。报告已统一为`/api/reports`并从运行OpenAPI重新生成原ribao客户端，不保留旧版本别名。生命周期、保留库恢复与真实依赖继续遵守现行门槛，不创建额外共享层、服务或存储桶。
 
 `backend/app/monitors/runs.py` 专管主题手动采集的内部分区校验、幂等重放、来源逐项受理及 Job/Outbox 事务；`monitors/services.py` 保留主题和调度投影，`worker/scheduler.py` 负责到期领取与事实入账。前端主题页专属入口位于 `frontend/src/app/monitors/[topicId]/components/topic-run-actions.tsx`，只使用生成的 API 客户端。
 
@@ -237,3 +245,26 @@ Demo 删除 `pwdlib`、身份配置和身份 CLI，不保留未来登录适配�
 ## 6. 维护
 
 PROJECT.md 是技术、架构、目录、API 契约和数据库约束的事实源；AGENTS.md 只补充实现门禁和命令，两者不得冲突。产品需求以总 PRD 001 和对应能力 PRD 为准；现行合同在 Design，当前排期的步骤在 Plan，证据与结论在 Acceptance。完成或合并的有效合同归入 Design，后置工作回归需求、设计和 BACKLOG，保留未通过条件后移除多余计划。历史原文由 Git 查阅；文档索引不复制版本、状态或验收矩阵。BACKLOG 是唯一进度看板（≤ 10 KB），HANDOVER 保持 ≤ 5 KB，均不追加流水账；小修复和普通文档整理不强制另建 Plan。
+
+`operations` 是全量迁移实际维护领域，承接反馈、私有附件、操作审计、健康心跳和人工词典版本；只通过现有业务DTO编排任务/来源/预算/备份恢复，不建立第二任务或身份系统。运营token与匿名Demo分离，写入另核CSRF、actor/operation_id/版本；默认关闭，不能指定任意owner。选择评测事实归`analysis/evaluation_models.py`与`evaluation_services.py`，通过原AiService和预算，运营只读其DTO；真实模型仍暂停。
+
+AI用途与供应商仍共用ai唯一调用账本；adapter显式component_key控制原ResourceComponentPolicy准入，embedding和未来兼容供应商不得借Codex组件许可。IndexNow保存已接收URL的资格位于原OperatorAuditOperation回执；每天按audit时间/ID/路径连续500项复验当前资格，变化才重新发送canonical，全部复验不加载供应商响应正文。没有额外模型、投递或SEO队列。
+
+全量公开日周月刊的`report_edition_schedules`只保存每种完整刊期的有界扫描游标，不保存主题报告偏好；原`monitor_topics.report_time/report_timezone/weekly_report_enabled`仍是主题偏好的唯一来源。先检查最新完整刊期，再持续推进旧刊空洞，停机后不会被反复扫描最早旧刊阻塞。
+
+全量阅读Web路径登记：`/discover`为资讯入口，`/items/[contentId]`为固定版本/许可正文，`/agent`为五工具与Markdown接入说明，`/feeds`为RSS订阅选择，`/publication/manage`为独立operator许可/投影维护；保留已有`/`监控首页。路由专属组件在各页面components，明确跨页复用放`src/components/publication/`（卡片、读取错误、海报下载）；不复制网络客户端，唯一生成gongkaifabu/gongkaifenfa。所有入口覆盖加载/空/失败重试、partial/unknown、许可收紧与403/409，公开Demo仍noindex。
+
+
+本轮全量迁移补充边界见Design048：content/editorial_rendered_*持同ContentVersion正式格式与媒体事实；publication/media_mirror_*只持原Job/Evidence镜像引用，MinIO客户端归evidence/adapters/media_storage.py和进程生命周期；jobs/source_scopes.py只读真实任务收集范围DTO。新增Web `/discover/stories/[eventId]`是全成员许可通过的公开详情，`/editorial-sources`是六类源配置与运行，组件归其路由，全部接唯一运行OpenAPI。父进程续租、按启用handler计算Kafka窗口以及独立进程心跳/外部watchdog按Design048，不引入第二队列或事实源。
+
+`publication/reading_groups.py`派生公开故事/事实/单件时间线，`publication/topics.py`与MIT静态行业定义派生行业主题目录、分页及索引准入；不新增材料或事件事实。Web `/discover/topics`与`/discover/topics/[slug]`使用唯一生成API，原`/topics`仍是监控主题。通知在生产结果事务内受理固定subject，原notification.scan/send任务复核所属领域typed DTO、目的地版本、当前许可和已保存供应商回执。
+
+站点说明、联系信息和部署开关由operations站点设置持有同owner单例及修订，运营审计复用原表；联系二维码只接受限额且解码验证的图片，公共读取服从当前启用状态且禁止旧缓存。publication提供当前许可资料的统计DTO，禁止用数据库原总行数冒充公开可见数。Web `/about`、`/privacy`、`/terms`、`/changelog`、`/contact`、`/site/manage`分别为说明/公开联系/独立运营设置，专属组件接运行OpenAPI；`/discover/starred`是只存ID的本机收藏。
+
+公开刊期`/reports/[kind]/[key]`仅日/周/月的最新完整稿，固定引用许可与索引授权取ALL相与；公开故事与专题采用同一实时indexable事实。IndexNow以原Job/预算/运营审计提交已准入的文章、刊期和事件canonical路径，三个领域分别使用连续有界游标；只记录接收/等待key验证，不冒充搜索引擎已收录。验证文件固定`/hotkey-indexnow-key.txt`且仅显式开启外部提交时提供。
+
+`publication/share_images.py`从实时许可DTO生成1200×630分享PNG及1080×1440海报PNG，使用已锁定Pillow；`publication/assets/og-fonts/`是服务端唯一静态字体目录，复用固定AIHOT版本随附NotoSansSC子集并完整保留OFL声明。公开图片根路径固定/og/*，由公开分发路由和Next有限白名单装配；读取不触发外采/模型、不持久第二份正文。
+
+海报二维码使用离线qrcode 8.2及Pillow编码当前许可canonical URL，固定纠错M和完整quiet zone；字体/OFL与移植MIT均保留。6h语义回溯以真实供应商/embeddings向量与同模型/维度cosine为依据，向量由events持有并沿原AiCall/Job/预算恢复，源码在ai/adapters/embeddings.py与events/embedding_execution.py，默认embeddings及AI均关闭。source.icons源图标只缓存已准入的源素材，复用Evidence/MinIO与原Jobs/预算，不在GET解析网站或请求头像。
+
+来源试抓由sources/editorial_preview_*编排原Job/预算与OpsAudit，connections仅提供当前CAS/许可typed准入。离线样本、原来源异步试抓及未知人工核对使用唯一运行OpenAPI；不创建正式SourceRun或第二正文库。外部批次上限50，私有来源token与HMAC盐分开，滚动60秒同owner/真实peer共10次受理，由jobs/external_ingress.py读原Job并持advisory事务锁；connections持原SourceRun逐条回执与原内容Writer，GET不重新摄入。编辑来源写与人工重新分析也用独立operator+CSRF，分类/公开推荐理由与私有审计原因分开。

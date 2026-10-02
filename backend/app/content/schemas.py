@@ -30,6 +30,35 @@ class EventContentInputView:
     representative_comment_id: UUID | None
 
 
+@dataclass(frozen=True, slots=True)
+class EventContentReadReference:
+    content_id: UUID
+    content_version_id: UUID
+    representative_comment_id: UUID | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class EventSignalContentInput:
+    reference: EventContentReadReference
+    reading: EventContentReadView
+    first_received_at: datetime
+    source_time: datetime
+    time_basis: str
+
+
+@dataclass(frozen=True, slots=True)
+class EventSignalContentPage:
+    items: tuple[EventSignalContentInput, ...]
+    next_after_content_id: UUID | None
+
+
+@dataclass(frozen=True, slots=True)
+class EditorialDiscoveryView:
+    timeline_at: datetime
+    first_received_at: datetime
+    backfill: bool | None
+
+
 class HotlistSourceView(OutputModel):
     source_key: str
     latest_observed_at: datetime | None
@@ -445,6 +474,28 @@ class ContentObservationView(OutputModel):
     content_version: ContentVersionView | None
 
 
+class EventCommentReadView(OutputModel):
+    id: UUID
+    root_content_id: UUID | None
+    parent_content_id: UUID | None
+    parent_relation_status: Literal["root", "observed", "unavailable", "unresolved"]
+    observation: ContentObservationView
+
+
+class EventContentReadView(OutputModel):
+    id: UUID
+    source_key: str
+    object_type: Literal["post", "comment", "webpage"]
+    native_scope: str | None
+    collection_scope: str | None = None
+    external_id: str
+    identity_basis: Literal["guid", "url_fallback"] | None
+    observation: ContentObservationView
+    current_visibility: ContentVisibilityView | None
+    representative_comment: EventCommentReadView | None
+    representative_comment_state: Literal["none", "readable", "unavailable"]
+
+
 class ContentDiscoveryView(OutputModel):
     job_id: UUID
     configuration_ref: str
@@ -554,3 +605,11 @@ class ContentSamplePreviewView(OutputModel):
     samples: list[ContentRuleSampleView]
     external_requests: Literal[0]
     model_requests: Literal[0]
+
+
+@dataclass(frozen=True, slots=True)
+class EventContentOriginalTime:
+    content_id: UUID
+    content_version_id: UUID
+    source_time: datetime
+    basis: Literal["published", "discovered"]

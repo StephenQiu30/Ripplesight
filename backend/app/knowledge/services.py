@@ -178,6 +178,7 @@ class KnowledgeExportService:
             note,
             object_id,
             relative_path=path if prior is not None or path != daily_relative_path(note) else None,
+            expected_content_sha256=prior.content_sha256 if prior is not None else None,
         )
         if prior is None:
             prior = KnowledgeExport(

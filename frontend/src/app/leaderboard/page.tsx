@@ -1,0 +1,54 @@
+import type { Metadata } from "next";
+import { connection } from "next/server";
+
+import { getLeaderboardBoard } from "@/api/moxingbang";
+import { publicSiteMetadata } from "@/components/publication/site-metadata";
+import { publicationApiOptions } from "@/components/publication/reading-parts";
+import { BoardReading } from "@/components/leaderboard/board-reading";
+import { LeaderboardFailure } from "@/components/leaderboard/reading-parts";
+
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<{ domestic?: string; open_weights?: string }>;
+}): Promise<Metadata> {
+  const search = await searchParams;
+  try {
+    const data = await getLeaderboardBoard(
+      { board: "overall" },
+      publicationApiOptions,
+    );
+    return publicSiteMetadata({
+      title: "模型榜",
+      description: "查看公开评测共识、证据覆盖、模型价格与来源。",
+      path: "/leaderboard",
+      imagePath: "/og/pages/leaderboard.png",
+      indexable: !!data.run && !search.domestic && !search.open_weights,
+    });
+  } catch {
+    return { title: "模型榜", robots: { index: false, follow: false } };
+  }
+}
+
+export default async function LeaderboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ domestic?: string; open_weights?: string }>;
+}) {
+  await connection();
+  const params = await searchParams;
+  const domestic = params.domestic === "true";
+  const openWeights = params.open_weights === "true";
+  let data: HotKeyAPI.BoardView;
+  try {
+    data = await getLeaderboardBoard(
+      { board: "overall", domestic, open_weights: openWeights },
+      { baseURL: process.env.HOTKEY_API_ORIGIN ?? "http://127.0.0.1:8867" },
+    );
+  } catch (error) {
+    return <LeaderboardFailure error={error} href="/leaderboard" />;
+  }
+  return (
+    <BoardReading data={data} domestic={domestic} openWeights={openWeights} />
+  );
+}

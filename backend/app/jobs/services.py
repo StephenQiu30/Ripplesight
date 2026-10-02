@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import cast
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 from sqlalchemy import Select, and_, case, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -44,6 +44,7 @@ from jobs.models import (
     ResourceUsageAttempt,
 )
 from jobs.schemas import (
+    AiTokenCostQuote,
     BudgetContext,
     BudgetDecisionStatus,
     BudgetMetric,
@@ -553,6 +554,43 @@ class JobExecutionConfiguration:
     adapter_version: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class JobCancellationState:
+    job_id: UUID
+    status: JobStatus
+    requested_at: datetime | None
+
+
+def load_job_cancellation_state_in_transaction(
+    session: Session, *, owner_id: UUID, job_id: UUID
+) -> JobCancellationState | None:
+    """Expose original cancellation facts to business read projections without ORM leakage."""
+    if not session.in_transaction():
+        raise RuntimeError("job cancellation reads require the caller's transaction")
+    row = session.execute(
+        select(Job.id, Job.status, Job.cancel_requested_at).where(
+            Job.owner_id == owner_id, Job.id == job_id
+        )
+    ).one_or_none()
+    return (
+        JobCancellationState(
+            job_id=row.id, status=JobStatus(row.status), requested_at=row.cancel_requested_at
+        )
+        if row is not None
+        else None
+    )
+
+
+def load_job_id_for_operation_in_transaction(
+    session: Session, *, owner_id: UUID, operation_id: UUID
+) -> UUID | None:
+    if not session.in_transaction():
+        raise RuntimeError("operation lookup requires the caller's transaction")
+    return session.scalar(
+        select(Job.id).where(Job.owner_id == owner_id, Job.operation_id == operation_id)
+    )
+
+
 def load_recent_comment_job_targets_in_transaction(
     session: Session,
     *,
@@ -914,6 +952,7 @@ class ResourceBudgetService:
         *,
         owner_id: UUID,
         command: UsageAttemptInput,
+        approved_paid_ai: bool = False,
     ) -> UsageAttemptView:
         """Persist a usage attempt inside an existing outer transaction."""
         existing = self._session.scalar(
@@ -934,14 +973,24 @@ class ResourceBudgetService:
             )
             .with_for_update()
         )
-        if (
-            policy is None
-            or not policy.enabled_for_core
-            or policy.cost_class not in self._CORE_COST_CLASSES
-        ):
+        core_allowed = bool(
+            policy is not None
+            and policy.enabled_for_core
+            and policy.cost_class in self._CORE_COST_CLASSES
+        )
+        paid_allowed = bool(
+            approved_paid_ai
+            and policy is not None
+            and policy.cost_class == CostClass.PAID.value
+            and policy.reviewed_at <= command.started_at
+            and command.component_key.startswith(("ai.llm.", "ai.embeddings"))
+            and self._approved_ai_reservations(owner_id, command)
+        )
+        if not core_allowed and not paid_allowed:
             raise ComponentPolicyUnavailableError(
                 "component is not enabled for zero-cost core execution"
             )
+        assert policy is not None
 
         usage_id = uuid4()
         inserted_id = self._session.scalar(
@@ -977,6 +1026,52 @@ class ResourceBudgetService:
         if model is None:
             raise RuntimeError("inserted usage attempt is not visible")
         return self._attempt_view(model)
+
+    def _approved_ai_reservations(self, owner_id: UUID, command: UsageAttemptInput) -> bool:
+        """Trusted paid opt-in needs both live global and component limits, never a public flag."""
+        for suffix, metrics in (
+            ("ai-provider-network", {BudgetMetric.NETWORK_REQUEST.value}),
+            (
+                "ai-provider-spend",
+                {BudgetMetric.PROVIDER_USD_MICROS.value, BudgetMetric.PROVIDER_CNY_MICROS.value},
+            ),
+        ):
+            rows = self._session.execute(
+                select(ResourceBudgetReservation, ResourceBudgetPolicy)
+                .join(
+                    ResourceBudgetPolicy,
+                    (ResourceBudgetPolicy.id == ResourceBudgetReservation.budget_policy_id)
+                    & (ResourceBudgetPolicy.owner_id == ResourceBudgetReservation.owner_id),
+                )
+                .where(
+                    ResourceBudgetReservation.owner_id == owner_id,
+                    ResourceBudgetReservation.reservation_id == uuid5(command.attempt_id, suffix),
+                )
+                .with_for_update()
+            ).all()
+            scopes: set[str] = set()
+            seen_metrics: set[str] = set()
+            for reservation, budget_policy in rows:
+                if (
+                    reservation.operation_id != command.operation_id
+                    or reservation.status != BudgetReservationStatus.RESERVED.value
+                    or reservation.metric not in metrics
+                    or not budget_policy.enabled
+                    or reservation.policy_version != budget_policy.policy_version
+                    or budget_policy.window_anchor_at > command.started_at
+                ):
+                    return False
+                seen_metrics.add(reservation.metric)
+                if budget_policy.scope_kind == BudgetScopeKind.GLOBAL.value:
+                    scopes.add("global")
+                if (
+                    budget_policy.scope_kind == BudgetScopeKind.SOURCE.value
+                    and budget_policy.scope_reference == command.component_key
+                ):
+                    scopes.add("source")
+            if scopes != {"global", "source"} or len(seen_metrics) != 1:
+                return False
+        return True
 
     def finish_attempt(
         self,
@@ -1352,6 +1447,17 @@ class ResourceBudgetService:
                 or command.requested_units != command.cost_quote.reservation_units
             ):
                 raise ValueError("x api spend budget requires a matching cost quote")
+        elif isinstance(command.cost_quote, AiTokenCostQuote):
+            expected = (
+                BudgetMetric.PROVIDER_USD_MICROS
+                if command.cost_quote.currency == "USD"
+                else BudgetMetric.PROVIDER_CNY_MICROS
+            )
+            if (
+                command.metric is not expected
+                or command.requested_units != command.cost_quote.reservation_units
+            ):
+                raise ValueError("AI spend requires a matching original-currency quote")
         elif command.cost_quote is not None:
             raise ValueError("cost quote requires x api spend budget")
         now = self._clock()
@@ -1515,6 +1621,36 @@ class ResourceBudgetService:
         actual_units: int,
     ) -> BudgetSettlementView:
         """Settle one budget reservation inside an existing outer transaction."""
+        return self._settle_budget_reservation_in_transaction(
+            owner_id=owner_id,
+            reservation_id=reservation_id,
+            actual_units=actual_units,
+            provider_receipt=False,
+        )
+
+    def settle_provider_cost_receipt_in_transaction(
+        self,
+        *,
+        owner_id: UUID,
+        reservation_id: UUID,
+        actual_units: int,
+    ) -> BudgetSettlementView:
+        """Account a known AI supplier fee, including an overrun, in the original windows."""
+        return self._settle_budget_reservation_in_transaction(
+            owner_id=owner_id,
+            reservation_id=reservation_id,
+            actual_units=actual_units,
+            provider_receipt=True,
+        )
+
+    def _settle_budget_reservation_in_transaction(
+        self,
+        *,
+        owner_id: UUID,
+        reservation_id: UUID,
+        actual_units: int,
+        provider_receipt: bool,
+    ) -> BudgetSettlementView:
         if actual_units < 0:
             raise ValueError("actual_units cannot be negative")
         now = self._clock()
@@ -1524,17 +1660,49 @@ class ResourceBudgetService:
             raise BudgetPolicyUnavailableError("budget reservation does not exist")
 
         first = reservations[0]
-        if actual_units > first.requested_units:
+        if provider_receipt and any(
+            row.metric
+            not in (
+                BudgetMetric.PROVIDER_USD_MICROS.value,
+                BudgetMetric.PROVIDER_CNY_MICROS.value,
+            )
+            or row.budget_mode != "cumulative"
+            for row in reservations
+        ):
+            raise ValueError("supplier receipts require original AI provider cost reservations")
+        if actual_units > first.requested_units and not provider_receipt:
             raise ValueError("actual_units cannot exceed requested_units")
         if any(row.requested_units != first.requested_units for row in reservations):
             raise RuntimeError("budget reservation rows disagree on requested units")
 
         statuses = {row.status for row in reservations}
         if statuses == {BudgetReservationStatus.SETTLED.value}:
-            if any(row.actual_units != actual_units for row in reservations):
-                raise BudgetReservationConflictError("reservation already has another settlement")
             if first.settled_at is None or first.actual_units is None:
                 raise RuntimeError("settled reservation is incomplete")
+            if any(row.actual_units != first.actual_units for row in reservations):
+                raise RuntimeError("settled reservation rows disagree on actual units")
+            if provider_receipt and actual_units > first.actual_units:
+                delta = actual_units - first.actual_units
+                for row in reservations:
+                    window = self._session.scalar(
+                        select(ResourceBudgetWindow)
+                        .where(
+                            ResourceBudgetWindow.owner_id == owner_id,
+                            ResourceBudgetWindow.id == row.budget_window_id,
+                        )
+                        .with_for_update()
+                    )
+                    if window is None:
+                        raise RuntimeError("budget reservation window is missing")
+                    window.used_units += delta
+                    window.updated_at = max(now, window.updated_at)
+                    row.actual_units = actual_units
+                    row.released_units = max(0, row.requested_units - actual_units)
+                return self._settlement_view(reservations, first.settled_at)
+            if not provider_receipt and any(
+                row.actual_units != actual_units for row in reservations
+            ):
+                raise BudgetReservationConflictError("reservation already has another settlement")
             return self._settlement_view(reservations, first.settled_at)
         if statuses != {BudgetReservationStatus.RESERVED.value}:
             raise RuntimeError("budget reservation rows have inconsistent status")
@@ -1560,7 +1728,7 @@ class ResourceBudgetService:
             window.reserved_units -= row.requested_units
             if row.budget_mode == "cumulative":
                 window.used_units += actual_units
-                released_units = row.requested_units - actual_units
+                released_units = max(0, row.requested_units - actual_units)
             else:
                 released_units = row.requested_units
             window.updated_at = now

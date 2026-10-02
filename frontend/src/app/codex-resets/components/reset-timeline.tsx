@@ -1,0 +1,141 @@
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+
+export function beijingTime(value: string | null | undefined): string {
+  return value
+    ? new Intl.DateTimeFormat("zh-CN", {
+        timeZone: "Asia/Shanghai",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).format(new Date(value))
+    : "暂无记录";
+}
+
+const labels: Record<HotKeyAPI.PresentationStatus, string> = {
+  announced: "已公告，待确认",
+  in_progress: "正在推进",
+  confirmed: "已确认",
+  expired_unconfirmed: "窗口已过，待确认",
+  likely_completed: "推测已完成，待确认",
+  withdrawn: "已撤回",
+};
+const basis: Record<HotKeyAPI.Estimate["basis"], string> = {
+  model: "模型估计",
+  source: "原话估计",
+  source_day: "公告日期估计",
+  history: "历史估计",
+};
+
+export function ResetTimeline({
+  events,
+  outage,
+}: {
+  events: HotKeyAPI.ResetEventView[];
+  outage: HotKeyAPI.OutageView | null;
+}) {
+  return (
+    <section aria-label="公告进展" className="space-y-8">
+      {outage && (
+        <article className="bg-secondary rounded-xl p-5">
+          <h3 className="font-medium">
+            {outage.recovered_at ? "故障后已发布恢复说明" : "有源帖子报告故障"}
+          </h3>
+          <p className="text-muted-foreground mt-2 text-sm leading-6 whitespace-pre-wrap">
+            {outage.translation_zh ?? outage.original_text}
+          </p>
+          <Button asChild variant="link" className="px-0">
+            <a href={outage.url} target="_blank" rel="noopener noreferrer">
+              阅读故障原帖
+            </a>
+          </Button>
+        </article>
+      )}
+      {events.length === 0 && (
+        <p className="text-muted-foreground py-8">当前范围没有公告记录。</p>
+      )}
+      {events.map((event) => (
+        <article key={event.id} className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="secondary">
+              {event.kind === "reset_credit" ? "重置额度" : "直接重置"}
+            </Badge>
+            <Badge variant="outline">
+              {labels[event.presentation_status ?? event.status]}
+            </Badge>
+            {event.confirmation_basis === "receipt_review" && (
+              <Badge variant="outline">人工到账复核</Badge>
+            )}
+            {event.confirmation_basis === "source_post" && (
+              <Badge variant="outline">官方源确认</Badge>
+            )}
+          </div>
+          <h3 className="text-lg leading-7 font-medium">
+            {event.title || "Codex 重置公告"}
+          </h3>
+          {event.scope?.audience_zh && (
+            <p className="text-sm">适用范围：{event.scope.audience_zh}</p>
+          )}
+          {event.scope?.products_zh && (
+            <p className="text-muted-foreground text-sm">
+              产品：{event.scope.products_zh}
+            </p>
+          )}
+          {event.scope?.plans?.length ? (
+            <p className="text-muted-foreground text-sm">
+              计划：{event.scope.plans.join("、")}
+            </p>
+          ) : null}
+          {event.schedule && (
+            <p className="text-sm">原话时间：{event.schedule.label}</p>
+          )}
+          {event.estimate && (
+            <div className="text-muted-foreground space-y-1 text-sm">
+              <p>{event.estimate.label}</p>
+              <p>
+                {basis[event.estimate.basis]}：{event.estimate.reason}
+              </p>
+            </div>
+          )}
+          {event.status === "confirmed" && (
+            <p className="text-muted-foreground text-sm">
+              {event.confirmation_basis === "source_post"
+                ? `确认帖时间：${beijingTime(event.confirmed_at)}`
+                : `人工获证日期：${event.occurred_on || "暂无记录"}`}
+              。此时间不是账户精确到账时间。
+            </p>
+          )}
+          <ol className="space-y-3">
+            {(event.posts ?? []).map((post) => (
+              <li key={`${post.post_id}-${post.action}`} className="text-sm">
+                <p className="text-muted-foreground">
+                  {beijingTime(post.published_at)} ·{" "}
+                  {post.action === "confirm"
+                    ? "源确认"
+                    : post.action === "withdraw"
+                      ? "撤回"
+                      : post.action === "amend"
+                        ? "公告修订"
+                        : post.action === "progress"
+                          ? "进展"
+                          : "公告"}
+                </p>
+                <p className="mt-1 leading-6 whitespace-pre-wrap">
+                  {post.excerpt_zh || post.translation_zh || post.excerpt}
+                </p>
+                <Button asChild variant="link" className="px-0">
+                  <a href={post.url} target="_blank" rel="noopener noreferrer">
+                    阅读公告原帖
+                  </a>
+                </Button>
+              </li>
+            ))}
+          </ol>
+        </article>
+      ))}
+    </section>
+  );
+}

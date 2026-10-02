@@ -433,6 +433,8 @@ class BudgetMetric(StrEnum):
     ANALYSIS_ATTEMPT = "analysis_attempt"
     CONCURRENCY_SLOT = "concurrency_slot"
     X_API_USD_MICROS = "x_api_usd_micros"
+    PROVIDER_CNY_MICROS = "provider_cny_micros"
+    PROVIDER_USD_MICROS = "provider_usd_micros"
 
 
 class XApiPostReadCost(BaseModel):
@@ -478,6 +480,17 @@ class XApiUserReadCost(BaseModel):
 
 
 XApiReadCostQuote = XApiPostReadCost | XApiUserReadCost
+
+
+class AiTokenCostQuote(BaseModel):
+    """Conservative original-currency cap, computed from a protected model tariff."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    resource_kind: Literal["ai_tokens"] = "ai_tokens"
+    currency: Literal["USD", "CNY"]
+    reservation_units: int = Field(gt=0, le=_MAX_BUDGET_UNITS)
+    model_price_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
 class BudgetScopeKind(StrEnum):
@@ -591,7 +604,7 @@ class BudgetReservationInput(BaseModel):
     metric: BudgetMetric
     requested_units: int = Field(gt=0, le=_MAX_BUDGET_UNITS)
     context: BudgetContext
-    cost_quote: XApiReadCostQuote | None = None
+    cost_quote: XApiReadCostQuote | AiTokenCostQuote | None = None
 
     @model_validator(mode="after")
     def validate_x_source(self) -> BudgetReservationInput:
@@ -603,6 +616,19 @@ class BudgetReservationInput(BaseModel):
                 or self.requested_units != self.cost_quote.reservation_units
             ):
                 raise ValueError("x api spend budget requires a matching cost quote")
+        elif isinstance(self.cost_quote, AiTokenCostQuote):
+            expected = (
+                BudgetMetric.PROVIDER_USD_MICROS
+                if self.cost_quote.currency == "USD"
+                else BudgetMetric.PROVIDER_CNY_MICROS
+            )
+            if (
+                self.metric is not expected
+                or self.requested_units != self.cost_quote.reservation_units
+                or not self.context.source_ref
+                or not self.context.source_ref.startswith(("ai.llm.", "ai.embeddings"))
+            ):
+                raise ValueError("AI spend requires its matching currency, component and cap")
         elif self.cost_quote is not None:
             raise ValueError("cost quote requires x api spend budget")
         return self

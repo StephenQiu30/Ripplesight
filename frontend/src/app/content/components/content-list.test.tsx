@@ -72,6 +72,30 @@ const content: HotKeyAPI.ContentRecordSummaryView = {
 };
 
 describe("content list filters", () => {
+  it("retains text search when loading another page and omits an empty query", () => {
+    expect(
+      contentListParams({ ...filters, query: "  OpenAI 模型  " }, "next"),
+    ).toMatchObject({
+      q: "OpenAI 模型",
+      cursor: "next",
+    });
+    expect(contentListParams({ ...filters, query: "   " })).not.toHaveProperty(
+      "q",
+    );
+  });
+
+  it("rejects excessive search input before issuing a request", () => {
+    expect(() =>
+      contentListParams({ ...filters, query: "a b c d e f g" }),
+    ).toThrow("搜索");
+    expect(() =>
+      contentListParams({ ...filters, query: "a".repeat(201) }),
+    ).toThrow("搜索");
+    expect(() => contentListParams({ ...filters, query: "a\u0000b" })).toThrow(
+      "搜索",
+    );
+  });
+
   it("converts inclusive Beijing dates into a half-open UTC window and retains the cursor", () => {
     expect(contentListParams(filters, "page-two")).toEqual({
       source_key: "hn_algolia",

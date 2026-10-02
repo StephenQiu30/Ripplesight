@@ -18,6 +18,7 @@ from core.errors import ApplicationError
 from evidence.services import load_source_access_readiness
 from jobs.schemas import BudgetMetric, BudgetScopeKind
 from jobs.services import ResourceBudgetService
+from monitors.editorial_events import editorial_event_topic_id, reject_internal_editorial_topic
 from monitors.models import (
     FollowedAccount,
     FollowedAccountAlias,
@@ -833,6 +834,7 @@ class MonitorTopicService:
         )
 
     def get_topic(self, *, owner_id: UUID, topic_id: UUID) -> MonitorTopicView:
+        reject_internal_editorial_topic(owner_id=owner_id, topic_id=topic_id)
         self._session.rollback()
         with self._session.begin():
             topic = self._find_topic(owner_id=owner_id, topic_id=topic_id)
@@ -911,7 +913,10 @@ class MonitorTopicService:
                         MonitorTopicVersion.version == MonitorTopic.current_version,
                     ),
                 )
-                .where(MonitorTopic.owner_id == owner_id)
+                .where(
+                    MonitorTopic.owner_id == owner_id,
+                    MonitorTopic.id != editorial_event_topic_id(owner_id),
+                )
                 .order_by(MonitorTopic.id)
                 .limit(limit + 1)
             )
@@ -932,6 +937,7 @@ class MonitorTopicService:
         return items, next_cursor
 
     def clone_topic(self, *, owner_id: UUID, topic_id: UUID) -> MonitorTopicView:
+        reject_internal_editorial_topic(owner_id=owner_id, topic_id=topic_id)
         now = self._clock()
         self._session.rollback()
         with self._session.begin():
@@ -1009,6 +1015,7 @@ class MonitorTopicService:
         topic_id: UUID,
         command: MonitorTopicUpdateInput,
     ) -> MonitorTopicView:
+        reject_internal_editorial_topic(owner_id=owner_id, topic_id=topic_id)
         name = self._normalize_name(command.name)
         rules = self._normalize_command_rules(command)
         source_keys = self._normalize_source_keys(command.source_keys)
@@ -1101,6 +1108,7 @@ class MonitorTopicService:
         topic_id: UUID,
         target: MonitorTopicStatus,
     ) -> MonitorTopicView:
+        reject_internal_editorial_topic(owner_id=owner_id, topic_id=topic_id)
         now = self._clock()
         self._session.rollback()
         with self._session.begin():

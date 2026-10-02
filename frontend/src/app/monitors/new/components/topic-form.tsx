@@ -171,7 +171,7 @@ export function TopicForm() {
       <WorkspaceHeader current="topics" />
       <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-20 xl:px-0">
         <Button asChild variant="ghost" size="navigation" className="mb-10">
-          <Link href="/events">返回我的关注</Link>
+          <Link href="/topics">返回我的关注</Link>
         </Button>
         <div className="grid gap-12 md:grid-cols-2 md:gap-16">
           <section>

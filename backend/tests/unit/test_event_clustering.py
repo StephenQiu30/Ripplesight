@@ -197,7 +197,12 @@ def test_preflight_input_failure_marks_candidate_after_rollback(monkeypatch) -> 
 
     @contextmanager
     def sessions():
-        yield SimpleNamespace(begin=begin, get=lambda *_args: candidate)
+        def scalar(statement):
+            assert active
+            assert "event_candidates" in str(statement) and "FOR UPDATE" in str(statement)
+            return candidate
+
+        yield SimpleNamespace(begin=begin, scalar=scalar)
 
     configuration = SimpleNamespace(
         owner_id=owner,
@@ -252,6 +257,10 @@ def test_scan_stops_after_ten_assigned_pages_and_logs(monkeypatch) -> None:
 
     monkeypatch.setattr("events.services.list_relevant_event_annotation_refs_in_transaction", page)
     monkeypatch.setattr("events.services._event_inputs_from_refs", lambda *_a, **_kw: ())
+    monkeypatch.setattr(
+        "events.services.list_editorial_event_inputs_in_transaction",
+        lambda *_a, **_kw: SimpleNamespace(items=(), next_after=None),
+    )
     logs = []
     monkeypatch.setattr(
         "events.services.structlog.get_logger",
@@ -272,9 +281,17 @@ def test_append_uses_highest_score_latest_context_and_bounded_batches() -> None:
     from events.clustering import append_candidates
     from events.schemas import EventTarget
 
-    inputs = tuple(_member("Acme launch") for _ in range(40))
     old, recent = _member("Acme launch"), _member("Acme launch")
-    recent = replace(recent, first_seen_at=recent.first_seen_at + timedelta(hours=1))
+    recent = replace(
+        recent,
+        owner_id=old.owner_id,
+        topic_id=old.topic_id,
+        first_seen_at=recent.first_seen_at + timedelta(hours=1),
+    )
+    inputs = tuple(
+        replace(_member("Acme launch"), owner_id=old.owner_id, topic_id=old.topic_id)
+        for _ in range(40)
+    )
     low = EventTarget(event_id=uuid4(), revision=1, members=(old,))
     high = EventTarget(event_id=uuid4(), revision=2, members=(old, recent))
     calls = []
@@ -352,9 +369,9 @@ def test_rework_old_event_uses_recent_member_dto(monkeypatch) -> None:
 
     def load_content(_session, **kwargs):
         calls.append(kwargs)
-        return {recent.content_version_id: recent}
+        return (recent,)
 
-    monkeypatch.setattr("events.services.load_event_content_inputs_in_transaction", load_content)
+    monkeypatch.setattr("events.services._fixed_context_inputs", load_content)
     monkeypatch.setattr(
         "events.services.MonitorTopicService",
         lambda _session: SimpleNamespace(
@@ -373,5 +390,5 @@ def test_rework_old_event_uses_recent_member_dto(monkeypatch) -> None:
     )
     assert "events.first_seen_at >=" not in statements[0]
     assert calls[0]["since"] == since
-    assert calls[0]["version_ids"] == (recent.content_version_id,)
+    assert calls[0]["members"] == [member]
     assert targets[0].event_id == target.id and targets[0].members == (recent,)

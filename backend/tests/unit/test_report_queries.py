@@ -85,18 +85,19 @@ def test_report_routes_apply_demo_partition_and_public_error_contract() -> None:
     app.dependency_overrides[get_report_service] = lambda: service
     client = TestClient(app)
 
-    listed = client.get("/api/v1/reports")
+    listed = client.get("/api/reports")
     assert listed.status_code == 200
     assert listed.json() == {"items": [], "next_cursor": None}
     assert listed.headers["cache-control"] == "no-store"
 
-    hidden = client.get(f"/api/v1/reports/{uuid4()}")
+    hidden = client.get(f"/api/reports/{uuid4()}")
     assert hidden.status_code == 404
     assert hidden.json()["code"] == "resource_not_found"
 
-    invalid = client.get("/api/v1/reports?date_from=2026-09-25&date_to=2026-09-24")
+    invalid = client.get("/api/reports?date_from=2026-09-25&date_to=2026-09-24")
     assert invalid.status_code == 422
     assert invalid.json()["code"] == "validation_error"
+    assert client.get("/api/v1/reports").status_code == 404
 
 
 def test_report_cursor_cannot_cross_owner_or_filter_boundary() -> None:

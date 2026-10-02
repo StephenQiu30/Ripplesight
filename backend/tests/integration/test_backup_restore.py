@@ -244,56 +244,9 @@ def test_candidate_backup_uses_real_snapshot_archive_and_minio_inventory(
     assert manifest.evidence_mode is EvidenceBackupMode.CONTENT_ARCHIVED
     assert manifest.restore_verified is False
     assert manifest.secrets_included is False
-    assert set(table_counts) == {
-        "ai_calls",
-        "analysis_prompt_activations",
-        "analysis_prompt_runtime_sessions",
-        "collection_due_windows",
-        "content_annotations",
-        "coverage_windows",
-        "content_discoveries",
-        "content_observations",
-        "content_records",
-        "hotlist_snapshots",
-        "hotlist_entries",
-        "content_threads",
-        "content_version_relations",
-        "content_versions",
-        "content_visibility_observations",
-        "event_candidates",
-        "event_members",
-        "events",
-        "evidence_cleanup_targets",
-        "evidence_deletions",
-        "evidence_resources",
-        "evidence_retention_policies",
-        "followed_account_aliases",
-        "followed_accounts",
-        "job_attempts",
-        "job_stage_attempts",
-        "jobs",
-        "knowledge_exports",
-        "monitor_schedules",
-        "monitor_topic_status_events",
-        "monitor_topic_versions",
-        "monitor_topics",
-        "notification_deliveries",
-        "notification_targets",
-        "outbox_messages",
-        "processed_messages",
-        "provenance_manifest_inputs",
-        "provenance_manifests",
-        "resource_budget_policies",
-        "resource_budget_reservations",
-        "resource_budget_windows",
-        "resource_component_policies",
-        "resource_usage_attempts",
-        "reports",
-        "source_access_policies",
-        "source_capability_evidence",
-        "source_connection_versions",
-        "source_connections",
-    }
+    from db.metadata import metadata
+
+    assert set(table_counts) == set(metadata.tables)
     assert "identity_users" not in table_counts
     assert "identity_sessions" not in table_counts
     assert table_counts["analysis_prompt_activations"] == 0
