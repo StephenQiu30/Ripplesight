@@ -29,7 +29,7 @@ from content.collection import (
     WebPageFetchService,
 )
 from content.schemas import PersistContentDocumentInput
-from core.config import Settings
+from core.config import JOB_PROCESS_STARTUP_TIMEOUT_SECONDS, Settings
 from core.errors import ApplicationError
 from evidence.schemas import AdmittedSourcePayload, DataClass
 from evidence.services import ResourceUnavailableError
@@ -899,7 +899,7 @@ def test_worker_executes_job_in_a_spawned_process(
         worker_id="worker-spawn-integration",
         lease_seconds=60,
         supervisor=JobProcessSupervisor(
-            startup_timeout_seconds=5,
+            startup_timeout_seconds=JOB_PROCESS_STARTUP_TIMEOUT_SECONDS,
             execution_timeout_seconds=10,
             terminate_grace_seconds=1,
             poll_interval_seconds=0.05,
