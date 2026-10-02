@@ -11,7 +11,7 @@ description:
 ## Goals
 
 - Produce a commit that reflects the actual code changes and the session context.
-- Follow `WORKFLOW.md` and `AGENTS.md` commit discipline (allowed types and test-first ordering).
+- Follow `AGENTS.md` commit discipline and the architecture in `PROJECT.md`.
 - Include both summary and rationale in the body.
 
 ## Commit title convention
@@ -29,8 +29,9 @@ scope, or an unscoped prefix. Do not add a space after the colon. The Chinese
 description must be a concise Simplified Chinese verb-object phrase; do not
 use an English description.
 
-For feature or behavior work, preserve order: `test` first, then `feat`/`fix`,
-then optional `refactor`, `docs`, or `chore`.
+For behavior changes, reproduce the failure before implementation, then include
+the fix, its tests, and corresponding contracts in one independently reviewable
+commit.
 
 Do not mix unrelated types in one commit. Split by type when practical.
 
@@ -38,13 +39,13 @@ Do not mix unrelated types in one commit. Split by type when practical.
 
 - Session history for intent and rationale.
 - `git status`, `git diff`, and `git diff --staged` for actual changes.
-- `WORKFLOW.md`, `AGENTS.md`, and workpad `Commit Plan` when present.
+- `AGENTS.md` and `PROJECT.md`.
 
 ## Steps
 
 1. Read session history to identify scope, intent, and rationale.
 2. Inspect the working tree and staged changes (`git status`, `git diff`, `git diff --staged`).
-3. Stage intended changes (`git add -A`) after confirming scope.
+3. Stage the exact intended paths after confirming scope; preserve unrelated edits.
 4. Sanity-check newly added files; flag build artifacts, logs, or temp files before committing.
 5. If staging is incomplete or includes unrelated files, fix the index or ask for confirmation.
 6. Choose the allowed type and stable non-empty scope that match the staged diff.
