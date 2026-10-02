@@ -20,6 +20,7 @@ from sqlalchemy import Engine, create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 from structlog.contextvars import get_contextvars
 from tests.conftest import TEST_DATABASE_TRUNCATE
+from tests.process_targets import _controlled_long_child
 
 from core.config import Settings
 from core.errors import ApplicationError
@@ -42,12 +43,7 @@ from jobs.schemas import (
 )
 from jobs.services import JobObservationService, JobService, OutboxService
 from sources.contracts import SourceCapability
-from worker.app import (
-    ChildJobCompletion,
-    ChildJobResult,
-    JobExecutionContext,
-    create_job_message_handler,
-)
+from worker.app import JobExecutionContext, create_job_message_handler
 from worker.execution import JobProcessSupervisor
 from worker.messaging import (
     MessageDeferredError,
@@ -1915,11 +1911,6 @@ def test_real_kafka_redelivery_rebalance_and_redis_loss_recover_once(
         if second_consumer is not None:
             second_consumer.close()
         admin.delete_topics([topic])[topic].result(10)
-
-
-def _controlled_long_child(message, lease, lease_seconds):
-    time.sleep(6)
-    return ChildJobResult(lease=lease, completion=ChildJobCompletion(status="succeeded"))
 
 
 class _ControlledLongSupervisor(JobProcessSupervisor):
