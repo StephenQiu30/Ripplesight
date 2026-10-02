@@ -18,7 +18,7 @@ import {
 
 export function ModelReading({ data }: { data: HotKeyAPI.ModelDetailView }) {
   return (
-    <main className="mx-auto max-w-6xl space-y-12 px-5 py-12 sm:px-8">
+    <div className="space-y-12">
       <header className="space-y-5">
         <Link
           className="text-muted-foreground text-sm hover:underline"
@@ -344,6 +344,6 @@ export function ModelReading({ data }: { data: HotKeyAPI.ModelDetailView }) {
           ))
         )}
       </section>
-    </main>
+    </div>
   );
 }

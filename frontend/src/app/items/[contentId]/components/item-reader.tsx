@@ -9,6 +9,7 @@ import { GroupExpansion } from "@/components/publication/reading-groups";
 import { PosterDownload } from "@/components/publication/poster-download";
 import { publicationTime } from "@/components/publication/reading-parts";
 import { Button } from "@/components/ui/button";
+import { useLayoutScrollContainer } from "@/layout/basic-layout";
 
 const translationLabels = {
   not_requested: "尚未生成译文",
@@ -22,11 +23,14 @@ const translationLabels = {
 } as const;
 
 export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
+  const scrollContainer = useLayoutScrollContainer();
   const [mode, setMode] = useState<"original" | "translated">("original");
   const [note, setNote] = useState("");
   const [notice, setNotice] = useState("");
   const key = `hotkey.reading.v1.${item.id}.${item.revision}`;
   useEffect(() => {
+    const scrollElement = scrollContainer?.current;
+    let restoreFrame: number | null = null;
     const frame = requestAnimationFrame(() => {
       try {
         const saved = JSON.parse(localStorage.getItem(key) ?? "{}");
@@ -34,19 +38,25 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
         if (saved.mode === "translated" && item.body?.translated)
           setMode("translated");
         if (typeof saved.scroll === "number" && saved.scroll >= 0)
-          requestAnimationFrame(() => window.scrollTo(0, saved.scroll));
+          restoreFrame = requestAnimationFrame(() => {
+            if (scrollElement) scrollElement.scrollTop = saved.scroll;
+          });
       } catch {
         /* Reading works when local storage is unavailable. */
       }
     });
-    return () => cancelAnimationFrame(frame);
-  }, [key, item.body?.translated]);
+    return () => {
+      cancelAnimationFrame(frame);
+      if (restoreFrame !== null) cancelAnimationFrame(restoreFrame);
+    };
+  }, [key, item.body?.translated, scrollContainer]);
   useEffect(() => {
+    const scrollElement = scrollContainer?.current;
     const save = () => {
       try {
         localStorage.setItem(
           key,
-          JSON.stringify({ note, mode, scroll: window.scrollY }),
+          JSON.stringify({ note, mode, scroll: scrollElement?.scrollTop ?? 0 }),
         );
       } catch {
         /* Optional local state. */
@@ -57,11 +67,11 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
       save();
       window.removeEventListener("pagehide", save);
     };
-  }, [key, note, mode]);
+  }, [key, note, mode, scrollContainer]);
   const html =
     mode === "translated" ? item.body?.translated : item.body?.original_html;
   return (
-    <main className="mx-auto max-w-5xl px-5 py-10 sm:px-8">
+    <div>
       <MarkItemRead id={item.id} />
       <div className="text-muted-foreground mb-5 flex flex-wrap gap-4 text-xs">
         <span>{item.source.name}</span>
@@ -298,7 +308,11 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
             try {
               localStorage.setItem(
                 key,
-                JSON.stringify({ note, mode, scroll: window.scrollY }),
+                JSON.stringify({
+                  note,
+                  mode,
+                  scroll: scrollContainer?.current?.scrollTop ?? 0,
+                }),
               );
               setNotice("已保存在本机。");
             } catch {
@@ -314,6 +328,6 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
           </p>
         ) : null}
       </section>
-    </main>
+    </div>
   );
 }

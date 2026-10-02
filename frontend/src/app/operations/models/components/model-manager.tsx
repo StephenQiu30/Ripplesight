@@ -7,7 +7,7 @@ import {
   getAiModelOverview,
   switchAiCapabilityModel,
 } from "@/api/moxingpeizhi";
-import { WorkspaceHeader } from "@/components/navigation/workspace-header";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -319,8 +319,7 @@ export function ModelManager() {
   }
   return (
     <>
-      <WorkspaceHeader current="operations" />
-      <main className="mx-auto max-w-6xl space-y-8 px-5 py-10 sm:px-8">
+      <div className="space-y-8">
         <header className="space-y-3">
           <h1 className="text-3xl font-medium tracking-tight">
             模型配置与费用
@@ -548,7 +547,7 @@ export function ModelManager() {
             </section>
           </>
         ) : null}
-      </main>
+      </div>
     </>
   );
 }

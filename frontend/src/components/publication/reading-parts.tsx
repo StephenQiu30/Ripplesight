@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 
 import { LocalReadingPreferences } from "@/components/publication/local-reading";
-import { WorkspaceHeader } from "@/components/navigation/workspace-header";
+
 import { PageState } from "@/components/system/page-state";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/request";
@@ -28,10 +28,9 @@ export function publicationTime(value: string | null) {
 export function PublicationNavigation() {
   return (
     <>
-      <WorkspaceHeader current="discover" />
       <nav
         aria-label="资讯阅读入口"
-        className="mx-auto flex max-w-6xl flex-wrap gap-5 px-5 pt-4 text-sm sm:px-8"
+        className="mb-8 flex flex-wrap gap-5 text-sm"
       >
         <Link href="/discover">资讯</Link>
         <Link href="/discover/topics">行业专题</Link>

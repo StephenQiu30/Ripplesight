@@ -25,9 +25,6 @@ vi.mock("@/api/shijian", () => ({
   listEvents: api.events,
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: api.push }) }));
-vi.mock("@/components/navigation/workspace-header", () => ({
-  WorkspaceHeader: () => <nav>工作区导航</nav>,
-}));
 
 vi.mock("@/app/events/[eventId]/components/event-heat", () => ({
   EventHeat: () => null,

@@ -34,12 +34,15 @@ src/
 ├── api/                  # Umi OpenAPI 生成文件
 ├── components/ui/        # shadcn 基础组件
 ├── components/<feature>/ # 跨页面复用组件
+├── layout/               # BasicLayout、统一 Header/Footer、容器和共用指南
 ├── lib/                  # 纯工具
 ├── proxy.ts              # CSP nonce
 └── request.ts            # Axios 请求封装
 ```
 
 不创建 `features`、`common`、`patterns`、`shared` 或 `scripts` 目录。复用组件按功能领域分类；页面组件保留在所属路由中。组件归属、复用范围、目标路径、数据来源和状态覆盖必须在 Design 阶段确定。
+
+根路由统一使用 `layout/BasicLayout`，Header/Footer 固定在视口两端，正文在唯一 main 内滚动，头尾和正文使用相同容器宽度及边距。页面不再重复导航、main 或全屏尺寸。正文滚动容器通过 `useLayoutScrollContainer` 提供给阅读进度功能，保存与恢复保留原本机存储格式；打印恢复自然文档流。
 
 所有测试统一放独立 `tests/`，其中 `app/`、`components/` 对应业务目录，`config/` 放 ESLint/OpenAPI 配置测试；传输与 CSP 测试放测试目录根。`src/` 和前端根不放测试文件，业务代码不导入测试框架或测试目录。`pnpm test` 只发现 tests，`pnpm typecheck` 同时检查生产和测试配置；生产构建及 Docker 上下文排除测试。独立内存 prototype 已由正式前端承接并退役。
 

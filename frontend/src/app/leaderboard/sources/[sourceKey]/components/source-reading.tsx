@@ -18,7 +18,7 @@ import {
 
 export function SourceReading({ data }: { data: HotKeyAPI.SourceDetailView }) {
   return (
-    <main className="mx-auto max-w-6xl space-y-10 px-5 py-12 sm:px-8">
+    <div className="space-y-10">
       <header className="max-w-3xl space-y-4">
         <Link
           className="text-muted-foreground text-sm hover:underline"
@@ -160,6 +160,6 @@ export function SourceReading({ data }: { data: HotKeyAPI.SourceDetailView }) {
           </Table>
         )}
       </section>
-    </main>
+    </div>
   );
 }

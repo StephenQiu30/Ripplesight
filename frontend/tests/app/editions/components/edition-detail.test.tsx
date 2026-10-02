@@ -21,9 +21,6 @@ vi.mock("@/api/rizhouyuekan", () => ({
   correctReportEdition: mocks.correct,
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
-vi.mock("@/components/navigation/workspace-header", () => ({
-  WorkspaceHeader: () => <nav>工作区</nav>,
-}));
 
 function edition(
   status: HotKeyAPI.EditionDetailView["status"] = "complete",

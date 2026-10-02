@@ -29,9 +29,6 @@ const buttonVariants = cva(
         navigation:
           "h-11 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 md:h-8 md:px-2.5 md:has-data-[icon=inline-end]:pr-2 md:has-data-[icon=inline-start]:pl-2",
         hero: "h-11 gap-2 rounded-full px-6 text-sm xl:h-12 xl:px-7 xl:text-base 2xl:h-13 2xl:px-9 2xl:text-xl",
-        homeNavigation: "h-11 gap-2 px-0 text-base font-normal 2xl:text-lg",
-        homeHeader:
-          "h-10 rounded-xl px-4 sm:h-11 sm:px-6 2xl:h-12 2xl:text-base",
         announcement:
           "h-10 gap-3 px-0 text-xs font-normal md:text-sm 2xl:text-base",
         icon: "size-8",

@@ -18,7 +18,7 @@ import { NotificationWorkspace } from "./notification-workspace";
 import { SourceIdentityEditor } from "./source-identity-editor";
 import { SelectBenchReading } from "./selectbench-reading";
 import { RelationBench } from "./relation-bench";
-import { WorkspaceHeader } from "@/components/navigation/workspace-header";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -802,8 +802,7 @@ export function OperationsWorkspace() {
   }
   return (
     <>
-      <WorkspaceHeader current="operations" />
-      <main className="mx-auto grid max-w-6xl gap-10 px-5 py-10 sm:px-8">
+      <div className="grid gap-10">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-semibold">运营管理</h1>
@@ -1117,7 +1116,7 @@ export function OperationsWorkspace() {
             </section>
           </>
         )}
-      </main>
+      </div>
     </>
   );
 }

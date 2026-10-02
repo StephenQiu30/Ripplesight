@@ -1,0 +1,152 @@
+// @vitest-environment happy-dom
+
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const route = vi.hoisted(() => ({ pathname: "/" as string | null }));
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => route.pathname,
+}));
+
+import { BasicLayout } from "@/layout/basic-layout";
+
+const page = <h1>页面正文</h1>;
+
+beforeEach(() => {
+  route.pathname = "/";
+});
+
+afterEach(cleanup);
+
+describe("BasicLayout", () => {
+  it("provides a single accessible main between the shared header and footer", () => {
+    render(<BasicLayout>{page}</BasicLayout>);
+
+    const header = screen.getByRole("banner");
+    const main = screen.getByRole("main");
+    const footer = screen.getByRole("contentinfo");
+    expect(screen.getAllByRole("main")).toHaveLength(1);
+    expect(main.id).toBe("main-content");
+    expect(main.tabIndex).toBe(-1);
+    expect(
+      within(main).getByRole("heading", { name: "页面正文" }),
+    ).toBeTruthy();
+    expect(
+      header.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      main.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      within(footer).getByRole("link", { name: /关于/ }).getAttribute("href"),
+    ).toBe("/about");
+    expect(
+      within(footer).getByRole("link", { name: /隐私/ }).getAttribute("href"),
+    ).toBe("/privacy");
+    expect(
+      within(footer)
+        .getByRole("link", { name: /条款|许可/ })
+        .getAttribute("href"),
+    ).toBe("/terms");
+    expect(
+      within(footer).getByRole("link", { name: /联系/ }).getAttribute("href"),
+    ).toBe("/contact");
+  });
+
+  it.each([
+    ["/monitors/topic-1", "我的关注", "/topics"],
+    ["/events/event-1", "事件", "/events"],
+    ["/content/content-1", "相关内容", "/content"],
+  ])(
+    "identifies the workspace destination of nested route %s",
+    (pathname, label, href) => {
+      route.pathname = pathname;
+      render(<BasicLayout>{page}</BasicLayout>);
+
+      const navigation = screen.getByRole("navigation", { name: "工作区导航" });
+      const current = within(navigation).getByRole("link", {
+        name: label,
+        current: "page",
+      });
+      expect(current.getAttribute("href")).toBe(href);
+      expect(
+        within(navigation).getAllByRole("link", { current: "page" }),
+      ).toHaveLength(1);
+    },
+  );
+
+  it("resets the body scroll position when a different route renders", async () => {
+    route.pathname = "/events";
+    const view = render(<BasicLayout>{page}</BasicLayout>);
+    const main = screen.getByRole("main");
+    main.scrollTop = 480;
+
+    route.pathname = "/content/content-1";
+    view.rerender(
+      <BasicLayout>
+        <h1>另一页面</h1>
+      </BasicLayout>,
+    );
+
+    await waitFor(() => expect(main.scrollTop).toBe(0));
+    expect(
+      within(main).getByRole("heading", { name: "另一页面" }),
+    ).toBeTruthy();
+  });
+
+  it("retains reading position for a rerender within the same route", () => {
+    route.pathname = "/events/event-1";
+    const view = render(<BasicLayout>{page}</BasicLayout>);
+    const main = screen.getByRole("main");
+    main.scrollTop = 480;
+
+    view.rerender(
+      <BasicLayout>
+        <h1>更新后的正文</h1>
+      </BasicLayout>,
+    );
+
+    expect(main.scrollTop).toBe(480);
+  });
+
+  it("opens the guide and restores focus to its trigger on close", async () => {
+    render(<BasicLayout>{page}</BasicLayout>);
+    const trigger = screen.getByRole("button", { name: "使用指南" });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("heading", { level: 2 })).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "关闭" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
+  it("keeps the shell usable while the router pathname is unavailable and recovers its active navigation", () => {
+    route.pathname = null;
+    const view = render(<BasicLayout>{page}</BasicLayout>);
+    expect(screen.getByRole("banner")).toBeTruthy();
+    expect(screen.getByRole("main")).toBeTruthy();
+    expect(screen.getByRole("contentinfo")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "使用指南" })).toBeTruthy();
+
+    route.pathname = "/events/event-1";
+    view.rerender(<BasicLayout>{page}</BasicLayout>);
+
+    expect(
+      within(screen.getByRole("navigation", { name: "工作区导航" })).getByRole(
+        "link",
+        { name: "事件", current: "page" },
+      ),
+    ).toBeTruthy();
+  });
+});

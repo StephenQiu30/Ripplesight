@@ -12,9 +12,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const api = vi.hoisted(() => ({ topics: vi.fn(), reports: vi.fn() }));
 vi.mock("@/api/jiankongzhuti", () => ({ listMonitorTopics: api.topics }));
 vi.mock("@/api/ribao", () => ({ listReports: api.reports }));
-vi.mock("@/components/navigation/workspace-header", () => ({
-  WorkspaceHeader: () => null,
-}));
 
 import { ReportList } from "@/app/reports/components/report-list";
 

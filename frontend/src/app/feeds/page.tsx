@@ -24,7 +24,7 @@ export default async function FeedsPage() {
   return (
     <>
       <PublicationNavigation />
-      <main className="mx-auto max-w-4xl px-5 py-10 sm:px-8">
+      <div>
         <h1 className="text-3xl font-medium">订阅资讯</h1>
         <p className="text-muted-foreground mt-5 text-sm leading-7">
           复制链接到 RSS
@@ -63,7 +63,7 @@ export default async function FeedsPage() {
             API / MCP 接入
           </a>
         </p>
-      </main>
+      </div>
     </>
   );
 }

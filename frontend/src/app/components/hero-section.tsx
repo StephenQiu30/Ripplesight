@@ -9,7 +9,10 @@ type HeroSectionProps = {
 
 export function HeroSection({ onExample }: HeroSectionProps) {
   return (
-    <main className="relative mx-auto flex w-full max-w-384 flex-col items-start gap-9 px-5 pt-14 pb-12 sm:px-8 md:min-h-108 md:flex-1 md:flex-row md:items-center md:justify-between md:gap-0 md:pt-0 md:pb-16 2xl:min-h-125 2xl:px-7">
+    <section
+      className="relative flex w-full flex-col items-start gap-9 pt-10 pb-8 md:min-h-108 md:flex-1 md:flex-row md:items-center md:justify-between md:gap-0 md:pt-0 md:pb-12 2xl:min-h-125"
+      aria-label="关注关键词，了解变化"
+    >
       <div className="relative max-w-full md:w-3/5">
         <h1 className="text-3xl leading-snug font-light tracking-tight sm:text-4xl md:text-5xl md:leading-tight xl:text-6xl 2xl:text-7xl">
           关注你在意的，
@@ -44,6 +47,6 @@ export function HeroSection({ onExample }: HeroSectionProps) {
         <p>简单设置，持续关注</p>
         <p>沿着来源，理解变化</p>
       </div>
-    </main>
+    </section>
   );
 }

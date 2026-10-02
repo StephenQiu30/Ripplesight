@@ -8,7 +8,7 @@ import {
   getReportEdition,
   listReportEditionRevisions,
 } from "@/api/rizhouyuekan";
-import { WorkspaceHeader } from "@/components/navigation/workspace-header";
+
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -225,8 +225,7 @@ export function EditionDetail({ editionId }: { editionId: string }) {
   const content = row?.valid && row.status === "complete" ? row.content : null;
   return (
     <>
-      <WorkspaceHeader current="editions" />
-      <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8">
+      <div>
         <div className="mb-8 flex justify-between gap-3">
           <Link href="/editions" className="text-muted-foreground text-sm">
             返回刊期档案
@@ -366,7 +365,7 @@ export function EditionDetail({ editionId }: { editionId: string }) {
             </ul>
           )}
         </section>
-      </main>
+      </div>
     </>
   );
 }

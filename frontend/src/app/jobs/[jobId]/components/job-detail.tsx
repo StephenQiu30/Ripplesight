@@ -16,7 +16,6 @@ import {
   getCollectionJob,
   retryCollectionJob,
 } from "@/api/caijirenwu";
-import { WorkspaceHeader } from "@/components/navigation/workspace-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Collapsible,
@@ -500,7 +499,6 @@ export function JobDetail({ jobId }: JobDetailProps) {
   if (state.status === "loading") {
     return (
       <PageState
-        navigation={<WorkspaceHeader current="jobs" />}
         eyebrow="任务详情"
         title="正在读取任务"
         description="正在读取持久状态与已保存的结果范围。"
@@ -511,7 +509,6 @@ export function JobDetail({ jobId }: JobDetailProps) {
   if (state.status === "not-found") {
     return (
       <PageState
-        navigation={<WorkspaceHeader current="jobs" />}
         eyebrow="任务不可用"
         title="没有找到这个任务"
         description="任务不存在或已不可读。"
@@ -533,7 +530,6 @@ export function JobDetail({ jobId }: JobDetailProps) {
       : state.message;
     return (
       <PageState
-        navigation={<WorkspaceHeader current="jobs" />}
         eyebrow="加载失败"
         title="暂时无法读取任务"
         description={description}
@@ -562,206 +558,192 @@ export function JobDetail({ jobId }: JobDetailProps) {
       : `已持久保存 ${job.progress.items_saved} 条结果。`;
 
   return (
-    <div className="bg-background min-h-screen">
-      <WorkspaceHeader current="jobs" />
-
-      <main className="mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-14">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-3xl font-normal tracking-tight sm:text-4xl">
-                采集任务
-              </h1>
-              <Badge
-                variant={
-                  job.status === "failed" || job.cancellation?.timed_out
-                    ? "destructive"
-                    : "secondary"
-                }
-              >
-                {STATUS_LABELS[job.status]}
-              </Badge>
-            </div>
-            <p className="text-muted-foreground mt-3 text-sm">
-              受理后在这里查看采集进度与结果。
-            </p>
+    <div>
+      <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-normal tracking-tight sm:text-4xl">
+              采集任务
+            </h1>
+            <Badge
+              variant={
+                job.status === "failed" || job.cancellation?.timed_out
+                  ? "destructive"
+                  : "secondary"
+              }
+            >
+              {STATUS_LABELS[job.status]}
+            </Badge>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <p className="text-muted-foreground mt-3 text-sm">
+            受理后在这里查看采集进度与结果。
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void refresh()}
+            disabled={isRefreshing || isCancelling || isRetrying}
+          >
+            <RefreshCwIcon data-icon="inline-start" />
+            {isRefreshing ? "正在刷新" : "刷新状态"}
+          </Button>
+          {canCancel ? (
             <Button
               type="button"
               variant="secondary"
-              onClick={() => void refresh()}
+              onClick={() => void cancel()}
               disabled={isRefreshing || isCancelling || isRetrying}
             >
-              <RefreshCwIcon data-icon="inline-start" />
-              {isRefreshing ? "正在刷新" : "刷新状态"}
+              <BanIcon data-icon="inline-start" />
+              {isCancelling ? "正在取消" : "取消任务"}
             </Button>
-            {canCancel ? (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => void cancel()}
-                disabled={isRefreshing || isCancelling || isRetrying}
-              >
-                <BanIcon data-icon="inline-start" />
-                {isCancelling ? "正在取消" : "取消任务"}
-              </Button>
-            ) : isCancellationPending ? (
-              <Button type="button" variant="secondary" disabled>
-                <BanIcon data-icon="inline-start" />
-                等待在途请求
-              </Button>
-            ) : job.status === "failed" && job.failure?.manual_retry_allowed ? (
-              <Button
-                type="button"
-                onClick={() => void retry()}
-                disabled={isRefreshing || isCancelling || isRetrying}
-              >
-                <RotateCcwIcon data-icon="inline-start" />
-                {isRetrying ? "正在提交" : "重试任务"}
-              </Button>
-            ) : null}
-          </div>
+          ) : isCancellationPending ? (
+            <Button type="button" variant="secondary" disabled>
+              <BanIcon data-icon="inline-start" />
+              等待在途请求
+            </Button>
+          ) : job.status === "failed" && job.failure?.manual_retry_allowed ? (
+            <Button
+              type="button"
+              onClick={() => void retry()}
+              disabled={isRefreshing || isCancelling || isRetrying}
+            >
+              <RotateCcwIcon data-icon="inline-start" />
+              {isRetrying ? "正在提交" : "重试任务"}
+            </Button>
+          ) : null}
         </div>
+      </div>
 
-        {job.cancellation ? (
-          <Alert
-            variant={job.cancellation.timed_out ? "destructive" : "default"}
-            className="mt-8"
-            aria-live="polite"
-          >
-            <AlertTitle>
-              {job.cancellation.timed_out ? "取消收尾已超时" : "已收到取消请求"}
-            </AlertTitle>
-            <AlertDescription>
-              系统不会发起新的来源请求；已在途响应仍会按截止时间保存。
-              {job.cancellation.deadline_at
-                ? ` 截止时间：${formatTime(job.cancellation.deadline_at)}。`
-                : " 当前任务无需等待在途请求。"}
-            </AlertDescription>
-          </Alert>
-        ) : null}
-        {job.failure ? (
-          <Alert variant="destructive" className="mt-8" aria-live="polite">
-            <AlertTitle>{FAILURE_LABELS[job.failure.category]}</AlertTitle>
-            <AlertDescription>
-              <p>
-                {job.failure.next_action} 错误代码：{job.failure.error_code}。
-              </p>
-              <p>
-                发生时间：{formatTime(job.failure.occurred_at)}。
-                {job.next_run_at
-                  ? ` 下次尝试：${formatTime(job.next_run_at)}。`
-                  : " 当前没有自动重试计划。"}
-              </p>
-            </AlertDescription>
-          </Alert>
-        ) : null}
-
-        {actionError ? (
-          <Alert variant="destructive" className="mt-5">
-            <AlertTitle>操作未完成</AlertTitle>
-            <AlertDescription>
-              {actionError.message}
-              {actionError.requestId
-                ? ` 请求编号：${actionError.requestId}`
-                : null}
-            </AlertDescription>
-          </Alert>
-        ) : null}
-
-        <section
-          className="mt-10 grid gap-4 sm:grid-cols-3"
-          aria-label="任务进度"
+      {job.cancellation ? (
+        <Alert
+          variant={job.cancellation.timed_out ? "destructive" : "default"}
+          className="mt-8"
+          aria-live="polite"
         >
-          <div className="py-4">
-            <p className="text-muted-foreground text-sm">当前阶段</p>
-            <p className="mt-2 text-xl font-medium">
-              {job.progress.stage
-                ? STAGE_LABELS[job.progress.stage]
-                : "尚未开始"}
+          <AlertTitle>
+            {job.cancellation.timed_out ? "取消收尾已超时" : "已收到取消请求"}
+          </AlertTitle>
+          <AlertDescription>
+            系统不会发起新的来源请求；已在途响应仍会按截止时间保存。
+            {job.cancellation.deadline_at
+              ? ` 截止时间：${formatTime(job.cancellation.deadline_at)}。`
+              : " 当前任务无需等待在途请求。"}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {job.failure ? (
+        <Alert variant="destructive" className="mt-8" aria-live="polite">
+          <AlertTitle>{FAILURE_LABELS[job.failure.category]}</AlertTitle>
+          <AlertDescription>
+            <p>
+              {job.failure.next_action} 错误代码：{job.failure.error_code}。
             </p>
-          </div>
-          <div className="py-4">
-            <p className="text-muted-foreground text-sm">已发请求</p>
-            <p className="mt-2 text-xl font-medium">
-              {job.progress.requests_sent}
+            <p>
+              发生时间：{formatTime(job.failure.occurred_at)}。
+              {job.next_run_at
+                ? ` 下次尝试：${formatTime(job.next_run_at)}。`
+                : " 当前没有自动重试计划。"}
             </p>
-          </div>
-          <div className="py-4">
-            <p className="text-muted-foreground text-sm">已保存结果</p>
-            <p className="mt-2 text-xl font-medium">
-              {job.progress.items_saved}
-            </p>
-          </div>
-        </section>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
-        <JobResult
-          resultContentId={job.result_content_id}
-          savedDescription={savedDescription}
-          updatedAt={job.progress.updated_at}
-        />
+      {actionError ? (
+        <Alert variant="destructive" className="mt-5">
+          <AlertTitle>操作未完成</AlertTitle>
+          <AlertDescription>
+            {actionError.message}
+            {actionError.requestId
+              ? ` 请求编号：${actionError.requestId}`
+              : null}
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
-        <Collapsible className="mt-10">
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost">
-              执行与覆盖记录
-              <ChevronDownIcon data-icon="inline-end" />
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <JobCycleTiming job={job} />
-            {job.source_freshness ? (
-              <JobSourceFreshness freshness={job.source_freshness} />
-            ) : null}
+      <section
+        className="mt-10 grid gap-4 sm:grid-cols-3"
+        aria-label="任务进度"
+      >
+        <div className="py-4">
+          <p className="text-muted-foreground text-sm">当前阶段</p>
+          <p className="mt-2 text-xl font-medium">
+            {job.progress.stage ? STAGE_LABELS[job.progress.stage] : "尚未开始"}
+          </p>
+        </div>
+        <div className="py-4">
+          <p className="text-muted-foreground text-sm">已发请求</p>
+          <p className="mt-2 text-xl font-medium">
+            {job.progress.requests_sent}
+          </p>
+        </div>
+        <div className="py-4">
+          <p className="text-muted-foreground text-sm">已保存结果</p>
+          <p className="mt-2 text-xl font-medium">{job.progress.items_saved}</p>
+        </div>
+      </section>
 
-            <JobCoverageWindows windows={job.coverage_windows ?? []} />
+      <JobResult
+        resultContentId={job.result_content_id}
+        savedDescription={savedDescription}
+        updatedAt={job.progress.updated_at}
+      />
 
-            <section className="mt-10" aria-labelledby="job-facts-title">
-              <h2 id="job-facts-title" className="text-xl font-medium">
-                执行信息
-              </h2>
-              <dl className="mt-5 grid gap-x-8 gap-y-6 sm:grid-cols-2">
-                <DetailItem label="任务编号" value={job.id} />
-                <DetailItem
-                  label="配置"
-                  value={job.observation.configuration_ref}
-                />
-                <DetailItem
-                  label="配置版本"
-                  value={String(job.observation.configuration_version)}
-                />
-                <DetailItem label="任务类型" value={job.kind} />
-                <DetailItem
-                  label="来源能力"
-                  value={job.observation.source_capability ?? "未指定"}
-                />
-                <DetailItem
-                  label="创建时间"
-                  value={formatTime(job.created_at)}
-                />
-                <DetailItem
-                  label="开始时间"
-                  value={formatTime(job.started_at)}
-                />
-                <DetailItem
-                  label="完成时间"
-                  value={formatTime(job.completed_at)}
-                />
-                <DetailItem
-                  label="计划时间"
-                  value={formatTime(job.scheduled_for_at)}
-                />
-                <DetailItem
-                  label="下次尝试"
-                  value={formatTime(job.next_run_at)}
-                />
-                <DetailItem label="重试次数" value={String(job.retry_count)} />
-              </dl>
-            </section>
-          </CollapsibleContent>
-        </Collapsible>
-      </main>
+      <Collapsible className="mt-10">
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost">
+            执行与覆盖记录
+            <ChevronDownIcon data-icon="inline-end" />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <JobCycleTiming job={job} />
+          {job.source_freshness ? (
+            <JobSourceFreshness freshness={job.source_freshness} />
+          ) : null}
+
+          <JobCoverageWindows windows={job.coverage_windows ?? []} />
+
+          <section className="mt-10" aria-labelledby="job-facts-title">
+            <h2 id="job-facts-title" className="text-xl font-medium">
+              执行信息
+            </h2>
+            <dl className="mt-5 grid gap-x-8 gap-y-6 sm:grid-cols-2">
+              <DetailItem label="任务编号" value={job.id} />
+              <DetailItem
+                label="配置"
+                value={job.observation.configuration_ref}
+              />
+              <DetailItem
+                label="配置版本"
+                value={String(job.observation.configuration_version)}
+              />
+              <DetailItem label="任务类型" value={job.kind} />
+              <DetailItem
+                label="来源能力"
+                value={job.observation.source_capability ?? "未指定"}
+              />
+              <DetailItem label="创建时间" value={formatTime(job.created_at)} />
+              <DetailItem label="开始时间" value={formatTime(job.started_at)} />
+              <DetailItem
+                label="完成时间"
+                value={formatTime(job.completed_at)}
+              />
+              <DetailItem
+                label="计划时间"
+                value={formatTime(job.scheduled_for_at)}
+              />
+              <DetailItem
+                label="下次尝试"
+                value={formatTime(job.next_run_at)}
+              />
+              <DetailItem label="重试次数" value={String(job.retry_count)} />
+            </dl>
+          </section>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }

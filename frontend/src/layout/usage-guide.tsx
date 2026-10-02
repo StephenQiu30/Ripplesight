@@ -10,10 +10,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-export type HomeInfoView = "guide" | "example";
+export type UsageGuideView = "guide" | "example";
 
-type CapabilityOverviewProps = {
-  view: HomeInfoView | null;
+type UsageGuideProps = {
+  view: UsageGuideView | null;
   onClose: () => void;
   onCloseAutoFocus: (event: Event) => void;
 };
@@ -27,11 +27,11 @@ const steps = [
   ],
 ];
 
-export function CapabilityOverview({
+export function UsageGuide({
   view,
   onClose,
   onCloseAutoFocus,
-}: CapabilityOverviewProps) {
+}: UsageGuideProps) {
   return (
     <Dialog open={view !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent

@@ -23,9 +23,6 @@ vi.mock("@/api/zhongzhigonggao", () => ({
   getCodexResetVersion: api.version,
   listCodexResetPosts: api.posts,
 }));
-vi.mock("@/components/navigation/workspace-header", () => ({
-  WorkspaceHeader: () => <nav>工作区导航</nav>,
-}));
 
 import { CodexResetWorkspace } from "@/app/codex-resets/components/codex-reset-workspace";
 
@@ -123,7 +120,6 @@ describe("Codex reset reading", () => {
     expect(
       await screen.findByRole("heading", { name: "尚未配置公告监控" }),
     ).toBeTruthy();
-    expect(screen.getByText("工作区导航")).toBeTruthy();
     expect(api.posts).not.toHaveBeenCalled();
   });
 

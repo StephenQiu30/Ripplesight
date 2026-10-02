@@ -14,6 +14,8 @@ HN 新任务要求连接配置匹配当前完整预设；缺少 comment_scan 的
 
 前端 62 份测试统一迁入 `frontend/tests/`，生产类型检查与 Docker 上下文排除测试，测试类型独立检查；ESLint 拒绝测试散放及业务导入测试依赖。后端仍使用 `backend/tests/`。独立内存 prototype 已移出工作区，源码、选定设计及 QA 资料已校验归档，原目录保留在本机废纸篓可恢复。
 
+全站外壳统一在 `frontend/src/layout/`：BasicLayout 装配 Header/Footer 和唯一正文滚动区，LayoutContainer 统一宽度、边距与滚动条留白；头尾固定在视口两端。各路由只组合正文，阅读位置跟随正文容器；加载、错误、404、全局恢复和打印遵守同一视觉合同。
+
 ## 本地运行
 
 业务库统一为 `hotkey`，112 表结构来自完整 schema.sql。本机 API 为 `127.0.0.1:8867`，Web 当前为 `127.0.0.1:3001`；Swagger `/docs`、Scalar `/scalar`、契约 `/openapi.json`。本机 backend/.env 与根 Compose .env 均已指向同一业务库，密钥不入 Git。API 和 Web 已启动；Worker/调度按需单独启动。

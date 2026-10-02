@@ -35,9 +35,7 @@ vi.mock("@/app/operations/components/notification-workspace", () => ({
 vi.mock("@/app/operations/components/selectbench-reading", () => ({
   SelectBenchReading: () => null,
 }));
-vi.mock("@/components/navigation/workspace-header", () => ({
-  WorkspaceHeader: () => null,
-}));
+
 import { OperationsWorkspace } from "@/app/operations/components/operations-workspace";
 afterEach(() => {
   cleanup();

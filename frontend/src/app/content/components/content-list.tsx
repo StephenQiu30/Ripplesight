@@ -25,7 +25,6 @@ import {
   visibilityStatusNotice,
 } from "@/app/content/components/content-presenters";
 import { WebPageCaptureForm } from "@/app/content/components/webpage-capture-form";
-import { WorkspaceHeader } from "@/components/navigation/workspace-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -355,363 +354,353 @@ export function ContentList() {
 
   const filtered = Object.values(applied).some(Boolean);
   return (
-    <div className="bg-background min-h-screen">
-      <WorkspaceHeader current="content" />
-      <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
-        <div className="flex flex-wrap items-end justify-between gap-6">
-          <div className="flex max-w-xl flex-col gap-4">
-            <h1 className="text-3xl font-normal tracking-tight sm:text-4xl">
-              作品资料
-            </h1>
-            <p className="text-muted-foreground leading-7">
-              阅读已保存的内容，查看评论与主题分析。
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Dialog open={filterOpen} onOpenChange={setFilterOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline">
-                  <FilterIcon data-icon="inline-start" />
-                  筛选{filtered ? " · 已应用" : ""}
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-h-svh overflow-y-auto sm:max-w-lg">
-                <DialogHeader>
-                  <DialogTitle>筛选作品资料</DialogTitle>
-                  <DialogDescription>
-                    日期按北京时间，结束日期包含当日。日期范围最多 31 天。
-                  </DialogDescription>
-                </DialogHeader>
-                <form onSubmit={applyFilters} aria-label="筛选作品资料">
-                  <FieldGroup>
-                    <Field>
-                      <FieldLabel htmlFor="content-query">正文搜索</FieldLabel>
-                      <Input
-                        id="content-query"
-                        value={draft.query ?? ""}
-                        maxLength={200}
-                        placeholder="例如 OpenAI 模型"
-                        onChange={(event) =>
-                          setDraft({ ...draft, query: event.target.value })
-                        }
-                      />
-                      <FieldDescription>
-                        搜索已保存的标题和正文。最多 6
-                        个不同词，多个词以空格分隔并同时命中。
-                      </FieldDescription>
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="content-source">来源</FieldLabel>
-                      <Select
-                        value={draft.sourceKey || "all"}
-                        onValueChange={(value) =>
-                          setDraft({
-                            ...draft,
-                            sourceKey: value === "all" ? "" : value,
-                          })
-                        }
-                        disabled={options.status !== "ready"}
+    <div>
+      <div className="flex flex-wrap items-end justify-between gap-6">
+        <div className="flex max-w-xl flex-col gap-4">
+          <h1 className="text-3xl font-normal tracking-tight sm:text-4xl">
+            作品资料
+          </h1>
+          <p className="text-muted-foreground leading-7">
+            阅读已保存的内容，查看评论与主题分析。
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <Dialog open={filterOpen} onOpenChange={setFilterOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <FilterIcon data-icon="inline-start" />
+                筛选{filtered ? " · 已应用" : ""}
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-h-svh overflow-y-auto sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>筛选作品资料</DialogTitle>
+                <DialogDescription>
+                  日期按北京时间，结束日期包含当日。日期范围最多 31 天。
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={applyFilters} aria-label="筛选作品资料">
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel htmlFor="content-query">正文搜索</FieldLabel>
+                    <Input
+                      id="content-query"
+                      value={draft.query ?? ""}
+                      maxLength={200}
+                      placeholder="例如 OpenAI 模型"
+                      onChange={(event) =>
+                        setDraft({ ...draft, query: event.target.value })
+                      }
+                    />
+                    <FieldDescription>
+                      搜索已保存的标题和正文。最多 6
+                      个不同词，多个词以空格分隔并同时命中。
+                    </FieldDescription>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="content-source">来源</FieldLabel>
+                    <Select
+                      value={draft.sourceKey || "all"}
+                      onValueChange={(value) =>
+                        setDraft({
+                          ...draft,
+                          sourceKey: value === "all" ? "" : value,
+                        })
+                      }
+                      disabled={options.status !== "ready"}
+                    >
+                      <SelectTrigger id="content-source" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="all">全部来源</SelectItem>
+                          {options.status === "ready"
+                            ? options.sources.map((source) => (
+                                <SelectItem
+                                  key={source.source_key}
+                                  value={source.source_key}
+                                >
+                                  {source.display_name}
+                                </SelectItem>
+                              ))
+                            : null}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="content-topic">主题</FieldLabel>
+                    <Select
+                      value={draft.topicId || "all"}
+                      onValueChange={(value) =>
+                        setDraft({
+                          ...draft,
+                          topicId: value === "all" ? "" : value,
+                          analysisState: "",
+                        })
+                      }
+                      disabled={options.status !== "ready"}
+                    >
+                      <SelectTrigger id="content-topic" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="all">全部主题</SelectItem>
+                          {options.status === "ready"
+                            ? options.topics.map((topic) => (
+                                <SelectItem key={topic.id} value={topic.id}>
+                                  {topic.name}
+                                  {topic.status === "archived"
+                                    ? "（已归档）"
+                                    : ""}
+                                </SelectItem>
+                              ))
+                            : null}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="content-start-date">
+                      开始日期
+                    </FieldLabel>
+                    <Input
+                      id="content-start-date"
+                      type="date"
+                      value={draft.startDate}
+                      onChange={(event) =>
+                        setDraft({ ...draft, startDate: event.target.value })
+                      }
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="content-end-date">
+                      结束日期（含）
+                    </FieldLabel>
+                    <Input
+                      id="content-end-date"
+                      type="date"
+                      value={draft.endDate}
+                      onChange={(event) =>
+                        setDraft({ ...draft, endDate: event.target.value })
+                      }
+                    />
+                  </Field>
+                  <Field data-disabled={!draft.topicId}>
+                    <FieldLabel htmlFor="content-analysis-state">
+                      标注状态
+                    </FieldLabel>
+                    <Select
+                      value={draft.analysisState || "all"}
+                      onValueChange={(value) =>
+                        setDraft({
+                          ...draft,
+                          analysisState:
+                            value === "all" ? "" : (value as AnalysisFilter),
+                        })
+                      }
+                      disabled={!draft.topicId}
+                    >
+                      <SelectTrigger
+                        id="content-analysis-state"
+                        className="w-full"
                       >
-                        <SelectTrigger id="content-source" className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            <SelectItem value="all">全部来源</SelectItem>
-                            {options.status === "ready"
-                              ? options.sources.map((source) => (
-                                  <SelectItem
-                                    key={source.source_key}
-                                    value={source.source_key}
-                                  >
-                                    {source.display_name}
-                                  </SelectItem>
-                                ))
-                              : null}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="content-topic">主题</FieldLabel>
-                      <Select
-                        value={draft.topicId || "all"}
-                        onValueChange={(value) =>
-                          setDraft({
-                            ...draft,
-                            topicId: value === "all" ? "" : value,
-                            analysisState: "",
-                          })
-                        }
-                        disabled={options.status !== "ready"}
-                      >
-                        <SelectTrigger id="content-topic" className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            <SelectItem value="all">全部主题</SelectItem>
-                            {options.status === "ready"
-                              ? options.topics.map((topic) => (
-                                  <SelectItem key={topic.id} value={topic.id}>
-                                    {topic.name}
-                                    {topic.status === "archived"
-                                      ? "（已归档）"
-                                      : ""}
-                                  </SelectItem>
-                                ))
-                              : null}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="content-start-date">
-                        开始日期
-                      </FieldLabel>
-                      <Input
-                        id="content-start-date"
-                        type="date"
-                        value={draft.startDate}
-                        onChange={(event) =>
-                          setDraft({ ...draft, startDate: event.target.value })
-                        }
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="content-end-date">
-                        结束日期（含）
-                      </FieldLabel>
-                      <Input
-                        id="content-end-date"
-                        type="date"
-                        value={draft.endDate}
-                        onChange={(event) =>
-                          setDraft({ ...draft, endDate: event.target.value })
-                        }
-                      />
-                    </Field>
-                    <Field data-disabled={!draft.topicId}>
-                      <FieldLabel htmlFor="content-analysis-state">
-                        标注状态
-                      </FieldLabel>
-                      <Select
-                        value={draft.analysisState || "all"}
-                        onValueChange={(value) =>
-                          setDraft({
-                            ...draft,
-                            analysisState:
-                              value === "all" ? "" : (value as AnalysisFilter),
-                          })
-                        }
-                        disabled={!draft.topicId}
-                      >
-                        <SelectTrigger
-                          id="content-analysis-state"
-                          className="w-full"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            <SelectItem value="all">全部状态</SelectItem>
-                            <SelectItem value="missing">
-                              暂无标注记录
-                            </SelectItem>
-                            <SelectItem value="pending">等待标注</SelectItem>
-                            <SelectItem value="failed">标注失败</SelectItem>
-                            <SelectItem value="invalid">标注无效</SelectItem>
-                            <SelectItem value="valid">已有有效结论</SelectItem>
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                      <FieldDescription>
-                        选择主题后可筛选其分析状态。
-                      </FieldDescription>
-                    </Field>
-                    {options.status === "error" ? (
-                      <FieldError>
-                        来源和主题暂时无法加载，日期筛选仍可使用。
-                        <Button
-                          type="button"
-                          variant="link"
-                          onClick={() => void loadOptions()}
-                        >
-                          重试加载筛选项
-                        </Button>
-                      </FieldError>
-                    ) : null}
-                    {filterError ? (
-                      <FieldError>{filterError}</FieldError>
-                    ) : null}
-                    <div className="flex flex-wrap gap-3">
-                      <Button type="submit">应用筛选</Button>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="all">全部状态</SelectItem>
+                          <SelectItem value="missing">暂无标注记录</SelectItem>
+                          <SelectItem value="pending">等待标注</SelectItem>
+                          <SelectItem value="failed">标注失败</SelectItem>
+                          <SelectItem value="invalid">标注无效</SelectItem>
+                          <SelectItem value="valid">已有有效结论</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <FieldDescription>
+                      选择主题后可筛选其分析状态。
+                    </FieldDescription>
+                  </Field>
+                  {options.status === "error" ? (
+                    <FieldError>
+                      来源和主题暂时无法加载，日期筛选仍可使用。
                       <Button
                         type="button"
-                        variant="ghost"
-                        onClick={() => {
-                          setDraft(EMPTY_FILTERS);
-                          setApplied(EMPTY_FILTERS);
-                          setFilterError(null);
-                          setFilterOpen(false);
-                          reload(EMPTY_FILTERS);
-                        }}
+                        variant="link"
+                        onClick={() => void loadOptions()}
                       >
-                        清除筛选
+                        重试加载筛选项
                       </Button>
-                    </div>
-                  </FieldGroup>
-                </form>
-              </DialogContent>
-            </Dialog>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button>
-                  <PlusIcon data-icon="inline-start" />
-                  添加网页
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-h-svh overflow-y-auto sm:max-w-lg">
-                <DialogHeader className="sr-only">
-                  <DialogTitle>添加网页</DialogTitle>
-                  <DialogDescription>
-                    提交网页地址创建采集任务。
-                  </DialogDescription>
-                </DialogHeader>
-                <WebPageCaptureForm />
-              </DialogContent>
-            </Dialog>
-          </div>
-        </div>
-        {state.status === "loading" ? (
-          <div
-            aria-label="正在读取作品资料"
-            className="mt-12 flex flex-col gap-6"
-          >
-            {[0, 1, 2].map((item) => (
-              <Skeleton key={item} className="h-24 w-full" />
-            ))}
-          </div>
-        ) : null}
-        {state.status === "error" ? (
-          <Alert variant="destructive" className="mt-12">
-            <AlertTitle>暂时无法读取作品</AlertTitle>
-            <AlertDescription>
-              {state.message}
-              {state.requestId ? ` 请求编号：${state.requestId}` : null}
-              <Button variant="outline" onClick={() => reload(applied)}>
-                <RotateCcwIcon data-icon="inline-start" />
-                重新加载
+                    </FieldError>
+                  ) : null}
+                  {filterError ? <FieldError>{filterError}</FieldError> : null}
+                  <div className="flex flex-wrap gap-3">
+                    <Button type="submit">应用筛选</Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        setDraft(EMPTY_FILTERS);
+                        setApplied(EMPTY_FILTERS);
+                        setFilterError(null);
+                        setFilterOpen(false);
+                        reload(EMPTY_FILTERS);
+                      }}
+                    >
+                      清除筛选
+                    </Button>
+                  </div>
+                </FieldGroup>
+              </form>
+            </DialogContent>
+          </Dialog>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button>
+                <PlusIcon data-icon="inline-start" />
+                添加网页
               </Button>
-            </AlertDescription>
-          </Alert>
-        ) : null}
-        {state.status === "ready" && state.items.length === 0 ? (
-          <Empty className="mt-12">
-            <EmptyHeader>
-              <EmptyTitle>当前条件下没有可读作品</EmptyTitle>
-              <EmptyDescription>
-                完成采集并保存后，作品会显示在这里；当前为空不代表来源返回了零结果。
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        ) : null}
-        {state.status === "ready" && state.items.length > 0 ? (
-          <>
-            <section
-              aria-label="作品列表"
-              className="mt-12 flex flex-col gap-10"
-            >
-              {state.items.map((content) => {
-                const version = content.latest_observation.content_version;
-                const title =
-                  version?.title || version?.body || content.external_id;
-                const source =
-                  options.status === "ready"
-                    ? (options.sources.find(
-                        (item) => item.source_key === content.source_key,
-                      )?.display_name ?? content.source_key)
-                    : content.source_key;
-                const notice = version
-                  ? contentScopeNotice(version.text_scope)
-                  : "未取得正文";
-                return (
-                  <article
-                    key={content.id}
-                    className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:gap-8"
-                  >
-                    <div className="flex min-w-0 flex-col gap-3">
-                      <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-                        <span>{source}</span>
-                        <TimelineBasis content={content} />
-                        <ContentAnalysisStatus content={content} />
-                      </div>
-                      <h2 className="line-clamp-2 text-xl leading-8 font-medium break-words">
-                        <Link href={`/content/${content.id}`}>{title}</Link>
-                      </h2>
-                      {version?.title && version.body ? (
-                        <p className="text-muted-foreground line-clamp-2 max-w-2xl text-sm leading-6 break-words">
-                          {version.body}
-                        </p>
-                      ) : null}
-                      <div className="flex flex-wrap items-center gap-3">
-                        {version ? (
-                          <Badge variant="secondary">
-                            {contentScopeLabel(version.text_scope)}
-                          </Badge>
-                        ) : null}
-                        {content.current_visibility &&
-                        content.current_visibility.status !== "visible" ? (
-                          <Badge variant="outline">
-                            {visibilityStatusLabel(
-                              content.current_visibility.status,
-                            )}
-                          </Badge>
-                        ) : null}
-                      </div>
-                      {notice ? (
-                        <p className="text-muted-foreground text-xs leading-5">
-                          {notice}
-                        </p>
+            </DialogTrigger>
+            <DialogContent className="max-h-svh overflow-y-auto sm:max-w-lg">
+              <DialogHeader className="sr-only">
+                <DialogTitle>添加网页</DialogTitle>
+                <DialogDescription>
+                  提交网页地址创建采集任务。
+                </DialogDescription>
+              </DialogHeader>
+              <WebPageCaptureForm />
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+      {state.status === "loading" ? (
+        <div
+          aria-label="正在读取作品资料"
+          className="mt-12 flex flex-col gap-6"
+        >
+          {[0, 1, 2].map((item) => (
+            <Skeleton key={item} className="h-24 w-full" />
+          ))}
+        </div>
+      ) : null}
+      {state.status === "error" ? (
+        <Alert variant="destructive" className="mt-12">
+          <AlertTitle>暂时无法读取作品</AlertTitle>
+          <AlertDescription>
+            {state.message}
+            {state.requestId ? ` 请求编号：${state.requestId}` : null}
+            <Button variant="outline" onClick={() => reload(applied)}>
+              <RotateCcwIcon data-icon="inline-start" />
+              重新加载
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {state.status === "ready" && state.items.length === 0 ? (
+        <Empty className="mt-12">
+          <EmptyHeader>
+            <EmptyTitle>当前条件下没有可读作品</EmptyTitle>
+            <EmptyDescription>
+              完成采集并保存后，作品会显示在这里；当前为空不代表来源返回了零结果。
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      ) : null}
+      {state.status === "ready" && state.items.length > 0 ? (
+        <>
+          <section aria-label="作品列表" className="mt-12 flex flex-col gap-10">
+            {state.items.map((content) => {
+              const version = content.latest_observation.content_version;
+              const title =
+                version?.title || version?.body || content.external_id;
+              const source =
+                options.status === "ready"
+                  ? (options.sources.find(
+                      (item) => item.source_key === content.source_key,
+                    )?.display_name ?? content.source_key)
+                  : content.source_key;
+              const notice = version
+                ? contentScopeNotice(version.text_scope)
+                : "未取得正文";
+              return (
+                <article
+                  key={content.id}
+                  className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:gap-8"
+                >
+                  <div className="flex min-w-0 flex-col gap-3">
+                    <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                      <span>{source}</span>
+                      <TimelineBasis content={content} />
+                      <ContentAnalysisStatus content={content} />
+                    </div>
+                    <h2 className="line-clamp-2 text-xl leading-8 font-medium break-words">
+                      <Link href={`/content/${content.id}`}>{title}</Link>
+                    </h2>
+                    {version?.title && version.body ? (
+                      <p className="text-muted-foreground line-clamp-2 max-w-2xl text-sm leading-6 break-words">
+                        {version.body}
+                      </p>
+                    ) : null}
+                    <div className="flex flex-wrap items-center gap-3">
+                      {version ? (
+                        <Badge variant="secondary">
+                          {contentScopeLabel(version.text_scope)}
+                        </Badge>
                       ) : null}
                       {content.current_visibility &&
                       content.current_visibility.status !== "visible" ? (
-                        <p className="text-muted-foreground text-xs leading-5">
-                          {visibilityStatusNotice(
+                        <Badge variant="outline">
+                          {visibilityStatusLabel(
                             content.current_visibility.status,
                           )}
-                        </p>
+                        </Badge>
                       ) : null}
                     </div>
-                    <Button asChild variant="ghost" className="self-start">
-                      <Link href={`/content/${content.id}`}>
-                        查看详情
-                        <ArrowRightIcon data-icon="inline-end" />
-                      </Link>
-                    </Button>
-                  </article>
-                );
-              })}
-            </section>
-            {state.nextCursor ? (
-              <div className="mt-12 flex justify-center">
-                <Button
-                  variant="outline"
-                  onClick={() => void loadMore()}
-                  disabled={isLoadingMore}
-                >
-                  {isLoadingMore ? "正在加载" : "加载更多"}
-                </Button>
-              </div>
-            ) : null}
-            {loadMoreError ? (
-              <p role="alert" className="text-destructive mt-4 text-sm">
-                {loadMoreError}
-              </p>
-            ) : null}
-          </>
-        ) : null}
-      </main>
+                    {notice ? (
+                      <p className="text-muted-foreground text-xs leading-5">
+                        {notice}
+                      </p>
+                    ) : null}
+                    {content.current_visibility &&
+                    content.current_visibility.status !== "visible" ? (
+                      <p className="text-muted-foreground text-xs leading-5">
+                        {visibilityStatusNotice(
+                          content.current_visibility.status,
+                        )}
+                      </p>
+                    ) : null}
+                  </div>
+                  <Button asChild variant="ghost" className="self-start">
+                    <Link href={`/content/${content.id}`}>
+                      查看详情
+                      <ArrowRightIcon data-icon="inline-end" />
+                    </Link>
+                  </Button>
+                </article>
+              );
+            })}
+          </section>
+          {state.nextCursor ? (
+            <div className="mt-12 flex justify-center">
+              <Button
+                variant="outline"
+                onClick={() => void loadMore()}
+                disabled={isLoadingMore}
+              >
+                {isLoadingMore ? "正在加载" : "加载更多"}
+              </Button>
+            </div>
+          ) : null}
+          {loadMoreError ? (
+            <p role="alert" className="text-destructive mt-4 text-sm">
+              {loadMoreError}
+            </p>
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }

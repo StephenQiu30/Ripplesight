@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRightIcon, ChevronDownIcon, RotateCcwIcon } from "lucide-react";
 import { listMonitorTopics } from "@/api/jiankongzhuti";
 import { listReports } from "@/api/ribao";
-import { WorkspaceHeader } from "@/components/navigation/workspace-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -106,94 +105,91 @@ export function ReportList() {
   }, [reloadToken]);
 
   return (
-    <div className="bg-background min-h-screen">
-      <WorkspaceHeader current="reports" />
-      <main className="mx-auto max-w-6xl px-5 py-12 sm:px-8 sm:py-16">
-        <div className="flex flex-wrap items-end justify-between gap-5">
-          <div>
-            <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
-              已有报告
-            </h1>
-            <p className="text-muted-foreground mt-4 leading-7">
-              按主题和日期，阅读已经定稿的日报。
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            onClick={() => setReloadToken((value) => value + 1)}
-          >
-            <RotateCcwIcon data-icon="inline-start" />
-            刷新
-          </Button>
+    <div>
+      <div className="flex flex-wrap items-end justify-between gap-5">
+        <div>
+          <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
+            已有报告
+          </h1>
+          <p className="text-muted-foreground mt-4 leading-7">
+            按主题和日期，阅读已经定稿的日报。
+          </p>
         </div>
-        <Collapsible className="mt-8">
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost">
-              筛选报告
-              <ChevronDownIcon data-icon="inline-end" />
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mt-5 flex flex-col gap-4">
-            <div className="grid gap-5 sm:grid-cols-3">
-              <Field>
-                <FieldLabel htmlFor="report-topic">关注主题</FieldLabel>
-                <Select value={topicId} onValueChange={setTopicId}>
-                  <SelectTrigger id="report-topic" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value="all">全部主题</SelectItem>
-                      {topics.map((topic) => (
-                        <SelectItem key={topic.id} value={topic.id}>
-                          {topic.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="report-date-from">开始日期</FieldLabel>
-                <Input
-                  id="report-date-from"
-                  type="date"
-                  value={dateFrom}
-                  onChange={(event) => setDateFrom(event.target.value)}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="report-date-to">结束日期</FieldLabel>
-                <Input
-                  id="report-date-to"
-                  type="date"
-                  value={dateTo}
-                  onChange={(event) => setDateTo(event.target.value)}
-                />
-              </Field>
-            </div>
-            {topicOptionsError ? (
-              <p className="text-muted-foreground text-sm">
-                主题选项暂时无法读取，仍可按日期查看报告。
-              </p>
-            ) : null}
-          </CollapsibleContent>
-        </Collapsible>
-        {rangeError ? (
-          <Alert variant="destructive" className="mt-6">
-            <AlertDescription>{rangeError}</AlertDescription>
-          </Alert>
-        ) : null}
-        {!rangeError ? (
-          <ReportResults
-            key={`${topicId}|${dateFrom}|${dateTo}|${reloadToken}`}
-            topicId={topicId}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onRetry={() => setReloadToken((value) => value + 1)}
-          />
-        ) : null}
-      </main>
+        <Button
+          variant="outline"
+          onClick={() => setReloadToken((value) => value + 1)}
+        >
+          <RotateCcwIcon data-icon="inline-start" />
+          刷新
+        </Button>
+      </div>
+      <Collapsible className="mt-8">
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost">
+            筛选报告
+            <ChevronDownIcon data-icon="inline-end" />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-5 flex flex-col gap-4">
+          <div className="grid gap-5 sm:grid-cols-3">
+            <Field>
+              <FieldLabel htmlFor="report-topic">关注主题</FieldLabel>
+              <Select value={topicId} onValueChange={setTopicId}>
+                <SelectTrigger id="report-topic" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">全部主题</SelectItem>
+                    {topics.map((topic) => (
+                      <SelectItem key={topic.id} value={topic.id}>
+                        {topic.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="report-date-from">开始日期</FieldLabel>
+              <Input
+                id="report-date-from"
+                type="date"
+                value={dateFrom}
+                onChange={(event) => setDateFrom(event.target.value)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="report-date-to">结束日期</FieldLabel>
+              <Input
+                id="report-date-to"
+                type="date"
+                value={dateTo}
+                onChange={(event) => setDateTo(event.target.value)}
+              />
+            </Field>
+          </div>
+          {topicOptionsError ? (
+            <p className="text-muted-foreground text-sm">
+              主题选项暂时无法读取，仍可按日期查看报告。
+            </p>
+          ) : null}
+        </CollapsibleContent>
+      </Collapsible>
+      {rangeError ? (
+        <Alert variant="destructive" className="mt-6">
+          <AlertDescription>{rangeError}</AlertDescription>
+        </Alert>
+      ) : null}
+      {!rangeError ? (
+        <ReportResults
+          key={`${topicId}|${dateFrom}|${dateTo}|${reloadToken}`}
+          topicId={topicId}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onRetry={() => setReloadToken((value) => value + 1)}
+        />
+      ) : null}
     </div>
   );
 }

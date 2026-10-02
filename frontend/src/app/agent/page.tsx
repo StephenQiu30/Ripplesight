@@ -36,7 +36,7 @@ export default async function AgentPage() {
   return (
     <>
       <PublicationNavigation />
-      <main className="mx-auto max-w-4xl px-5 py-10 sm:px-8">
+      <div>
         <h1 className="text-3xl font-medium">让 Agent 读取资讯</h1>
         <p className="text-muted-foreground mt-5 text-sm leading-7">
           MCP 使用同站 /mcp 的 HTTP POST 接入；API、RSS 与 Markdown
@@ -75,7 +75,7 @@ export default async function AgentPage() {
             {instructions}
           </pre>
         </details>
-      </main>
+      </div>
     </>
   );
 }

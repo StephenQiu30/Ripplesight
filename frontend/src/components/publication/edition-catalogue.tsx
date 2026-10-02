@@ -59,7 +59,7 @@ export function PublicEditionCatalogue({
     }
   }
   return (
-    <main className="mx-auto max-w-4xl space-y-8 px-5 py-10 sm:px-8">
+    <div className="space-y-8">
       <h1 className="text-3xl font-medium">{labels[initial.kind]}历史</h1>
       <nav aria-label="公开刊物" className="flex flex-wrap gap-5 text-sm">
         {(["daily", "weekly", "monthly"] as const).map((kind) => (
@@ -135,7 +135,7 @@ export function PublicEditionCatalogue({
           {busy ? "正在读取…" : "更早刊期"}
         </Button>
       ) : null}
-    </main>
+    </div>
   );
 }
 

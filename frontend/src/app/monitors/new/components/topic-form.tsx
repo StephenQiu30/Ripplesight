@@ -23,7 +23,6 @@ import {
   tryBeginTopicSubmission,
   type TopicFieldErrors,
 } from "@/components/monitors/topic-validation";
-import { WorkspaceHeader } from "@/components/navigation/workspace-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -167,151 +166,148 @@ export function TopicForm() {
   }
 
   return (
-    <div className="bg-background min-h-screen">
-      <WorkspaceHeader current="topics" />
-      <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-20 xl:px-0">
-        <Button asChild variant="ghost" size="navigation" className="mb-10">
-          <Link href="/topics">返回我的关注</Link>
-        </Button>
-        <div className="grid gap-12 md:grid-cols-2 md:gap-16">
-          <section>
-            <p className="text-muted-foreground text-sm">创建关注</p>
-            <h1 className="mt-5 text-4xl leading-tight font-normal tracking-tight sm:text-5xl">
-              从你关心的
-              <br />
-              事情开始。
-            </h1>
-            <p className="text-muted-foreground mt-6 max-w-sm text-sm leading-7">
-              选好关键词和信息来源，以适合自己的节奏了解新的变化。
-            </p>
-          </section>
-          <form onSubmit={handleSubmit} noValidate aria-busy={isSubmitting}>
-            <FieldGroup className="gap-8">
-              <Field
-                data-disabled={isSubmitting}
-                data-invalid={Boolean(submissionError?.fields?.name)}
-              >
-                <FieldLabel htmlFor="topic-name">主题名称</FieldLabel>
-                <Input
-                  id="topic-name"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  disabled={isSubmitting}
-                  minLength={1}
-                  maxLength={80}
-                  required
-                  placeholder="例如：AI 产品与工具"
-                  aria-invalid={Boolean(submissionError?.fields?.name)}
-                  aria-describedby={
-                    submissionError?.fields?.name
-                      ? "topic-name-error"
-                      : "topic-name-description"
-                  }
-                />
-                {submissionError?.fields?.name ? (
-                  <FieldError id="topic-name-error">
-                    {submissionError.fields.name}
-                  </FieldError>
-                ) : (
-                  <FieldDescription id="topic-name-description">
-                    起一个容易辨认的名字，之后可以随时修改。
-                  </FieldDescription>
-                )}
-              </Field>
-              <KeywordGroupField
-                id="match-any"
-                label="想关注的关键词"
-                description="任意一个词出现即可。每行填写一个，组合筛选可在进阶设置中调整。"
-                value={matchAny}
-                onChange={setMatchAny}
+    <div>
+      <Button asChild variant="ghost" size="navigation" className="mb-10">
+        <Link href="/topics">返回我的关注</Link>
+      </Button>
+      <div className="grid gap-12 md:grid-cols-2 md:gap-16">
+        <section>
+          <p className="text-muted-foreground text-sm">创建关注</p>
+          <h1 className="mt-5 text-4xl leading-tight font-normal tracking-tight sm:text-5xl">
+            从你关心的
+            <br />
+            事情开始。
+          </h1>
+          <p className="text-muted-foreground mt-6 max-w-sm text-sm leading-7">
+            选好关键词和信息来源，以适合自己的节奏了解新的变化。
+          </p>
+        </section>
+        <form onSubmit={handleSubmit} noValidate aria-busy={isSubmitting}>
+          <FieldGroup className="gap-8">
+            <Field
+              data-disabled={isSubmitting}
+              data-invalid={Boolean(submissionError?.fields?.name)}
+            >
+              <FieldLabel htmlFor="topic-name">主题名称</FieldLabel>
+              <Input
+                id="topic-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
                 disabled={isSubmitting}
-                error={submissionError?.fields?.match_any}
+                minLength={1}
+                maxLength={80}
+                required
+                placeholder="例如：AI 产品与工具"
+                aria-invalid={Boolean(submissionError?.fields?.name)}
+                aria-describedby={
+                  submissionError?.fields?.name
+                    ? "topic-name-error"
+                    : "topic-name-description"
+                }
               />
-              {sourcesState.status === "ready" ? (
-                <TopicSettingsFields
-                  sourceOptions={sourcesState.sourceOptions}
-                  sourceKeys={sourceKeys}
-                  onSourceKeysChange={setSourceKeys}
-                  disabled={isSubmitting}
-                  fieldErrors={submissionError?.fields}
-                />
-              ) : sourcesState.status === "loading" ? (
-                <Field>
-                  <FieldLabel>信息来源</FieldLabel>
-                  <FieldDescription>
-                    正在读取来源配置。你可以先填写关键词。
-                  </FieldDescription>
-                  <Spinner aria-label="正在读取来源" />
-                </Field>
+              {submissionError?.fields?.name ? (
+                <FieldError id="topic-name-error">
+                  {submissionError.fields.name}
+                </FieldError>
               ) : (
-                <Alert variant="destructive">
-                  <AlertTitle>信息来源暂时不可用</AlertTitle>
-                  <AlertDescription>
-                    {sourcesState.message}
-                    {sourcesState.requestId ? (
-                      <p>请求编号：{sourcesState.requestId}</p>
-                    ) : null}
-                    <p>可以先保存关注，之后再配置来源。</p>
-                  </AlertDescription>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="navigation"
-                    disabled={isSubmitting}
-                    onClick={() => void reloadSources()}
-                  >
-                    <RotateCcwIcon data-icon="inline-start" />
-                    重新读取来源
-                  </Button>
-                </Alert>
+                <FieldDescription id="topic-name-description">
+                  起一个容易辨认的名字，之后可以随时修改。
+                </FieldDescription>
               )}
-              <TopicAdvancedFields
-                matchAll={matchAll}
-                onMatchAllChange={setMatchAll}
-                exclude={exclude}
-                onExcludeChange={setExclude}
-                collectionIntervalSeconds={collectionIntervalSeconds}
-                onCollectionIntervalSecondsChange={setCollectionIntervalSeconds}
+            </Field>
+            <KeywordGroupField
+              id="match-any"
+              label="想关注的关键词"
+              description="任意一个词出现即可。每行填写一个，组合筛选可在进阶设置中调整。"
+              value={matchAny}
+              onChange={setMatchAny}
+              disabled={isSubmitting}
+              error={submissionError?.fields?.match_any}
+            />
+            {sourcesState.status === "ready" ? (
+              <TopicSettingsFields
+                sourceOptions={sourcesState.sourceOptions}
+                sourceKeys={sourceKeys}
+                onSourceKeysChange={setSourceKeys}
                 disabled={isSubmitting}
                 fieldErrors={submissionError?.fields}
               />
-              {submissionError ? (
-                <Alert variant="destructive">
-                  <AlertTitle>无法保存关注</AlertTitle>
-                  <AlertDescription>
-                    {submissionError.message}
-                    {submissionError.requestId ? (
-                      <p>请求编号：{submissionError.requestId}</p>
-                    ) : null}
-                  </AlertDescription>
-                </Alert>
-              ) : null}
-              <Field
-                orientation="horizontal"
-                className="flex-wrap justify-between gap-3"
-              >
-                <TopicRulePreview
-                  matchAny={matchAny}
-                  matchAll={matchAll}
-                  exclude={exclude}
-                  sourceKeys={sourceKeys}
-                  disabled={isSubmitting}
-                />
-                <Button type="submit" size="hero" disabled={isSubmitting}>
-                  {isSubmitting ? (
-                    <Spinner data-icon="inline-start" aria-hidden="true" />
-                  ) : null}
-                  {isSubmitting ? "正在保存" : "保存关注"}
-                  <ArrowRightIcon data-icon="inline-end" />
-                </Button>
+            ) : sourcesState.status === "loading" ? (
+              <Field>
+                <FieldLabel>信息来源</FieldLabel>
+                <FieldDescription>
+                  正在读取来源配置。你可以先填写关键词。
+                </FieldDescription>
+                <Spinner aria-label="正在读取来源" />
               </Field>
-              <FieldDescription>
-                保存后保持暂停。准备好后可在关注详情开始运行。
-              </FieldDescription>
-            </FieldGroup>
-          </form>
-        </div>
-      </main>
+            ) : (
+              <Alert variant="destructive">
+                <AlertTitle>信息来源暂时不可用</AlertTitle>
+                <AlertDescription>
+                  {sourcesState.message}
+                  {sourcesState.requestId ? (
+                    <p>请求编号：{sourcesState.requestId}</p>
+                  ) : null}
+                  <p>可以先保存关注，之后再配置来源。</p>
+                </AlertDescription>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="navigation"
+                  disabled={isSubmitting}
+                  onClick={() => void reloadSources()}
+                >
+                  <RotateCcwIcon data-icon="inline-start" />
+                  重新读取来源
+                </Button>
+              </Alert>
+            )}
+            <TopicAdvancedFields
+              matchAll={matchAll}
+              onMatchAllChange={setMatchAll}
+              exclude={exclude}
+              onExcludeChange={setExclude}
+              collectionIntervalSeconds={collectionIntervalSeconds}
+              onCollectionIntervalSecondsChange={setCollectionIntervalSeconds}
+              disabled={isSubmitting}
+              fieldErrors={submissionError?.fields}
+            />
+            {submissionError ? (
+              <Alert variant="destructive">
+                <AlertTitle>无法保存关注</AlertTitle>
+                <AlertDescription>
+                  {submissionError.message}
+                  {submissionError.requestId ? (
+                    <p>请求编号：{submissionError.requestId}</p>
+                  ) : null}
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            <Field
+              orientation="horizontal"
+              className="flex-wrap justify-between gap-3"
+            >
+              <TopicRulePreview
+                matchAny={matchAny}
+                matchAll={matchAll}
+                exclude={exclude}
+                sourceKeys={sourceKeys}
+                disabled={isSubmitting}
+              />
+              <Button type="submit" size="hero" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <Spinner data-icon="inline-start" aria-hidden="true" />
+                ) : null}
+                {isSubmitting ? "正在保存" : "保存关注"}
+                <ArrowRightIcon data-icon="inline-end" />
+              </Button>
+            </Field>
+            <FieldDescription>
+              保存后保持暂停。准备好后可在关注详情开始运行。
+            </FieldDescription>
+          </FieldGroup>
+        </form>
+      </div>
     </div>
   );
 }

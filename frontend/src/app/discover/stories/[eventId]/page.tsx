@@ -68,7 +68,7 @@ export default async function PublicStoryPage({
   return (
     <>
       <PublicationNavigation />
-      <main className="mx-auto max-w-4xl space-y-8 px-5 py-10 sm:px-8">
+      <div className="space-y-8">
         <div className="text-muted-foreground flex flex-wrap gap-4 text-sm">
           <time dateTime={story.first_seen_at}>
             {publicationTime(story.first_seen_at)}
@@ -98,7 +98,7 @@ export default async function PublicStoryPage({
           <h2 className="text-xl font-medium">来源与报道</h2>
           <PublicItemCards items={story.reports} />
         </section>
-      </main>
+      </div>
     </>
   );
 }

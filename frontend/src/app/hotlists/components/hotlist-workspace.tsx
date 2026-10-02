@@ -17,7 +17,6 @@ import {
   listHotlistSources,
 } from "@/api/rebang";
 
-import { WorkspaceHeader } from "@/components/navigation/workspace-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Empty,
@@ -504,7 +503,6 @@ export function HotlistWorkspace() {
   if (sources.status === "loading")
     return (
       <PageState
-        navigation={<WorkspaceHeader current="hotlists" />}
         eyebrow="热榜历史"
         title="正在加载来源"
         description="正在读取已应用的热榜来源。"
@@ -513,7 +511,6 @@ export function HotlistWorkspace() {
   if (sources.status === "error")
     return (
       <PageState
-        navigation={<WorkspaceHeader current="hotlists" />}
         eyebrow="加载失败"
         title="暂时无法打开热榜"
         description={
@@ -531,161 +528,154 @@ export function HotlistWorkspace() {
     );
 
   return (
-    <div className="bg-background min-h-screen">
-      <WorkspaceHeader current="hotlists" />
-      <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
-        <h1 className="mt-3 text-3xl font-normal tracking-tight sm:text-4xl">
-          热榜
-        </h1>
-        <p className="text-muted-foreground mt-4 max-w-2xl leading-7">
-          选择来源，查看已保存的热榜与排名变化。
-        </p>
-        {sources.items.length > 0 ? (
-          <FieldGroup className="mt-8 max-w-sm">
-            <Field>
-              <FieldLabel htmlFor="hotlist-source">来源</FieldLabel>
-              <Select value={activeSource ?? ""} onValueChange={selectSource}>
-                <SelectTrigger id="hotlist-source" className="w-full">
-                  <SelectValue placeholder="选择来源" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {sources.items.map((source) => (
-                      <SelectItem
-                        key={source.source_key}
-                        value={source.source_key}
-                      >
-                        {SOURCES.find((item) => item.key === source.source_key)
-                          ?.label ?? source.source_key}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
-          </FieldGroup>
-        ) : null}
-        {!activeSource || sources.items.length === 0 ? (
-          <InlineState
-            eyebrow="尚无来源"
-            title="还没有应用热榜来源"
-            description="热榜来源配置并成功采集后，这里会显示历史快照。"
-          />
-        ) : !applied ? (
-          <InlineState
-            eyebrow="来源不可用"
-            title="此来源尚未应用"
-            description="该热榜尚未配置。请选择已启用的来源，或查看来源设置。"
-            action={
-              <Button asChild>
-                <Link href="/sources">查看来源状态</Link>
-              </Button>
-            }
-          />
-        ) : history?.status === "error" &&
-          history.sourceKey === activeSource ? (
-          <InlineState
-            eyebrow="加载失败"
-            title="无法读取历史快照"
-            description={
-              history.requestId
-                ? `${history.message} 请求编号：${history.requestId}`
-                : history.message
-            }
-            action={
-              <Button
-                onClick={() => {
-                  setHistory(null);
-                  setHistoryRefresh((value) => value + 1);
-                }}
-              >
-                重新加载
-              </Button>
-            }
-          />
-        ) : history?.status !== "ready" ||
-          history.sourceKey !== activeSource ? (
-          <div
-            aria-label="正在读取历史快照"
-            className="mt-10 flex flex-col gap-3"
-          >
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-28 w-full" />
-          </div>
-        ) : history.items.length === 0 ? (
-          <InlineState
-            eyebrow="尚无快照"
-            title="还没有成功的榜单快照"
-            description="采集任务成功后，这里会出现按观察时间排序的历史记录。失败的采集不会伪装为空榜。"
-          />
-        ) : (
-          <>
-            <div className="mt-10">
-              <SnapshotSelector
-                snapshots={history.items}
-                selectedId={selectedSnapshot ?? ""}
-                nextCursor={history.nextCursor}
-                loadingMore={loadingHistoryMore}
-                onSelect={selectSnapshot}
-                onLoadMore={() => void loadHistoryMore()}
-              />
-            </div>
-            {detail?.status === "ready" &&
-            detail.snapshotId === selectedSnapshot ? (
-              <>
-                <SnapshotDetail snapshot={detail.value} />
-                {detail.value.next_cursor ? (
-                  <div className="mt-8 flex justify-center">
-                    <Button
-                      variant="secondary"
-                      onClick={() => void loadEntriesMore()}
-                      disabled={loadingEntriesMore}
+    <div>
+      <h1 className="mt-3 text-3xl font-normal tracking-tight sm:text-4xl">
+        热榜
+      </h1>
+      <p className="text-muted-foreground mt-4 max-w-2xl leading-7">
+        选择来源，查看已保存的热榜与排名变化。
+      </p>
+      {sources.items.length > 0 ? (
+        <FieldGroup className="mt-8 max-w-sm">
+          <Field>
+            <FieldLabel htmlFor="hotlist-source">来源</FieldLabel>
+            <Select value={activeSource ?? ""} onValueChange={selectSource}>
+              <SelectTrigger id="hotlist-source" className="w-full">
+                <SelectValue placeholder="选择来源" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {sources.items.map((source) => (
+                    <SelectItem
+                      key={source.source_key}
+                      value={source.source_key}
                     >
-                      {loadingEntriesMore ? "正在加载" : "加载更多榜位"}
-                    </Button>
-                  </div>
-                ) : null}
-              </>
-            ) : detail?.status === "error" &&
-              detail.snapshotId === selectedSnapshot ? (
-              <InlineState
-                eyebrow={detail.forbidden ? "不可访问" : "加载失败"}
-                title={
-                  detail.forbidden ? "快照不存在或无权访问" : "无法读取快照"
-                }
-                description={
-                  detail.requestId
-                    ? `${detail.message} 请求编号：${detail.requestId}`
-                    : detail.message
-                }
-                action={
+                      {SOURCES.find((item) => item.key === source.source_key)
+                        ?.label ?? source.source_key}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+        </FieldGroup>
+      ) : null}
+      {!activeSource || sources.items.length === 0 ? (
+        <InlineState
+          eyebrow="尚无来源"
+          title="还没有应用热榜来源"
+          description="热榜来源配置并成功采集后，这里会显示历史快照。"
+        />
+      ) : !applied ? (
+        <InlineState
+          eyebrow="来源不可用"
+          title="此来源尚未应用"
+          description="该热榜尚未配置。请选择已启用的来源，或查看来源设置。"
+          action={
+            <Button asChild>
+              <Link href="/sources">查看来源状态</Link>
+            </Button>
+          }
+        />
+      ) : history?.status === "error" && history.sourceKey === activeSource ? (
+        <InlineState
+          eyebrow="加载失败"
+          title="无法读取历史快照"
+          description={
+            history.requestId
+              ? `${history.message} 请求编号：${history.requestId}`
+              : history.message
+          }
+          action={
+            <Button
+              onClick={() => {
+                setHistory(null);
+                setHistoryRefresh((value) => value + 1);
+              }}
+            >
+              重新加载
+            </Button>
+          }
+        />
+      ) : history?.status !== "ready" || history.sourceKey !== activeSource ? (
+        <div
+          aria-label="正在读取历史快照"
+          className="mt-10 flex flex-col gap-3"
+        >
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-28 w-full" />
+        </div>
+      ) : history.items.length === 0 ? (
+        <InlineState
+          eyebrow="尚无快照"
+          title="还没有成功的榜单快照"
+          description="采集任务成功后，这里会出现按观察时间排序的历史记录。失败的采集不会伪装为空榜。"
+        />
+      ) : (
+        <>
+          <div className="mt-10">
+            <SnapshotSelector
+              snapshots={history.items}
+              selectedId={selectedSnapshot ?? ""}
+              nextCursor={history.nextCursor}
+              loadingMore={loadingHistoryMore}
+              onSelect={selectSnapshot}
+              onLoadMore={() => void loadHistoryMore()}
+            />
+          </div>
+          {detail?.status === "ready" &&
+          detail.snapshotId === selectedSnapshot ? (
+            <>
+              <SnapshotDetail snapshot={detail.value} />
+              {detail.value.next_cursor ? (
+                <div className="mt-8 flex justify-center">
                   <Button
-                    onClick={() => {
-                      setDetail(null);
-                      setDetailRefresh((value) => value + 1);
-                    }}
+                    variant="secondary"
+                    onClick={() => void loadEntriesMore()}
+                    disabled={loadingEntriesMore}
                   >
-                    重新加载
+                    {loadingEntriesMore ? "正在加载" : "加载更多榜位"}
                   </Button>
-                }
-              />
-            ) : (
-              <div
-                aria-label="正在读取榜位"
-                className="mt-10 flex flex-col gap-3"
-              >
-                <Skeleton className="h-28 w-full" />
-                <Skeleton className="h-28 w-full" />
-              </div>
-            )}
-            {moreError ? (
-              <p role="alert" className="text-destructive mt-4 text-sm">
-                {moreError}
-              </p>
-            ) : null}
-          </>
-        )}
-      </main>
+                </div>
+              ) : null}
+            </>
+          ) : detail?.status === "error" &&
+            detail.snapshotId === selectedSnapshot ? (
+            <InlineState
+              eyebrow={detail.forbidden ? "不可访问" : "加载失败"}
+              title={detail.forbidden ? "快照不存在或无权访问" : "无法读取快照"}
+              description={
+                detail.requestId
+                  ? `${detail.message} 请求编号：${detail.requestId}`
+                  : detail.message
+              }
+              action={
+                <Button
+                  onClick={() => {
+                    setDetail(null);
+                    setDetailRefresh((value) => value + 1);
+                  }}
+                >
+                  重新加载
+                </Button>
+              }
+            />
+          ) : (
+            <div
+              aria-label="正在读取榜位"
+              className="mt-10 flex flex-col gap-3"
+            >
+              <Skeleton className="h-28 w-full" />
+              <Skeleton className="h-28 w-full" />
+            </div>
+          )}
+          {moreError ? (
+            <p role="alert" className="text-destructive mt-4 text-sm">
+              {moreError}
+            </p>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

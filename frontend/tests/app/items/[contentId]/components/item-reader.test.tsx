@@ -1,13 +1,25 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, expect, it } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/items/00000000-0000-4000-8000-000000000001",
+}));
 
 import { ItemReader } from "@/app/items/[contentId]/components/item-reader";
 import { savedIds } from "@/components/publication/local-reading";
+import { BasicLayout } from "@/layout/basic-layout";
 
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  window.scrollTo(0, 0);
 });
 
 const item: HotKeyAPI.PublicItemDetailView = {
@@ -103,4 +115,90 @@ it("rejects invalid local saved material instead of trusting it as public conten
     }),
   ).toEqual([item.id]);
   expect(savedIds({ getItem: () => "broken" })).toEqual([]);
+});
+
+const readingKey = `hotkey.reading.v1.${item.id}.${item.revision}`;
+
+it("restores the saved reading position, note and translation inside the layout scroll container", async () => {
+  localStorage.setItem(
+    readingKey,
+    JSON.stringify({
+      note: "继续阅读这篇资讯",
+      mode: "translated",
+      scroll: 480,
+    }),
+  );
+  render(
+    <BasicLayout>
+      <ItemReader item={item} />
+    </BasicLayout>,
+  );
+
+  await waitFor(() => {
+    expect(screen.getByRole("main").scrollTop).toBe(480);
+    expect(
+      (
+        screen.getByRole("textbox", {
+          name: "本机阅读笔记",
+        }) as HTMLTextAreaElement
+      ).value,
+    ).toBe("继续阅读这篇资讯");
+    expect(screen.getByText("部分中文")).toBeTruthy();
+  });
+
+  screen.getByRole("main").scrollTop = 360;
+  fireEvent.click(screen.getByRole("button", { name: "保存笔记" }));
+  expect(JSON.parse(localStorage.getItem(readingKey)!)).toEqual({
+    note: "继续阅读这篇资讯",
+    mode: "translated",
+    scroll: 360,
+  });
+});
+
+it("saves the current main reading position with the note in the existing local storage format", () => {
+  render(
+    <BasicLayout>
+      <ItemReader item={item} />
+    </BasicLayout>,
+  );
+  screen.getByRole("main").scrollTop = 360;
+  fireEvent.change(screen.getByRole("textbox", { name: "本机阅读笔记" }), {
+    target: { value: "记下当前进展" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "保存笔记" }));
+
+  expect(JSON.parse(localStorage.getItem(readingKey)!)).toEqual({
+    note: "记下当前进展",
+    mode: "original",
+    scroll: 360,
+  });
+});
+
+it("preserves the main reading position on pagehide and when the reader unmounts", () => {
+  const view = render(
+    <BasicLayout>
+      <ItemReader item={item} />
+    </BasicLayout>,
+  );
+  const main = screen.getByRole("main");
+  main.scrollTop = 360;
+  fireEvent.change(screen.getByRole("textbox", { name: "本机阅读笔记" }), {
+    target: { value: "下次继续" },
+  });
+  fireEvent(window, new Event("pagehide"));
+
+  expect(JSON.parse(localStorage.getItem(readingKey)!)).toEqual({
+    note: "下次继续",
+    mode: "original",
+    scroll: 360,
+  });
+
+  main.scrollTop = 520;
+  view.unmount();
+
+  expect(JSON.parse(localStorage.getItem(readingKey)!)).toEqual({
+    note: "下次继续",
+    mode: "original",
+    scroll: 520,
+  });
 });
