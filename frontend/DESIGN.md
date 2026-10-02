@@ -52,6 +52,7 @@
 - ESLint 拒绝业务源码直接导入传输函数/HTTP 客户端或调用网络原语；页面可使用生成函数、传输错误类和请求选项类型。透明同源代理只做通用转发，生成代码只由生成器更新。
 - 浏览器同源与 SSR 后端 origin 由 `src/request.ts` 统一解析，移除页面重复 baseURL 和 `publicationApiOptions`；业务请求选项只允许头、取消、响应格式和超时，生成的方法/URL/参数不能被覆盖。
 - Agent 页专属 `SelectedSnapshotDownload` 位于 `src/app/agent/components/selected-snapshot-download.tsx`，使用生成的 `getSelectedPublicationSnapshot` 下载 JSON 快照，覆盖加载、错误和再次下载；不手写 API 地址。
+- 测试统一在 `tests/`，按原业务路径组织 `app/`、`components/`，根配置测试归 `tests/config/`；`src/` 只放业务源码和生成客户端。Vitest 仅扫描 tests，生产类型检查及 Docker 构建排除测试；独立测试 TypeScript 配置继续检查所有测试，ESLint 拒绝业务目录中的测试或测试依赖。
 - App Router 统一提供 loading、error、global-error 和 not-found 边界。
 - `src/components/system/page-state.tsx` 中的 `PageState` 处理页面错误、空态、无权限和恢复操作。业务页通过 `navigation` 保留 `WorkspaceHeader`，读取失败时仍可切换页面；不在状态组件内部请求业务数据。
 
