@@ -1,22 +1,12 @@
 import type { ReactNode } from "react";
 
+import { safeHttpUrl } from "./report-links";
+
 const INLINE_LINK =
   /\[((?:\\.|[^\[\]])+|\[[^\]]+\])\]\(<([^>\n]+)>\)|\[(c[1-9][0-9]*)\]/g;
 
 function unescapeMarkdown(value: string): string {
   return value.replace(/\\([\\`*_\[\]<>])/g, "$1");
-}
-
-function safeHttpUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" || parsed.protocol === "http:"
-      ? parsed.href
-      : null;
-  } catch {
-    return null;
-  }
 }
 
 function inlineContent(

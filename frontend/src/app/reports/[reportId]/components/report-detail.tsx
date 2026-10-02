@@ -22,24 +22,13 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiRequestError } from "@/request";
 import { ReportMarkdown } from "./report-markdown";
+import { safeHttpUrl } from "./report-links";
 
 type DetailState =
   | { status: "loading" }
   | { status: "ready"; report: HotKeyAPI.ReportDetailView }
   | { status: "not-found" }
   | { status: "error"; message: string };
-
-function safeHttpUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" || parsed.protocol === "http:"
-      ? parsed.href
-      : null;
-  } catch {
-    return null;
-  }
-}
 
 function reportTime(value: string) {
   return new Intl.DateTimeFormat("zh-CN", {

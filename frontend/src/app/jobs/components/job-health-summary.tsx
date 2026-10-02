@@ -9,36 +9,12 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/request";
+import { capabilityLabel, formatTime } from "./job-presenters";
 
 type IssueState =
   | { status: "loading" }
   | { status: "ready"; issues: HotKeyAPI.JobContinuousFailureIssueView[] }
   | { status: "error"; message: string };
-
-function capabilityLabel(capability: HotKeyAPI.SourceCapability): string {
-  switch (capability) {
-    case "search":
-      return "检索";
-    case "author_posts":
-      return "作者作品";
-    case "comments":
-      return "评论";
-    case "replies":
-      return "回复";
-    case "page_content":
-      return "页面正文";
-    case "hotlist":
-      return "热榜";
-  }
-}
-
-function formatTime(value: string): string {
-  return new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    dateStyle: "medium",
-    timeStyle: "medium",
-  }).format(new Date(value));
-}
 
 export function JobHealthSummaryView({ state }: { state: IssueState }) {
   if (state.status === "loading") {

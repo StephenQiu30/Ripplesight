@@ -33,8 +33,6 @@ from sources.editorial_preview_rules import preview_items
 from sources.editorial_preview_schemas import EditorialSourcePreviewView
 from sources.editorial_schemas import EditorialCursor, EditorialProfileView, EditorialRunResult
 
-PREVIEW_TIMEOUT_SECONDS = 600
-
 
 class EditorialSourcePreviewExecutor:
     def __init__(

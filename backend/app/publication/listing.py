@@ -109,9 +109,3 @@ def iter_current_publications_in_transaction(
             return
         after = rows[-1].content_id
         after_timeline = rows[-1].timeline_at
-
-
-def list_current_publications_in_transaction(
-    session: Session, *, owner_id: UUID, now: datetime
-) -> tuple[PublicationListingMember, ...]:
-    return tuple(iter_current_publications_in_transaction(session, owner_id=owner_id, now=now))

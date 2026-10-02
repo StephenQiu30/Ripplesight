@@ -1,255 +1,37 @@
-from ai.capability_models import AiCapabilityConfiguration
-from ai.models import AiCall
-from analysis.editorial_models import (
-    EditorialContentState,
-    EditorialOverride,
-    EditorialRun,
-    EditorialSource,
-    EditorialSourceVersion,
-    EditorialStage,
-)
-from analysis.evaluation_models import SelectBenchResult, SelectBenchRun
-from analysis.models import (
-    AnalysisPromptActivation,
-    AnalysisPromptRuntimeSession,
-    ContentAnnotation,
-)
-from analysis.translation_models import ContentTranslationBatch, ContentTranslationRun
-from connections.editorial_icon_models import EditorialSourceIcon
-from connections.editorial_models import (
-    EditorialSourceMaterialReceipt,
-    EditorialSourceProfile,
-    EditorialSourceRun,
-)
-from connections.editorial_models import (
-    EditorialSourceVersion as EditorialSourceProfileVersion,
-)
-from connections.models import (
-    SourceCapabilityEvidence,
-    SourceConnection,
-    SourceConnectionVersion,
-)
-from content.editorial_rendered_models import ContentRenderedMaterial
-from content.models import (
-    ContentDiscovery,
-    ContentObservation,
-    ContentRecord,
-    ContentThread,
-    ContentVersion,
-    ContentVersionRelation,
-    ContentVisibilityObservation,
-    HotlistEntryRecord,
-    HotlistSnapshot,
-)
-from db.base import Base
-from events.embedding_models import EventContentEmbedding
-from events.fact_models import (
-    EventDerivedContent,
-    EventFact,
-    EventFactAssignment,
-    EventFactMember,
-    EventGroupingAssessment,
-    EventGroupingOverride,
-    EventRevisionOperation,
-)
-from events.heat_models import EventAttentionSignal, EventAttentionSnapshot, EventAttentionSource
-from events.models import Event, EventCandidate, EventMember
-from events.story_models import EventStoryLink
-from evidence.models import (
-    CleanupTarget,
-    DeletionDirective,
-    EvidenceResource,
-    ProvenanceManifest,
-    ProvenanceManifestItem,
-    RetentionPolicy,
-    SourceAccessPolicy,
-)
-from identity.models import IdentitySession, IdentityUser
-from jobs.models import (
-    CollectionDueWindow,
-    CoverageWindow,
-    Job,
-    JobAttempt,
-    JobStageAttempt,
-    OutboxMessage,
-    ProcessedMessage,
-    ResourceBudgetPolicy,
-    ResourceBudgetReservation,
-    ResourceBudgetWindow,
-    ResourceComponentPolicy,
-    ResourceUsageAttempt,
-)
-from knowledge.models import KnowledgeExport
-from leaderboard.models import (
-    LeaderboardAlias,
-    LeaderboardFxRate,
-    LeaderboardModel,
-    LeaderboardPrice,
-    LeaderboardRanking,
-    LeaderboardRun,
-    LeaderboardScore,
-    LeaderboardSnapshot,
-    LeaderboardSourceState,
-)
-from monitors.codex_models import (
-    CodexResetEvent,
-    CodexResetEventPost,
-    CodexResetMonitor,
-    CodexResetMonitorVersion,
-    CodexResetPost,
-    CodexResetRecognition,
-    CodexResetReview,
-    CodexResetScanGap,
-)
-from monitors.models import (
-    FollowedAccount,
-    FollowedAccountAlias,
-    MonitorSchedule,
-    MonitorTopic,
-    MonitorTopicStatusEvent,
-    MonitorTopicVersion,
-)
-from notifications.models import NotificationDelivery, NotificationTarget
-from operations.models import (
-    DictionaryVersion,
-    Feedback,
-    FeedbackAttachment,
-    FeedbackCooldown,
-    OperatorAuditOperation,
-    ProcessHeartbeat,
-)
-from operations.site_models import SiteConfiguration
-from publication.media_mirror_models import PublicationMediaFile, PublicationMediaRun
-from publication.publication_models import (
-    PublicationPolicyVersion,
-    PublicationRecord,
-    PublicationRepublishRun,
-    PublicationRevision,
-    PublicationSelectedChange,
-    PublicationSourcePolicy,
-    PublicationSyncState,
-)
-from reports.edition_models import ReportEdition, ReportEditionSchedule
-from reports.models import Report
+"""Register runtime mappings; database/schema.sql owns DDL."""
 
-# Import each domain's models here for runtime mapping and clean-database verification.
-# DDL ownership remains exclusively in database/schema.sql.
+import ai.capability_models as _ai_capability_models  # noqa: F401
+import ai.models as _ai_models  # noqa: F401
+import analysis.editorial_models as _analysis_editorial_models  # noqa: F401
+import analysis.evaluation_models as _analysis_evaluation_models  # noqa: F401
+import analysis.models as _analysis_models  # noqa: F401
+import analysis.translation_models as _analysis_translation_models  # noqa: F401
+import connections.editorial_icon_models as _connections_editorial_icon_models  # noqa: F401
+import connections.editorial_models as _connections_editorial_models  # noqa: F401
+import connections.models as _connections_models  # noqa: F401
+import content.editorial_rendered_models as _content_editorial_rendered_models  # noqa: F401
+import content.models as _content_models  # noqa: F401
+import events.embedding_models as _events_embedding_models  # noqa: F401
+import events.fact_models as _events_fact_models  # noqa: F401
+import events.heat_models as _events_heat_models  # noqa: F401
+import events.models as _events_models  # noqa: F401
+import events.story_models as _events_story_models  # noqa: F401
+import evidence.models as _evidence_models  # noqa: F401
+import identity.models as _identity_models  # noqa: F401
+import jobs.models as _jobs_models  # noqa: F401
+import knowledge.models as _knowledge_models  # noqa: F401
+import leaderboard.models as _leaderboard_models  # noqa: F401
+import monitors.codex_models as _monitors_codex_models  # noqa: F401
+import monitors.models as _monitors_models  # noqa: F401
+import notifications.models as _notifications_models  # noqa: F401
+import operations.models as _operations_models  # noqa: F401
+import operations.site_models as _operations_site_models  # noqa: F401
+import publication.media_mirror_models as _publication_media_mirror_models  # noqa: F401
+import publication.publication_models as _publication_publication_models  # noqa: F401
+import reports.edition_models as _reports_edition_models  # noqa: F401
+import reports.models as _reports_models  # noqa: F401
+from db.base import Base as Base
+
 metadata = Base.metadata
 
-__all__ = [
-    "AiCall",
-    "AiCapabilityConfiguration",
-    "AnalysisPromptActivation",
-    "AnalysisPromptRuntimeSession",
-    "CleanupTarget",
-    "CodexResetEvent",
-    "CodexResetEventPost",
-    "CodexResetMonitor",
-    "CodexResetMonitorVersion",
-    "CodexResetPost",
-    "CodexResetRecognition",
-    "CodexResetReview",
-    "CodexResetScanGap",
-    "CollectionDueWindow",
-    "ContentAnnotation",
-    "ContentDiscovery",
-    "ContentObservation",
-    "ContentRecord",
-    "ContentRenderedMaterial",
-    "ContentThread",
-    "ContentTranslationBatch",
-    "ContentTranslationRun",
-    "ContentVersion",
-    "ContentVersionRelation",
-    "ContentVisibilityObservation",
-    "CoverageWindow",
-    "DeletionDirective",
-    "DictionaryVersion",
-    "EditorialContentState",
-    "EditorialOverride",
-    "EditorialRun",
-    "EditorialSource",
-    "EditorialSourceIcon",
-    "EditorialSourceMaterialReceipt",
-    "EditorialSourceProfile",
-    "EditorialSourceProfileVersion",
-    "EditorialSourceRun",
-    "EditorialSourceVersion",
-    "EditorialStage",
-    "Event",
-    "EventAttentionSignal",
-    "EventAttentionSnapshot",
-    "EventAttentionSource",
-    "EventCandidate",
-    "EventContentEmbedding",
-    "EventDerivedContent",
-    "EventFact",
-    "EventFactAssignment",
-    "EventFactMember",
-    "EventGroupingAssessment",
-    "EventGroupingOverride",
-    "EventMember",
-    "EventRevisionOperation",
-    "EventStoryLink",
-    "EvidenceResource",
-    "Feedback",
-    "FeedbackAttachment",
-    "FeedbackCooldown",
-    "FollowedAccount",
-    "FollowedAccountAlias",
-    "HotlistEntryRecord",
-    "HotlistSnapshot",
-    "IdentitySession",
-    "IdentityUser",
-    "Job",
-    "JobAttempt",
-    "JobStageAttempt",
-    "KnowledgeExport",
-    "LeaderboardAlias",
-    "LeaderboardFxRate",
-    "LeaderboardModel",
-    "LeaderboardPrice",
-    "LeaderboardRanking",
-    "LeaderboardRun",
-    "LeaderboardScore",
-    "LeaderboardSnapshot",
-    "LeaderboardSourceState",
-    "MonitorSchedule",
-    "MonitorTopic",
-    "MonitorTopicStatusEvent",
-    "MonitorTopicVersion",
-    "NotificationDelivery",
-    "NotificationTarget",
-    "OperatorAuditOperation",
-    "OutboxMessage",
-    "ProcessHeartbeat",
-    "ProcessedMessage",
-    "ProvenanceManifest",
-    "ProvenanceManifestItem",
-    "PublicationMediaFile",
-    "PublicationMediaRun",
-    "PublicationPolicyVersion",
-    "PublicationRecord",
-    "PublicationRepublishRun",
-    "PublicationRevision",
-    "PublicationSelectedChange",
-    "PublicationSourcePolicy",
-    "PublicationSyncState",
-    "Report",
-    "ReportEdition",
-    "ReportEditionSchedule",
-    "ResourceBudgetPolicy",
-    "ResourceBudgetReservation",
-    "ResourceBudgetWindow",
-    "ResourceComponentPolicy",
-    "ResourceUsageAttempt",
-    "RetentionPolicy",
-    "SelectBenchResult",
-    "SelectBenchRun",
-    "SiteConfiguration",
-    "SourceAccessPolicy",
-    "SourceCapabilityEvidence",
-    "SourceConnection",
-    "SourceConnectionVersion",
-    "metadata",
-]
+__all__ = ["Base", "metadata"]

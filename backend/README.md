@@ -2,14 +2,14 @@
 
 Python 3.12、FastAPI、Uvicorn、Pydantic 2、SQLAlchemy 2、psycopg 3、PostgreSQL、Redis、Kafka、MinIO。
 
-采用按业务领域分组的模块化单体。项目架构、目录、API 契约和数据库事实源统一执行根目录 [PROJECT.md](../PROJECT.md)；实现门禁和验证命令执行 [AGENTS.md](../AGENTS.md#fastapi-目录与命名必须执行)。
+采用按业务领域分组的模块化单体。项目架构、目录、API 契约和数据库事实源统一执行根目录 [PROJECT.md](../PROJECT.md)；实现门禁和验证命令执行 [AGENTS.md](../AGENTS.md)。
 
 ## 执行入口
 
 复制 `.env.example` 为未跟踪的 `.env`，填写数据库凭据并指向业务库 `hotkey`。在 `backend/` 执行 `uv sync --locked`；从 `backend/app/` 执行以下独立入口：
 
 ```bash
-uv run --locked uvicorn main:create_app --factory --host 127.0.0.1 --port 8867 --no-proxy-headers --no-access-log
+uv run --locked uvicorn main:create_app --factory --host 127.0.0.1 --port 8667 --no-proxy-headers --no-access-log
 uv run --locked python -m worker
 uv run --locked python -m cli
 ```
@@ -52,7 +52,7 @@ docker compose --env-file .env up --detach --build --wait
 
 生产入口 `docker-compose-prod.yml` 通过 include 复用相同服务定义，使用 `docker compose --env-file .env.prod -f docker-compose-prod.yml up --detach --build --wait`。需要 Compose 2.20.0+；开发与生产的应用镜像、profile、命令和安全限制一致，连接信息与密钥分开注入。
 
-`docker-compose-env.yml` 仅在需要全新环境时显式启动；本地开发默认复用已有环境。它保留原持久卷名，仅在全新 PostgreSQL 空卷通过官方初始化目录运行 `schema.sql`。连接和组合启动方法见[根 README](../README.md#启动服务)。Worker 与 CLI 保留按需 profile；当前 P1 使用宿主机 Worker，受控环境才显式启动容器 Worker。普通停止不删除持久卷，验证直接使用 Compose 与各依赖官方 CLI。
+`docker-compose-env.yml` 仅在需要全新环境时显式启动；本地开发默认复用已有环境。它保留原持久卷名，仅在全新 PostgreSQL 空卷通过官方初始化目录运行 `schema.sql`。连接和组合启动方法见[根 README](../README.md#启动服务)。Worker 与 CLI 保留按需 profile；M1/M2 使用宿主机 Worker，受控环境才显式启动容器 Worker。普通停止不删除持久卷，验证直接使用 Compose 与各依赖官方 CLI。
 
 已配置的运行环境可用以下有界命令执行一批到期扫描与 Redis/MinIO 在线副本清理；它不会创建或启动新的依赖服务：
 
@@ -102,10 +102,12 @@ PYTHONPATH=app uv run --env-file .env python -m cli backup verify-restore \
 
 账号密码、GitHub App、邮箱验证码共用 `identity/` 的账户与12小时固定数据库会话，业务API读写验证用户UUID及资源归属，写入另校验绑定CSRF。运营令牌和来源平台凭据继续独立管理。首次GitHub/邮箱验证创建个人空分区，密码不自动注册，不把历史分区授给首个注册者。
 
+密码登录支持已验证邮箱或原用户名；邮箱验证后未设置密码的账户进入首次设密，既有账户也可从账户设置完成。首次设密允许5分钟内新近验证会话，超时须重新核验绑定邮箱；已有密码须当前密码或绑定邮箱验证码。凭据更新返回新会话并轮换Cookie，在同事务撤销全部旧会话，当前设备继续登录。此变更不新增数据库字段，运行库无需执行DDL。
+
 配置 `HOTKEY_WEB_ORIGIN`、GitHub App client ID/secret、认证SMTP及邮箱验证码HMAC key；真实密钥只留本机环境文件。GitHub缺失配置时明确不可用；邮箱6位码5分钟、单次且错误/频率受限，不记录明文。数据库Schema只在新空库验证，存量库备份/恢复/导入核对后切换；历史账号归属必须用维护CLI显式映射。HTTP/Cookie/API合同见 [Design001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md#92-公开欢迎页登录与个人数据访问)。
 
 来源/模型秘密不得进入Git、日志、前端或模型输入；ToC账户不改变来源许可证与授权边界。MediaCrawler仍保留个人、非商业研究及本人B站低频试点限制。
 
 ## 状态
 
-当前实现与逐能力证据分别见 [HANDOVER](../HANDOVER.md)、[BACKLOG](../BACKLOG.md) 和 [Acceptance 索引](../docs/README.md)，历史底座盘点从 Git 历史查阅。服务健康、受控适配器及技术门禁不能替代真实来源或产品验收。
+当前实现与逐能力证据分别见 [BACKLOG](../BACKLOG.md) 和 [Acceptance 索引](../docs/README.md)，历史底座盘点从 Git 历史查阅。服务健康、受控适配器及技术门禁不能替代真实来源或产品验收。

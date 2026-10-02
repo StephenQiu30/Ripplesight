@@ -38,7 +38,7 @@ docker compose --env-file .env config --quiet
 docker compose --env-file .env up --detach --build --wait
 ```
 
-启动后打开 [业务页面](http://127.0.0.1:3000/events)，API 默认位于 `127.0.0.1:8867`，接口文档位于 `/docs` 和 `/scalar`。开发与生产的服务、镜像、命令、profile、端口规则、资源和安全限制相同，生产入口仅复用定义并使用独立项目名；连接信息与密钥由各自环境文件注入。
+本机前端固定使用 `8666`，后端固定使用 `8667`。启动后打开 [欢迎页](http://127.0.0.1:8666/)，登录后进入工作区；API 位于 `127.0.0.1:8667`，[Swagger 文档](http://127.0.0.1:8667/docs) 和 [Scalar 文档](http://127.0.0.1:8667/scalar) 使用同一后端端口。Compose 的容器内 Web/API 端口继续为 `8080`，宿主映射使用这两个固定端口。开发与生产的服务、镜像、命令、profile、资源和安全限制相同，生产入口仅复用定义并使用独立项目名；连接信息与密钥由各自环境文件注入。
 
 ```bash
 cp .env.example .env.prod
@@ -61,7 +61,7 @@ docker compose --env-file .env -f docker-compose-env.yml up --detach --wait
 docker compose --env-file .env -f docker-compose.yml -f docker-compose-env.yml up --detach --build --wait
 ```
 
-Worker 保留按需 profile；当前 P1 仍使用宿主机 Worker，避免并行消费者争抢消息。需要容器 Worker 的受控环境可执行 `docker compose --env-file .env --profile worker up --detach worker`；生产命令同样加上 `--env-file .env.prod -f docker-compose-prod.yml`。CLI 使用 `docker compose --env-file .env run --rm cli`，Browser 使用 `--profile browser`，其授权与出口门槛保持有效。
+Worker 保留按需 profile；M1/M2 仍使用宿主机 Worker，避免并行消费者争抢消息。需要容器 Worker 的受控环境可执行 `docker compose --env-file .env --profile worker up --detach worker`；生产命令同样加上 `--env-file .env.prod -f docker-compose-prod.yml`。CLI 使用 `docker compose --env-file .env run --rm cli`，Browser 使用 `--profile browser`，其授权与出口门槛保持有效。
 
 RSSHub/SearXNG、Firecrawl、MinIO 和 MediaCrawler 继续使用既有独立环境；RSSHub/SearXNG 的 Compose 主机默认 `host.docker.internal`，固定端口为 1200/8888。现有 Compose 没有独立调度服务。上述启动与健康检查只验证运行底座，真实来源、模型与产品闭环仍需单独验收。不要对已有业务库执行 `backend/database/schema.sql`。停止时使用与启动相同的文件、环境和项目参数执行 `down`，不要添加 `--volumes` 或 `--remove-orphans`；分开启动的应用与环境共用默认网络时，全部停止后再移除网络。详细说明见 [后端 README](backend/README.md) 和 [Web README](frontend/README.md)。
 
@@ -72,7 +72,7 @@ RSSHub/SearXNG、Firecrawl、MinIO 和 MediaCrawler 继续使用既有独立环�
 | 文档 | 用途 |
 | --- | --- |
 | [项目约束](PROJECT.md) | 架构、目录与运行边界 |
-| [文档索引](docs/README.md) | 需求、设计、计划与验收记录 |
+| [文档索引](docs/README.md) | 需求、设计与验收记录 |
 | [进度看板](BACKLOG.md) | 当前任务和真实验收状态 |
 | [贡献指南](CONTRIBUTING.md) | 开发、验证与 PR 要求 |
 | [安全策略](SECURITY.md) | 私密报告漏洞及敏感信息处理 |

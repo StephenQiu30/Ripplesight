@@ -534,58 +534,6 @@ class LeaderboardService:
             reason=reason,
         )
 
-    def import_directory(
-        self, *, file: Path | None = None, at: datetime | None = None
-    ) -> dict[str, int]:
-        now = at or datetime.now(UTC)
-        path = file or Path(__file__).with_name("model-directory.json")
-        directory = json.loads(path.read_text(encoding="utf-8"))
-        models = aliases = 0
-        for slug, name, provider, provider_slug, released_on in directory["models"]:
-            inserted = self.session.scalar(
-                insert(LeaderboardModel)
-                .values(
-                    id=uuid4(),
-                    slug=slug,
-                    name=name,
-                    provider=provider,
-                    provider_slug=provider_slug,
-                    released_at=datetime.fromisoformat(released_on).replace(tzinfo=UTC)
-                    if released_on
-                    else None,
-                    release_date_source="directory" if released_on else None,
-                    metadata_source="directory",
-                    context_window_tokens=None,
-                    created_at=now,
-                    updated_at=now,
-                )
-                .on_conflict_do_nothing(index_elements=[LeaderboardModel.slug])
-                .returning(LeaderboardModel.id)
-            )
-            models += inserted is not None
-        ids = {model.slug: model.id for model in self.session.scalars(select(LeaderboardModel))}
-        for source_key, names in directory["aliases"].items():
-            for alias, slug in names.items():
-                if slug not in ids:
-                    continue
-                inserted = self.session.scalar(
-                    insert(LeaderboardAlias)
-                    .values(
-                        id=uuid4(),
-                        source_key=source_key,
-                        alias=alias,
-                        normalized_alias=slug,
-                        model_id=ids[slug],
-                    )
-                    .on_conflict_do_nothing(
-                        index_elements=[LeaderboardAlias.source_key, LeaderboardAlias.alias]
-                    )
-                    .returning(LeaderboardAlias.id)
-                )
-                aliases += inserted is not None
-        self.session.flush()
-        return {"models": models, "aliases": aliases}
-
     def import_official_prices(
         self, *, file: Path | None = None, overwrite: bool = False, at: datetime | None = None
     ) -> dict[str, Any]:

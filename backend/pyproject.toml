@@ -23,7 +23,6 @@ dependencies = [
     "scalar-fastapi>=1.4,<2",
     "sqlalchemy>=2.0,<3",
     "structlog>=25.4,<26",
-    "tenacity>=9.1,<10",
     "typer>=0.16,<1",
 ]
 
