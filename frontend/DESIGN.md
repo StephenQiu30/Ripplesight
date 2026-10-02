@@ -49,6 +49,9 @@
 - 传输层不全局弹提示、不按 message 分支、不自动重试写操作。字段错误就地显示，页面失败保留恢复入口，操作结果使用适当短时反馈；旧数据刷新失败要标明过期。
 - Umi OpenAPI 将端点和类型直接生成到 `src/api/`。
 - 所有生成请求统一使用 `src/request.ts`，页面不得手写端点或创建第二套 HTTP 客户端。
+- ESLint 拒绝业务源码直接导入传输函数/HTTP 客户端或调用网络原语；页面可使用生成函数、传输错误类和请求选项类型。透明同源代理只做通用转发，生成代码只由生成器更新。
+- 浏览器同源与 SSR 后端 origin 由 `src/request.ts` 统一解析，移除页面重复 baseURL 和 `publicationApiOptions`；业务请求选项只允许头、取消、响应格式和超时，生成的方法/URL/参数不能被覆盖。
+- Agent 页专属 `SelectedSnapshotDownload` 位于 `src/app/agent/components/selected-snapshot-download.tsx`，使用生成的 `getSelectedPublicationSnapshot` 下载 JSON 快照，覆盖加载、错误和再次下载；不手写 API 地址。
 - App Router 统一提供 loading、error、global-error 和 not-found 边界。
 - `src/components/system/page-state.tsx` 中的 `PageState` 处理页面错误、空态、无权限和恢复操作。业务页通过 `navigation` 保留 `WorkspaceHeader`，读取失败时仍可切换页面；不在状态组件内部请求业务数据。
 

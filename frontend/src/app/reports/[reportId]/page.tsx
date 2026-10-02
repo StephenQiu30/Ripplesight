@@ -10,7 +10,6 @@ import {
 import {
   PublicationFailure,
   PublicationNavigation,
-  publicationApiOptions,
 } from "@/components/publication/reading-parts";
 import { PublicEditionReader } from "./[key]/components/public-edition-reader";
 const labels = { daily: "日报", weekly: "周报", monthly: "月报" } as const;
@@ -27,19 +26,13 @@ export async function generateMetadata({
   if (!kind)
     return { title: "日报详情", robots: { index: false, follow: false } };
   try {
-    const page = await listPublicEditionCatalogue(
-      { kind, limit: 1 },
-      publicationApiOptions,
-    );
+    const page = await listPublicEditionCatalogue({ kind, limit: 1 });
     if (!page.entries.length)
       return {
         title: `最新${labels[kind]}`,
         robots: { index: false, follow: false },
       };
-    const edition = await getPublicEdition(
-      { kind, key: page.entries[0].key },
-      publicationApiOptions,
-    );
+    const edition = await getPublicEdition({ kind, key: page.entries[0].key });
     return {
       title: edition.title,
       description: edition.lead,
@@ -73,15 +66,12 @@ export default async function ReportDetailPage({ params }: Parameters) {
   let edition: HotKeyAPI.PublicEditionView | null = null;
   let navigation: HotKeyAPI.PublicEditionNavigationView | undefined;
   try {
-    const page = await listPublicEditionCatalogue(
-      { kind, limit: 1 },
-      publicationApiOptions,
-    );
+    const page = await listPublicEditionCatalogue({ kind, limit: 1 });
     if (page.entries.length) {
       const key = page.entries[0].key;
       [edition, navigation] = await Promise.all([
-        getPublicEdition({ kind, key }, publicationApiOptions),
-        getPublicEditionNavigation({ kind, key }, publicationApiOptions),
+        getPublicEdition({ kind, key }),
+        getPublicEditionNavigation({ kind, key }),
       ]);
     }
   } catch (error) {

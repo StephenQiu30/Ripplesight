@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { publicSiteMetadata } from "@/components/publication/site-metadata";
-
 import { getLeaderboardRules } from "@/api/moxingbang";
 import { RulesReading } from "@/app/leaderboard/rules/components/rules-reading";
 import { LeaderboardFailure } from "@/components/leaderboard/reading-parts";
@@ -9,9 +8,7 @@ import { LeaderboardFailure } from "@/components/leaderboard/reading-parts";
 export async function generateMetadata(): Promise<Metadata> {
   let indexable = false;
   try {
-    const data = await getLeaderboardRules({
-      baseURL: process.env.HOTKEY_API_ORIGIN ?? "http://127.0.0.1:8867",
-    });
+    const data = await getLeaderboardRules();
     indexable = Boolean(data.methodology_version && data.budgets.length);
   } catch {
     // Do not index a failed rules read.
@@ -28,9 +25,7 @@ export default async function LeaderboardRulesPage() {
   await connection();
   let data: HotKeyAPI.RulesView;
   try {
-    data = await getLeaderboardRules({
-      baseURL: process.env.HOTKEY_API_ORIGIN ?? "http://127.0.0.1:8867",
-    });
+    data = await getLeaderboardRules();
   } catch (error) {
     return <LeaderboardFailure error={error} href="/leaderboard/rules" />;
   }

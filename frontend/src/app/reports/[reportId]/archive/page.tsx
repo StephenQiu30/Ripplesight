@@ -9,7 +9,6 @@ import { PublicEditionCatalogue } from "@/components/publication/edition-catalog
 import {
   PublicationFailure,
   PublicationNavigation,
-  publicationApiOptions,
 } from "@/components/publication/reading-parts";
 import { publicSiteMetadata } from "@/components/publication/site-metadata";
 const labels = { daily: "日报", weekly: "周报", monthly: "月报" } as const;
@@ -25,10 +24,7 @@ export async function generateMetadata({
   const current = kind((await params).reportId);
   let indexable = false;
   try {
-    const page = await listPublicEditionCatalogue(
-      { kind: current, limit: 20 },
-      publicationApiOptions,
-    );
+    const page = await listPublicEditionCatalogue({ kind: current, limit: 20 });
     indexable =
       page.entries.length > 0 &&
       page.entries.every((entry) => entry.indexable === true);
@@ -48,19 +44,14 @@ export default async function PublicEditionArchive({ params }: Parameters) {
   let initial: HotKeyAPI.PublicEditionCatalogueView;
   let calendar: HotKeyAPI.PublicDailyCalendarView | undefined;
   try {
-    initial = await listPublicEditionCatalogue(
-      { kind: current, limit: 20 },
-      publicationApiOptions,
-    );
+    initial = await listPublicEditionCatalogue({ kind: current, limit: 20 });
     const month =
       initial.entries[0]?.key.slice(0, 7) ??
       new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai" })
         .format(new Date())
         .slice(0, 7);
     calendar =
-      current === "daily"
-        ? await getPublicDailyCalendar({ month }, publicationApiOptions)
-        : undefined;
+      current === "daily" ? await getPublicDailyCalendar({ month }) : undefined;
   } catch (error) {
     return (
       <>

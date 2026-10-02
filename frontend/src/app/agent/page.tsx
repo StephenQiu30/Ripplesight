@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import { connection } from "next/server";
 
 import { getPublicAgentMarkdown } from "@/api/gongkaifenfa";
+import { SelectedSnapshotDownload } from "@/app/agent/components/selected-snapshot-download";
 import {
   PublicationNavigation,
   PublicationFailure,
-  publicationApiOptions,
 } from "@/components/publication/reading-parts";
 
 export const metadata: Metadata = {
@@ -17,7 +17,7 @@ export default async function AgentPage() {
   await connection();
   let instructions: string;
   try {
-    instructions = await getPublicAgentMarkdown(publicationApiOptions);
+    instructions = await getPublicAgentMarkdown();
   } catch (error) {
     return (
       <>
@@ -65,13 +65,7 @@ export default async function AgentPage() {
           <a className="underline" href="/agent.md">
             完整 Markdown 说明
           </a>
-          <a
-            className="underline"
-            href="/api/publication/selected/snapshot"
-            download
-          >
-            精选同步快照
-          </a>
+          <SelectedSnapshotDownload />
         </p>
         <details className="mt-10">
           <summary className="cursor-pointer text-sm font-medium">

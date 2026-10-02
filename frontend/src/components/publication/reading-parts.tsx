@@ -7,10 +7,6 @@ import { PageState } from "@/components/system/page-state";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/request";
 
-export const publicationApiOptions = {
-  baseURL: process.env.HOTKEY_API_ORIGIN ?? "http://127.0.0.1:8867",
-};
-
 export const categories = [
   ["ai-models", "模型"],
   ["ai-products", "产品"],

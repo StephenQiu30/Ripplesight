@@ -5,7 +5,12 @@ import axios, {
   type RawAxiosResponseHeaders,
 } from "axios";
 
-export type RequestOptions = AxiosRequestConfig & {
+export type RequestOptions = Pick<
+  AxiosRequestConfig,
+  "headers" | "signal" | "responseType" | "timeout"
+>;
+
+type TransportRequestOptions = AxiosRequestConfig & {
   requestType?: "form";
 };
 
@@ -140,7 +145,6 @@ export class ApiRequestError extends Error {
 }
 
 const client = axios.create({
-  baseURL: "/",
   timeout: 15_000,
   withCredentials: false,
   headers: {
@@ -173,11 +177,15 @@ client.interceptors.response.use(
 
 export async function request<T>(
   url: string,
-  options: RequestOptions = {},
+  options: TransportRequestOptions = {},
 ): Promise<T> {
   const config = { ...options };
   delete config.requestType;
   const response = await client.request<T>({
+    baseURL:
+      typeof window === "undefined"
+        ? (process.env.HOTKEY_API_ORIGIN ?? "http://127.0.0.1:8867")
+        : "/",
     ...config,
     url,
   });

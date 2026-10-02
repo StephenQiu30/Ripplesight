@@ -5,7 +5,6 @@ import { getPublicTopicDirectory } from "@/api/gongkaifabu";
 import {
   PublicationFailure,
   PublicationNavigation,
-  publicationApiOptions,
 } from "@/components/publication/reading-parts";
 
 export const metadata: Metadata = {
@@ -21,7 +20,7 @@ export default async function PublicTopicsPage() {
   await connection();
   let directory: HotKeyAPI.PublicTopicDirectoryView;
   try {
-    directory = await getPublicTopicDirectory(publicationApiOptions);
+    directory = await getPublicTopicDirectory();
   } catch (error) {
     return (
       <>

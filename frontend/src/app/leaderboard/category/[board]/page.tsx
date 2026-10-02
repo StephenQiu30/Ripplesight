@@ -4,7 +4,6 @@ import { connection } from "next/server";
 
 import { getLeaderboardBoard } from "@/api/moxingbang";
 import { publicSiteMetadata } from "@/components/publication/site-metadata";
-import { publicationApiOptions } from "@/components/publication/reading-parts";
 import { BoardReading } from "@/components/leaderboard/board-reading";
 import { LeaderboardFailure } from "@/components/leaderboard/reading-parts";
 
@@ -25,7 +24,7 @@ export async function generateMetadata({
   )
     return { title: "分类模型榜", robots: { index: false, follow: false } };
   try {
-    const data = await getLeaderboardBoard({ board }, publicationApiOptions);
+    const data = await getLeaderboardBoard({ board });
     return publicSiteMetadata({
       title: `${data.board.name}模型榜`,
       description: data.board.description,
@@ -59,10 +58,11 @@ export default async function CategoryBoardPage({
   const openWeights = search.open_weights === "true";
   let data: HotKeyAPI.BoardView;
   try {
-    data = await getLeaderboardBoard(
-      { board, domestic, open_weights: openWeights },
-      { baseURL: process.env.HOTKEY_API_ORIGIN ?? "http://127.0.0.1:8867" },
-    );
+    data = await getLeaderboardBoard({
+      board,
+      domestic,
+      open_weights: openWeights,
+    });
   } catch (error) {
     return (
       <LeaderboardFailure

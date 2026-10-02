@@ -9,7 +9,6 @@ import {
   PublicItemCards,
   PublicationFailure,
   PublicationNavigation,
-  publicationApiOptions,
 } from "@/components/publication/reading-parts";
 import { Button } from "@/components/ui/button";
 export async function generateMetadata({
@@ -20,8 +19,8 @@ export async function generateMetadata({
   const { slug } = await params;
   try {
     const [page, site] = await Promise.all([
-      getPublicTopicPage({ slug, page: 1 }, publicationApiOptions),
-      getPublicSiteMeta(publicationApiOptions),
+      getPublicTopicPage({ slug, page: 1 }),
+      getPublicSiteMeta(),
     ]);
     return {
       title: page.topic.name,
@@ -59,10 +58,7 @@ export default async function TopicPage({
   const number = raw && /^[1-9][0-9]{0,5}$/.test(raw) ? Number(raw) : 1;
   let page: HotKeyAPI.PublicTopicPageView;
   try {
-    page = await getPublicTopicPage(
-      { slug, page: number },
-      publicationApiOptions,
-    );
+    page = await getPublicTopicPage({ slug, page: number });
   } catch (error) {
     if (error instanceof ApiRequestError && error.status === 404) notFound();
     return (

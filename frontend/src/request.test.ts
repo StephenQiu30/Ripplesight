@@ -13,6 +13,7 @@ const HEADER_REQUEST_ID = "dc7deafc-1f20-4921-87e2-20c221d9c79b";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 function responseAdapter(
@@ -64,6 +65,34 @@ async function captureError(adapter: AxiosAdapter): Promise<ApiRequestError> {
 }
 
 describe("request transport", () => {
+  it.each([
+    {
+      browser: false,
+      origin: "http://backend.test:8080",
+      expected: "http://backend.test:8080",
+    },
+    { browser: false, origin: undefined, expected: "http://127.0.0.1:8867" },
+    { browser: true, origin: "http://backend.test:8080", expected: "/" },
+  ])(
+    "resolves the transport origin for $browser / $origin",
+    async ({ browser, origin, expected }) => {
+      vi.stubGlobal("window", browser ? {} : undefined);
+      vi.stubEnv("HOTKEY_API_ORIGIN", origin);
+      await request("/api/topics", {
+        adapter: async (config) => {
+          expect(config.baseURL).toBe(expected);
+          return {
+            config,
+            data: {},
+            headers: new AxiosHeaders(),
+            status: 200,
+            statusText: "OK",
+          };
+        },
+      });
+    },
+  );
+
   it("uses the Demo write header without reading cookies or credentials", async () => {
     const readCookie = vi.fn(() => "hotkey_csrf=obsolete-session-token");
     vi.stubGlobal("document", {
