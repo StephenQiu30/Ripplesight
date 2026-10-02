@@ -198,7 +198,7 @@ jobs:
 
       - name: Create an isolated runtime account
         run: |
-          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T backend python - <<'PYTHON'
+          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T backend /srv/backend/.venv/bin/python - <<'PYTHON'
           from core.config import get_settings
           from db.session import create_db_engine, create_session_factory
           from identity.services import IdentityService
