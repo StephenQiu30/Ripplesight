@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
+
+import pytest
 
 from api.router import api_router
 from core.errors import ERROR_CATEGORIES, ApplicationError
 
 BACKEND = Path(__file__).resolve().parents[2]
 APP = BACKEND / "app"
+REPOSITORY = BACKEND.parent
 REGISTERED_PACKAGES = {
     "ai",
     "analysis",
@@ -45,6 +49,119 @@ def _imports(path: Path) -> set[str]:
     return names
 
 
+def _sql_files(root: Path) -> set[Path]:
+    generated_directories = {
+        ".git",
+        ".mypy_cache",
+        ".next",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".venv",
+        "__pycache__",
+        "node_modules",
+    }
+    files: set[Path] = set()
+    for directory, subdirectories, filenames in root.walk():
+        subdirectories[:] = [name for name in subdirectories if name not in generated_directories]
+        files.update(directory / name for name in filenames if Path(name).suffix.lower() == ".sql")
+    return files
+
+
+def _orm_ddl_calls(source: str) -> set[str]:
+    forbidden_calls = {
+        "create_all",
+        "drop_all",
+        "CreateTable",
+        "DropTable",
+        "CreateIndex",
+        "DropIndex",
+        "CreateSchema",
+        "DropSchema",
+        "AddConstraint",
+        "DropConstraint",
+        "CreateSequence",
+        "DropSequence",
+        "DDL",
+    }
+    tree = ast.parse(source)
+    aliases = {
+        alias.asname or alias.name: alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("sqlalchemy")
+        for alias in node.names
+    }
+
+    def call_name(node: ast.expr) -> str:
+        if isinstance(node, ast.Attribute):
+            return node.attr
+        if isinstance(node, ast.Name):
+            return aliases.get(node.id, node.id)
+        return ""
+
+    schema_objects: set[str] = set()
+
+    def is_schema_object(node: ast.expr) -> bool:
+        return (
+            (isinstance(node, ast.Name) and node.id in schema_objects)
+            or (isinstance(node, ast.Attribute) and node.attr == "__table__")
+            or (
+                isinstance(node, ast.Subscript)
+                and isinstance(node.value, ast.Attribute)
+                and node.value.attr == "tables"
+            )
+            or (
+                isinstance(node, ast.Call)
+                and call_name(node.func) in {"Table", "Index", "MetaData"}
+            )
+        )
+
+    # Follow local aliases of SQLAlchemy table/index/metadata objects.
+    assignments = [node for node in ast.walk(tree) if isinstance(node, ast.Assign)]
+    for _ in range(len(assignments) + 1):
+        previous = schema_objects.copy()
+        for assignment in assignments:
+            if is_schema_object(assignment.value):
+                schema_objects.update(
+                    target.id for target in assignment.targets if isinstance(target, ast.Name)
+                )
+        if schema_objects == previous:
+            break
+
+    calls: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        name = call_name(node.func)
+        if name in forbidden_calls:
+            calls.add(name)
+        if (
+            name in {"create", "drop"}
+            and isinstance(node.func, ast.Attribute)
+            and is_schema_object(node.func.value)
+        ):
+            calls.add(name)
+        if name in {"text", "execute", "exec_driver_sql"} and node.args:
+            argument = node.args[0]
+            if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
+                query = argument.value
+            elif isinstance(argument, ast.JoinedStr):
+                query = " ".join(
+                    item.value
+                    for item in argument.values
+                    if isinstance(item, ast.Constant) and isinstance(item.value, str)
+                )
+            else:
+                continue
+            if re.search(
+                r"\b(?:CREATE(?:\s+OR\s+REPLACE)?(?:\s+UNIQUE)?|ALTER|DROP)\s+"
+                r"(?:TABLE|INDEX|SCHEMA|EXTENSION|FUNCTION|TRIGGER|TYPE|VIEW|SEQUENCE)\b",
+                query,
+                re.IGNORECASE,
+            ):
+                calls.add("inline DDL")
+    return calls
+
+
 def test_backend_has_no_wrapper_package() -> None:
     assert not (BACKEND / "src").exists()
     assert not (APP / "src").exists()
@@ -80,10 +197,57 @@ def test_public_api_uses_the_single_stable_namespace() -> None:
 
 
 def test_schema_sql_is_the_only_ddl_source() -> None:
-    assert (BACKEND / "database" / "schema.sql").is_file()
+    assert _sql_files(REPOSITORY) == {BACKEND / "database" / "schema.sql"}
     assert not (BACKEND / "alembic.ini").exists()
     assert not (BACKEND / "migrations").exists()
     assert "alembic" not in (BACKEND / "pyproject.toml").read_text().lower()
+
+
+def test_schema_is_a_complete_definition_without_merge_fragments() -> None:
+    source = (BACKEND / "database" / "schema.sql").read_text().lower()
+    comments = "\n".join(line for line in source.splitlines() if line.lstrip().startswith("--"))
+    for marker in (
+        "merge-only fragment",
+        "integration fragment",
+        "review fragment",
+        "draft for root",
+        "generated from",
+        "parent merges",
+        "root merges",
+    ):
+        assert marker not in comments, marker
+
+
+def test_ddl_boundary_rejects_an_additional_sql_file(tmp_path: Path) -> None:
+    schema = tmp_path / "backend" / "database" / "schema.sql"
+    schema.parent.mkdir(parents=True)
+    schema.touch()
+    extra = tmp_path / "backend" / "database" / "patch.sql"
+    extra.touch()
+    assert _sql_files(tmp_path) - {schema} == {extra}
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "Base.metadata.create_all(engine)",
+        "Base.metadata.drop_all(engine)",
+        "CreateTable(Account.__table__)",
+        "sqlalchemy.schema.CreateIndex(index)",
+        "from sqlalchemy.schema import CreateTable as CT\nCT(Account.__table__)",
+        "DDL('CREATE TABLE unexpected (id integer)')",
+        "connection.exec_driver_sql('CREATE TABLE unexpected (id integer)')",
+        "connection.execute(text('ALTER TABLE accounts ADD COLUMN other integer'))",
+        "Account.__table__.create(engine)",
+        "table = Table('accounts', metadata)\nalias = table\nalias.create(engine)",
+        "index = Index('accounts_id', column)\nindex.create(engine)",
+        "connection.exec_driver_sql('CREATE UNIQUE INDEX rogue ON accounts (id)')",
+        "connection.exec_driver_sql('CREATE SEQUENCE rogue')",
+        "CreateSequence(sequence)",
+    ],
+)
+def test_ddl_boundary_rejects_orm_schema_creation(source: str) -> None:
+    assert _orm_ddl_calls(source)
 
 
 def test_every_persistent_domain_registers_its_models() -> None:
@@ -92,10 +256,10 @@ def test_every_persistent_domain_registers_its_models() -> None:
     assert model_modules <= registered_modules
 
 
-def test_runtime_does_not_create_or_drop_schema() -> None:
-    runtime_source = "\n".join(path.read_text() for path in APP.rglob("*.py"))
-    assert ".create_all(" not in runtime_source
-    assert ".drop_all(" not in runtime_source
+def test_application_and_tests_do_not_create_or_drop_schema() -> None:
+    for directory in (APP, BACKEND / "tests"):
+        for path in directory.rglob("*.py"):
+            assert not _orm_ddl_calls(path.read_text()), path
 
 
 def test_routers_do_not_import_persistence_or_service_implementations() -> None:

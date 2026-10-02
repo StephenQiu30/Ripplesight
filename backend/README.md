@@ -31,7 +31,7 @@ uv run --locked python -m cli connections disable-browser-state --owner-id OWNER
 
 ## 数据库结构
 
-`database/schema.sql` 是唯一 DDL 事实源；SQLAlchemy Model 只负责运行时映射。每次数据结构变更必须在同一提交中更新 SQL、Model 与真实 PostgreSQL 验证。
+[`database/schema.sql`](database/schema.sql) 是唯一 DDL 事实源，维护当前完整表、约束和索引；SQLAlchemy Model 只负责运行时映射，不生成第二套结构。应用、测试、CI、Compose 和备份校验均使用该文件；持久化测试不通过 ORM 或 SQLite 建业务表。每次数据结构变更必须在同一提交中更新 SQL、Model，并用真实 PostgreSQL 核对全部映射表的列、类型、可空性和主键。`datetime` 统一映射为 `TIMESTAMPTZ`。
 
 该文件只允许写入新建空库，并自行包含完整事务边界：
 

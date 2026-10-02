@@ -11,6 +11,7 @@ from sqlalchemy import (
     Index,
     LargeBinary,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -192,7 +193,7 @@ class EditorialOverride(Base):
     revision: Mapped[int]
     before: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     after: Mapped[dict[str, Any]] = mapped_column(JSONB)
-    reason: Mapped[str]
+    reason: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 

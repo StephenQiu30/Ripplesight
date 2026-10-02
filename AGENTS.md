@@ -43,7 +43,7 @@
 - Session 不跨线程或任务共享。同步数据库端点使用同步路由；各 API/Worker 进程独立拥有连接池和消息客户端，禁止跨进程继承连接。
 - 业务服务只能直接导入本领域ORM模型；跨领域读取使用所属模块提供的函数/DTO，跨领域原子写显式传入同一Session。禁止为绕过边界建立全局repository或共享models目录。
 - 顶层模块只在当前切片真实创建时登记；architecture测试不得预先白名单未来模块。新增模块必须先以失败测试证明未登记代码会被拒绝。
-- `backend/database/schema.sql` 是唯一数据库 DDL 事实源；SQLAlchemy Model 只负责运行时映射。禁止 Alembic、revision 目录、`metadata.create_all`、应用启动建表和第二份 DDL。
+- `backend/database/schema.sql` 是唯一数据库 DDL 事实源，维护当前完整结构，按依赖顺序定义表及其约束和索引，不追加待合并片段或历史迁移补丁。SQLAlchemy Model 只负责运行时映射；`db/base.py` 统一将 `datetime` 映射为 `TIMESTAMPTZ`。禁止 Alembic、revision 目录、ORM 建表、应用启动建表和第二份 DDL；此边界同样适用于测试，不使用 SQLite 建业务表。架构检查覆盖全仓 SQL 文件与应用/测试的 ORM 建表调用，真实 PostgreSQL 检查覆盖全部映射表的列、类型、可空性和主键。
 - 业务数据库统一为 `hotkey`；宿主机与 Compose 的连接配置必须一致。集成测试使用本机独立 `hotkey_test_<suffix>`，由执行者在成功或失败后删除，禁止使用业务库或长期遗留测试库。恢复验证的 `hotkey_restore_*` 由所属恢复流程清理。
 - Plan 001 的 `monitor_topic_versions` 是关键词组、来源选择和主题请求间隔的不可变采集配置快照；名称与报告/推送偏好不升采集版本。主题恢复前核对已应用搜索预设、当前来源准入/执行策略和预算，旧 Job 不按当前主题投影重释。
 - `schema.sql` 只用于全新空库，文件自身以 `BEGIN`/`COMMIT` 包住完整 DDL；直接 `psql -X --set ON_ERROR_STOP=on -f backend/database/schema.sql`、CI stdin 导入和 Compose 官方 entrypoint 挂载均依赖该文件内事务保证原子性，也可额外使用 `--single-transaction`，但不得以其代替文件内事务。三种入口均须在空库执行并在失败后确认无部分业务表。当前不支持存量库自动就地演进；需要保留数据时先验证备份，再新建数据库、应用完整 Schema 并导入校验后的数据。禁止对旧系统库直接执行。
