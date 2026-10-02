@@ -3,7 +3,6 @@ import { connection } from "next/server";
 
 import { getLeaderboardModel } from "@/api/moxingbang";
 import { publicSiteMetadata } from "@/components/publication/site-metadata";
-import { publicationApiOptions } from "@/components/publication/reading-parts";
 import { ModelReading } from "@/app/leaderboard/models/[slug]/components/model-reading";
 import { LeaderboardFailure } from "@/components/leaderboard/reading-parts";
 
@@ -14,7 +13,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   try {
-    const data = await getLeaderboardModel({ slug }, publicationApiOptions);
+    const data = await getLeaderboardModel({ slug });
     return publicSiteMetadata({
       title: `${data.model.name} · 模型证据`,
       description: `${data.model.name}的公开评测配置、独立证据、排名稳定性与官方价格。`,
@@ -36,10 +35,7 @@ export default async function ModelPage({
   const { slug } = await params;
   let data: HotKeyAPI.ModelDetailView;
   try {
-    data = await getLeaderboardModel(
-      { slug },
-      { baseURL: process.env.HOTKEY_API_ORIGIN ?? "http://127.0.0.1:8867" },
-    );
+    data = await getLeaderboardModel({ slug });
   } catch (error) {
     return (
       <LeaderboardFailure

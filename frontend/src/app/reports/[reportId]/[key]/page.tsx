@@ -7,7 +7,6 @@ import { getPublicEdition } from "@/api/gongkaifabu";
 import {
   PublicationFailure,
   PublicationNavigation,
-  publicationApiOptions,
 } from "@/components/publication/reading-parts";
 import { ApiRequestError } from "@/request";
 import { PublicEditionReader } from "./components/public-edition-reader";
@@ -24,10 +23,10 @@ export async function generateMetadata({
 }: Parameters): Promise<Metadata> {
   const { reportId, key } = await params;
   try {
-    const edition = await getPublicEdition(
-      { kind: editionKind(reportId), key },
-      publicationApiOptions,
-    );
+    const edition = await getPublicEdition({
+      kind: editionKind(reportId),
+      key,
+    });
     return {
       title: edition.title,
       description: edition.lead,
@@ -64,8 +63,8 @@ export default async function PublicEditionPage({ params }: Parameters) {
   let navigation: HotKeyAPI.PublicEditionNavigationView;
   try {
     [edition, navigation] = await Promise.all([
-      getPublicEdition({ kind, key }, publicationApiOptions),
-      getPublicEditionNavigation({ kind, key }, publicationApiOptions),
+      getPublicEdition({ kind, key }),
+      getPublicEditionNavigation({ kind, key }),
     ]);
   } catch (error) {
     if (error instanceof ApiRequestError && error.status === 404) notFound();

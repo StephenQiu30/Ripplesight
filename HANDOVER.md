@@ -10,6 +10,8 @@ Demo 不建立登录、注册、账户或会话。业务读取无需 Cookie，�
 
 HN 新任务要求连接配置匹配当前完整预设；缺少 comment_scan 的配置须显式重新应用预设并产生新版本。已受理任务继续使用其冻结版本，不据当前配置改写历史任务。
 
+前端业务请求统一使用 `@umijs/openapi` 生成的 `src/api/` 和 Axios `src/request.ts`，ESLint 拒绝手写请求及直接传输调用。SSR origin 在传输层统一解析，页面不重复配置；业务选项不能覆盖生成方法、地址或参数。精选快照下载已改用生成函数。
+
 ## 本地运行
 
 业务库统一为 `hotkey`，112 表结构来自完整 schema.sql。本机 API 为 `127.0.0.1:8867`，Web 当前为 `127.0.0.1:3001`；Swagger `/docs`、Scalar `/scalar`、契约 `/openapi.json`。本机 backend/.env 与根 Compose .env 均已指向同一业务库，密钥不入 Git。API 和 Web 已启动；Worker/调度按需单独启动。

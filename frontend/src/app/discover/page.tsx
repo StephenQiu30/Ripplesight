@@ -12,7 +12,6 @@ import {
   PublicItemCards,
   PublicationFailure,
   PublicationNavigation,
-  publicationApiOptions,
 } from "@/components/publication/reading-parts";
 import { PublicTimelineCards } from "@/components/publication/reading-groups";
 import { SavedItems } from "@/components/publication/local-reading";
@@ -29,10 +28,11 @@ export async function generateMetadata({
   let indexable = false;
   if (!Object.values(params).some(Boolean)) {
     try {
-      const page = await getPublicReadingTimeline(
-        { window: "24h", channel: "all", limit: 20 },
-        publicationApiOptions,
-      );
+      const page = await getPublicReadingTimeline({
+        window: "24h",
+        channel: "all",
+        limit: 20,
+      });
       indexable =
         page.cards.length > 0 &&
         page.cards.every((card) => card.item.indexable === true);
@@ -70,42 +70,36 @@ export default async function DiscoverPage({
   let hot: HotKeyAPI.PublicStoriesPage | null = null;
   try {
     if (mode === "selected" && by === "timeline" && !params.q) {
-      timeline = await getPublicReadingTimeline(
-        {
-          window,
-          category,
-          channel: channel ?? "all",
-          source_key: params.source_key || undefined,
-          tag: params.tag || undefined,
-          topic: params.topic || undefined,
-          cursor: params.cursor || undefined,
-          limit: 20,
-        },
-        publicationApiOptions,
-      );
+      timeline = await getPublicReadingTimeline({
+        window,
+        category,
+        channel: channel ?? "all",
+        source_key: params.source_key || undefined,
+        tag: params.tag || undefined,
+        topic: params.topic || undefined,
+        cursor: params.cursor || undefined,
+        limit: 20,
+      });
       page = {
         items: timeline.cards.map((card) => card.item),
         next_cursor: timeline.next_cursor,
         snapshot_at: timeline.snapshot_at,
       };
     } else {
-      page = await listPublicItems(
-        {
-          mode,
-          window,
-          by,
-          category,
-          channel,
-          source_key: params.source_key || undefined,
-          tag: params.tag || undefined,
-          topic: params.topic || undefined,
-          q: params.q || undefined,
-          search_order: params.search_order === "time" ? "time" : "relevance",
-          cursor: params.cursor || undefined,
-          limit: params.q ? 40 : 30,
-        },
-        publicationApiOptions,
-      );
+      page = await listPublicItems({
+        mode,
+        window,
+        by,
+        category,
+        channel,
+        source_key: params.source_key || undefined,
+        tag: params.tag || undefined,
+        topic: params.topic || undefined,
+        q: params.q || undefined,
+        search_order: params.search_order === "time" ? "time" : "relevance",
+        cursor: params.cursor || undefined,
+        limit: params.q ? 40 : 30,
+      });
     }
   } catch (error) {
     return (
@@ -116,7 +110,7 @@ export default async function DiscoverPage({
     );
   }
   try {
-    hot = await getPublicHotStories({ limit: 5 }, publicationApiOptions);
+    hot = await getPublicHotStories({ limit: 5 });
   } catch {
     /* Lists remain independently readable. */
   }

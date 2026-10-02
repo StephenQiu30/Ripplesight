@@ -9,7 +9,6 @@ import {
   PublicationFailure,
   PublicationNavigation,
   PublicItemCards,
-  publicationApiOptions,
   publicationTime,
 } from "@/components/publication/reading-parts";
 
@@ -20,10 +19,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { eventId } = await params;
   try {
-    const story = await getPublicStory(
-      { event_id: eventId },
-      publicationApiOptions,
-    );
+    const story = await getPublicStory({ event_id: eventId });
     return {
       title: story.title,
       description: story.summary,
@@ -59,7 +55,7 @@ export default async function PublicStoryPage({
   const { eventId } = await params;
   let story: HotKeyAPI.PublicStoryView;
   try {
-    story = await getPublicStory({ event_id: eventId }, publicationApiOptions);
+    story = await getPublicStory({ event_id: eventId });
   } catch (error) {
     if (error instanceof ApiRequestError && error.status === 404) notFound();
     return (

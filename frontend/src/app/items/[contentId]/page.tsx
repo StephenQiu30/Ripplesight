@@ -7,7 +7,6 @@ import { getPublicSiteMeta } from "@/api/zhandiziliao";
 import {
   PublicationFailure,
   PublicationNavigation,
-  publicationApiOptions,
 } from "@/components/publication/reading-parts";
 import { ItemReader } from "./components/item-reader";
 import { ApiRequestError } from "@/request";
@@ -20,11 +19,8 @@ export async function generateMetadata({
   const { contentId } = await params;
   let item: HotKeyAPI.PublicItemDetailView;
   try {
-    item = await getSitePublicationItem(
-      { content_id: contentId },
-      publicationApiOptions,
-    );
-    const site = await getPublicSiteMeta(publicationApiOptions);
+    item = await getSitePublicationItem({ content_id: contentId });
+    const site = await getPublicSiteMeta();
     return {
       title: item.title,
       description: item.summary ?? undefined,
@@ -57,10 +53,7 @@ export default async function ItemPage({
   const { contentId } = await params;
   let item: HotKeyAPI.PublicItemDetailView;
   try {
-    item = await getSitePublicationItem(
-      { content_id: contentId },
-      publicationApiOptions,
-    );
+    item = await getSitePublicationItem({ content_id: contentId });
   } catch (error) {
     if (error instanceof ApiRequestError && error.status === 404) notFound();
     return (

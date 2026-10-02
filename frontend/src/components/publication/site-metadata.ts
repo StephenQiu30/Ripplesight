@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { getPublicSiteMeta } from "@/api/zhandiziliao";
-import { publicationApiOptions } from "@/components/publication/reading-parts";
 
 export function publicPageMetadata(
   site: HotKeyAPI.PublicSiteMetaView,
@@ -40,10 +39,7 @@ export async function publicSiteMetadata(
   options: Parameters<typeof publicPageMetadata>[1],
 ): Promise<Metadata> {
   try {
-    return publicPageMetadata(
-      await getPublicSiteMeta(publicationApiOptions),
-      options,
-    );
+    return publicPageMetadata(await getPublicSiteMeta(), options);
   } catch {
     return {
       title: options.title,

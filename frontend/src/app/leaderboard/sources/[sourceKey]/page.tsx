@@ -3,7 +3,6 @@ import { connection } from "next/server";
 
 import { getLeaderboardSource } from "@/api/moxingbang";
 import { publicSiteMetadata } from "@/components/publication/site-metadata";
-import { publicationApiOptions } from "@/components/publication/reading-parts";
 import { SourceReading } from "@/app/leaderboard/sources/[sourceKey]/components/source-reading";
 import { LeaderboardFailure } from "@/components/leaderboard/reading-parts";
 
@@ -14,10 +13,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { sourceKey } = await params;
   try {
-    const data = await getLeaderboardSource(
-      { source_key: sourceKey },
-      publicationApiOptions,
-    );
+    const data = await getLeaderboardSource({ source_key: sourceKey });
     return publicSiteMetadata({
       title: `${data.full_name} · 评测来源`,
       description: data.source.description,
@@ -38,10 +34,7 @@ export default async function LeaderboardSourcePage({
   const { sourceKey } = await params;
   let data: HotKeyAPI.SourceDetailView;
   try {
-    data = await getLeaderboardSource(
-      { source_key: sourceKey },
-      { baseURL: process.env.HOTKEY_API_ORIGIN ?? "http://127.0.0.1:8867" },
-    );
+    data = await getLeaderboardSource({ source_key: sourceKey });
   } catch (error) {
     return (
       <LeaderboardFailure

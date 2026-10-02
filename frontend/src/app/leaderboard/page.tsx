@@ -3,7 +3,6 @@ import { connection } from "next/server";
 
 import { getLeaderboardBoard } from "@/api/moxingbang";
 import { publicSiteMetadata } from "@/components/publication/site-metadata";
-import { publicationApiOptions } from "@/components/publication/reading-parts";
 import { BoardReading } from "@/components/leaderboard/board-reading";
 import { LeaderboardFailure } from "@/components/leaderboard/reading-parts";
 
@@ -14,10 +13,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const search = await searchParams;
   try {
-    const data = await getLeaderboardBoard(
-      { board: "overall" },
-      publicationApiOptions,
-    );
+    const data = await getLeaderboardBoard({ board: "overall" });
     return publicSiteMetadata({
       title: "模型榜",
       description: "查看公开评测共识、证据覆盖、模型价格与来源。",
@@ -41,10 +37,11 @@ export default async function LeaderboardPage({
   const openWeights = params.open_weights === "true";
   let data: HotKeyAPI.BoardView;
   try {
-    data = await getLeaderboardBoard(
-      { board: "overall", domestic, open_weights: openWeights },
-      { baseURL: process.env.HOTKEY_API_ORIGIN ?? "http://127.0.0.1:8867" },
-    );
+    data = await getLeaderboardBoard({
+      board: "overall",
+      domestic,
+      open_weights: openWeights,
+    });
   } catch (error) {
     return <LeaderboardFailure error={error} href="/leaderboard" />;
   }
