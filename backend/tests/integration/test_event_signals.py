@@ -257,7 +257,7 @@ def _semantic(client, monkeypatch, *, vector=(1, 0)):
         )
 
     monkeypatch.setattr("events.embedding_execution.create_embedding_client", embedding_client)
-    now = datetime.now(UTC) + timedelta(seconds=1)
+    now = datetime.now(UTC)
     with factory() as session, session.begin():
         assert (
             EventEmbeddingService(session, settings).enqueue_due_in_transaction(

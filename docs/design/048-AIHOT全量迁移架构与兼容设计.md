@@ -15,7 +15,7 @@ plan: docs/plan/062-AIHOT全量业务迁移执行计划.md
 
 # AIHOT 全量迁移架构与兼容设计
 
-全量范围和技术选择已经由用户确定，见 PRD046。继续使用唯一 Python/FastAPI 模块化后端、Next.js Web、PostgreSQL 事实、Outbox→Kafka、Redis 可重建缓存、既有 MinIO。AIHOT 的 Node/Fastify、pg-boss、React Router、独立 SQL 客户端与手写 OpenAPI 不进入运行时。上游固定 SHA 见 Research049；复制规则/提示词/算法保留完整 MIT 版权与许可文本和来源变更记录。
+全量范围和技术选择已经由用户确定，见 PRD046。继续使用唯一 Python/FastAPI 模块化后端、Next.js Web、PostgreSQL 事实、Outbox→Kafka、Redis 可重建缓存、既有 MinIO。AIHOT 的 Node/Fastify、pg-boss、React Router、独立 SQL 客户端与手写 OpenAPI 不进入运行时。上游固定 SHA 和完整许可见 THIRD_PARTY_NOTICES.md；复制规则/提示词/算法保留完整 MIT 版权与许可文本和来源变更记录。
 
 ## 1. 功能所有权
 
@@ -224,7 +224,7 @@ IndexNow按[官方协议](https://www.indexnow.org/documentation)用POST及根�
 
 `SourceIconService.get/read_in_transaction`只读缓存并重新核当前来源/许可/保留版本、Evidence与固定对象hash；`SourceIconReadingService.read/read_by_source_key`只访问原MinIO，读前后再次核准入。管理三API沿独立operator权限；公开`/api/site/source-icons/{source_key}/{mode}`在缓存准入外还须当前released来源许可，所有图像no-store，撤回返回404，公开列表保留默认SVG fallback。跨域公开投影仅调用callerTX `read_source_icon_urls_in_transaction`（100个来源有界）获取合法avatar48 URL，不新建图标原文或队列，不在GET采集。
 
-真实6h语义回溯通过/embeddings实际向量、同provider/model/维度cosine判断，不使用标题相似度冒充。events持1向量表，ai/adapters/embeddings.py沿原AiService账本接受供应商结构化向量；原Job冻结输入/模型/维度与预算，已保存结果免费恢复、未知付费不重发、当前权限/epoch复核。默认embeddings_enabled与ai_enabled均关闭。
+真实6h语义回溯通过/embeddings实际向量、同provider/model/维度cosine判断，不使用标题相似度冒充。events持1向量表，ai/adapters/embeddings.py沿原AiService账本接受供应商结构化向量；原Job冻结输入/模型/维度与预算，受理使用本轮扫描的同一时间，不混用额外墙钟。已保存结果免费恢复、未知付费不重发、当前权限/epoch复核。默认embeddings_enabled与ai_enabled均关闭。
 
 ## 23. 完整度复核补齐的入口与合同
 

@@ -1,13 +1,15 @@
 # ruff: noqa: F811
+import os
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
 import pytest
 from pydantic import SecretStr
-from sqlalchemy import select
+from sqlalchemy import create_engine, select
+from sqlalchemy.engine import make_url
 from tests.integration.test_content_records import _demo_scope
 from tests.integration.test_event_reading import event_read_client  # noqa: F401
 
@@ -219,19 +221,36 @@ def test_operations_unknown_delivery_is_not_sent_again_and_can_be_operator_resol
         assert budget.used_units == 1 and budget.reserved_units == 0
 
 
+@pytest.fixture
+def restore_database_url() -> Iterator[SecretStr]:
+    source_url = os.getenv("HOTKEY_TEST_DATABASE_URL")
+    if source_url is None:
+        pytest.skip("isolated PostgreSQL test database is required")
+    parsed = make_url(source_url)
+    name = f"hotkey_restore_{uuid4().hex}"
+    engine = create_engine(parsed.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    try:
+        with engine.connect() as connection:
+            connection.exec_driver_sql(f'CREATE DATABASE "{name}"')
+        try:
+            yield SecretStr(parsed.set(database=name).render_as_string(hide_password=False))
+        finally:
+            with engine.connect() as connection:
+                connection.exec_driver_sql(f'DROP DATABASE "{name}"')
+    finally:
+        engine.dispose()
+
+
 def test_backup_and_isolated_restore_verify_real_dump_and_all_registered_tables(
-    event_read_client, tmp_path
+    event_read_client, tmp_path, restore_database_url
 ):
-    restore_path = Path("/tmp/hotkey-aihot-restore-test-database-url")
-    if not restore_path.exists():
-        pytest.skip("independent empty restore maintenance database is required")
     owner = _demo_scope(event_read_client)
     factory = event_read_client.app.state.session_factory
     settings = event_read_client.app.state.settings.model_copy(
         update={
             "operations_maintenance_enabled": True,
             "operations_backup_directory": tmp_path,
-            "operations_restore_database_url": SecretStr(restore_path.read_text().strip()),
+            "operations_restore_database_url": restore_database_url,
         }
     )
     executor = OperationsMaintenanceExecutor(factory, settings)

@@ -201,7 +201,7 @@ def test_preset_versions_snapshot_policy_and_rolls_back_partial_apply(
         )
 
 
-def test_legacy_hn_connection_keeps_search_until_comment_preset_is_reapplied(
+def test_incomplete_hn_connection_requires_current_preset_before_use(
     source_connection_client: TestClient,
 ) -> None:
     owner_id = _demo_scope(source_connection_client)
@@ -218,11 +218,10 @@ def test_legacy_hn_connection_keeps_search_until_comment_preset_is_reapplied(
             {"connection": applied.connection_id},
         )
     with factory.begin() as session:
-        legacy = load_applied_source_presets_in_transaction(
+        unapplied = load_applied_source_presets_in_transaction(
             session, owner_id=owner_id, source_keys=("hackernews",)
-        )["hackernews"]
-        assert legacy.comment_scan_policy is None
-        assert legacy.capabilities == (SourceCapability.SEARCH,)
+        )
+        assert "hackernews" not in unapplied
         reapplied = SourcePresetService(session).apply_in_transaction(
             owner_id=owner_id, preset=SOURCE_PRESETS["hackernews"]
         )
