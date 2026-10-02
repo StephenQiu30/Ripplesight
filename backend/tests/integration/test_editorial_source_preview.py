@@ -435,8 +435,12 @@ def test_preview_http_contract_requires_operator_csrf_and_has_typed_results(engi
     }
     path = "/api/editorial-sources/preview/sample"
     token = {"X-HotKey-Operator-Token": "controlled-preview-token"}
-    headers = {**token, "X-HotKey-CSRF": "1"}
     with TestClient(app) as client:
+        from tests.conftest import authenticate_test_client
+
+        assert client.post(path, json=local).status_code == 401
+        authenticate_test_client(client, owner_id=_owner)
+        headers = {**token, "X-HotKey-CSRF": client.cookies["hotkey_csrf"]}
         assert client.post(path, json=local).status_code == 401
         assert client.post(path, json=local, headers=token).status_code == 403
         complete = client.post(path, json=local, headers=headers)

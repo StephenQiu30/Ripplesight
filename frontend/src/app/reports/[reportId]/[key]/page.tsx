@@ -30,7 +30,7 @@ export async function generateMetadata({
     return {
       title: edition.title,
       description: edition.lead,
-      robots: { index: edition.indexable, follow: edition.indexable },
+      robots: { index: false, follow: false },
       alternates: { canonical: edition.canonical_url ?? undefined },
       openGraph: {
         title: edition.title,

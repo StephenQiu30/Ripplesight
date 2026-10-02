@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRightIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useIdentitySession } from "@/components/auth/session-context";
 import {
   Dialog,
   DialogContent,
@@ -32,6 +33,7 @@ export function UsageGuide({
   onClose,
   onCloseAutoFocus,
 }: UsageGuideProps) {
+  const session = useIdentitySession();
   return (
     <Dialog open={view !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
@@ -88,7 +90,11 @@ export function UsageGuide({
           </div>
         )}
         <Button asChild size="hero">
-          <Link href="/monitors/new">
+          <Link
+            href={
+              session ? "/monitors/new" : "/login?returnTo=%2Fmonitors%2Fnew"
+            }
+          >
             创建关注
             <ArrowRightIcon data-icon="inline-end" />
           </Link>

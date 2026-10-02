@@ -8,7 +8,7 @@ from uuid import UUID
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, text
-from tests.conftest import TEST_DATABASE_TRUNCATE
+from tests.conftest import TEST_DATABASE_TRUNCATE, authenticate_test_client, authenticated_owner_id
 from tests.integration.test_collection_coverage_http import (
     _accepted_job,
     _connection,
@@ -16,7 +16,6 @@ from tests.integration.test_collection_coverage_http import (
 )
 
 from core.config import Settings
-from db.demo import resolve_demo_scope
 from main import create_app
 
 
@@ -37,8 +36,9 @@ def metrics_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[TestClient
     )
     try:
         with TestClient(create_app(settings)) as client:
+            authenticate_test_client(client)
             with client.app.state.session_factory() as session:
-                owner_id = resolve_demo_scope(session)
+                owner_id = authenticated_owner_id(session)
             yield client, engine, owner_id
     finally:
         with engine.begin() as connection:

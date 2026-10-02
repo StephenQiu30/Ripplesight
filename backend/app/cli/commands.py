@@ -20,6 +20,7 @@ from backups.adapters.minio import (
 from backups.adapters.postgres import BackupToolError, PostgresDumpAdapter
 from backups.restore import BackupRestoreError, BackupRestoreService
 from backups.services import BackupError, BackupService
+from cli.identity import identity_app
 from cli.jobs import jobs_app
 from connections.adapters.local_secrets import BrowserStateError, BrowserStateStore
 from connections.presets import SOURCE_PRESETS
@@ -39,7 +40,7 @@ from connections.services import (
 from content.services import ContentObservationCleanup
 from core.config import get_settings
 from core.errors import ApplicationError
-from db.demo import require_demo_partition_match, resolve_demo_scope
+from db.owners import require_owner_id
 from db.session import create_db_engine, create_session_factory
 from evidence.adapters.cache import RedisCacheCleanup
 from evidence.adapters.minio import MinioObjectCleanup
@@ -63,6 +64,7 @@ app.add_typer(lifecycle_app, name="lifecycle")
 app.add_typer(backup_app, name="backup")
 app.add_typer(connections_app, name="connections")
 app.add_typer(jobs_app, name="jobs")
+app.add_typer(identity_app, name="identity")
 app.add_typer(sources_app, name="sources")
 sources_app.add_typer(source_preset_app, name="preset")
 app.add_typer(notifications_app, name="notifications")
@@ -72,17 +74,18 @@ notifications_app.add_typer(notification_target_app, name="target")
 @notification_target_app.command("add")
 def add_notification_target(
     name: Annotated[str, typer.Argument(metavar="NAME")],
+    user_id: Annotated[UUID, typer.Option(help="Account UUID whose resources are maintained.")],
     channel: Annotated[NotificationChannel, typer.Option()] = NotificationChannel.FEISHU,
     secret_env: Annotated[
         str | None, typer.Option(help="Name of a HOTKEY_ secret environment variable.")
     ] = None,
 ) -> None:
-    """Create a named notification target for the Demo business partition."""
+    """Create a named notification target for the explicit account."""
     settings = get_settings()
     engine = create_db_engine(settings)
     session = create_session_factory(engine)()
     try:
-        owner_id = resolve_demo_scope(session)
+        owner_id = require_owner_id(session, user_id)
         target = TargetInput(name=name, channel=channel, secret_env=secret_env)
         with session.begin():
             created = NotificationTargetService(session).add_in_transaction(
@@ -99,13 +102,15 @@ def add_notification_target(
 
 
 @notification_target_app.command("list")
-def list_notification_targets() -> None:
+def list_notification_targets(
+    user_id: Annotated[UUID, typer.Option(help="Account UUID whose resources are maintained.")],
+) -> None:
     """List named targets without displaying credentials."""
     settings = get_settings()
     engine = create_db_engine(settings)
     session = create_session_factory(engine)()
     try:
-        owner_id = resolve_demo_scope(session)
+        owner_id = require_owner_id(session, user_id)
         targets = NotificationTargetService(session).list(owner_id=owner_id)
     except ApplicationError as error:
         typer.echo(f"Notification target list failed: {error.code}", err=True)
@@ -143,8 +148,9 @@ def list_source_presets() -> None:
 @source_preset_app.command("apply")
 def apply_source_preset(
     preset_name: Annotated[str, typer.Argument(metavar="PRESET")],
+    user_id: Annotated[UUID, typer.Option(help="Account UUID whose resources are maintained.")],
 ) -> None:
-    """Atomically apply one built-in source preset for the Demo business partition."""
+    """Atomically apply one built-in source preset for the explicit account."""
     preset = SOURCE_PRESETS.get(preset_name)
     if preset is None:
         typer.echo(f"Source preset apply failed: unknown preset: {preset_name}", err=True)
@@ -154,7 +160,7 @@ def apply_source_preset(
     engine = create_db_engine(settings)
     session = create_session_factory(engine)()
     try:
-        owner_id = resolve_demo_scope(session)
+        owner_id = require_owner_id(session, user_id)
         with session.begin():
             applied = SourcePresetService(session).apply_in_transaction(
                 owner_id=owner_id,
@@ -176,13 +182,15 @@ def apply_source_preset(
 
 
 @sources_app.command("status-bilibili")
-def status_bilibili() -> None:
+def status_bilibili(
+    user_id: Annotated[UUID, typer.Option(help="Account UUID whose resources are maintained.")],
+) -> None:
     """Show the current Bilibili safety stop without exposing local browser data."""
     settings = get_settings()
     engine = create_db_engine(settings)
     session = create_session_factory(engine)()
     try:
-        owner_id = resolve_demo_scope(session)
+        owner_id = require_owner_id(session, user_id)
         platform = next(
             item
             for item in SourceConnectionService(session).list_platforms(owner_id=owner_id)
@@ -204,6 +212,7 @@ def status_bilibili() -> None:
 @sources_app.command("resume-bilibili")
 def resume_bilibili(
     expected_version: Annotated[int, typer.Option(min=1)],
+    user_id: Annotated[UUID, typer.Option(help="Account UUID whose resources are maintained.")],
     owner_reviewed: Annotated[
         bool, typer.Option(help="I reviewed my account and access state.")
     ] = False,
@@ -213,7 +222,7 @@ def resume_bilibili(
     engine = create_db_engine(settings)
     session = create_session_factory(engine)()
     try:
-        owner_id = resolve_demo_scope(session)
+        owner_id = require_owner_id(session, user_id)
         connection = SourceConnectionService(session).update_connection(
             owner_id=owner_id,
             source_key="bilibili",
@@ -323,7 +332,7 @@ def probe_browser() -> None:
 
 @connections_app.command("record-probe")
 def record_source_probe(
-    owner_id: Annotated[UUID, typer.Option(help="Historical Demo partition of the connection.")],
+    owner_id: Annotated[UUID, typer.Option(help="Account UUID of the connection.")],
     connection_id: Annotated[UUID, typer.Option(help="Connection used by the probe.")],
     connection_version: Annotated[int, typer.Option(min=1, help="Version used by the probe.")],
     operation_id: Annotated[UUID, typer.Option(help="Idempotency key for this probe.")],
@@ -358,7 +367,7 @@ def record_source_probe(
     engine = create_db_engine(settings)
     session = create_session_factory(engine)()
     try:
-        require_demo_partition_match(resolve_demo_scope(session), owner_id)
+        require_owner_id(session, owner_id)
         evidence = SourceCapabilityEvidenceService(session).record_probe(
             owner_id=owner_id,
             command=command,
@@ -377,9 +386,7 @@ def record_source_probe(
 
 @connections_app.command("rotate-browser-state")
 def rotate_browser_state(
-    owner_id: Annotated[
-        UUID, typer.Option(help="Historical Demo partition of the browser connection.")
-    ],
+    owner_id: Annotated[UUID, typer.Option(help="Account UUID of the browser connection.")],
     connection_id: Annotated[UUID, typer.Option(help="Existing browser connection to rotate.")],
     expected_version: Annotated[int, typer.Option(min=1, help="Current connection version.")],
     capture_file: Annotated[Path, typer.Option(help="Absolute private Playwright state file.")],
@@ -399,7 +406,7 @@ def rotate_browser_state(
     engine = create_db_engine(settings)
     session = create_session_factory(engine)()
     try:
-        require_demo_partition_match(resolve_demo_scope(session), owner_id)
+        require_owner_id(session, owner_id)
         connection = SourceConnectionService(session).rotate_browser_state(
             owner_id=owner_id,
             connection_id=connection_id,
@@ -418,9 +425,7 @@ def rotate_browser_state(
 
 @connections_app.command("disable-browser-state")
 def disable_browser_state(
-    owner_id: Annotated[
-        UUID, typer.Option(help="Historical Demo partition of the browser connection.")
-    ],
+    owner_id: Annotated[UUID, typer.Option(help="Account UUID of the browser connection.")],
     connection_id: Annotated[UUID, typer.Option(help="Existing browser connection to stop.")],
     expected_version: Annotated[int, typer.Option(min=1, help="Current connection version.")],
 ) -> None:
@@ -429,7 +434,7 @@ def disable_browser_state(
     engine = create_db_engine(settings)
     session = create_session_factory(engine)()
     try:
-        require_demo_partition_match(resolve_demo_scope(session), owner_id)
+        require_owner_id(session, owner_id)
         connection = SourceConnectionService(session).disable_browser_state(
             owner_id=owner_id,
             connection_id=connection_id,

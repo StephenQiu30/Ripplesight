@@ -32,7 +32,9 @@ it("removes both QR images and contact text after current configuration is disab
   await screen.findByAltText("微信二维码");
   expect(screen.getByAltText("飞书二维码")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "重新读取" }));
-  await screen.findByText("维护者尚未启用公开联系资料。你可以使用站内反馈。");
+  await screen.findByText(
+    "维护者尚未启用公开联系资料。登录后可以提交站内反馈。",
+  );
   expect(screen.queryByText("当前联系资料")).toBeNull();
   expect(screen.queryByAltText("微信二维码")).toBeNull();
   expect(screen.queryByAltText("飞书二维码")).toBeNull();

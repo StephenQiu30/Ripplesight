@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Path, Response, status
 
-from api.dependencies import DemoWriteScopeDependency, SourceConnectionServiceDependency
+from api.dependencies import SourceConnectionServiceDependency, UserWriteScopeDependency
 from connections.schemas import SourceConnectionUpdateInput, SourceConnectionView
 from core.schemas import ErrorView
 
@@ -35,7 +35,7 @@ def update_source_connection(
     payload: SourceConnectionUpdateInput,
     response: Response,
     service: SourceConnectionServiceDependency,
-    scope_id: DemoWriteScopeDependency,
+    scope_id: UserWriteScopeDependency,
 ) -> SourceConnectionView:
     view = service.update_connection(owner_id=scope_id, source_key=source_key, command=payload)
     response.headers["cache-control"] = "no-store"

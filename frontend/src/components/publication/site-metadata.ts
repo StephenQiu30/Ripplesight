@@ -12,11 +12,10 @@ export function publicPageMetadata(
   },
 ): Metadata {
   const canonical = new URL(options.path, `${site.public_base_url}/`).href;
-  const index = site.robots_index === true && options.indexable !== false;
   return {
     title: options.title,
     description: options.description,
-    robots: { index, follow: index },
+    robots: { index: false, follow: false },
     alternates: { canonical },
     openGraph: {
       title: options.title,

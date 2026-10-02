@@ -454,7 +454,7 @@ def test_republish_admission_outbox_restart_and_unpublished_completed_material(
         )
 
 
-def test_public_http_mcp_formats_and_operator_permissions_make_no_writes(
+def test_authenticated_http_mcp_formats_and_operator_permissions_make_no_writes(
     editorial_client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -508,7 +508,10 @@ def test_public_http_mcp_formats_and_operator_permissions_make_no_writes(
         assert editorial_client.put("/api/publication/sources/x/policy", json={}).status_code == 403
         assert editorial_client.get("/api/publication/policies").status_code == 403
     assert editorial_client.get("/mcp").status_code == 405
-    headers = {"Accept": "application/json, text/event-stream"}
+    headers = {
+        "Accept": "application/json, text/event-stream",
+        "Origin": editorial_client.app.state.settings.web_base_url,
+    }
     initialized = editorial_client.post(
         "/mcp",
         headers=headers,

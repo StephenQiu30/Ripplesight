@@ -11,6 +11,41 @@ SET LOCAL statement_timeout = '60s';
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
+CREATE TABLE identity_users (
+    id UUID PRIMARY KEY,
+    username VARCHAR(64) NOT NULL UNIQUE,
+    email VARCHAR(254) UNIQUE,
+    github_user_id VARCHAR(32) UNIQUE,
+    password_hash TEXT,
+    credential_version INTEGER NOT NULL DEFAULT 1
+        CONSTRAINT identity_users_credential_version_check CHECK (credential_version >= 1),
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE identity_sessions (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES identity_users(id) ON DELETE CASCADE,
+    token_digest BYTEA NOT NULL UNIQUE
+        CONSTRAINT identity_sessions_token_length CHECK (octet_length(token_digest) = 32),
+    csrf_digest BYTEA NOT NULL
+        CONSTRAINT identity_sessions_csrf_length CHECK (octet_length(csrf_digest) = 32),
+    credential_version INTEGER NOT NULL
+        CONSTRAINT identity_sessions_credential_version CHECK (credential_version >= 1),
+    created_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL
+        CONSTRAINT identity_sessions_expiry CHECK (expires_at > created_at),
+    revoked_at TIMESTAMPTZ,
+    revoked_reason VARCHAR(32),
+    CONSTRAINT identity_sessions_revocation CHECK (
+        (revoked_at IS NULL AND revoked_reason IS NULL)
+        OR (revoked_at IS NOT NULL AND revoked_reason IS NOT NULL)
+    )
+);
+CREATE INDEX identity_sessions_user_id_idx ON identity_sessions(user_id);
+CREATE INDEX identity_sessions_active_expiry_idx ON identity_sessions(expires_at)
+    WHERE revoked_at IS NULL;
+
 CREATE TABLE monitor_topics (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL,

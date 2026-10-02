@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
-from tests.integration.test_content_records import _demo_scope
+from tests.integration.test_content_records import _user_scope
 from tests.integration.test_event_reading import event_read_client  # noqa: F401
 
 from core.errors import ApplicationError
@@ -17,7 +17,7 @@ from operations.services import OperationsService, record_process_heartbeat_in_t
 def test_feedback_idempotence_and_cooldown_are_persistent_and_owner_scoped(
     event_read_client: TestClient,
 ):
-    owner = _demo_scope(event_read_client)
+    owner = _user_scope(event_read_client)
     factory = event_read_client.app.state.session_factory
     command = FeedbackInput(operation_id=uuid4(), content="需要更清楚的原文入口")
     now = datetime.now(UTC)
@@ -56,7 +56,7 @@ def test_feedback_idempotence_and_cooldown_are_persistent_and_owner_scoped(
 
 
 def test_feedback_deletion_ban_and_audit_commit_atomically(event_read_client):
-    owner = _demo_scope(event_read_client)
+    owner = _user_scope(event_read_client)
     factory = event_read_client.app.state.session_factory
     with factory() as session:
         result = OperationsService(session, feedback_secret="controlled-test").submit_feedback(
@@ -97,7 +97,7 @@ def test_feedback_deletion_ban_and_audit_commit_atomically(event_read_client):
 
 
 def test_dictionary_is_versioned_and_revision_conflict_rolls_back_audit(event_read_client):
-    owner = _demo_scope(event_read_client)
+    owner = _user_scope(event_read_client)
     factory = event_read_client.app.state.session_factory
     command = DictionaryInput(
         operation_id=uuid4(),
@@ -122,7 +122,7 @@ def test_dictionary_is_versioned_and_revision_conflict_rolls_back_audit(event_re
 
 
 def test_health_reports_actual_stale_heartbeat_not_a_configured_alive_process(event_read_client):
-    owner = _demo_scope(event_read_client)
+    owner = _user_scope(event_read_client)
     factory = event_read_client.app.state.session_factory
     now = datetime.now(UTC)
     with factory() as session, session.begin():
@@ -144,7 +144,7 @@ def test_health_reports_actual_stale_heartbeat_not_a_configured_alive_process(ev
 
 
 def test_feedback_secret_missing_disables_submit_without_creating_rows(event_read_client):
-    owner = _demo_scope(event_read_client)
+    owner = _user_scope(event_read_client)
     with event_read_client.app.state.session_factory() as session:
         with pytest.raises(ApplicationError, match="feedback_disabled"):
             OperationsService(session).submit_feedback(
@@ -180,7 +180,7 @@ def test_operator_http_requires_independent_token_and_write_csrf(event_read_clie
     assert (
         client.put("/api/operations/dictionaries", headers=headers, json=payload).status_code == 403
     )
-    headers["X-HotKey-CSRF"] = "1"
+    headers["X-HotKey-CSRF"] = event_read_client.cookies["hotkey_csrf"]
     assert (
         client.put("/api/operations/dictionaries", headers=headers, json=payload).status_code == 200
     )
@@ -192,7 +192,7 @@ def test_operator_http_requires_independent_token_and_write_csrf(event_read_clie
     )
     feedback = client.post(
         "/api/feedback",
-        headers={"X-HotKey-CSRF": "1"},
+        headers={"X-HotKey-CSRF": event_read_client.cookies["hotkey_csrf"]},
         json={"operation_id": str(uuid4()), "content": "提交意见"},
     )
     assert feedback.status_code == 201
@@ -203,7 +203,7 @@ def test_operator_http_requires_independent_token_and_write_csrf(event_read_clie
     )
     second = client.post(
         "/api/feedback",
-        headers={"X-HotKey-CSRF": "1"},
+        headers={"X-HotKey-CSRF": event_read_client.cookies["hotkey_csrf"]},
         json={"operation_id": str(uuid4()), "content": "再次提交"},
     )
     assert second.status_code == 429 and 0 < int(second.headers["retry-after"]) <= 60
@@ -213,7 +213,7 @@ def test_operator_budget_cas_updates_real_ledger_and_replay_cannot_raise_twice(e
     from jobs.schemas import BudgetPolicyInput
     from operations.schemas import BudgetUpdateInput
 
-    owner = _demo_scope(event_read_client)
+    owner = _user_scope(event_read_client)
     factory = event_read_client.app.state.session_factory
     command = BudgetUpdateInput(
         operation_id=uuid4(),
@@ -257,7 +257,7 @@ def test_action_audit_history_filters_owner_and_orders_actual_updates(event_read
         list_action_audits_in_transaction,
     )
 
-    owner = _demo_scope(event_read_client)
+    owner = _user_scope(event_read_client)
     factory = event_read_client.app.state.session_factory
     now = datetime.now(UTC)
     with factory() as session, session.begin():

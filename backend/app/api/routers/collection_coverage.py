@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
-from api.dependencies import CollectionCoverageServiceDependency, DemoScopeDependency
+from api.dependencies import CollectionCoverageServiceDependency, UserScopeDependency
 from core.schemas import ErrorView, PageView
 from jobs.schemas import CollectionCoverageMetricsView, CollectionCoverageView
 from sources.contracts import SourceCapability
@@ -36,7 +36,7 @@ _METRICS_ERROR_RESPONSES = {
 def list_collection_coverage(
     response: Response,
     service: CollectionCoverageServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
     start: Annotated[
         datetime,
         Query(description="UTC 到期范围起点 (包含)", examples=["2026-09-27T00:00:00Z"]),
@@ -89,7 +89,7 @@ def list_collection_coverage(
 def get_collection_coverage_metrics(
     response: Response,
     service: CollectionCoverageServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
     start: Annotated[datetime, Query(description="UTC 到期范围起点 (包含)")],
     end: Annotated[datetime, Query(description="UTC 到期范围终点 (不包含); 最多 31 天")],
     source_key: Annotated[str | None, Query(pattern=r"^[a-z][a-z0-9_-]{0,63}$")] = None,
@@ -124,7 +124,7 @@ def get_collection_coverage(
     window_id: UUID,
     response: Response,
     service: CollectionCoverageServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
 ) -> CollectionCoverageView:
     view = service.get_coverage(owner_id=scope_id, window_id=window_id)
     response.headers["cache-control"] = "no-store"

@@ -247,8 +247,8 @@ def test_candidate_backup_uses_real_snapshot_archive_and_minio_inventory(
     from db.metadata import metadata
 
     assert set(table_counts) == set(metadata.tables)
-    assert "identity_users" not in table_counts
-    assert "identity_sessions" not in table_counts
+    assert table_counts["identity_users"] == 0
+    assert table_counts["identity_sessions"] == 0
     assert table_counts["analysis_prompt_activations"] == 0
     assert table_counts["analysis_prompt_runtime_sessions"] == 1
     assert table_counts["monitor_topic_status_events"] == 0

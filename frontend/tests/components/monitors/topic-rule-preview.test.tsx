@@ -162,18 +162,18 @@ describe("persisted rule samples", () => {
       new ApiRequestError({
         kind: "http",
         status: 503,
-        code: "demo_scope_conflict",
-        message: "存在多个历史数据分区，无法读取样本",
-        requestId: "request-demo-scope",
+        code: "database_unavailable",
+        message: "依赖服务暂时不可用，无法读取样本",
+        requestId: "request-dependency",
       }),
     );
     readSamples();
     await waitFor(() => {
       expect(screen.getByRole("alert").textContent).toContain(
-        "存在多个历史数据分区，无法读取样本",
+        "依赖服务暂时不可用，无法读取样本",
       );
       expect(screen.getByRole("alert").textContent).toContain(
-        "request-demo-scope",
+        "request-dependency",
       );
     });
     api.samples.mockResolvedValueOnce(preview);

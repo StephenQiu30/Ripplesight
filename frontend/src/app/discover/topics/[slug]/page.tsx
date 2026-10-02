@@ -25,7 +25,7 @@ export async function generateMetadata({
     return {
       title: page.topic.name,
       description: page.topic.definition,
-      robots: { index: page.topic.indexable, follow: page.topic.indexable },
+      robots: { index: false, follow: false },
       alternates: {
         canonical: `${site.public_base_url}/discover/topics/${encodeURIComponent(slug)}`,
       },

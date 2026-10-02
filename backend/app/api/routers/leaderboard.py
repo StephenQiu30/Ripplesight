@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Path, Response, status
+from fastapi import APIRouter, Depends, Path, Response, status
 
-from api.dependencies import LeaderboardReadServiceDependency
+from api.dependencies import LeaderboardReadServiceDependency, require_identity_session
 from core.schemas import ErrorView
 from leaderboard.schemas import (
     BoardKey,
@@ -15,7 +15,12 @@ from leaderboard.schemas import (
     SourcesView,
 )
 
-router = APIRouter(prefix="/leaderboard", tags=["模型榜"])
+router = APIRouter(
+    dependencies=[Depends(require_identity_session)],
+    responses={401: {"model": ErrorView}},
+    prefix="/leaderboard",
+    tags=["模型榜"],
+)
 
 _READ_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: {"model": ErrorView, "description": "模型、来源或榜单不存在"},

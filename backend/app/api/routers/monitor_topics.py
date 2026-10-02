@@ -7,10 +7,10 @@ from fastapi import APIRouter, Query, Response, status
 
 from api.dependencies import (
     ContentServiceDependency,
-    DemoScopeDependency,
-    DemoWriteScopeDependency,
     MonitorTopicRunServiceDependency,
     MonitorTopicServiceDependency,
+    UserScopeDependency,
+    UserWriteScopeDependency,
 )
 from content.schemas import ContentSamplePreviewInput, ContentSamplePreviewView
 from core.schemas import ErrorView, PageView
@@ -55,7 +55,7 @@ _WRITE_RESPONSES: dict[int | str, dict[str, Any]] = {
 def list_monitor_topics(
     response: Response,
     service: MonitorTopicServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
     include_archived: bool = False,
     cursor: UUID | None = None,
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
@@ -86,7 +86,7 @@ def create_monitor_topic(
     payload: MonitorTopicCreateInput,
     response: Response,
     service: MonitorTopicServiceDependency,
-    scope_id: DemoWriteScopeDependency,
+    scope_id: UserWriteScopeDependency,
 ) -> MonitorTopicView:
     topic = service.create_topic(owner_id=scope_id, command=payload)
     response.headers["location"] = f"/api/topics/{topic.id}"
@@ -107,7 +107,7 @@ def preview_monitor_topic(
     payload: MonitorTopicPreviewInput,
     response: Response,
     service: MonitorTopicServiceDependency,
-    _: DemoWriteScopeDependency,
+    _: UserWriteScopeDependency,
 ) -> MonitorTopicPreviewView:
     preview = service.preview_topic(command=payload)
     response.headers["cache-control"] = "no-store"
@@ -131,7 +131,7 @@ def preview_monitor_topic_samples(
     payload: ContentSamplePreviewInput,
     response: Response,
     service: ContentServiceDependency,
-    scope_id: DemoWriteScopeDependency,
+    scope_id: UserWriteScopeDependency,
 ) -> ContentSamplePreviewView:
     response.headers["cache-control"] = "no-store"
     return service.preview_rule_samples(owner_id=scope_id, command=payload)
@@ -150,7 +150,7 @@ def get_monitor_topic(
     topic_id: UUID,
     response: Response,
     service: MonitorTopicServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
 ) -> MonitorTopicView:
     topic = service.get_topic(owner_id=scope_id, topic_id=topic_id)
     response.headers["cache-control"] = "no-store"
@@ -174,7 +174,7 @@ def update_monitor_topic(
     payload: MonitorTopicUpdateInput,
     response: Response,
     service: MonitorTopicServiceDependency,
-    scope_id: DemoWriteScopeDependency,
+    scope_id: UserWriteScopeDependency,
 ) -> MonitorTopicView:
     topic = service.update_topic(
         owner_id=scope_id,
@@ -198,7 +198,7 @@ def clone_monitor_topic(
     topic_id: UUID,
     response: Response,
     service: MonitorTopicServiceDependency,
-    scope_id: DemoWriteScopeDependency,
+    scope_id: UserWriteScopeDependency,
 ) -> MonitorTopicView:
     topic = service.clone_topic(owner_id=scope_id, topic_id=topic_id)
     response.headers["location"] = f"/api/topics/{topic.id}"
@@ -219,7 +219,7 @@ def pause_monitor_topic(
     topic_id: UUID,
     response: Response,
     service: MonitorTopicServiceDependency,
-    scope_id: DemoWriteScopeDependency,
+    scope_id: UserWriteScopeDependency,
 ) -> MonitorTopicView:
     topic = service.pause_topic(owner_id=scope_id, topic_id=topic_id)
     response.headers["cache-control"] = "no-store"
@@ -239,7 +239,7 @@ def resume_monitor_topic(
     topic_id: UUID,
     response: Response,
     service: MonitorTopicServiceDependency,
-    scope_id: DemoWriteScopeDependency,
+    scope_id: UserWriteScopeDependency,
 ) -> MonitorTopicView:
     topic = service.resume_topic(owner_id=scope_id, topic_id=topic_id)
     response.headers["cache-control"] = "no-store"
@@ -259,7 +259,7 @@ def archive_monitor_topic(
     topic_id: UUID,
     response: Response,
     service: MonitorTopicServiceDependency,
-    scope_id: DemoWriteScopeDependency,
+    scope_id: UserWriteScopeDependency,
 ) -> MonitorTopicView:
     topic = service.archive_topic(owner_id=scope_id, topic_id=topic_id)
     response.headers["cache-control"] = "no-store"
@@ -283,7 +283,7 @@ def run_monitor_topic(
     payload: MonitorTopicRunInput,
     response: Response,
     service: MonitorTopicRunServiceDependency,
-    scope_id: DemoWriteScopeDependency,
+    scope_id: UserWriteScopeDependency,
 ) -> MonitorTopicRunView:
     result = service.run(owner_id=scope_id, topic_id=topic_id, command=payload)
     response.status_code = status.HTTP_200_OK if result.replayed else status.HTTP_202_ACCEPTED

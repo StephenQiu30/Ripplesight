@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session, sessionmaker
+from tests.conftest import authenticate_test_client
 from tests.integration.test_editorial_source_profiles import (
     NOW,
     begin,
@@ -283,7 +284,7 @@ def test_external_http_receipts_authentication_ignore_spoofed_forwarding_and_zer
     engine,
 ):
     with Session(engine, expire_on_commit=False) as session:
-        _, _, profile, _ = configured(session)
+        _, owner, profile, _ = configured(session)
     settings = Settings(
         environment="test",
         database_url=engine.url.render_as_string(hide_password=False),
@@ -293,13 +294,20 @@ def test_external_http_receipts_authentication_ignore_spoofed_forwarding_and_zer
     )
     app = create_app(settings)
     path = f"/api/editorial-sources/{profile.id}/ingest"
-    headers = {"X-HotKey-CSRF": "1", "X-HotKey-Source-Token": TOKEN}
     command = input_for(profile, material())
     with TestClient(app, client=("192.0.2.10", 6200)) as client:
+        assert client.post(path, json=command.model_dump(mode="json")).status_code == 401
+        authenticate_test_client(client, owner_id=owner)
+        headers = {
+            "X-HotKey-CSRF": client.cookies["hotkey_csrf"],
+            "X-HotKey-Source-Token": TOKEN,
+        }
         assert client.post(path, json=command.model_dump(mode="json")).status_code == 403
         assert (
             client.post(
-                path, headers={"X-HotKey-CSRF": "1"}, json=command.model_dump(mode="json")
+                path,
+                headers={"X-HotKey-CSRF": client.cookies["hotkey_csrf"]},
+                json=command.model_dump(mode="json"),
             ).status_code
             == 401
         )

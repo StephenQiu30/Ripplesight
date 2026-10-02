@@ -37,7 +37,7 @@ def account_session() -> Iterator[Session]:
         ],
     )
     session = Session(engine)
-    session.info["demo_scope_id"] = uuid4()
+    session.info["owner_id"] = uuid4()
     try:
         yield session
     finally:
@@ -46,7 +46,7 @@ def account_session() -> Iterator[Session]:
 
 
 def _owner_id(session: Session) -> UUID:
-    return session.info["demo_scope_id"]
+    return session.info["owner_id"]
 
 
 def _without_timezone(value: datetime) -> datetime:

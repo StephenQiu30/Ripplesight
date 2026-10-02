@@ -21,6 +21,7 @@ REGISTERED_PACKAGES = {
     "events",
     "evidence",
     "jobs",
+    "identity",
     "knowledge",
     "leaderboard",
     "monitors",
@@ -173,6 +174,21 @@ def test_ai_adapters_do_not_import_business_or_runtime_layers() -> None:
     }
     for path in adapters:
         assert not {name.split(".")[0] for name in _imports(path)} & forbidden, path
+
+
+def test_identity_adapters_keep_external_verification_separate_from_persistence() -> None:
+    adapters = sorted((APP / "identity" / "adapters").glob("*.py"))
+    assert {path.name for path in adapters} == {
+        "__init__.py",
+        "email.py",
+        "github.py",
+        "verification_store.py",
+    }
+    forbidden = {"api", "db", "worker", "cli", "sqlalchemy", "fastapi", "starlette"}
+    for path in adapters:
+        imports = _imports(path)
+        assert not {name.split(".")[0] for name in imports} & forbidden, path
+        assert not {"identity.models", "identity.services", "core.config"} & imports, path
 
 
 def test_analysis_reads_content_through_domain_contracts() -> None:

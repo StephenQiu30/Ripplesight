@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import content.services as content_services
-from api.dependencies import get_content_service, get_demo_scope
+from api.dependencies import get_content_service, get_user_scope
 from content.services import ContentService
 from core.errors import ApplicationError
 
@@ -49,7 +49,7 @@ def test_content_search_is_documented_and_forwarded_without_runtime_dependencies
         calls.append(kwargs)
         return [], None
 
-    app.dependency_overrides[get_demo_scope] = lambda: owner_id
+    app.dependency_overrides[get_user_scope] = lambda: owner_id
     app.dependency_overrides[get_content_service] = lambda: SimpleNamespace(
         list_contents=list_contents
     )

@@ -4,12 +4,18 @@ import {
   type AxiosAdapter,
   type AxiosResponse,
 } from "axios";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import request, { ApiRequestError } from "@/request";
 
 const BODY_REQUEST_ID = "1d585580-ef30-449a-8716-56c0a015763a";
 const HEADER_REQUEST_ID = "dc7deafc-1f20-4921-87e2-20c221d9c79b";
+const { requestHeaders } = vi.hoisted(() => ({ requestHeaders: vi.fn() }));
+vi.mock("next/headers", () => ({ headers: requestHeaders }));
+
+beforeEach(() => {
+  requestHeaders.mockResolvedValue(new Headers());
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -93,8 +99,11 @@ describe("request transport", () => {
     },
   );
 
-  it("uses the Demo write header without reading cookies or credentials", async () => {
-    const readCookie = vi.fn(() => "hotkey_csrf=obsolete-session-token");
+  it("uses the current browser session CSRF token and credentials for private writes", async () => {
+    vi.stubGlobal("window", {});
+    const readCookie = vi.fn(
+      () => "private=1; hotkey_csrf=current-session-token",
+    );
     vi.stubGlobal("document", {
       get cookie() {
         return readCookie();
@@ -134,10 +143,118 @@ describe("request transport", () => {
       method: "GET",
     });
 
-    expect(mutationHeader).toBe("1");
+    expect(mutationHeader).toBe("current-session-token");
     expect(readHeader).toBeUndefined();
-    expect(readCookie).not.toHaveBeenCalled();
-    expect(credentials).not.toBe(true);
+    expect(readCookie).toHaveBeenCalledOnce();
+    expect(credentials).toBe(true);
+  });
+
+  it.each([
+    "/api/identity/sessions",
+    "/api/identity/email/challenges",
+    "/api/identity/email/sessions",
+    "/api/identity/github/authorize",
+  ])("uses the public login header for %s", async (path) => {
+    vi.stubGlobal("window", {});
+    vi.stubGlobal("document", { cookie: "" });
+    await request(path, {
+      method: "POST",
+      adapter: async (config) => {
+        expect(config.headers.get("X-HotKey-CSRF")).toBe("1");
+        expect(config.withCredentials).toBe(true);
+        return {
+          config,
+          data: {},
+          headers: new AxiosHeaders(),
+          status: 200,
+          statusText: "OK",
+        };
+      },
+    });
+  });
+
+  it("forwards only request-local identity cookies during SSR", async () => {
+    vi.stubGlobal("window", undefined);
+    requestHeaders.mockResolvedValue(
+      new Headers({
+        cookie:
+          "unrelated=secret; hotkey_session=one; hotkey_csrf=csrf-one; hotkey_oauth=binding",
+      }),
+    );
+    await request("/api/topics", {
+      method: "POST",
+      adapter: async (config) => {
+        expect(config.headers.get("Cookie")).toBe(
+          "hotkey_session=one; hotkey_csrf=csrf-one; hotkey_oauth=binding",
+        );
+        expect(config.headers.get("X-HotKey-CSRF")).toBe("csrf-one");
+        return {
+          config,
+          data: {},
+          headers: new AxiosHeaders(),
+          status: 200,
+          statusText: "OK",
+        };
+      },
+    });
+    requestHeaders.mockResolvedValue(
+      new Headers({ cookie: "hotkey_session=two; hotkey_csrf=csrf-two" }),
+    );
+    await request("/api/topics", {
+      adapter: async (config) => {
+        expect(config.headers.get("Cookie")).toBe(
+          "hotkey_session=two; hotkey_csrf=csrf-two",
+        );
+        return {
+          config,
+          data: {},
+          headers: new AxiosHeaders(),
+          status: 200,
+          statusText: "OK",
+        };
+      },
+    });
+  });
+
+  it("binds an authenticated credential email challenge to its current CSRF cookie", async () => {
+    vi.stubGlobal("window", {});
+    vi.stubGlobal("document", { cookie: "hotkey_csrf=current-session-token" });
+    await request("/api/identity/email/challenges", {
+      method: "POST",
+      adapter: async (config) => {
+        expect(config.headers.get("X-HotKey-CSRF")).toBe(
+          "current-session-token",
+        );
+        return {
+          config,
+          data: {},
+          headers: new AxiosHeaders(),
+          status: 200,
+          statusText: "OK",
+        };
+      },
+    });
+  });
+
+  it("gives explicit SSR cookies precedence without leaking other cookies", async () => {
+    vi.stubGlobal("window", undefined);
+    requestHeaders.mockResolvedValue(
+      new Headers({ cookie: "hotkey_session=request-local" }),
+    );
+    await request("/api/identity/session", {
+      headers: { Cookie: "unrelated=secret; hotkey_session=explicit" },
+      adapter: async (config) => {
+        expect(config.headers.get("Cookie")).toBe("hotkey_session=explicit");
+        return {
+          config,
+          data: {},
+          headers: new AxiosHeaders(),
+          status: 200,
+          statusText: "OK",
+        };
+      },
+    });
+    expect(requestHeaders).not.toHaveBeenCalled();
   });
 
   it("reads details and falls back to the body request id", async () => {

@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from minio.error import S3Error
 from PIL import Image
 from sqlalchemy import text
+from tests.conftest import authenticate_test_client
 from tests.integration.test_content_search import _seed_posts
 from tests.integration.test_editorial_execution import (
     NOW,
@@ -153,6 +154,7 @@ def prepared(request, monkeypatch):
             )
         )
     ) as client:
+        authenticate_test_client(client)
         owner, _, posts = _seed_posts(
             client, [("OpenAI new model", "只含文字和官方附件" if metadata_only else rendered_body)]
         )

@@ -10,11 +10,10 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
-from tests.conftest import TEST_DATABASE_TRUNCATE
+from tests.conftest import TEST_DATABASE_TRUNCATE, authenticate_test_client, authenticated_owner_id
 
 from core.config import Settings
 from core.errors import ApplicationError
-from db.demo import resolve_demo_scope
 from jobs.coverage import CollectionCoverageQueryService
 from jobs.schemas import (
     BudgetContext,
@@ -50,8 +49,9 @@ def coverage_client() -> Iterator[tuple[TestClient, Engine, UUID]]:
     )
     try:
         with TestClient(create_app(settings)) as client:
+            authenticate_test_client(client)
             with client.app.state.session_factory() as session:
-                owner_id = resolve_demo_scope(session)
+                owner_id = authenticated_owner_id(session)
             yield client, engine, owner_id
     finally:
         with engine.begin() as connection:

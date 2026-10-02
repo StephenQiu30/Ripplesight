@@ -23,6 +23,15 @@ jobs:
   backend:
     runs-on: ubuntu-latest
     services:
+      redis:
+        image: redis:7.2.16-alpine3.21
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
       postgres:
         image: postgres:17.11-alpine3.23
         env:
@@ -65,6 +74,7 @@ jobs:
       HOTKEY_TEST_DATABASE_URL: postgresql+psycopg://hotkey_test:postgres_test_only@127.0.0.1:5432/hotkey_test_ci
       PGTZ: UTC
       HOTKEY_TEST_KAFKA_BOOTSTRAP_SERVERS: 127.0.0.1:9092
+      HOTKEY_TEST_REDIS_URL: redis://127.0.0.1:6379/0
       HOTKEY_TEST_MINIO_ENDPOINT: 127.0.0.1:9000
       HOTKEY_TEST_MINIO_ACCESS_KEY: hotkey_test
       HOTKEY_TEST_MINIO_SECRET_KEY: hotkey_minio_test_only

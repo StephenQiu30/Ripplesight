@@ -7,13 +7,13 @@ from uuid import UUID
 from fastapi import APIRouter, Query, Response, status
 
 from api.dependencies import (
-    DemoScopeDependency,
-    DemoWriteScopeDependency,
     EventCorrectionServiceDependency,
     EventFactReadServiceDependency,
     EventHeatServiceDependency,
     EventReadServiceDependency,
     OperatorWriteScopeDependency,
+    UserScopeDependency,
+    UserWriteScopeDependency,
 )
 from core.schemas import ErrorView, PageView
 from events.fact_schemas import EventCorrectionInput, EventCorrectionView, EventFactPageView
@@ -48,7 +48,7 @@ def list_related_events(
     event_id: UUID,
     response: Response,
     service: EventReadServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
 ) -> EventRelatedPageView:
     result = service.list_related(owner_id=scope_id, event_id=event_id)
     response.headers["cache-control"] = "no-store"
@@ -76,7 +76,7 @@ def correct_event(
     command: EventCorrectionInput,
     response: Response,
     service: EventCorrectionServiceDependency,
-    scope_id: DemoWriteScopeDependency,
+    scope_id: UserWriteScopeDependency,
 ) -> EventCorrectionView:
     result = service.correct(owner_id=scope_id, actor_id=scope_id, command=command)
     response.headers["cache-control"] = "no-store"
@@ -95,7 +95,7 @@ def correct_event(
 def list_events(
     response: Response,
     service: EventReadServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
     cursor: Annotated[str | None, Query(max_length=512)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     topic_id: UUID | None = None,
@@ -127,7 +127,7 @@ def list_events(
     responses=_READ_RESPONSES,
 )
 def list_attention_sources(
-    response: Response, service: EventHeatServiceDependency, scope_id: DemoScopeDependency
+    response: Response, service: EventHeatServiceDependency, scope_id: UserScopeDependency
 ) -> list[AttentionSourceView]:
     result = service.list_sources(owner_id=scope_id)
     response.headers["cache-control"] = "no-store"
@@ -170,7 +170,7 @@ def upsert_attention_source(
 def list_hot_events(
     response: Response,
     service: EventHeatServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
     topic_id: UUID | None = None,
 ) -> EventHotPageView:
     result = service.list_hot(owner_id=scope_id, topic_id=topic_id)
@@ -194,7 +194,7 @@ def get_event(
     event_id: UUID,
     response: Response,
     service: EventReadServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
 ) -> EventReadView:
     result = service.get_event(owner_id=scope_id, event_id=event_id)
     response.headers["cache-control"] = "no-store"
@@ -220,7 +220,7 @@ def list_event_members(
     event_id: UUID,
     response: Response,
     service: EventReadServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
     revision: Annotated[int | None, Query(ge=1)] = None,
     cursor: Annotated[str | None, Query(max_length=512)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
@@ -252,7 +252,7 @@ def list_event_facts(
     event_id: UUID,
     response: Response,
     service: EventFactReadServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
     revision: Annotated[int | None, Query(ge=1)] = None,
 ) -> EventFactPageView:
     result = service.list_facts(owner_id=scope_id, event_id=event_id, revision=revision)
@@ -272,7 +272,7 @@ def get_event_heat(
     event_id: UUID,
     response: Response,
     service: EventHeatServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
 ) -> EventAttentionView:
     result = service.get_attention(owner_id=scope_id, event_id=event_id)
     response.headers["cache-control"] = "no-store"
@@ -292,7 +292,7 @@ def list_event_heat_history(
     event_id: UUID,
     response: Response,
     service: EventHeatServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
     limit: Annotated[int, Query(ge=1, le=168)] = 48,
 ) -> EventAttentionHistoryView:
     result = service.list_history(owner_id=scope_id, event_id=event_id, limit=limit)

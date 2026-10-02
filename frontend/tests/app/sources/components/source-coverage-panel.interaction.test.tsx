@@ -209,15 +209,15 @@ describe("source coverage interaction", () => {
       new ApiRequestError({
         kind: "http",
         status: 503,
-        code: "demo_scope_conflict",
-        message: "历史数据分区冲突",
-        requestId: "request-demo-scope",
+        code: "database_unavailable",
+        message: "依赖服务暂时不可用",
+        requestId: "request-dependency",
       }),
     );
     const { unmount } = render(<SourceCoveragePanel />);
-    expect(await screen.findByText(/历史数据分区冲突/)).toBeTruthy();
+    expect(await screen.findByText(/依赖服务暂时不可用/)).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toContain(
-      "request-demo-scope",
+      "request-dependency",
     );
     expect(navigation.href).toBe(url("old_source"));
     fireEvent.click(screen.getByRole("button", { name: "重新加载" }));

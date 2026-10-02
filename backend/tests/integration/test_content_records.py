@@ -11,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
-from tests.conftest import TEST_DATABASE_TRUNCATE
+from tests.conftest import TEST_DATABASE_TRUNCATE, authenticate_test_client, authenticated_owner_id
 
 from analysis.prompts import ANALYSIS_PROMPT_VERSION
 from connections.schemas import SourceEntryPoint
@@ -26,7 +26,6 @@ from content.schemas import (
 from content.services import ContentObservationCleanup, ContentService
 from core.config import Settings
 from core.errors import ApplicationError
-from db.demo import resolve_demo_scope
 from evidence.schemas import (
     AdmittedSourcePayload,
     CleanupTargetKind,
@@ -56,6 +55,7 @@ def content_client() -> Iterator[TestClient]:
         connection.execute(text(_TRUNCATE))
     try:
         with TestClient(create_app(settings)) as client:
+            authenticate_test_client(client)
             yield client
     finally:
         with engine.begin() as connection:
@@ -63,9 +63,9 @@ def content_client() -> Iterator[TestClient]:
         engine.dispose()
 
 
-def _demo_scope(client: TestClient) -> UUID:
+def _user_scope(client: TestClient) -> UUID:
     with client.app.state.session_factory() as session:
-        return resolve_demo_scope(session)
+        return authenticated_owner_id(session)
 
 
 def _seed_context(client: TestClient, owner_id: UUID) -> tuple[UUID, UUID, UUID, UUID, UUID]:
@@ -227,7 +227,7 @@ def _command(
 def test_content_versions_preserve_scope_provenance_relations_and_snapshot_time(
     content_client: TestClient,
 ) -> None:
-    owner_id = _demo_scope(content_client)
+    owner_id = _user_scope(content_client)
     connection_id, policy_id, retention_id, first_job_id, second_job_id = _seed_context(
         content_client, owner_id
     )
@@ -347,7 +347,7 @@ def test_content_versions_preserve_scope_provenance_relations_and_snapshot_time(
 def test_edit_and_visibility_history_keep_last_success_across_failures_and_late_data(
     content_client: TestClient,
 ) -> None:
-    owner_id = _demo_scope(content_client)
+    owner_id = _user_scope(content_client)
     connection_id, policy_id, retention_id, job_id, _ = _seed_context(content_client, owner_id)
     base_time = datetime.now(UTC) - timedelta(minutes=10)
     factory = content_client.app.state.session_factory
@@ -466,7 +466,7 @@ def test_edit_and_visibility_history_keep_last_success_across_failures_and_late_
 def test_lifecycle_cleanup_removes_postgres_content_and_blocks_exact_replay(
     content_client: TestClient,
 ) -> None:
-    owner_id = _demo_scope(content_client)
+    owner_id = _user_scope(content_client)
     connection_id, policy_id, retention_id, job_id, _ = _seed_context(content_client, owner_id)
     observed_at = datetime.now(UTC) - timedelta(minutes=1)
     command = _command(
@@ -576,7 +576,7 @@ def test_content_version_contract_rejects_false_or_untraceable_text(
     extra_fields: dict[str, object],
     message: str,
 ) -> None:
-    owner_id = _demo_scope(content_client)
+    owner_id = _user_scope(content_client)
     connection_id, policy_id, retention_id, job_id, _ = _seed_context(content_client, owner_id)
     command = _command(
         owner_id=owner_id,
@@ -599,7 +599,7 @@ def test_content_version_contract_rejects_false_or_untraceable_text(
 def test_content_versions_keep_truncated_media_and_machine_extracted_semantics(
     content_client: TestClient,
 ) -> None:
-    owner_id = _demo_scope(content_client)
+    owner_id = _user_scope(content_client)
     connection_id, policy_id, retention_id, job_id, _ = _seed_context(content_client, owner_id)
     cases = (
         (
@@ -662,7 +662,7 @@ def test_content_versions_keep_truncated_media_and_machine_extracted_semantics(
 def test_same_post_keeps_two_discoveries_zero_unknown_and_idempotent_observations(
     content_client: TestClient,
 ) -> None:
-    owner_id = _demo_scope(content_client)
+    owner_id = _user_scope(content_client)
     connection_id, policy_id, retention_id, first_job_id, second_job_id = _seed_context(
         content_client, owner_id
     )
@@ -740,7 +740,7 @@ def test_same_post_keeps_two_discoveries_zero_unknown_and_idempotent_observation
 def test_connection_changes_preserve_historical_content_and_replay(
     content_client: TestClient, change: str
 ) -> None:
-    owner_id = _demo_scope(content_client)
+    owner_id = _user_scope(content_client)
     connection_id, policy_id, retention_id, job_id, _ = _seed_context(content_client, owner_id)
     command = _command(
         owner_id=owner_id,
@@ -788,7 +788,7 @@ def test_connection_changes_preserve_historical_content_and_replay(
 
 def test_content_reads_enforce_owner_and_lifecycle_boundary(content_client: TestClient) -> None:
     assert content_client.get("/api/contents").status_code == 200
-    owner_id = _demo_scope(content_client)
+    owner_id = _user_scope(content_client)
     connection_id, policy_id, retention_id, job_id, _ = _seed_context(content_client, owner_id)
     command = _command(
         owner_id=owner_id,
@@ -823,7 +823,7 @@ def test_content_reads_enforce_owner_and_lifecycle_boundary(content_client: Test
 def test_detail_reads_annotation_status_by_readable_version_and_current_topic_rule(
     content_client: TestClient,
 ) -> None:
-    owner_id = _demo_scope(content_client)
+    owner_id = _user_scope(content_client)
     connection_id, policy_id, retention_id, first_job_id, second_job_id = _seed_context(
         content_client, owner_id
     )
@@ -991,7 +991,7 @@ def test_detail_reads_annotation_status_by_readable_version_and_current_topic_ru
 def test_content_list_filters_bind_cursor_and_label_discovery_time(
     content_client: TestClient,
 ) -> None:
-    owner_id = _demo_scope(content_client)
+    owner_id = _user_scope(content_client)
     connection_id, policy_id, retention_id, first_job_id, second_job_id = _seed_context(
         content_client, owner_id
     )
@@ -1140,7 +1140,7 @@ def test_content_list_filters_bind_cursor_and_label_discovery_time(
 def test_unavailable_relation_rolls_back_entire_content_write(
     content_client: TestClient, reference: str, code: str
 ) -> None:
-    owner_id = _demo_scope(content_client)
+    owner_id = _user_scope(content_client)
     connection_id, policy_id, retention_id, job_id, _ = _seed_context(content_client, owner_id)
     command = _command(
         owner_id=owner_id,
@@ -1202,7 +1202,7 @@ def test_unavailable_relation_rolls_back_entire_content_write(
 
 
 def test_reference_expansion_rechecks_target_readability(content_client: TestClient) -> None:
-    owner_id = _demo_scope(content_client)
+    owner_id = _user_scope(content_client)
     connection_id, policy_id, retention_id, job_id, _ = _seed_context(content_client, owner_id)
     base = _command(
         owner_id=owner_id,
@@ -1250,7 +1250,7 @@ def test_reference_expansion_rechecks_target_readability(content_client: TestCli
 def test_concurrent_writes_reuse_the_same_native_content_identity(
     content_client: TestClient,
 ) -> None:
-    owner_id = _demo_scope(content_client)
+    owner_id = _user_scope(content_client)
     connection_id, policy_id, retention_id, first_job_id, second_job_id = _seed_context(
         content_client, owner_id
     )
@@ -1461,7 +1461,7 @@ def _thread_rows(client: TestClient, owner_id: UUID) -> dict[str, tuple[str, str
 def test_comments_keep_post_and_parent_links_even_when_reply_arrives_first(
     content_client: TestClient,
 ) -> None:
-    owner_id = _demo_scope(content_client)
+    owner_id = _user_scope(content_client)
     connection_id, *_ = _seed_context(content_client, owner_id)
     policy_id, retention_id, job_id = _seed_comment_context(content_client, owner_id, connection_id)
     factory = content_client.app.state.session_factory
@@ -1521,7 +1521,7 @@ def test_comments_keep_post_and_parent_links_even_when_reply_arrives_first(
 def test_comments_keep_root_reply_target_and_unavailable_parent_gap(
     content_client: TestClient,
 ) -> None:
-    owner_id = _demo_scope(content_client)
+    owner_id = _user_scope(content_client)
     connection_id, *_ = _seed_context(content_client, owner_id)
     policy_id, retention_id, job_id = _seed_comment_context(content_client, owner_id, connection_id)
     factory = content_client.app.state.session_factory
@@ -1608,7 +1608,7 @@ def test_comment_read_pages_keep_missing_root_and_parent_gap(
     content_client: TestClient,
 ) -> None:
     assert content_client.get(f"/api/contents/{uuid4()}/comments").status_code == 404
-    owner_id = _demo_scope(content_client)
+    owner_id = _user_scope(content_client)
     connection_id, policy_id, retention_id, post_job_id, _ = _seed_context(content_client, owner_id)
     comment_policy_id, comment_retention_id, comment_job_id = _seed_comment_context(
         content_client, owner_id, connection_id
@@ -1729,7 +1729,7 @@ def test_comment_read_pages_keep_missing_root_and_parent_gap(
 def test_persisted_rule_preview_is_bounded_local_and_owner_scoped(
     content_client: TestClient,
 ) -> None:
-    owner = _demo_scope(content_client)
+    owner = _user_scope(content_client)
     connection, policy, retention, first_job, second_job = _seed_context(content_client, owner)
     factory = content_client.app.state.session_factory
     now = datetime.now(UTC) - timedelta(minutes=2)
@@ -1807,7 +1807,7 @@ def test_persisted_rule_preview_is_bounded_local_and_owner_scoped(
         "exclude": ["招聘"],
         "source_keys": ["x"],
     }
-    headers = {"X-HotKey-CSRF": "1"}
+    headers = {"X-HotKey-CSRF": content_client.cookies["hotkey_csrf"]}
     response = content_client.post("/api/topics/sample-preview", json=payload, headers=headers)
     assert response.status_code == 200
     result = response.json()
@@ -1865,4 +1865,4 @@ def test_persisted_rule_preview_is_bounded_local_and_owner_scoped(
     empty = content_client.post("/api/topics/sample-preview", json=payload, headers=headers)
     assert empty.json()["sample_status"] == "insufficient_samples" and not empty.json()["samples"]
     content_client.cookies.clear()
-    assert content_client.post("/api/topics/sample-preview", json=payload).status_code == 403
+    assert content_client.post("/api/topics/sample-preview", json=payload).status_code == 401

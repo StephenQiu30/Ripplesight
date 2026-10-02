@@ -9,8 +9,8 @@ from fastapi import APIRouter, Query, Response, status
 from api.dependencies import (
     CommentManualRunServiceDependency,
     ContentServiceDependency,
-    DemoScopeDependency,
-    DemoWriteScopeDependency,
+    UserScopeDependency,
+    UserWriteScopeDependency,
 )
 from content.schemas import (
     CommentManualRunInput,
@@ -48,7 +48,7 @@ _COMMON_READ_RESPONSES: dict[int | str, dict[str, Any]] = {
 def list_content_records(
     response: Response,
     service: ContentServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
     cursor: Annotated[str | None, Query(max_length=512)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     topic_id: UUID | None = None,
@@ -94,7 +94,7 @@ def get_content_record(
     content_id: UUID,
     response: Response,
     service: ContentServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
 ) -> ContentRecordDetailView:
     content = service.get_content(owner_id=scope_id, content_id=content_id)
     response.headers["cache-control"] = "no-store"
@@ -117,7 +117,7 @@ def list_content_comments(
     content_id: UUID,
     response: Response,
     service: ContentServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
     root_id: UUID | None = None,
     parent_id: UUID | None = None,
     cursor: UUID | None = None,
@@ -151,7 +151,7 @@ def get_content_comment_run_readiness(
     content_id: UUID,
     response: Response,
     service: CommentManualRunServiceDependency,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
 ) -> CommentRunReadinessView:
     readiness = service.readiness(owner_id=scope_id, content_id=content_id)
     response.headers["cache-control"] = "no-store"
@@ -180,7 +180,7 @@ def run_content_comments(
     payload: CommentManualRunInput,
     response: Response,
     service: CommentManualRunServiceDependency,
-    scope_id: DemoWriteScopeDependency,
+    scope_id: UserWriteScopeDependency,
 ) -> JobAcceptedView:
     result = service.run(owner_id=scope_id, content_id=content_id, command=payload)
     if result.replayed:

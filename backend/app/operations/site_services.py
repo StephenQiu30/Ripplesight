@@ -136,7 +136,17 @@ class SiteConfigurationService:
         with self.session.begin():
             return _view(self.session.get(SiteConfiguration, owner_id))
 
-    def contact(self, *, owner_id: UUID) -> PublicContactView:
+    def contact(self, *, owner_id: UUID | None) -> PublicContactView:
+        if owner_id is None:
+            return PublicContactView(
+                enabled=False,
+                title=None,
+                text=None,
+                url=None,
+                wechat_qr_url=None,
+                feishu_qr_url=None,
+                revision=0,
+            )
         value = self.get(owner_id=owner_id)
         return PublicContactView(
             enabled=value.contact_enabled,
@@ -148,7 +158,9 @@ class SiteConfigurationService:
             revision=value.revision,
         )
 
-    def image(self, *, owner_id: UUID, sha256: str) -> bytes:
+    def image(self, *, owner_id: UUID | None, sha256: str) -> bytes:
+        if owner_id is None:
+            raise ApplicationError("resource_not_found")
         with self.session.begin():
             row = self.session.get(SiteConfiguration, owner_id)
             if row is None or not row.contact_enabled:

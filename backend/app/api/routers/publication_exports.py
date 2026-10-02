@@ -4,20 +4,25 @@ import hashlib
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Header, Path, Response
+from fastapi import APIRouter, Body, Depends, Header, Path, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from api.dependencies import (
-    DemoScopeDependency,
     PublicationMcpServiceDependency,
     PublicationServiceDependency,
     SiteConfigurationServiceDependency,
+    UserScopeDependency,
+    require_identity_session,
 )
 from core.schemas import ErrorView
 from publication.mcp_schemas import McpResponse
 from publication.schemas import Category, SharePage
 
-router = APIRouter(tags=["公开分发"])
+router = APIRouter(
+    dependencies=[Depends(require_identity_session)],
+    responses={401: {"model": ErrorView}},
+    tags=["公开分发"],
+)
 _EXPORT_ERRORS: dict[int | str, dict[str, Any]] = {
     422: {"model": ErrorView, "description": "输入无效"},
     503: {"model": ErrorView, "description": "读取依赖暂不可用"},
@@ -95,7 +100,7 @@ def page_share_image(
 def item_share_image(
     content_id: UUID,
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
     if_none_match: ImageEtag = None,
 ) -> Response:
     return _png(service.share_item(owner_id=owner_id, content_id=content_id), if_none_match)
@@ -113,7 +118,7 @@ def item_share_image(
 def item_poster_png(
     content_id: UUID,
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
     if_none_match: ImageEtag = None,
 ) -> Response:
     return _png(
@@ -133,7 +138,7 @@ def item_poster_png(
 def story_share_image(
     event_id: UUID,
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
     if_none_match: ImageEtag = None,
 ) -> Response:
     return _png(service.share_story(owner_id=owner_id, event_id=event_id), if_none_match)
@@ -151,7 +156,7 @@ def story_share_image(
 def story_poster_png(
     event_id: UUID,
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
     if_none_match: ImageEtag = None,
 ) -> Response:
     return _png(
@@ -172,7 +177,7 @@ def edition_share_image(
     kind: Literal["daily", "weekly", "monthly"],
     key: Annotated[str, Path(max_length=10)],
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
     if_none_match: ImageEtag = None,
 ) -> Response:
     return _png(service.share_edition(owner_id=owner_id, kind=kind, key=key), if_none_match)
@@ -191,7 +196,7 @@ def edition_poster_png(
     kind: Literal["daily", "weekly", "monthly"],
     key: Annotated[str, Path(max_length=10)],
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
     if_none_match: ImageEtag = None,
 ) -> Response:
     return _png(
@@ -211,7 +216,7 @@ def edition_poster_png(
 def topic_share_image(
     slug: Annotated[str, Path(pattern=r"^[a-z0-9-]{1,80}$")],
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
     if_none_match: ImageEtag = None,
 ) -> Response:
     return _png(service.share_topic(owner_id=owner_id, slug=slug), if_none_match)
@@ -249,7 +254,7 @@ def _xml(content: str, *, media_type: str = "application/rss+xml") -> Response:
     summary="精选摘要RSS",
     responses=_XML_RESPONSE,
 )
-def selected_feed(service: PublicationServiceDependency, owner_id: DemoScopeDependency) -> Response:
+def selected_feed(service: PublicationServiceDependency, owner_id: UserScopeDependency) -> Response:
     return _xml(service.feed(owner_id=owner_id))
 
 
@@ -263,7 +268,7 @@ def selected_feed(service: PublicationServiceDependency, owner_id: DemoScopeDepe
     description="仅明确获准再分发的来源内联正文;其余仍有摘要和站内入口。",
     responses=_XML_RESPONSE,
 )
-def full_feed(service: PublicationServiceDependency, owner_id: DemoScopeDependency) -> Response:
+def full_feed(service: PublicationServiceDependency, owner_id: UserScopeDependency) -> Response:
     return _xml(service.feed(owner_id=owner_id, kind="selected-full"))
 
 
@@ -276,7 +281,7 @@ def full_feed(service: PublicationServiceDependency, owner_id: DemoScopeDependen
     summary="全部公开摘要RSS",
     responses=_XML_RESPONSE,
 )
-def all_feed(service: PublicationServiceDependency, owner_id: DemoScopeDependency) -> Response:
+def all_feed(service: PublicationServiceDependency, owner_id: UserScopeDependency) -> Response:
     return _xml(service.feed(owner_id=owner_id, kind="all"))
 
 
@@ -290,7 +295,7 @@ def all_feed(service: PublicationServiceDependency, owner_id: DemoScopeDependenc
     responses=_XML_RESPONSE,
 )
 def category_feed(
-    category: Category, service: PublicationServiceDependency, owner_id: DemoScopeDependency
+    category: Category, service: PublicationServiceDependency, owner_id: UserScopeDependency
 ) -> Response:
     return _xml(service.feed(owner_id=owner_id, category=category))
 
@@ -305,7 +310,7 @@ def category_feed(
     responses=_XML_RESPONSE,
 )
 def category_full_feed(
-    category: Category, service: PublicationServiceDependency, owner_id: DemoScopeDependency
+    category: Category, service: PublicationServiceDependency, owner_id: UserScopeDependency
 ) -> Response:
     return _xml(service.feed(owner_id=owner_id, category=category, kind="selected-full"))
 
@@ -322,7 +327,7 @@ def category_full_feed(
 def edition_feed(
     kind: Literal["daily", "weekly", "monthly"],
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
 ) -> Response:
     return _xml(service.edition_feed(owner_id=owner_id, kind=kind))
 
@@ -340,7 +345,7 @@ def item_markdown(
     content_id: UUID,
     response: Response,
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
 ) -> str:
     response.headers["cache-control"] = "no-store"
     response.headers["x-robots-tag"] = "noindex, nofollow"
@@ -357,7 +362,7 @@ def item_markdown(
     responses=_EXPORT_ERRORS,
 )
 def selected_markdown(
-    response: Response, service: PublicationServiceDependency, owner_id: DemoScopeDependency
+    response: Response, service: PublicationServiceDependency, owner_id: UserScopeDependency
 ) -> str:
     response.headers["cache-control"] = "no-store"
     response.headers["x-robots-tag"] = "noindex, nofollow"
@@ -378,7 +383,7 @@ def edition_markdown(
     key: str,
     response: Response,
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
 ) -> str:
     response.headers["cache-control"] = "no-store"
     response.headers["x-robots-tag"] = "noindex, nofollow"
@@ -440,7 +445,7 @@ def robots(response: Response, service: PublicationServiceDependency) -> str:
         **_EXPORT_ERRORS,
     },
 )
-def sitemap(service: PublicationServiceDependency, owner_id: DemoScopeDependency) -> Response:
+def sitemap(service: PublicationServiceDependency, owner_id: UserScopeDependency) -> Response:
     return _xml(service.sitemap(owner_id=owner_id), media_type="application/xml")
 
 
@@ -459,7 +464,7 @@ def sitemap(service: PublicationServiceDependency, owner_id: DemoScopeDependency
 def sitemap_shard(
     shard: Annotated[int, Path(ge=0, le=999999)],
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
 ) -> Response:
     return _xml(service.sitemap_shard(owner_id=owner_id, shard=shard), media_type="application/xml")
 
@@ -479,7 +484,7 @@ def sitemap_shard(
 def story_sitemap_shard(
     shard: Annotated[int, Path(ge=0, le=999999)],
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
 ) -> Response:
     return _xml(
         service.sitemap_collection_shard(owner_id=owner_id, collection="stories", shard=shard),
@@ -502,7 +507,7 @@ def story_sitemap_shard(
 def edition_sitemap_shard(
     shard: Annotated[int, Path(ge=0, le=999999)],
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
 ) -> Response:
     return _xml(
         service.sitemap_collection_shard(owner_id=owner_id, collection="reports", shard=shard),
@@ -525,7 +530,7 @@ def edition_sitemap_shard(
 def topic_sitemap_shard(
     shard: Annotated[int, Path(ge=0, le=999999)],
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
 ) -> Response:
     return _xml(
         service.sitemap_collection_shard(owner_id=owner_id, collection="topics", shard=shard),
@@ -546,7 +551,7 @@ def topic_sitemap_shard(
     },
 )
 def jsonld(
-    content_id: UUID, service: PublicationServiceDependency, owner_id: DemoScopeDependency
+    content_id: UUID, service: PublicationServiceDependency, owner_id: UserScopeDependency
 ) -> Response:
     return _xml(
         service.jsonld(owner_id=owner_id, content_id=content_id), media_type="application/ld+json"
@@ -572,7 +577,7 @@ def jsonld(
 def mcp(
     payload: Annotated[dict[str, Any], Body()],
     service: PublicationMcpServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
     origin: Annotated[str | None, Header()] = None,
     accept: Annotated[str, Header()] = "",
     protocol: Annotated[str | None, Header(alias="MCP-Protocol-Version")] = None,
@@ -625,7 +630,7 @@ def mcp_stream() -> Response:
     },
 )
 def item_poster(
-    content_id: UUID, service: PublicationServiceDependency, owner_id: DemoScopeDependency
+    content_id: UUID, service: PublicationServiceDependency, owner_id: UserScopeDependency
 ) -> Response:
     return _xml(
         service.item_poster(owner_id=owner_id, content_id=content_id), media_type="image/svg+xml"
@@ -645,7 +650,7 @@ def item_poster(
     },
 )
 def story_poster(
-    event_id: UUID, service: PublicationServiceDependency, owner_id: DemoScopeDependency
+    event_id: UUID, service: PublicationServiceDependency, owner_id: UserScopeDependency
 ) -> Response:
     return _xml(
         service.story_poster(owner_id=owner_id, event_id=event_id), media_type="image/svg+xml"
@@ -668,7 +673,7 @@ def edition_poster(
     kind: Literal["daily", "weekly", "monthly"],
     key: str,
     service: PublicationServiceDependency,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
 ) -> Response:
     return _xml(
         service.edition_poster(owner_id=owner_id, kind=kind, key=key), media_type="image/svg+xml"

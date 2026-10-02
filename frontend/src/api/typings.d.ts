@@ -784,6 +784,12 @@ declare namespace HotKeyAPI {
     rows: ComparisonRowView[];
   };
 
+  type completeGithubLoginParams = {
+    code?: string | null;
+    state?: string | null;
+    error?: string | null;
+  };
+
   type ContactImageInput = {
     /** Mime */
     mime: "image/png" | "image/jpeg" | "image/webp" | "image/gif";
@@ -1976,6 +1982,20 @@ declare namespace HotKeyAPI {
     tags?: string[] | null;
   };
 
+  type EmailChallengeView = {
+    /** Challenge Id */
+    challenge_id: string;
+    /** Expires At */
+    expires_at: string;
+    /** Resend After Seconds */
+    resend_after_seconds: number;
+  };
+
+  type EmailCodeInput = {
+    /** Email */
+    email: string;
+  };
+
   type ErrorView = {
     /** Code */
     code: string;
@@ -2916,6 +2936,16 @@ declare namespace HotKeyAPI {
       | "image-1600";
   };
 
+  type GithubAuthorizationInput = {
+    /** Return To */
+    return_to?: string;
+  };
+
+  type GithubAuthorizationView = {
+    /** Authorization Url */
+    authorization_url: string;
+  };
+
   type HealthView = {
     /** Status */
     status: "ok" | "ready";
@@ -3012,6 +3042,41 @@ declare namespace HotKeyAPI {
     source_key: string;
     /** Latest Observed At */
     latest_observed_at: string | null;
+  };
+
+  type IdentityCredentialsInput = {
+    /** Username */
+    username: string;
+    /** Password */
+    password: string;
+  };
+
+  type IdentityCredentialsUpdateInput = {
+    /** Username */
+    username: string;
+    /** Password */
+    password: string;
+    /** Current Password */
+    current_password?: string | null;
+    /** Challenge Id */
+    challenge_id?: string | null;
+    /** Code */
+    code?: string | null;
+  };
+
+  type IdentitySessionView = {
+    user: IdentityUserView;
+    /** Expires At */
+    expires_at: string;
+  };
+
+  type IdentityUserView = {
+    /** Id */
+    id: string;
+    /** Username */
+    username: string;
+    /** Email */
+    email: string | null;
   };
 
   type ingestExternalEditorialSourceParams = {
@@ -3380,6 +3445,15 @@ declare namespace HotKeyAPI {
     kind?: ReportKind;
     cursor?: string | null;
     limit?: number;
+  };
+
+  type LoginOptionsView = {
+    /** Password */
+    password: boolean;
+    /** Github */
+    github: boolean;
+    /** Email */
+    email: boolean;
   };
 
   type MaintenanceAcceptedView = {
@@ -6024,6 +6098,13 @@ declare namespace HotKeyAPI {
 
   type VerdictRelation =
     "SAME_OCCURRENCE" | "SAME_STORY" | "UNRELATED" | "ROUNDUP";
+
+  type VerifyEmailCodeInput = {
+    /** Challenge Id */
+    challenge_id: string;
+    /** Code */
+    code: string;
+  };
 
   type WebPageCollectionJobInput = {
     /** Operation Id */

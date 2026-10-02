@@ -926,10 +926,14 @@ def test_relink_http_requires_operator_and_both_cas_and_preserves_original_posts
     )
     path = f"/api/codex-resets/monitors/{monitor}/posts/{source_post.id}/relink"
     with TestClient(app) as client:
+        from tests.conftest import authenticate_test_client
+
+        assert client.post(path, json=command).status_code == 401
+        authenticate_test_client(client, owner_id=owner)
         assert client.post(path, json=command).status_code == 401
         token = {"X-HotKey-Operator-Token": "controlled-route-token"}
         assert client.post(path, json=command, headers=token).status_code == 403
-        headers = {**token, "X-HotKey-CSRF": "1"}
+        headers = {**token, "X-HotKey-CSRF": client.cookies["hotkey_csrf"]}
         bad_pair = client.post(
             path, json={**command, "target_expected_revision": None}, headers=headers
         )

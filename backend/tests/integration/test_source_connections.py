@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
-from tests.conftest import TEST_DATABASE_TRUNCATE
+from tests.conftest import TEST_DATABASE_TRUNCATE, authenticate_test_client, authenticated_owner_id
 from typer.testing import CliRunner
 
 from cli.commands import app as cli_app
@@ -45,7 +45,6 @@ from connections.services import (
 from content.discovery_execution import KeywordDiscoveryExecutor
 from core.config import Settings, get_settings
 from core.errors import ApplicationError
-from db.demo import resolve_demo_scope
 from jobs.schemas import (
     BudgetContext,
     BudgetDecisionStatus,
@@ -79,6 +78,7 @@ def source_connection_client() -> Iterator[TestClient]:
         connection.execute(text(_TRUNCATE))
     try:
         with TestClient(create_app(settings)) as client:
+            authenticate_test_client(client)
             yield client
     finally:
         with engine.begin() as connection:
@@ -86,16 +86,16 @@ def source_connection_client() -> Iterator[TestClient]:
         engine.dispose()
 
 
-def _demo_scope(client: TestClient) -> UUID:
+def _user_scope(client: TestClient) -> UUID:
     with client.app.state.session_factory() as session:
-        return resolve_demo_scope(session)
+        return authenticated_owner_id(session)
 
 
 def test_preset_versions_snapshot_policy_and_rolls_back_partial_apply(
     source_connection_client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    owner_id = _demo_scope(source_connection_client)
+    owner_id = _user_scope(source_connection_client)
     factory = source_connection_client.app.state.session_factory
     original = SOURCE_PRESETS["hackernews"]
     from jobs.services import ResourceBudgetService
@@ -204,7 +204,7 @@ def test_preset_versions_snapshot_policy_and_rolls_back_partial_apply(
 def test_incomplete_hn_connection_requires_current_preset_before_use(
     source_connection_client: TestClient,
 ) -> None:
-    owner_id = _demo_scope(source_connection_client)
+    owner_id = _user_scope(source_connection_client)
     factory = source_connection_client.app.state.session_factory
     with factory.begin() as session:
         applied = SourcePresetService(session).apply_in_transaction(
@@ -238,12 +238,16 @@ def test_public_preset_cli_twice_then_policy_change_keeps_budget_window(
     source_connection_client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    owner_id = _demo_scope(source_connection_client)
+    owner_id = _user_scope(source_connection_client)
     settings = source_connection_client.app.state.settings
     monkeypatch.setattr("cli.commands.get_settings", lambda: settings)
     runner = CliRunner()
-    first = runner.invoke(cli_app, ["sources", "preset", "apply", "hackernews"])
-    repeated = runner.invoke(cli_app, ["sources", "preset", "apply", "hackernews"])
+    first = runner.invoke(
+        cli_app, ["sources", "preset", "apply", "hackernews", "--user-id", str(owner_id)]
+    )
+    repeated = runner.invoke(
+        cli_app, ["sources", "preset", "apply", "hackernews", "--user-id", str(owner_id)]
+    )
     assert first.exit_code == repeated.exit_code == 0
     assert "version: 1" in first.stdout and "version: 1" in repeated.stdout
     assert "secret" not in first.stdout.lower()
@@ -287,7 +291,9 @@ def test_public_preset_cli_twice_then_policy_change_keeps_budget_window(
         ),
     )
     monkeypatch.setattr("cli.commands.SOURCE_PRESETS", {"hackernews": changed})
-    changed_result = runner.invoke(cli_app, ["sources", "preset", "apply", "hackernews"])
+    changed_result = runner.invoke(
+        cli_app, ["sources", "preset", "apply", "hackernews", "--user-id", str(owner_id)]
+    )
     assert changed_result.exit_code == 0
     assert "version: 2" in changed_result.stdout
     assert "secret" not in changed_result.stdout.lower()
@@ -392,11 +398,11 @@ def _monitor_job_command() -> JobAcceptanceInput:
     )
 
 
-def test_capability_catalog_is_anonymous_and_reports_truthful_defaults(
+def test_capability_catalog_is_authenticated_and_reports_truthful_defaults(
     source_connection_client: TestClient,
 ) -> None:
     missing = source_connection_client.get("/api/source-capabilities")
-    _demo_scope(source_connection_client)
+    _user_scope(source_connection_client)
 
     response = source_connection_client.get("/api/source-capabilities")
 
@@ -450,8 +456,8 @@ def test_anonymous_web_connection_versions_without_fabricating_credentials(
     source_connection_client: TestClient,
 ) -> None:
     client = source_connection_client
-    owner_id = _demo_scope(client)
-    headers = {"X-HotKey-CSRF": "1"}
+    owner_id = _user_scope(client)
+    headers = {"X-HotKey-CSRF": source_connection_client.cookies["hotkey_csrf"]}
 
     missing_scope = client.put(
         "/api/source-connections/web",
@@ -545,7 +551,7 @@ def test_anonymous_web_connection_versions_without_fabricating_credentials(
 def test_current_version_persisted_evidence_projects_partial_without_cross_entry_leak(
     source_connection_client: TestClient,
 ) -> None:
-    owner_id = _demo_scope(source_connection_client)
+    owner_id = _user_scope(source_connection_client)
     factory = source_connection_client.app.state.session_factory
     connection_id = _seed_search_connection(source_connection_client, owner_id)
     now = datetime.now(UTC)
@@ -633,7 +639,7 @@ def test_probe_cli_records_check_without_enabling_either_entry(
     source_connection_client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    owner_id = _demo_scope(source_connection_client)
+    owner_id = _user_scope(source_connection_client)
     connection_id = _seed_search_connection(source_connection_client, owner_id)
     operation_id = uuid4()
     database_url = os.environ["HOTKEY_TEST_DATABASE_URL"]
@@ -696,7 +702,7 @@ def test_probe_cli_records_check_without_enabling_either_entry(
 def test_persisted_read_registration_is_idempotent_and_entry_scoped(
     source_connection_client: TestClient,
 ) -> None:
-    owner_id = _demo_scope(source_connection_client)
+    owner_id = _user_scope(source_connection_client)
     connection_id = _seed_search_connection(source_connection_client, owner_id)
     operation_id = uuid4()
     command = PersistedReadEvidenceInput(
@@ -751,7 +757,7 @@ def test_persisted_read_registration_is_idempotent_and_entry_scoped(
 def test_evidence_registration_rejects_another_owners_connection(
     source_connection_client: TestClient,
 ) -> None:
-    owner_id = _demo_scope(source_connection_client)
+    owner_id = _user_scope(source_connection_client)
     connection_id = _seed_search_connection(source_connection_client, owner_id)
     command = PersistedReadEvidenceInput(
         operation_id=uuid4(),
@@ -779,7 +785,7 @@ def test_evidence_registration_rejects_another_owners_connection(
 def test_changed_connection_rejects_late_evidence_but_preserves_replays(
     source_connection_client: TestClient, change: str, kind: str
 ) -> None:
-    owner_id = _demo_scope(source_connection_client)
+    owner_id = _user_scope(source_connection_client)
     connection_id = _seed_search_connection(source_connection_client, owner_id)
     factory = source_connection_client.app.state.session_factory
     command = PersistedReadEvidenceInput(
@@ -858,7 +864,7 @@ def test_changed_connection_rejects_late_evidence_but_preserves_replays(
 def test_evidence_waits_for_connection_lock_and_observes_committed_disable(
     source_connection_client: TestClient,
 ) -> None:
-    owner_id = _demo_scope(source_connection_client)
+    owner_id = _user_scope(source_connection_client)
     connection_id = _seed_search_connection(source_connection_client, owner_id)
     factory = source_connection_client.app.state.session_factory
     command = ProbeEvidenceInput(
@@ -904,9 +910,9 @@ def test_connection_management_requires_csrf_and_server_credentials(
 ) -> None:
     client = source_connection_client
     payload = {"expected_version": 0, "status": "active"}
-    _demo_scope(client)
+    _user_scope(client)
     assert client.put("/api/source-connections/douyin", json=payload).status_code == 403
-    headers = {"X-HotKey-CSRF": "1"}
+    headers = {"X-HotKey-CSRF": source_connection_client.cookies["hotkey_csrf"]}
     missing = client.put("/api/source-connections/douyin", json=payload, headers=headers)
     assert missing.status_code == 409
     assert missing.json()["code"] == "connection_credentials_missing"
@@ -917,8 +923,8 @@ def test_connection_rotation_disable_and_resume_are_versioned_without_secrets(
     source_connection_client: TestClient,
 ) -> None:
     client = source_connection_client
-    owner_id = _demo_scope(client)
-    headers = {"X-HotKey-CSRF": "1"}
+    owner_id = _user_scope(client)
+    headers = {"X-HotKey-CSRF": source_connection_client.cookies["hotkey_csrf"]}
     secret = "controlled-source-credential-for-tests-only"
     client.app.state.settings.source_credentials = {"douyin": SecretStr(secret)}
     payload = {"expected_version": 0, "status": "active"}
@@ -979,9 +985,9 @@ def test_disabled_connection_rejects_new_jobs_without_outbox(
     source_connection_client: TestClient,
 ) -> None:
     client = source_connection_client
-    owner_id = _demo_scope(client)
+    owner_id = _user_scope(client)
     _seed_search_connection(client, owner_id)
-    headers = {"X-HotKey-CSRF": "1"}
+    headers = {"X-HotKey-CSRF": source_connection_client.cookies["hotkey_csrf"]}
     disabled = client.put(
         "/api/source-connections/douyin",
         headers=headers,
@@ -1006,7 +1012,7 @@ def test_connection_auth_failure_propagates_but_capability_denial_is_local(
     reason: SourceStopReason,
 ) -> None:
     client = source_connection_client
-    owner_id = _demo_scope(client)
+    owner_id = _user_scope(client)
     connection_id = _seed_search_connection(client, str(owner_id))
     with client.app.state.session_factory() as session:
         service = SourceCapabilityEvidenceService(session)
@@ -1063,7 +1069,7 @@ def test_concurrent_connection_requests_create_one_version_per_transition(
     source_connection_client: TestClient,
 ) -> None:
     client = source_connection_client
-    owner_id = _demo_scope(client)
+    owner_id = _user_scope(client)
     credentials = {"douyin": SecretStr("controlled-source-credential-for-tests-only")}
 
     def update(expected_version: int, status: SourceConnectionStatus):
@@ -1103,7 +1109,7 @@ def test_bilibili_safety_pause_requires_owner_review_and_records_versions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client = source_connection_client
-    owner_id = _demo_scope(client)
+    owner_id = _user_scope(client)
     trigger_job_id = uuid4()
     factory = client.app.state.session_factory
     with factory.begin() as session:
@@ -1182,15 +1188,22 @@ def test_bilibili_safety_pause_requires_owner_review_and_records_versions(
             connection_id=applied.connection_id,
             connection_version=applied.connection_version,
         )
-    headers = {"X-HotKey-CSRF": "1"}
+    headers = {"X-HotKey-CSRF": source_connection_client.cookies["hotkey_csrf"]}
     monkeypatch.setattr("cli.commands.get_settings", lambda: client.app.state.settings)
     runner = CliRunner()
-    status = runner.invoke(cli_app, ["sources", "status-bilibili"])
+    status = runner.invoke(cli_app, ["sources", "status-bilibili", "--user-id", str(owner_id)])
     assert status.exit_code == 0
     assert "safety reason: rate_limited" in status.stdout
     unconfirmed = runner.invoke(
         cli_app,
-        ["sources", "resume-bilibili", "--expected-version", str(applied.connection_version)],
+        [
+            "sources",
+            "resume-bilibili",
+            "--user-id",
+            str(owner_id),
+            "--expected-version",
+            str(applied.connection_version),
+        ],
     )
     assert unconfirmed.exit_code == 1
     assert "connection_owner_confirmation_required" in unconfirmed.output
@@ -1250,6 +1263,8 @@ def test_bilibili_safety_pause_requires_owner_review_and_records_versions(
         [
             "sources",
             "resume-bilibili",
+            "--user-id",
+            str(owner_id),
             "--expected-version",
             str(applied.connection_version + 1),
             "--owner-reviewed",
@@ -1263,9 +1278,9 @@ def test_disabled_connection_rejects_manual_retry_of_historical_job(
     source_connection_client: TestClient,
 ) -> None:
     client = source_connection_client
-    owner_id = _demo_scope(client)
+    owner_id = _user_scope(client)
     _seed_search_connection(client, owner_id)
-    headers = {"X-HotKey-CSRF": "1"}
+    headers = {"X-HotKey-CSRF": source_connection_client.cookies["hotkey_csrf"]}
     with client.app.state.session_factory() as session:
         job = JobService(session).accept(owner_id=owner_id, command=_monitor_job_command())
     job_id = job.id
@@ -1299,7 +1314,7 @@ def test_browser_state_execution_requires_current_active_authenticated_version(
     source_connection_client: TestClient, tmp_path: Path
 ) -> None:
     client = source_connection_client
-    owner_id = _demo_scope(client)
+    owner_id = _user_scope(client)
     connection_id = uuid4()
     root = tmp_path / "browser-states"
     root.mkdir(mode=0o700)
@@ -1441,7 +1456,7 @@ def test_browser_state_maintenance_rotates_disables_and_requires_new_capture(
     source_connection_client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     client = source_connection_client
-    owner_id = _demo_scope(client)
+    owner_id = _user_scope(client)
     connection_id = uuid4()
     root = tmp_path / "browser-states"
     root.mkdir(mode=0o700)

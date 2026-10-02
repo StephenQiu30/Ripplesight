@@ -1,18 +1,24 @@
-import type { Metadata } from "next";
 import { connection } from "next/server";
 import { InformationPage } from "@/components/site/information-page";
+import { welcomeMetadata } from "@/components/site/welcome-metadata";
 
-export const metadata: Metadata = {
-  title: "隐私与本机数据",
-  robots: { index: false, follow: false },
-};
+export const metadata = welcomeMetadata(
+  "/privacy",
+  "隐私与本机数据",
+  "了解账户、登录会话、本机阅读记录与反馈资料的保存方式。",
+);
 export default async function PrivacyPage() {
   await connection();
   return (
     <InformationPage title="隐私与本机数据">
       <p>
-        当前 Demo
-        不建立产品账户、登录会话或第三方登录。来源凭据和运营令牌有独立用途；运营令牌仅保存在当前页面内存。
+        账号密码、GitHub
+        和邮箱验证码登录使用同一账户会话。密码只保存哈希，登录会话通过 HttpOnly
+        Cookie 保存；GitHub
+        授权用于核对身份，邮箱验证码有有效期与使用次数限制，不用于订阅或报告投递。
+      </p>
+      <p>
+        个人关注和任务按账户区分。退出会撤销当前登录会话；修改登录凭据会撤销已有会话，需重新登录。来源凭据和独立运营令牌用于相应业务，不作为个人登录密码。
       </p>
       <p>
         收藏、已读、阅读位置、笔记及反馈草稿保存在当前浏览器。清除浏览器站点数据会删除这些记录；它们不自动同步到其他设备。导入导出只包含页面声明的本机字段，不包含原始全文或服务端凭据。

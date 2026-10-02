@@ -8,7 +8,8 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
-from tests.integration.test_content_records import _command, _demo_scope, _seed_context
+from tests.conftest import authenticate_test_client
+from tests.integration.test_content_records import _command, _seed_context, _user_scope
 
 from content.event_reading import load_event_member_content_in_transaction
 from content.schemas import ContentRecordSummaryView, EventContentReadReference
@@ -28,13 +29,14 @@ def event_read_client() -> Iterator[TestClient]:
     with TestClient(
         create_app(Settings(environment="test", log_level="WARNING", database_url=database_url))
     ) as client:
+        authenticate_test_client(client)
         yield client
 
 
 def _seed_reading(
     client: TestClient,
 ) -> tuple[UUID, UUID, UUID, ContentRecordSummaryView, ContentRecordSummaryView]:
-    owner = _demo_scope(client)
+    owner = _user_scope(client)
     connection, policy, retention, first_job, second_job = _seed_context(client, owner)
     now = datetime.now(UTC) - timedelta(minutes=3)
     factory = client.app.state.session_factory

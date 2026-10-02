@@ -70,7 +70,7 @@ export function ContactPanel() {
           )}
         </>
       ) : (
-        <p>维护者尚未启用公开联系资料。你可以使用站内反馈。</p>
+        <p>维护者尚未启用公开联系资料。登录后可以提交站内反馈。</p>
       )}
       <div className="flex flex-wrap gap-5">
         <Button
@@ -80,7 +80,7 @@ export function ContactPanel() {
           重新读取
         </Button>
         <Button variant="ghost" asChild>
-          <Link href="/feedback">提交反馈</Link>
+          <Link href="/feedback">登录后提交反馈</Link>
         </Button>
       </div>
     </section>

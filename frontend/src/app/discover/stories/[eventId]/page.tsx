@@ -23,7 +23,7 @@ export async function generateMetadata({
     return {
       title: story.title,
       description: story.summary,
-      robots: { index: story.indexable, follow: story.indexable },
+      robots: { index: false, follow: false },
       alternates: { canonical: story.canonical_url ?? undefined },
       openGraph: {
         title: story.title,

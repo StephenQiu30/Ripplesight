@@ -2,7 +2,7 @@
 from uuid import uuid4
 
 import pytest
-from tests.integration.test_content_records import _demo_scope
+from tests.integration.test_content_records import _user_scope
 from tests.integration.test_event_reading import event_read_client  # noqa: F401
 
 from analysis.evaluation_schemas import SelectBenchImportInput
@@ -11,7 +11,7 @@ from core.errors import ApplicationError
 
 
 def test_selectbench_persists_same_gold_recomputes_and_filters_disagreements(event_read_client):
-    owner = _demo_scope(event_read_client)
+    owner = _user_scope(event_read_client)
     factory = event_read_client.app.state.session_factory
     cases = [
         {

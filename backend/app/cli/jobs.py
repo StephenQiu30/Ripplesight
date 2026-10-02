@@ -13,7 +13,7 @@ from ai.services import AI_COMPONENT_KEY
 from analysis.services import build_analysis_need_ledger_in_transaction
 from core.config import get_settings
 from core.errors import ApplicationError
-from db.demo import require_demo_partition_match, resolve_demo_scope
+from db.owners import require_owner_id
 from db.session import create_db_engine, create_session_factory
 from jobs.coverage import CollectionCoverageQueryService
 from jobs.schemas import (
@@ -31,9 +31,7 @@ jobs_app = typer.Typer(no_args_is_help=True)
 
 @jobs_app.command("analysis-need-ledger")
 def analysis_need_ledger(
-    owner_id: Annotated[
-        UUID, typer.Option(help="Historical Demo partition whose candidates are audited.")
-    ],
+    owner_id: Annotated[UUID, typer.Option(help="Account UUID whose candidates are audited.")],
     start: Annotated[str, typer.Option(help="UTC analysis-need start (inclusive).")],
     end: Annotated[str, typer.Option(help="UTC analysis-need end (exclusive).")],
     cutoff: Annotated[str, typer.Option(help="UTC observation cutoff, at or after end.")],
@@ -45,7 +43,7 @@ def analysis_need_ledger(
     engine = create_db_engine(get_settings())
     try:
         with create_session_factory(engine)() as session:
-            require_demo_partition_match(resolve_demo_scope(session), owner_id)
+            require_owner_id(session, owner_id)
             with session.begin():
                 session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
                 try:
@@ -70,9 +68,7 @@ def analysis_need_ledger(
 
 @jobs_app.command("coverage-metrics")
 def coverage_metrics(
-    owner_id: Annotated[
-        UUID, typer.Option(help="Historical Demo partition whose sources are measured.")
-    ],
+    owner_id: Annotated[UUID, typer.Option(help="Account UUID whose sources are measured.")],
     start: Annotated[str, typer.Option(help="UTC ISO 8601 due-window start (inclusive).")],
     end: Annotated[str, typer.Option(help="UTC ISO 8601 due-window end (exclusive).")],
     source_key: Annotated[str | None, typer.Option(help="Optional source key.")] = None,
@@ -81,14 +77,14 @@ def coverage_metrics(
     ] = None,
     topic_id: Annotated[UUID | None, typer.Option(help="Optional topic ID.")] = None,
 ) -> None:
-    """Print the same Demo-partition metric DTO as GET /collection-coverage/metrics."""
+    """Print the same account metric DTO as GET /collection-coverage/metrics."""
     start_at = _parse_utc_datetime(start, option="--start")
     end_at = _parse_utc_datetime(end, option="--end")
     settings = get_settings()
     engine = create_db_engine(settings)
     try:
         with create_session_factory(engine)() as session:
-            require_demo_partition_match(resolve_demo_scope(session), owner_id)
+            require_owner_id(session, owner_id)
             try:
                 result = CollectionCoverageQueryService(
                     session, hotlist_interval_seconds=settings.hotlist_interval_seconds
@@ -124,6 +120,7 @@ def _parse_utc_datetime(value: str, *, option: str) -> datetime:
 
 @jobs_app.command("reliability-snapshot")
 def reliability_snapshot(
+    user_id: Annotated[UUID, typer.Option(help="Account UUID whose resources are maintained.")],
     window_start: Annotated[
         str,
         typer.Option(help="ISO 8601 observation-window start, including timezone."),
@@ -143,7 +140,7 @@ def reliability_snapshot(
     try:
         sessions = create_session_factory(engine)
         with sessions() as session:
-            owner_id = resolve_demo_scope(session)
+            owner_id = require_owner_id(session, user_id)
             snapshot = JobObservationService(session).reliability_snapshot(
                 owner_id=owner_id,
                 window_start=start,
@@ -167,6 +164,7 @@ _DAY_SECONDS = 86_400
 
 @jobs_app.command("budget-baseline")
 def budget_baseline(
+    user_id: Annotated[UUID, typer.Option(help="Account UUID whose resources are maintained.")],
     network_daily: Annotated[
         int, typer.Option(min=1, help="Global daily cap on outbound source requests.")
     ] = 5_000,
@@ -182,7 +180,7 @@ def budget_baseline(
     engine = create_db_engine(settings)
     session = create_session_factory(engine)()
     try:
-        owner_id = resolve_demo_scope(session)
+        owner_id = require_owner_id(session, user_id)
         with session.begin():
             budgets = ResourceBudgetService(session)
             for budget_key, metric, limit_units in (

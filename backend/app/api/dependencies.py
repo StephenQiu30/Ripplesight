@@ -5,7 +5,8 @@ from hmac import compare_digest
 from typing import Annotated, cast
 from uuid import UUID
 
-from fastapi import Depends, Header, Request
+from fastapi import Cookie, Depends, Header, Request, Response, Security
+from fastapi.security import APIKeyCookie
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
@@ -22,11 +23,12 @@ from content.comments import CommentManualRunService
 from content.hotlist import HotlistService
 from content.services import ContentService
 from core.errors import ApplicationError, DependencyUnavailableError
-from db.demo import resolve_demo_scope
 from events.corrections import EventCorrectionService
 from events.facts import EventFactReadService
 from events.heat import EventHeatService
 from events.reads import EventReadService
+from identity.services import AuthenticatedIdentity, IdentityService
+from identity.services import CreatedIdentitySession as CreatedIdentitySession
 from jobs.coverage import CollectionCoverageQueryService
 from jobs.services import JobService
 from leaderboard.reads import LeaderboardReadService
@@ -425,28 +427,78 @@ def get_codex_reset_service(request: Request, session: SessionDependency) -> Cod
 CodexResetServiceDependency = Annotated[CodexResetService, Depends(get_codex_reset_service)]
 
 
-def get_demo_scope(session: SessionDependency) -> UUID:
-    return resolve_demo_scope(session)
+def get_identity_service(request: Request, session: SessionDependency) -> IdentityService:
+    return IdentityService(
+        session,
+        request.app.state.settings,
+        verification=request.app.state.identity_verification,
+        github=request.app.state.identity_github,
+        email=request.app.state.identity_email,
+    )
 
 
-DemoScopeDependency = Annotated[UUID, Depends(get_demo_scope)]
+IdentityServiceDependency = Annotated[IdentityService, Depends(get_identity_service)]
+_SESSION_COOKIE = APIKeyCookie(name="hotkey_session", scheme_name="SessionCookie", auto_error=False)
 
 
-def get_demo_write_scope(
-    scope_id: DemoScopeDependency,
-    csrf_header: Annotated[str | None, Header(alias="X-HotKey-CSRF")] = None,
-) -> UUID:
-    if csrf_header != "1":
+def require_identity_session(
+    service: IdentityServiceDependency,
+    response: Response,
+    token: Annotated[str | None, Security(_SESSION_COOKIE)],
+) -> AuthenticatedIdentity:
+    response.headers["cache-control"] = "no-store"
+    return service.authenticate(token)
+
+
+AuthenticatedIdentityDependency = Annotated[
+    AuthenticatedIdentity, Depends(require_identity_session)
+]
+
+
+def require_same_origin(request: Request) -> None:
+    if request.headers.get("origin") != request.app.state.settings.web_origin:
         raise ApplicationError("csrf_invalid")
-    return scope_id
 
 
-DemoWriteScopeDependency = Annotated[UUID, Depends(get_demo_write_scope)]
+def require_identity_csrf(
+    request: Request,
+    service: IdentityServiceDependency,
+    identity: AuthenticatedIdentityDependency,
+    cookie: Annotated[str | None, Cookie(alias="hotkey_csrf", include_in_schema=False)] = None,
+    header: Annotated[str | None, Header(alias="X-HotKey-CSRF")] = None,
+) -> AuthenticatedIdentity:
+    require_same_origin(request)
+    service.validate_csrf(identity, cookie=cookie, header=header)
+    return identity
+
+
+CsrfProtectedIdentityDependency = Annotated[AuthenticatedIdentity, Depends(require_identity_csrf)]
+
+
+def get_user_scope(identity: AuthenticatedIdentityDependency) -> UUID:
+    return identity.view.user.id
+
+
+UserScopeDependency = Annotated[UUID, Depends(get_user_scope)]
+
+
+def get_user_write_scope(identity: CsrfProtectedIdentityDependency) -> UUID:
+    return identity.view.user.id
+
+
+UserWriteScopeDependency = Annotated[UUID, Depends(get_user_write_scope)]
+
+
+def get_public_contact_scope(request: Request) -> UUID | None:
+    return cast(UUID | None, request.app.state.settings.public_contact_owner_id)
+
+
+PublicContactScopeDependency = Annotated[UUID | None, Depends(get_public_contact_scope)]
 
 
 def get_operator_scope(
     request: Request,
-    scope_id: DemoScopeDependency,
+    scope_id: UserScopeDependency,
     token: Annotated[str | None, Header(alias="X-HotKey-Operator-Token")] = None,
 ) -> UUID:
     secret = request.app.state.settings.operator_token
@@ -462,10 +514,8 @@ OperatorScopeDependency = Annotated[UUID, Depends(get_operator_scope)]
 
 def get_operator_write_scope(
     scope_id: OperatorScopeDependency,
-    csrf_header: Annotated[str | None, Header(alias="X-HotKey-CSRF")] = None,
+    identity: CsrfProtectedIdentityDependency,
 ) -> UUID:
-    if csrf_header != "1":
-        raise ApplicationError("csrf_invalid")
     return scope_id
 
 

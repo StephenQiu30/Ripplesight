@@ -6,11 +6,11 @@ from uuid import UUID
 from fastapi import APIRouter, Path, Response
 
 from api.dependencies import (
-    DemoScopeDependency,
     OperatorScopeDependency,
     OperatorWriteScopeDependency,
     PublicationMediaReadingServiceDependency,
     PublicationMediaServiceDependency,
+    UserScopeDependency,
 )
 from core.errors import ApplicationError
 from core.schemas import ErrorView
@@ -73,7 +73,7 @@ def _media_response(body: bytes, mime: str, digest: str) -> Response:
 def request_mirror(
     content_id: Annotated[UUID, Path()],
     command: MediaMirrorInput,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
     service: PublicationMediaServiceDependency,
     _: OperatorWriteScopeDependency,
 ) -> MediaMirrorRunView:
@@ -95,7 +95,7 @@ def request_mirror(
 )
 def read_run(
     run_id: Annotated[UUID, Path()],
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
     service: PublicationMediaServiceDependency,
     _: OperatorScopeDependency,
     response: Response,
@@ -132,7 +132,7 @@ def read_run(
 def site_media(
     file_id: Annotated[UUID, Path()],
     mode: Mode,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
     service: PublicationMediaReadingServiceDependency,
 ) -> Response:
     value = service.read(owner_id=owner_id, file_id=file_id, mode=mode, redistribute=False)
@@ -164,7 +164,7 @@ def site_media(
 def public_media(
     file_id: Annotated[UUID, Path()],
     mode: Mode,
-    owner_id: DemoScopeDependency,
+    owner_id: UserScopeDependency,
     service: PublicationMediaReadingServiceDependency,
 ) -> Response:
     value = service.read(owner_id=owner_id, file_id=file_id, mode=mode, redistribute=True)

@@ -6,20 +6,18 @@ HotKey 面向关注 AI 等专业方向的用户，是 ToC 信息监控产品；�
 
 ## 当前能做什么
 
-- Web 提供主题、来源、内容搜索、事件阅读、热榜、报告、模型榜、公告及独立运营页面，当前 Demo 无需登录。
+- Web 提供主题、来源、内容搜索、事件阅读、热榜、报告、模型榜、公告及独立运营页面，登录后进入工作区。
 - 使用 PostgreSQL 保存内容、任务与运行状态；Kafka Worker 执行持久任务，Web 展示主题、来源、内容、任务和报告页面。
 - 已接入 Hacker News、RSS、网页搜索和编辑来源适配器，以及分析、事件、日周月刊、公开分发和通知任务；实际来源、模型和渠道需要单独配置和验证。
 - 提供 FastAPI 自动生成的 OpenAPI、Swagger UI 与 Scalar 文档。
 
 **当前边界：**真实来源、模型质量、事件归并、报告、渠道、保留库恢复及连续运行验收仍有缺口。功能代码、单元测试或服务健康检查不代表真实业务通过，最新状态见 [BACKLOG](BACKLOG.md)。
 
-## Demo 访问
+## 欢迎页与登录
 
-当前 Demo 直接打开 `/events`，无需登录、注册、部署密钥或账户初始化。访问和历史分区合同见 [Design001 §9.2](docs/design/001-热点舆情监控平台总体设计.md#92-当前-demo-的访问与数据分区)。
+首页 `/` 是公开SEO Welcome，关于、隐私、条款、联系和变更说明保持公开；其余系统页面需要真实登录。`/login`提供账号密码、GitHub App和邮箱验证码，登录后默认进入 `/topics`，安全站内原目标可恢复。访问、会话、数据隔离和历史分区合同见 [Design001 §9.2](docs/design/001-热点舆情监控平台总体设计.md#92-公开欢迎页登录与个人数据访问)。
 
-Demo 用于本机或受控演示环境，写请求使用固定 `X-HotKey-CSRF: 1` 自定义头；前端自动设置。内部历史分区 UUID 只维持业务数据关联。已有运行库不清空、不就地应用新 Schema。
-
-未来 ToC 的用户名密码、GitHub App、邮箱验证码和无感登录需求后置，实施前重新设计和验收；当前访问与数据合同见 [Design 001 §9.2](docs/design/001-热点舆情监控平台总体设计.md)。
+所有方式共用可撤销的数据库会话Cookie；业务写入校验绑定CSRF，运营操作还须独立令牌。GitHub/SMTP需要本机未跟踪配置，不提供默认账号或伪造会话；已验证邮箱/GitHub首次登录创建个人账户，账号密码只登录已有账户。完整Schema只在新空库应用，存量数据按备份恢复/导入验证后切换。
 
 ## 启动服务
 
@@ -44,7 +42,7 @@ docker compose --env-file .env up --detach --build --wait
 
 ```bash
 cp .env.example .env.prod
-# 编辑 .env.prod：设置生产连接信息与独立密钥
+# 编辑 .env.prod：设置生产连接信息与独立密钥，以及 HOTKEY_ENVIRONMENT=production 和 HTTPS HOTKEY_WEB_ORIGIN
 docker compose --env-file .env.prod -f docker-compose-prod.yml config --quiet
 docker compose --env-file .env.prod -f docker-compose-prod.yml up --detach --build --wait
 ```

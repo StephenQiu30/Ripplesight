@@ -9,7 +9,7 @@ Python 3.12、FastAPI、Uvicorn、Pydantic 2、SQLAlchemy 2、psycopg 3、Postgr
 复制 `.env.example` 为未跟踪的 `.env`，填写数据库凭据并指向业务库 `hotkey`。在 `backend/` 执行 `uv sync --locked`；从 `backend/app/` 执行以下独立入口：
 
 ```bash
-uv run --locked uvicorn main:create_app --factory
+uv run --locked uvicorn main:create_app --factory --host 127.0.0.1 --port 8867 --no-proxy-headers --no-access-log
 uv run --locked python -m worker
 uv run --locked python -m cli
 ```
@@ -98,15 +98,13 @@ PYTHONPATH=app uv run --env-file .env python -m cli backup verify-restore \
 
 业务接口统一使用 `/api` 命名空间，例如存活检查 `/api/health`、就绪检查 `/api/ready`。采集任务使用 `POST /api/jobs` 持久受理，按响应 `Location` 读取 `GET /api/jobs/{job_id}`，并以 `POST /api/jobs/{job_id}/cancel` 登记取消；详情返回持久阶段、已发请求、已保存数量及取消截止。来源处理器的实现与真实验收状态见 [BACKLOG](../BACKLOG.md)，受控 Worker 验证不能代替来源接入验收。接口文档入口为 Swagger UI `/docs`、Scalar `/scalar`，共用 `/openapi.json`。
 
-## Demo 访问与历史数据分区
+## 用户登录与数据归属
 
-当前 Demo 不建立账户、会话或身份 API，业务读取无需 Cookie，写入需固定 `X-HotKey-CSRF: 1`。CLI 删除身份初始化与密码重置；来源平台凭据和人工导入登录态仍按来源合同管理。
+账号密码、GitHub App、邮箱验证码共用 `identity/` 的账户与12小时固定数据库会话，业务API读写验证用户UUID及资源归属，写入另校验绑定CSRF。运营令牌和来源平台凭据继续独立管理。首次GitHub/邮箱验证创建个人空分区，密码不自动注册，不把历史分区授给首个注册者。
 
-`db/demo.py`解析所有业务owner_id：新Schema空库固定UUID，唯一值复用、多值拒绝。新DDL无身份表/FK，不造假用户；业务为空且有旧身份表的Schema（包括身份表空表）也拒绝默认分区。现有库不执行新DDL；合同见 [Design001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md#92-当前-demo-的访问与数据分区)，验证边界见 [共享验收](../docs/acceptance/001-共享运行门槛验收.md)。
+配置 `HOTKEY_WEB_ORIGIN`、GitHub App client ID/secret、认证SMTP及邮箱验证码HMAC key；真实密钥只留本机环境文件。GitHub缺失配置时明确不可用；邮箱6位码5分钟、单次且错误/频率受限，不记录明文。数据库Schema只在新空库验证，存量库备份/恢复/导入核对后切换；历史账号归属必须用维护CLI显式映射。HTTP/Cookie/API合同见 [Design001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md#92-公开欢迎页登录与个人数据访问)。
 
-未来 ToC 账户需求后置；Demo 不实现多用户权限。来源/模型秘密仍不得进入 Git、日志、前端或模型输入；任务预算、幂等与业务复合关联继续有效。
-
-账户结构变更仍遵守全新空库 Schema 与保留库备份恢复规则，不得为替换身份表在现有业务库上直接执行 `schema.sql`。ToC 多用户设计不改变来源许可和授权边界；MediaCrawler 保留个人、非商业研究和本人账号 B 站低频试点限制，不能扩展为所有用户均可采集。
+来源/模型秘密不得进入Git、日志、前端或模型输入；ToC账户不改变来源许可证与授权边界。MediaCrawler仍保留个人、非商业研究及本人B站低频试点限制。
 
 ## 状态
 

@@ -176,7 +176,7 @@ def test_partial_split_creates_new_fact_and_current_then_historical_reading_stay
     factory = event_read_client.app.state.session_factory
     response = event_read_client.post(
         "/api/events/corrections",
-        headers={"X-HotKey-CSRF": "1"},
+        headers={"X-HotKey-CSRF": event_read_client.cookies["hotkey_csrf"]},
         json={
             "operation_id": str(uuid4()),
             "kind": "split",
@@ -348,7 +348,9 @@ def test_unreadable_fixed_version_and_missing_csrf_block_manual_writes(
         )
     assert (
         event_read_client.post(
-            "/api/events/corrections", json=command, headers={"X-HotKey-CSRF": "1"}
+            "/api/events/corrections",
+            json=command,
+            headers={"X-HotKey-CSRF": event_read_client.cookies["hotkey_csrf"]},
         ).status_code
         == 404
     )

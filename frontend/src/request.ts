@@ -146,16 +146,68 @@ export class ApiRequestError extends Error {
 
 const client = axios.create({
   timeout: 15_000,
-  withCredentials: false,
+  withCredentials: true,
   headers: {
     Accept: "application/json",
   },
 });
 
-client.interceptors.request.use((config) => {
+const AUTH_COOKIE_NAMES = new Set([
+  "hotkey_session",
+  "hotkey_csrf",
+  "hotkey_oauth",
+]);
+
+function identityCookies(value: string): string {
+  return value
+    .split(";")
+    .map((cookie) => cookie.trim())
+    .filter((cookie) => {
+      const separator = cookie.indexOf("=");
+      return (
+        separator > 0 &&
+        AUTH_COOKIE_NAMES.has(cookie.slice(0, separator)) &&
+        /^[A-Za-z0-9._~-]*$/.test(cookie.slice(separator + 1))
+      );
+    })
+    .join("; ");
+}
+
+function csrfCookie(value: string): string | undefined {
+  return identityCookies(value)
+    .split("; ")
+    .find((cookie) => cookie.startsWith("hotkey_csrf="))
+    ?.slice("hotkey_csrf=".length);
+}
+
+client.interceptors.request.use(async (config) => {
+  if (typeof window === "undefined") {
+    let cookies = String(config.headers.get("Cookie") ?? "");
+    if (!config.headers.has("Cookie")) {
+      // The same transport also runs in contract tests outside a Next request.
+      try {
+        const { headers } = await import("next/headers");
+        cookies = (await headers()).get("cookie") ?? "";
+      } catch {
+        cookies = "";
+      }
+    }
+    const allowed = identityCookies(cookies);
+    if (allowed) config.headers.set("Cookie", allowed);
+    else config.headers.delete("Cookie");
+  }
   const method = (config.method ?? "GET").toUpperCase();
   if (!SAFE_METHODS.has(method)) {
-    config.headers.set("X-HotKey-CSRF", "1");
+    const cookies =
+      typeof window === "undefined"
+        ? String(config.headers.get("Cookie") ?? "")
+        : document.cookie;
+    const csrf = csrfCookie(cookies);
+    const publicLogin =
+      /^\/api\/identity\/(?:sessions|email\/(?:challenges|sessions)|github\/authorize)$/.test(
+        config.url ?? "",
+      ) && !(config.url === "/api/identity/email/challenges" && csrf);
+    config.headers.set("X-HotKey-CSRF", publicLogin ? "1" : (csrf ?? "1"));
   }
   return config;
 });

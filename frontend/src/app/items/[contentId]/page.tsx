@@ -24,7 +24,7 @@ export async function generateMetadata({
     return {
       title: item.title,
       description: item.summary ?? undefined,
-      robots: { index: item.indexable, follow: item.indexable },
+      robots: { index: false, follow: false },
       alternates: { canonical: site.public_base_url + item.reading_url },
       openGraph: {
         title: item.title,

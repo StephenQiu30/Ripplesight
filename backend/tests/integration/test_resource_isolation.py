@@ -5,12 +5,11 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
+from tests.conftest import authenticate_test_client, authenticated_owner_id
 from tests.integration.test_monitor_topics import (
     monitor_topic_client as _topic_client,  # noqa: F401
 )
 
-from api.dependencies import get_demo_scope
-from db.demo import resolve_demo_scope
 from jobs.schemas import JobAcceptanceInput, JobObservationContext
 from jobs.services import JobService
 
@@ -43,7 +42,7 @@ def test_internal_partition_cannot_read_or_mutate_other_partition_resources(
     request: pytest.FixtureRequest, method: str, path: str, payload: dict | None
 ) -> None:
     monitor_topic_client: TestClient = request.getfixturevalue("_topic_client")
-    headers = {"X-HotKey-CSRF": "1"}
+    headers = {"X-HotKey-CSRF": monitor_topic_client.cookies["hotkey_csrf"]}
     topic = monitor_topic_client.post(
         "/api/topics",
         headers=headers,
@@ -51,7 +50,7 @@ def test_internal_partition_cannot_read_or_mutate_other_partition_resources(
     )
     factory = monitor_topic_client.app.state.session_factory
     with factory() as session:
-        owner_id = resolve_demo_scope(session)
+        owner_id = authenticated_owner_id(session)
         job = JobService(session).accept(
             owner_id=owner_id,
             command=JobAcceptanceInput(
@@ -66,8 +65,8 @@ def test_internal_partition_cannot_read_or_mutate_other_partition_resources(
         )
     assert topic.status_code == 201
     topic_id, job_id = topic.json()["id"], str(job.id)
-    other_scope = uuid4()
-    monitor_topic_client.app.dependency_overrides[get_demo_scope] = lambda: other_scope
+    authenticate_test_client(monitor_topic_client)
+    headers = {"X-HotKey-CSRF": monitor_topic_client.cookies["hotkey_csrf"]}
     try:
         denied = monitor_topic_client.request(
             method, path.format(topic_id=topic_id, job_id=job_id), headers=headers, json=payload
@@ -86,7 +85,7 @@ def test_internal_partition_cannot_read_or_mutate_other_partition_resources(
         }
         assert denied.headers.get("cache-control") == "no-store"
     finally:
-        monitor_topic_client.app.dependency_overrides.clear()
+        authenticate_test_client(monitor_topic_client, owner_id=owner_id)
     assert monitor_topic_client.get(f"/api/topics/{topic_id}").json() == topic.json()
     assert monitor_topic_client.get(f"/api/jobs/{job_id}").json()["status"] == "queued"
     with factory() as session:

@@ -8,14 +8,14 @@ from uuid import UUID
 from fastapi import APIRouter, Header, Query, Request, Response, status
 
 from api.dependencies import (
-    DemoScopeDependency,
-    DemoWriteScopeDependency,
     EditorialSourcePreviewServiceDependency,
     EditorialSourceServiceDependency,
     OperatorScopeDependency,
     OperatorWriteScopeDependency,
     SourceIconReadingServiceDependency,
     SourceIconServiceDependency,
+    UserScopeDependency,
+    UserWriteScopeDependency,
 )
 from connections.editorial_schemas import (
     EditorialGroupBacklogReviewInput,
@@ -337,7 +337,7 @@ def external_ingest(
     response: Response,
     request: Request,
     service: EditorialSourceServiceDependency,
-    owner: DemoWriteScopeDependency,
+    owner: UserWriteScopeDependency,
     token: Annotated[str | None, Header(alias="X-HotKey-Source-Token", max_length=4096)] = None,
 ) -> ExternalIngressReceipt:
     service.verify_external_token(owner_id=owner, profile_id=profile_id, token=token)
@@ -368,7 +368,7 @@ def external_receipt(
     run_id: UUID,
     response: Response,
     service: EditorialSourceServiceDependency,
-    owner: DemoScopeDependency,
+    owner: UserScopeDependency,
     token: Annotated[str | None, Header(alias="X-HotKey-Source-Token", max_length=4096)] = None,
 ) -> ExternalIngressReceipt:
     service.verify_external_token(owner_id=owner, profile_id=profile_id, token=token)

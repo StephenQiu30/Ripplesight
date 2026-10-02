@@ -14,11 +14,20 @@ const route = vi.hoisted(() => ({ pathname: "/" as string | null }));
 
 vi.mock("next/navigation", () => ({
   usePathname: () => route.pathname,
+  useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
 }));
 
 import { BasicLayout } from "@/layout/basic-layout";
 
 const page = <h1>页面正文</h1>;
+const session: HotKeyAPI.IdentitySessionView = {
+  user: {
+    id: "00000000-0000-4000-8000-000000000002",
+    username: "reader",
+    email: null,
+  },
+  expires_at: "2100-01-01T00:00:00Z",
+};
 
 beforeEach(() => {
   route.pathname = "/";
@@ -27,8 +36,26 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("BasicLayout", () => {
-  it("provides a single accessible main between the shared header and footer", () => {
+  it("shows public navigation and login without exposing the workspace menu", () => {
     render(<BasicLayout>{page}</BasicLayout>);
+    expect(screen.getByRole("navigation", { name: "站点导航" })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "登录" }).getAttribute("href"),
+    ).toBe("/login");
+    expect(screen.queryByRole("button", { name: "更多页面" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "账户菜单" })).toBeNull();
+  });
+
+  it("keeps welcome navigation public after login while offering the real workspace entry", () => {
+    render(<BasicLayout session={session}>{page}</BasicLayout>);
+    expect(
+      screen.getByRole("link", { name: "进入系统" }).getAttribute("href"),
+    ).toBe("/topics");
+    expect(screen.queryByRole("navigation", { name: "工作区导航" })).toBeNull();
+  });
+
+  it("provides a single accessible main between the shared header and footer", () => {
+    render(<BasicLayout session={session}>{page}</BasicLayout>);
 
     const header = screen.getByRole("banner");
     const main = screen.getByRole("main");
@@ -69,7 +96,7 @@ describe("BasicLayout", () => {
     "identifies the workspace destination of nested route %s",
     (pathname, label, href) => {
       route.pathname = pathname;
-      render(<BasicLayout>{page}</BasicLayout>);
+      render(<BasicLayout session={session}>{page}</BasicLayout>);
 
       const navigation = screen.getByRole("navigation", { name: "工作区导航" });
       const current = within(navigation).getByRole("link", {
@@ -85,13 +112,13 @@ describe("BasicLayout", () => {
 
   it("resets the body scroll position when a different route renders", async () => {
     route.pathname = "/events";
-    const view = render(<BasicLayout>{page}</BasicLayout>);
+    const view = render(<BasicLayout session={session}>{page}</BasicLayout>);
     const main = screen.getByRole("main");
     main.scrollTop = 480;
 
     route.pathname = "/content/content-1";
     view.rerender(
-      <BasicLayout>
+      <BasicLayout session={session}>
         <h1>另一页面</h1>
       </BasicLayout>,
     );
@@ -104,12 +131,12 @@ describe("BasicLayout", () => {
 
   it("retains reading position for a rerender within the same route", () => {
     route.pathname = "/events/event-1";
-    const view = render(<BasicLayout>{page}</BasicLayout>);
+    const view = render(<BasicLayout session={session}>{page}</BasicLayout>);
     const main = screen.getByRole("main");
     main.scrollTop = 480;
 
     view.rerender(
-      <BasicLayout>
+      <BasicLayout session={session}>
         <h1>更新后的正文</h1>
       </BasicLayout>,
     );
@@ -118,7 +145,7 @@ describe("BasicLayout", () => {
   });
 
   it("opens the guide and restores focus to its trigger on close", async () => {
-    render(<BasicLayout>{page}</BasicLayout>);
+    render(<BasicLayout session={session}>{page}</BasicLayout>);
     const trigger = screen.getByRole("button", { name: "使用指南" });
     trigger.focus();
     fireEvent.click(trigger);
@@ -133,14 +160,14 @@ describe("BasicLayout", () => {
 
   it("keeps the shell usable while the router pathname is unavailable and recovers its active navigation", () => {
     route.pathname = null;
-    const view = render(<BasicLayout>{page}</BasicLayout>);
+    const view = render(<BasicLayout session={session}>{page}</BasicLayout>);
     expect(screen.getByRole("banner")).toBeTruthy();
     expect(screen.getByRole("main")).toBeTruthy();
     expect(screen.getByRole("contentinfo")).toBeTruthy();
     expect(screen.getByRole("button", { name: "使用指南" })).toBeTruthy();
 
     route.pathname = "/events/event-1";
-    view.rerender(<BasicLayout>{page}</BasicLayout>);
+    view.rerender(<BasicLayout session={session}>{page}</BasicLayout>);
 
     expect(
       within(screen.getByRole("navigation", { name: "工作区导航" })).getByRole(

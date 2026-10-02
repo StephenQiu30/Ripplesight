@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query, Response, status
 
-from api.dependencies import DemoScopeDependency, DemoWriteScopeDependency, EditionServiceDependency
+from api.dependencies import EditionServiceDependency, UserScopeDependency, UserWriteScopeDependency
 from core.schemas import ErrorView
 from reports.edition_rules import EditionKind
 from reports.edition_schemas import (
@@ -40,7 +40,7 @@ _WRITE_ERRORS = {
 def list_editions(
     response: Response,
     service: EditionServiceDependency,
-    owner: DemoScopeDependency,
+    owner: UserScopeDependency,
     kind: EditionKind = "daily",
     before_key: str | None = None,
     limit: int = Query(default=20, ge=1, le=100),
@@ -61,7 +61,7 @@ def request_edition(
     command: EditionRequestInput,
     response: Response,
     service: EditionServiceDependency,
-    owner: DemoWriteScopeDependency,
+    owner: UserWriteScopeDependency,
 ) -> EditionDetailView:
     response.headers["cache-control"] = "no-store"
     return service.request(owner_id=owner, actor_id=owner, command=command)
@@ -79,7 +79,7 @@ def get_edition(
     edition_id: UUID,
     response: Response,
     service: EditionServiceDependency,
-    owner: DemoScopeDependency,
+    owner: UserScopeDependency,
 ) -> EditionDetailView:
     response.headers["cache-control"] = "no-store"
     return service.get(owner_id=owner, edition_id=edition_id)
@@ -97,7 +97,7 @@ def list_revisions(
     edition_id: UUID,
     response: Response,
     service: EditionServiceDependency,
-    owner: DemoScopeDependency,
+    owner: UserScopeDependency,
     limit: int = Query(default=50, ge=1, le=100),
 ) -> tuple[EditionSummaryView, ...]:
     response.headers["cache-control"] = "no-store"
@@ -117,7 +117,7 @@ def correct_edition(
     command: EditionCorrectionInput,
     response: Response,
     service: EditionServiceDependency,
-    owner: DemoWriteScopeDependency,
+    owner: UserWriteScopeDependency,
 ) -> EditionDetailView:
     response.headers["cache-control"] = "no-store"
     return service.correct(owner_id=owner, actor_id=owner, edition_id=edition_id, command=command)

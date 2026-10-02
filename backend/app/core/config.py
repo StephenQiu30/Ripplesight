@@ -38,6 +38,76 @@ class Settings(BaseSettings):
     environment: Literal["development", "test", "staging", "production"] = "development"
     log_level: str = "INFO"
 
+    web_origin: str = "http://127.0.0.1:3001"
+    session_ttl_seconds: int = Field(default=43_200, ge=300, le=43_200)
+    github_client_id: str | None = None
+    github_client_secret: SecretStr | None = None
+    auth_smtp_host: str | None = None
+    auth_smtp_port: int = Field(default=587, ge=1, le=65535)
+    auth_smtp_tls: Literal["starttls", "ssl"] = "starttls"
+    auth_smtp_username: SecretStr | None = None
+    auth_smtp_password: SecretStr | None = None
+    auth_smtp_from_email: str | None = None
+    email_code_hmac_key: SecretStr | None = None
+    public_contact_owner_id: UUID | None = None
+
+    @field_validator(
+        "github_client_id",
+        "github_client_secret",
+        "auth_smtp_host",
+        "auth_smtp_username",
+        "auth_smtp_password",
+        "auth_smtp_from_email",
+        "email_code_hmac_key",
+        "public_contact_owner_id",
+        mode="before",
+    )
+    @classmethod
+    def normalize_optional_identity_setting(cls, value: object) -> object:
+        return None if value == "" else value
+
+    @field_validator("web_origin")
+    @classmethod
+    def validate_web_origin(cls, value: str) -> str:
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("web origin must be a fixed HTTP(S) origin")
+        return value.rstrip("/")
+
+    @field_validator("email_code_hmac_key")
+    @classmethod
+    def validate_email_code_key(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value().encode()) < 32:
+            raise ValueError("email verification HMAC key requires at least 32 bytes")
+        return value
+
+    @model_validator(mode="after")
+    def validate_identity_configuration(self) -> Settings:
+        if self.environment in {"staging", "production"} and not self.web_origin.startswith(
+            "https://"
+        ):
+            raise ValueError("production web origin requires HTTPS")
+        github = (self.github_client_id, self.github_client_secret)
+        if any(github) and not all(github):
+            raise ValueError("GitHub client configuration must be complete")
+        smtp = (self.auth_smtp_host, self.auth_smtp_from_email, self.email_code_hmac_key)
+        if any(smtp) and not all(smtp):
+            raise ValueError("authentication email configuration must be complete")
+        if bool(self.auth_smtp_username) != bool(self.auth_smtp_password):
+            raise ValueError("authentication SMTP credentials must be paired")
+        for value in (self.auth_smtp_host, self.auth_smtp_from_email):
+            if value and any(character in value for character in "\r\n"):
+                raise ValueError("authentication email configuration contains invalid characters")
+        return self
+
     database_url: SecretStr
     database_pool_size: int = Field(default=10, ge=1, le=100)
     database_max_overflow: int = Field(default=10, ge=0, le=100)

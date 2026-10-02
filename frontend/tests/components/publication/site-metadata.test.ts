@@ -18,7 +18,7 @@ const site: HotKeyAPI.PublicSiteMetaView = {
     external_indexing: false,
   },
 };
-it("keeps Demo and unpublished or filtered pages noindex while constructing the public canonical and OG path", () => {
+it("keeps every login workspace page noindex even when publication indexing is enabled", () => {
   const options = {
     title: "公开模型榜",
     path: "/leaderboard",
@@ -33,7 +33,7 @@ it("keeps Demo and unpublished or filtered pages noindex while constructing the 
     publicPageMetadata(enabled, { ...options, indexable: false }).robots,
   ).toEqual({ index: false, follow: false });
   const valid = publicPageMetadata(enabled, options);
-  expect(valid.robots).toEqual({ index: true, follow: true });
+  expect(valid.robots).toEqual({ index: false, follow: false });
   expect(valid.alternates?.canonical).toBe(
     "https://hotkey.example/leaderboard",
   );
