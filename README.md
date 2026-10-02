@@ -6,12 +6,12 @@ HotKey 面向关注 AI 等专业方向的用户，是 ToC 信息监控产品；�
 
 ## 当前能做什么
 
-- Web 已有监控主题、关键词规则和来源连接管理页面；账户实现的替换状态见下方说明。
+- Web 提供主题、来源、内容搜索、事件阅读、热榜、报告、模型榜、公告及独立运营页面，当前 Demo 无需登录。
 - 使用 PostgreSQL 保存内容、任务与运行状态；Kafka Worker 执行持久任务，Web 展示主题、来源、内容、任务和报告页面。
-- 已有 Hacker News、RSS、网页搜索等采集适配器及调度、分析、日报相关代码；实际来源需要单独配置和验证。
+- 已接入 Hacker News、RSS、网页搜索和编辑来源适配器，以及分析、事件、日周月刊、公开分发和通知任务；实际来源、模型和渠道需要单独配置和验证。
 - 提供 FastAPI 自动生成的 OpenAPI、Swagger UI 与 Scalar 文档。
 
-**当前边界：**项目正在验证真实来源采集、评论、模型标注和日报链路。邮件推送、周报、事件归并、知识库后续能力及连续运行验收尚未完成；页面、适配器、单元测试或服务健康检查不代表某来源已经通过真实业务验收。最新进度和验收状态以 [BACKLOG](BACKLOG.md) 为准。
+**当前边界：**真实来源、模型质量、事件归并、报告、渠道、保留库恢复及连续运行验收仍有缺口。功能代码、单元测试或服务健康检查不代表真实业务通过，最新状态见 [BACKLOG](BACKLOG.md)。
 
 ## Demo 访问
 
@@ -31,7 +31,7 @@ Demo 用于本机或受控演示环境，写请求使用固定 `X-HotKey-CSRF: 1
 | `docker-compose-env.yml` | 单独启动 PostgreSQL/Redis/Kafka，本地开发默认不启动 |
 | `docker-compose-prod.yml` | 通过 include 复用全部应用定义，以独立密钥启动生产服务 |
 
-本地开发复用已运行的环境。首次使用复制模板；已有 `.env` 只补齐连接项，不覆盖现有密钥。配置完整 `HOTKEY_DATABASE_URL`、`HOTKEY_REDIS_URL` 和 `HOTKEY_KAFKA_BOOTSTRAP_SERVERS`，容器访问宿主机使用 `host.docker.internal`。Kafka 的 advertised listeners 也必须能从应用容器访问。旧配置只有 `HOTKEY_POSTGRES_PASSWORD` 时，需要补充完整数据库 URL，指向准备使用的已有库。
+本地开发复用已运行的环境，业务数据库名固定为 `hotkey`。首次使用复制模板；已有 `.env` 只补齐连接项，不覆盖现有密钥。配置完整 `HOTKEY_DATABASE_URL`、`HOTKEY_REDIS_URL` 和 `HOTKEY_KAFKA_BOOTSTRAP_SERVERS`，容器访问宿主机使用 `host.docker.internal`。Kafka 的 advertised listeners 也必须能从应用容器访问。
 
 ```bash
 cp .env.example .env

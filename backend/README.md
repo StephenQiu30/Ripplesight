@@ -6,7 +6,7 @@ Python 3.12、FastAPI、Uvicorn、Pydantic 2、SQLAlchemy 2、psycopg 3、Postgr
 
 ## 执行入口
 
-复制 `.env.example` 为未跟踪的 `.env` 并填写数据库凭据。在 `backend/` 执行 `uv sync --locked`；从 `backend/app/` 执行以下独立入口：
+复制 `.env.example` 为未跟踪的 `.env`，填写数据库凭据并指向业务库 `hotkey`。在 `backend/` 执行 `uv sync --locked`；从 `backend/app/` 执行以下独立入口：
 
 ```bash
 uv run --locked uvicorn main:create_app --factory
@@ -15,6 +15,8 @@ uv run --locked python -m cli
 ```
 
 API、Worker 和 CLI 分别启动。应用启动不会创建或修改数据库结构。
+
+集成测试只使用本机独立 `hotkey_test_<suffix>` 数据库，不能指向业务库；测试执行者负责创建、初始化，并在成功或失败后删除测试库。恢复验证的 `hotkey_restore_*` 临时库由恢复流程清理，不复用 Demo 或历史计划库。
 
 宿主机 Worker 的 `HOTKEY_RSSHUB_HOST/HOTKEY_SEARXNG_HOST` 默认 `127.0.0.1`；根 Compose 默认 `host.docker.internal`。两项仅允许这两个固定主机，RSSHub/SearXNG 端口分别固定 1200/8888；SearXNG 引擎固定 `duckduckgo news`。应用来源预设时将主机与白名单写入连接版本，修改环境后需显式重新应用预设，不会改写已有版本。
 

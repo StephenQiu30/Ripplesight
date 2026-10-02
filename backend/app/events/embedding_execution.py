@@ -242,7 +242,7 @@ class EventEmbeddingService:
                 row = self._session.get(EventContentEmbedding, identity)
                 if row is not None:
                     continue
-                job = JobService(self._session).accept_in_transaction(
+                job = JobService(self._session, clock=lambda: now).accept_in_transaction(
                     owner_id=owner,
                     command=JobAcceptanceInput(
                         operation_id=identity,

@@ -66,8 +66,9 @@ def _embedding_budget(factory, owner, at):
             )
 
 
-def _setup(client, *, at, approve=True, paid=False):
+def _setup(client, *, approve=True, paid=False):
     owner, _, factory = _selected(client)
+    at = datetime.now(UTC)
     settings = client.app.state.settings.model_copy(
         update={
             "ai_enabled": True,
@@ -119,6 +120,7 @@ def _setup(client, *, at, approve=True, paid=False):
         assert service.enqueue_due_in_transaction(now=at, ai_enabled=True) == 1
         assert service.enqueue_due_in_transaction(now=at, ai_enabled=True) == 0
         job = session.scalar(select(Job).where(Job.kind == "events.embed"))
+        assert job.created_at == at
         message = SimpleNamespace(
             kind=job.kind,
             job_id=job.id,
@@ -131,7 +133,7 @@ def _setup(client, *, at, approve=True, paid=False):
         lease = JobExecutionService(session, lease_seconds=300, clock=lambda: at).acquire(
             job_id=job.id, worker_id="controlled-embedding"
         )
-    return owner, factory, settings, message, lease
+    return at, owner, factory, settings, message, lease
 
 
 def _client(requests, settings):
@@ -160,8 +162,7 @@ def _client(requests, settings):
 def test_embedding_revocation_after_prepare_denies_ai_and_budget_reservation(
     editorial_client, monkeypatch
 ):
-    at = datetime.now(UTC) + timedelta(seconds=1)
-    _, factory, settings, message, lease = _setup(editorial_client, at=at, paid=True)
+    at, _, factory, settings, message, lease = _setup(editorial_client, paid=True)
     requests = []
     with factory() as session:
         before = session.execute(text("SELECT count(*) FROM resource_budget_reservations")).scalar()
@@ -187,8 +188,7 @@ def test_embedding_revocation_after_prepare_denies_ai_and_budget_reservation(
 def test_real_embedding_protocol_uses_original_ledger_and_fixed_vectors_on_free_replay(
     editorial_client, monkeypatch
 ):
-    at = datetime.now(UTC) + timedelta(seconds=1)
-    owner, factory, settings, message, lease = _setup(editorial_client, at=at)
+    at, owner, factory, settings, message, lease = _setup(editorial_client)
     requests = []
     monkeypatch.setattr(
         "events.embedding_execution.create_embedding_client", lambda _: _client(requests, settings)
@@ -232,8 +232,7 @@ def test_real_embedding_protocol_uses_original_ledger_and_fixed_vectors_on_free_
 def test_embedding_does_not_borrow_codex_component_approval_for_a_new_supplier(
     editorial_client, monkeypatch
 ):
-    at = datetime.now(UTC) + timedelta(seconds=1)
-    _, _, settings, message, lease = _setup(editorial_client, at=at, approve=False)
+    at, _, _, settings, message, lease = _setup(editorial_client, approve=False)
     requests = []
     monkeypatch.setattr(
         "events.embedding_execution.create_embedding_client", lambda _: _client(requests, settings)
@@ -248,8 +247,7 @@ def test_embedding_does_not_borrow_codex_component_approval_for_a_new_supplier(
 def test_saved_embedding_response_recovers_without_second_http_and_missing_response_stops_unknown(
     editorial_client, monkeypatch
 ):
-    at = datetime.now(UTC) + timedelta(seconds=1)
-    _, factory, settings, message, lease = _setup(editorial_client, at=at)
+    at, _, factory, settings, message, lease = _setup(editorial_client)
     requests = []
     monkeypatch.setattr(
         "events.embedding_execution.create_embedding_client", lambda _: _client(requests, settings)
@@ -283,8 +281,7 @@ def test_saved_embedding_response_recovers_without_second_http_and_missing_respo
 def test_paid_embedding_missing_usage_stays_unknown_and_settles_original_cap_without_repeat(
     editorial_client, monkeypatch
 ):
-    at = datetime.now(UTC) + timedelta(seconds=1)
-    owner, factory, settings, message, lease = _setup(editorial_client, at=at, paid=True)
+    at, owner, factory, settings, message, lease = _setup(editorial_client, paid=True)
     requests = []
 
     def send(request):

@@ -49,11 +49,11 @@ HotKey/
 原获取、标注、日报、通知和Obsidian任务保留；062新增六类编辑来源、分阶段精选/中文写作/全文翻译、事实纠错/热度、日周月刊、模型榜、Codex公告、公开投影/媒体与维护任务，复用原Job/Outbox/Kafka，全部领域API/Worker/页面已接。相应技术证据见Acceptance001，真实验收仍待完成。SMTP实现默认关闭，通知目标默认关闭，unknown只能人工确认。历史约四小时记录不证明M1连续72小时；B站修复后真实采集、真实三平台归并和产品AC仍未通过。当前状态以BACKLOG与逐卡Acceptance为准。
 
 
-### 1.4 全量迁移决定（2026-10-02）
+### 1.4 完整业务范围
 
-用户确认完整迁移 AIHOT 全部业务，包含模型榜、Codex 重置公告、月报、分享海报、后台与运维，并选择保留 Python/FastAPI、Next.js、Kafka。范围见 [PRD046](docs/prd/046-AIHOT全量业务迁移需求.md)，所有权、版本/事务与兼容合同见 [Design048](docs/design/048-AIHOT全量迁移架构与兼容设计.md)，连续执行由 [Plan062](docs/plan/062-AIHOT全量业务迁移执行计划.md) 统筹。此前“特有模块可选、未来不排期”不再适用；原 058/032/038/009/014 的真实验收与未通过证据仍有效，不能被迁移任务改为通过。
+完整范围包含信息获取、编辑分析、事件、报告、公开分发、模型榜、Codex 公告、分享海报和运营维护，采用 Python/FastAPI、Next.js、Kafka。范围见 [PRD046](docs/prd/046-AIHOT全量业务迁移需求.md)，所有权、版本和事务合同见 [Design048](docs/design/048-AIHOT全量迁移架构与兼容设计.md)。[Plan062](docs/plan/062-AIHOT全量业务迁移执行计划.md) 承接剩余真实验证；058/032/038/009/014 的专项验收与未通过条件继续保留。
 
-扩展现有 analysis/events/content/reports/monitors/notifications 等领域；按真实实现创建 publication（统一可发布投影与出口）、leaderboard（模型身份/快照/排名）及 operations（独立运营认证、反馈/维护编排）并注册验证，不提前创建空包。原 HotKey 主题、评论、原生榜单、覆盖、预算、证据、任务恢复与 Obsidian 保留。迁移不上 Node/Fastify/pg-boss 第二后端，不复制手写 OpenAPI；收费调用和状态接既有底座。业务 Demo 匿名与运营认证分别处理。真实来源/模型/渠道、数据库保留、预算及外部启用边界不自动放开。
+analysis/events/content/reports/monitors/notifications 维护所属业务；publication 持有统一可发布投影与出口，leaderboard 持有模型身份/快照/排名，operations 持有独立运营认证、反馈与维护编排。以上领域均已注册架构验证。原 HotKey 主题、评论、原生榜单、覆盖、预算、证据、任务恢复与 Obsidian 保留。迁移不上 Node/Fastify/pg-boss 第二后端，不复制手写 OpenAPI；收费调用和状态接既有底座。业务 Demo 匿名与运营认证分别处理。真实来源/模型/渠道、数据库保留、预算及外部启用边界不自动放开。
 
 publication已创建并登记架构门禁：持有来源公开许可版本、仅引用固定正文的投影、修订审计、精选epoch与分页重投；读取复核正文/人工版本/许可和撤回。原始内容及编辑分析分别由content与analysis经DTO提供，本域不另存正文，不建立第二个Job/投递队列。RSS、MCP、Markdown、SEO和海报使用同一准入投影。
 
@@ -84,6 +84,8 @@ Web 设计固定为组件优先的无边框系统：App Router 页面只组合�
 Web的CSP nonce由`proxy.ts`每请求生成，交互HTML按请求渲染。主题创建page等待`connection()`，客户端只读取来源能力；生产脚本nonce须与响应CSP相同，不共享HTML缓存。runtime核对脚本/响应，浏览器冷进入验证交互，不能只检查健康。
 
 ### Python 后端与基础设施
+
+业务数据库名统一为 `hotkey`，宿主机与 Compose 的 `HOTKEY_DATABASE_URL` 都指向该库。集成测试只使用本机独立 `hotkey_test_<suffix>` 库；执行者负责测试结束后的删除，不能把测试库、Demo 日期库或历史计划库作为业务配置。数据库初始化与保留数据的恢复继续遵守第 3 节，应用启动不执行 DDL。
 
 架构固定为模块化单体，按业务领域分组；Router 处理 HTTP，Service 处理业务与事务，Pydantic Schema 定义契约，SQLAlchemy Model 定义持久化。Repository 按需引入。完整目录、文件职责、依赖方向和事务边界由本文固定；AGENTS.md 负责把这些决策转成实现门禁和验证命令。
 

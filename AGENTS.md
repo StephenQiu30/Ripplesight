@@ -6,9 +6,9 @@
 
 总设计为 [Design 001](docs/design/001-热点舆情监控平台总体设计.md)，M1—M6 的 Design 002—007 定义各能力合同；需求为 [PRD 001](docs/prd/001-热点舆情监控平台需求.md) 与 PRD 002—007。只有当前已排期、需要持续协调、恢复或独立验收的工作保留 [Plan](docs/plan/README.md)；未来能力留在 PRD/Design/BACKLOG，启动时再写必要步骤。小修复沿用现行合同和适用检查，不强制新建计划。Plan 引用 Design，只写本轮差异、步骤、真实依赖与完成条件，不复制整份设计或重复 SPEC、Checklist、阶段门禁。关键契约未定不得声称实施就绪，技术依赖与真实授权条件分别列明。架构/数据库变化同步对应 Design 及总 Design001；实际证据写 Acceptance，未通过项如实保留。文档编号见 `docs/README.md`，历史编号不复用；计划逐项人工编写和审核，不用脚本生成或重编号。
 
-## 全量迁移执行决定（2026-10-02）
+## 完整业务维护边界
 
-用户已授权 AIHOT 全量业务迁移并明确保留 Python/Next.js/Kafka。读取 PRD046、Design048 和 Plan062 后按全部闭环连续推进，不以局部文档/算法/API/页面交付关闭全量任务。此前特有模块不排期和只先实现 M1 的开发范围由本次授权扩展，原真实验收与暂停付费/来源/渠道条件保持。新增 publication/leaderboard/administration 只有实际实现时创建，并以失败架构测试登记职责；不引入 Node 后端、pg-boss 或第二套状态/回执。共享文件串行汇合，已有未提交文档是本轮调研产物，不丢弃。具体工程门禁仍按下文执行。
+完整范围与领域合同见 PRD046、Design048；Plan062 只保留真实验证与缺陷修复。现有 Python/Next.js/Kafka、唯一状态和回执账本继续使用；真实验收及付费、来源、渠道启用条件保持有效。publication、leaderboard、operations 均已实现并登记架构检查，后续修改按所属领域门禁执行。
 
 本轮publication实际实现已以未登记包的失败测试登记：只持许可/公开投影/修订与精选epoch，使用content/analysis/events领域DTO复核固定材料，所有异步重投复用jobs；禁止跨域ORM与重复原文/模型账本。出口必须逐次服从相同许可与撤回状态。
 
@@ -43,6 +43,7 @@
 - 业务服务只能直接导入本领域ORM模型；跨领域读取使用所属模块提供的函数/DTO，跨领域原子写显式传入同一Session。禁止为绕过边界建立全局repository或共享models目录。
 - 顶层模块只在当前切片真实创建时登记；architecture测试不得预先白名单未来模块。新增模块必须先以失败测试证明未登记代码会被拒绝。
 - `backend/database/schema.sql` 是唯一数据库 DDL 事实源；SQLAlchemy Model 只负责运行时映射。禁止 Alembic、revision 目录、`metadata.create_all`、应用启动建表和第二份 DDL。
+- 业务数据库统一为 `hotkey`；宿主机与 Compose 的连接配置必须一致。集成测试使用本机独立 `hotkey_test_<suffix>`，由执行者在成功或失败后删除，禁止使用业务库或长期遗留测试库。恢复验证的 `hotkey_restore_*` 由所属恢复流程清理。
 - Plan 001 的 `monitor_topic_versions` 是关键词组、来源选择和主题请求间隔的不可变采集配置快照；名称与报告/推送偏好不升采集版本。主题恢复前核对已应用搜索预设、当前来源准入/执行策略和预算，旧 Job 不按当前主题投影重释。
 - `schema.sql` 只用于全新空库，文件自身以 `BEGIN`/`COMMIT` 包住完整 DDL；直接 `psql -X --set ON_ERROR_STOP=on -f backend/database/schema.sql`、CI stdin 导入和 Compose 官方 entrypoint 挂载均依赖该文件内事务保证原子性，也可额外使用 `--single-transaction`，但不得以其代替文件内事务。三种入口均须在空库执行并在失败后确认无部分业务表。当前不支持存量库自动就地演进；需要保留数据时先验证备份，再新建数据库、应用完整 Schema 并导入校验后的数据。禁止对旧系统库直接执行。
 - 业务状态与 Outbox 同事务提交。Outbox 发布到 Kafka，消费者在业务事务提交后提交连续完成位置的 offset，允许重投并通过消息 ID、epoch、fencing、租约和唯一约束保证幂等。Kafka 事务不等于与 PostgreSQL 的跨系统原子提交。Redis 只承担缓存、限流及可重建临时状态，不保存唯一业务事实；关键执行权以 PostgreSQL 为准。不再采用 RabbitMQ/Celery，不以 Redis 另建任务队列。
@@ -202,6 +203,9 @@ backend/
 | `notifications/` | 推送渠道、订阅、发送记录与未知结果人工恢复；SMTP 已实现默认关闭，飞书真实送达暂缓 |
 | `knowledge/` | Obsidian 日报导出已有代码；M4 独立验收及 `pg_trgm` 检索与问答 |
 | `audit/` | 跨领域审计记录 |
+| `publication/` | 公开许可、固定内容投影、公开阅读与分发出口 |
+| `leaderboard/` | 模型身份、来源快照、评分与排名 |
+| `operations/` | 独立运营认证、反馈、站点设置、心跳与维护编排 |
 
 新增领域必须先在切片 Design 登记主责、依赖和目标目录，再更新本表；不得把业务代码堆入 `core/`、全局 `utils/` 或全局 `models/`。
 
