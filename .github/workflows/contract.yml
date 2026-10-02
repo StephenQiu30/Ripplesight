@@ -26,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       HOTKEY_DATABASE_URL: postgresql+psycopg://contract:contract@127.0.0.1:5432/hotkey_contract
+      HOTKEY_OPENAPI_URL: http://127.0.0.1:8667/openapi.json
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@v4
@@ -62,11 +63,11 @@ jobs:
 
       - name: Verify generated client and transport tests
         run: |
-          uv run --directory backend uvicorn main:create_app --factory --app-dir app --host 127.0.0.1 --port 8867 &
+          uv run --directory backend uvicorn main:create_app --factory --app-dir app --host 127.0.0.1 --port 8667 &
           api_pid=$!
           trap 'kill "$api_pid"' EXIT
           for attempt in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:8867/openapi.json >/dev/null; then
+            if curl --fail --silent http://127.0.0.1:8667/openapi.json >/dev/null; then
               break
             fi
             if [ "$attempt" -eq 30 ]; then

@@ -110,7 +110,7 @@ def test_feishu_card_and_signature_with_fake_transport(caplog: pytest.LogCapture
         _data(),
         report_id=REPORT,
         generator="template",
-        web_base_url="http://localhost:3000",
+        web_base_url="http://127.0.0.1:8666",
         vault_name="Vault",
         export_relative_path=None,
     )

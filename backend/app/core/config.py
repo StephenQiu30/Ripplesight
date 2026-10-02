@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     environment: Literal["development", "test", "staging", "production"] = "development"
     log_level: str = "INFO"
 
-    web_origin: str = "http://127.0.0.1:3001"
+    web_origin: str = "http://127.0.0.1:8666"
     session_ttl_seconds: int = Field(default=43_200, ge=300, le=43_200)
     github_client_id: str | None = None
     github_client_secret: SecretStr | None = None
@@ -172,7 +172,7 @@ class Settings(BaseSettings):
 
     feishu_webhook_url: SecretStr | None = None
     feishu_secret: SecretStr | None = None
-    web_base_url: str = "http://localhost:3000"
+    web_base_url: str = "http://127.0.0.1:8666"
     notifications_enabled: bool = False
     notification_smtp_enabled: bool = False
     notification_smtp_host: str | None = None

@@ -77,7 +77,7 @@ describe("request transport", () => {
       origin: "http://backend.test:8080",
       expected: "http://backend.test:8080",
     },
-    { browser: false, origin: undefined, expected: "http://127.0.0.1:8867" },
+    { browser: false, origin: undefined, expected: "http://127.0.0.1:8667" },
     { browser: true, origin: "http://backend.test:8080", expected: "/" },
   ])(
     "resolves the transport origin for $browser / $origin",
