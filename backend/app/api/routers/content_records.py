@@ -37,7 +37,10 @@ _COMMON_READ_RESPONSES: dict[int | str, dict[str, Any]] = {
     status_code=status.HTTP_200_OK,
     summary="列出作品资料",
     description=(
-        "按当前 Demo 分区列出具有可读观察的作品; 可按来源、发现主题、时间窗与当前标注状态筛选。"
+        "按当前 Demo 分区列出具有可读观察的作品; "
+        "可按文本、来源、发现主题、时间窗与当前标注状态筛选。"
+        "文本搜索最多 200 字符、6 个空白分隔词项; 全部词项在最新可读版本的标题或正文中"
+        "按字面子串匹配, 大小写不敏感, 不将通配符解释为模式。"
         "时间窗使用发布时间, 缺失时回退首次发现时间; 读取不会触发来源或模型请求。"
     ),
     responses=_COMMON_READ_RESPONSES,
@@ -53,6 +56,10 @@ def list_content_records(
     starts_at: datetime | None = None,
     ends_at: datetime | None = None,
     analysis_state: Literal["missing", "pending", "failed", "invalid", "valid"] | None = None,
+    q: Annotated[
+        str | None,
+        Query(max_length=200, description="最多 6 个空白分隔词项, 按 AND 字面搜索标题与正文"),
+    ] = None,
 ) -> PageView[ContentRecordSummaryView]:
     items, next_cursor = service.list_contents(
         owner_id=scope_id,
@@ -63,6 +70,7 @@ def list_content_records(
         starts_at=starts_at,
         ends_at=ends_at,
         analysis_state=analysis_state,
+        q=q,
     )
     response.headers["cache-control"] = "no-store"
     return PageView(items=items, next_cursor=next_cursor)

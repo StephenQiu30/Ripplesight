@@ -1,0 +1,7 @@
+# Publication provenance
+
+The centralized pool/selection/detail/fulltext/indexing rules, release gate, selected synchronization, feed and agent format intent are adapted from [AIHOT](https://github.com/KKKKhazix/AIHOT/tree/035f7b7f6e26cf203562ddd6065ff7adc1bb0c07/packages/backend/src/publication), fixed commit `035f7b7f6e26cf203562ddd6065ff7adc1bb0c07`. Complete upstream MIT license is preserved in `AIHOT-LICENSE`.
+
+HotKey owns the Python persistence and current-permission guards. Original content remains in the content domain; grants do not authorize third-party re-distribution outside their explicit terms. Cached old ledger payloads are never used to bypass withdrawal. Branding, source data and logos have separate permissions from the code license. The fixed source exposes five MCP tools; live marketing about eight tools is not a source implementation guarantee.
+
+`assets/og-fonts/noto-sans-sc-400.ttf` and `noto-sans-sc-700.ttf` are the unchanged subsets from upstream `assets/og-fonts` at the same fixed commit, used for Chinese share-image text. Their license is SIL Open Font License 1.1, separately from MIT. Upstream's original copyright/subsetting notice is retained in `assets/og-fonts/LICENSE`; the complete official Noto CJK license text is retained in `assets/og-fonts/OFL.txt`. Original font copyright: Adobe 2014–2021, Reserved Font Name “Source”. The fonts are embedded with the application and are not sold separately. No AIHOT branding or source logos are copied under the code license.

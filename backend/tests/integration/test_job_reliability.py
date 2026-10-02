@@ -42,7 +42,13 @@ from jobs.schemas import (
 )
 from jobs.services import JobObservationService, JobService, OutboxService
 from sources.contracts import SourceCapability
-from worker.app import JobExecutionContext, create_job_message_handler
+from worker.app import (
+    ChildJobCompletion,
+    ChildJobResult,
+    JobExecutionContext,
+    create_job_message_handler,
+)
+from worker.execution import JobProcessSupervisor
 from worker.messaging import (
     MessageDeferredError,
     create_producer,
@@ -76,6 +82,145 @@ def job_context() -> Iterator[JobTestContext]:
         with engine.begin() as connection:
             connection.execute(text(TEST_DATABASE_TRUNCATE))
         engine.dispose()
+
+
+def test_heartbeat_renews_only_the_current_epoch_without_fabricating_work(
+    job_context: JobTestContext,
+) -> None:
+    current = [datetime.now(UTC)]
+    with job_context.sessions() as session:
+        job = JobService(session, clock=lambda: current[0]).accept(
+            owner_id=job_context.owner_id,
+            command=JobAcceptanceInput(
+                operation_id=uuid4(),
+                kind="report.edition",
+                observation=JobObservationContext(
+                    configuration_ref="heartbeat-test", configuration_version=1
+                ),
+                scope={},
+            ),
+        )
+        execution = JobExecutionService(session, lease_seconds=5, clock=lambda: current[0])
+        original = execution.acquire(job_id=job.id, worker_id="heartbeat-owner")
+        current[0] += timedelta(seconds=4)
+        renewed, cancelled = execution.heartbeat(original)
+        assert not cancelled and renewed.expires_at > original.expires_at
+        assert renewed.epoch == original.epoch and renewed.checkpoint == original.checkpoint
+        current[0] += timedelta(seconds=2)
+        assert not execution.cancellation_requested(original)
+        with session.begin():
+            row = session.execute(
+                text("SELECT requests_sent,checkpoint_sequence FROM jobs WHERE id=:id"),
+                {"id": job.id},
+            ).one()
+            assert tuple(row) == (0, 0)
+        current[0] += timedelta(seconds=4)
+        with pytest.raises(StaleExecutionLeaseError):
+            execution.heartbeat(original)
+
+
+def test_worker_redelivery_quarantines_paid_process_death_before_the_domain_handler(
+    job_context: JobTestContext,
+) -> None:
+    import httpx
+    from tests.integration.test_ai_capability_routing import _budgets, _job, _settings
+
+    from ai.capability_routing import create_ai_client_for_frozen_model
+    from ai.capability_services import load_frozen_ai_routing_in_transaction
+    from ai.schemas import AiCallError
+    from ai.services import AiService
+
+    owner, settings = job_context.owner_id, _settings()
+    clock = [datetime.now(UTC)]
+    job = _job(job_context.engine, owner, settings, clock[0])
+    _budgets(job_context.engine, owner, clock[0], "USD")
+    with job_context.sessions() as session:
+        old = JobExecutionService(session, lease_seconds=30, clock=lambda: clock[0]).acquire(
+            job_id=job.id, worker_id="paid-dead-process"
+        )
+    with job_context.sessions() as session, session.begin():
+        routing = load_frozen_ai_routing_in_transaction(session, owner_id=owner, job_id=job.id)
+    assert routing is not None
+    requests: list[httpx.Request] = []
+
+    def crash(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        raise SystemExit("controlled death after HTTP admission")
+
+    client = create_ai_client_for_frozen_model(
+        settings, routing.for_purpose("editorial.understand"), transport=httpx.MockTransport(crash)
+    )
+
+    def attempt(lease):
+        with job_context.sessions() as session:
+            return AiService(
+                session,
+                client,
+                settings=settings,
+                clock=lambda: clock[0],
+                execution_epoch=lease.epoch,
+                guard=lambda current: JobExecutionService(
+                    current, lease_seconds=30, clock=lambda: clock[0]
+                ).require_current_operation_in_transaction(
+                    lease, owner_id=owner, operation_id=job.operation_id
+                ),
+            ).complete(
+                owner_id=owner,
+                job_id=job.id,
+                purpose="editorial.understand",
+                prompt_version="worker-recovery-v1",
+                prompt="fixed controlled material",
+                output_schema={"type": "object"},
+            )
+
+    try:
+        with pytest.raises(SystemExit):
+            attempt(old)
+        clock[0] += timedelta(seconds=31)
+        seen_epochs: list[int] = []
+
+        def recover_domain(context: JobExecutionContext) -> None:
+            seen_epochs.append(context.lease.epoch)
+            with job_context.engine.connect() as connection:
+                assert connection.scalar(text("SELECT status FROM ai_calls")) == "unknown"
+                assert (
+                    connection.scalar(
+                        text("SELECT sum(reserved_units) FROM resource_budget_windows")
+                    )
+                    == 0
+                )
+            with pytest.raises(AiCallError) as refusal:
+                attempt(context.lease)
+            assert refusal.value.outcome_unknown
+            raise JobExecutionFailure(
+                error_code="original_ai_result_unknown",
+                category=JobFailureCategory.CONFIGURATION_UNAVAILABLE,
+                occurred_at=clock[0],
+                next_action="人工核对原调用结果和费用",
+                manual_retry_allowed=True,
+            )
+
+        handler = create_job_message_handler(
+            job_context.sessions,
+            {"analysis.editorial": recover_domain},
+            worker_id="paid-recovered-worker",
+            lease_seconds=30,
+            clock=lambda: clock[0],
+        )
+        message = _stored_message(job_context, job_id=job.id, dispatch_sequence=1, offset=0)
+        handler(message)
+        handler(message)
+        assert seen_epochs == [old.epoch + 1]
+        assert len(requests) == 1
+        with job_context.engine.connect() as connection:
+            receipt = connection.execute(
+                text("SELECT status,cost_cap_micros,cost_actual_micros FROM ai_calls")
+            ).one()
+            assert receipt.status == "unknown" and receipt.cost_cap_micros > 0
+            assert receipt.cost_actual_micros is None
+            assert connection.scalar(text("SELECT count(*) FROM processed_messages")) == 1
+    finally:
+        client.close()
 
 
 def _command(
@@ -1770,3 +1915,40 @@ def test_real_kafka_redelivery_rebalance_and_redis_loss_recover_once(
         if second_consumer is not None:
             second_consumer.close()
         admin.delete_topics([topic])[topic].result(10)
+
+
+def _controlled_long_child(message, lease, lease_seconds):
+    time.sleep(6)
+    return ChildJobResult(lease=lease, completion=ChildJobCompletion(status="succeeded"))
+
+
+class _ControlledLongSupervisor(JobProcessSupervisor):
+    def run(self, target, args, **kwargs):
+        return super().run(_controlled_long_child, args, **kwargs)
+
+
+def test_parent_renews_lease_while_real_spawned_child_outlives_original_lease(
+    job_context: JobTestContext,
+) -> None:
+    with job_context.sessions() as session:
+        job = JobService(session).accept(owner_id=job_context.owner_id, command=_command())
+    message = _stored_message(job_context, job_id=job.id, dispatch_sequence=1, offset=0)
+    handler = create_job_message_handler(
+        job_context.sessions,
+        {"monitor.collect": lambda _: None},
+        worker_id="long-supervised",
+        lease_seconds=5,
+        stopping=Event(),
+        supervisor=_ControlledLongSupervisor(
+            startup_timeout_seconds=3, execution_timeout_seconds=10, terminate_grace_seconds=1
+        ),
+    )
+    handler(message)
+    handler(message)
+    with job_context.engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT status, requests_sent,checkpoint_sequence FROM jobs WHERE id=:id"),
+            {"id": job.id},
+        ).one() == ("succeeded", 0, 0)
+        assert connection.execute(text("SELECT count(*) FROM job_attempts")).scalar_one() == 1
+        assert connection.execute(text("SELECT count(*) FROM processed_messages")).scalar_one() == 1

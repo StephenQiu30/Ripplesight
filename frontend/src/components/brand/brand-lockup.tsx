@@ -13,7 +13,7 @@ export function BrandMark() {
       height={44}
       loading="eager"
       unoptimized
-      className="size-11 shrink-0 mix-blend-multiply"
+      className="size-11 shrink-0 mix-blend-multiply dark:mix-blend-screen dark:invert"
     />
   );
 }

@@ -9,9 +9,12 @@ from api.docs import register_documentation
 from api.exception_handlers import register_exception_handlers
 from api.middleware import register_middleware
 from api.router import api_router
+from api.routers.publication_exports import router as publication_exports_router
 from core.config import Settings, get_settings
 from core.logging import configure_logging
 from db.session import create_db_engine, create_session_factory
+from evidence.adapters.media_storage import create_media_storage
+from operations.heartbeat import ProcessHeartbeatReporter
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -22,9 +25,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         engine = create_db_engine(resolved_settings)
         app.state.session_factory = create_session_factory(engine)
+        media_storage = create_media_storage(resolved_settings)
+        app.state.media_storage = media_storage
+        heartbeat = ProcessHeartbeatReporter(
+            app.state.session_factory, role="api", enabled=resolved_settings.environment != "test"
+        )
+        heartbeat.start()
         try:
             yield
         finally:
+            heartbeat.stop()
+            if media_storage is not None:
+                media_storage.close()
             engine.dispose()
 
     app = FastAPI(
@@ -40,4 +52,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exception_handlers(app)
     register_documentation(app)
     app.include_router(api_router)
+    app.include_router(publication_exports_router)
     return app

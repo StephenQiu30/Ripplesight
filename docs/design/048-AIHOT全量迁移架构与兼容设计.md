@@ -1,0 +1,267 @@
+---
+layer: Design
+scope: shared
+doc_no: "048"
+title: AIHOT 全量迁移架构与兼容设计
+status: accepted
+version: v1.0
+date: 2026-10-02
+owner: HotKey Team
+canonical_path: docs/design/048-AIHOT全量迁移架构与兼容设计.md
+parent: docs/design/001-热点舆情监控平台总体设计.md
+prd: docs/prd/046-AIHOT全量业务迁移需求.md
+plan: docs/plan/062-AIHOT全量业务迁移执行计划.md
+---
+
+# AIHOT 全量迁移架构与兼容设计
+
+全量范围和技术选择已经由用户确定，见 PRD046。继续使用唯一 Python/FastAPI 模块化后端、Next.js Web、PostgreSQL 事实、Outbox→Kafka、Redis 可重建缓存、既有 MinIO。AIHOT 的 Node/Fastify、pg-boss、React Router、独立 SQL 客户端与手写 OpenAPI 不进入运行时。上游固定 SHA 见 Research049；复制规则/提示词/算法保留完整 MIT 版权与许可文本和来源变更记录。
+
+## 1. 功能所有权
+
+| 范围 | 本地所有者与职责 | 上游对应 |
+|---|---|---|
+| 来源与摄入 | `sources/adapters` 只做远程差异；`connections` 管许可/版本/凭据；`content` 管材料身份、质量、媒体和外部摄入持久化；`jobs` 管执行/预算 | sources、ingest、content、providers |
+| 分析与评测 | `analysis` 管提示词版本、预筛、两次评分、结构、中文写作/翻译和评测结果；`ai` 统一模型调用/回执/预算 | editorial、SelectBench、LLM/embeddings |
+| 事实与事件 | `events` 继续持有 Event 身份；事实为本领域子实体，保存固定成员版本、根事实、直接关系、人工覆盖/排除、修订与热度快照 | events、stories、facts |
+| 日周月刊/知识库 | `reports` 统一编选、程序统计、冻结输入、版本与模板降级；`knowledge` 继续安全导出/检索问答 | reports |
+| 通知 | `notifications` 管目标、内容/报告/公告/运维 subject、幂等投递、unknown 人工确认与冷却 | notify、ops notices |
+| 公开阅读与分发 | `publication`：统一许可/版本/撤回投影、阅读归组、RSS/Markdown/MCP/SEO/海报与可重建缓存；不能持有第二份原始材料事实 | publication、site、OG |
+| 模型榜 | `leaderboard`：注册、身份、来源快照、算法、发布版本与只读 DTO；真实抓取使用本域薄适配器与共享预算 | leaderboard |
+| 公告监控 | `monitors` 内独立公告用例：目标版本、源证据、识别结果、程序状态机、复核与日历 DTO；不等同调用 Codex 的余额 | monitor |
+| 运营管理 | `operations`：运营 Token 校验、权限与审计编排；业务事实由各领域服务持有，后台不能跨域直接导 ORM | admin、feedback |
+| 可靠运行 | `jobs`、`backups`、`evidence` 与既有 Worker 生命周期承接 watchdog、恢复、备份/清理；不创建第二个任务数据库 | operations |
+
+以上为完整迁移目标所有权，新目录只有真实实现时创建并注册架构测试。跨域读取通过所属领域 DTO/函数，原子跨域写显式共享同一 Session；API 只映射协议，前端只消费 FastAPI 自动契约。上游内存缓存不保存唯一结果或权限，写后失效与每次读取撤回校验由本地合同实现。
+
+## 2. 数据与修订
+
+新增表同批维护 `schema.sql`、ORM、模型注册和隔离空库验证，不对旧业务库运行 Schema。事实关系、人工操作幂等/排除、热度冻结输入；内容编辑/翻译/精选版本；公开准入/发布延迟/撤回；榜单来源快照/模型身份/发布轮次；公告源证据/识别/状态/复核；运营会话/审计，均属于必须持久化的事实，不能以内存列表替代。
+
+事件读取必须按成员冻结的 `content_version_id` 投影，不退回最新正文；来源撤权、证据不可读和私有材料不通过事件标题/摘要泄露。每个事件独立 revision，成员历史唯一键包含 event_id；人工合并/拆分以预期 revision 和 operation_id 防重，锁按稳定 ID 排序。后台改判、模型结果写回与内容更新必须再次核对人工版本，旧结果不得覆盖新状态。未知判定/调用失败不能改成已确认“不相关”。
+
+归组模型采用同事实/直接进展/无关/盘点的不同语义，进展只关联根事实，禁止经后续事实无限串联；现有 pg_trgm 负责候选召回，相似不等于确认。不为完整迁移强制引入向量数据库。精选价值、主题相关性、原生榜单指标和独立来源关注热度分别持有口径。
+
+报告和派生稿生成前冻结成员、正文、注释、事件和许可版本，提交时逐项再核输入；撤回使含旧文字的派生稿失效/再生，不能仅过滤引用列表。未知/失败要保留原状态与可重试依据。日周月刊期使用本项目固定时区和程序边界，不复制上游 08:00/10:00。月报初始采用本地每月 1 日 09:00 上完整月，截止/补刊沿用报告合同的有界任务。
+
+## 3. 执行与预算
+
+所有异步能力通过现有 Job/Outbox/Kafka；每种任务都须有受理、处理器、预算/硬截止、结果持久化、重试/取消、到期 ledger 和幂等约束，单有 kind 或排队记录不算实现。收费调用统一 `ai`/既有预算，新增付费源统一 `connections`/`jobs`。不开第二套回执或收费链路。
+
+真实 Codex、X、飞书与本人 B 站的现行启用条件继续有效；完成静态/受控路径不代表已获准实请求。X 保留官方 API；迁入公告识别与调度语义，不自动采用 SocialData。默认未授权、未定费用或无适配器时明确禁用，不能把空数组当成功。未知收费响应不自动额外发送，投递 unknown 人工确认；恢复不绕过当前授权和硬预算。
+
+## 4. 接口、前端与管理
+
+业务 API 统一 `/api`，唯一 OpenAPI 由 FastAPI/Pydantic 生成。新接口按实际创建的用例分领域提供，不复制上游 URL/手写 schema；外部 RSS、Markdown、MCP 和媒体响应采用其协议，同时有独立请求上限和无副作用读取验证。站内全文、再分发全文、摘要链接、私人/撤回分别判定，同一投影供各出口调用。
+
+Next.js 保留已有首页、同源 Axios、nonce/CSP、生成客户端和 Tailwind 命名尺度。关注配置与真实事件阅读分为 `/topics` 与 `/events`；旧入口只在新页面和导航核对后切换。阅读、搜索、事件/热度、报告归档、榜单/模型详情、公告日历、收藏、Agent、运营后台、分享等组件按真实领域分别设计路径/状态/数据来源，不搬入上游 features/shared 层或复制第二套 API 客户端。
+
+运营认证独立于匿名 Demo：公共投影只读，运营写入需运营身份与 CSRF，来源/模型秘密只留服务端。未具备受保护管理与私有材料隔离前，不对公网发布当前 Demo。固定模型配置按能力记录有效版本、用量与错误，切换不偷偷重判历史。反馈上传、海报/媒体、导入导出有大小/类型/主机/路径约束，失败可见；下载副本不能承诺远程抹除。
+
+## 5. 验证与切换
+
+每个移植记录上游文件、纯逻辑/资产、合同差异与本地入口；固定输入先核语义，再验真实数据库/消息/浏览器。上游测试意图可复用，依赖其 SQL/pg-boss/stub 的文件不能直接计为本地测试通过。正常、失败、未知、并发、预算、人工修订、重启、撤回和多出口一致分别覆盖。
+
+新路径接入全部调用方并回归后再撤下重叠旧路径，不双写唯一事实；旧业务库和持久卷保留。整体验收依 PRD046 与原 PRD/Acceptance，当前实现/真实运行状态只见 BACKLOG。外部条件未满足不得以“全量代码迁入”宣称全量产品通过。
+
+## 模型榜实现与阅读合同
+
+`leaderboard/method` 移植 v15 的十个固定预算、22 个信号、Cephes CDF、证据资格和同协议七日沿用、加权不完整 Kemeny 二元整数规划、锚点支持指数与敏感性重算。Python 官方 `highspy==1.15.1` 承担求解，不用原始分数均值替代排序。配置代表选择独立于测得分数；明确排除阻止旧数据复活。遗漏预算不重新分配，筛选保持发布轮次的原始排名，参考系统数据不混作基础模型能力。实际 HiGHS 平手求解器标签和输入指纹采用本地运行时版本，不能承诺不同运行时二进制结果完全一致。
+
+`leaderboard/evidence.py`、`configuration.py`、`registry.py` 定义配置与来源合同，`fetch.py` 提供十个受控采集器和原始证据解析，`refresh.py` 按注册顺序写入并隔离单来源失败。HiGHS 与 Parquet 解析依赖分别锁定官方 highspy 与 pyarrow。`services.py` 拥有模型身份、别名、不可变来源快照、全部配置分数、发布轮次、排名、官方价格、汇率和来源状态九类实体。`reads.py` 只读取最近有效发布；新轮次失格不撤掉旧轮次，历史模型页明确使用旧轮次。来源验证时间、上游时间、测评时间和价格核对日分别保存。未知价格/汇率不填零；人民币换算固定使用发布轮次汇率，价格单位为每百万 token。
+
+刷新必须从唯一 Job/Worker 入口调用并提供持久预算的 client factory，每个请求（含分页和重定向）先取得执行权/预算，成功或失败均由统一账本结算；默认关闭外部请求且默认回调拒绝，不因可解析固定样本自动启用。抓取最多两路并发，Session 只在原线程写入；每来源 savepoint 与 last_ok_at 保留，空结果和未授权强制前的异常减半结果不能替换已有证据。一次采集器可能产出多来源状态，状态中的 request_count 不应相加作为实际网络消费。每六小时的刷新任务、硬截止、重启、取消与预算接线归现有 jobs/worker。GET 页面/API 不抓取、不求解、不生成。
+
+五个只读操作由 FastAPI 自动契约生成到 `src/api/moxingbang.ts`；六个 Next.js 路由按请求服务端渲染，保持现行匿名 Demo 的 noindex 和 nonce/CSP，不修改既有首页。组件设计如下。
+
+| 组件 | 领域、范围与路径 | 数据与状态 |
+|---|---|---|
+| LeaderboardLayout | 模型榜六页共用导航，`src/app/leaderboard/layout.tsx` | 已有 WorkspaceHeader 与真实模型榜/来源/规则路径；无业务写入 |
+| BoardReading | 总榜与分类榜复用，`src/components/leaderboard/board-reading.tsx` | getLeaderboardBoard；五分类、国内/开放权重筛选、原排名、支持指数、覆盖与稳定性、价格与缺项；未发布、筛选空、错误和恢复 |
+| ModelReading | 模型详情专属，`src/app/leaderboard/models/[slug]/components/model-reading.tsx` | getLeaderboardModel；当前/历史轮次、分类排名、逐项证据和配置、沿用/缺失/排除、相邻对比、官方价格/权重出处；不存在/错误/恢复 |
+| SourcesReading | 来源列表专属，`src/app/leaderboard/sources/components/sources-reading.tsx` | listLeaderboardSources；注册分组、权重、运营方和已采集状态；无发布时仍读静态方法注册表 |
+| SourceReading | 来源详情专属，`src/app/leaderboard/sources/[sourceKey]/components/source-reading.tsx` | getLeaderboardSource；许可、口径、限制、来源原排名、配置排除、系统参考、时间；尚未采集/不提供明细/不存在/错误 |
+| RulesReading | 方法说明专属，`src/app/leaderboard/rules/components/rules-reading.tsx` | getLeaderboardRules；实际方法版本、预算、固定锚点、发布最低规模、配置选择、沿用和发布资格，不声称少量样本证明算法实际质量 |
+| RunStamp / OfficialPrice / ModelMark / LeaderboardFailure | 两页以上稳定复用，`src/components/leaderboard/reading-parts.tsx` | 只消费生成 DTO 和统一错误；轮次/价格出处、缺失值、受控错误提示与请求 ID，无第二套客户端 |
+
+全站 loading/error 边界继续承担请求加载与异常恢复；模型榜保留具体未发布/未知资源和读取故障状态。固定来源回放、独立枚举求解器 oracle、真实隔离 PostgreSQL 发布/回退和页面样本只证明受控路径；真实供应商可用性、当前第三方许可、生产 Worker 恢复与实际浏览器仍各自验收。
+
+## 统一 publication 实现合同
+
+`publication/rules.py` 定义公共池、精选、详情、站内正文、再分发、索引与180秒归组释放门的纯规则；`schemas.py` 持有来源许可/发布修订、唯一公共 DTO、分页/同步及报告冻结引用；`publication_models.py` 只映射本域表，统一 Schema 与 metadata 由共享窗口登记。`services.py` 投影当前固定分析与材料版本，许可/撤回操作有 expected_revision、operation_id、原因与审计；`reading.py` 每次重新读取当前许可和领域 DTO，所有新出口同一结果。正文只经 content 固定版本 DTO 读取，不复制成第二份原始材料表；analysis 当前结果只经 `analysis.editorial_reading`，事件归属只经 events 的批量 DTO。
+
+来源公共参与模式与站内全文/再分发权限各自明确，默认 isolated、无正文/再分发权。来源暂停不自动撤已公开文章；模式和权限收紧由每次读取的 live guard 立即生效，随后可恢复 republish 更新投影和精选 ledger。固定材料缺失/不可读、非当前人工版本或分析未完成一律不输出旧派生摘要。summary-only 不输出正文、推荐理由、标签、作者和归组。具体详情可以在归组释放门前读取，列表/精选/同步都等相同visible_after；历史导入仅凭明确released_at，不从旧发布日期猜已公开。
+
+精选 epoch/sequence 与修订同事务串行分配，cursor 绑定 owner、窗口、筛选与 epoch；旧 epoch冲突要求重建快照。ledger只存修订/操作引用，输出upsert必须再核当前投影，已撤回或许可失效转remove，旧payload不可绕过live guard。所有GET零抓取/零模型/零求解/零业务写入。报告候选冻结 publication/许可/analysis/material/event/fact 全部版本，生成提交与读取必须再次逐项复验，缺失即invalid；翻译 grant 按同一固定版本判定精选public+站内全文。
+
+`exports.py` 提供摘要/全文/全部/分类 RSS、单篇与 Agent Markdown、sitemap/robots/llms/结构化SEO；XML/Markdown转义、来源署名、稳定 GUID、明确原始时间与缺项，全文RSS另核再分发权。`mcp.py` 提供固定开源五工具只读合同和 bounded JSON-RPC，不能把线上八工具宣传当已移植验收。HTTP接口由唯一FastAPI入口装配；ETag从实时可见结果生成且不共享含旧正文的长缓存，撤回与许可收紧不返回过期304。图像分享只用受控短投影，不能多读许可正文。全文、译文、媒体和索引授权与公开摘要分别核对，当前业务Demo继续noindex。
+
+## 分析全链路实现合同
+
+`analysis/editorial_schemas.py` 定义源分级、冻结材料身份、各阶段严格输出和公开结果；`editorial_rules.py` 移植评分阈值、词表、身份保护、材料与中文写作提示组装；`editorial_models.py` 映射来源编辑配置、分析运行和业务阶段结果；`editorial_services.py` 承接受理、扫描、事务、固定版本读取、阶段恢复和人工重判；`editorial_translation.py` 承接结构保护的分段翻译。现有主题相关性 annotation 保留本来口径，精选不能覆盖主题相关性。HTTP 路由、Worker、调度和客户端仍通过唯一入口接入。
+
+来源编辑配置必须明确 tier 与版本，不因公司或来源名猜一手来源。每次运行冻结 content/version、配置和27提示模板的版本摘要；阶段结果只保存本用例输出与唯一 AiCall 引用，不建立另一套模型回执。预筛 BLOCK 在正文/摘要/引用缺失时归 UNKNOWN 并继续；仅已证实 BLOCK 停止。两次同模型独立评分依次执行，T1/T1_5/T2 阈值60/65/76，以总分判断，显示向下取整平均；无阈值不评分。已精选或平均严格大于50进入理解写作，否则按长短帖/文章写作。结构、分类/标签/实体、事实、中文标题/摘要与身份保护均独立保留；未知、故障和材料不完整不伪装精选或可发布。
+
+模型调用前先持久保存该业务阶段正在执行，返回后校验固定输入、结果 Schema 与人工版本并保存；完成阶段重启直接复用，正在执行却没有可证明完成结果的阶段进入 unknown，禁止自动再次付费。模型停用时保留待执行状态且零调用。阶段之间核对取消/材料撤回/新人工版本；旧结果可审计但不得改当前结果。手动重新评价以 operation_id 与预期人工版本幂等，明确产生新调用；读取不生成、不翻译。
+
+翻译仅对具备站内全文许可的精选版本运行，链接、媒体、代码与引用锚点屏蔽后按3500字符分批、最多60000字符；占位符遗漏/重复或返回段数不匹配保留原文并标 partial，不能将部分结果声明完整。引文按原身份/文本指纹复用，同一材料新版本不得套用旧译文。评测保留原预筛/双评分的真实阶段、失败/未知分组与固定样本输入，不能把少量示例样本的指标写成实际质量通过。
+
+## 6. Codex 重置公告合同（FR-046-002）
+
+`monitors/codex_schemas.py` 持有严格输入、识别、源上下文、事件、健康和日历 DTO；`codex_time.py` 解释原话中的太平洋时间；`codex_models.py` 映射本领域持久表；`codex_services.py` 拥有事务、程序装配、人工修订和读取；`codex_scan.py` 仅编排来源域 SearchRequest/SourcePage 与上下文 DTO，不持有远程供应商。`monitors/services.py` 继续只拥有主题。HTTP、Worker 和生成客户端由统一入口装配，不创建其他运行时。
+
+监控配置默认关闭，固定 `thsottiaux` 与 X 官方来源；不可变配置版本冻结作者、连接版本、正常 300 秒/热窗 180 秒频次及有界页量。X 的凭据、本人授权和月预算门禁由来源执行入口校验；缺少任一条件时扫描服务返回明确禁止原因且零调用。模型识别必须经 AiService 的原有预算与 AiCall，暂停时帖子继续持久等待，未知/失败不能改为不相关。正文与至多两层回复、引用上下文先持久，再移动源水位。每次追新至多五页，补缺另至多五页；未完成的精确查询、分页 token、止点与最低已读 ID 存在 gap 表，过期/循环/部分失败保持缺口，不能伪完整。
+
+本域表为 `codex_reset_monitors`、`codex_reset_monitor_versions`、`codex_reset_scan_gaps`、`codex_reset_posts`、`codex_reset_recognitions`、`codex_reset_events`、`codex_reset_event_posts`、`codex_reset_reviews`。每张表按 owner/monitor 分区并有同分区外键；原始输入指纹、识别 JSON、AiCall ID、提示词版本、配置版本、投影 epoch 与人工复核版本均保留。通知 intent 与识别结果同事务保存，交给 notifications 唯一投递账本和 Outbox/Kafka；不创建公告投递回执表或自行渠道发送。
+
+识别只提取 direct_reset/reset_credit、announce/progress/confirm/amend/withdraw、原句/中文、范围及原话时间；程序逐项验证原句确属该源帖子、明确数量（否则多轮压为一轮）、目标类型与关联窗口。needs_review 或原句不符时命题 held，不能修改公共事件；故障/恢复亦保留源依据。最早未处理帖子优先，模型失败立即停止该轮；积压页未读前不识别新帖子。提交再核关闭开关、配置版本、投影 epoch、帖子输入指纹和人工版本，旧结果仅留 stale 记录。确认只能来自接受的源确认或带原因的人工 receipt_review，预测与时间流逝不能确认到账。
+
+太平洋当地日期使用 America/Los_Angeles 的夏令时，展示固定 Asia/Shanghai。relative_hours 从发帖瞬间计算；时段、明天、截止/约/跨午夜窗口由程序解释，不让模型换算。不存在的夏令时时刻进入复核；回拨重复时刻沿用上游标准时优先并明确计算规则。source schedule 忠实表示原话，estimate 单独标注模型/原话/日期/历史依据，模型窗不得早于帖子、超过 36 小时或违反原话。估计窗过期先显示 expired_unconfirmed，六小时后 likely_completed，数据库状态仍 announced；撤回独立保留。
+
+人工 skip/reviewed、事件改类型/状态/时间/范围、receipt_review、撤回/恢复和移链必须提供 reason、operation_id、预期版本；同事务保存 before/after、操作者、时间与新 epoch。旧操作重放幂等，相同 operation_id 不同输入冲突；人工结果不得被旧模型写回覆盖。人工到账复核无通知；后续源确认可补官方依据。通知每源帖子/目标幂等，amend/withdraw 只交给曾接收原公告（含 sending/unknown）的目标；36 小时旧帖子和启用前帖子不补发，unknown 不自动重投。
+
+完整/最近七个北京时间自然日快照、日历、90 日轮次/中位间隔、版本探针均读同一持久投影；source_post 时间仅是确认帖时间，人工 occurred_on 是获证日期，均非精确到账秒。pending/review/gap 持久数量与 last_attempt/last_collected/last_verified 分开：完整采集且没有等待或复核缺口才推进 verified；未知 verified 显示 unknown，超过 40 分钟/存在 pending 显示 delayed，超过三小时或 review/gap 显示 attention。读取不调用外源/模型，不写业务状态。真实 API/Worker/通知/浏览器核对仍独立于算法与隔离数据库测试。
+
+模型调用前先持久保存 running 业务记录，返回后在同一记录保存 applied/held/stale 与唯一 AiCall 引用。调用被中断、已发出调用失败或返回未知时保存 unknown，帖子仍 pending 且需复核；下次 tick 不自动再次付费。只在带 reason、operation_id、预期帖子复核版本的人工 retry 后允许新调用，未知历史保留；未发出调用的预算/暂停失败保存 failed，恢复后可继续。人工 acknowledge gap 只允许解释已知帖子，缺口仍 held 并计入健康，不推进 verified；retry 保留原查询与 token，过期配置不得继续。没有监控时配置/快照/最近/版本返回 null、帖子列表返回空，GET 不自动创建监控。
+
+`codex_execution.py` 提供本域只读 due DTO 与 Worker 装配器。due 读取在调度事务内返回现有启用监控的不可变配置版本、正常/热窗频率和到期点；Job、ledger、Outbox 仍由既有调度入口受理。executor 使用 PostgreSQL tick advisory lock 覆盖采集、识别和通知准备；来源 factory 必须经来源域准入和逐请求预算，只返回官方 DTO 适配器，缺省未授权。Worker 注入 lease/epoch guard，在采集与模型写回、模型调用前及 verified 事务再核执行权；取消、租约失效或配置变化不能修改公共事件。通知 sink 只向既有通知服务幂等受理 intent，不代表发送成功；没有投递装配时结果为 partial，unknown 继续由唯一投递账本人工确认。
+
+Next `/codex-resets` 保留匿名 Demo、noindex、按请求 nonce 和生成客户端。读取入口不创建/开启监控，不增加无权限保护的写操作。页面状态及组件如下。
+
+| 组件 | 领域、范围与路径 | 数据与状态 |
+|---|---|---|
+| CodexResetWorkspace | 公告页专属，`src/app/codex-resets/components/codex-reset-workspace.tsx` | 五个生成只读操作；加载、未配置、关闭、快照/最近七日、撤回筛选、版本刷新、故障恢复与刷新失败旧数据提示 |
+| ResetCalendar | 公告页专属，`src/app/codex-resets/components/reset-calendar.tsx` | generated CalendarMark/ResetSnapshot；北京时间月份、当日选择、已确认/推测/待确认分开、零记录合法空；日历不把预测改为到账 |
+| ResetTimeline | 公告页专属，`src/app/codex-resets/components/reset-timeline.tsx` | generated ResetEventView/OutageView；官方确认与人工复核分开，公告范围/原话时间/估计依据、撤回与证据链接；没有公告不编造记录 |
+| ResetSourcePosts | 公告页专属，`src/app/codex-resets/components/reset-source-posts.tsx` | generated listCodexResetPosts；原文/译文/回复引用、待处理/复核/失败、四过滤和每页50条翻页、取消不报错、错误/合法空 |
+
+健康区显示 attempt/collected/verified 的实际时间及 pending/review/gap 数量，不把隔离测试数据写成真实可用性。版本探针仅刷新已有快照；源确认帖时间和人工日期不能呈现为账户精确到账时间。桌面、窄屏与真实 Worker/渠道验收分别记录，不以页面单测代替。
+
+## 六类型编辑来源合同
+
+`sources/editorial_schemas.py` 提供 RSS、web_list、json_list、官方 x_search、mp_account、external 的严格有界配置、材料、游标、页面和来源准入 DTO；未知字段与未实现选项明确拒绝。`sources/adapters/editorial_*.py` 实现 RSS/Atom/RDF、HTML/Markdown/Docusaurus/MiMo、普通或内嵌 JSON、官方 X、MP 上游协议与外部材料归一化，不创建持久状态。`sources/editorial_registry.py` 与执行装配只消费配置/来源 DTO、既有预算及调用方取消/lease guard；既有 HN/原生榜单/评论来源继续保留。
+
+`connections/editorial_models.py`、schemas/services 持有独立来源身份、不可变编辑配置版本、成功游标/健康与运行/材料接收元数据四类事实。来源身份是稳定的 source_key，不把各站点混为 web；配置绑定既有 SourceConnection 版本与其准入，凭据仍只由执行生命周期持有。未知收费或运行中断持久进入 unknown，不能下轮自动重发；人工恢复需 reason、operation_id 和预期版本。内容通过 `content/editorial_ingest.py`/schemas 复用 ContentService 的版本、观察、Job 和 Evidence，无第二 articles 表。外部 payload 不声明许可，逐项核对所属 source_key 当前已批准 Evidence/retention 版本；无许可不摄入正文。
+
+RSS validators 绑定配置哈希、最终响应URL与 ETag/Last-Modified，初次有界回填完成前不接受304跳过普通窗口。所有正文/标题/日期/媒体归一化且不执行源脚本；摘要/teaser 不冒充全文。HTML 明确 selector/日期 offset 和详情权威规则，Markdown 排除导航与段内链接，Docusaurus 保留章节 fragment，MiMo 路由解析失败不回退菜单。JSON 点路径/模板、内嵌严格 JSON、条件与时间单位保持程序语义，禁止 eval。URL 类别/噪声过滤、前缀改写、固定身份去重先于详情预算与初次回填限制；已由详情确认的标题不被列表重新覆盖。
+
+X 固定官方 API、不移入 SocialData；冻结查询与页 token 的积压持久保存，失败/过期不移动成功水位或伪完整。账号分组只在查询/模式/版本相容且已有水位时使用，有界24账号/查询长度；仍由统一Job计费。引用和最多两层回复通过官方 DTO 获取。MP 保留每轮8新帖、初次7日、已知材料正文有界补全/版本和未知结果，MP/Jina/X未授权默认明确 blocked 且零请求。external 摄入固定 owner/source/config版本、操作与输入哈希、Job和许可，重复同输入幂等、同操作不同输入冲突；token只在服务器认证，配置/材料 DTO 和日志无密钥。
+
+只有同事务内容持久成功、输入配置/人工版本/执行权仍有效才推进成功游标。来源初次导入按源发布时间回填，未知发布时间保留未知；初次上限默认30条/12个月，配置有硬上限。HTTP 每次请求（含分页、重定向和详情）重新核准入、取消、预算及硬截止，响应体有上限；未授权/协议错误/部分/未知与真正空结果分开。scheduler due DTO只读，Job/Outbox/Kafka/ledger和运营鉴权由统一入口接入。
+
+## 日周月刊实现合同
+
+`reports/edition_models.py` 映射逐刊不可变修订，不覆盖既有主题统计报告。`edition_rules.py` 用北京时间完整自然日、ISO周和自然月，09:00接受上一完整刊期；逐事实优先第一方、排除明确回填、保留回填状态未知的统计，日报每类8条加12条快讯、周刊40条、月刊60条。`edition_services.py` 通过同一Job/Outbox接受冻结的publication候选，不复制原始正文；生成前、提交与每次读取重新核验全部版本和许可，任一失效隐藏整份派生标题、摘要和正文。刊期operation_id幂等与expected_revision串行锁保留历史稿；人工修订有原因和actor，不可添加未冻结引用。
+
+模板稿不用模型；启用模型时统一AiService和预算账本，程序统计不由模型计算，严格验证引用编号。running已发送但回执不确定的恢复进入unknown，自动调度不可重付，需新操作人工复核；唯一AiCall回执独立保存，晚到结果必须复核任务lease和刊期最新修订。`edition_reading.py` 提供调用者事务内的typed只读合同给RSS/Markdown/MCP，所有GET零生成。自动补刊必须有界且保留扫描进度，不能从最早旧刊反复扫描造成最近刊期饥饿。
+
+## 运营与评测实施合同
+
+运营编排实际包名固定为 `operations`，承接上表 administration 职责；`analysis/evaluation_*` 持有 SelectBench 评测事实。运营认证使用独立 `HOTKEY_OPERATOR_TOKEN`，默认未配置关闭；constant-time 校验后仅解析既有唯一 Demo 分区，不能由请求指定 owner。读取需运营 token，写入还要求 `X-HotKey-CSRF:1`；token 仅内存输入和服务端配置，不进入浏览器持久存储、DTO、审计或日志。撤销通过替换/移除服务端配置并重启加载，生效后旧 token 在下一请求失效；页面退出清当前内存上下文，不宣称撤销服务端密钥或提供会话TTL，匿名业务阅读不增加登录要求。
+
+六项运营事实分别是匿名反馈、来源冷却/禁止、私有附件、幂等审计操作、进程心跳和不可变词表版本。反馈按 operation_id+输入hash 幂等，持久冷却跨重启有效；HMAC 处理来源标识，不存 IP/UA 原文，密钥无配置时明确关闭提交。反馈文字5000字、可选邮箱200字和页面URL500字；截图限8MiB、PNG/JPEG/WebP/GIF且核验实际格式/尺寸，私有读取需要运营身份。状态修订/屏蔽/关闭要求预期版本与原因；处理结束可删除正文/联系信息/附件，保留无正文审计。外转至内部渠道保持独立开关、Job和回执，不能在匿名HTTP提交中隐式发送。
+
+SelectBench 两表保存不可变评测run和按model/case的gold、decision、score、错误和模型回执；离线导入必须严格同gold集合、prompt/version/hash/模型配置，程序复算TP/FP/FN/TN/错误和分层结果，不信任导入summary。收费评测统一AiService且默认关闭，真实预算/运行/恢复证据分开记录。修改词表/主体/分类生成新版本，旧内容不自动重判；分析请求通过所属领域DTO消费有效版本。
+
+| 组件 | 所属/路径 | 数据与状态 |
+| --- | --- | --- |
+| OperationsWorkspace | `frontend/src/app/operations/components/operations-workspace.tsx` | 独立运营认证、loading/disabled/unauthorized/error，真实Job/coverage/来源/预算/反馈/审计/心跳 DTO |
+| FeedbackForm | `frontend/src/app/feedback/components/feedback-form.tsx` | 匿名CSRF提交、相同opid重试、持久冷却、附件拒绝和成功编号，无隐式渠道发送 |
+| SourceIdentityEditor | `frontend/src/app/operations/components/source-identity-editor.tsx` | 来源角色/selector/机构与组身份、expected_revision冲突；不触发采集 |
+| SelectBenchReading | `frontend/src/app/operations/components/selectbench-reading.tsx` | 严格导入、离线复算、同case横向对比/分层/误判/错误，不把导入报告当真实付费模型验收 |
+
+维护计划必须逐项映射实际 Scheduler/Worker/Job：来源调度/处理与翻译、热榜和小时快照、事件摘要/关系、日周月刊/补刊、保留/清理、收费unknown恢复、故障告警/摘要、反馈外转、备份与源健康报告，不能仅返回一张“已配置cron”清单。沿用既有覆盖、失败健康、预算、清理和 backups 的文件hash/一致性快照/隔离恢复合同；备份上传与 restore verified 是独立状态。运维写入通过所属领域公开服务并在同事务写审计，禁止后台跨域ORM；进程心跳与外部watchdog分开，服务失联时不能用其自身GET成功作为持续存活证据。
+### 公开阅读组件与接口（本轮实现）
+
+`/discover` 使用生成的 `gongkaifabu.listPublicItems/getPublicHotStories`，提供精选/全部、24小时/7天、分类、来源、频道、时间口径与字面检索、真实游标分页；不替换现有监控首页。`PublicItemCards` 在资讯和公开事件报道列表复用，`PublicationFailure` 在多个读取路由复用，路径为 `frontend/src/components/publication/`。`/items/[contentId]` 的专属 `ItemReader` 读取站内许可详情，显示原文/已持久译文、部分与unknown状态、目录和有状态媒体，不通过读取触发付费翻译；允许仅ID的本机收藏、按发布修订保存阅读位置和本机笔记，不创建身份或复制原始材料。`PosterDownload` 为资讯、事件和刊期读取服务端生成的PNG并提供本机预览和下载，GET前复核当前许可，复用生成的公开出口函数。
+
+`/agent` 和 `/feeds` 展示实际五个MCP工具、原生时间窗口和各公开出口地址；资料通过生成客户端读取。`/publication/manage` 的专属 `PublicationManager` 通过生成客户端管理来源参与/许可、人工范围与索引；正文格式由固定材料事实决定、异步重建进度；操作员令牌只由使用者输入并存在组件内存，不读取服务端配置令牌、不写入浏览器持久存储。来源配置和许可策略分别持有原有领域事实。页面覆盖加载、空、网络/服务异常、404、403/409、处理中、部分、unknown、撤回与许可失效状态；Demo默认noindex。
+
+
+### 材料格式、镜像与长任务接入
+
+`content/editorial_rendered_*`持有同一ContentVersion的一对一正式格式、HTML/Markdown原文和媒体事实；格式/正文/媒体变化纳入版本指纹，原纯文本仍供搜索、主题和评论读取。摄入和格式事实必须同事务，来源receipt只存结构化采集状态/谱系，不另存正文。跨域通过content公开typed DTO读取固定版本，publication全文grant以实际材料格式为准；模板格式或配置不能覆盖材料事实。正文与派生稿在提交和读取时都核对许可、证据有效期/删除、版本及人工修订。
+
+`publication/media_mirror_*`仅持固定候选、原Job和Evidence引用及各rendition描述，使用既有Evidence MinIO桶。默认禁外采，明确限32候选、图片15MiB/视频64MiB、单请求20秒与单媒体120秒；DNS、每次重定向与预算逐次复核。PNG/WebP/JPEG/GIF/ICO/SVG按真实格式处理，动画保留时间与循环，不扩小图；超像素/活动SVG拒绝。启动即持久running，外采不确定不自动重下；已准备对象可按SHA与固定Evidence恢复，否则unknown并人工处理。GET只读已保存对象，I/O前后复核授权，不隐式创建桶、抓媒体或付费。存储adapter归evidence/adapters/media_storage.py，客户端归进程生命周期。
+
+报告使用report.edition原Job，日期由北京自然日/ISO周/月和9点到期规则产生；最新到期优先，每轮有界补缺并持久游标，不在读取时生成。原模型回执与冻结引用决定恢复，纯模板中断可继续；付费结果unknown不会自动重付。publication每5分钟经原Job作有界重投，来源许可收紧即时阻断读取。固定译文新op复用完成结果仍有原Job幂等受理回执，不增加模型调用，op与不同payload冲突。
+
+Worker父进程在监督子进程期间按租约的三分之一续租，只续当前epoch，不虚构请求/检查点、不续取消任务；长任务Kafka轮询窗口按启用handler上限及退出边界自动计算，显式不足配置拒绝。API/Worker/Scheduler独立写进程心跳，测试环境不启动背景写；watchdog是独立进程，不用Scheduler自报持续存活。预算USD/CNY分别记原账本且无隐式汇兑。
+
+公开事件详情路径`/discover/stories/[eventId]`仅输出ALL成员当前许可通过的公开报道，原`/events`保留内部证据/事实工作台口径。`/editorial-sources`负责实际六类源配置、版本、人工轮询和未知恢复；其业务组件归该路由，统一生成客户端，原平台连接与公开许可分别操作。
+
+### 通知统一账本与完整筛选评测
+
+既有 notifications 继续持有唯一 Target/Delivery，投递仅使用原 notification.send Job/Outbox。Target默认关闭，以独立运营鉴权、operation_id、expected_revision与原因审计控制收件人和report/edition/selected/codex_reset订阅。enabled_at在有效开启或目的地/订阅变更时重置，不回发该时间之前的历史材料。SMTP凭据仅为Settings SecretStr，页面不接收或返回密钥；独立开关默认关闭，仅允许SSL/STARTTLS与不超过10秒的超时。
+
+Delivery保留报告FK和版本合同并支持typed subject，原报告唯一键与新owner/target/kind/dedupe_key保证幂等。冻结subject版本、target revision、固定材料input fingerprint、payload和expires_at。发送前通过所属领域DTO复核可读性、公开许可、撤回和指纹。selected按同一事实的sibling key去重，Codex按confirmed周期身份，edition按固定刊物版本。SMTP成功仅宣称服务器接受；未知请求禁止自动重发，运营按delivery revision CAS记录目的地证据，确认未送达后只允许原Job显式重试，不伪造原失败任务成功。
+
+跨域生产成功回调在caller事务中登记固定subject和原Job，生产状态与通知受理同事务。发送内容经所属领域实际read DTO逐次复验；通知服务不读取foreign ORM，不建立另一通知队列。
+
+SelectBench复用analysis已有两表。Gold DTO冻结来源事实、材料、split/seed与至多100样本×5模型，确定性分层抽样；每case/model独立analysis.selectbench Job，production next_editorial_step(selection_only=True)实际执行prefilter/score-1/score-2。程序复算指标和阈值扫描，Run.summary私有阶段保存完整响应与真实AiCall ID；已保存阶段免费续跑，未保存响应unknown且零自动重付。selectbench_enabled默认False，原全局AI开关和预算照常适用，不定时发起付费评测。
+
+## 站点说明与联系设置
+
+IndexNow额外按原运营真实接收回执的canonical资格位做每日连续复验。原OperatorAuditOperation保存每次实际发送路径及索引资格（true/false），不建第二URL事实库。分页游标为回执created_at/audit_id/path，每批至多500条；与每个路径最新成功接收资格相比，来源策略直接收紧、派生稿失效和重新授权均能产生一次变化通知，无需伪造文章修订。空回执不进入复验集合、一天内走到尾即停止，未知回执仍阻止调度且须原Job人工确认。公开资格通过publication自有typed读模型复验，资格false只发送本域canonical以请求重新抓取，不泄露撤回的正文。Article/edition/story变化共至多1500路径，接收资格复验共享剩余路径容量，未处理游标不越过；统计examined至多2000。
+
+operations/site_models.py持单分区站点设置一表，revision CAS、operation_id/原因及before/after审计复用原operations审计。联系说明和HTTP(S)入口无密钥；微信与飞书两个二维码分别限2MiB且由Pillow实际解码、尺寸/格式验证后规范编码，不接受SVG或任意远程代理。配置关闭或更换后读取no-store且旧hash URL不再返回图片。publication/site_reading.py以500条分批的当前公开typed投影计算准确可见数、精选数、来源数和最新时间，GET零付费/零外采/零业务写。静态说明由本地真实部署边界编写，不复制上游品牌/法律承诺；公开联系和运营配置由唯一生成API消费。
+
+IndexNow按[官方协议](https://www.indexnow.org/documentation)用POST及根路径验证文件；200只记已接收，202单列等待key验证，不称已索引。`operations/indexnow_*`编排原`publication.indexnow` Job，审计只存冻结URL引用、已处理游标与回执摘要；`publication/indexnow_reading.py`只派生当前indexable文章、公开刊期与真实root事件路径及已冻结的撤回路径。文章修订、刊期created_at和事件updated_at分别每批500、保留三个连续游标分批，不越过未处理记录；公开刊期canonical为/reports/{kind}/{key}，事件为/discover/stories/{id}，逐篇和聚合均要求ALL索引许可；相同lease下先记sending/网络预算，保存响应后免费恢复，unknown不自动发送。默认全开关关闭；真实提交还须显式indexing许可、HTTPS根域、key与global/source网络预算，无第二队列或供应商回执表。
+
+### 官方 X 分组采集事务合同
+
+`source.editorial.x_group` 复用原 Job/Outbox/Kafka，scope 冻结同分区、同官方连接版本、同参与模式的成员身份、作者、配置/许可版本、修订、水位与查询哈希；每组至多 24 成员、查询至多 470 字符。成员仍各自持有原来源配置、运行回执、内容/Evidence 与健康水位，不把分组查询改成全局 X 来源。普通单来源 Job 的上下文保持原合同；分组内容仅经 jobs 的 typed member-context 读取冻结成员配置，未列入 manifest 的 source/profile 不得借用父任务。
+
+同一 HTTP 请求在原预算账本全局与 X 汇总仅计一次；每个成员独立来源请求计一次，已知帖子费用按上游作者归属分摊。重复作者归属不明确时不得给成员重复分配同一费用；无法解析或中断的费用保持各预算的保守上限并进入持久 unknown，人工核验前不重复请求。原账本提供 group reserve/settle 公共服务，所有预算在 caller 事务内一起预留或一起回滚；普通预算预留和结算行为保持原合同。
+
+请求前同事务复核所有成员当前开关、冻结配置/修订、当前连接与许可、原 Job lease/epoch 和取消；任一成员变化必须停止该冻结请求。分页的查询、token、停止水位及原成员集合进入既有运行 prepared-page/backlog，恢复不能把旧分页 token 用于新分组查询。完整回执及零条成功才推进对应成员 selector 时钟；部分、未知或已撤销成员不得刷新时钟。调度先选分组再受理未分组成员，原任务幂等与重启回执负责避免同轮重复采集；Provider、付费预算和凭据默认仍关闭。
+
+服务端分享图片`publication/share_images.py`使用既有Pillow及固定AIHOT随附NotoSansSC子集（assets/og-fonts唯一目录，OFL完整保留）生成1200×630与1080×1440 PNG；根/og/* route仅固定site/pages/items/stories/reports/topics/posters参数。取当前许可DTO，不重复正文存储，不触发付费，ETag/304前ALL复验，撤回404/no-store。
+
+源图标source.icons：sources/icons.*负责上游候选规则（自己最新X作者头像、公众号两篇round_head_img、站点主页icon前5），connections/editorial_icon_*持单一同来源版本cache与typed准入，publication仅消费当前合法cache URL，默认关闭外采。200来源有界批次、30日缺项/公众号3日重查，公众号页面间隔3秒；逐请求复核source版本/准入与网络预算、DNS固定SNI和有限重定向，复用media avatar48/96 codec及Evidence MEDIA/MinIO，不在GET调用外部URL。
+
+来源图标事务与公开读取：`source.icons` scope冻结profile/source身份、cfg/revision、许可/连接版本、最近10篇URL与本人头像URL、输入hash。Worker在原Job租约内逐HTTP与MinIO写入复核当前版本及独立MEDIA的`url`/`source_icon`字段目的；候选头像的两个48/96尺寸共用原Evidence资源及两个MinIO清理目标，先持久清理计划再PUT。进程崩溃后原`source.icons.*` UsageAttempt保守结算已预留上限并转缓存unknown，Scheduler不自动重试；人工retry_unknown须原操作ID、理由和当前profile CAS，同事务原运营审计。缓存unknown与运行中不能被新周期覆盖。
+
+`SourceIconService.get/read_in_transaction`只读缓存并重新核当前来源/许可/保留版本、Evidence与固定对象hash；`SourceIconReadingService.read/read_by_source_key`只访问原MinIO，读前后再次核准入。管理三API沿独立operator权限；公开`/api/site/source-icons/{source_key}/{mode}`在缓存准入外还须当前released来源许可，所有图像no-store，撤回返回404，公开列表保留默认SVG fallback。跨域公开投影仅调用callerTX `read_source_icon_urls_in_transaction`（100个来源有界）获取合法avatar48 URL，不新建图标原文或队列，不在GET采集。
+
+真实6h语义回溯通过/embeddings实际向量、同provider/model/维度cosine判断，不使用标题相似度冒充。events持1向量表，ai/adapters/embeddings.py沿原AiService账本接受供应商结构化向量；原Job冻结输入/模型/维度与预算，已保存结果免费恢复、未知付费不重发、当前权限/epoch复核。默认embeddings_enabled与ai_enabled均关闭。
+
+## 23. 完整度复核补齐的入口与合同
+
+公开刊物目录由 `publication/edition_catalogue.py` 与 `api/routers/publication_editions.py` 持有。跨域仅调用 `reports/edition_reading.py` 的调用者事务内 DTO：逐 kind/key 连续扫描、只取每期最新修订，再逐份 ALL 核验；最新稿不可读时不得回退到旧修订。公开最新入口 `/reports/daily`、`/reports/weekly`、`/reports/monthly` 与 `/reports/{kind}/archive` 不替代既有 UUID 主题报告；同一 `/reports/{kind}/{key}` 读取前后期和日报月历。RSS 按 500 条原始游标继续读到 50 条合格条目或尾部，不能先截前 2000 条再过滤。
+
+`analysis.editorial_reading` 仅暴露运行时原 `input_manifest.quote` 的固定 `quote_reference`。公开引用卡片再读同一固定内容版本与引用来源当前独立许可；目标对应的发布投影、固定版本、站内全文或再分发许可分别复核。未发布、撤回或失去许可的引用不显示，摘要模式不带正文，不递归展开引用。文章的同事实报道、进展与相关故事经原 events 只读 DTO 及每份当前公开投影读取。图库只展示已保存且当前许可允许的站内 rendition，支持键盘浏览、放大和原生视频；不把外部图片链接直接嵌入播放器。
+
+人工纠错由原 `EditorialOverride` 与 `manual_version` 审计承接，支持部分 selected/title/summary/category/reason/tags/silent 覆盖、逐字段清除以及恢复最早自动 before 结果。修订始终单调增加，历史不删、不调用模型、不以人工字段覆盖付费阶段证据；全清后 `manual=false`，自动扫描按当前 CAS 版本继续。修改入口用独立运营令牌和 CSRF，作品当前分析读取同样核验固定材料；操作重复返回原修订结果并再次核验许可。`frontend/src/app/publication/manage/components/editorial-correction-manager.tsx` 仅消费运行时生成的客户端，令牌和作品上下文变化会丢弃迟到响应。silent 在通知受理和发送前同时检查；清除后仍按原精选身份和 Delivery 幂等键去重。
+
+`ai/capability_*` 持有 11 类能力、保护的服务端模型目录、单调配置历史与原 Job scope 冻结。后台选择优先于环境选择，清除后台选择恢复环境/默认。公开运营 DTO 不含 endpoint、API key 或额外请求参数；原 `AiCall` 记录真实 model/provider、配置哈希、原币种以及 estimate/actual/cap。estimated token 费用不能称实际收费，USD/CNY 不混算。供应商调用先在同一事务预约原全局/来源请求数和费用预算、记录原 running 调用与租约 epoch；新 epoch 只恢复旧 epoch 的调用为 unknown，按原 cap 保守结算，不自动重付。保存的领域响应按冻结模型免费继续，不受后来后台模型切换重解释。独立 embeddings 仍使用真实 `/embeddings` 和原冻结向量配置，不改成 group 聊天请求。Worker、Scheduler 的硬截止和 Kafka 最大轮询窗口覆盖模型目录最长有界超时。
+
+### 运维健康报告与原投递闭环（2026-10-02）
+
+`operations.maintenance` 的10个原action共用原Job、运营审计和预算；来源周报不是通用snapshot。每周北京时间周一09点受理，按content首次收录统计本7日/前7日，当前发布精选数由publication独立typed实时许可读取得（包括允许的summary-only、排除withdrawn），并列出启用/新增/失败/降级来源以及非外部/非公众号的7日沉默来源。所有来源metadata连续keyset分页；正文与渠道凭据不进入DTO。报告保存在原审计after_state，运营页可阅读，启用运营告警与独立Feishu URL才实际投递。
+
+健康findings由所属领域caller-TX DTO组成：Worker真实started_at后的20分钟静默宽限、默认360分钟无新文章、模型开启且处理等待2h达10条或3h失败达20条、北京10点后缺有效日报、Codex待识别超过1h/48h待复核、模型真实成本超冻结cap熔断、榜来源超过26h未成功、原通知failed/unknown、进程心跳、预算、任务和备份。默认阀门关闭时不报告预期未开启的采集、榜或刊物失败。恢复通知与now每小时/today每日去重沿原审计执行，不建立第二告警队列。
+
+运营渠道使用原审计request_started→delivery_saved握手和原网络预算，卡片按完整UTF-8 JSON字节限制，过长报告保留运营页全文。成功回执免费恢复；丢失响应为unknown，自动再次运行零HTTP，人工核对原operation后才能放行。真实外部渠道仍默认关闭，受控HTTP验收与真实送达分别记录。
+
+### 来源试抓、外部摄入与完整人工操作
+
+来源试抓归 sources/editorial_preview_*，管理专属 SourcePreview 组件归 editorial-sources/components。草稿 sample 仅本地 RSS/HTML/JSON 解析，有界输入和最多20条 title/url/time/200字 excerpt；原审计保存输入/配置hash与结果元数据，不另存原文、不摄入 Content 或推进水位。已有来源的真实试抓经 source.editorial.preview 原 Job/Outbox，冻结配置/修订/连接/许可，每 HTTP 复核原预算与租约；只取列表页、不抓正文，X仅一页，公众号/外部推送明确不支持主动试抓。GET只读原审计typed回执，unknown不自动外采。人工复核要求原Job/preview_operation_id、当前profile修订、独立review operation和原因；保存原审计允许新的显式受理，原unknown及保守费用记录不变。
+
+外部摄入每批至多50条，来源专用token须服务端保护且至少32字符，拒绝明显占位及空白。每真实对端IP每分钟至多10次新受理，Settings私有稳定HMAC盐未配置时入口关闭，原 Job 持准入指纹与逐条结果；相同操作重放不重复扣限额，错误payload复用操作仍409。API提供typed受理回执与逐条成功/重复/拒绝读取，复用原来源运行和内容摄入，不新建队列或原文库。未知代理头不作为可信对端，生产代理需配置真实peer。
+
+编辑来源写配置和人工重新分析均使用独立运营令牌+CSRF。重新分析提交当前固定content_version_id/manual_version、相同operation_id可恢复受理，原Job冻结模型并异步执行；页面只宣称已排队，不把受理称分析成功。分类修正使用既有六类Category，公开推荐理由reason_zh与私有审计reason分开；逐字段/全清恢复原自动值，收费阶段回执不变。Codex重新关联/解除关联捕获当前源事件revision（review.expected_revision）及目标事件target_expected_revision双CAS；解除时to_event_id与目标revision同为null，不以帖子的review_version替代源事件版本。原因/opid审计，现有管理页与typed API连通。
+
+来源管理的最近材料组件同样归 editorial-sources/components，仅消费既有 listContentRecords 的精确 source_key 与20条原游标分页；包含合法的未精选/分析失败材料，链接原 content 详情及发布维护入口。列表是当前可读材料，不能冒充该来源完整统计。外部推送组件使用来源专属令牌、typed批次/逐条回执及显式纯读取处理进度；pending只表示受理，全部上下文切换丢弃迟到响应，令牌仅存在组件内存。
+
+### 连续扫描、最终准入与迟到回执
+
+归并候选和小时热度任务按稳定身份分页扫描；已受理 Job、已有快照、不可读材料不能占满前置 LIMIT 并遮住后续候选。单轮新增任务仍有上限，后续轮次可继续覆盖尾部；热榜对全部当前可读根事件计算实时48小时热度，以有界内存精确保留前十及身份并列排序，不按更新时间截取前1000代替完整榜单。
+
+各领域拥有最终模型材料核验：在 AiService 预留原预算、保存 running AiCall 的同一事务内，重读固定材料/成员、当前来源字段许可、Evidence 有效期、人工修订、来源配置和原任务执行权。准备阶段通过不替代最终准入；受控注入客户端同样绑定领域守门。`with_admission_guard` 只组合预留前核验，保留原租约守门和 epoch，不在供应商返途中提前丢弃回执；返途中撤权仍持久保存原 AiCall，再由领域提交守门禁止修改当前派生结果。
+
+兼容模型没有审核币种/价格时，无论组件是否被标为免费，均在发送前拒绝。已审核定价的模型均要求原 global/source 网络及费用预算；零价不需要付费开关，费用账按最小1微单位预留异常回执位置，正常零价结算为0，AiCall 的批准费用上限仍为0。已知同币种供应商实费完整进入原 reservation 和预算窗口，允许已知实际费用超过原预留且释放为0；普通来源/API结算仍不得超预留。unknown 保留原上限，已知更高费用只补增量；迟到、同额或低额回执不能退款、重复扣款、改变unknown或触发重发。费用熔断人工确认只记录原审计及配置修订，允许确认已知超额的unknown费用，但不改变调用结果、不清账，另一模型仍受原全局预算约束。
+
+Codex 修订/撤回通知在受理及最终发送事务内，均查询原 Delivery 中同 owner、目标、monitor/event 的 announce 历史；只有 succeeded、sending、unknown 原预告收件人有资格。后加订阅者、仅 pending/failed、其他分区及人工确认 not_delivered 的原预告目标不接收修订/撤回；不增加收件人账本。
+
+运维组件退出及换令牌同步推进本地上下文 epoch、清令牌/DTO/游标/待办；每次刷新、分页、操作回执和私有截图在 await 后复核原上下文，旧操作回调在发起刷新前也复核。退出保持可操作，迟到响应不能恢复旧令牌或污染新上下文。

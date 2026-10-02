@@ -18,6 +18,10 @@ LOCAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
 MAX_TITLE_LENGTH = 80
 
 
+class ObsidianWriteConflictError(OSError):
+    """An observed user edit must survive export and require a fresh merge."""
+
+
 def safe_title(value: str) -> str:
     cleaned = "".join(
         character
@@ -107,6 +111,7 @@ def write_daily_note(
     object_id: UUID,
     *,
     relative_path: Path | None = None,
+    expected_content_sha256: str | None = None,
 ) -> KnowledgeExportResult:
     path = relative_path or daily_relative_path(note)
     target = _target(vault, root, path)
@@ -116,15 +121,25 @@ def write_daily_note(
             path = daily_relative_path(note, short_id=True)
             target = _target(vault, root, path)
     generated = _managed_text(note, object_id)
-    if target.exists():
-        existing = target.read_text(encoding="utf-8")
+    snapshot = target.read_bytes() if target.exists() else None
+    if snapshot is not None:
+        existing = snapshot.decode("utf-8")
         if f'hotkey_id: "{object_id}"' not in existing.split(BEGIN, 1)[0]:
             raise ValueError("Obsidian note belongs to another object")
         updated = _merge(existing, generated)
+        managed = BEGIN + existing.split(BEGIN, 1)[1].split(END, 1)[0] + END
+        managed_sha256 = hashlib.sha256(managed.encode()).hexdigest()
+        if expected_content_sha256 is not None and managed_sha256 not in {
+            expected_content_sha256,
+            content_sha256(note),
+        }:
+            raise ObsidianWriteConflictError(
+                "Obsidian managed content differs from the recorded export"
+            )
     else:
         updated = f"{generated}\n## 我的笔记\n"
     digest = content_sha256(note)
-    if target.exists() and updated == existing:
+    if snapshot is not None and updated == existing:
         return KnowledgeExportResult(
             relative_path=(Path(root) / path).as_posix(),
             content_sha256=digest,
@@ -139,6 +154,10 @@ def write_daily_note(
             temporary.write(updated)
             temporary.flush()
             os.fsync(temporary.fileno())
+        # Recheck all bytes after preparing/fsyncing, including user text outside our block.
+        # This detects observed concurrent edits; an ordinary filesystem has no cross-editor CAS.
+        if target.is_symlink() or (target.read_bytes() if target.exists() else None) != snapshot:
+            raise ObsidianWriteConflictError("Obsidian note changed before replacement")
         os.replace(temp_name, target)
         temp_name = None
         directory_fd = os.open(target.parent, os.O_RDONLY)

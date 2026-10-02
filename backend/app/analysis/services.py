@@ -11,6 +11,7 @@ from sqlalchemy import func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
+from ai.capability_services import freeze_ai_job_scope_in_transaction
 from ai.schemas import AiCallError, AiFailureCode
 from ai.services import AiService, create_ai_client
 from analysis.models import (
@@ -38,6 +39,7 @@ from analysis.schemas import (
     EventAnnotationRef,
     WindowAnnotationCountView,
 )
+from content.editorial_reading import require_analysis_content_permissions_in_transaction
 from content.schemas import AnalysisPostContentView
 from content.services import (
     load_frozen_analysis_comments,
@@ -47,8 +49,9 @@ from content.services import (
     load_post_versions_for_analysis_scan,
 )
 from core.config import Settings
+from core.errors import ApplicationError
 from jobs.coverage import CollectionDueWindowService
-from jobs.execution import JobCompletion, JobExecutionFailure
+from jobs.execution import ExecutionLease, JobCompletion, JobExecutionFailure, JobExecutionService
 from jobs.metrics import AnalysisTimingSample, summarize_analysis_timing
 from jobs.models import Job
 from jobs.schemas import (
@@ -275,8 +278,10 @@ def build_analysis_need_ledger_in_transaction(
                 ):
                     timing_samples.append(
                         AnalysisTimingSample(
-                            needed_at=origin.started_at,
-                            first_valid_at=first_valid_at,
+                            needed_at=origin.started_at.astimezone(UTC),
+                            first_valid_at=first_valid_at.astimezone(UTC)
+                            if first_valid_at is not None
+                            else None,
                         )
                     )
     timing = summarize_analysis_timing(timing_samples, cutoff_at=cutoff_at)
@@ -619,7 +624,8 @@ def analysis_failure(error: AiCallError, *, now: datetime) -> JobExecutionFailur
 
 
 class AnalysisService:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, *, settings: Settings | None = None) -> None:
+        self.settings = settings
         self._session = session
 
     def record_prompt_activation_in_transaction(
@@ -1119,14 +1125,19 @@ class AnalysisService:
                             configuration_ref=f"topic:{topic_id}",
                             configuration_version=rule_version,
                         ),
-                        scope=AnalysisJobScope(
-                            topic_id=topic_id,
-                            topic_rule_version=rule_version,
-                            prompt_version=ANALYSIS_PROMPT_VERSION,
-                            content_version_ids=content_version_ids,
-                            prompt_items=batch,
-                            retry_index=retry_index,
-                        ).to_job_scope(),
+                        scope={
+                            **AnalysisJobScope(
+                                topic_id=topic_id,
+                                topic_rule_version=rule_version,
+                                prompt_version=ANALYSIS_PROMPT_VERSION,
+                                content_version_ids=content_version_ids,
+                                prompt_items=batch,
+                                retry_index=retry_index,
+                            ).to_job_scope(),
+                            **freeze_ai_job_scope_in_transaction(
+                                self._session, owner_id=owner_id, settings=self.settings
+                            ),
+                        },
                     ),
                 )
             )
@@ -1292,7 +1303,9 @@ class AnalysisAnnotateExecutor:
         self._settings = settings
         self._clock = clock or (lambda: datetime.now(UTC))
 
-    def execute(self, message: JobMessage) -> AnalysisExecutionResult:
+    def execute(
+        self, message: JobMessage, lease: ExecutionLease | None = None
+    ) -> AnalysisExecutionResult:
         scope, rules, posts, items = self._load_execution(message)
         if not items:
             return AnalysisExecutionResult(
@@ -1306,6 +1319,10 @@ class AnalysisAnnotateExecutor:
             or any(len(item.comments) > _MAX_COMMENTS_PER_POST for item in items)
         ):
             raise self._configuration_failure("analysis_batch_scope_invalid")
+
+        def admission_guard(current: Session) -> None:
+            self._ai_admission(current, message, lease, scope, rules, items)
+
         try:
             client = create_ai_client(self._settings)
         except AiCallError as error:
@@ -1313,24 +1330,51 @@ class AnalysisAnnotateExecutor:
         try:
             try:
                 with self._sessions() as session:
-                    completion = AiService(session, client, clock=self._clock).complete(
-                        owner_id=message.owner_id,
-                        job_id=message.job_id,
-                        purpose="analysis.annotate",
-                        prompt_version=scope.prompt_version,
-                        prompt=build_analysis_prompt(
-                            items=items,
-                            match_any=rules.match_any,
-                            match_all=rules.match_all,
-                            exclude=rules.exclude,
-                        ),
-                        output_schema=ANALYSIS_OUTPUT_SCHEMA,
+                    completion = (
+                        AiService(
+                            session,
+                            client,
+                            clock=self._clock,
+                            settings=self._settings,
+                            guard=(
+                                lambda current: JobExecutionService(
+                                    current,
+                                    lease_seconds=self._settings.job_lease_seconds,
+                                    clock=self._clock,
+                                ).require_current_operation_in_transaction(
+                                    lease,
+                                    owner_id=message.owner_id,
+                                    operation_id=message.operation_id,
+                                )
+                            )
+                            if lease is not None
+                            else None,
+                            execution_epoch=lease.epoch if lease else None,
+                        )
+                        .with_admission_guard(
+                            admission_guard,
+                            execution_epoch=lease.epoch if lease else None,
+                        )
+                        .complete(
+                            owner_id=message.owner_id,
+                            job_id=message.job_id,
+                            purpose="analysis.annotate",
+                            prompt_version=scope.prompt_version,
+                            prompt=build_analysis_prompt(
+                                items=items,
+                                match_any=rules.match_any,
+                                match_all=rules.match_all,
+                                exclude=rules.exclude,
+                            ),
+                            output_schema=ANALYSIS_OUTPUT_SCHEMA,
+                        )
                     )
             except AiCallError as error:
                 self._persist_results(
                     message=message,
                     scope=scope,
                     posts=posts,
+                    guard=admission_guard,
                     results=tuple(
                         AnnotationWrite(
                             content_version_id=item.content_version_id,
@@ -1360,6 +1404,7 @@ class AnalysisAnnotateExecutor:
                     message=message,
                     scope=scope,
                     posts=posts,
+                    guard=admission_guard,
                     results=tuple(
                         AnnotationWrite(
                             content_version_id=item.content_version_id,
@@ -1392,7 +1437,13 @@ class AnalysisAnnotateExecutor:
                 ai_call_id=completion.call_id,
                 retry_index=scope.retry_index,
             )
-            self._persist_results(message=message, scope=scope, posts=posts, results=results)
+            self._persist_results(
+                message=message,
+                scope=scope,
+                posts=posts,
+                results=results,
+                guard=admission_guard,
+            )
             invalid_count = sum(result.status is AnnotationStatus.UNANALYZED for result in results)
             job_completion = (
                 JobCompletion(status=JobStatus.SUCCEEDED)
@@ -1419,6 +1470,48 @@ class AnalysisAnnotateExecutor:
         finally:
             client.close()
 
+    def _ai_admission(
+        self,
+        session: Session,
+        message: JobMessage,
+        lease: ExecutionLease | None,
+        expected_scope: AnalysisJobScope,
+        expected_rules: NormalizedMonitorRules,
+        expected_items: tuple[AnalysisPromptItem, ...],
+    ) -> None:
+        if lease is not None:
+            JobExecutionService(
+                session, lease_seconds=self._settings.job_lease_seconds, clock=self._clock
+            ).require_current_operation_in_transaction(
+                lease, owner_id=message.owner_id, operation_id=message.operation_id
+            )
+        scope, rules, _posts, items = self._load_execution_in_transaction(session, message)
+        current_version, _current_rules, _sources = MonitorTopicService(
+            session
+        ).get_current_topic_rules_and_sources_in_transaction(
+            owner_id=message.owner_id, topic_id=scope.topic_id
+        )
+        if (
+            scope != expected_scope
+            or rules != expected_rules
+            or items != expected_items
+            or current_version != scope.topic_rule_version
+        ):
+            raise self._configuration_failure("analysis_input_changed")
+        try:
+            require_analysis_content_permissions_in_transaction(
+                session,
+                owner_id=message.owner_id,
+                content_version_ids=tuple(
+                    version
+                    for item in items
+                    for version in (item.content_version_id, *(item.comment_version_ids or ()))
+                ),
+                now=self._clock(),
+            )
+        except ApplicationError as error:
+            raise self._configuration_failure("analysis_input_changed") from error
+
     def _persist_results(
         self,
         *,
@@ -1426,8 +1519,10 @@ class AnalysisAnnotateExecutor:
         scope: AnalysisJobScope,
         posts: Mapping[UUID, AnalysisPostContentView],
         results: Sequence[AnnotationWrite],
+        guard: Callable[[Session], None],
     ) -> None:
         with self._sessions() as session, session.begin():
+            guard(session)
             AnalysisService(session).persist_results_in_transaction(
                 owner_id=message.owner_id,
                 topic_id=scope.topic_id,
@@ -1448,93 +1543,107 @@ class AnalysisAnnotateExecutor:
         tuple[AnalysisPromptItem, ...],
     ]:
         with self._sessions() as session, session.begin():
-            configuration = load_job_execution_configuration(session, job_id=message.job_id)
-            if configuration is None:
-                raise self._configuration_failure("analysis_job_missing")
-            try:
-                scope = AnalysisJobScope.from_job_scope(configuration.scope)
-            except (TypeError, ValueError, ValidationError) as error:
-                raise self._configuration_failure("analysis_scope_invalid") from error
-            expected_operation_id = analysis_operation_id(
-                topic_id=scope.topic_id,
-                topic_rule_version=scope.topic_rule_version,
-                content_version_ids=scope.content_version_ids,
-                prompt_version=scope.prompt_version,
-                retry_index=scope.retry_index,
-            )
-            if (
-                configuration.owner_id != message.owner_id
-                or configuration.operation_id != message.operation_id
-                or configuration.operation_id != expected_operation_id
-                or configuration.kind != "analysis.annotate"
-                or configuration.observation.configuration_ref != f"topic:{scope.topic_id}"
-                or configuration.observation.configuration_version != scope.topic_rule_version
-                or configuration.observation.source_key is not None
-                or scope.prompt_version != ANALYSIS_PROMPT_VERSION
-                or tuple(sorted(scope.content_version_ids, key=str)) != scope.content_version_ids
+            return self._load_execution_in_transaction(session, message)
+
+    def _load_execution_in_transaction(
+        self,
+        session: Session,
+        message: JobMessage,
+    ) -> tuple[
+        AnalysisJobScope,
+        NormalizedMonitorRules,
+        dict[UUID, AnalysisPostContentView],
+        tuple[AnalysisPromptItem, ...],
+    ]:
+        if not session.in_transaction():
+            raise RuntimeError("analysis input reads require caller transaction")
+        configuration = load_job_execution_configuration(session, job_id=message.job_id)
+        if configuration is None:
+            raise self._configuration_failure("analysis_job_missing")
+        try:
+            scope = AnalysisJobScope.from_job_scope(configuration.scope)
+        except (TypeError, ValueError, ValidationError) as error:
+            raise self._configuration_failure("analysis_scope_invalid") from error
+        expected_operation_id = analysis_operation_id(
+            topic_id=scope.topic_id,
+            topic_rule_version=scope.topic_rule_version,
+            content_version_ids=scope.content_version_ids,
+            prompt_version=scope.prompt_version,
+            retry_index=scope.retry_index,
+        )
+        if (
+            configuration.owner_id != message.owner_id
+            or configuration.operation_id != message.operation_id
+            or configuration.operation_id != expected_operation_id
+            or configuration.kind != "analysis.annotate"
+            or configuration.observation.configuration_ref != f"topic:{scope.topic_id}"
+            or configuration.observation.configuration_version != scope.topic_rule_version
+            or configuration.observation.source_key is not None
+            or scope.prompt_version != ANALYSIS_PROMPT_VERSION
+            or tuple(sorted(scope.content_version_ids, key=str)) != scope.content_version_ids
+        ):
+            raise self._configuration_failure("analysis_scope_mismatch")
+        if scope.prompt_items is None:
+            raise self._configuration_failure("analysis_frozen_input_missing")
+        rules = MonitorTopicService(session).get_topic_rules_in_transaction(
+            owner_id=message.owner_id,
+            topic_id=scope.topic_id,
+            version=scope.topic_rule_version,
+        )
+        missing_ids = AnalysisService(session).missing_content_version_ids_in_transaction(
+            owner_id=message.owner_id,
+            topic_id=scope.topic_id,
+            topic_rule_version=scope.topic_rule_version,
+            prompt_version=scope.prompt_version,
+            content_version_ids=scope.content_version_ids,
+        )
+        loaded_posts = load_post_versions_for_analysis(
+            session,
+            owner_id=message.owner_id,
+            content_version_ids=set(missing_ids),
+            readable_at=self._clock(),
+        )
+        posts = {item.content_version_id: item for item in loaded_posts}
+        if len(posts) != len(missing_ids):
+            raise self._configuration_failure("analysis_content_missing")
+        frozen = {item.content_version_id: item for item in scope.prompt_items}
+        items = tuple(frozen[content_version_id] for content_version_id in missing_ids)
+        if any(item.comments and item.comment_version_ids is None for item in items):
+            raise self._configuration_failure("analysis_frozen_input_missing")
+        frozen_comments = load_frozen_analysis_comments(
+            session,
+            owner_id=message.owner_id,
+            version_ids={
+                version_id for item in items for version_id in (item.comment_version_ids or ())
+            },
+            now=self._clock(),
+        )
+        for item in items:
+            for index, (version_id, text) in enumerate(
+                zip(item.comment_version_ids or (), item.comments, strict=True)
             ):
-                raise self._configuration_failure("analysis_scope_mismatch")
-            if scope.prompt_items is None:
-                raise self._configuration_failure("analysis_frozen_input_missing")
-            rules = MonitorTopicService(session).get_topic_rules_in_transaction(
-                owner_id=message.owner_id,
-                topic_id=scope.topic_id,
-                version=scope.topic_rule_version,
-            )
-            missing_ids = AnalysisService(session).missing_content_version_ids_in_transaction(
-                owner_id=message.owner_id,
-                topic_id=scope.topic_id,
-                topic_rule_version=scope.topic_rule_version,
-                prompt_version=scope.prompt_version,
-                content_version_ids=scope.content_version_ids,
-            )
-            loaded_posts = load_post_versions_for_analysis(
-                session,
-                owner_id=message.owner_id,
-                content_version_ids=set(missing_ids),
-                readable_at=self._clock(),
-            )
-            posts = {item.content_version_id: item for item in loaded_posts}
-            if len(posts) != len(missing_ids):
-                raise self._configuration_failure("analysis_content_missing")
-            frozen = {item.content_version_id: item for item in scope.prompt_items}
-            items = tuple(frozen[content_version_id] for content_version_id in missing_ids)
-            if any(item.comments and item.comment_version_ids is None for item in items):
-                raise self._configuration_failure("analysis_frozen_input_missing")
-            frozen_comments = load_frozen_analysis_comments(
-                session,
-                owner_id=message.owner_id,
-                version_ids={
-                    version_id for item in items for version_id in (item.comment_version_ids or ())
-                },
-                now=self._clock(),
-            )
-            for item in items:
-                for index, (version_id, text) in enumerate(
-                    zip(item.comment_version_ids or (), item.comments, strict=True)
-                ):
-                    comment = frozen_comments.get(version_id)
-                    if comment is None:
-                        raise self._configuration_failure("analysis_comment_missing")
-                    if comment.post_content_id != item.content_id or not (
-                        comment.text == text
-                        or (
-                            item.comments_truncated
-                            and index == len(item.comments) - 1
-                            and comment.text.startswith(text)
-                        )
-                    ):
-                        raise self._configuration_failure("analysis_frozen_content_mismatch")
-                post = posts[item.content_version_id]
-                frozen_body = post.body[:_MAX_BODY_CHARACTERS] if post.body is not None else None
-                if (
-                    item.content_id != post.content_id
-                    or item.title != post.title
-                    or item.body != frozen_body
-                    or item.body_truncated
-                    != (post.body is not None and len(post.body) > _MAX_BODY_CHARACTERS)
+                comment = frozen_comments.get(version_id)
+                if comment is None:
+                    raise self._configuration_failure("analysis_comment_missing")
+                if comment.post_content_id != item.content_id or not (
+                    comment.text == text
+                    or (
+                        item.comments_truncated
+                        and index == len(item.comments) - 1
+                        and comment.text.startswith(text)
+                    )
                 ):
                     raise self._configuration_failure("analysis_frozen_content_mismatch")
+            post = posts[item.content_version_id]
+            frozen_body = post.body[:_MAX_BODY_CHARACTERS] if post.body is not None else None
+            if (
+                item.content_id != post.content_id
+                or item.title != post.title
+                or item.body != frozen_body
+                or item.body_truncated
+                != (post.body is not None and len(post.body) > _MAX_BODY_CHARACTERS)
+            ):
+                raise self._configuration_failure("analysis_frozen_content_mismatch")
         return scope, rules, posts, items
 
     def _configuration_failure(self, code: str) -> JobExecutionFailure:

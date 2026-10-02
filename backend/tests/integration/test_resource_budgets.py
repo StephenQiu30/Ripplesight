@@ -1514,3 +1514,35 @@ def test_budget_usage_snapshot_is_owner_scoped_and_read_only(
     assert by_key["global.disabled"].remaining_units is None
     assert other_snapshot == ()
     assert before == after
+
+
+@pytest.mark.parametrize(
+    "metric", [BudgetMetric.PROVIDER_CNY_MICROS, BudgetMetric.PROVIDER_USD_MICROS]
+)
+def test_provider_currency_budgets_use_original_ledger_and_do_not_mix_currencies(
+    resource_budget_context: ResourceBudgetContext, metric: BudgetMetric
+) -> None:
+    ctx = resource_budget_context
+    clock = MutableClock(datetime.now(UTC))
+    with ctx.sessions() as session:
+        service = ResourceBudgetService(session, clock=clock)
+        policy = service.save_budget_policy(
+            owner_id=ctx.owner_id,
+            command=_budget_policy(clock=clock).model_copy(
+                update={"metric": metric, "budget_key": metric.value, "limit_units": 1000000}
+            ),
+        )
+        result = service.reserve_budget(
+            owner_id=ctx.owner_id, command=_reservation(metric=metric, requested_units=600000)
+        )
+        assert result.status == BudgetDecisionStatus.RESERVED
+        service.settle_budget_reservation(
+            owner_id=ctx.owner_id, reservation_id=result.reservation_id, actual_units=600000
+        )
+        denied = service.reserve_budget(
+            owner_id=ctx.owner_id, command=_reservation(metric=metric, requested_units=600000)
+        )
+        assert denied.status == BudgetDecisionStatus.DELAYED
+        snapshot = service.budget_usage_snapshot(owner_id=ctx.owner_id)
+        own = next(item for item in snapshot if item.budget_policy_id == policy.id)
+        assert own.metric == metric and own.used_units == 600000

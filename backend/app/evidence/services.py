@@ -137,6 +137,31 @@ def load_readable_resource_ids(
     )
 
 
+def load_readable_resources_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    resource_type: str,
+    resource_ids: set[UUID],
+    now: datetime,
+) -> dict[UUID, EvidenceResourceView]:
+    if not session.in_transaction() or now.utcoffset() is None or len(resource_ids) > 1000:
+        raise ValueError("resource DTO reads require an aware bounded caller transaction")
+    if not resource_ids:
+        return {}
+    ids = readable_resource_ids_query(
+        owner_id=owner_id, resource_type=resource_type, now=now
+    ).where(EvidenceResource.resource_id.in_(resource_ids))
+    rows = session.scalars(
+        select(EvidenceResource).where(
+            EvidenceResource.owner_id == owner_id,
+            EvidenceResource.resource_type == resource_type,
+            EvidenceResource.resource_id.in_(ids),
+        )
+    )
+    return {row.resource_id: LifecycleService._resource_view(row) for row in rows}
+
+
 def readable_resource_ids_query(
     *,
     owner_id: UUID,
@@ -1082,66 +1107,66 @@ class ProvenanceService:
         self._session = session
         self._clock = clock or (lambda: datetime.now(UTC))
 
-    def create(
-        self,
-        *,
-        owner_id: UUID,
-        command: ProvenanceManifestInput,
-    ) -> ProvenanceManifestView:
-        normalized = self._normalized_inputs(command)
-        now = self._clock()
+    def create(self, *, owner_id: UUID, command: ProvenanceManifestInput) -> ProvenanceManifestView:
         self._session.rollback()
         with self._session.begin():
-            job = self._session.scalar(
-                select(Job)
-                .where(Job.owner_id == owner_id, Job.id == command.job_id)
-                .with_for_update()
+            return self.create_in_transaction(owner_id=owner_id, command=command)
+
+    def create_in_transaction(
+        self, *, owner_id: UUID, command: ProvenanceManifestInput
+    ) -> ProvenanceManifestView:
+        if not self._session.in_transaction():
+            raise RuntimeError("provenance creation requires caller transaction")
+        normalized = self._normalized_inputs(command)
+        now = self._clock()
+        job = self._session.scalar(
+            select(Job).where(Job.owner_id == owner_id, Job.id == command.job_id).with_for_update()
+        )
+        if job is None:
+            raise ProvenanceUnavailableError("job is unavailable")
+        self._require_readable_resources(owner_id, normalized, now)
+        fingerprint = self._fingerprint(job.operation_id, command, normalized)
+        existing = self._session.scalar(
+            select(ProvenanceManifest).where(
+                ProvenanceManifest.owner_id == owner_id,
+                ProvenanceManifest.job_id == command.job_id,
+                ProvenanceManifest.result_kind == command.result_kind,
             )
-            if job is None:
-                raise ProvenanceUnavailableError("job is unavailable")
-            self._require_readable_resources(owner_id, normalized, now)
-            fingerprint = self._fingerprint(job.operation_id, command, normalized)
-            existing = self._session.scalar(
-                select(ProvenanceManifest).where(
-                    ProvenanceManifest.owner_id == owner_id,
-                    ProvenanceManifest.job_id == command.job_id,
-                    ProvenanceManifest.result_kind == command.result_kind,
+        )
+        if existing is not None:
+            if existing.manifest_fingerprint != fingerprint:
+                raise ProvenanceConflictError(
+                    "job result already has a different provenance manifest"
+                )
+            return self._view(existing)
+        manifest = ProvenanceManifest(
+            id=uuid4(),
+            owner_id=owner_id,
+            job_id=command.job_id,
+            operation_id=job.operation_id,
+            result_kind=command.result_kind,
+            method_key=command.method_key,
+            method_version=command.method_version,
+            method_parameters=dict(command.method_parameters),
+            manifest_fingerprint=fingerprint,
+            created_at=now,
+        )
+        self._session.add(manifest)
+        self._session.flush()
+        for role, resource, ordinal in normalized:
+            self._session.add(
+                ProvenanceManifestItem(
+                    id=uuid4(),
+                    owner_id=owner_id,
+                    manifest_id=manifest.id,
+                    role=role.value,
+                    resource_record_id=resource.resource_record_id,
+                    snapshot_ref=resource.snapshot_ref,
+                    ordinal=ordinal,
                 )
             )
-            if existing is not None:
-                if existing.manifest_fingerprint != fingerprint:
-                    raise ProvenanceConflictError(
-                        "job result already has a different provenance manifest"
-                    )
-                return self._view(existing)
-            manifest = ProvenanceManifest(
-                id=uuid4(),
-                owner_id=owner_id,
-                job_id=command.job_id,
-                operation_id=job.operation_id,
-                result_kind=command.result_kind,
-                method_key=command.method_key,
-                method_version=command.method_version,
-                method_parameters=dict(command.method_parameters),
-                manifest_fingerprint=fingerprint,
-                created_at=now,
-            )
-            self._session.add(manifest)
-            self._session.flush()
-            for role, resource, ordinal in normalized:
-                self._session.add(
-                    ProvenanceManifestItem(
-                        id=uuid4(),
-                        owner_id=owner_id,
-                        manifest_id=manifest.id,
-                        role=role.value,
-                        resource_record_id=resource.resource_record_id,
-                        snapshot_ref=resource.snapshot_ref,
-                        ordinal=ordinal,
-                    )
-                )
-            self._session.flush()
-            view = self._view(manifest)
+        self._session.flush()
+        view = self._view(manifest)
         return view
 
     def get(self, *, owner_id: UUID, manifest_id: UUID) -> ProvenanceManifestView:

@@ -39,7 +39,7 @@ export function SiteHeader({ onGuide }: SiteHeaderProps) {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/events">我的关注</Link>
+                <Link href="/topics">我的关注</Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/sources">来源设置</Link>
@@ -58,7 +58,7 @@ export function SiteHeader({ onGuide }: SiteHeaderProps) {
         </Button>
       </nav>
       <Button asChild variant="outline" size="homeHeader" className="ml-auto">
-        <Link href="/events">我的关注</Link>
+        <Link href="/topics">我的关注</Link>
       </Button>
     </header>
   );

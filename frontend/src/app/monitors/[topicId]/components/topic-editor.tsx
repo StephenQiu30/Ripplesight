@@ -353,7 +353,7 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
         description="主题不存在，或当前使用者无权查看。"
         action={
           <Button asChild variant="secondary">
-            <Link href="/events">返回工作台</Link>
+            <Link href="/topics">返回工作台</Link>
           </Button>
         }
       />
@@ -387,7 +387,7 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
       <WorkspaceHeader current="topics" />
       <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-20 xl:px-0">
         <Button asChild variant="ghost" size="navigation" className="mb-10">
-          <Link href="/events">返回我的关注</Link>
+          <Link href="/topics">返回我的关注</Link>
         </Button>
         <div className="grid gap-12 md:grid-cols-2 md:gap-16">
           <section>

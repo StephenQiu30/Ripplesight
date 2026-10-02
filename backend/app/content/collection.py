@@ -26,6 +26,7 @@ from content.schemas import (
 )
 from content.services import ContentService
 from core.errors import ApplicationError
+from events.heat import record_source_fetch_success_in_transaction
 from evidence.schemas import DataClass
 from evidence.services import (
     LifecycleService,
@@ -69,6 +70,7 @@ from jobs.services import (
     load_job_execution_configuration,
     load_job_execution_configuration_by_operation,
 )
+from jobs.source_scopes import collection_selector_reference
 from sources.adapters.web_targets import normalize_web_url
 from sources.contracts import (
     DocumentAdapter,
@@ -460,6 +462,20 @@ class WebPageCommitService:
                 },
                 progress=JobProgress(stage=JobStage.SAVE, items_saved=1),
             )
+            collection_scope = collection_selector_reference(
+                CollectionJobKind.WEBPAGE_COLLECT.value,
+                "web",
+                {"target_url": connection.normalized_url},
+            )
+            if collection_scope is not None:
+                record_source_fetch_success_in_transaction(
+                    self._session,
+                    owner_id=owner_id,
+                    source_key="web",
+                    selector_kind="native_scope",
+                    selector_ref=collection_scope,
+                    completed_at=self._clock(),
+                )
         return content, renewed
 
 

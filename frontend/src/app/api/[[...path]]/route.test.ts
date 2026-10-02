@@ -34,6 +34,106 @@ async function close(server: Server): Promise<void> {
 }
 
 describe("API route proxy", () => {
+  it("maps allowed public exports to root resources and preserves MCP headers", async () => {
+    process.env.HOTKEY_API_ORIGIN = "http://127.0.0.1:8000";
+    const upstream = vi.fn().mockResolvedValue(
+      new Response("feed", {
+        headers: { "Content-Type": "application/xml" },
+      }),
+    );
+    vi.stubGlobal("fetch", upstream);
+    await route.GET(
+      new Request("http://web.test/feed/full/category/ai-models.xml?limit=5", {
+        headers: {
+          Cookie: "private=1",
+          Authorization: "Bearer private",
+          Accept: "application/xml",
+        },
+      }),
+      {
+        params: Promise.resolve({
+          path: ["__exports", "feed", "full", "category", "ai-models.xml"],
+        }),
+      },
+    );
+    const [url, options] = upstream.mock.calls[0];
+    expect(String(url)).toBe(
+      "http://127.0.0.1:8000/feed/full/category/ai-models.xml?limit=5",
+    );
+    expect(options.headers.get("cookie")).toBeNull();
+    expect(options.headers.get("authorization")).toBeNull();
+    await route.POST(
+      new Request("http://web.test/mcp", {
+        method: "POST",
+        body: '{"jsonrpc":"2.0"}',
+        headers: {
+          "MCP-Protocol-Version": "2025-06-18",
+          Origin: "http://web.test",
+          "Content-Type": "application/json",
+        },
+      }),
+      { params: Promise.resolve({ path: ["__exports", "mcp"] }) },
+    );
+    expect(upstream.mock.calls[1][1].headers.get("mcp-protocol-version")).toBe(
+      "2025-06-18",
+    );
+    expect(upstream.mock.calls[1][1].headers.get("origin")).toBe(
+      "http://web.test",
+    );
+  });
+
+  it.each([
+    ["__exports", "admin"],
+    ["__exports", "api", "operations"],
+    ["__exports", "feed", "..", "health"],
+    ["__exports", "sitemaps", "items-1000000.xml"],
+    ["__exports", "sitemaps", "items-00.xml"],
+    ["__exports", "sitemaps", "items--1.xml"],
+  ])(
+    "rejects an unrecognized root export without contacting the backend: %s",
+    async (...path) => {
+      const upstream = vi.fn();
+      vi.stubGlobal("fetch", upstream);
+      const response = await route.GET(
+        new Request("http://web.test/api/__exports/admin"),
+        { params: Promise.resolve({ path }) },
+      );
+      expect(response.status).toBe(404);
+      expect(upstream).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["items", 0],
+    ["items", 7],
+    ["items", 999999],
+    ["stories", 0],
+    ["reports", 1],
+    ["topics", 0],
+  ])(
+    "proxies bounded %s sitemap shard %s without credentials",
+    async (collection, shard) => {
+      process.env.HOTKEY_API_ORIGIN = "http://127.0.0.1:8000";
+      const upstream = vi.fn().mockResolvedValue(new Response("<urlset/>"));
+      vi.stubGlobal("fetch", upstream);
+      const response = await route.GET(
+        new Request(`http://web.test/sitemaps/${collection}-${shard}.xml`, {
+          headers: { Cookie: "private=1", Authorization: "Bearer private" },
+        }),
+        {
+          params: Promise.resolve({
+            path: ["__exports", "sitemaps", `${collection}-${shard}.xml`],
+          }),
+        },
+      );
+      expect(response.status).toBe(200);
+      expect(String(upstream.mock.calls[0][0])).toBe(
+        `http://127.0.0.1:8000/sitemaps/${collection}-${shard}.xml`,
+      );
+      expect(upstream.mock.calls[0][1].headers.get("cookie")).toBeNull();
+      expect(upstream.mock.calls[0][1].headers.get("authorization")).toBeNull();
+    },
+  );
   it("exports only supported HTTP handlers", () => {
     expect(Object.keys(route).sort()).toEqual([
       "DELETE",

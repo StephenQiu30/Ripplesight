@@ -10,6 +10,7 @@ from connections.services import require_source_connection_version
 from content.discovery import KeywordRequestMeter
 from content.hotlist import HotlistService
 from core.errors import ApplicationError
+from events.heat import record_source_fetch_success_in_transaction
 from evidence.services import RetentionPolicyUnavailableError, SourceAccessUnavailableError
 from jobs.execution import (
     ExecutionLease,
@@ -211,6 +212,24 @@ class HotlistExecutor:
                     page=page,
                     meter=meter,
                 )
+                session.rollback()
+                with session.begin():
+                    execution.require_current_lease_in_transaction(renewed)
+                    require_source_connection_version(
+                        session,
+                        owner_id=configuration.owner_id,
+                        source_key=source_key,
+                        connection_id=connection_id,
+                        connection_version=connection_version,
+                    )
+                    record_source_fetch_success_in_transaction(
+                        session,
+                        owner_id=configuration.owner_id,
+                        source_key=source_key,
+                        selector_kind="native_scope",
+                        selector_ref=f"hotlist:{source_key}",
+                        completed_at=self._clock(),
+                    )
                 return renewed, JobCompletion(status=JobStatus.SUCCEEDED)
             except JobExecutionFailure:
                 raise

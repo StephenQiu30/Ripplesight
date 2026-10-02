@@ -22,8 +22,11 @@ REGISTERED_PACKAGES = {
     "evidence",
     "jobs",
     "knowledge",
+    "leaderboard",
     "monitors",
     "notifications",
+    "operations",
+    "publication",
     "reports",
     "sources",
     "worker",
@@ -83,7 +86,7 @@ def test_schema_sql_is_the_only_ddl_source() -> None:
 
 
 def test_every_persistent_domain_registers_its_models() -> None:
-    model_modules = {f"{path.parent.name}.models" for path in APP.glob("*/models.py")}
+    model_modules = {f"{path.parent.name}.{path.stem}" for path in APP.glob("*/*models.py")}
     registered_modules = _imports(APP / "db" / "metadata.py")
     assert model_modules <= registered_modules
 
@@ -98,12 +101,12 @@ def test_routers_do_not_import_persistence_or_service_implementations() -> None:
     for path in (APP / "api" / "routers").glob("*.py"):
         imports = _imports(path)
         assert not any(name.startswith("sqlalchemy") for name in imports)
-        assert not any(name.endswith(".models") for name in imports)
-        assert not any(name.endswith(".services") for name in imports)
+        assert not any(name.endswith((".models", "_models")) for name in imports)
+        assert not any(name.endswith((".services", "_services")) for name in imports)
 
 
 def test_schema_modules_do_not_depend_on_http_or_orm() -> None:
-    for path in APP.rglob("schemas.py"):
+    for path in APP.rglob("*schemas.py"):
         imports = _imports(path)
         assert not any(name.startswith(("fastapi", "starlette", "sqlalchemy")) for name in imports)
 
@@ -195,17 +198,40 @@ def test_worker_does_not_depend_on_http_protocol() -> None:
         assert not any(name.startswith(("fastapi", "starlette")) for name in _imports(path))
 
 
+def test_all_literal_application_errors_are_registered() -> None:
+    for path in APP.rglob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id in {"ApplicationError", "DependencyUnavailableError"}
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+            ):
+                assert node.args[0].value in ERROR_CATEGORIES, (
+                    path,
+                    node.lineno,
+                    node.args[0].value,
+                )
+
+
 def test_resource_routes_declare_openapi_contract_fields() -> None:
     http_methods = {"get", "post", "put", "patch", "delete", "options", "head", "trace"}
     for path in (APP / "api" / "routers").glob("*.py"):
         tree = ast.parse(path.read_text())
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+        for function in ast.walk(tree):
+            if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            if node.func.attr not in http_methods:
-                continue
-            keyword_names = {keyword.arg for keyword in node.keywords if keyword.arg is not None}
-            assert {"operation_id", "response_model", "status_code"} <= keyword_names, path
+            for node in function.decorator_list:
+                if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+                    continue
+                if node.func.attr not in http_methods:
+                    continue
+                keyword_names = {
+                    keyword.arg for keyword in node.keywords if keyword.arg is not None
+                }
+                assert {"operation_id", "response_model", "status_code"} <= keyword_names, path
 
 
 def test_resource_routers_declare_openapi_tags() -> None:

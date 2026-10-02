@@ -5,8 +5,12 @@ from core.config import Settings
 
 
 def create_db_engine(settings: Settings) -> Engine:
+    database_url = settings.database_url.get_secret_value()
     return create_engine(
-        settings.database_url.get_secret_value(),
+        database_url,
+        connect_args={"options": "-c timezone=UTC"}
+        if database_url.startswith("postgresql")
+        else {},
         pool_pre_ping=True,
         pool_size=settings.database_pool_size,
         max_overflow=settings.database_max_overflow,

@@ -12,19 +12,24 @@ from sqlalchemy import and_, bindparam, or_, select, text
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session, aliased, sessionmaker
 
+from ai.capability_services import freeze_ai_job_scope_in_transaction
 from ai.schemas import AiCallError, AiCompletion
 from ai.services import AiService, create_ai_client
-from core.config import get_settings
+from content.editorial_reading import require_analysis_content_permissions_in_transaction
+from content.report_reading import report_inputs_readable_in_transaction
+from core.config import Settings, get_settings
 from core.errors import ApplicationError
-from jobs.execution import JobCompletion
+from jobs.execution import ExecutionLease, JobCompletion, JobExecutionFailure, JobExecutionService
 from jobs.schemas import (
     JobAcceptanceInput,
+    JobFailureCategory,
     JobMessage,
     JobObservationContext,
     JobStatus,
     JobView,
 )
 from jobs.services import JobService, load_job_execution_configuration
+from monitors.services import MonitorTopicService
 from reports.models import Report
 from reports.prompts import (
     REPORT_OUTPUT_SCHEMA,
@@ -374,8 +379,10 @@ class ReportService:
         self,
         session: Session,
         *,
+        settings: Settings | None = None,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
+        self.settings = settings
         self._session = session
         self._clock = clock or (lambda: datetime.now(UTC))
 
@@ -452,6 +459,19 @@ class ReportService:
             )
         ).first()
         if model is None:
+            raise ApplicationError("resource_not_found")
+        from reports.notification_reading import load_notification_report_in_transaction
+
+        if (
+            load_notification_report_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                report_id=report_id,
+                version=model.version,
+                now=self._clock(),
+            )
+            is None
+        ):
             raise ApplicationError("resource_not_found")
         data = DailyReportData.model_validate(model.data)
         return ReportDetailView(
@@ -553,6 +573,9 @@ class ReportService:
                         ),
                         scheduled_for_at=due_local.astimezone(UTC),
                         scope={
+                            **freeze_ai_job_scope_in_transaction(
+                                self._session, owner_id=owner_id, settings=self.settings
+                            ),
                             "topic_id": str(topic_id),
                             "window_start": window_start.isoformat(),
                             "window_end": window_end.isoformat(),
@@ -571,6 +594,7 @@ class ReportService:
         window_end: datetime,
         cutoff_at: datetime,
         narrate: Callable[[DailyReportData], DailyReportData] | None = None,
+        narrate_with_inputs: Callable[[PreparedDailyReport], DailyReportData] | None = None,
     ) -> ReportView:
         """Generate once for a job; redelivery returns the existing final version."""
         return self._generate_daily_in_transaction(
@@ -581,6 +605,7 @@ class ReportService:
             cutoff_at=cutoff_at,
             regenerate=False,
             narrate=narrate,
+            narrate_with_inputs=narrate_with_inputs,
         )
 
     def regenerate_daily_in_transaction(
@@ -612,6 +637,7 @@ class ReportService:
         cutoff_at: datetime,
         regenerate: bool,
         narrate: Callable[[DailyReportData], DailyReportData] | None = None,
+        narrate_with_inputs: Callable[[PreparedDailyReport], DailyReportData] | None = None,
     ) -> ReportView:
         if not self._session.in_transaction():
             raise RuntimeError("report generation requires the caller's transaction")
@@ -655,7 +681,15 @@ class ReportService:
             dataset=dataset,
             previous=previous,
         )
-        data = narrate(prepared.data) if narrate is not None else prepared.data
+        if narrate is not None and narrate_with_inputs is not None:
+            raise ValueError("report requires a single narrative callback")
+        data = (
+            narrate_with_inputs(prepared)
+            if narrate_with_inputs is not None
+            else narrate(prepared.data)
+            if narrate is not None
+            else prepared.data
+        )
         created_at = max(self._clock().astimezone(UTC), prepared.cutoff_at)
         model = Report(
             id=uuid4(),
@@ -1129,12 +1163,91 @@ class DailyReportExecutor:
         self,
         sessions: sessionmaker[Session],
         *,
+        settings: Settings | None = None,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._sessions = sessions
+        self._settings = settings
         self._clock = clock or (lambda: datetime.now(UTC))
 
-    def execute(self, message: JobMessage) -> DailyReportExecutionResult:
+    def _ai_admission(
+        self,
+        session: Session,
+        message: JobMessage,
+        lease: ExecutionLease | None,
+        prepared: PreparedDailyReport,
+    ) -> None:
+        settings = self._settings or get_settings()
+        if lease is not None:
+            JobExecutionService(
+                session, lease_seconds=settings.job_lease_seconds, clock=self._clock
+            ).require_current_operation_in_transaction(
+                lease, owner_id=message.owner_id, operation_id=message.operation_id
+            )
+        service = ReportService(session, settings=settings, clock=self._clock)
+        version, _rules, _sources = MonitorTopicService(
+            session
+        ).get_current_topic_rules_and_sources_in_transaction(
+            owner_id=message.owner_id, topic_id=prepared.topic_id
+        )
+        current = prepare_daily_report(
+            owner_id=message.owner_id,
+            topic_id=prepared.topic_id,
+            topic_name=service._topic_name(owner_id=message.owner_id, topic_id=prepared.topic_id),
+            window_start=prepared.window_start,
+            window_end=prepared.window_end,
+            cutoff_at=prepared.cutoff_at,
+            dataset=service._load_dataset(
+                owner_id=message.owner_id,
+                topic_id=prepared.topic_id,
+                window_start=prepared.window_start,
+                window_end=prepared.window_end,
+                cutoff_at=prepared.cutoff_at,
+            ),
+        )
+        manifest = prepared.input_manifest
+        versions = (*manifest.content_version_ids, *manifest.comment_content_version_ids)
+        if versions:
+            try:
+                require_analysis_content_permissions_in_transaction(
+                    session,
+                    owner_id=message.owner_id,
+                    content_version_ids=versions,
+                    now=self._clock(),
+                )
+            except ApplicationError as error:
+                raise JobExecutionFailure(
+                    error_code="report_input_changed",
+                    category=JobFailureCategory.CONFIGURATION_UNAVAILABLE,
+                    occurred_at=self._clock(),
+                    next_action="核对全部固定材料和当前来源许可后重新受理日报。",
+                ) from error
+        if (
+            version != message.configuration_version
+            or current.input_manifest != manifest
+            or current.data != prepared.data
+            or not report_inputs_readable_in_transaction(
+                session,
+                owner_id=message.owner_id,
+                content_version_ids=(
+                    *manifest.content_version_ids,
+                    *manifest.comment_content_version_ids,
+                ),
+                observation_ids=manifest.observation_ids,
+                now=self._clock(),
+            )
+        ):
+            raise JobExecutionFailure(
+                error_code="report_input_changed",
+                category=JobFailureCategory.CONFIGURATION_UNAVAILABLE,
+                occurred_at=self._clock(),
+                next_action="核对全部固定材料和当前来源许可后重新受理日报。",
+                manual_retry_allowed=True,
+            )
+
+    def execute(
+        self, message: JobMessage, lease: ExecutionLease | None = None
+    ) -> DailyReportExecutionResult:
         if message.kind != "report.daily":
             raise ValueError("daily report executor received another task kind")
         cutoff_at = self._clock().astimezone(UTC)
@@ -1153,16 +1266,38 @@ class DailyReportExecutor:
             if message.configuration_ref != f"topic:{scope.topic_id}":
                 raise ValueError("daily report topic does not match the job configuration")
             try:
-                client = create_ai_client(get_settings())
+                client = create_ai_client(self._settings or get_settings())
             except Exception:
                 client = None
             try:
 
-                def narrate(data: DailyReportData) -> DailyReportData:
+                def narrate(prepared: PreparedDailyReport) -> DailyReportData:
+                    data = prepared.data
                     if client is None:
+                        self._ai_admission(session, message, lease, prepared)
                         return data
-                    ai_service = AiService(session, client, clock=self._clock)
-                    return apply_model_narratives(
+                    settings = self._settings or get_settings()
+                    ai_service = AiService(
+                        session,
+                        client,
+                        clock=self._clock,
+                        settings=settings,
+                        guard=(
+                            lambda current: JobExecutionService(
+                                current, lease_seconds=settings.job_lease_seconds, clock=self._clock
+                            ).require_current_operation_in_transaction(
+                                lease, owner_id=message.owner_id, operation_id=message.operation_id
+                            )
+                        )
+                        if lease is not None
+                        else None,
+                        execution_epoch=lease.epoch if lease else None,
+                    )
+                    ai_service = ai_service.with_admission_guard(
+                        lambda current: self._ai_admission(current, message, lease, prepared),
+                        execution_epoch=lease.epoch if lease else None,
+                    )
+                    narrated = apply_model_narratives(
                         data,
                         lambda prompt, schema: ai_service.complete(
                             owner_id=message.owner_id,
@@ -1173,16 +1308,19 @@ class DailyReportExecutor:
                             output_schema=schema,
                         ),
                     )
+                    # Keep the original receipt before rejecting a stale report input.
+                    self._ai_admission(session, message, lease, prepared)
+                    return narrated
 
                 report = ReportService(
-                    session, clock=lambda: cutoff_at
+                    session, settings=self._settings, clock=lambda: cutoff_at
                 ).generate_daily_in_transaction(
                     owner_id=message.owner_id,
                     topic_id=scope.topic_id,
                     window_start=scope.window_start,
                     window_end=scope.window_end,
                     cutoff_at=cutoff_at,
-                    narrate=narrate,
+                    narrate_with_inputs=narrate,
                 )
             finally:
                 if client is not None:

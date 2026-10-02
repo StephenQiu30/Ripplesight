@@ -46,7 +46,10 @@ function getApiOrigin(): URL {
 }
 
 function createDestination(request: Request, path: string[] | undefined): URL {
-  const destinationPath = ["api", ...(path ?? [])]
+  const publicExport = path?.[0] === "__exports";
+  const destinationPath = (
+    publicExport ? path.slice(1) : ["api", ...(path ?? [])]
+  )
     .map(encodeURIComponent)
     .join("/");
   const destination = new URL(`/${destinationPath}`, getApiOrigin());
@@ -101,6 +104,16 @@ async function proxyApiRequest(
   context: ApiRouteContext,
 ): Promise<Response> {
   const { path } = await context.params;
+  if (path?.[0] === "__exports" && !isPublicExport(path.slice(1))) {
+    return Response.json(
+      {
+        code: "not_found",
+        message: "请求资源不存在",
+        request_id: crypto.randomUUID(),
+      },
+      { status: 404, headers: { "cache-control": "no-store" } },
+    );
+  }
   const method = request.method.toUpperCase();
   const body = method === "GET" || method === "HEAD" ? undefined : request.body;
   const init: StreamingRequestInit = {
@@ -140,3 +153,10 @@ export const PUT = proxyApiRequest;
 export const PATCH = proxyApiRequest;
 export const DELETE = proxyApiRequest;
 export const OPTIONS = proxyApiRequest;
+
+function isPublicExport(path: string[]): boolean {
+  const joined = path.join("/");
+  return /^(?:og\/(?:site|pages\/(?:site|all|hot|daily|weekly|monthly|topics|leaderboard|codex-reset|about|terms|privacy|changelog|feedback|agent|contact)|(?:items|stories|posters)\/[a-zA-Z0-9-]+|posters\/stories\/[a-zA-Z0-9-]+|(?:posters\/)?reports\/(?:daily|weekly|monthly)\/[a-zA-Z0-9-]+|topics\/[a-z0-9-]+)\.png|feed\.xml|feed\/(?:full|all|daily|weekly|monthly)\.xml|feed\/(?:full\/)?category\/[a-z-]+\.xml|items\/[a-zA-Z0-9-]+\.(?:md|jsonld)|(?:items|events)\/[a-zA-Z0-9-]+\/poster\.svg|selected\.md|reports\/(?:daily|weekly|monthly)\/[a-zA-Z0-9-]+(?:\.md|\/poster\.svg)|llms\.txt|agent\.md|robots\.txt|hotkey-indexnow-key\.txt|sitemap\.xml|sitemaps\/(?:items|stories|reports|topics)-(?:0|[1-9][0-9]{0,5})\.xml|mcp)$/.test(
+    joined,
+  );
+}

@@ -43,6 +43,16 @@ HTTP_ERRORS: Mapping[int, PublicError] = {
     504: PublicError(504, "upstream_timeout", "上游服务响应超时"),
 }
 APPLICATION_ERRORS: Mapping[str, PublicError] = {
+    "invalid_ai_input": PublicError(422, "invalid_ai_input", "模型能力配置不符合当前要求"),
+    "ai_configuration_conflict": PublicError(
+        409, "ai_configuration_conflict", "模型能力配置已变化,请重新读取当前版本"
+    ),
+    "ai_model_unavailable": PublicError(503, "ai_model_unavailable", "当前任务的固定模型暂不可用"),
+    "publication_search_busy": PublicError(
+        503, "publication_search_busy", "搜索结果较多,请收窄条件后重试"
+    ),
+    "selectbench_disabled": PublicError(503, "selectbench_disabled", "模型评测尚未启用"),
+    "media_storage_unavailable": PublicError(503, "media_storage_unavailable", "媒体存储暂不可用"),
     "connection_disabled": PublicError(409, "connection_disabled", "连接已停用"),
     "connection_authentication_required": PublicError(
         409, "connection_authentication_required", "连接授权已失效且需要更新凭据后重新验证"
@@ -66,6 +76,98 @@ APPLICATION_ERRORS: Mapping[str, PublicError] = {
         422, "invalid_comment_cursor", "评论分页游标不属于当前查询范围"
     ),
     "invalid_content_filter": PublicError(422, "invalid_content_filter", "作品筛选条件无效"),
+    "codex_monitor_disabled": PublicError(409, "codex_monitor_disabled", "公告监控尚未启用"),
+    "codex_version_conflict": PublicError(
+        409, "codex_version_conflict", "公告状态已更新, 请重新读取"
+    ),
+    "invalid_codex_input": PublicError(422, "invalid_codex_input", "公告监控输入无效"),
+    "codex_source_unavailable": PublicError(
+        503, "codex_source_unavailable", "公告来源尚未就绪或暂不可用"
+    ),
+    "invalid_event_filter": PublicError(422, "invalid_event_filter", "事件筛选条件无效"),
+    "invalid_event_correction": PublicError(422, "invalid_event_correction", "事件修订输入无效"),
+    "invalid_editorial_input": PublicError(422, "invalid_editorial_input", "编辑分析输入无效"),
+    "translation_disabled": PublicError(409, "translation_disabled", "全文翻译尚未启用"),
+    "translation_material_unavailable": PublicError(
+        404, "translation_material_unavailable", "固定正文或全文许可不可用"
+    ),
+    "translation_revision_conflict": PublicError(
+        409, "translation_revision_conflict", "译文版本已更新, 请重新读取"
+    ),
+    "operator_disabled": PublicError(403, "operator_disabled", "维护入口尚未启用"),
+    "invalid_feedback_input": PublicError(422, "invalid_feedback_input", "反馈输入无效"),
+    "feedback_disabled": PublicError(503, "feedback_disabled", "反馈入口尚未就绪"),
+    "feedback_rate_limited": PublicError(
+        429, "feedback_rate_limited", "反馈提交过于频繁, 请稍后重试"
+    ),
+    "feedback_banned": PublicError(403, "feedback_banned", "当前反馈请求不可接受"),
+    "operations_revision_conflict": PublicError(
+        409, "operations_revision_conflict", "维护对象版本已更新"
+    ),
+    "invalid_operations_input": PublicError(422, "invalid_operations_input", "维护输入无效"),
+    "indexnow_configuration_changed": PublicError(
+        409, "indexnow_configuration_changed", "索引提交配置已变化"
+    ),
+    "indexnow_budget_unavailable": PublicError(
+        503, "indexnow_budget_unavailable", "索引提交预算尚未准入"
+    ),
+    "indexnow_submission_unknown": PublicError(
+        503, "indexnow_submission_unknown", "索引提交结果待人工核对"
+    ),
+    "indexnow_submission_rejected": PublicError(
+        503, "indexnow_submission_rejected", "索引服务未接受提交"
+    ),
+    "invalid_evaluation_input": PublicError(422, "invalid_evaluation_input", "评测输入无效"),
+    "evaluation_input_conflict": PublicError(409, "evaluation_input_conflict", "评测输入已变更"),
+    "external_source_disabled": PublicError(
+        403, "external_source_disabled", "外部摄入入口尚未启用"
+    ),
+    "external_source_authentication_required": PublicError(
+        401, "external_source_authentication_required", "需要来源摄入授权"
+    ),
+    "external_source_rate_limited": PublicError(
+        429, "external_source_rate_limited", "来源摄入请求过于频繁,请稍后重试"
+    ),
+    "operator_authentication_required": PublicError(
+        401, "operator_authentication_required", "需要维护授权"
+    ),
+    "invalid_edition_input": PublicError(422, "invalid_edition_input", "刊期或修订输入无效"),
+    "edition_revision_conflict": PublicError(
+        409, "edition_revision_conflict", "刊期修订已更新, 请重新读取"
+    ),
+    "edition_input_unavailable": PublicError(
+        409, "edition_input_unavailable", "刊期没有有效材料或材料许可已变更"
+    ),
+    "event_revision_conflict": PublicError(
+        409, "event_revision_conflict", "事件版本已更新, 请重新读取"
+    ),
+    "editorial_version_conflict": PublicError(
+        409, "editorial_version_conflict", "分析或人工修订版本已更新, 请重新读取"
+    ),
+    "editorial_source_disabled": PublicError(
+        409, "editorial_source_disabled", "编辑分析来源尚未启用"
+    ),
+    "editorial_source_unavailable": PublicError(
+        409, "editorial_source_unavailable", "来源连接或许可已变化,请重新核对当前版本"
+    ),
+    "editorial_material_unavailable": PublicError(
+        404, "editorial_material_unavailable", "当前版本的分析材料不可读"
+    ),
+    "invalid_publication_input": PublicError(
+        422, "invalid_publication_input", "公开阅读配置或材料输入无效"
+    ),
+    "invalid_publication_cursor": PublicError(
+        422, "invalid_publication_cursor", "公开阅读游标不属于当前查询范围"
+    ),
+    "publication_revision_conflict": PublicError(
+        409, "publication_revision_conflict", "公开阅读修订已更新, 请重新读取"
+    ),
+    "publication_epoch_conflict": PublicError(
+        409, "publication_epoch_conflict", "精选内容版本已更新, 请刷新列表"
+    ),
+    "invalid_event_cursor": PublicError(
+        422, "invalid_event_cursor", "事件分页游标不属于当前查询范围"
+    ),
     "invalid_content_cursor": PublicError(
         422, "invalid_content_cursor", "作品分页游标不属于当前筛选条件"
     ),
@@ -252,6 +354,7 @@ def _validate_application_error_map() -> None:
             ErrorCategory.DEPENDENCY_UNAVAILABLE: 503,
             ErrorCategory.INVALID_INPUT: 422,
             ErrorCategory.NOT_FOUND: 404,
+            ErrorCategory.RATE_LIMITED: 429,
         }[category]
         if response.status_code != expected_status:
             raise RuntimeError(
@@ -267,7 +370,18 @@ def register_exception_handlers(app: FastAPI) -> None:
         request: Request,
         error: ApplicationError,
     ) -> JSONResponse:
-        return _error_response(request, APPLICATION_ERRORS[error.code])
+        headers = None
+        if error.code == "publication_search_busy":
+            headers = {"retry-after": "5"}
+        if error.code == "feedback_rate_limited":
+            seconds = error.context.get("retry_after")
+            if isinstance(seconds, int) and not isinstance(seconds, bool) and 0 <= seconds <= 3600:
+                headers = {"retry-after": str(seconds)}
+        if error.code == "external_source_rate_limited":
+            seconds = error.context.get("retry_after_seconds")
+            if isinstance(seconds, int) and not isinstance(seconds, bool) and 0 <= seconds <= 60:
+                headers = {"retry-after": str(seconds)}
+        return _error_response(request, APPLICATION_ERRORS[error.code], headers=headers)
 
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(

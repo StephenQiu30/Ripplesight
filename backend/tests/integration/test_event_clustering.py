@@ -6,17 +6,18 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from threading import Barrier
 from types import SimpleNamespace
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 import pytest
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
-from ai.schemas import AiCallError, AiFailureCode
+from ai.models import AiCall
+from ai.schemas import AiCallError, AiCompletion, AiFailureCode, AiTokenUsage
 from analysis.prompts import ANALYSIS_PROMPT_VERSION
 from core.config import Settings
-from events.clustering import EVENT_PROMPT_VERSION
+from events.clustering import EVENT_PROMPT_VERSION, candidate_fingerprint
 from events.models import Event, EventCandidate, EventMember
 from events.schemas import EventDecision
 from events.services import (
@@ -137,10 +138,130 @@ def event_context() -> Iterator[
                     "seen": observed_at,
                 },
             )
+    with sessions() as session, session.begin():
+        _seed_reading_evidence(session, owner_id, topic_id, version_ids, now)
     try:
         yield sessions, owner_id, topic_id, version_ids, call_id, now
     finally:
         engine.dispose()
+
+
+def _seed_reading_evidence(session, owner, topic, version_ids, now):
+    """Use real observed versions and lifecycle Evidence in controlled PostgreSQL fixtures."""
+    from jobs.schemas import JobAcceptanceInput, JobObservationContext
+    from jobs.services import JobService
+    from sources.contracts import SourceCapability
+
+    rows = session.execute(
+        text("SELECT id,content_id FROM content_versions WHERE id=ANY(:ids)"),
+        {"ids": list(version_ids)},
+    ).all()
+    by_source = {}
+    for version, content in rows:
+        record = session.execute(
+            text("SELECT source_key,created_at FROM content_records WHERE id=:id"), {"id": content}
+        ).one()
+        by_source.setdefault(record.source_key, []).append((version, content, record.created_at))
+    for source, versions in by_source.items():
+        policy = session.execute(
+            text(
+                "SELECT id FROM source_access_policies WHERE owner_id=:owner "
+                "AND source_key=:source AND capability='search'"
+            ),
+            {"owner": owner, "source": source},
+        ).scalar()
+        if policy is None:
+            policy = uuid4()
+            session.execute(
+                text(
+                    "INSERT INTO source_access_policies "
+                    "(id,owner_id,source_key,capability,status,enabled,access_basis,terms_reference,"
+                    "processing_purpose,component_name,component_version,component_license,field_purposes,"
+                    "reviewed_at,created_at,updated_at) "
+                    "VALUES (:id,:owner,:source,'search','approved',true,"
+                    "'manual_import','controlled PG fixture','事件固定阅读测试',"
+                    "'controlled','1','MIT',"
+                    '\'{"title":"事件证据","body":"事件证据"}\'::jsonb,:at,:at,:at)'
+                ),
+                {"id": policy, "owner": owner, "source": source, "at": now},
+            )
+        retention = session.execute(
+            text(
+                "SELECT id FROM evidence_retention_policies "
+                "WHERE owner_id=:owner AND source_policy_id=:policy AND data_class='structured'"
+            ),
+            {"owner": owner, "policy": policy},
+        ).scalar()
+        if retention is None:
+            retention = uuid4()
+            session.execute(
+                text(
+                    "INSERT INTO evidence_retention_policies "
+                    "(id,owner_id,source_policy_id,source_policy_version,data_class,requested_days,"
+                    "effective_days,created_at,updated_at) "
+                    "VALUES (:id,:owner,:policy,1,'structured',"
+                    "30,30,:at,:at)"
+                ),
+                {"id": retention, "owner": owner, "policy": policy, "at": now},
+            )
+        job = JobService(session, clock=lambda: now).accept_in_transaction(
+            owner_id=owner,
+            command=JobAcceptanceInput(
+                operation_id=uuid5(owner, f"event-test-observation:{source}"),
+                kind="content.search",
+                scope={},
+                observation=JobObservationContext(
+                    configuration_ref=f"topic:{topic}",
+                    configuration_version=1,
+                    source_key=source,
+                    source_capability=SourceCapability.SEARCH,
+                ),
+            ),
+        )
+        values = [
+            {
+                "id": uuid4(),
+                "owner": owner,
+                "content": content,
+                "version": version,
+                "job": job.id,
+                "operation": uuid4(),
+                "seen": seen,
+                "evidence": uuid4(),
+                "policy": policy,
+                "retention": retention,
+                "expires": now + timedelta(days=30),
+            }
+            for version, content, seen in versions
+        ]
+        session.execute(
+            text(
+                "INSERT INTO content_observations "
+                "(id,owner_id,content_id,content_version_id,job_id,source_operation_id,observed_at,received_at)"
+                " VALUES (:id,:owner,:content,:version,:job,:operation,:seen,:seen)"
+            ),
+            values,
+        )
+        session.execute(
+            text(
+                "INSERT INTO evidence_resources "
+                "(id,owner_id,resource_type,resource_id,source_policy_id,source_policy_version,"
+                "retention_policy_id,retention_policy_version,data_class,collected_at,expires_at,created_at)"
+                " VALUES (:evidence,:owner,'content_observation',:id,:policy,1,:retention,1,"
+                "'structured',"
+                ":seen,:expires,:seen)"
+            ),
+            values,
+        )
+        session.execute(
+            text(
+                "INSERT INTO content_visibility_observations "
+                "(id,owner_id,content_id,job_id,source_operation_id,observed_at,received_at,status,basis)"
+                " VALUES (gen_random_uuid(),:owner,:content,:job,:operation,:seen,:seen,'visible',"
+                "'content_returned')"
+            ),
+            values,
+        )
 
 
 def _decision(version_ids: tuple[UUID, ...]) -> EventDecision:
@@ -150,6 +271,19 @@ def _decision(version_ids: tuple[UUID, ...]) -> EventDecision:
         title="Acme 发布新模型",
         summary="两处来源报道了同一次发布。",
     )
+
+
+def _candidate_for_versions(session, owner, versions):
+    candidates = session.scalars(
+        select(EventCandidate).where(EventCandidate.owner_id == owner)
+    ).all()
+    matches = [
+        candidate
+        for candidate in candidates
+        if set(candidate.member_version_ids) == {str(version) for version in versions}
+    ]
+    assert len(matches) == 1
+    return matches[0]
 
 
 def test_candidate_uses_pg_trgm_window_and_commits_stable_identity(
@@ -164,10 +298,11 @@ def test_candidate_uses_pg_trgm_window_and_commits_stable_identity(
         candidates = session.scalars(
             select(EventCandidate).where(EventCandidate.owner_id == owner)
         ).all()
-        assert len(candidates) == 1
-        candidate_id = candidates[0].id
-        assert set(candidates[0].member_version_ids) == {str(versions[0]), str(versions[1])}
-        assert candidates[0].job_id is None
+        assert len(candidates) == 2
+        candidate = _candidate_for_versions(session, owner, versions[:2])
+        singleton = _candidate_for_versions(session, owner, versions[2:3])
+        candidate_id = candidate.id
+        assert candidate.job_id is None and singleton.job_id is None
     with sessions() as session, session.begin():
         event_id = EventCandidateService(session).confirm_in_transaction(
             candidate_id=candidate_id,
@@ -208,7 +343,7 @@ def test_candidate_uses_pg_trgm_window_and_commits_stable_identity(
                     select(EventCandidate).where(EventCandidate.owner_id == owner)
                 ).all()
             )
-            == 1
+            == 2
         )
 
 
@@ -218,7 +353,7 @@ def test_manual_assignment_wins_over_frozen_model_candidate(
     sessions, owner, topic, versions, call_id, now = event_context
     with sessions() as session, session.begin():
         EventCandidateService(session).enqueue_due_in_transaction(now=now, ai_enabled=False)
-        candidate = session.scalar(select(EventCandidate).where(EventCandidate.owner_id == owner))
+        candidate = _candidate_for_versions(session, owner, versions[:2])
         assert candidate is not None
         candidate_id = candidate.id
         source = load_relevant_event_inputs_in_transaction(
@@ -345,7 +480,7 @@ def test_rejection_and_unknown_member_do_not_create_event(
     sessions, owner, _, versions, call_id, now = event_context
     with sessions() as session, session.begin():
         EventCandidateService(session).enqueue_due_in_transaction(now=now, ai_enabled=False)
-        candidate = session.scalar(select(EventCandidate).where(EventCandidate.owner_id == owner))
+        candidate = _candidate_for_versions(session, owner, versions[:2])
         assert candidate is not None
         candidate_id = candidate.id
     with (
@@ -405,7 +540,7 @@ def test_concurrent_overlapping_candidates_keep_one_current_assignment(
                     id=candidate_id,
                     owner_id=owner,
                     topic_id=topic,
-                    input_fingerprint=candidate_id.bytes * 2,
+                    input_fingerprint=candidate_fingerprint(topic_id=topic, members=members),
                     member_version_ids=sorted(str(version) for version in pair),
                     expected_event_revisions={},
                     window_start=min(item.first_seen_at for item in members),
@@ -502,9 +637,9 @@ def test_event_worker_records_budget_denial_without_model_request(
     sessions, owner, _, versions, call_id, now = event_context
     with sessions() as session, session.begin():
         assert (
-            EventCandidateService(session).enqueue_due_in_transaction(now=now, ai_enabled=True) == 1
+            EventCandidateService(session).enqueue_due_in_transaction(now=now, ai_enabled=True) == 2
         )
-        candidate = session.scalar(select(EventCandidate).where(EventCandidate.owner_id == owner))
+        candidate = _candidate_for_versions(session, owner, versions[:2])
         assert candidate is not None and candidate.job_id is not None
         candidate_id = candidate.id
         job = session.get(Job, candidate.job_id)
@@ -601,6 +736,7 @@ def _add_event_inputs(session, owner, topic, call_id, now, count=1):
         ),
         rows,
     )
+    _seed_reading_evidence(session, owner, topic, tuple(row["version"] for row in rows), now)
     return tuple(row["version"] for row in rows)
 
 
@@ -617,28 +753,40 @@ def _event_message(session, candidate):
     )
 
 
-def _fake_event_model(monkeypatch, call_id, versions, *, same_event=True, before_return=None):
+def _fake_event_model(
+    monkeypatch, sessions, call_id, versions, *, same_event=True, before_return=None
+):
+    from tests.integration.test_ai_calls import _enable_ai_budget
+
     prompts = []
-    monkeypatch.setattr(
-        "events.services.create_ai_client",
-        lambda _settings: SimpleNamespace(close=lambda: None, provider="fake", model="fake"),
-    )
+    with sessions() as session:
+        owner = session.scalar(select(AiCall.owner_id).where(AiCall.id == call_id))
+    _enable_ai_budget(sessions.kw["bind"], owner)
 
-    def complete(*_args, **kwargs):
-        prompts.append(kwargs["prompt"])
-        if before_return:
-            before_return()
-        return SimpleNamespace(
-            call_id=call_id,
-            output={
-                "same_event": same_event,
-                "member_version_ids": [str(v) for v in versions],
-                "title": "模型新标题" if same_event else None,
-                "summary": "模型新摘要" if same_event else None,
-            },
-        )
+    class ControlledClient:
+        provider, model = "fake", "fake"
 
-    monkeypatch.setattr("events.services.AiService.complete", complete)
+        def complete(self, **kwargs):
+            prompts.append(kwargs["prompt"])
+            if before_return:
+                before_return()
+            return AiCompletion(
+                provider=self.provider,
+                model=self.model,
+                usage=AiTokenUsage(),
+                duration_ms=0,
+                output={
+                    "same_event": same_event,
+                    "member_version_ids": [str(v) for v in versions],
+                    "title": "模型新标题" if same_event else None,
+                    "summary": "模型新摘要" if same_event else None,
+                },
+            )
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("events.services.create_ai_client", lambda _: ControlledClient())
     return prompts
 
 
@@ -652,6 +800,56 @@ def _event_executor(sessions, now):
         ),
         clock=lambda: now,
     )
+
+
+def test_event_saved_response_resumes_without_another_model_call(event_context, monkeypatch):
+    sessions, owner, _, versions, call_id, now = event_context
+    with sessions() as session, session.begin():
+        EventCandidateService(session).enqueue_due_in_transaction(now=now, ai_enabled=True)
+        candidate = _candidate_for_versions(session, owner, versions[:2])
+        message = _event_message(session, candidate)
+        candidate_id = candidate.id
+    prompts = _fake_event_model(monkeypatch, sessions, call_id, versions[:2])
+    original_confirm = EventCandidateService.confirm_in_transaction
+    monkeypatch.setattr(
+        EventCandidateService,
+        "confirm_in_transaction",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(SystemExit()),
+    )
+    executor = _event_executor(sessions, now)
+    with pytest.raises(SystemExit):
+        executor.execute(message)
+    monkeypatch.setattr(EventCandidateService, "confirm_in_transaction", original_confirm)
+    executor.execute(message)
+    assert len(prompts) == 1
+    with sessions() as session:
+        assert session.get(EventCandidate, candidate_id).status == "confirmed"
+
+
+def test_event_started_request_is_unknown_and_cannot_repeat(event_context, monkeypatch):
+    from events.fact_models import EventGroupingAssessment
+    from events.fact_writer import freeze_fact_context_in_transaction
+
+    sessions, owner, _, versions, call_id, now = event_context
+    with sessions() as session, session.begin():
+        EventCandidateService(session).enqueue_due_in_transaction(now=now, ai_enabled=True)
+        candidate = _candidate_for_versions(session, owner, versions[:2])
+        message = _event_message(session, candidate)
+        freeze_fact_context_in_transaction(session, candidate=candidate, now=now)
+        assessment = session.scalar(
+            select(EventGroupingAssessment).where(
+                EventGroupingAssessment.candidate_id == candidate.id
+            )
+        )
+        assessment.error_code = "request_started"
+        candidate_id = candidate.id
+    prompts = _fake_event_model(monkeypatch, sessions, call_id, versions[:2])
+    with pytest.raises(JobExecutionFailure, match="event_result_unknown") as failure:
+        _event_executor(sessions, now).execute(message)
+    assert not failure.value.manual_retry_allowed
+    assert not prompts
+    with sessions() as session:
+        assert session.get(EventCandidate, candidate_id).error_code == "result_unknown"
 
 
 def test_review_scan_pages_deduplicates_and_drains_next_slot(event_context, monkeypatch):
@@ -756,16 +954,31 @@ def test_review_append_to_existing_event(event_context, monkeypatch, outcome):
 
     sessions, owner, topic, versions, call_id, now = event_context
     with sessions() as session, session.begin():
-        # Keep fixture content but use the exact HN + Google News source pair in the contract.
+        # Rebuild the controlled source fixture coherently before it enters event ownership.
+        # Record identity, original collection Job and admission policy must agree.
         session.execute(
             text(
-                "UPDATE content_records SET source_key='google_news' WHERE id="
-                "(SELECT content_id FROM content_versions WHERE id=:id)"
+                "UPDATE content_records SET source_key='google_news' "
+                "WHERE owner_id=:owner AND source_key='reddit'"
             ),
-            {"id": versions[1]},
+            {"owner": owner},
+        )
+        session.execute(
+            text(
+                "UPDATE jobs SET source_key='google_news' "
+                "WHERE owner_id=:owner AND source_key='reddit'"
+            ),
+            {"owner": owner},
+        )
+        session.execute(
+            text(
+                "UPDATE source_access_policies SET source_key='google_news' "
+                "WHERE owner_id=:owner AND source_key='reddit'"
+            ),
+            {"owner": owner},
         )
         EventCandidateService(session).enqueue_due_in_transaction(now=now, ai_enabled=False)
-        initial = session.scalar(select(EventCandidate).where(EventCandidate.owner_id == owner))
+        initial = _candidate_for_versions(session, owner, versions[:2])
         event_id = EventCandidateService(session).confirm_in_transaction(
             candidate_id=initial.id,
             owner_id=owner,
@@ -792,7 +1005,9 @@ def test_review_append_to_existing_event(event_context, monkeypatch, outcome):
         assert len(statements) == 1 and "unnest" in statements[0].lower()
         candidate = session.scalar(
             select(EventCandidate).where(
-                EventCandidate.owner_id == owner, EventCandidate.status == "pending"
+                EventCandidate.owner_id == owner,
+                EventCandidate.status == "pending",
+                EventCandidate.expected_event_revisions.contains({str(event_id): 1}),
             )
         )
         assert candidate is not None
@@ -855,7 +1070,12 @@ def test_review_append_to_existing_event(event_context, monkeypatch, outcome):
                 )
 
     prompts = _fake_event_model(
-        monkeypatch, call_id, frozen, same_event=outcome != "reject", before_return=manual_change
+        monkeypatch,
+        sessions,
+        call_id,
+        frozen,
+        same_event=outcome != "reject",
+        before_return=manual_change,
     )
     executor = _event_executor(sessions, now + timedelta(minutes=31))
     if outcome in {"revision", "removed", "assigned", "inactive"}:
@@ -897,7 +1117,7 @@ def test_review_input_changed_is_persisted_before_model(event_context, monkeypat
     sessions, owner, _, versions, _, now = event_context
     with sessions() as session, session.begin():
         EventCandidateService(session).enqueue_due_in_transaction(now=now, ai_enabled=True)
-        candidate = session.scalar(select(EventCandidate).where(EventCandidate.owner_id == owner))
+        candidate = _candidate_for_versions(session, owner, versions[:2])
         candidate_id, message = candidate.id, _event_message(session, candidate)
         session.execute(
             text(
@@ -976,10 +1196,11 @@ def test_rework_new_pair_is_not_starved_by_old_singletons(event_context):
             ],
         )
         EventCandidateService(session).enqueue_due_in_transaction(now=now, ai_enabled=False)
-        assert (
-            session.scalar(select(EventCandidate.id).where(EventCandidate.owner_id == owner))
-            is None
-        )
+        singletons = session.scalars(
+            select(EventCandidate).where(EventCandidate.owner_id == owner)
+        ).all()
+        assert len(singletons) == 100
+        assert all(len(candidate.member_version_ids) == 1 for candidate in singletons)
     later = now + timedelta(minutes=30)
     with sessions() as session, session.begin():
         pair = _add_event_inputs(session, owner, topic, call_id, later, count=2)
@@ -988,9 +1209,9 @@ def test_rework_new_pair_is_not_starved_by_old_singletons(event_context):
         candidates = session.scalars(
             select(EventCandidate).where(EventCandidate.owner_id == owner)
         ).all()
-        assert len(candidates) == 1
-        assert set(candidates[0].member_version_ids) == {str(version) for version in pair}
-        assert candidates[0].expected_event_revisions == {}
+        assert len(candidates) <= 201
+        candidate = _candidate_for_versions(session, owner, pair)
+        assert candidate.expected_event_revisions == {}
 
 
 @pytest.mark.parametrize("recent_member", ["current", "expired", "removed"])
@@ -999,7 +1220,7 @@ def test_rework_old_event_requires_recent_current_member(event_context, monkeypa
     old_time = now - timedelta(hours=80)
     with sessions() as session, session.begin():
         EventCandidateService(session).enqueue_due_in_transaction(now=now, ai_enabled=False)
-        initial = session.scalar(select(EventCandidate).where(EventCandidate.owner_id == owner))
+        initial = _candidate_for_versions(session, owner, versions[:2])
         event_id = EventCandidateService(session).confirm_in_transaction(
             candidate_id=initial.id,
             owner_id=owner,
@@ -1011,16 +1232,16 @@ def test_rework_old_event_requires_recent_current_member(event_context, monkeypa
         target.first_seen_at = old_time
         session.execute(
             text(
-                "UPDATE content_records SET created_at=:old WHERE id="
-                "(SELECT content_id FROM content_versions WHERE id=:version)"
+                "UPDATE content_observations SET observed_at=:old,received_at=:old "
+                "WHERE content_version_id=:version"
             ),
             {"old": old_time, "version": versions[0]},
         )
         if recent_member == "expired":
             session.execute(
                 text(
-                    "UPDATE content_records SET created_at=:old WHERE id="
-                    "(SELECT content_id FROM content_versions WHERE id=:version)"
+                    "UPDATE content_observations SET observed_at=:old,received_at=:old "
+                    "WHERE content_version_id=:version"
                 ),
                 {"old": old_time, "version": versions[1]},
             )
@@ -1044,11 +1265,16 @@ def test_rework_old_event_requires_recent_current_member(event_context, monkeypa
     later = now + timedelta(minutes=30)
     with sessions() as session, session.begin():
         EventCandidateService(session).enqueue_due_in_transaction(now=later, ai_enabled=True)
-        candidate = session.scalar(
-            select(EventCandidate).where(
-                EventCandidate.owner_id == owner, EventCandidate.status == "pending"
+        if recent_member == "current":
+            candidate = session.scalar(
+                select(EventCandidate).where(
+                    EventCandidate.owner_id == owner,
+                    EventCandidate.status == "pending",
+                    EventCandidate.expected_event_revisions.contains({str(event_id): 1}),
+                )
             )
-        )
+        else:
+            candidate = _candidate_for_versions(session, owner, added)
         assert candidate is not None
         frozen = tuple(UUID(value) for value in candidate.member_version_ids)
         if recent_member == "current":
@@ -1058,7 +1284,7 @@ def test_rework_old_event_requires_recent_current_member(event_context, monkeypa
             assert candidate.expected_event_revisions == {}
             assert set(frozen) == set(added)
         candidate_id, message = candidate.id, _event_message(session, candidate)
-    _fake_event_model(monkeypatch, call_id, frozen)
+    _fake_event_model(monkeypatch, sessions, call_id, frozen)
     _event_executor(sessions, later).execute(message)
     with sessions() as session:
         candidate = session.get(EventCandidate, candidate_id)
@@ -1081,3 +1307,71 @@ def test_rework_old_event_requires_recent_current_member(event_context, monkeypa
         else:
             assert candidate.event_id != event_id and event_count == 2
             assert target.revision == (2 if recent_member == "removed" else 1)
+
+
+def test_queued_legacy_annotation_candidate_rechecks_source_permission_before_pay(
+    event_context, monkeypatch
+):
+    sessions, owner, _, versions, _, now = event_context
+    with sessions() as session, session.begin():
+        EventCandidateService(session).enqueue_due_in_transaction(now=now, ai_enabled=True)
+        candidate = _candidate_for_versions(session, owner, versions[:2])
+        message = _event_message(session, candidate)
+        identity = candidate.id
+        session.execute(
+            text("UPDATE source_access_policies SET enabled=false WHERE owner_id=:owner"),
+            {"owner": owner},
+        )
+    monkeypatch.setattr(
+        "events.services.create_ai_client", lambda _: pytest.fail("source permission withdrawn")
+    )
+    with pytest.raises(JobExecutionFailure, match="event_input_changed"):
+        _event_executor(sessions, now).execute(message)
+    with sessions() as session:
+        candidate = session.get(EventCandidate, identity)
+        assert candidate.status == "failed" and candidate.error_code == "input_changed"
+        assert candidate.ai_call_id is None
+        assert session.scalar(select(Event)) is None
+
+
+def test_cluster_revocation_after_prepare_denies_ai_and_budget_reservation(
+    event_context, monkeypatch
+):
+    from events import services
+    from jobs.execution import JobExecutionService
+
+    sessions, owner, _, versions, call_id, now = event_context
+    with sessions.begin() as session:
+        EventCandidateService(session).enqueue_due_in_transaction(now=now, ai_enabled=True)
+        candidate = _candidate_for_versions(session, owner, versions[:2])
+        message = _event_message(session, candidate)
+        session.execute(
+            text("UPDATE jobs SET created_at=:at,updated_at=:at WHERE id=:job"),
+            {"at": now, "job": message.job_id},
+        )
+    prompts = _fake_event_model(monkeypatch, sessions, call_id, versions[:2])
+    original_factory = services.create_ai_client
+    with sessions() as session:
+        lease = JobExecutionService(session, lease_seconds=300, clock=lambda: now).acquire(
+            job_id=message.job_id, worker_id="controlled-cluster-admission"
+        )
+        calls = session.execute(text("SELECT count(*) FROM ai_calls")).scalar()
+        reservations = session.execute(
+            text("SELECT count(*) FROM resource_budget_reservations")
+        ).scalar()
+
+    def revoke_after_prepare(settings):
+        with sessions.begin() as session:
+            session.execute(text("UPDATE source_access_policies SET enabled=false"))
+        return original_factory(settings)
+
+    monkeypatch.setattr(services, "create_ai_client", revoke_after_prepare)
+    with pytest.raises(JobExecutionFailure, match="event_input_changed"):
+        _event_executor(sessions, now).execute(message, lease)
+    assert prompts == []
+    with sessions() as session:
+        assert session.execute(text("SELECT count(*) FROM ai_calls")).scalar() == calls
+        assert (
+            session.execute(text("SELECT count(*) FROM resource_budget_reservations")).scalar()
+            == reservations
+        )

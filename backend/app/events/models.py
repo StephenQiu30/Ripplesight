@@ -95,9 +95,13 @@ class EventMember(Base):
         UniqueConstraint(
             "owner_id",
             "topic_id",
+            "event_id",
             "content_id",
             "added_revision",
             name="event_members_revision_key",
+        ),
+        UniqueConstraint(
+            "owner_id", "topic_id", "event_id", "id", name="event_members_scope_id_key"
         ),
         CheckConstraint("added_revision >= 1", name="event_members_added_revision_check"),
         CheckConstraint(
@@ -173,7 +177,7 @@ class EventCandidate(Base):
         ),
         CheckConstraint(
             "jsonb_typeof(member_version_ids) = 'array' AND "
-            "jsonb_array_length(member_version_ids) BETWEEN 2 AND 20",
+            "jsonb_array_length(member_version_ids) BETWEEN 1 AND 20",
             name="event_candidates_members_check",
         ),
         CheckConstraint(

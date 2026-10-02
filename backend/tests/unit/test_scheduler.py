@@ -37,7 +37,9 @@ def test_prompt_runtime_heartbeat_failure_stops_scheduler_without_closing_gap(
     events: list[str] = []
     engine = SimpleNamespace(dispose=lambda: events.append("dispose"))
     monkeypatch.setattr(
-        scheduler, "get_settings", lambda: SimpleNamespace(log_level="INFO", ai_enabled=False)
+        scheduler,
+        "get_settings",
+        lambda: SimpleNamespace(log_level="INFO", ai_enabled=False, environment="test"),
     )
     monkeypatch.setattr(scheduler, "configure_logging", lambda _level: None)
     monkeypatch.setattr(scheduler.signal, "signal", lambda _signal, _handler: None)
@@ -172,11 +174,26 @@ def test_scheduler_registers_collection_comments_and_analysis_scans() -> None:
     names = tuple(scan.name for scan in _registered_scheduler_scans())
 
     assert names == (
+        "indexnow",
+        "publication",
+        "publication-media",
+        "editorial-sources",
+        "source-icons",
+        "leaderboard",
+        "operations",
+        "codex-resets",
         "hotlists",
         "collection",
         "comments",
         "analysis",
+        "editorial",
         "events",
+        "event-embeddings",
+        "event-digests",
+        "event-signals",
+        "event-consolidation",
+        "event-heat",
+        "editions",
         "reports",
         "knowledge",
         "notifications",
@@ -194,10 +211,30 @@ def test_event_scan_remains_off_even_when_analysis_is_enabled(
     monkeypatch.setattr(
         scheduler,
         "EventCandidateService",
-        lambda _session: pytest.fail("disabled scan accessed event storage"),
+        lambda _session, _settings: pytest.fail("disabled scan accessed event storage"),
     )
     event_scan = next(scan for scan in _registered_scheduler_scans() if scan.name == "events")
     assert event_scan.run_in_transaction(object(), datetime(2026, 9, 28, tzinfo=UTC)) == 0
+
+
+@pytest.mark.parametrize(
+    "name", ["source-icons", "event-embeddings", "event-consolidation", "event-signals"]
+)
+def test_new_migration_scans_do_not_access_storage_when_disabled(
+    name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from core.config import Settings
+
+    monkeypatch.setattr(
+        scheduler,
+        "get_settings",
+        lambda: Settings(
+            _env_file=None,
+            database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test",
+        ),
+    )
+    scan = next(scan for scan in _registered_scheduler_scans() if scan.name == name)
+    assert scan.run_in_transaction(object(), datetime(2026, 10, 2, tzinfo=UTC)) == 0
 
 
 def test_analysis_scan_does_not_admit_jobs_until_model_usage_is_enabled(
@@ -361,7 +398,7 @@ def test_event_slots_catch_up_and_retry_only_after_failed_commit(
     monkeypatch.setattr(
         scheduler,
         "EventCandidateService",
-        lambda _session: SimpleNamespace(enqueue_due_in_transaction=enqueue),
+        lambda _session, _settings: SimpleNamespace(enqueue_due_in_transaction=enqueue),
     )
     fail_commit = True
 

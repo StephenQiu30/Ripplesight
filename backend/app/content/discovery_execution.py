@@ -15,6 +15,7 @@ from connections.services import (
 from content.discovery import KeywordDiscoveryPageCommitService, KeywordRequestMeter
 from core.config import get_settings
 from core.errors import ApplicationError
+from events.heat import record_source_fetch_success_in_transaction
 from evidence.services import RetentionPolicyUnavailableError, SourceAccessUnavailableError
 from jobs.cursor import CursorBudgetExhaustedError, plan_cursor_request
 from jobs.execution import (
@@ -494,6 +495,24 @@ class KeywordDiscoveryExecutor:
                     live_token = result.progress.next_token
                     continue
                 if result.coverage.status == "confirmed":
+                    session.rollback()
+                    with session.begin():
+                        execution.require_current_lease_in_transaction(lease)
+                        require_source_connection_version(
+                            session,
+                            owner_id=configuration.owner_id,
+                            source_key=source_key,
+                            connection_id=connection_id,
+                            connection_version=connection_version,
+                        )
+                        record_source_fetch_success_in_transaction(
+                            session,
+                            owner_id=configuration.owner_id,
+                            source_key=source_key,
+                            selector_kind="native_scope",
+                            selector_ref=f"search:{window.target_hash.hex()}",
+                            completed_at=self._clock(),
+                        )
                     return lease, JobCompletion(status=JobStatus.SUCCEEDED)
                 reason = result.coverage.stop_reason or "unverified_terminal"
                 if (

@@ -517,7 +517,7 @@ export function JobDetail({ jobId }: JobDetailProps) {
         description="任务不存在或已不可读。"
         action={
           <Button asChild variant="secondary">
-            <Link href="/events">
+            <Link href="/topics">
               <ArrowLeftIcon data-icon="inline-start" />
               返回工作台
             </Link>

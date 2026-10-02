@@ -14,8 +14,10 @@ import structlog
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from analysis.editorial_services import EditorialService
 from analysis.prompts import ANALYSIS_PROMPT_VERSION
 from analysis.services import AnalysisService
+from connections.editorial_icon_services import enqueue_due_source_icons_in_transaction
 from connections.schemas import SourceEntryPoint, SourceExecutionPolicy
 from connections.services import (
     list_applied_hotlist_presets_in_transaction,
@@ -27,11 +29,17 @@ from content.schemas import KeywordDiscoveryRunInput
 from content.services import CommentScanService
 from core.config import get_settings
 from core.logging import configure_logging
+from db.demo import resolve_demo_scope
 
 # The scheduler is its own process; import the canonical registry to resolve ORM foreign keys.
 from db.metadata import metadata as _registered_metadata  # noqa: F401
 from db.session import create_db_engine, create_session_factory
+from events.consolidation import EventConsolidationService
+from events.digest import EventDigestService
+from events.embedding_execution import EventEmbeddingService
+from events.heat import EventHeatService
 from events.services import EventCandidateService
+from events.signals import EventSignalService
 from evidence.services import load_source_access_readiness
 from jobs.coverage import CollectionDueWindowService
 from jobs.models import CollectionDueWindow, Job
@@ -51,9 +59,20 @@ from jobs.services import (
     try_lock_source_collection_in_transaction,
 )
 from knowledge.services import KnowledgeExportService
+from leaderboard.schedule import enqueue_due_leaderboard_in_transaction
+from monitors.codex_schedule import enqueue_due_codex_monitors_in_transaction
 from monitors.services import DueCollectionSchedule, MonitorScheduleService
 from notifications.services import NotificationService
+from operations.heartbeat import ProcessHeartbeatReporter
+from operations.indexnow_services import enqueue_due_indexnow_in_transaction
+from operations.maintenance import enqueue_due_maintenance_in_transaction
+from publication.schedule import (
+    enqueue_due_media_in_transaction,
+    enqueue_due_publication_in_transaction,
+)
+from reports.edition_services import EditionService
 from sources.contracts import SourceCapability
+from sources.editorial_schedule import enqueue_due_editorial_sources_in_transaction
 
 SCHEDULER_POLL_SECONDS = 30
 COLLECTION_OPERATION_NAMESPACE = UUID("515944a7-070b-4b27-86a4-bc811109031d")
@@ -679,7 +698,9 @@ def enqueue_due_analysis_in_transaction(session: Session, now: datetime) -> int:
     for topic in topics:
         try:
             with session.begin_nested():
-                jobs = AnalysisService(session).enqueue_due_batches_in_transaction(
+                jobs = AnalysisService(
+                    session, settings=get_settings()
+                ).enqueue_due_batches_in_transaction(
                     owner_id=topic.owner_id,
                     topic_id=topic.topic_id,
                     now=now.astimezone(UTC),
@@ -764,7 +785,7 @@ def _registered_scheduler_scans() -> tuple[SchedulerScan, ...]:
         if slot == last_event_slot:
             return 0
         attempted_event_slot = slot
-        return EventCandidateService(session).enqueue_due_in_transaction(
+        return EventCandidateService(session, get_settings()).enqueue_due_in_transaction(
             now=now, ai_enabled=get_settings().ai_enabled
         )
 
@@ -774,6 +795,75 @@ def _registered_scheduler_scans() -> tuple[SchedulerScan, ...]:
             last_event_slot = attempted_event_slot
 
     scans = [
+        SchedulerScan(
+            name="indexnow",
+            run_in_transaction=lambda session, now: (
+                enqueue_due_indexnow_in_transaction(
+                    session, owner_id=resolve_demo_scope(session), now=now, settings=get_settings()
+                )
+                if get_settings().indexnow_enabled
+                else 0
+            ),
+        ),
+        SchedulerScan(
+            name="publication",
+            run_in_transaction=lambda session, now: enqueue_due_publication_in_transaction(
+                session, now=now, enabled=get_settings().publication_updates_enabled
+            ),
+        ),
+        SchedulerScan(
+            name="publication-media",
+            run_in_transaction=lambda session, now: (
+                enqueue_due_media_in_transaction(
+                    session,
+                    owner_id=resolve_demo_scope(session),
+                    now=now,
+                    enabled=True,
+                    allow_external_requests=True,
+                )
+                if (
+                    get_settings().media_mirror_enabled
+                    and get_settings().media_mirror_allow_external_requests
+                )
+                else 0
+            ),
+        ),
+        SchedulerScan(
+            name="editorial-sources",
+            run_in_transaction=lambda session, now: enqueue_due_editorial_sources_in_transaction(
+                session, now, enabled=get_settings().editorial_sources_enabled
+            ),
+        ),
+        SchedulerScan(
+            name="source-icons",
+            run_in_transaction=lambda session, now: (
+                enqueue_due_source_icons_in_transaction(session, now, enabled=True)
+                if get_settings().source_icons_enabled
+                else 0
+            ),
+        ),
+        SchedulerScan(
+            name="leaderboard",
+            run_in_transaction=lambda session, now: (
+                enqueue_due_leaderboard_in_transaction(
+                    session, now, enabled=True, owner_id=resolve_demo_scope(session)
+                )
+                if get_settings().leaderboard_enabled
+                else 0
+            ),
+        ),
+        SchedulerScan(
+            name="operations",
+            run_in_transaction=lambda session, now: enqueue_due_maintenance_in_transaction(
+                session, now=now, settings=get_settings()
+            ),
+        ),
+        SchedulerScan(
+            name="codex-resets",
+            run_in_transaction=lambda session, now: enqueue_due_codex_monitors_in_transaction(
+                session, now, enabled=get_settings().codex_resets_enabled
+            ),
+        ),
         SchedulerScan(name="hotlists", run_in_transaction=enqueue_due_hotlists_in_transaction),
         SchedulerScan(
             name="collection",
@@ -788,9 +878,75 @@ def _registered_scheduler_scans() -> tuple[SchedulerScan, ...]:
             run_in_transaction=enqueue_due_analysis_in_transaction,
         ),
         SchedulerScan(
+            name="editorial",
+            run_in_transaction=lambda session, now: (
+                EditorialService(session, settings=get_settings()).enqueue_due_in_transaction(
+                    now=now
+                )
+                if get_settings().ai_enabled
+                else 0
+            ),
+        ),
+        SchedulerScan(
             name="events",
             run_in_transaction=scan_events,
             after_commit=event_scan_committed,
+        ),
+        SchedulerScan(
+            name="event-embeddings",
+            run_in_transaction=lambda session, now: (
+                EventEmbeddingService(session, get_settings()).enqueue_due_in_transaction(
+                    now=now, ai_enabled=True
+                )
+                if get_settings().ai_enabled and get_settings().embeddings_enabled
+                else 0
+            ),
+        ),
+        SchedulerScan(
+            name="event-digests",
+            run_in_transaction=lambda session, now: (
+                EventDigestService(session, get_settings()).enqueue_due_in_transaction(
+                    now=now, ai_enabled=get_settings().ai_enabled
+                )
+                if get_settings().events_cluster_enabled
+                else 0
+            ),
+        ),
+        SchedulerScan(
+            name="event-signals",
+            run_in_transaction=lambda session, now: (
+                EventSignalService(session, get_settings()).enqueue_due_in_transaction(
+                    now=now, ai_enabled=get_settings().ai_enabled
+                )
+                if get_settings().events_cluster_enabled
+                else 0
+            ),
+        ),
+        SchedulerScan(
+            name="event-consolidation",
+            run_in_transaction=lambda session, now: (
+                EventConsolidationService(session, get_settings()).enqueue_due_in_transaction(
+                    now=now, ai_enabled=True
+                )
+                if get_settings().events_cluster_enabled and get_settings().ai_enabled
+                else 0
+            ),
+        ),
+        SchedulerScan(
+            name="event-heat",
+            run_in_transaction=lambda session, now: EventHeatService(
+                session
+            ).enqueue_due_in_transaction(now=now, enabled=get_settings().events_cluster_enabled),
+        ),
+        SchedulerScan(
+            name="editions",
+            run_in_transaction=lambda session, now: (
+                EditionService(
+                    session, settings=get_settings(), clock=lambda: now
+                ).enqueue_due_in_transaction(now=now)
+                if get_settings().report_editions_enabled
+                else 0
+            ),
         ),
     ]
     report_scan = _optional_report_scan()
@@ -854,10 +1010,14 @@ def run_scheduler() -> None:
 
     engine = create_db_engine(settings)
     sessions = create_session_factory(engine)
+    heartbeat = ProcessHeartbeatReporter(
+        sessions, role="scheduler", enabled=settings.environment != "test"
+    )
     scans = _registered_scheduler_scans()
     run_id: UUID | None = None
     normal_shutdown = False
     try:
+        heartbeat.start()
         run_id = start_analysis_prompt_runtime_at_startup(
             sessions,
             ai_enabled=settings.ai_enabled,
@@ -877,6 +1037,7 @@ def run_scheduler() -> None:
             if normal_shutdown and run_id is not None:
                 stop_analysis_prompt_runtime(sessions, run_id=run_id, stopped_at=datetime.now(UTC))
         finally:
+            heartbeat.stop()
             engine.dispose()
     logger.info("scheduler_stopped")
 

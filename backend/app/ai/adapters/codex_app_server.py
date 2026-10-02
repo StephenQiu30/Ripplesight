@@ -12,7 +12,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from ai.schemas import AiCallError, AiCompletion, AiFailureCode, AiTokenUsage
+from ai.schemas import AiCallError, AiCompletion, AiFailureCode, AiImageInput, AiTokenUsage
+from core.config import Settings
 
 _EOF = object()
 _RATE_LIMIT_MARKERS = ("429", "rate limit", "rate_limit", "usage limit", "too many requests")
@@ -67,6 +68,7 @@ class CodexAppServerClient:
     """
 
     provider = "codex_app_server"
+    capability_settings: Settings | None = None
 
     def __init__(
         self,
@@ -121,6 +123,18 @@ class CodexAppServerClient:
         output_schema: Mapping[str, Any],
         instructions: str = "",
     ) -> AiCompletion:
+        return self.complete_multimodal(
+            prompt=prompt, output_schema=output_schema, instructions=instructions, images=()
+        )
+
+    def complete_multimodal(
+        self,
+        *,
+        prompt: str,
+        output_schema: Mapping[str, Any],
+        instructions: str = "",
+        images: Sequence[AiImageInput] = (),
+    ) -> AiCompletion:
         with self._lock:
             with tempfile.TemporaryDirectory(prefix="hotkey-ai-call-") as workdir:
                 started = time.monotonic()
@@ -149,7 +163,8 @@ class CodexAppServerClient:
                         "turn/start",
                         {
                             "threadId": thread_id,
-                            "input": [{"type": "text", "text": prompt}],
+                            "input": [{"type": "text", "text": prompt}]
+                            + [{"type": "image", "url": image.data_url} for image in images[:1]],
                             "outputSchema": dict(output_schema),
                             "model": self._model,
                             "effort": self._effort,

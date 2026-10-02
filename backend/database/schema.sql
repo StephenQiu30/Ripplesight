@@ -506,7 +506,7 @@ CREATE TABLE resource_budget_policies (
         budget_key ~ '^[a-z][a-z0-9_.:-]{0,127}$'
     ),
     metric VARCHAR(32) NOT NULL CHECK (
-        metric IN ('network_request', 'collector_call', 'analysis_attempt', 'concurrency_slot', 'x_api_usd_micros')
+        metric IN ('network_request', 'collector_call', 'analysis_attempt', 'concurrency_slot', 'x_api_usd_micros', 'provider_cny_micros', 'provider_usd_micros')
     ),
     scope_kind VARCHAR(32) NOT NULL CHECK (
         scope_kind IN ('global', 'source', 'connection', 'job')
@@ -572,7 +572,7 @@ CREATE TABLE resource_budget_reservations (
     policy_version BIGINT NOT NULL CHECK (policy_version >= 1),
     limit_units BIGINT NOT NULL CHECK (limit_units > 0),
     metric VARCHAR(32) NOT NULL CHECK (
-        metric IN ('network_request', 'collector_call', 'analysis_attempt', 'concurrency_slot', 'x_api_usd_micros')
+        metric IN ('network_request', 'collector_call', 'analysis_attempt', 'concurrency_slot', 'x_api_usd_micros', 'provider_cny_micros', 'provider_usd_micros')
     ),
     budget_mode VARCHAR(32) NOT NULL CHECK (
         budget_mode IN ('cumulative', 'concurrent')
@@ -603,7 +603,8 @@ CREATE TABLE resource_budget_reservations (
     ),
     CHECK (
         actual_units IS NULL
-        OR (actual_units >= 0 AND actual_units <= requested_units)
+        OR (actual_units >= 0 AND (actual_units <= requested_units
+            OR metric IN ('provider_cny_micros', 'provider_usd_micros')))
     ),
     CHECK (
         released_units IS NULL
@@ -611,7 +612,8 @@ CREATE TABLE resource_budget_reservations (
     ),
     CHECK (
         status = 'reserved'
-        OR (budget_mode = 'cumulative' AND actual_units + released_units = requested_units)
+        OR (budget_mode = 'cumulative'
+            AND actual_units + released_units = GREATEST(requested_units, actual_units))
         OR (budget_mode = 'concurrent' AND released_units = requested_units)
     )
 );
@@ -830,7 +832,7 @@ CREATE TABLE ai_calls (
     model VARCHAR(128) NOT NULL CHECK (model <> ''),
     prompt_version VARCHAR(128) NOT NULL CHECK (prompt_version <> ''),
     input_fingerprint BYTEA NOT NULL CHECK (octet_length(input_fingerprint) = 32),
-    status VARCHAR(16) NOT NULL CHECK (status IN ('succeeded', 'failed')),
+    status VARCHAR(16) NOT NULL CHECK (status IN ('running', 'unknown', 'succeeded', 'failed')),
     failure_code VARCHAR(32) CHECK (
         failure_code IN ('rate_limited', 'unavailable', 'timeout', 'invalid_output', 'failed')
     ),
@@ -839,17 +841,49 @@ CREATE TABLE ai_calls (
     output_tokens BIGINT NOT NULL CHECK (output_tokens >= 0),
     reasoning_output_tokens BIGINT NOT NULL CHECK (reasoning_output_tokens >= 0),
     duration_ms BIGINT NOT NULL CHECK (duration_ms >= 0),
+    model_key VARCHAR(64),
+    routing_version BIGINT,
+    routing_hash BYTEA,
+    currency VARCHAR(3),
+    cost_estimate_micros BIGINT,
+    cost_actual_micros BIGINT,
+    cost_cap_micros BIGINT,
+    execution_epoch BIGINT,
     created_at TIMESTAMPTZ NOT NULL,
     CONSTRAINT ai_calls_owner_id_key UNIQUE (owner_id, id),
     CONSTRAINT ai_calls_owner_job_fkey
         FOREIGN KEY (owner_id, job_id) REFERENCES jobs (owner_id, id),
+    CONSTRAINT ai_calls_routing_version_check CHECK (routing_version IS NULL OR routing_version >= 0),
+    CONSTRAINT ai_calls_execution_epoch_check CHECK (execution_epoch IS NULL OR execution_epoch >= 1),
+    CONSTRAINT ai_calls_routing_hash_check CHECK (routing_hash IS NULL OR octet_length(routing_hash) = 32),
+    CONSTRAINT ai_calls_currency_check CHECK (currency IS NULL OR currency IN ('USD', 'CNY')),
+    CONSTRAINT ai_calls_cost_check CHECK (
+        (cost_estimate_micros IS NULL OR cost_estimate_micros >= 0) AND
+        (cost_actual_micros IS NULL OR cost_actual_micros >= 0) AND
+        (cost_cap_micros IS NULL OR cost_cap_micros >= 0)
+    ),
     CONSTRAINT ai_calls_status_failure_check CHECK (
-        (status = 'succeeded' AND failure_code IS NULL)
-        OR (status = 'failed' AND failure_code IS NOT NULL)
+        (status IN ('running', 'succeeded') AND failure_code IS NULL)
+        OR (status IN ('unknown', 'failed') AND failure_code IS NOT NULL)
     )
 );
 
 CREATE INDEX ai_calls_owner_created_idx ON ai_calls (owner_id, created_at);
+CREATE TABLE ai_capability_configurations (
+    owner_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    operation_id UUID NOT NULL,
+    input_hash BYTEA NOT NULL,
+    overrides JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (owner_id, version),
+    CONSTRAINT ai_capability_configurations_owner_operation_key UNIQUE (owner_id, operation_id),
+    CONSTRAINT ai_capability_configurations_version_check CHECK (version >= 1),
+    CONSTRAINT ai_capability_configurations_hash_check CHECK (octet_length(input_hash) = 32),
+    CONSTRAINT ai_capability_configurations_overrides_check CHECK (
+        jsonb_typeof(overrides) = 'object' AND octet_length(overrides::text) <= 4096
+    )
+);
 
 CREATE TABLE analysis_prompt_activations (
     prompt_version VARCHAR(128) PRIMARY KEY
@@ -1489,7 +1523,9 @@ CREATE TABLE event_members (
         REFERENCES content_records (owner_id, id, source_key) ON DELETE RESTRICT,
     CONSTRAINT event_members_comment_fkey FOREIGN KEY (owner_id, representative_comment_id)
         REFERENCES content_records (owner_id, id) ON DELETE RESTRICT,
-    CONSTRAINT event_members_revision_key UNIQUE (owner_id, topic_id, content_id, added_revision)
+    CONSTRAINT event_members_revision_key UNIQUE
+        (owner_id, topic_id, event_id, content_id, added_revision),
+    CONSTRAINT event_members_scope_id_key UNIQUE (owner_id, topic_id, event_id, id)
 );
 
 CREATE UNIQUE INDEX event_members_one_current_assignment_idx
@@ -1504,7 +1540,7 @@ CREATE TABLE event_candidates (
     input_fingerprint BYTEA NOT NULL CHECK (octet_length(input_fingerprint) = 32),
     member_version_ids JSONB NOT NULL CHECK (
         jsonb_typeof(member_version_ids) = 'array'
-        AND jsonb_array_length(member_version_ids) BETWEEN 2 AND 20
+        AND jsonb_array_length(member_version_ids) BETWEEN 1 AND 20
     ),
     expected_event_revisions JSONB NOT NULL DEFAULT '{}'::jsonb
         CHECK (jsonb_typeof(expected_event_revisions) = 'object'),
@@ -1581,39 +1617,62 @@ CREATE TABLE knowledge_exports (
 );
 
 CREATE TABLE notification_targets (
-    id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL,
-    name VARCHAR(80) NOT NULL CHECK (char_length(name) BETWEEN 1 AND 80),
-    channel VARCHAR(16) NOT NULL CHECK (channel IN ('feishu', 'email')),
-    recipients JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(recipients) = 'array'),
-    secret_env VARCHAR(128),
-    enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL CHECK (updated_at >= created_at),
-    CONSTRAINT notification_targets_secret_env_check CHECK (
-        secret_env IS NULL OR secret_env ~ '^HOTKEY_[A-Z][A-Z0-9_]*$'
-    ),
-    CONSTRAINT notification_targets_owner_name_key UNIQUE (owner_id, name),
-    CONSTRAINT notification_targets_owner_id_key UNIQUE (owner_id, id)
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	name VARCHAR(80) NOT NULL,
+	channel VARCHAR(16) NOT NULL,
+	recipients JSONB NOT NULL,
+	secret_env VARCHAR(128),
+	enabled BOOLEAN DEFAULT false NOT NULL,
+	revision INTEGER DEFAULT 1 NOT NULL,
+	enabled_at TIMESTAMP WITH TIME ZONE,
+	subscriptions JSONB DEFAULT '[]'::jsonb NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT notification_targets_owner_name_key UNIQUE (owner_id, name),
+	CONSTRAINT notification_targets_owner_id_key UNIQUE (owner_id, id),
+	CONSTRAINT notification_targets_channel_check CHECK (channel IN ('feishu', 'email')),
+	CONSTRAINT notification_targets_recipients_check CHECK (jsonb_typeof(recipients) = 'array'),
+	CONSTRAINT notification_targets_secret_env_check CHECK (secret_env IS NULL OR secret_env ~ '^HOTKEY_[A-Z][A-Z0-9_]*$'),
+	CONSTRAINT notification_targets_updated_at_check CHECK (updated_at >= created_at),
+	CONSTRAINT notification_targets_revision_check CHECK (revision >= 1),
+	CONSTRAINT notification_targets_subscriptions_check CHECK (jsonb_typeof(subscriptions)='array' AND jsonb_array_length(subscriptions)<=4 AND subscriptions <@ '["report","edition","selected","codex_reset"]'::jsonb),
+	CONSTRAINT notification_targets_enabled_at_check CHECK (enabled_at IS NULL OR enabled_at >= created_at)
 );
 
 CREATE TABLE notification_deliveries (
-    id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL,
-    report_id UUID NOT NULL REFERENCES reports (id) ON DELETE CASCADE,
-    report_version INTEGER NOT NULL CHECK (report_version >= 1),
-    target_id UUID NOT NULL,
-    status VARCHAR(16) NOT NULL CHECK (status IN ('pending', 'sending', 'succeeded', 'failed', 'unknown')),
-    attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count BETWEEN 0 AND 3),
-    last_error_code VARCHAR(64),
-    sent_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL CHECK (updated_at >= created_at),
-    CONSTRAINT notification_deliveries_owner_target_fkey
-        FOREIGN KEY (owner_id, target_id)
-        REFERENCES notification_targets (owner_id, id) ON DELETE CASCADE,
-    CONSTRAINT notification_deliveries_report_version_target_key
-        UNIQUE (report_id, report_version, target_id)
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	report_id UUID,
+	report_version INTEGER NOT NULL,
+	target_id UUID NOT NULL,
+	subject_kind VARCHAR(16) DEFAULT 'report' NOT NULL,
+	subject_id UUID,
+	dedupe_key VARCHAR(256),
+	revision INTEGER DEFAULT 1 NOT NULL,
+	target_revision INTEGER DEFAULT 1 NOT NULL,
+	input_fingerprint BYTEA,
+	frozen_payload JSONB DEFAULT '{}'::jsonb NOT NULL,
+	provider_receipt JSONB DEFAULT '{}'::jsonb NOT NULL,
+	expires_at TIMESTAMP WITH TIME ZONE,
+	status VARCHAR(16) NOT NULL,
+	attempt_count INTEGER DEFAULT 0 NOT NULL,
+	last_error_code VARCHAR(64),
+	sent_at TIMESTAMP WITH TIME ZONE,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT notification_deliveries_owner_target_fkey FOREIGN KEY(owner_id, target_id) REFERENCES notification_targets (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT notification_deliveries_report_version_target_key UNIQUE (report_id, report_version, target_id),
+	CONSTRAINT notification_deliveries_subject_target_key UNIQUE (owner_id, target_id, subject_kind, dedupe_key),
+	CONSTRAINT notification_deliveries_subject_check CHECK (subject_kind IN ('report','edition','selected','codex_reset') AND ((subject_kind='report' AND report_id IS NOT NULL AND subject_id IS NULL) OR (subject_kind<>'report' AND report_id IS NULL AND subject_id IS NOT NULL))),
+	CONSTRAINT notification_deliveries_snapshot_check CHECK (revision>=1 AND target_revision>=1 AND (input_fingerprint IS NULL OR octet_length(input_fingerprint)=32) AND (subject_kind='report' OR (input_fingerprint IS NOT NULL AND dedupe_key IS NOT NULL)) AND (dedupe_key IS NULL OR length(dedupe_key) BETWEEN 1 AND 256) AND jsonb_typeof(frozen_payload)='object' AND jsonb_typeof(provider_receipt)='object'),
+	CONSTRAINT notification_deliveries_version_check CHECK (report_version >= 1),
+	CONSTRAINT notification_deliveries_status_check CHECK (status IN ('pending', 'sending', 'succeeded', 'failed', 'unknown')),
+	CONSTRAINT notification_deliveries_attempt_check CHECK (attempt_count BETWEEN 0 AND 3),
+	CONSTRAINT notification_deliveries_updated_at_check CHECK (updated_at >= created_at),
+	FOREIGN KEY(report_id) REFERENCES reports (id) ON DELETE CASCADE
 );
 
 CREATE TABLE provenance_manifests (
@@ -1719,5 +1778,1302 @@ CREATE TABLE processed_messages (
     CONSTRAINT processed_messages_topic_partition_offset_key
         UNIQUE (topic, partition, message_offset)
 );
+
+
+-- HotKey leaderboard domain DDL; generated from leaderboard/models.py.
+-- Empty database initialization only; parent merges into canonical schema.sql.
+-- No database execution was performed by this task.
+
+CREATE TABLE leaderboard_models (
+	id UUID NOT NULL,
+	slug VARCHAR(160) NOT NULL,
+	name VARCHAR(300) NOT NULL,
+	provider VARCHAR(160),
+	provider_slug VARCHAR(100),
+	released_at TIMESTAMP WITH TIME ZONE,
+	release_date_source VARCHAR(100),
+	metadata_source VARCHAR(100) NOT NULL,
+	context_window_tokens INTEGER,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT leaderboard_models_slug_key UNIQUE (slug)
+);
+
+CREATE TABLE leaderboard_aliases (
+	id UUID NOT NULL,
+	source_key VARCHAR(100) NOT NULL,
+	alias VARCHAR(600) NOT NULL,
+	normalized_alias VARCHAR(160) NOT NULL,
+	model_id UUID NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT leaderboard_aliases_source_alias_key UNIQUE (source_key, alias),
+	FOREIGN KEY(model_id) REFERENCES leaderboard_models (id)
+);
+
+CREATE INDEX leaderboard_aliases_model_idx ON leaderboard_aliases (model_id);
+
+CREATE TABLE leaderboard_snapshots (
+	id UUID NOT NULL,
+	source_key VARCHAR(100) NOT NULL,
+	source_name VARCHAR(300) NOT NULL,
+	source_url TEXT NOT NULL,
+	license TEXT NOT NULL,
+	attribution_url TEXT NOT NULL,
+	content_hash VARCHAR(64) NOT NULL,
+	published_at TIMESTAMP WITH TIME ZONE,
+	fetched_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	record_count INTEGER NOT NULL,
+	metadata JSONB NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT leaderboard_snapshots_count_check CHECK (record_count >= 0)
+);
+
+CREATE INDEX leaderboard_snapshots_source_fetched_idx ON leaderboard_snapshots (source_key, fetched_at);
+
+CREATE TABLE leaderboard_scores (
+	id UUID NOT NULL,
+	snapshot_id UUID NOT NULL,
+	model_id UUID NOT NULL,
+	configuration_key VARCHAR(800) NOT NULL,
+	configuration_label VARCHAR(400) NOT NULL,
+	configuration_kind VARCHAR(20) NOT NULL,
+	configuration_priority INTEGER NOT NULL,
+	selected_for_product BOOLEAN NOT NULL,
+	selection_reason TEXT NOT NULL,
+	metric_key VARCHAR(160) NOT NULL,
+	metric_name VARCHAR(300) NOT NULL,
+	raw_score FLOAT NOT NULL,
+	lower_bound FLOAT,
+	upper_bound FLOAT,
+	source_rank INTEGER,
+	sample_size INTEGER,
+	source_model_name VARCHAR(600) NOT NULL,
+	source_organization VARCHAR(200),
+	source_published_at TIMESTAMP WITH TIME ZONE,
+	metadata JSONB NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT leaderboard_scores_config_metric_key UNIQUE (snapshot_id, configuration_key, metric_key),
+	CONSTRAINT leaderboard_scores_kind_check CHECK (configuration_kind IN ('FIRST_PARTY', 'SOURCE_DEFAULT', 'SCAFFOLDED')),
+	CONSTRAINT leaderboard_scores_sample_size_check CHECK (sample_size IS NULL OR sample_size >= 0),
+	CONSTRAINT leaderboard_scores_bounds_check CHECK (lower_bound IS NULL OR upper_bound IS NULL OR lower_bound <= upper_bound),
+	FOREIGN KEY(snapshot_id) REFERENCES leaderboard_snapshots (id) ON DELETE CASCADE,
+	FOREIGN KEY(model_id) REFERENCES leaderboard_models (id)
+);
+
+CREATE INDEX leaderboard_scores_model_snapshot_idx ON leaderboard_scores (model_id, snapshot_id);
+
+CREATE INDEX leaderboard_scores_snapshot_selected_idx ON leaderboard_scores (snapshot_id, selected_for_product);
+
+CREATE TABLE leaderboard_runs (
+	id UUID NOT NULL,
+	methodology_version VARCHAR(100) NOT NULL,
+	generated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	source_snapshot_ids JSONB NOT NULL,
+	summary JSONB NOT NULL,
+	status VARCHAR(20) NOT NULL,
+	origin VARCHAR(20) NOT NULL,
+	fingerprint VARCHAR(64) NOT NULL,
+	failure_reason TEXT,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT leaderboard_runs_status_check CHECK (status IN ('published', 'failed')),
+	CONSTRAINT leaderboard_runs_origin_check CHECK (origin IN ('computed', 'refreshed'))
+);
+
+CREATE INDEX leaderboard_runs_status_generated_idx ON leaderboard_runs (status, generated_at, created_at);
+
+CREATE TABLE leaderboard_rankings (
+	id UUID NOT NULL,
+	run_id UUID NOT NULL,
+	board VARCHAR(40) NOT NULL,
+	model_id UUID NOT NULL,
+	rank INTEGER NOT NULL,
+	score FLOAT NOT NULL,
+	coverage FLOAT NOT NULL,
+	metric_count INTEGER NOT NULL,
+	summary TEXT NOT NULL,
+	detail JSONB NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT leaderboard_rankings_model_key UNIQUE (run_id, board, model_id),
+	CONSTRAINT leaderboard_rankings_rank_key UNIQUE (run_id, board, rank),
+	CONSTRAINT leaderboard_rankings_rank_check CHECK (rank >= 1),
+	CONSTRAINT leaderboard_rankings_score_check CHECK (score >= 0 AND score <= 100),
+	CONSTRAINT leaderboard_rankings_coverage_check CHECK (coverage >= 0 AND metric_count >= 0),
+	FOREIGN KEY(run_id) REFERENCES leaderboard_runs (id) ON DELETE CASCADE,
+	FOREIGN KEY(model_id) REFERENCES leaderboard_models (id)
+);
+
+CREATE INDEX leaderboard_rankings_model_run_idx ON leaderboard_rankings (model_id, run_id);
+
+CREATE TABLE leaderboard_prices (
+	id UUID NOT NULL,
+	model_id UUID NOT NULL,
+	kind VARCHAR(30) NOT NULL,
+	currency VARCHAR(3) NOT NULL,
+	input_price FLOAT,
+	output_price FLOAT,
+	cached_input_price FLOAT,
+	source_url TEXT NOT NULL,
+	verified_on DATE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT leaderboard_prices_model_kind_key UNIQUE (model_id, kind),
+	CONSTRAINT leaderboard_prices_kind_check CHECK (kind = 'official'),
+	CONSTRAINT leaderboard_prices_input_check CHECK (input_price IS NULL OR input_price >= 0),
+	CONSTRAINT leaderboard_prices_output_check CHECK (output_price IS NULL OR output_price >= 0),
+	CONSTRAINT leaderboard_prices_cached_check CHECK (cached_input_price IS NULL OR cached_input_price >= 0),
+	FOREIGN KEY(model_id) REFERENCES leaderboard_models (id)
+);
+
+CREATE TABLE leaderboard_fx_rates (
+	id UUID NOT NULL,
+	pair VARCHAR(10) NOT NULL,
+	as_of DATE NOT NULL,
+	rate FLOAT NOT NULL,
+	source_name VARCHAR(200) NOT NULL,
+	source_url TEXT,
+	PRIMARY KEY (id),
+	CONSTRAINT leaderboard_fx_rates_pair_date_key UNIQUE (pair, as_of),
+	CONSTRAINT leaderboard_fx_rates_rate_check CHECK (pair = 'USD/CNY' AND rate > 0)
+);
+
+-- Merge-only fragment for backend/database/schema.sql; never execute on a business database.
+CREATE TABLE codex_reset_monitors (
+    id UUID PRIMARY KEY, owner_id UUID NOT NULL, enabled BOOLEAN NOT NULL,
+    revision INTEGER NOT NULL, configuration_version INTEGER NOT NULL,
+    projection_epoch INTEGER NOT NULL, scan_revision INTEGER NOT NULL,
+    since_id VARCHAR(19), hot_until TIMESTAMPTZ, last_attempt_at TIMESTAMPTZ,
+    last_collected_at TIMESTAMPTZ, last_verified_at TIMESTAMPTZ, history_from TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT codex_reset_monitors_owner_id_key UNIQUE(owner_id,id),
+    CONSTRAINT codex_reset_monitors_owner_key UNIQUE(owner_id),
+    CONSTRAINT codex_reset_monitors_versions_check CHECK(revision>=1 AND configuration_version>=1 AND projection_epoch>=1 AND scan_revision>=1)
+);
+CREATE TABLE codex_reset_monitor_versions (
+    owner_id UUID NOT NULL, monitor_id UUID NOT NULL, version INTEGER NOT NULL,
+    configuration JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY(owner_id,monitor_id,version),
+    CONSTRAINT codex_reset_monitor_versions_monitor_fkey FOREIGN KEY(owner_id,monitor_id) REFERENCES codex_reset_monitors(owner_id,id) ON DELETE CASCADE,
+    CONSTRAINT codex_reset_monitor_versions_configuration_check CHECK(version>=1 AND jsonb_typeof(configuration)='object')
+);
+CREATE TABLE codex_reset_scan_gaps (
+    id UUID PRIMARY KEY, owner_id UUID NOT NULL, monitor_id UUID NOT NULL,
+    configuration_version INTEGER NOT NULL, query VARCHAR(512) NOT NULL,
+    next_token VARCHAR(2048), stop_at_id VARCHAR(19), before_id VARCHAR(19),
+    starts_at TIMESTAMPTZ, ends_at TIMESTAMPTZ, state VARCHAR(16) NOT NULL,
+    failure_code VARCHAR(64), created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT codex_reset_scan_gaps_version_fkey FOREIGN KEY(owner_id,monitor_id,configuration_version) REFERENCES codex_reset_monitor_versions(owner_id,monitor_id,version) ON DELETE CASCADE,
+    CONSTRAINT codex_reset_scan_gaps_state_check CHECK(state IN ('pending','held','complete')),
+    CONSTRAINT codex_reset_scan_gaps_bounds_check CHECK(starts_at IS NULL AND ends_at IS NULL OR starts_at<ends_at)
+);
+CREATE INDEX codex_reset_scan_gaps_monitor_idx ON codex_reset_scan_gaps(owner_id,monitor_id,state,created_at);
+CREATE TABLE codex_reset_posts (
+    id UUID PRIMARY KEY, owner_id UUID NOT NULL, monitor_id UUID NOT NULL,
+    configuration_version INTEGER NOT NULL, external_id VARCHAR(19) NOT NULL,
+    published_at TIMESTAMPTZ NOT NULL, source_input JSONB NOT NULL,
+    input_fingerprint BYTEA NOT NULL, translation_zh TEXT, context JSONB NOT NULL,
+    processed_at TIMESTAMPTZ, needs_review BOOLEAN NOT NULL, reviewed BOOLEAN NOT NULL,
+    skipped BOOLEAN NOT NULL, review_version INTEGER NOT NULL, failure_count INTEGER NOT NULL,
+    failure_code VARCHAR(64), outage JSONB, activity JSONB, collected_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT codex_reset_posts_owner_monitor_id_key UNIQUE(owner_id,monitor_id,id),
+    CONSTRAINT codex_reset_posts_external_key UNIQUE(owner_id,monitor_id,external_id),
+    CONSTRAINT codex_reset_posts_version_fkey FOREIGN KEY(owner_id,monitor_id,configuration_version) REFERENCES codex_reset_monitor_versions(owner_id,monitor_id,version),
+    CONSTRAINT codex_reset_posts_input_check CHECK(octet_length(input_fingerprint)=32 AND review_version>=1 AND failure_count>=0),
+    CONSTRAINT codex_reset_posts_source_check CHECK(external_id ~ '^[0-9]{1,19}$' AND jsonb_typeof(source_input)='object')
+);
+CREATE INDEX codex_reset_posts_pending_idx ON codex_reset_posts(owner_id,monitor_id,published_at,external_id);
+CREATE TABLE codex_reset_recognitions (
+    id UUID PRIMARY KEY, owner_id UUID NOT NULL, monitor_id UUID NOT NULL, post_id UUID NOT NULL,
+    configuration_version INTEGER NOT NULL, projection_epoch INTEGER NOT NULL,
+    review_version INTEGER NOT NULL, input_fingerprint BYTEA NOT NULL,
+    prompt_version VARCHAR(128) NOT NULL, ai_call_id UUID,
+    status VARCHAR(16) NOT NULL, recognition JSONB NOT NULL, held JSONB NOT NULL,
+    notifications JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT codex_reset_recognitions_post_fkey FOREIGN KEY(owner_id,monitor_id,post_id) REFERENCES codex_reset_posts(owner_id,monitor_id,id),
+    CONSTRAINT codex_reset_recognitions_ai_call_fkey FOREIGN KEY(owner_id,ai_call_id) REFERENCES ai_calls(owner_id,id),
+    CONSTRAINT codex_reset_recognitions_status_check CHECK(status IN ('applied','held','stale','failed','running','unknown') AND octet_length(input_fingerprint)=32),
+    CONSTRAINT codex_reset_recognitions_json_check CHECK(jsonb_typeof(recognition)='object' AND jsonb_typeof(held)='array' AND jsonb_typeof(notifications)='array')
+);
+CREATE INDEX codex_reset_recognitions_post_idx ON codex_reset_recognitions(owner_id,monitor_id,post_id,created_at);
+CREATE TABLE codex_reset_events (
+    owner_id UUID NOT NULL, monitor_id UUID NOT NULL, id VARCHAR(128) NOT NULL,
+    kind VARCHAR(16) NOT NULL, status VARCHAR(16) NOT NULL, revision INTEGER NOT NULL,
+    manual_version INTEGER NOT NULL, withdrawn BOOLEAN NOT NULL, in_progress BOOLEAN NOT NULL,
+    kind_explicit BOOLEAN NOT NULL, time_inferred BOOLEAN NOT NULL, schedule JSONB, estimate JSONB,
+    scope JSONB NOT NULL, reported_at TIMESTAMPTZ, confirmed_at TIMESTAMPTZ, occurred_on DATE,
+    confirmation_basis VARCHAR(16), created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY(owner_id,monitor_id,id),
+    CONSTRAINT codex_reset_events_monitor_fkey FOREIGN KEY(owner_id,monitor_id) REFERENCES codex_reset_monitors(owner_id,id),
+    CONSTRAINT codex_reset_events_state_check CHECK(kind IN ('direct_reset','reset_credit') AND status IN ('announced','confirmed')),
+    CONSTRAINT codex_reset_events_revision_check CHECK(revision>=1 AND manual_version>=0),
+    CONSTRAINT codex_reset_events_basis_check CHECK(confirmation_basis IS NULL OR confirmation_basis IN ('source_post','receipt_review'))
+);
+CREATE INDEX codex_reset_events_timeline_idx ON codex_reset_events(owner_id,monitor_id,created_at);
+CREATE TABLE codex_reset_event_posts (
+    owner_id UUID NOT NULL, monitor_id UUID NOT NULL, event_id VARCHAR(128) NOT NULL,
+    post_id UUID NOT NULL, action VARCHAR(16) NOT NULL, stage VARCHAR(32) NOT NULL,
+    excerpt TEXT NOT NULL, excerpt_zh TEXT NOT NULL, PRIMARY KEY(owner_id,monitor_id,event_id,post_id),
+    CONSTRAINT codex_reset_event_posts_event_fkey FOREIGN KEY(owner_id,monitor_id,event_id) REFERENCES codex_reset_events(owner_id,monitor_id,id),
+    CONSTRAINT codex_reset_event_posts_post_fkey FOREIGN KEY(owner_id,monitor_id,post_id) REFERENCES codex_reset_posts(owner_id,monitor_id,id),
+    CONSTRAINT codex_reset_event_posts_action_check CHECK(action IN ('announce','progress','confirm','amend','withdraw'))
+);
+CREATE TABLE codex_reset_reviews (
+    id UUID PRIMARY KEY, owner_id UUID NOT NULL, monitor_id UUID NOT NULL, operation_id UUID NOT NULL,
+    input_fingerprint BYTEA NOT NULL, entity_kind VARCHAR(16) NOT NULL, entity_id VARCHAR(128) NOT NULL,
+    action VARCHAR(32) NOT NULL, actor VARCHAR(128) NOT NULL, reason TEXT NOT NULL,
+    before JSONB NOT NULL, after JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT codex_reset_reviews_monitor_fkey FOREIGN KEY(owner_id,monitor_id) REFERENCES codex_reset_monitors(owner_id,id),
+    CONSTRAINT codex_reset_reviews_operation_key UNIQUE(owner_id,monitor_id,operation_id),
+    CONSTRAINT codex_reset_reviews_input_check CHECK(octet_length(input_fingerprint)=32 AND length(reason) BETWEEN 1 AND 1000)
+);
+
+
+-- Leaderboard source refresh state; merge into canonical empty-db DDL.
+CREATE TABLE leaderboard_source_states (
+	source_key VARCHAR(100) NOT NULL,
+	ok BOOLEAN NOT NULL,
+	checked_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	last_ok_at TIMESTAMP WITH TIME ZONE,
+	changed BOOLEAN,
+	row_count INTEGER,
+	new_models INTEGER,
+	request_count INTEGER NOT NULL,
+	error_code VARCHAR(100),
+	PRIMARY KEY (source_key),
+	CONSTRAINT leaderboard_source_states_requests_check CHECK (request_count >= 0),
+	CONSTRAINT leaderboard_source_states_rows_check CHECK (row_count IS NULL OR row_count >= 0)
+);
+
+CREATE TABLE editorial_sources (
+    owner_id UUID NOT NULL, source_key VARCHAR(64) NOT NULL,
+    revision INTEGER NOT NULL, configuration JSONB NOT NULL, scan_cursor UUID,
+    created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (owner_id, source_key),
+    CONSTRAINT editorial_sources_revision_check CHECK (revision >= 1)
+);
+
+CREATE TABLE editorial_source_versions (
+    owner_id UUID NOT NULL, source_key VARCHAR(64) NOT NULL, revision INTEGER NOT NULL,
+    operation_id UUID NOT NULL, input_fingerprint BYTEA NOT NULL,
+    configuration JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (owner_id, source_key, revision),
+    CONSTRAINT editorial_source_versions_operation_key UNIQUE (owner_id, operation_id),
+    CONSTRAINT editorial_source_versions_source_fkey FOREIGN KEY (owner_id, source_key)
+        REFERENCES editorial_sources (owner_id, source_key) ON DELETE CASCADE,
+    CONSTRAINT editorial_source_versions_input_check
+        CHECK (revision >= 1 AND octet_length(input_fingerprint) = 32),
+    CONSTRAINT editorial_source_versions_configuration_check
+        CHECK (jsonb_typeof(configuration) = 'object')
+);
+
+CREATE TABLE editorial_runs (
+    id UUID PRIMARY KEY, owner_id UUID NOT NULL, operation_id UUID NOT NULL,
+    content_id UUID NOT NULL, content_version_id UUID NOT NULL,
+    source_key VARCHAR(64) NOT NULL, source_revision INTEGER NOT NULL, job_id UUID,
+    prompt_version VARCHAR(128) NOT NULL, input_fingerprint BYTEA NOT NULL,
+    request_fingerprint BYTEA NOT NULL, input_manifest JSONB NOT NULL,
+    stages VARCHAR(16) NOT NULL, manual_version INTEGER NOT NULL, execution_token UUID,
+    status VARCHAR(16) NOT NULL, result JSONB, failure_code VARCHAR(64),
+    created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT editorial_runs_owner_id_key UNIQUE (owner_id, id),
+    CONSTRAINT editorial_runs_operation_key UNIQUE (owner_id, operation_id),
+    CONSTRAINT editorial_runs_content_version_fkey
+        FOREIGN KEY (owner_id, content_id, content_version_id)
+        REFERENCES content_versions (owner_id, content_id, id) ON DELETE CASCADE,
+    CONSTRAINT editorial_runs_source_version_fkey
+        FOREIGN KEY (owner_id, source_key, source_revision)
+        REFERENCES editorial_source_versions (owner_id, source_key, revision),
+    CONSTRAINT editorial_runs_job_fkey FOREIGN KEY (owner_id, job_id)
+        REFERENCES jobs (owner_id, id),
+    CONSTRAINT editorial_runs_status_check
+        CHECK (status IN ('queued','running','complete','blocked','failed','unknown','stale')),
+    CONSTRAINT editorial_runs_options_check
+        CHECK (stages IN ('selection','all') AND manual_version >= 0),
+    CONSTRAINT editorial_runs_input_check
+        CHECK (octet_length(input_fingerprint) = 32 AND length(prompt_version) > 0),
+    CONSTRAINT editorial_runs_result_check CHECK (result IS NULL OR jsonb_typeof(result) = 'object')
+);
+CREATE INDEX editorial_runs_owner_content_created_idx
+    ON editorial_runs (owner_id, content_id, created_at);
+
+CREATE TABLE editorial_stages (
+    id UUID PRIMARY KEY, owner_id UUID NOT NULL, run_id UUID NOT NULL,
+    stage_key VARCHAR(64) NOT NULL, prompt_version VARCHAR(128) NOT NULL,
+    input_fingerprint BYTEA NOT NULL, status VARCHAR(16) NOT NULL, output JSONB,
+    ai_call_id UUID, failure_code VARCHAR(64), started_at TIMESTAMPTZ NOT NULL,
+    completed_at TIMESTAMPTZ,
+    CONSTRAINT editorial_stages_run_key UNIQUE (owner_id, run_id, stage_key),
+    CONSTRAINT editorial_stages_run_fkey FOREIGN KEY (owner_id, run_id)
+        REFERENCES editorial_runs (owner_id, id) ON DELETE CASCADE,
+    CONSTRAINT editorial_stages_ai_call_fkey FOREIGN KEY (owner_id, ai_call_id)
+        REFERENCES ai_calls (owner_id, id),
+    CONSTRAINT editorial_stages_status_check
+        CHECK (status IN ('running','succeeded','failed','unknown')),
+    CONSTRAINT editorial_stages_input_check CHECK (octet_length(input_fingerprint) = 32),
+    CONSTRAINT editorial_stages_output_check CHECK (output IS NULL OR jsonb_typeof(output) = 'object'),
+    CONSTRAINT editorial_stages_success_check CHECK (status <> 'succeeded' OR output IS NOT NULL)
+);
+
+CREATE TABLE editorial_overrides (
+    id UUID PRIMARY KEY, owner_id UUID NOT NULL, run_id UUID NOT NULL,
+    operation_id UUID NOT NULL, input_fingerprint BYTEA NOT NULL, revision INTEGER NOT NULL,
+    before JSONB, after JSONB NOT NULL, reason TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT editorial_overrides_operation_key UNIQUE (owner_id, operation_id),
+    CONSTRAINT editorial_overrides_run_fkey FOREIGN KEY (owner_id, run_id)
+        REFERENCES editorial_runs (owner_id, id),
+    CONSTRAINT editorial_overrides_input_check
+        CHECK (revision >= 1 AND octet_length(input_fingerprint) = 32),
+    CONSTRAINT editorial_overrides_reason_check CHECK (length(reason) BETWEEN 1 AND 1000)
+);
+
+CREATE TABLE editorial_content_states (
+    owner_id UUID NOT NULL, content_id UUID NOT NULL, current_run_id UUID NOT NULL,
+    manual_version INTEGER NOT NULL, updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (owner_id, content_id),
+    CONSTRAINT editorial_content_states_content_fkey FOREIGN KEY (owner_id, content_id)
+        REFERENCES content_records (owner_id, id) ON DELETE CASCADE,
+    CONSTRAINT editorial_content_states_current_run_fkey FOREIGN KEY (owner_id, current_run_id)
+        REFERENCES editorial_runs (owner_id, id),
+    CONSTRAINT editorial_content_states_manual_check CHECK (manual_version >= 0)
+);
+
+
+-- Proposed seven-table event slice; merge only into the sole canonical schema.sql.
+
+CREATE TABLE event_facts (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	topic_id UUID NOT NULL,
+	revision INTEGER NOT NULL,
+	title VARCHAR(200) NOT NULL,
+	summary TEXT NOT NULL,
+	status VARCHAR(16) NOT NULL,
+	merged_into_id UUID,
+	frame JSONB,
+	first_seen_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	first_seen_basis VARCHAR(16) NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT event_facts_scope_id_key UNIQUE (owner_id, topic_id, id),
+	CONSTRAINT event_facts_topic_fkey FOREIGN KEY(owner_id, topic_id) REFERENCES monitor_topics (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_facts_merged_into_fkey FOREIGN KEY(owner_id, topic_id, merged_into_id) REFERENCES event_facts (owner_id, topic_id, id),
+	CONSTRAINT event_facts_revision_check CHECK (revision >= 1),
+	CONSTRAINT event_facts_title_check CHECK (btrim(title) <> ''),
+	CONSTRAINT event_facts_summary_check CHECK (btrim(summary) <> ''),
+	CONSTRAINT event_facts_status_check CHECK (status IN ('confirmed','unreviewed','merged')),
+	CONSTRAINT event_facts_merge_check CHECK ((status = 'merged' AND merged_into_id IS NOT NULL AND merged_into_id <> id) OR (status <> 'merged' AND merged_into_id IS NULL)),
+	CONSTRAINT event_facts_time_check CHECK (first_seen_basis IN ('published','discovered')),
+	CONSTRAINT event_facts_frame_check CHECK (frame IS NULL OR jsonb_typeof(frame) = 'object'),
+	CONSTRAINT event_facts_updated_check CHECK (updated_at >= created_at)
+);
+
+CREATE TABLE event_fact_assignments (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	topic_id UUID NOT NULL,
+	event_id UUID NOT NULL,
+	fact_id UUID NOT NULL,
+	root_fact_id UUID,
+	relation VARCHAR(16) NOT NULL,
+	added_revision INTEGER NOT NULL,
+	removed_revision INTEGER,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT event_fact_assignments_event_fkey FOREIGN KEY(owner_id, topic_id, event_id) REFERENCES events (owner_id, topic_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_fact_assignments_fact_fkey FOREIGN KEY(owner_id, topic_id, fact_id) REFERENCES event_facts (owner_id, topic_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_fact_assignments_root_fkey FOREIGN KEY(owner_id, topic_id, root_fact_id) REFERENCES event_facts (owner_id, topic_id, id),
+	CONSTRAINT event_fact_assignments_revision_key UNIQUE (owner_id, event_id, fact_id, added_revision),
+	CONSTRAINT event_fact_assignments_added_check CHECK (added_revision >= 1),
+	CONSTRAINT event_fact_assignments_removed_check CHECK (removed_revision IS NULL OR removed_revision > added_revision),
+	CONSTRAINT event_fact_assignments_relation_check CHECK (relation IN ('root','development','background','roundup','unreviewed')),
+	CONSTRAINT event_fact_assignments_root_check CHECK ((relation IN ('development','background') AND root_fact_id IS NOT NULL AND root_fact_id <> fact_id) OR (relation IN ('root','roundup','unreviewed') AND root_fact_id IS NULL))
+);
+
+CREATE UNIQUE INDEX event_fact_assignments_current_fact_idx ON event_fact_assignments (owner_id, topic_id, fact_id) WHERE removed_revision IS NULL;
+
+CREATE UNIQUE INDEX event_fact_assignments_current_root_idx ON event_fact_assignments (owner_id, event_id) WHERE removed_revision IS NULL AND relation IN ('root','roundup');
+
+CREATE TABLE event_fact_members (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	topic_id UUID NOT NULL,
+	fact_id UUID NOT NULL,
+	event_id UUID NOT NULL,
+	event_member_id UUID NOT NULL,
+	content_id UUID NOT NULL,
+	content_version_id UUID NOT NULL,
+	role VARCHAR(16) NOT NULL,
+	assignment_origin VARCHAR(16) NOT NULL,
+	added_revision INTEGER NOT NULL,
+	removed_revision INTEGER,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT event_fact_members_fact_fkey FOREIGN KEY(owner_id, topic_id, fact_id) REFERENCES event_facts (owner_id, topic_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_fact_members_member_fkey FOREIGN KEY(owner_id, topic_id, event_id, event_member_id) REFERENCES event_members (owner_id, topic_id, event_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_fact_members_content_fkey FOREIGN KEY(owner_id, content_id, content_version_id) REFERENCES content_versions (owner_id, content_id, id) ON DELETE RESTRICT,
+	CONSTRAINT event_fact_members_history_key UNIQUE (owner_id, fact_id, event_member_id),
+	CONSTRAINT event_fact_members_role_check CHECK (role IN ('primary','report','mention')),
+	CONSTRAINT event_fact_members_origin_check CHECK (assignment_origin IN ('model','manual','legacy')),
+	CONSTRAINT event_fact_members_added_check CHECK (added_revision >= 1),
+	CONSTRAINT event_fact_members_removed_check CHECK (removed_revision IS NULL OR removed_revision > added_revision)
+);
+
+CREATE UNIQUE INDEX event_fact_members_current_content_idx ON event_fact_members (owner_id, topic_id, content_id) WHERE removed_revision IS NULL;
+
+CREATE UNIQUE INDEX event_fact_members_current_primary_idx ON event_fact_members (owner_id, fact_id) WHERE removed_revision IS NULL AND role = 'primary';
+
+CREATE TABLE event_grouping_overrides (
+	owner_id UUID NOT NULL,
+	topic_id UUID NOT NULL,
+	content_id UUID NOT NULL,
+	mode VARCHAR(24) NOT NULL,
+	revision INTEGER NOT NULL,
+	reason VARCHAR(2000) NOT NULL,
+	actor_id UUID NOT NULL,
+	operation_id UUID NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (owner_id, topic_id, content_id),
+	CONSTRAINT event_grouping_overrides_topic_fkey FOREIGN KEY(owner_id, topic_id) REFERENCES monitor_topics (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_grouping_overrides_content_fkey FOREIGN KEY(owner_id, content_id) REFERENCES content_records (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_grouping_overrides_mode_check CHECK (mode IN ('standalone','manual','regroup_pending')),
+	CONSTRAINT event_grouping_overrides_revision_check CHECK (revision >= 1),
+	CONSTRAINT event_grouping_overrides_reason_check CHECK (btrim(reason) <> '')
+);
+
+CREATE TABLE event_revision_operations (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	topic_id UUID NOT NULL,
+	operation_id UUID NOT NULL,
+	kind VARCHAR(24) NOT NULL,
+	input_fingerprint BYTEA NOT NULL,
+	actor_id UUID NOT NULL,
+	reason VARCHAR(2000) NOT NULL,
+	before_state JSONB NOT NULL,
+	after_state JSONB NOT NULL,
+	result JSONB NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT event_revision_operations_operation_key UNIQUE (owner_id, operation_id),
+	CONSTRAINT event_revision_operations_topic_fkey FOREIGN KEY(owner_id, topic_id) REFERENCES monitor_topics (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_revision_operations_hash_check CHECK (octet_length(input_fingerprint) = 32),
+	CONSTRAINT event_revision_operations_kind_check CHECK (kind IN ('merge','split','move','detach','merge_facts','regroup','create_fact')),
+	CONSTRAINT event_revision_operations_reason_check CHECK (btrim(reason) <> ''),
+	CONSTRAINT event_revision_operations_json_check CHECK (jsonb_typeof(before_state) = 'object' AND jsonb_typeof(after_state) = 'object' AND jsonb_typeof(result) = 'object')
+);
+
+CREATE TABLE event_derived_contents (
+	owner_id UUID NOT NULL,
+	event_id UUID NOT NULL,
+	topic_id UUID NOT NULL,
+	event_revision INTEGER NOT NULL,
+	input_fingerprint BYTEA NOT NULL,
+	status VARCHAR(16) NOT NULL,
+	title VARCHAR(200),
+	summary TEXT,
+	latest_progress VARCHAR(2000),
+	ai_call_id UUID,
+	job_id UUID,
+	error_code VARCHAR(64),
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (owner_id, event_id),
+	CONSTRAINT event_derived_contents_event_fkey FOREIGN KEY(owner_id, topic_id, event_id) REFERENCES events (owner_id, topic_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_derived_contents_call_fkey FOREIGN KEY(owner_id, ai_call_id) REFERENCES ai_calls (owner_id, id),
+	CONSTRAINT event_derived_contents_job_fkey FOREIGN KEY(owner_id, job_id) REFERENCES jobs (owner_id, id),
+	CONSTRAINT event_derived_contents_revision_check CHECK (event_revision >= 1),
+	CONSTRAINT event_derived_contents_hash_check CHECK (octet_length(input_fingerprint) = 32),
+	CONSTRAINT event_derived_contents_status_check CHECK (status IN ('pending','valid','failed','stale')),
+	CONSTRAINT event_derived_contents_text_check CHECK ((status = 'valid' AND title IS NOT NULL AND summary IS NOT NULL) OR (status <> 'valid' AND title IS NULL AND summary IS NULL AND latest_progress IS NULL))
+);
+
+CREATE TABLE event_grouping_assessments (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	topic_id UUID NOT NULL,
+	candidate_id UUID NOT NULL,
+	input_fingerprint BYTEA NOT NULL,
+	input_snapshot JSONB NOT NULL,
+	decisions JSONB NOT NULL,
+	status VARCHAR(16) NOT NULL,
+	confidence FLOAT,
+	ai_call_id UUID,
+	error_code VARCHAR(64),
+	prompt_version VARCHAR(128) NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT event_grouping_assessments_candidate_fkey FOREIGN KEY(owner_id, candidate_id) REFERENCES event_candidates (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_grouping_assessments_topic_fkey FOREIGN KEY(owner_id, topic_id) REFERENCES monitor_topics (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_grouping_assessments_call_fkey FOREIGN KEY(owner_id, ai_call_id) REFERENCES ai_calls (owner_id, id),
+	CONSTRAINT event_grouping_assessments_input_key UNIQUE (owner_id, candidate_id, input_fingerprint),
+	CONSTRAINT event_grouping_assessments_hash_check CHECK (octet_length(input_fingerprint) = 32),
+	CONSTRAINT event_grouping_assessments_status_check CHECK (status IN ('pending','valid','degraded','stale','failed')),
+	CONSTRAINT event_grouping_assessments_json_check CHECK (jsonb_typeof(input_snapshot) = 'object' AND jsonb_typeof(decisions) = 'array'),
+	CONSTRAINT event_grouping_assessments_confidence_check CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 1)
+);
+
+-- Integration fragment only. Root merges into the unique schema.sql for NEW empty databases.
+CREATE TABLE publication_source_policies (
+    owner_id UUID NOT NULL,
+    source_key VARCHAR(64) NOT NULL,
+    revision INTEGER NOT NULL,
+    configuration JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (owner_id, source_key),
+    CONSTRAINT publication_source_policies_revision_check CHECK (revision >= 1)
+);
+CREATE TABLE publication_policy_versions (
+    owner_id UUID NOT NULL,
+    source_key VARCHAR(64) NOT NULL,
+    revision INTEGER NOT NULL,
+    operation_id UUID NOT NULL,
+    actor_id UUID NOT NULL,
+    input_fingerprint VARCHAR(64) NOT NULL,
+    configuration JSONB NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (owner_id, source_key, revision),
+    CONSTRAINT publication_policy_versions_policy_fk FOREIGN KEY (owner_id, source_key) REFERENCES publication_source_policies(owner_id, source_key),
+    CONSTRAINT publication_policy_versions_operation_key UNIQUE (owner_id, operation_id),
+    CONSTRAINT publication_policy_versions_revision_check CHECK (revision >= 1)
+);
+CREATE TABLE publication_records (
+    owner_id UUID NOT NULL,
+    content_id UUID NOT NULL,
+    content_version_id UUID NOT NULL,
+    source_key VARCHAR(64) NOT NULL,
+    revision INTEGER NOT NULL,
+    visibility VARCHAR(20) NOT NULL,
+    eligible BOOLEAN NOT NULL,
+    selected BOOLEAN NOT NULL,
+    visible_after TIMESTAMPTZ,
+    timeline_at TIMESTAMPTZ NOT NULL,
+    sort_at TIMESTAMPTZ NOT NULL,
+    last_sequence BIGINT NOT NULL,
+    input_fingerprint VARCHAR(64) NOT NULL,
+    projection JSONB NOT NULL,
+    override JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (owner_id, content_id),
+    CONSTRAINT publication_records_content_version_fk FOREIGN KEY (owner_id, content_id, content_version_id) REFERENCES content_versions(owner_id, content_id, id),
+    CONSTRAINT publication_records_source_policy_fk FOREIGN KEY (owner_id, source_key) REFERENCES publication_source_policies(owner_id, source_key),
+    CONSTRAINT publication_records_revision_check CHECK (revision >= 1),
+    CONSTRAINT publication_records_visibility_check CHECK (visibility IN ('public','summary-only','withdrawn'))
+);
+CREATE INDEX publication_records_timeline_idx ON publication_records(owner_id, timeline_at, content_id);
+CREATE INDEX publication_records_source_idx ON publication_records(owner_id, source_key, content_id);
+CREATE INDEX publication_records_selected_idx ON publication_records(owner_id, selected, visible_after);
+CREATE TABLE publication_revisions (
+    owner_id UUID NOT NULL,
+    content_id UUID NOT NULL,
+    revision INTEGER NOT NULL,
+    operation_id UUID NOT NULL,
+    actor_id UUID,
+    input_fingerprint VARCHAR(64) NOT NULL,
+    projection JSONB NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (owner_id, content_id, revision),
+    CONSTRAINT publication_revisions_publication_fk FOREIGN KEY (owner_id, content_id) REFERENCES publication_records(owner_id, content_id),
+    CONSTRAINT publication_revisions_operation_key UNIQUE (owner_id, operation_id),
+    CONSTRAINT publication_revisions_revision_check CHECK (revision >= 1)
+);
+CREATE TABLE publication_sync_states (
+    owner_id UUID PRIMARY KEY,
+    epoch UUID NOT NULL,
+    sequence BIGINT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT publication_sync_states_sequence_check CHECK (sequence >= 0)
+);
+CREATE TABLE publication_selected_changes (
+    owner_id UUID NOT NULL,
+    epoch UUID NOT NULL,
+    sequence BIGINT NOT NULL,
+    content_id UUID NOT NULL,
+    publication_revision INTEGER NOT NULL,
+    operation VARCHAR(10) NOT NULL,
+    visible_at TIMESTAMPTZ NOT NULL,
+    changed_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (owner_id, epoch, sequence),
+    CONSTRAINT publication_selected_changes_publication_fk FOREIGN KEY (owner_id, content_id) REFERENCES publication_records(owner_id, content_id),
+    CONSTRAINT publication_selected_changes_sequence_check CHECK (sequence >= 1),
+    CONSTRAINT publication_selected_changes_operation_check CHECK (operation IN ('upsert','remove'))
+);
+CREATE INDEX publication_selected_changes_visible_idx ON publication_selected_changes(owner_id, epoch, visible_at, sequence);
+CREATE TABLE publication_republish_runs (
+    id UUID PRIMARY KEY,
+    owner_id UUID NOT NULL,
+    source_key VARCHAR(64) NOT NULL,
+    policy_revision INTEGER NOT NULL,
+    job_id UUID NOT NULL,
+    operation_id UUID NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    after_content_id UUID,
+    processed_count INTEGER NOT NULL,
+    failure_code VARCHAR(100),
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT publication_republish_runs_owner_id_key UNIQUE (owner_id, id),
+    CONSTRAINT publication_republish_runs_operation_key UNIQUE (owner_id, operation_id),
+    CONSTRAINT publication_republish_runs_policy_fk FOREIGN KEY (owner_id, source_key) REFERENCES publication_source_policies(owner_id, source_key),
+    CONSTRAINT publication_republish_runs_job_fk FOREIGN KEY (owner_id, job_id) REFERENCES jobs(owner_id, id),
+    CONSTRAINT publication_republish_runs_status_check CHECK (status IN ('queued','running','completed','failed','cancelled')),
+    CONSTRAINT publication_republish_runs_count_check CHECK (processed_count >= 0)
+);
+
+CREATE TABLE report_editions (
+    id UUID PRIMARY KEY,
+    owner_id UUID NOT NULL,
+    operation_id UUID NOT NULL,
+    actor_id UUID NOT NULL,
+    kind VARCHAR(16) NOT NULL,
+    period_key VARCHAR(10) NOT NULL,
+    revision INTEGER NOT NULL,
+    window_start TIMESTAMPTZ NOT NULL,
+    window_end TIMESTAMPTZ NOT NULL,
+    cutoff_at TIMESTAMPTZ NOT NULL,
+    job_id UUID,
+    prompt_version VARCHAR(128) NOT NULL,
+    input_fingerprint VARCHAR(64) NOT NULL,
+    request_fingerprint VARCHAR(64) NOT NULL,
+    input_snapshot JSONB NOT NULL,
+    repeats_suppressed INTEGER NOT NULL,
+    daily_editions_covered INTEGER NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    generator VARCHAR(16) NOT NULL,
+    content JSONB,
+    body_markdown TEXT,
+    ai_call_id UUID,
+    failure_code VARCHAR(80),
+    reason TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT report_editions_owner_id_key UNIQUE (owner_id, id),
+    CONSTRAINT report_editions_operation_key UNIQUE (owner_id, operation_id),
+    CONSTRAINT report_editions_revision_key UNIQUE (owner_id, kind, period_key, revision),
+    CONSTRAINT report_editions_job_fkey FOREIGN KEY (owner_id, job_id) REFERENCES jobs(owner_id, id),
+    CONSTRAINT report_editions_ai_call_fkey FOREIGN KEY (owner_id, ai_call_id) REFERENCES ai_calls(owner_id, id),
+    CONSTRAINT report_editions_kind_revision_check CHECK (kind IN ('daily','weekly','monthly') AND revision >= 1),
+    CONSTRAINT report_editions_status_check CHECK (status IN ('queued','running','complete','failed','unknown','stale')),
+    CONSTRAINT report_editions_generator_check CHECK (generator IN ('template','model','manual')),
+    CONSTRAINT report_editions_window_check CHECK (window_start < window_end AND cutoff_at >= window_end),
+    CONSTRAINT report_editions_snapshot_check CHECK (jsonb_typeof(input_snapshot) = 'array'),
+    CONSTRAINT report_editions_content_check CHECK (content IS NULL OR jsonb_typeof(content) = 'object'),
+    CONSTRAINT report_editions_complete_check CHECK (status <> 'complete' OR (content IS NOT NULL AND body_markdown IS NOT NULL AND length(body_markdown) > 0)),
+    CONSTRAINT report_editions_fingerprint_check CHECK (length(input_fingerprint) = 64)
+);
+CREATE INDEX report_editions_owner_period_idx ON report_editions(owner_id, kind, period_key, revision);
+
+-- Event attention three-table draft for root canonical schema merge; explicit TIMESTAMPTZ.
+
+CREATE TABLE event_attention_sources (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	source_key VARCHAR(64) NOT NULL,
+	selector_kind VARCHAR(24) NOT NULL,
+	selector_ref VARCHAR(256) NOT NULL,
+	name VARCHAR(200) NOT NULL,
+	revision INTEGER NOT NULL,
+	mode VARCHAR(16) NOT NULL,
+	group_key VARCHAR(128),
+	owner_entity_key VARCHAR(128),
+	first_party BOOLEAN NOT NULL,
+	tier VARCHAR(8),
+	scheduled BOOLEAN NOT NULL,
+	enabled BOOLEAN NOT NULL,
+	interval_seconds INTEGER NOT NULL,
+	last_successful_fetch_at TIMESTAMP WITH TIME ZONE,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT event_attention_sources_scope_id_key UNIQUE (owner_id, id),
+	CONSTRAINT event_attention_sources_selector_key UNIQUE (owner_id, source_key, selector_kind, selector_ref),
+	CONSTRAINT event_attention_sources_source_check CHECK (source_key ~ '^[a-z][a-z0-9_-]{0,63}$'),
+	CONSTRAINT event_attention_sources_selector_check CHECK (selector_kind IN ('source','author','native_scope','canonical_host')),
+	CONSTRAINT event_attention_sources_identity_check CHECK (btrim(selector_ref) <> '' AND btrim(name) <> ''),
+	CONSTRAINT event_attention_sources_mode_check CHECK (mode IN ('editorial','signal','isolated')),
+	CONSTRAINT event_attention_sources_revision_check CHECK (revision >= 1 AND interval_seconds >= 300),
+	CONSTRAINT event_attention_sources_tier_check CHECK (tier IS NULL OR tier IN ('T1','T1_5','T2')),
+	CONSTRAINT event_attention_sources_updated_check CHECK (updated_at >= created_at)
+);
+
+CREATE TABLE event_attention_signals (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	topic_id UUID NOT NULL,
+	event_id UUID NOT NULL,
+	fact_id UUID,
+	source_id UUID NOT NULL,
+	content_id UUID NOT NULL,
+	content_version_id UUID NOT NULL,
+	kind VARCHAR(16) NOT NULL,
+	source_time TIMESTAMP WITH TIME ZONE NOT NULL,
+	time_basis VARCHAR(16) NOT NULL,
+	status VARCHAR(16) NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT event_attention_signals_event_fkey FOREIGN KEY(owner_id, topic_id, event_id) REFERENCES events (owner_id, topic_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_attention_signals_source_fkey FOREIGN KEY(owner_id, source_id) REFERENCES event_attention_sources (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_attention_signals_fact_fkey FOREIGN KEY(owner_id, topic_id, fact_id) REFERENCES event_facts (owner_id, topic_id, id),
+	CONSTRAINT event_attention_signals_content_fkey FOREIGN KEY(owner_id, content_id, content_version_id) REFERENCES content_versions (owner_id, content_id, id) ON DELETE RESTRICT,
+	CONSTRAINT event_attention_signals_input_key UNIQUE (owner_id, topic_id, event_id, content_id, content_version_id),
+	CONSTRAINT event_attention_signals_kind_check CHECK (kind IN ('editorial','discussion','native')),
+	CONSTRAINT event_attention_signals_time_check CHECK (time_basis IN ('published','discovered')),
+	CONSTRAINT event_attention_signals_status_check CHECK (status IN ('active','withdrawn'))
+);
+
+CREATE INDEX event_attention_signals_window_idx ON event_attention_signals (owner_id, event_id, source_time);
+
+CREATE TABLE event_attention_snapshots (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	topic_id UUID NOT NULL,
+	event_id UUID NOT NULL,
+	event_revision INTEGER NOT NULL,
+	window_end TIMESTAMP WITH TIME ZONE NOT NULL,
+	formula_version VARCHAR(128) NOT NULL,
+	input_fingerprint BYTEA NOT NULL,
+	input_manifest JSONB NOT NULL,
+	result JSONB NOT NULL,
+	complete BOOLEAN NOT NULL,
+	computed_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT event_attention_snapshots_event_fkey FOREIGN KEY(owner_id, topic_id, event_id) REFERENCES events (owner_id, topic_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_attention_snapshots_input_key UNIQUE (owner_id, event_id, event_revision, window_end, formula_version, input_fingerprint),
+	CONSTRAINT event_attention_snapshots_revision_check CHECK (event_revision >= 1 AND octet_length(input_fingerprint) = 32),
+	CONSTRAINT event_attention_snapshots_json_check CHECK (jsonb_typeof(input_manifest) = 'object' AND jsonb_typeof(result) = 'object')
+);
+
+CREATE INDEX event_attention_snapshots_latest_idx ON event_attention_snapshots (owner_id, event_id, window_end, computed_at);
+
+-- Review fragment; root merges into sole canonical schema.sql for empty databases.
+
+-- Review fragment; root merges into sole canonical schema.sql for empty databases.
+
+CREATE TABLE editorial_source_profiles (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	source_key VARCHAR(64) NOT NULL,
+	name VARCHAR(128) NOT NULL,
+	enabled BOOLEAN NOT NULL,
+	current_version INTEGER NOT NULL,
+	revision INTEGER NOT NULL,
+	cursor JSONB NOT NULL,
+	health VARCHAR(16) NOT NULL,
+	failure_count INTEGER NOT NULL,
+	last_failure_code VARCHAR(64),
+	last_fetch_at TIMESTAMP WITH TIME ZONE,
+	last_ok_at TIMESTAMP WITH TIME ZONE,
+	next_fetch_at TIMESTAMP WITH TIME ZONE,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT editorial_profiles_owner_id_key UNIQUE (owner_id, id),
+	CONSTRAINT editorial_profiles_source_key UNIQUE (owner_id, source_key),
+	CONSTRAINT editorial_profiles_source_key_check CHECK (source_key ~ '^ed_[a-z_]+_[a-f0-9]{32}$'),
+	CONSTRAINT editorial_profiles_counters_check CHECK (current_version >= 1 AND revision >= 1 AND failure_count >= 0),
+	CONSTRAINT editorial_profiles_health_check CHECK (health IN ('unknown','ok','degraded','failing')),
+	CONSTRAINT editorial_profiles_cursor_check CHECK (jsonb_typeof(cursor) = 'object')
+);
+
+CREATE TABLE editorial_source_profile_versions (
+	profile_id UUID NOT NULL,
+	version INTEGER NOT NULL,
+	owner_id UUID NOT NULL,
+	operation_id UUID NOT NULL,
+	input_hash BYTEA NOT NULL,
+	kind VARCHAR(16) NOT NULL,
+	configuration JSONB NOT NULL,
+	participation_mode VARCHAR(16) NOT NULL,
+	tier VARCHAR(8) NOT NULL,
+	first_party BOOLEAN NOT NULL,
+	connection_id UUID NOT NULL,
+	connection_version INTEGER NOT NULL,
+	policy_version INTEGER NOT NULL,
+	interval_minutes INTEGER NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (profile_id, version),
+	CONSTRAINT editorial_versions_owner_key UNIQUE (owner_id, profile_id, version),
+	CONSTRAINT editorial_versions_operation_key UNIQUE (owner_id, operation_id),
+	CONSTRAINT editorial_versions_profile_fkey FOREIGN KEY(owner_id, profile_id) REFERENCES editorial_source_profiles (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT editorial_versions_connection_fkey FOREIGN KEY(owner_id, connection_id, connection_version) REFERENCES source_connection_versions (owner_id, connection_id, version),
+	CONSTRAINT editorial_versions_kind_check CHECK (kind IN ('rss','web_list','json_list','x_search','mp_account','external')),
+	CONSTRAINT editorial_versions_participation_check CHECK (participation_mode IN ('editorial','hot_signal','isolated') AND tier IN ('T1','T1_5','T2','T3')),
+	CONSTRAINT editorial_versions_numbers_check CHECK (octet_length(input_hash) = 32 AND version >= 1 AND policy_version >= 1 AND connection_version >= 1 AND interval_minutes BETWEEN 1 AND 360),
+	CONSTRAINT editorial_versions_configuration_check CHECK (jsonb_typeof(configuration) = 'object')
+);
+
+CREATE TABLE editorial_source_runs (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	profile_id UUID NOT NULL,
+	operation_id UUID NOT NULL,
+	input_hash BYTEA NOT NULL,
+	configuration_version INTEGER NOT NULL,
+	profile_revision INTEGER NOT NULL,
+	job_id UUID NOT NULL,
+	status VARCHAR(16) NOT NULL,
+	prepared_page JSONB,
+	found INTEGER DEFAULT 0 NOT NULL,
+	created INTEGER DEFAULT 0 NOT NULL,
+	revised INTEGER DEFAULT 0 NOT NULL,
+	failure_code VARCHAR(64),
+	review_audit JSONB,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT editorial_source_runs_operation_key UNIQUE (owner_id, profile_id, operation_id),
+	CONSTRAINT editorial_source_runs_owner_id_key UNIQUE (owner_id, id),
+	CONSTRAINT editorial_source_runs_version_fkey FOREIGN KEY(owner_id, profile_id, configuration_version) REFERENCES editorial_source_profile_versions (owner_id, profile_id, version),
+	CONSTRAINT editorial_source_runs_job_fkey FOREIGN KEY(owner_id, job_id) REFERENCES jobs (owner_id, id),
+	CONSTRAINT editorial_source_runs_status_check CHECK (status IN ('running','staged','succeeded','partial','unknown','failed','blocked','cancelled')),
+	CONSTRAINT editorial_source_runs_input_check CHECK (octet_length(input_hash) = 32 AND configuration_version >= 1 AND profile_revision >= 1),
+	CONSTRAINT editorial_source_runs_counts_check CHECK (found >= 0 AND created >= 0 AND revised >= 0),
+	CONSTRAINT editorial_source_runs_page_check CHECK (prepared_page IS NULL OR (jsonb_typeof(prepared_page) = 'object' AND octet_length(prepared_page::text) <= 8388608)),
+	CONSTRAINT editorial_source_runs_review_check CHECK (review_audit IS NULL OR jsonb_typeof(review_audit) = 'object')
+);
+
+CREATE TABLE editorial_source_material_receipts (
+	owner_id UUID NOT NULL,
+	profile_id UUID NOT NULL,
+	identity_key VARCHAR(512) NOT NULL,
+	material_hash BYTEA NOT NULL,
+	content_id UUID NOT NULL,
+	content_version_id UUID NOT NULL,
+	run_id UUID NOT NULL,
+	body_status VARCHAR(16) NOT NULL,
+	body_retry_count INTEGER NOT NULL,
+	first_import BOOLEAN NOT NULL,
+	detail_title VARCHAR(2000),
+	published_at TIMESTAMP WITH TIME ZONE,
+	source_updated_at TIMESTAMP WITH TIME ZONE,
+	next_body_retry_at TIMESTAMP WITH TIME ZONE,
+	metadata JSONB NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (owner_id, profile_id, identity_key),
+	CONSTRAINT editorial_materials_profile_fkey FOREIGN KEY(owner_id, profile_id) REFERENCES editorial_source_profiles (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT editorial_materials_content_fkey FOREIGN KEY(owner_id, content_id, content_version_id) REFERENCES content_versions (owner_id, content_id, id),
+	CONSTRAINT editorial_materials_run_fkey FOREIGN KEY(owner_id, run_id) REFERENCES editorial_source_runs (owner_id, id),
+	CONSTRAINT editorial_materials_numbers_check CHECK (octet_length(material_hash) = 32 AND body_retry_count BETWEEN 0 AND 3),
+	CONSTRAINT editorial_materials_body_check CHECK (body_status IN ('ok','pending','none')),
+	CONSTRAINT editorial_materials_metadata_check CHECK (jsonb_typeof(metadata) = 'object')
+);
+
+ALTER TABLE editorial_source_profiles ADD CONSTRAINT editorial_profiles_current_version_fkey FOREIGN KEY(owner_id, id, current_version) REFERENCES editorial_source_profile_versions (owner_id, profile_id, version) DEFERRABLE INITIALLY DEFERRED;
+
+CREATE INDEX editorial_profiles_due_idx ON editorial_source_profiles (enabled, next_fetch_at);
+
+CREATE INDEX editorial_runs_profile_status_idx ON editorial_source_runs (owner_id, profile_id, status);
+
+CREATE TABLE report_edition_schedules (
+    owner_id UUID NOT NULL,
+    kind VARCHAR(16) NOT NULL,
+    first_period_key VARCHAR(10) NOT NULL,
+    scan_after_key VARCHAR(10),
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (owner_id, kind),
+    CONSTRAINT report_edition_schedules_kind_check CHECK (kind IN ('daily','weekly','monthly')),
+    CONSTRAINT report_edition_schedules_key_check CHECK (length(first_period_key) BETWEEN 7 AND 10)
+);
+
+CREATE TABLE operations_feedback (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	operation_id UUID NOT NULL,
+	source_hash BYTEA NOT NULL,
+	input_fingerprint BYTEA NOT NULL,
+	content VARCHAR(5000),
+	email VARCHAR(200),
+	page_url VARCHAR(500),
+	status VARCHAR(16) NOT NULL,
+	revision INTEGER NOT NULL,
+	note VARCHAR(2000),
+	forwarded_at TIMESTAMP WITH TIME ZONE,
+	forward_error VARCHAR(64),
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT operations_feedback_scope_key UNIQUE (owner_id, id),
+	CONSTRAINT operations_feedback_operation_key UNIQUE (owner_id, operation_id),
+	CONSTRAINT operations_feedback_hash_check CHECK (octet_length(source_hash)=32 AND octet_length(input_fingerprint)=32),
+	CONSTRAINT operations_feedback_state_check CHECK (status IN ('new','reviewing','resolved','rejected','deleted') AND revision>=1),
+	CONSTRAINT operations_feedback_content_check CHECK ((status='deleted' AND content IS NULL AND email IS NULL AND page_url IS NULL) OR (status<>'deleted' AND btrim(content)<>'' AND content IS NOT NULL))
+);
+
+CREATE INDEX operations_feedback_inbox_idx ON operations_feedback (owner_id, status, created_at);
+
+CREATE TABLE operations_feedback_cooldowns (
+	owner_id UUID NOT NULL,
+	source_hash BYTEA NOT NULL,
+	available_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	banned BOOLEAN NOT NULL,
+	ban_reason VARCHAR(2000),
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (owner_id, source_hash),
+	CONSTRAINT operations_feedback_cooldowns_hash_check CHECK (octet_length(source_hash)=32)
+);
+
+CREATE TABLE operations_feedback_attachments (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	feedback_id UUID NOT NULL,
+	mime VARCHAR(16) NOT NULL,
+	data BYTEA NOT NULL,
+	sha256 BYTEA NOT NULL,
+	width INTEGER NOT NULL,
+	height INTEGER NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT operations_feedback_attachments_feedback_fkey FOREIGN KEY(owner_id, feedback_id) REFERENCES operations_feedback (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT operations_feedback_attachments_feedback_key UNIQUE (owner_id, feedback_id),
+	CONSTRAINT operations_feedback_attachments_format_check CHECK (mime IN ('image/png','image/jpeg','image/webp','image/gif') AND octet_length(data) BETWEEN 1 AND 8388608 AND octet_length(sha256)=32 AND width BETWEEN 1 AND 20000 AND height BETWEEN 1 AND 20000 AND width*height<=40000000)
+);
+
+CREATE TABLE operations_audit_operations (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	operation_id UUID NOT NULL,
+	input_fingerprint BYTEA NOT NULL,
+	action VARCHAR(64) NOT NULL,
+	target_ref VARCHAR(256) NOT NULL,
+	actor VARCHAR(64) NOT NULL,
+	reason VARCHAR(2000) NOT NULL,
+	status VARCHAR(16) NOT NULL,
+	before_state JSONB NOT NULL,
+	after_state JSONB NOT NULL,
+	job_id UUID,
+	error_code VARCHAR(64),
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT operations_audit_operations_operation_key UNIQUE (owner_id, operation_id),
+	CONSTRAINT operations_audit_operations_job_fkey FOREIGN KEY(owner_id, job_id) REFERENCES jobs (owner_id, id),
+	CONSTRAINT operations_audit_operations_state_check CHECK (octet_length(input_fingerprint)=32 AND status IN ('accepted','succeeded','failed','unknown') AND jsonb_typeof(before_state)='object' AND jsonb_typeof(after_state)='object')
+);
+
+CREATE INDEX operations_audit_operations_history_idx ON operations_audit_operations (owner_id, created_at);
+
+CREATE TABLE operations_process_heartbeats (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	role VARCHAR(16) NOT NULL,
+	instance_id VARCHAR(128) NOT NULL,
+	pid INTEGER NOT NULL,
+	state VARCHAR(16) NOT NULL,
+	last_seen_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	started_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	detail JSONB NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT operations_process_heartbeats_instance_key UNIQUE (owner_id, role, instance_id),
+	CONSTRAINT operations_process_heartbeats_state_check CHECK (role IN ('api','worker','scheduler','watchdog') AND state IN ('alive','stopping','error') AND pid>0)
+);
+
+CREATE TABLE operations_dictionary_versions (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	operation_id UUID NOT NULL,
+	kind VARCHAR(16) NOT NULL,
+	version INTEGER NOT NULL,
+	active BOOLEAN NOT NULL,
+	content JSONB NOT NULL,
+	input_fingerprint BYTEA NOT NULL,
+	created_by UUID NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT operations_dictionary_versions_version_key UNIQUE (owner_id, kind, version),
+	CONSTRAINT operations_dictionary_versions_operation_key UNIQUE (owner_id, operation_id),
+	CONSTRAINT operations_dictionary_versions_value_check CHECK (kind IN ('glossary','entities','categories') AND version>=1 AND jsonb_typeof(content)='object' AND octet_length(input_fingerprint)=32)
+);
+
+CREATE UNIQUE INDEX operations_dictionary_versions_one_current_idx ON operations_dictionary_versions (owner_id, kind) WHERE active;
+
+CREATE TABLE analysis_selectbench_runs (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	operation_id UUID NOT NULL,
+	input_fingerprint BYTEA NOT NULL,
+	gold_fingerprint BYTEA NOT NULL,
+	label VARCHAR(200) NOT NULL,
+	prompt_version VARCHAR(100) NOT NULL,
+	split VARCHAR(64),
+	seed INTEGER,
+	sample_size INTEGER NOT NULL,
+	models JSONB NOT NULL,
+	summary JSONB NOT NULL,
+	imported_by UUID NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT analysis_selectbench_runs_scope_key UNIQUE (owner_id, id),
+	CONSTRAINT analysis_selectbench_runs_operation_key UNIQUE (owner_id, operation_id),
+	CONSTRAINT analysis_selectbench_runs_input_check CHECK (octet_length(input_fingerprint)=32 AND octet_length(gold_fingerprint)=32 AND sample_size BETWEEN 1 AND 5000 AND jsonb_typeof(models)='array' AND jsonb_typeof(summary)='object')
+);
+
+CREATE TABLE analysis_selectbench_results (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	run_id UUID NOT NULL,
+	model VARCHAR(200) NOT NULL,
+	case_id VARCHAR(200) NOT NULL,
+	title VARCHAR(500) NOT NULL,
+	stratum VARCHAR(128),
+	gold VARCHAR(8) NOT NULL,
+	decision VARCHAR(8),
+	score FLOAT,
+	relevance VARCHAR(128),
+	category VARCHAR(128),
+	reason VARCHAR(2000),
+	error_code VARCHAR(64),
+	ai_call_id UUID,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT analysis_selectbench_results_run_fkey FOREIGN KEY(owner_id, run_id) REFERENCES analysis_selectbench_runs (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT analysis_selectbench_results_call_fkey FOREIGN KEY(owner_id, ai_call_id) REFERENCES ai_calls (owner_id, id),
+	CONSTRAINT analysis_selectbench_results_case_key UNIQUE (owner_id, run_id, model, case_id),
+	CONSTRAINT analysis_selectbench_results_decision_check CHECK (gold IN ('select','reject','either') AND (decision IS NULL OR decision IN ('select','reject')) AND (score IS NULL OR score BETWEEN 0 AND 100))
+);
+
+
+CREATE TABLE content_translation_runs (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	operation_id UUID NOT NULL,
+	content_id UUID NOT NULL,
+	content_version_id UUID NOT NULL,
+	policy_revision INTEGER NOT NULL,
+	revision INTEGER NOT NULL,
+	job_id UUID NOT NULL,
+	prompt_version VARCHAR(128) NOT NULL,
+	input_fingerprint VARCHAR(64) NOT NULL,
+	request_fingerprint VARCHAR(64) NOT NULL,
+	reference JSONB NOT NULL,
+	source_format VARCHAR(16) NOT NULL,
+	status VARCHAR(16) NOT NULL,
+	body_html TEXT,
+	translated_segments INTEGER NOT NULL,
+	total_segments INTEGER NOT NULL,
+	complete BOOLEAN NOT NULL,
+	failure_code VARCHAR(80),
+	reason TEXT NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT content_translation_runs_owner_key UNIQUE (owner_id, id),
+	CONSTRAINT content_translation_runs_operation_key UNIQUE (owner_id, operation_id),
+	CONSTRAINT content_translation_runs_revision_key UNIQUE (owner_id, content_id, content_version_id, policy_revision, revision),
+	CONSTRAINT content_translation_runs_content_fkey FOREIGN KEY(owner_id, content_id, content_version_id) REFERENCES content_versions (owner_id, content_id, id),
+	CONSTRAINT content_translation_runs_job_fkey FOREIGN KEY(owner_id, job_id) REFERENCES jobs (owner_id, id),
+	CONSTRAINT content_translation_runs_status_check CHECK (status IN ('queued','running','complete','partial','unknown','failed','stale')),
+	CONSTRAINT content_translation_runs_version_check CHECK (source_format IN ('text','html','markdown') AND revision >= 1 AND policy_revision >= 1),
+	CONSTRAINT content_translation_runs_input_check CHECK (length(input_fingerprint)=64 AND length(request_fingerprint)=64 AND jsonb_typeof(reference)='object'),
+	CONSTRAINT content_translation_runs_counts_check CHECK (translated_segments >= 0 AND translated_segments <= total_segments),
+	CONSTRAINT content_translation_runs_result_check CHECK (status NOT IN ('complete','partial') OR body_html IS NOT NULL)
+)
+
+;
+
+CREATE TABLE content_translation_batches (
+	run_id UUID NOT NULL,
+	ordinal INTEGER NOT NULL,
+	owner_id UUID NOT NULL,
+	status VARCHAR(16) NOT NULL,
+	ai_call_id UUID,
+	answers JSONB,
+	failure_code VARCHAR(80),
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (run_id, ordinal),
+	CONSTRAINT content_translation_batches_run_fkey FOREIGN KEY(owner_id, run_id) REFERENCES content_translation_runs (owner_id, id),
+	CONSTRAINT content_translation_batches_call_fkey FOREIGN KEY(owner_id, ai_call_id) REFERENCES ai_calls (owner_id, id),
+	CONSTRAINT content_translation_batches_status_check CHECK (status IN ('running','succeeded','unknown','failed') AND ordinal >= 0),
+	CONSTRAINT content_translation_batches_answers_check CHECK (answers IS NULL OR jsonb_typeof(answers)='array')
+)
+
+;
+CREATE TABLE publication_media_runs (
+    owner_id UUID NOT NULL,
+    id UUID NOT NULL,
+    operation_id UUID NOT NULL,
+    job_id UUID NOT NULL,
+    content_id UUID NOT NULL,
+    content_version_id UUID NOT NULL,
+    policy_revision INTEGER NOT NULL,
+    source_key VARCHAR(64) NOT NULL,
+    fixed_reference JSONB NOT NULL,
+    input_fingerprint VARCHAR(64) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    reason TEXT,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (owner_id, id),
+    CONSTRAINT publication_media_runs_job_fk FOREIGN KEY (owner_id,job_id) REFERENCES jobs(owner_id,id),
+    CONSTRAINT publication_media_runs_content_fk FOREIGN KEY (owner_id,content_id,content_version_id) REFERENCES content_versions(owner_id,content_id,id),
+    CONSTRAINT publication_media_runs_operation_key UNIQUE (owner_id,operation_id),
+    CONSTRAINT publication_media_runs_identity_key UNIQUE (owner_id,content_id,content_version_id,policy_revision),
+    CONSTRAINT publication_media_runs_policy_check CHECK (policy_revision >= 1),
+    CONSTRAINT publication_media_runs_status_check CHECK (status IN ('queued','running','complete','partial','unknown','failed','stale','cancelled'))
+);
+CREATE INDEX publication_media_runs_job_idx ON publication_media_runs(owner_id,job_id);
+CREATE TABLE publication_media_files (
+    owner_id UUID NOT NULL,
+    id UUID NOT NULL,
+    run_id UUID NOT NULL,
+    media_key VARCHAR(24) NOT NULL,
+    source_url TEXT NOT NULL,
+    kind VARCHAR(8) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    mime_type VARCHAR(64),
+    content_sha256 VARCHAR(64),
+    byte_count INTEGER,
+    renditions JSONB NOT NULL,
+    evidence_resource_id UUID,
+    reason TEXT,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (owner_id,id),
+    CONSTRAINT publication_media_files_run_fk FOREIGN KEY (owner_id,run_id) REFERENCES publication_media_runs(owner_id,id),
+    CONSTRAINT publication_media_files_key_key UNIQUE (owner_id,run_id,media_key),
+    CONSTRAINT publication_media_files_kind_check CHECK (kind IN ('image','video')),
+    CONSTRAINT publication_media_files_status_check CHECK (status IN ('pending','running','complete','unknown','failed','stale','cancelled')),
+    CONSTRAINT publication_media_files_size_check CHECK (byte_count IS NULL OR byte_count > 0)
+);
+CREATE INDEX publication_media_files_run_idx ON publication_media_files(owner_id,run_id);
+
+CREATE TABLE content_rendered_materials (
+    owner_id UUID NOT NULL,
+    content_version_id UUID NOT NULL,
+    content_id UUID NOT NULL,
+    body_format VARCHAR(16) NOT NULL,
+    body TEXT NOT NULL,
+    media JSONB NOT NULL,
+    representation_hash BYTEA NOT NULL,
+    input_hash BYTEA NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (owner_id, content_version_id),
+    CONSTRAINT content_rendered_materials_version_fkey FOREIGN KEY (owner_id, content_id, content_version_id)
+        REFERENCES content_versions(owner_id, content_id, id) ON DELETE CASCADE,
+    CONSTRAINT content_rendered_materials_format_check CHECK (body_format IN ('text','html','markdown')),
+    CONSTRAINT content_rendered_materials_body_check CHECK (char_length(body) <= 500000),
+    CONSTRAINT content_rendered_materials_media_check CHECK (jsonb_typeof(media) = 'array' AND jsonb_array_length(media) <= 64 AND octet_length(media::text) <= 65536),
+    CONSTRAINT content_rendered_materials_hash_check CHECK (octet_length(representation_hash) = 32 AND octet_length(input_hash) = 32)
+);
+
+-- Operator-owned site contact, with image/current revision in the same transaction.
+CREATE TABLE operations_site_configurations (
+    owner_id UUID PRIMARY KEY,
+    revision INTEGER NOT NULL,
+    contact_enabled BOOLEAN NOT NULL,
+    contact_title VARCHAR(100) NOT NULL,
+    contact_text VARCHAR(4000) NOT NULL,
+    contact_url VARCHAR(1000),
+    wechat_qr_data BYTEA,
+    wechat_qr_sha256 BYTEA,
+    wechat_qr_mime VARCHAR(32),
+    feishu_qr_data BYTEA,
+    feishu_qr_sha256 BYTEA,
+    feishu_qr_mime VARCHAR(32),
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT operations_site_configurations_revision_check CHECK (revision >= 1),
+    CONSTRAINT operations_site_configurations_wechat_image_check CHECK (
+        (wechat_qr_data IS NULL AND wechat_qr_sha256 IS NULL AND wechat_qr_mime IS NULL)
+        OR (wechat_qr_data IS NOT NULL AND wechat_qr_sha256 IS NOT NULL AND wechat_qr_mime = 'image/png'
+            AND octet_length(wechat_qr_data) BETWEEN 1 AND 2097152
+            AND octet_length(wechat_qr_sha256) = 32)
+    ),
+    CONSTRAINT operations_site_configurations_feishu_image_check CHECK (
+        (feishu_qr_data IS NULL AND feishu_qr_sha256 IS NULL AND feishu_qr_mime IS NULL)
+        OR (feishu_qr_data IS NOT NULL AND feishu_qr_sha256 IS NOT NULL AND feishu_qr_mime = 'image/png'
+            AND octet_length(feishu_qr_data) BETWEEN 1 AND 2097152
+            AND octet_length(feishu_qr_sha256) = 32)
+    )
+);
+
+
+
+CREATE TABLE event_story_links (
+	owner_id UUID NOT NULL,
+	topic_id UUID NOT NULL,
+	first_event_id UUID NOT NULL,
+	second_event_id UUID NOT NULL,
+	first_revision INTEGER NOT NULL,
+	second_revision INTEGER NOT NULL,
+	evidence JSONB NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (owner_id, first_event_id, second_event_id),
+	CONSTRAINT event_story_links_first_fkey FOREIGN KEY(owner_id, topic_id, first_event_id) REFERENCES events (owner_id, topic_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_story_links_second_fkey FOREIGN KEY(owner_id, topic_id, second_event_id) REFERENCES events (owner_id, topic_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_story_links_order_check CHECK (first_event_id < second_event_id),
+	CONSTRAINT event_story_links_revision_check CHECK (first_revision >= 1 AND second_revision >= 1),
+	CONSTRAINT event_story_links_evidence_check CHECK (jsonb_typeof(evidence)='array' AND jsonb_array_length(evidence) BETWEEN 2 AND 20)
+)
+
+;
+CREATE INDEX event_story_links_second_idx ON event_story_links (owner_id, topic_id, second_event_id);
+
+CREATE TABLE editorial_source_icons (
+    owner_id UUID NOT NULL,
+    profile_id UUID NOT NULL,
+    source_key VARCHAR(64) NOT NULL,
+    configuration_version INTEGER NOT NULL,
+    profile_revision INTEGER NOT NULL,
+    input_hash BYTEA NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    source_url TEXT,
+    media_refs JSONB NOT NULL,
+    operation_id UUID NOT NULL,
+    job_id UUID NOT NULL,
+    failure_code VARCHAR(64),
+    checked_at TIMESTAMPTZ,
+    next_retry_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (owner_id, profile_id),
+    CONSTRAINT editorial_source_icons_version_fkey FOREIGN KEY (owner_id, profile_id, configuration_version)
+        REFERENCES editorial_source_profile_versions (owner_id, profile_id, version),
+    CONSTRAINT editorial_source_icons_job_fkey FOREIGN KEY (job_id) REFERENCES jobs (id),
+    CONSTRAINT editorial_source_icons_version_check CHECK (configuration_version >= 1 AND profile_revision >= 1),
+    CONSTRAINT editorial_source_icons_hash_check CHECK (octet_length(input_hash) = 32),
+    CONSTRAINT editorial_source_icons_status_check CHECK (status IN ('ready','missing','blocked','unknown','running')),
+    CONSTRAINT editorial_source_icons_media_check CHECK (jsonb_typeof(media_refs) = 'array' AND octet_length(media_refs::text) <= 65536),
+    CONSTRAINT editorial_source_icons_ready_check CHECK (status <> 'ready' OR (source_url IS NOT NULL AND jsonb_array_length(media_refs) = 2))
+);
+
+
+CREATE TABLE event_content_embeddings (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	content_id UUID NOT NULL,
+	content_version_id UUID NOT NULL,
+	model VARCHAR(128) NOT NULL,
+	requested_dimensions INTEGER NOT NULL,
+	input_fingerprint BYTEA NOT NULL,
+	status VARCHAR(16) NOT NULL,
+	dimensions INTEGER,
+	vector JSONB,
+	ai_call_id UUID,
+	job_id UUID,
+	error_code VARCHAR(64),
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT event_content_embeddings_scope_key UNIQUE (owner_id, id),
+	CONSTRAINT event_content_embeddings_input_key UNIQUE (owner_id, content_version_id, model, requested_dimensions, input_fingerprint),
+	CONSTRAINT event_content_embeddings_version_fkey FOREIGN KEY(owner_id, content_id, content_version_id) REFERENCES content_versions (owner_id, content_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_content_embeddings_job_fkey FOREIGN KEY(owner_id, job_id) REFERENCES jobs (owner_id, id),
+	CONSTRAINT event_content_embeddings_call_fkey FOREIGN KEY(owner_id, ai_call_id) REFERENCES ai_calls (owner_id, id),
+	CONSTRAINT event_content_embeddings_input_check CHECK (requested_dimensions BETWEEN 0 AND 3072 AND octet_length(input_fingerprint)=32),
+	CONSTRAINT event_content_embeddings_status_check CHECK (status IN ('pending','running','response_saved','valid','failed','unknown','stale')),
+	CONSTRAINT event_content_embeddings_vector_check CHECK ((status IN ('valid','response_saved') AND dimensions BETWEEN 1 AND 3072 AND vector IS NOT NULL AND jsonb_typeof(vector)='array' AND jsonb_array_length(vector)=dimensions AND ai_call_id IS NOT NULL) OR (status NOT IN ('valid','response_saved') AND dimensions IS NULL AND vector IS NULL))
+)
+
+;
 
 COMMIT;

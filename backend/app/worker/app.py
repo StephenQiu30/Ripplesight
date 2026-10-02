@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import signal
 import socket
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -15,7 +16,11 @@ from confluent_kafka import Message
 from sqlalchemy.orm import Session, sessionmaker
 from structlog.contextvars import bound_contextvars
 
+from ai.services import recover_abandoned_ai_calls_in_transaction
+from analysis.editorial_services import EditorialExecutor
+from analysis.evaluation_execution import SelectBenchExecutor
 from analysis.services import AnalysisAnnotateExecutor
+from analysis.translation_services import ContentTranslationExecutor
 from content.collection import (
     WebPageCollectionExecutor,
     recover_webpage_collection_usage_in_transaction,
@@ -35,7 +40,13 @@ from core.logging import configure_logging
 # Spawn starts a fresh interpreter; import the canonical registry to resolve ORM foreign keys.
 from db.metadata import metadata as _registered_metadata  # noqa: F401
 from db.session import create_db_engine, create_session_factory
+from events.consolidation import EventConsolidationExecutor
+from events.digest import EventDigestExecutor
+from events.embedding_execution import EventEmbeddingExecutor
+from events.heat import EventHeatExecutor
 from events.services import EventClusterExecutor
+from events.signals import EventSignalExecutor
+from evidence.adapters.media_storage import create_media_storage
 from jobs.execution import (
     CheckpointValue,
     Clock,
@@ -51,10 +62,24 @@ from jobs.execution import (
 from jobs.schemas import JobFailureCategory, JobMessage, JobStage, JobStatus
 from jobs.services import JOB_ACCEPTED_TOPIC, OutboxService, load_job_execution_configuration
 from knowledge.services import KnowledgeExportExecutor
+from leaderboard.execution import LeaderboardRefreshExecutor
+from monitors.codex_job import CodexResetJobExecutor
+from notifications.admission import enqueue_codex_notifications_in_transaction
 from notifications.executor import NotificationExecutor
+from notifications.scan import NotificationScanExecutor
 from notifications.services import mark_interrupted_sending_in_transaction
+from operations.heartbeat import ProcessHeartbeatReporter
+from operations.indexnow_services import IndexNowExecutor
+from operations.maintenance import OperationsMaintenanceExecutor
+from publication.execution import PublicationRepublishExecutor
+from publication.media_mirror_execution import MediaObjectStorage, PublicationMediaExecutor
+from reports.edition_services import EditionExecutor
 from reports.services import DailyReportExecutor
 from sources.adapters.firecrawl import FirecrawlAdapter
+from sources.editorial_group_job import EditorialXGroupJobExecutor
+from sources.editorial_job import EditorialSourceJobExecutor
+from sources.editorial_preview_job import EditorialSourcePreviewExecutor
+from sources.icons_job import SourceIconJobExecutor
 from worker.execution import (
     IsolatedProcessResult,
     JobProcessChildError,
@@ -197,8 +222,11 @@ def _run_job_in_child(
     settings = get_settings()
     engine = create_db_engine(settings)
     sessions = create_session_factory(engine)
+    media_storage = create_media_storage(settings)
     try:
-        handler = _registered_job_handlers(sessions, settings).get(message.kind)
+        handler = _registered_job_handlers(sessions, settings, media_storage=media_storage).get(
+            message.kind
+        )
         if handler is None:
             occurred_at = datetime.now(UTC)
             return ChildJobResult(
@@ -235,6 +263,8 @@ def _run_job_in_child(
             ),
         )
     finally:
+        if media_storage is not None:
+            media_storage.close()
         engine.dispose()
 
 
@@ -282,6 +312,32 @@ def create_job_message_handler(
                     if retry_at is None:
                         raise
                     raise MessageDeferredError(retry_at) from error
+                if body.kind in {
+                    "analysis.annotate",
+                    "analysis.editorial",
+                    "analysis.translate",
+                    "analysis.selectbench",
+                    "events.cluster",
+                    "events.digest",
+                    "events.consolidate",
+                    "events.signals",
+                    "events.embed",
+                    "report.daily",
+                    "report.weekly",
+                    "report.edition",
+                    "monitor.codex_reset.tick",
+                }:
+                    with session.begin():
+                        execution.require_current_operation_in_transaction(
+                            lease, owner_id=body.owner_id, operation_id=body.operation_id
+                        )
+                        recover_abandoned_ai_calls_in_transaction(
+                            session,
+                            owner_id=body.owner_id,
+                            job_id=body.job_id,
+                            current_epoch=lease.epoch,
+                            now=_now(clock),
+                        )
                 handler = handlers.get(body.kind)
                 if handler is None:
                     occurred_at = clock() if clock is not None else datetime.now(UTC)
@@ -301,16 +357,29 @@ def create_job_message_handler(
             if supervisor is not None:
                 if stopping is None:
                     raise ValueError("a stopping event is required for supervised handlers")
+                next_heartbeat = time.monotonic() + max(1.0, lease_seconds / 3)
+
+                def watch_lease() -> bool:
+                    nonlocal next_heartbeat
+                    if time.monotonic() >= next_heartbeat:
+                        try:
+                            with sessions() as heartbeat_session:
+                                _, cancelled = JobExecutionService(
+                                    heartbeat_session, lease_seconds=lease_seconds, clock=clock
+                                ).heartbeat(lease)
+                        except JobExecutionError as error:
+                            raise JobProcessCrashedError(type(error).__name__) from None
+                        next_heartbeat = time.monotonic() + max(1.0, lease_seconds / 3)
+                        return cancelled
+                    return _cancellation_requested(
+                        sessions, lease=lease, lease_seconds=lease_seconds, clock=clock
+                    )
+
                 try:
                     result = supervisor.run(
                         _run_job_in_child,
                         (body, lease, lease_seconds),
-                        cancellation_requested=lambda: _cancellation_requested(
-                            sessions,
-                            lease=lease,
-                            lease_seconds=lease_seconds,
-                            clock=clock,
-                        ),
+                        cancellation_requested=watch_lease,
                         stopping=stopping,
                         execution_timeout_seconds=(
                             job_execution_timeout_seconds(body.kind, body.source_key)
@@ -628,6 +697,7 @@ def _registered_job_handlers(
     settings: Settings,
     *,
     clock: Clock | None = None,
+    media_storage: MediaObjectStorage | None = None,
 ) -> dict[str, JobHandler]:
     webpage_executor = WebPageCollectionExecutor(
         sessions,
@@ -658,10 +728,99 @@ def _registered_job_handlers(
         clock=clock,
     )
     analysis_executor = AnalysisAnnotateExecutor(sessions, settings, clock=clock)
+    editorial_executor = EditorialExecutor(sessions, settings, clock=clock)
+    selectbench_executor = SelectBenchExecutor(sessions, settings, clock=clock)
+    translation_executor = ContentTranslationExecutor(sessions, settings, clock=clock)
     event_executor = EventClusterExecutor(sessions, settings, clock=clock)
-    daily_report_executor = DailyReportExecutor(sessions, clock=clock)
+    event_digest_executor = EventDigestExecutor(sessions, settings, clock=clock)
+    event_consolidation_executor = EventConsolidationExecutor(sessions, settings, clock=clock)
+    event_embedding_executor = EventEmbeddingExecutor(sessions, settings, clock=clock)
+    event_signal_executor = EventSignalExecutor(sessions, settings, clock=clock)
+    event_heat_executor = EventHeatExecutor(sessions, settings, clock=clock)
+    edition_executor = EditionExecutor(sessions, settings, clock=clock)
+    publication_executor = PublicationRepublishExecutor(
+        sessions, indexing_enabled=settings.publication_indexing_enabled, clock=clock
+    )
+    daily_report_executor = DailyReportExecutor(sessions, settings=settings, clock=clock)
     knowledge_executor = KnowledgeExportExecutor(sessions, settings, clock=clock)
     notification_executor = NotificationExecutor(sessions, settings, clock=clock)
+    notification_scan_executor = NotificationScanExecutor(sessions, settings, clock=clock)
+    source_editorial_executor = EditorialSourceJobExecutor(
+        sessions,
+        settings,
+        lease_seconds=settings.job_lease_seconds,
+        clock=clock or (lambda: datetime.now(UTC)),
+    )
+    source_editorial_group_executor = EditorialXGroupJobExecutor(
+        sessions,
+        settings,
+        lease_seconds=settings.job_lease_seconds,
+        clock=clock or (lambda: datetime.now(UTC)),
+    )
+    source_editorial_preview_executor = EditorialSourcePreviewExecutor(
+        sessions,
+        settings,
+        lease_seconds=settings.job_lease_seconds,
+        clock=clock or (lambda: datetime.now(UTC)),
+    )
+    indexnow_executor = IndexNowExecutor(sessions, settings, clock=clock)
+    source_icon_executor = SourceIconJobExecutor(
+        sessions,
+        settings,
+        lease_seconds=settings.job_lease_seconds,
+        clock=clock or (lambda: datetime.now(UTC)),
+    )
+    maintenance_executor = OperationsMaintenanceExecutor(sessions, settings, clock=clock)
+    media_executor = (
+        PublicationMediaExecutor(
+            sessions,
+            media_storage,
+            allow_external_requests=settings.media_mirror_allow_external_requests,
+            image_max_bytes=settings.media_mirror_image_max_bytes,
+            video_max_bytes=settings.media_mirror_video_max_bytes,
+            redirect_hosts=frozenset(settings.media_mirror_redirect_hosts),
+            lease_seconds=settings.job_lease_seconds,
+            clock=clock,
+        )
+        if media_storage is not None
+        else None
+    )
+    codex_executor = CodexResetJobExecutor(
+        sessions,
+        settings,
+        lease_seconds=settings.job_lease_seconds,
+        clock=clock or (lambda: datetime.now(UTC)),
+        notification_sink=lambda session, owner, monitor, intents: (
+            enqueue_codex_notifications_in_transaction(
+                session,
+                owner_id=owner,
+                monitor_id=monitor,
+                intents=intents,
+                now=_now(clock),
+            )
+            if settings.notifications_enabled
+            else 0
+        ),
+    )
+    leaderboard_executor = LeaderboardRefreshExecutor(
+        sessions,
+        allow_external_requests=settings.leaderboard_external_requests_enabled,
+        artificial_analysis_api_key=(
+            settings.leaderboard_artificial_analysis_api_key.get_secret_value()
+            if settings.leaderboard_artificial_analysis_api_key
+            else None
+        ),
+        github_token=(
+            settings.leaderboard_github_token.get_secret_value()
+            if settings.leaderboard_github_token
+            else None
+        ),
+        max_requests_per_source=settings.leaderboard_max_requests_per_source,
+        max_seconds_per_source=settings.leaderboard_max_seconds_per_source,
+        solver_seconds=settings.leaderboard_solver_seconds,
+        lease_seconds=settings.job_lease_seconds,
+        clock=clock or (lambda: datetime.now(UTC)),
+    )
 
     def collect_webpage(context: JobExecutionContext) -> JobCompletion:
         context.lease = webpage_executor.execute(context.message, context.lease)
@@ -680,7 +839,7 @@ def _registered_job_handlers(
         return completion
 
     def annotate_content(context: JobExecutionContext) -> JobCompletion:
-        result = analysis_executor.execute(context.message)
+        result = analysis_executor.execute(context.message, context.lease)
         context.save_checkpoint(
             context.lease.checkpoint_sequence + 1,
             {"processed_items": result.processed_items},
@@ -692,7 +851,7 @@ def _registered_job_handlers(
         return result.completion
 
     def cluster_event(context: JobExecutionContext) -> JobCompletion:
-        completion = event_executor.execute(context.message)
+        completion = event_executor.execute(context.message, context.lease)
         context.save_checkpoint(
             context.lease.checkpoint_sequence + 1,
             {"candidate_processed": True},
@@ -700,8 +859,52 @@ def _registered_job_handlers(
         )
         return completion
 
+    def editorial_content(context: JobExecutionContext) -> JobCompletion:
+        completion = editorial_executor.execute(context.message, context.lease)
+        context.save_checkpoint(
+            context.lease.checkpoint_sequence + 1,
+            {"editorial_completed": True},
+            progress=JobProgress(stage=JobStage.ANALYSIS, items_saved=1),
+        )
+        return completion
+
+    def evaluate_selection(context: JobExecutionContext) -> JobCompletion:
+        return selectbench_executor.execute(context.message, context.lease)
+
+    def digest_event(context: JobExecutionContext) -> JobCompletion:
+        completion = event_digest_executor.execute(context.message, context.lease)
+        context.save_checkpoint(
+            context.lease.checkpoint_sequence + 1,
+            {"event_digest_completed": True},
+            progress=JobProgress(stage=JobStage.ANALYSIS, items_saved=1),
+        )
+        return completion
+
+    def consolidate_event(context: JobExecutionContext) -> JobCompletion:
+        return event_consolidation_executor.execute(context.message, context.lease)
+
+    def embed_event(context: JobExecutionContext) -> JobCompletion:
+        return event_embedding_executor.execute(context.message, context.lease)
+
+    def rematch_event_signals(context: JobExecutionContext) -> JobCompletion:
+        return event_signal_executor.execute(context.message, context.lease)
+
+    def refresh_source_icon(context: JobExecutionContext) -> JobCompletion | None:
+        return source_icon_executor.execute(
+            context.message, context.lease, cancelled=context.cancellation_requested
+        )
+
+    def translate_content(context: JobExecutionContext) -> JobCompletion:
+        completion = translation_executor.execute(context.message, context.lease)
+        context.save_checkpoint(
+            context.lease.checkpoint_sequence + 1,
+            {"translation_completed": True},
+            progress=JobProgress(stage=JobStage.ANALYSIS, items_saved=1),
+        )
+        return completion
+
     def generate_daily_report(context: JobExecutionContext) -> JobCompletion:
-        result = daily_report_executor.execute(context.message)
+        result = daily_report_executor.execute(context.message, context.lease)
         context.save_checkpoint(
             context.lease.checkpoint_sequence + 1,
             {
@@ -715,6 +918,32 @@ def _registered_job_handlers(
         )
         return result.completion
 
+    def heat_event(context: JobExecutionContext) -> JobCompletion:
+        completion = event_heat_executor.execute(context.message)
+        context.save_checkpoint(
+            context.lease.checkpoint_sequence + 1,
+            {"event_heat_completed": True},
+            progress=JobProgress(stage=JobStage.SAVE, items_saved=1),
+        )
+        return completion
+
+    def generate_edition(context: JobExecutionContext) -> JobCompletion:
+        completion = edition_executor.execute(context.message, context.lease)
+        context.save_checkpoint(
+            context.lease.checkpoint_sequence + 1,
+            {"edition_completed": True},
+            progress=JobProgress(stage=JobStage.SAVE, items_saved=1),
+        )
+        return completion
+
+    def republish(context: JobExecutionContext) -> JobCompletion | None:
+        return publication_executor.execute(
+            context.message,
+            context.lease,
+            cancelled=context.cancellation_requested,
+            checkpoint=context.save_checkpoint,
+        )
+
     def export_knowledge(context: JobExecutionContext) -> JobCompletion:
         completion = knowledge_executor.execute(context.message)
         context.save_checkpoint(
@@ -725,14 +954,82 @@ def _registered_job_handlers(
         return completion
 
     def send_notification(context: JobExecutionContext) -> JobCompletion:
-        return notification_executor.execute(context.message)
+        return notification_executor.execute(context.message, context.lease)
+
+    def scan_notifications(context: JobExecutionContext) -> JobCompletion:
+        return notification_scan_executor.execute(context.message, context.lease)
+
+    def poll_editorial_source(context: JobExecutionContext) -> JobCompletion | None:
+        return source_editorial_executor.execute(
+            context.message, context.lease, cancelled=context.cancellation_requested
+        )
+
+    def preview_editorial_source(context: JobExecutionContext) -> JobCompletion | None:
+        return source_editorial_preview_executor.execute(
+            context.message, context.lease, cancelled=context.cancellation_requested
+        )
+
+    def maintain(context: JobExecutionContext) -> JobCompletion:
+        return maintenance_executor.execute(context.message, context.lease)
+
+    def poll_editorial_group(context: JobExecutionContext) -> JobCompletion | None:
+        return source_editorial_group_executor.execute(
+            context.message, context.lease, cancelled=context.cancellation_requested
+        )
+
+    def submit_indexnow(context: JobExecutionContext) -> JobCompletion:
+        return indexnow_executor.execute(context.message, context.lease)
+
+    def mirror_media(context: JobExecutionContext) -> JobCompletion | None:
+        if media_executor is None:
+            raise JobExecutionFailure(
+                error_code="media_storage_unavailable",
+                category=JobFailureCategory.CONFIGURATION_UNAVAILABLE,
+                occurred_at=_now(clock),
+                next_action="配置现有证据对象存储后人工重试",
+                manual_retry_allowed=True,
+            )
+        return media_executor.execute(
+            context.message, context.lease, cancelled=context.cancellation_requested
+        )
+
+    def scan_codex_resets(context: JobExecutionContext) -> JobCompletion | None:
+        return codex_executor.execute(
+            context.message, context.lease, cancelled=context.cancellation_requested
+        )
+
+    def refresh_leaderboard(context: JobExecutionContext) -> JobCompletion | None:
+        return leaderboard_executor.execute(
+            context.message, context.lease, cancelled=context.cancellation_requested
+        )
 
     return {
         "analysis.annotate": annotate_content,
+        "analysis.editorial": editorial_content,
+        "analysis.selectbench": evaluate_selection,
+        "analysis.translate": translate_content,
+        "source.editorial.poll": poll_editorial_source,
+        "source.editorial.ingest": poll_editorial_source,
+        "source.editorial.x_group": poll_editorial_group,
+        "source.editorial.preview": preview_editorial_source,
+        "operations.maintenance": maintain,
+        "monitor.codex_reset.tick": scan_codex_resets,
+        "leaderboard.refresh": refresh_leaderboard,
         "events.cluster": cluster_event,
+        "events.digest": digest_event,
+        "events.consolidate": consolidate_event,
+        "events.embed": embed_event,
+        "events.signals": rematch_event_signals,
+        "source.icons": refresh_source_icon,
+        "events.heat": heat_event,
+        "publication.republish": republish,
+        "publication.indexnow": submit_indexnow,
+        "publication.media_mirror": mirror_media,
+        "report.edition": generate_edition,
         "keyword.search": search_keyword,
         "knowledge.export": export_knowledge,
         "notification.send": send_notification,
+        "notification.scan": scan_notifications,
         "report.daily": generate_daily_report,
         "source.comments": collect_comments,
         "source.hotlist": collect_hotlist,
@@ -754,7 +1051,11 @@ def run_worker() -> None:
 
     engine = create_db_engine(settings)
     sessions = create_session_factory(engine)
-    job_handlers = _registered_job_handlers(sessions, settings)
+    heartbeat = ProcessHeartbeatReporter(
+        sessions, role="worker", enabled=settings.environment != "test"
+    )
+    media_storage = create_media_storage(settings)
+    job_handlers = _registered_job_handlers(sessions, settings, media_storage=media_storage)
     producer = create_producer(settings)
     message_handler = create_job_message_handler(
         sessions,
@@ -783,6 +1084,7 @@ def run_worker() -> None:
             )
 
     try:
+        heartbeat.start()
         run_consumer_loop(
             settings,
             {JOB_ACCEPTED_TOPIC: message_handler},
@@ -790,5 +1092,8 @@ def run_worker() -> None:
             before_poll=publish_pending,
         )
     finally:
+        heartbeat.stop()
+        if media_storage is not None:
+            media_storage.close()
         engine.dispose()
     logger.info("worker_stopped")

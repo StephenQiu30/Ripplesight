@@ -1,12 +1,72 @@
 from __future__ import annotations
 
+import hashlib
 import json
-from collections.abc import Sequence
+import re
+from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 from analysis.schemas import AnalysisPromptItem
 
 ANALYSIS_PROMPT_VERSION = "analysis.annotate.v1"
+
+# Editorial templates and include/version semantics are adapted from AIHOT
+# 035f7b7f6e26cf203562ddd6065ff7adc1bb0c07, editorial/prompts.ts.
+# Copyright (c) 2026 数字生命卡兹克. MIT: root THIRD_PARTY_NOTICES.md.
+_EDITORIAL_PROMPT_DIR = Path(__file__).with_name("prompt_templates")
+_EDITORIAL_NAME = re.compile(r"[a-z][a-z0-9-]*")
+_EDITORIAL_TOKEN = re.compile(r"\{\{(>\s*)?([A-Za-z][\w.-]*)\s*\}\}")
+
+
+def _expand_editorial_prompt(name: str, trail: tuple[str, ...] = ()) -> tuple[str, dict[str, str]]:
+    if _EDITORIAL_NAME.fullmatch(name) is None:
+        raise ValueError("invalid prompt name")
+    if name in trail:
+        raise ValueError("prompt include cycle")
+    path = _EDITORIAL_PROMPT_DIR / f"{name}.md"
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("missing prompt template")
+    raw = path.read_text(encoding="utf-8")
+    used = {name: raw}
+
+    def include(match: re.Match[str]) -> str:
+        if not match.group(1):
+            return match.group(0)
+        text, inner = _expand_editorial_prompt(match.group(2), (*trail, name))
+        used.update(inner)
+        return text
+
+    return _EDITORIAL_TOKEN.sub(include, raw), used
+
+
+def render_editorial_prompt(name: str, values: Mapping[str, str] | None = None) -> str:
+    """Render a trusted versioned template; substituted material is never re-expanded."""
+    template, _ = _expand_editorial_prompt(name)
+    variables = {"siteName": "HotKey", **(values or {})}
+
+    def substitute(match: re.Match[str]) -> str:
+        key = match.group(2)
+        if key not in variables:
+            raise ValueError("missing prompt value")
+        return variables[key]
+
+    return _EDITORIAL_TOKEN.sub(substitute, template)
+
+
+def editorial_prompt_version(*names: str) -> str:
+    """Hash every included source exactly as upstream; used in the existing call ledger."""
+    if not names:
+        raise ValueError("invalid prompt name")
+    used: dict[str, str] = {}
+    for name in names:
+        _, sources = _expand_editorial_prompt(name)
+        used.update(sources)
+    digest = hashlib.sha256()
+    for name, raw in sorted(used.items()):
+        digest.update(f"{name}\n{raw}\n".encode())
+    return f"{'+'.join(names)}@{digest.hexdigest()[:10]}"
+
 
 ANALYSIS_OUTPUT_SCHEMA: dict[str, Any] = {
     "type": "object",

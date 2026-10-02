@@ -27,7 +27,7 @@ class AiCall(Base):
             name="ai_calls_owner_job_fkey",
         ),
         CheckConstraint(
-            "status IN ('succeeded', 'failed')",
+            "status IN ('running', 'unknown', 'succeeded', 'failed')",
             name="ai_calls_status_check",
         ),
         CheckConstraint(
@@ -36,8 +36,8 @@ class AiCall(Base):
             name="ai_calls_failure_code_check",
         ),
         CheckConstraint(
-            "(status = 'succeeded' AND failure_code IS NULL) OR "
-            "(status = 'failed' AND failure_code IS NOT NULL)",
+            "(status IN ('running', 'succeeded') AND failure_code IS NULL) OR "
+            "(status IN ('unknown', 'failed') AND failure_code IS NOT NULL)",
             name="ai_calls_status_failure_check",
         ),
         CheckConstraint(
@@ -50,6 +50,26 @@ class AiCall(Base):
             name="ai_calls_token_usage_check",
         ),
         CheckConstraint("duration_ms >= 0", name="ai_calls_duration_check"),
+        CheckConstraint(
+            "routing_version IS NULL OR routing_version >= 0", name="ai_calls_routing_version_check"
+        ),
+        CheckConstraint(
+            "execution_epoch IS NULL OR execution_epoch >= 1",
+            name="ai_calls_execution_epoch_check",
+        ),
+        CheckConstraint(
+            "routing_hash IS NULL OR octet_length(routing_hash) = 32",
+            name="ai_calls_routing_hash_check",
+        ),
+        CheckConstraint(
+            "currency IS NULL OR currency IN ('USD', 'CNY')", name="ai_calls_currency_check"
+        ),
+        CheckConstraint(
+            "(cost_estimate_micros IS NULL OR cost_estimate_micros >= 0) AND "
+            "(cost_actual_micros IS NULL OR cost_actual_micros >= 0) AND "
+            "(cost_cap_micros IS NULL OR cost_cap_micros >= 0)",
+            name="ai_calls_cost_check",
+        ),
         Index("ai_calls_owner_created_idx", "owner_id", "created_at"),
     )
 
@@ -69,3 +89,12 @@ class AiCall(Base):
     reasoning_output_tokens: Mapped[int] = mapped_column(BigInteger)
     duration_ms: Mapped[int] = mapped_column(BigInteger)
     created_at: Mapped[datetime]
+
+    model_key: Mapped[str | None] = mapped_column(String(64), default=None)
+    routing_version: Mapped[int | None] = mapped_column(BigInteger, default=None)
+    routing_hash: Mapped[bytes | None] = mapped_column(LargeBinary(32), default=None)
+    currency: Mapped[str | None] = mapped_column(String(3), default=None)
+    cost_estimate_micros: Mapped[int | None] = mapped_column(BigInteger, default=None)
+    cost_actual_micros: Mapped[int | None] = mapped_column(BigInteger, default=None)
+    cost_cap_micros: Mapped[int | None] = mapped_column(BigInteger, default=None)
+    execution_epoch: Mapped[int | None] = mapped_column(BigInteger, default=None)

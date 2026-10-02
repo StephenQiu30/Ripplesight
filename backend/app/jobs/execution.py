@@ -493,6 +493,28 @@ class JobExecutionService:
             self._require_current_lease(model, lease, now)
             return model.cancel_requested_at is not None
 
+    def heartbeat(self, lease: ExecutionLease) -> tuple[ExecutionLease, bool]:
+        """Renew the current epoch without changing checkpoints or request counts."""
+        now = self._clock()
+        self._session.rollback()
+        with self._session.begin():
+            model = self._lock_job(lease.job_id)
+            self._require_current_lease(model, lease, now)
+            if model.cancel_requested_at is not None:
+                return self._lease(model), True
+            model.lease_expires_at = now + self._lease_duration
+            model.updated_at = now
+            self._session.execute(
+                update(JobAttempt)
+                .where(
+                    JobAttempt.job_id == model.id,
+                    JobAttempt.lease_epoch == model.lease_epoch,
+                    JobAttempt.finished_at.is_(None),
+                )
+                .values(lease_expires_at=model.lease_expires_at)
+            )
+            return self._lease(model), False
+
     def acknowledge_cancelled(
         self,
         *,

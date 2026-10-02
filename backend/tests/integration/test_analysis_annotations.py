@@ -492,7 +492,7 @@ print(first_valid_at.isoformat() if first_valid_at else "missing")
         capture_output=True,
         text=True,
     )
-    assert separate_process.stdout.strip() == (now + timedelta(minutes=1)).isoformat()
+    assert datetime.fromisoformat(separate_process.stdout.strip()) == now + timedelta(minutes=1)
 
 
 def test_annotation_batch_rolls_back_when_a_content_version_is_not_frozen(

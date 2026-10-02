@@ -43,7 +43,8 @@ class ResourceBudgetPolicy(Base):
         ),
         CheckConstraint(
             "metric IN ('network_request', 'collector_call', 'analysis_attempt', "
-            "'concurrency_slot', 'x_api_usd_micros')",
+            "'concurrency_slot', 'x_api_usd_micros', "
+            "'provider_cny_micros', 'provider_usd_micros')",
             name="resource_budget_policies_metric_check",
         ),
         CheckConstraint(
@@ -183,7 +184,8 @@ class ResourceBudgetReservation(Base):
         ),
         CheckConstraint(
             "metric IN ('network_request', 'collector_call', 'analysis_attempt', "
-            "'concurrency_slot', 'x_api_usd_micros')",
+            "'concurrency_slot', 'x_api_usd_micros', "
+            "'provider_cny_micros', 'provider_usd_micros')",
             name="resource_budget_reservations_metric_check",
         ),
         CheckConstraint(
@@ -210,7 +212,9 @@ class ResourceBudgetReservation(Base):
             name="resource_budget_reservations_settlement_check",
         ),
         CheckConstraint(
-            "actual_units IS NULL OR (actual_units >= 0 AND actual_units <= requested_units)",
+            "actual_units IS NULL OR (actual_units >= 0 AND "
+            "(actual_units <= requested_units OR "
+            "metric IN ('provider_cny_micros', 'provider_usd_micros')))",
             name="resource_budget_reservations_actual_check",
         ),
         CheckConstraint(
@@ -219,7 +223,8 @@ class ResourceBudgetReservation(Base):
         ),
         CheckConstraint(
             "status = 'reserved' OR "
-            "(budget_mode = 'cumulative' AND actual_units + released_units = requested_units) OR "
+            "(budget_mode = 'cumulative' AND "
+            "actual_units + released_units = GREATEST(requested_units, actual_units)) OR "
             "(budget_mode = 'concurrent' AND released_units = requested_units)",
             name="resource_budget_reservations_balance_check",
         ),
