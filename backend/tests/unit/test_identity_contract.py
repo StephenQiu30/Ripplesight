@@ -6,7 +6,12 @@ from pydantic import ValidationError
 
 from core.config import Settings
 from core.errors import ApplicationError
-from identity.schemas import EmailCodeInput, IdentityCredentialsInput
+from identity.schemas import (
+    EmailCodeInput,
+    IdentityCredentialsInput,
+    IdentityCredentialsUpdateInput,
+    IdentityPasswordLoginInput,
+)
 from identity.services import IdentityService, safe_return_to
 
 
@@ -43,6 +48,44 @@ def test_identity_input_normalizes_identity_without_exposing_password() -> None:
         EmailCodeInput(email="user@example.com\nBcc:other@example.com")
 
 
+@pytest.mark.parametrize(
+    ("identifier", "normalized"),
+    [
+        ("Test.User", "test.user"),
+        (" Test.User+news@Example.com ", "test.user+news@example.com"),
+        ("account@" + "a" * 63 + ".example.com", "account@" + "a" * 63 + ".example.com"),
+    ],
+)
+def test_password_login_accepts_a_normalized_email_or_legacy_username(
+    identifier: str, normalized: str
+) -> None:
+    value = IdentityPasswordLoginInput(username=identifier, password="a sufficiently long password")
+    assert value.username == normalized
+    assert "sufficiently" not in repr(value)
+
+
+@pytest.mark.parametrize(
+    "identifier",
+    [
+        "invalid@",
+        "two@@example.com",
+        "user@example.com\nBcc:other@example.com",
+        "bad username",
+        "a" * 65,
+        "account@" + "a" * 64 + ".example.com",
+    ],
+)
+def test_password_login_rejects_invalid_email_and_legacy_username(identifier: str) -> None:
+    with pytest.raises(ValidationError):
+        IdentityPasswordLoginInput(username=identifier, password="a sufficiently long password")
+
+
+@pytest.mark.parametrize("username", ["user@example.com", "a" * 65])
+def test_email_password_login_does_not_broaden_credentials_update_username(username: str) -> None:
+    with pytest.raises(ValidationError):
+        IdentityCredentialsUpdateInput(username=username, password="a sufficiently long password")
+
+
 def test_identity_partial_integration_configuration_is_rejected() -> None:
     with pytest.raises(ValidationError):
         Settings(
@@ -75,6 +118,18 @@ def test_openapi_exposes_session_security_and_never_credentials_as_query(app: Fa
                 assert "401" in operation["responses"]
     identity = schema["components"]["schemas"]["IdentitySessionView"]
     assert set(identity["properties"]) == {"user", "expires_at"}
+    user = schema["components"]["schemas"]["IdentityUserView"]
+    assert user["properties"]["has_password"]["type"] == "boolean"
+    assert "has_password" in user["required"]
+    login = schema["components"]["schemas"]["IdentityPasswordLoginInput"]
+    assert login["properties"]["username"]["maxLength"] == 254
+    credentials = schema["components"]["schemas"]["IdentityCredentialsUpdateInput"]
+    assert credentials["properties"]["username"]["maxLength"] == 64
+    updated = schema["paths"]["/api/identity/credentials"]["put"]["responses"]
+    assert "204" not in updated
+    assert updated["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/IdentitySessionView"
+    }
     assert not any(path.endswith(("/initialize", "/workspace")) for path in schema["paths"])
 
 

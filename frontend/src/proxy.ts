@@ -52,6 +52,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   const sessionCookie = request.cookies.get("hotkey_session")?.value;
   const csrfCookie = request.cookies.get("hotkey_csrf")?.value;
   let authenticated = false;
+  let hasPassword = false;
   let invalidSession = false;
   if (sessionCookie) {
     try {
@@ -68,6 +69,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
         encodeURIComponent(JSON.stringify(session)),
       );
       authenticated = true;
+      hasPassword = session.user.has_password;
     } catch (error) {
       if (!(error instanceof ApiRequestError && error.status === 401)) {
         requestHeaders.set("x-hotkey-session-error", "1");
@@ -92,7 +94,10 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set(
       "returnTo",
-      safeReturnTo(`${request.nextUrl.pathname}${request.nextUrl.search}`),
+      request.nextUrl.pathname === "/account" &&
+        request.nextUrl.searchParams.get("setup") === "1"
+        ? safeReturnTo(request.nextUrl.searchParams.get("returnTo"))
+        : safeReturnTo(`${request.nextUrl.pathname}${request.nextUrl.search}`),
     );
     return setSecurityHeaders(
       NextResponse.redirect(loginUrl),
@@ -101,13 +106,17 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     );
   }
   if (request.nextUrl.pathname === "/login" && authenticated) {
+    const returnTo = safeReturnTo(request.nextUrl.searchParams.get("returnTo"));
+    const destination = new URL(
+      hasPassword ? returnTo : "/account",
+      request.url,
+    );
+    if (!hasPassword) {
+      destination.searchParams.set("setup", "1");
+      destination.searchParams.set("returnTo", returnTo);
+    }
     return setSecurityHeaders(
-      NextResponse.redirect(
-        new URL(
-          safeReturnTo(request.nextUrl.searchParams.get("returnTo")),
-          request.url,
-        ),
-      ),
+      NextResponse.redirect(destination),
       contentSecurityPolicy,
     );
   }
