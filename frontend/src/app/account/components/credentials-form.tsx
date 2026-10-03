@@ -22,10 +22,18 @@ export function CredentialsForm({
   session,
   initialSetup = false,
   returnTo = "/topics",
+  embedded = false,
+  disabled = false,
+  onUpdated,
+  onBusyChange,
 }: {
   session: HotKeyAPI.IdentitySessionView;
   initialSetup?: boolean;
   returnTo?: string;
+  embedded?: boolean;
+  disabled?: boolean;
+  onUpdated?: (session: HotKeyAPI.IdentitySessionView) => void;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const router = useRouter();
   const [account, setAccount] = useState(session);
@@ -44,6 +52,11 @@ export function CredentialsForm({
   const [busy, setBusy] = useState<"save" | "send" | null>(null);
   const operation = useRef<AbortController | null>(null);
   const hasPassword = account.user.has_password;
+  const unavailable = !!busy || disabled;
+  function updateBusy(value: "save" | "send" | null) {
+    setBusy(value);
+    onBusyChange?.(value !== null);
+  }
 
   useEffect(() => () => operation.current?.abort(), []);
   useEffect(() => {
@@ -53,10 +66,10 @@ export function CredentialsForm({
   }, [challenge]);
 
   async function sendCode() {
-    if (busy || !account.user.email) return;
+    if (unavailable || !account.user.email) return;
     const controller = new AbortController();
     operation.current = controller;
-    setBusy("send");
+    updateBusy("send");
     try {
       const value = await sendEmailLoginCode(
         { email: account.user.email },
@@ -74,14 +87,14 @@ export function CredentialsForm({
     } finally {
       if (operation.current === controller) {
         operation.current = null;
-        setBusy(null);
+        updateBusy(null);
       }
     }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy) return;
+    if (unavailable) return;
     if (password !== confirmation) {
       toast.error("两次输入的新密码不一致。");
       return;
@@ -105,7 +118,7 @@ export function CredentialsForm({
     }
     const controller = new AbortController();
     operation.current = controller;
-    setBusy("save");
+    updateBusy("save");
     try {
       const updated = await updateIdentityCredentials(
         {
@@ -126,6 +139,7 @@ export function CredentialsForm({
       setCode("");
       setChallenge(null);
       setAccount(updated);
+      onUpdated?.(updated);
       setUsername(updated.user.username);
       setVerification("password");
       if (initialSetup && !hasPassword) {
@@ -155,7 +169,7 @@ export function CredentialsForm({
     } finally {
       if (operation.current === controller) {
         operation.current = null;
-        setBusy(null);
+        updateBusy(null);
       }
     }
   }
@@ -164,7 +178,7 @@ export function CredentialsForm({
   const expired = !!challenge && now >= Date.parse(challenge.expires_at);
   const emailVerification = (
     <FieldGroup>
-      <Field data-disabled={!!busy || !challenge || expired}>
+      <Field data-disabled={unavailable || !challenge || expired}>
         <FieldLabel htmlFor="account-code">邮箱验证码</FieldLabel>
         <Input
           id="account-code"
@@ -176,7 +190,7 @@ export function CredentialsForm({
           pattern="[0-9]{6}"
           value={code}
           onChange={(event) => setCode(event.target.value)}
-          disabled={!!busy || !challenge || expired}
+          disabled={unavailable || !challenge || expired}
         />
         <FieldDescription role="status">
           {expired
@@ -190,7 +204,7 @@ export function CredentialsForm({
         type="button"
         variant="outline"
         className="min-h-11 self-start"
-        disabled={!!busy || wait > 0}
+        disabled={unavailable || wait > 0}
         onClick={() => void sendCode()}
       >
         {busy === "send"
@@ -206,8 +220,8 @@ export function CredentialsForm({
 
   return (
     <section
-      aria-labelledby="account-title"
-      className="flex w-full max-w-xl flex-col gap-y-8"
+      aria-labelledby={embedded ? "password-title" : "account-title"}
+      className={`flex w-full flex-col gap-y-8 ${embedded ? "" : "max-w-xl"}`}
     >
       <header className="flex flex-col gap-y-3">
         {!hasPassword && account.user.email && (
@@ -215,15 +229,24 @@ export function CredentialsForm({
             邮箱已验证 · 设置登录密码
           </p>
         )}
-        <h1 id="account-title" className="text-3xl font-medium tracking-tight">
-          {hasPassword ? "账户设置" : "设置登录密码"}
-        </h1>
+        {embedded ? (
+          <h2 id="password-title" className="text-2xl font-medium">
+            {hasPassword ? "修改密码" : "设置登录密码"}
+          </h2>
+        ) : (
+          <h1
+            id="account-title"
+            className="text-3xl font-medium tracking-tight"
+          >
+            {hasPassword ? "账户设置" : "设置登录密码"}
+          </h1>
+        )}
         <p className="text-muted-foreground text-sm leading-6">
           {hasPassword
             ? "修改密码后，当前设备保持登录，其他设备的旧会话将退出。"
             : "为账户设置密码。以后可以直接使用已验证邮箱和密码登录。"}
         </p>
-        {account.user.email && (
+        {!embedded && account.user.email && (
           <p className="text-muted-foreground text-sm break-all">
             已验证邮箱：{account.user.email}
           </p>
@@ -231,8 +254,8 @@ export function CredentialsForm({
       </header>
       <form onSubmit={submit} aria-label="设置登录凭据">
         <FieldGroup>
-          {hasPassword && (
-            <Field data-disabled={!!busy}>
+          {hasPassword && !embedded && (
+            <Field data-disabled={unavailable}>
               <FieldLabel htmlFor="account-username">用户名</FieldLabel>
               <Input
                 id="account-username"
@@ -245,17 +268,18 @@ export function CredentialsForm({
                 pattern="[a-z0-9][a-z0-9._-]{2,63}"
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
-                disabled={!!busy}
+                disabled={unavailable}
               />
               <FieldDescription>
                 3–64 个小写字母、数字或 . _ -，以字母或数字开头。
               </FieldDescription>
             </Field>
           )}
-          <Field data-disabled={!!busy}>
+          <Field data-disabled={unavailable}>
             <FieldLabel htmlFor="account-password">新密码</FieldLabel>
             <Input
               id="account-password"
+              className={embedded ? "min-h-10" : undefined}
               type="password"
               autoComplete="new-password"
               required
@@ -263,14 +287,15 @@ export function CredentialsForm({
               maxLength={128}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              disabled={!!busy}
+              disabled={unavailable}
             />
             <FieldDescription>使用 12–128 个字符。</FieldDescription>
           </Field>
-          <Field data-disabled={!!busy}>
+          <Field data-disabled={unavailable}>
             <FieldLabel htmlFor="account-confirmation">确认新密码</FieldLabel>
             <Input
               id="account-confirmation"
+              className={embedded ? "min-h-10" : undefined}
               type="password"
               autoComplete="new-password"
               required
@@ -278,50 +303,71 @@ export function CredentialsForm({
               maxLength={128}
               value={confirmation}
               onChange={(event) => setConfirmation(event.target.value)}
-              disabled={!!busy}
+              disabled={unavailable}
             />
           </Field>
           {hasPassword && (
-            <Tabs
-              value={verification}
-              onValueChange={(value) => {
-                setVerification(value as "password" | "email");
-              }}
-            >
-              {account.user.email && (
-                <TabsList variant="line" className="mb-4">
-                  <TabsTrigger value="password" disabled={!!busy}>
-                    当前密码
-                  </TabsTrigger>
-                  <TabsTrigger value="email" disabled={!!busy}>
-                    邮箱验证码
-                  </TabsTrigger>
-                </TabsList>
-              )}
-              <TabsContent value="password">
-                <Field data-disabled={!!busy}>
-                  <FieldLabel htmlFor="account-current-password">
-                    当前密码
-                  </FieldLabel>
-                  <Input
-                    id="account-current-password"
-                    type="password"
-                    autoComplete="current-password"
-                    required={verification === "password"}
-                    maxLength={128}
-                    value={currentPassword}
-                    onChange={(event) => setCurrentPassword(event.target.value)}
-                    disabled={!!busy}
-                  />
-                  <FieldDescription>
-                    输入当前密码，或使用已验证邮箱的验证码确认修改。
-                  </FieldDescription>
-                </Field>
-              </TabsContent>
-              {account.user.email && (
-                <TabsContent value="email">{emailVerification}</TabsContent>
-              )}
-            </Tabs>
+            <div className="flex flex-col gap-5">
+              {embedded && <h3 className="text-2xl font-medium">验证身份</h3>}
+              <Tabs
+                value={verification}
+                onValueChange={(value) => {
+                  setVerification(value as "password" | "email");
+                }}
+              >
+                {account.user.email && (
+                  <TabsList
+                    variant="line"
+                    className={
+                      embedded
+                        ? "border-border mb-4 w-full justify-start border-b"
+                        : "mb-4"
+                    }
+                  >
+                    <TabsTrigger
+                      value="password"
+                      className={embedded ? "flex-none text-base" : undefined}
+                      disabled={unavailable}
+                    >
+                      当前密码
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="email"
+                      className={embedded ? "flex-none text-base" : undefined}
+                      disabled={unavailable}
+                    >
+                      邮箱验证码
+                    </TabsTrigger>
+                  </TabsList>
+                )}
+                <TabsContent value="password">
+                  <Field data-disabled={unavailable}>
+                    <FieldLabel htmlFor="account-current-password">
+                      当前密码
+                    </FieldLabel>
+                    <Input
+                      id="account-current-password"
+                      className={embedded ? "min-h-10" : undefined}
+                      type="password"
+                      autoComplete="current-password"
+                      required={verification === "password"}
+                      maxLength={128}
+                      value={currentPassword}
+                      onChange={(event) =>
+                        setCurrentPassword(event.target.value)
+                      }
+                      disabled={unavailable}
+                    />
+                    <FieldDescription>
+                      输入当前密码，或使用已验证邮箱的验证码确认修改。
+                    </FieldDescription>
+                  </Field>
+                </TabsContent>
+                {account.user.email && (
+                  <TabsContent value="email">{emailVerification}</TabsContent>
+                )}
+              </Tabs>
+            </div>
           )}
           {!hasPassword && verification === "email" && emailVerification}
           {!hasPassword && verification === "recent" && account.user.email && (
@@ -329,7 +375,7 @@ export function CredentialsForm({
               type="button"
               variant="ghost"
               className="min-h-11 self-start"
-              disabled={!!busy}
+              disabled={unavailable}
               onClick={() => {
                 setVerification("email");
               }}
@@ -340,7 +386,7 @@ export function CredentialsForm({
           <Button
             type="submit"
             className="min-h-11 self-start"
-            disabled={!!busy}
+            disabled={unavailable}
           >
             {busy === "save"
               ? "正在保存…"

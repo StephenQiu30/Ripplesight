@@ -2,6 +2,36 @@
 /* eslint-disable */
 import request from "@/request";
 
+/** 读取当前账户头像 GET /api/identity/avatar */
+export async function getIdentityAvatar(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: HotKeyAPI.getIdentityAvatarParams,
+  options?: import("@/request").RequestOptions,
+) {
+  return request<string>("/api/identity/avatar", {
+    method: "GET",
+    params: {
+      ...params,
+    },
+    ...(options || {}),
+  });
+}
+
+/** 上传并替换当前账户头像 PUT /api/identity/avatar */
+export async function uploadIdentityAvatar(
+  body: HotKeyAPI.IdentityAvatarInput,
+  options?: import("@/request").RequestOptions,
+) {
+  return request<HotKeyAPI.IdentitySessionView>("/api/identity/avatar", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    data: body,
+    ...(options || {}),
+  });
+}
+
 /** Update Credentials PUT /api/identity/credentials */
 export async function updateIdentityCredentials(
   body: HotKeyAPI.IdentityCredentialsUpdateInput,
@@ -138,6 +168,21 @@ export async function getLoginOptions(
 ) {
   return request<HotKeyAPI.LoginOptionsView>("/api/identity/options", {
     method: "GET",
+    ...(options || {}),
+  });
+}
+
+/** 更新当前账户基本资料 PUT /api/identity/profile */
+export async function updateIdentityProfile(
+  body: HotKeyAPI.IdentityProfileInput,
+  options?: import("@/request").RequestOptions,
+) {
+  return request<HotKeyAPI.IdentitySessionView>("/api/identity/profile", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    data: body,
     ...(options || {}),
   });
 }

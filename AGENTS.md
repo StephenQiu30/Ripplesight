@@ -23,6 +23,7 @@
 - HTTP唯一源为路由注解/Pydantic → `/openapi.json`；声明稳定operation_id、中文summary/tag、约束、成功模型、实际错误、认证与必要头。不手写OpenAPI、客户端DTO或生成文件。
 - 成功为资源/`PageView[T]`/`JobAcceptedView`，错误统一 ErrorView，应用错误不携HTTP状态；禁止全局body改写或为所有路由统一声明所有错误。请求ID、5xx/422脱敏、必要头、运行/OpenAPI/客户端一致；204/304/文件/流按真实协议。
 - Web/App按code/status分支，不按message判断；传输层不全局弹提示或自动重试写操作。核对HTTP、网络、超时、取消、非JSON、失败任务正常查询及请求ID头/body回退。
+- 账户小型头像由 identity 管理规范化 PNG 与摘要，原图不持久化；资料写再次复验当前会话与绑定 CSRF，读取仅本人/当前摘要，Web 使用生成客户端和既有全局会话。存量结构按 Design001 §6.3 保留升级。
 - 真实账户、12小时可撤销会话、CSRF、个人归属与历史映射按Design001 §9.2；禁止默认账号/会话或首个注册者取得旧分区。运营令牌、来源授权独立；GitHub/邮件未配置时明确不可用，受控认证不代替真实授权/收件。
 
 ## Web 目录与页面门禁

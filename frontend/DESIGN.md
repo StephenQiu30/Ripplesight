@@ -139,3 +139,7 @@ GitHub 按钮使用官方 GitHub-Mark 栅格素材 `public/brand/github-mark.png
 `/reports/[reportId]/[key]`（reportId严格为kind）为公开刊期只读阅读页，kind仅daily/weekly/monthly，专属PublicEditionReader消费getPublicEdition及复用publication稿件组件。与原监控主题报告及/editions修订操作分离，公开稿只读最新完整修订且ALL引用当前许可有效；404撤回整稿、错误可重试、无生成或编辑控件。公开故事/刊期/专题Metadata按实际DTO.indexable决定noindex；故事和刊期要求所有固定叙事成员的当前索引许可。IndexNow根验证文件经固定Next rewrite及代理白名单，不开放任意文本文件代理。
 
 账户设置在密码表单下展示“登录方式”：当前邮箱及绑定/更换按钮、GitHub连接状态及连接按钮。邮箱验证使用原生Dialog、FieldGroup和Input，验证码限时且发送有冷却；GitHub复用OAuth App回调，成功/失败用Sonner反馈。加载时按钮禁用，离页/关闭邮箱Dialog中止短请求并忽略失效响应，不追加HTTP取消按钮。页面随轮换后的会话更新，旧邮箱凭据表单不继续使用旧挑战。专属组件为 `src/app/account/components/identity-connections.tsx`，请求仅用同提交生成的getLoginOptions、sendEmailLinkCode、linkIdentityEmail、startGithubLink。
+
+## 账户设置
+
+`AccountSettings`（src/app/account/components/account-settings.tsx）复现选定方案3：左侧浅灰资料摘要展示头像、用户名、绑定邮箱和验证状态，右侧使用官方line Tabs切换基本资料与登录安全；lg以上1:2双列，窄屏顺序堆叠。用户名独立保存不要求填密码，头像上传独立于密码操作；两者通过生成的updateIdentityProfile/uploadIdentityAvatar返回真实会话后刷新导航。文件类型/2 MiB在客户端预检，服务端重新解码校验并规范化；上传中禁重复，失败保留旧头像，成功统一Sonner。未上传使用用户图标，读取失败允许在资料栏重试；无伪造人像或默认账户。`UserAvatar`跨页复用在components/auth，经getIdentityAvatar读Blob，只显示当前哈希，离页/换图中止读取并释放object URL。密码表单复用CredentialsForm嵌入模式，保留当前密码/绑定邮箱验证码、首次设置和安全回跳合同。分类切换保留输入草稿，短提交期间限制其他账户修改。并行已有IdentityConnections继续在右侧登录安全下展示真实绑定能力。

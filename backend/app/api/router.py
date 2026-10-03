@@ -11,6 +11,7 @@ from api.routers.events import router as events_router
 from api.routers.health import router as health_router
 from api.routers.hotlists import router as hotlists_router
 from api.routers.identity import router as identity_router
+from api.routers.identity_profile import router as identity_profile_router
 from api.routers.leaderboard import router as leaderboard_router
 from api.routers.monitor_topics import router as monitor_topics_router
 from api.routers.operations import feedback_router
@@ -28,6 +29,7 @@ from core.schemas import ErrorView
 
 api_router = APIRouter(prefix="/api")
 api_router.include_router(identity_router)
+api_router.include_router(identity_profile_router)
 api_router.include_router(ai_models_router, responses={401: {"model": ErrorView}})
 api_router.include_router(health_router)
 api_router.include_router(hotlists_router, responses={401: {"model": ErrorView}})

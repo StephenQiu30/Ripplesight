@@ -106,6 +106,7 @@ class IdentityService:
                 username=user.username,
                 email=user.email,
                 has_password=user.password_hash is not None,
+                avatar_sha256=user.avatar_sha256.hex() if user.avatar_sha256 else None,
                 github_connected=user.github_user_id is not None,
             ),
             expires_at=expires_at,

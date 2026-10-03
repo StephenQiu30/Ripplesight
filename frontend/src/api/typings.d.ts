@@ -2642,6 +2642,10 @@ declare namespace HotKeyAPI {
     limit?: number;
   };
 
+  type getIdentityAvatarParams = {
+    sha256: string;
+  };
+
   type getLeaderboardBoardParams = {
     board: "overall" | "coding" | "reasoning" | "knowledge" | "professional";
     domestic?: boolean;
@@ -3044,6 +3048,13 @@ declare namespace HotKeyAPI {
     latest_observed_at: string | null;
   };
 
+  type IdentityAvatarInput = {
+    /** Mime */
+    mime: "image/jpeg" | "image/png" | "image/webp";
+    /** Data Base64 */
+    data_base64: string;
+  };
+
   type IdentityCredentialsUpdateInput = {
     /** Username */
     username: string;
@@ -3064,6 +3075,11 @@ declare namespace HotKeyAPI {
     password: string;
   };
 
+  type IdentityProfileInput = {
+    /** Username */
+    username: string;
+  };
+
   type IdentitySessionView = {
     user: IdentityUserView;
     /** Expires At */
@@ -3079,6 +3095,8 @@ declare namespace HotKeyAPI {
     email: string | null;
     /** Has Password */
     has_password: boolean;
+    /** Avatar Sha256 */
+    avatar_sha256?: string | null;
     /** Github Connected */
     github_connected: boolean;
   };

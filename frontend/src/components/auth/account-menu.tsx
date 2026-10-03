@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogOutIcon, UserRoundIcon } from "lucide-react";
+import { LogOutIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { authErrorMessage } from "./auth-error";
 import { useIdentitySession } from "./session-context";
+import { UserAvatar } from "./user-avatar";
 
 export function AccountMenu() {
   const session = useIdentitySession();
@@ -52,7 +53,7 @@ export function AccountMenu() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="navigation" aria-label="账户菜单">
-          <UserRoundIcon />
+          <UserAvatar user={session.user} className="size-7" />
           <span className="hidden max-w-24 truncate lg:inline">
             {session.user.username}
           </span>

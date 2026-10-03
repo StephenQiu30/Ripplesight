@@ -13,6 +13,13 @@ class IdentityUser(Base):
     __tablename__ = "identity_users"
     __table_args__ = (
         CheckConstraint("credential_version >= 1", name="identity_users_credential_version_check"),
+        CheckConstraint(
+            "(avatar_data IS NULL AND avatar_sha256 IS NULL) OR "
+            "(avatar_data IS NOT NULL AND avatar_sha256 IS NOT NULL "
+            "AND octet_length(avatar_data) BETWEEN 1 AND 262144 "
+            "AND octet_length(avatar_sha256) = 32)",
+            name="identity_users_avatar_check",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
@@ -20,6 +27,8 @@ class IdentityUser(Base):
     email: Mapped[str | None] = mapped_column(String(254), unique=True)
     github_user_id: Mapped[str | None] = mapped_column(String(32), unique=True)
     password_hash: Mapped[str | None] = mapped_column(Text)
+    avatar_data: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    avatar_sha256: Mapped[bytes | None] = mapped_column(LargeBinary(32))
     credential_version: Mapped[int] = mapped_column(default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

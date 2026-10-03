@@ -57,6 +57,9 @@ APPLICATION_ERRORS: Mapping[str, PublicError] = {
         409, "identity_link_conflict", "登录身份无法关联到当前账户"
     ),
     "username_unavailable": PublicError(409, "username_unavailable", "用户名无法使用"),
+    "invalid_avatar": PublicError(
+        422, "invalid_avatar", "请选择有效的 JPG、PNG 或 WebP 静态图片,最大 2 MB"
+    ),
     "auth_rate_limited": PublicError(429, "auth_rate_limited", "登录请求过于频繁,请稍后重试"),
     "auth_dependency_unavailable": PublicError(
         503, "auth_dependency_unavailable", "登录服务暂时不可用"
