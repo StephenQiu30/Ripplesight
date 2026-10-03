@@ -100,11 +100,11 @@ PYTHONPATH=app uv run --env-file .env python -m cli backup verify-restore \
 
 ## 用户登录与数据归属
 
-账号密码、GitHub App、邮箱验证码共用 `identity/` 的账户与12小时固定数据库会话，业务API读写验证用户UUID及资源归属，写入另校验绑定CSRF。运营令牌和来源平台凭据继续独立管理。首次GitHub/邮箱验证创建个人空分区，密码不自动注册，不把历史分区授给首个注册者。
+账号密码、GitHub OAuth App、邮箱验证码共用 `identity/` 的账户与12小时固定数据库会话，业务API读写验证用户UUID及资源归属，写入另校验绑定CSRF。运营令牌和来源平台凭据继续独立管理。首次GitHub/邮箱验证创建个人空分区，密码不自动注册，不把历史分区授给首个注册者。
 
 密码登录支持已验证邮箱或原用户名；邮箱验证后未设置密码的账户进入首次设密，既有账户也可从账户设置完成。首次设密允许5分钟内新近验证会话，超时须重新核验绑定邮箱；已有密码须当前密码或绑定邮箱验证码。凭据更新返回新会话并轮换Cookie，在同事务撤销全部旧会话，当前设备继续登录。此变更不新增数据库字段，运行库无需执行DDL。
 
-配置 `HOTKEY_WEB_ORIGIN`、GitHub App client ID/secret、认证SMTP及邮箱验证码HMAC key；真实密钥只留本机环境文件。GitHub缺失配置时明确不可用；邮箱6位码5分钟、单次且错误/频率受限，不记录明文。数据库Schema只在新空库验证，存量库备份/恢复/导入核对后切换；历史账号归属必须用维护CLI显式映射。HTTP/Cookie/API合同见 [Design001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md#92-公开欢迎页登录与个人数据访问)。
+配置 `HOTKEY_WEB_ORIGIN`、GitHub OAuth App client ID/secret、认证SMTP及邮箱验证码HMAC key；真实密钥只留本机环境文件。GitHub缺失配置时明确不可用；邮箱6位码5分钟、单次且错误/频率受限，不记录明文。数据库Schema只在新空库验证，存量库备份/恢复/导入核对后切换；历史账号归属必须用维护CLI显式映射。HTTP/Cookie/API合同见 [Design001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md#92-公开欢迎页登录与个人数据访问)。
 
 来源/模型秘密不得进入Git、日志、前端或模型输入；ToC账户不改变来源许可证与授权边界。MediaCrawler仍保留个人、非商业研究及本人B站低频试点限制。
 

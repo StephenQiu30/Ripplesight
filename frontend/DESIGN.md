@@ -44,7 +44,7 @@
 
 `/`保留既定黑白留白主视觉作为SEO Welcome，公开Header只显示站点说明/指南及登录入口，不显示工作区菜单；主操作“开始使用”进入 `/login`，登录后默认 `/topics` 或安全站内原目标。已登录工作区保留原“更多”导航、统一容器、固定头尾及唯一正文滚动区，显示账户和退出。公开说明仅about/privacy/terms/contact/changelog，公开文案不读取个人业务统计；login默认noindex，工作区始终noindex，robots/sitemap只列公开路径。
 
-登录专属组件归 `src/app/login/components/`，跨页会话/账户与守卫归 `src/components/auth/`；全部类型和请求来自Umi生成的identity API。账号密码、GitHub App、邮箱验证码共用真实数据库会话，覆盖加载/不可用/字段错误/限流/取消/成功/网络重试。业务深链接和prefetch均先验证会话，网络失败不能当成已退出；SSR按请求转发限定Cookie，代理只转发HotKey身份Cookie/Set-Cookie。保持官方shadcn/Radix表单、按钮、菜单、无装饰边框、语义颜色及命名尺度。
+登录专属组件归 `src/app/login/components/`，跨页会话/账户与守卫归 `src/components/auth/`；全部类型和请求来自Umi生成的identity API。账号密码、GitHub OAuth App、邮箱验证码共用真实数据库会话，覆盖加载/不可用/字段错误/限流/取消/成功/网络重试。业务深链接和prefetch均先验证会话，网络失败不能当成已退出；SSR按请求转发限定Cookie，代理只转发HotKey身份Cookie/Set-Cookie。保持官方shadcn/Radix表单、按钮、菜单、无装饰边框、语义颜色及命名尺度。
 
 登录页采用用户选定的 Product Design 方案 1：桌面左侧品牌短句与浅灰涟漪图片，右侧登录表单；窄屏优先表单，隐藏装饰故事区域。登录方式不使用 Tab，账号密码为默认表单，邮箱验证码与 GitHub 在主按钮下方作为同尺寸按钮；邮箱表单保留返回账号密码的按钮。不可用方式保留禁用按钮和明确说明，密码显示切换不改变认证合同。
 
