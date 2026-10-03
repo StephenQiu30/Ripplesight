@@ -14,6 +14,7 @@ export { PublicationNavigation } from "./reading-navigation";
 
 import { PageState } from "@/components/system/page-state";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ApiRequestError } from "@/request";
 
 export const categories = [
@@ -111,8 +112,13 @@ export function PublicItemCards({
                   {item.source.first_party ? " · 第一方" : ""}
                 </span>
                 <time dateTime={item.timeline_at}>
+                  {item.published_at ? "发布于 " : "发现于 "}
                   {publicationTime(item.timeline_at)}
                 </time>
+                {item.backfill ? <span>历史导入</span> : null}
+                {item.analysis_state === "not_analyzed" ? (
+                  <span>未分析</span>
+                ) : null}
                 {item.category ? (
                   <span>
                     {categories.find(([key]) => key === item.category)?.[1]}
@@ -127,7 +133,14 @@ export function PublicItemCards({
               </ItemTitle>
               {item.summary ? (
                 <ItemDescription className="line-clamp-none">
+                  {item.summary_origin === "source" ? (
+                    <span>来源摘要： </span>
+                  ) : null}
                   {item.summary}
+                </ItemDescription>
+              ) : item.analysis_state === "not_analyzed" ? (
+                <ItemDescription>
+                  来源未提供摘要，可前往原文阅读。
                 </ItemDescription>
               ) : null}
               <div className="text-muted-foreground flex flex-wrap gap-3 text-xs">
@@ -150,5 +163,38 @@ export function PublicItemCards({
         </Item>
       ))}
     </ItemGroup>
+  );
+}
+
+export function PublicSourceStatus({
+  sources,
+}: {
+  sources: HotKeyAPI.PublicSourceStatusView[];
+}) {
+  const affected = sources.filter(
+    (source) =>
+      !source.enabled || ["degraded", "failing"].includes(source.health),
+  );
+  if (!affected.length) return null;
+  return (
+    <Alert className="mb-5">
+      <AlertTitle>部分来源暂未更新</AlertTitle>
+      <AlertDescription>
+        <ul className="space-y-2">
+          {affected.map((source) => (
+            <li key={source.source_key}>
+              {source.name} ·{" "}
+              {!source.enabled
+                ? "已暂停"
+                : source.health === "failing"
+                  ? "采集失败"
+                  : "采集不完整"}
+              {" · "}最近成功：{publicationTime(source.last_success_at)}
+            </li>
+          ))}
+        </ul>
+        <p>已保存且许可仍有效的资讯可以继续阅读。</p>
+      </AlertDescription>
+    </Alert>
   );
 }

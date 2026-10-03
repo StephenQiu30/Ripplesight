@@ -40,6 +40,7 @@ from publication.schemas import (
     PublicMediaView,
     PublicQuotedPostView,
     PublicRelatedStoryView,
+    PublicSourceStatusView,
     PublicSourceView,
     ReportPublicationCandidate,
     SelectedChangesPage,
@@ -54,7 +55,7 @@ def frozen_reference(projection: ProjectionView) -> FrozenPublicationReference:
 
 
 def editorial_subject_tags(snapshot: EditorialPublicationInputView) -> tuple[str, ...]:
-    result = snapshot.run.result
+    result = snapshot.run.result if snapshot.run else None
     tags = (
         result.structure.tags
         if result and result.structure
@@ -77,6 +78,9 @@ def public_item(projection: ProjectionView, *, icon_url: str | None = None) -> P
     minimal = projection.visibility == "summary-only"
     return PublicItemView(
         id=projection.content_id,
+        analysis_state=projection.analysis_state,
+        summary_origin=projection.summary_origin,
+        backfill=projection.backfill,
         revision=projection.publication_revision,
         title=projection.title,
         original_title=projection.original_title,
@@ -147,6 +151,31 @@ class PublicationReadingService:
     def source_icon_url(self, source_key: str) -> str | None:
         return self._source_icons.get(source_key)
 
+    def source_status_in_transaction(self, *, owner_id: UUID) -> list[PublicSourceStatusView]:
+        from connections.editorial_services import list_editorial_source_health_in_transaction
+
+        require_transaction(self.session)
+        policies = {
+            row.source_key
+            for row in self.session.scalars(
+                select(PublicationSourcePolicy).where(PublicationSourcePolicy.owner_id == owner_id)
+            )
+            if row.configuration.get("participation_mode") == "editorial"
+        }
+        return [
+            PublicSourceStatusView(
+                source_key=source.source_key,
+                name=source.name,
+                enabled=source.enabled,
+                health=source.health,
+                last_success_at=source.last_success_at,
+            )
+            for source in list_editorial_source_health_in_transaction(
+                self.session, owner_id=owner_id
+            )
+            if source.source_key in policies
+        ]
+
     def item(self, projection: ProjectionView) -> PublicItemView:
         return public_item(projection, icon_url=self.source_icon_url(projection.source_key))
 
@@ -174,14 +203,17 @@ class PublicationReadingService:
             content_ids=tuple(row.content_id for row in rows),
             now=now,
         )
-        accepted = {
-            row.content_id: inputs[row.content_id]
-            for row in rows
-            if row.content_id in inputs
-            and row.content_version_id == inputs[row.content_id].material.content_version_id
-            and row.data.get("editorial_run_id") == str(inputs[row.content_id].run.id)
-            and row.data.get("manual_version") == inputs[row.content_id].run.manual_version
-        }
+        accepted = {}
+        for row in rows:
+            item = inputs.get(row.content_id)
+            if item is None or row.content_version_id != item.material.content_version_id:
+                continue
+            run = item.run
+            if row.data.get("editorial_run_id") != (str(run.id) if run else None):
+                continue
+            if row.data.get("manual_version") != (run.manual_version if run else 0):
+                continue
+            accepted[row.content_id] = item
         groupings = load_publication_groupings_in_transaction(
             self.session,
             owner_id=owner_id,
@@ -569,7 +601,12 @@ class PublicationReadingService:
             if more and last
             else None
         )
-        return PublicItemsPage(items=items, next_cursor=next_cursor, snapshot_at=snapshot)
+        return PublicItemsPage(
+            items=items,
+            next_cursor=next_cursor,
+            snapshot_at=snapshot,
+            source_status=self.source_status_in_transaction(owner_id=owner_id),
+        )
 
     def effective_sequence_in_transaction(
         self, *, owner_id: UUID, now: datetime

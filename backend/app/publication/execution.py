@@ -73,6 +73,7 @@ class PublicationRepublishExecutor:
                 return JobCompletion(status=JobStatus.SUCCEEDED)
             if run.status == "cancelled":
                 return None
+        checkpoint_sequence = lease.checkpoint_sequence
         while True:
             if cancelled and cancelled():
                 with self.sessions.begin() as session:
@@ -98,8 +99,9 @@ class PublicationRepublishExecutor:
             if progress["status"] == "failed":
                 raise self._failure("publication_policy_changed", JobFailureCategory.INVALID_INPUT)
             if checkpoint:
+                checkpoint_sequence += 1
                 checkpoint(
-                    int(progress["processed"]) + 1,
+                    checkpoint_sequence,
                     {
                         "publication_run_id": str(run_id),
                         "after_content_id": str(progress["after"]) if progress["after"] else None,

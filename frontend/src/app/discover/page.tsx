@@ -18,6 +18,7 @@ import {
 import {
   categories,
   PublicItemCards,
+  PublicSourceStatus,
   PublicationFailure,
   PublicationNavigation,
 } from "@/components/publication/reading-parts";
@@ -35,14 +36,14 @@ export async function generateMetadata({
   let indexable = false;
   if (!Object.values(params).some(Boolean)) {
     try {
-      const page = await getPublicReadingTimeline({
+      const page = await listPublicItems({
+        mode: "all",
         window: "24h",
-        channel: "all",
         limit: 20,
       });
       indexable =
-        page.cards.length > 0 &&
-        page.cards.every((card) => card.item.indexable === true);
+        page.items.length > 0 &&
+        page.items.every((item) => item.indexable === true);
     } catch {
       // Failed or empty reading pages are not indexed.
     }
@@ -63,7 +64,7 @@ export default async function DiscoverPage({
   await connection();
   const params = await searchParams;
   const category = categories.find(([key]) => key === params.category)?.[0];
-  const mode = params.mode === "all" ? "all" : "selected";
+  const mode = params.mode === "selected" ? "selected" : "all";
   const window = params.window === "7d" ? "7d" : "24h";
   const by = params.by === "published" ? "published" : "timeline";
   const channel =
@@ -141,9 +142,28 @@ export default async function DiscoverPage({
           by={by}
           params={params}
           categories={categories}
+          sources={Array.from(
+            new Map([
+              ...(page.source_status ?? []).map(
+                (source) =>
+                  [
+                    source.source_key,
+                    { key: source.source_key, name: source.name },
+                  ] as const,
+              ),
+              ...page.items.map(
+                (item) =>
+                  [
+                    item.source.key,
+                    { key: item.source.key, name: item.source.name },
+                  ] as const,
+              ),
+            ]).values(),
+          )}
         />
         <div className="grid gap-12 lg:grid-cols-3">
           <section className="lg:col-span-2">
+            <PublicSourceStatus sources={page.source_status ?? []} />
             {timeline ? (
               <PublicTimelineCards page={timeline} />
             ) : (

@@ -95,7 +95,8 @@ def load_editorial_processing_health_in_transaction(
         ).values():
             # Fixed inputs, quotes and current field permission are validated by the owning reader.
             if (
-                item.run.result is None
+                item.run is None
+                or item.run.result is None
                 or not item.run.result.selected
                 or item.run.result.relevance != "pass"
                 or item.backfill

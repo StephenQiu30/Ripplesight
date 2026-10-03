@@ -300,7 +300,7 @@ def test_empty_edition_gaps_advance_durably_and_bound_each_round(
         .isoformat()
     )
     with sessions.begin() as session:
-        assert EditionService(session).enqueue_due_in_transaction(now=now) >= 0
+        assert EditionService(session, clock=lambda: now).enqueue_due_in_transaction(now=now) >= 0
         session.execute(
             text(
                 "UPDATE report_edition_schedules SET first_period_key=:first,scan_after_key=NULL "
@@ -311,7 +311,9 @@ def test_empty_edition_gaps_advance_durably_and_bound_each_round(
     progress = []
     for _ in range(2):
         with sessions.begin() as session:
-            assert EditionService(session).enqueue_due_in_transaction(now=now) == 0
+            assert (
+                EditionService(session, clock=lambda: now).enqueue_due_in_transaction(now=now) == 0
+            )
             progress.append(
                 session.execute(
                     text(

@@ -4383,6 +4383,12 @@ declare namespace HotKeyAPI {
   };
 
   type PublicItemDetailView = {
+    /** Analysis State */
+    analysis_state?: "not_analyzed" | "complete";
+    /** Summary Origin */
+    summary_origin?: "source" | "model" | "none";
+    /** Backfill */
+    backfill?: boolean | null;
     /** Id */
     id: string;
     /** Revision */
@@ -4446,6 +4452,8 @@ declare namespace HotKeyAPI {
   };
 
   type PublicItemsPage = {
+    /** Source Status */
+    source_status?: PublicSourceStatusView[];
     /** Items */
     items: PublicItemView[];
     /** Next Cursor */
@@ -4455,6 +4463,12 @@ declare namespace HotKeyAPI {
   };
 
   type PublicItemView = {
+    /** Analysis State */
+    analysis_state?: "not_analyzed" | "complete";
+    /** Summary Origin */
+    summary_origin?: "source" | "model" | "none";
+    /** Backfill */
+    backfill?: boolean | null;
     /** Id */
     id: string;
     /** Revision */
@@ -4651,6 +4665,19 @@ declare namespace HotKeyAPI {
     latest_publication_at: string | null;
     /** Snapshot At */
     snapshot_at: string;
+  };
+
+  type PublicSourceStatusView = {
+    /** Source Key */
+    source_key: string;
+    /** Name */
+    name: string;
+    /** Enabled */
+    enabled: boolean;
+    /** Health */
+    health: "unknown" | "ok" | "degraded" | "failing";
+    /** Last Success At */
+    last_success_at: string | null;
   };
 
   type PublicSourceView = {
@@ -4951,7 +4978,7 @@ declare namespace HotKeyAPI {
     /** Content Version Id */
     content_version_id: string;
     /** Editorial Run Id */
-    editorial_run_id: string;
+    editorial_run_id: string | null;
     /** Manual Version */
     manual_version: number;
     /** Source Profile Revision */

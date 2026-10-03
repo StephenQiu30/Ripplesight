@@ -1,4 +1,4 @@
-"""Current completed editorial inputs; source pauses do not withdraw prior publications."""
+"""Stored source inputs and completed editorial evidence, with no model prerequisite."""
 
 from __future__ import annotations
 
@@ -10,13 +10,18 @@ from sqlalchemy.orm import Session
 
 from analysis.editorial_models import EditorialContentState, EditorialRun, EditorialSource
 from analysis.editorial_schemas import (
+    EditorialMaterial,
     EditorialPublicationIdPage,
     EditorialPublicationInputView,
     EditorialRunView,
     EditorialSourceView,
 )
 from analysis.editorial_services import EditorialService
-from content.editorial_reading import editorial_discovery_in_transaction
+from content.editorial_reading import (
+    editorial_discovery_in_transaction,
+    load_latest_editorial_content_in_transaction,
+    scan_editorial_content_ids_in_transaction,
+)
 from content.schemas import EventContentReadReference
 from core.errors import ApplicationError
 
@@ -84,6 +89,59 @@ def load_editorial_publication_inputs_in_transaction(
             backfill=discovery.backfill,
             quote_reference=quote_reference,
         )
+    originals = load_latest_editorial_content_in_transaction(
+        session,
+        owner_id=owner_id,
+        content_ids=tuple(identity for identity in content_ids if identity not in result),
+        now=now,
+    )
+    sources = {
+        source.source_key: source
+        for source in session.scalars(
+            select(EditorialSource).where(
+                EditorialSource.owner_id == owner_id,
+                EditorialSource.source_key.in_({item.source_key for item in originals.values()}),
+            )
+        )
+    }
+    for identity, item in originals.items():
+        source = sources.get(item.source_key)
+        version = item.observation.content_version
+        discovery = editorial_discovery_in_transaction(
+            session, owner_id=owner_id, content_id=identity
+        )
+        if source is None or version is None or discovery is None:
+            continue
+        profile = EditorialSourceView.model_validate(
+            {"source_key": source.source_key, "revision": source.revision, **source.configuration}
+        )
+        body_complete = version.text_scope.value == "full"
+        material = EditorialMaterial(
+            content_id=identity,
+            content_version_id=version.id,
+            source_key=item.source_key,
+            source_name=profile.name,
+            source_kind=profile.source_kind,
+            tier=profile.tier,
+            title=version.title or "",
+            body=version.body or "",
+            excerpt=(version.body or "") if version.text_scope.value == "summary" else "",
+            body_complete=body_complete,
+            url=item.observation.canonical_url or item.observation.final_url or "",
+            author=item.observation.author_external_id,
+            published_at=item.observation.published_at,
+            discovered_at=discovery.first_received_at,
+            first_party=profile.first_party,
+            source_tags=profile.tags,
+        )
+        result[identity] = EditorialPublicationInputView(
+            run=None,
+            source=profile,
+            material=material,
+            timeline_at=discovery.timeline_at,
+            first_received_at=discovery.first_received_at,
+            backfill=discovery.backfill,
+        )
     return result
 
 
@@ -110,7 +168,20 @@ def scan_current_editorial_publication_ids_in_transaction(
         query = query.where(
             EditorialRun.owner_id == owner_id, EditorialRun.source_key == source_key
         )
-    ids = tuple(session.scalars(query))
+    ids = tuple(
+        sorted(
+            set(session.scalars(query))
+            | set(
+                scan_editorial_content_ids_in_transaction(
+                    session,
+                    owner_id=owner_id,
+                    source_key=source_key,
+                    after=after,
+                    limit=limit + 1,
+                )
+            )
+        )
+    )
     return EditorialPublicationIdPage(
         content_ids=ids[:limit], next_after=ids[limit - 1] if len(ids) > limit else None
     )
