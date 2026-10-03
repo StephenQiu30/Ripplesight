@@ -44,6 +44,30 @@ function setSecurityHeaders(
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const contentSecurityPolicy = createContentSecurityPolicy(nonce);
+  const webOrigin = new URL(
+    process.env.HOTKEY_WEB_ORIGIN ?? "http://127.0.0.1:8666",
+  );
+  // NextURL normalizes loopback IPs to localhost. Host preserves the browser origin.
+  const incomingOrigin = new URL(request.url);
+  const host = request.headers.get("host");
+  if (host) incomingOrigin.host = host;
+  const loopbackHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
+  if (
+    (request.method === "GET" || request.method === "HEAD") &&
+    loopbackHosts.has(webOrigin.hostname) &&
+    loopbackHosts.has(incomingOrigin.hostname) &&
+    incomingOrigin.hostname !== webOrigin.hostname &&
+    incomingOrigin.protocol === webOrigin.protocol &&
+    incomingOrigin.port === webOrigin.port
+  ) {
+    const canonicalUrl = new URL(webOrigin);
+    canonicalUrl.pathname = request.nextUrl.pathname;
+    canonicalUrl.search = request.nextUrl.search;
+    return setSecurityHeaders(
+      NextResponse.redirect(canonicalUrl),
+      contentSecurityPolicy,
+    );
+  }
   const requestHeaders = new Headers(request.headers);
   requestHeaders.delete("x-hotkey-session");
   requestHeaders.delete("x-hotkey-session-error");
@@ -55,7 +79,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   const csrfCookie = request.cookies.get("hotkey_csrf")?.value;
   let authenticated = false;
   let hasPassword = false;
-  let invalidSession = false;
+  let invalidSession = !sessionCookie && !!csrfCookie;
   if (sessionCookie) {
     try {
       const session = await getIdentitySession({
