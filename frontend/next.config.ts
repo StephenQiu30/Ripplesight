@@ -1,5 +1,9 @@
 import type { NextConfig } from "next";
 
+import { loadRootWebEnvironment } from "./env.config.mjs";
+
+loadRootWebEnvironment();
+
 const nextConfig: NextConfig = {
   agentRules: false,
   devIndicators: false,

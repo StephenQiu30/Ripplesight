@@ -86,6 +86,8 @@ GitHub 按钮使用官方 GitHub-Mark 栅格素材 `public/brand/github-mark.png
 
 ## 可访问性与运行
 
+- 配置只在仓库根 `.env` / `.env.prod` 维护，模板仅根 `.env.example`。Next 和 OpenAPI 配置按 Web 字段白名单读取根 `.env`，保留显式进程注入，后端认证/来源/模型秘密不加载到 Web 进程；容器继续按需注入，不复制环境文件。
+
 - 本机 loopback 页面别名在读取会话前按 `HOTKEY_WEB_ORIGIN` 规范化，仅同协议同端口的 GET/HEAD 跳转并保留原路径和查询。API Origin/CSRF 校验保持严格；缺少会话的孤立 CSRF Cookie 在页面入口清除，有效账户的凭据验证码仍使用绑定 CSRF。OAuth 回调、Cookie 和本机页面使用同一主机。
 
 - 交互支持键盘焦点，装饰图形使用 `aria-hidden`，状态区域提供语义名称。

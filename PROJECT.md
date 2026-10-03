@@ -101,7 +101,7 @@ CSP nonce 由 proxy 每请求生成，交互 HTML 按请求渲染，创建页使
 
 ## 部署与外部启用
 
-根 `docker-compose.yml` 唯一维护应用定义；prod 文件通过 include 复用，生产命令显式 `--env-file .env.prod`；env 文件单独维护 PostgreSQL/Redis/Kafka，本机默认复用已有服务。外部环境不作为应用 depends_on；连接/密钥由环境注入。容器 Web/API 均8080，宿主映射8666/8667；Browser WS3000独立。不得删除用户库/卷或复制 RSSHub、SearXNG、Firecrawl、MinIO 编排。
+环境文件和唯一 `.env.example` 模板只在仓库根目录：本机所有入口共用根 `.env`，生产使用根 `.env.prod`；Settings 按源码位置解析根目录，进程注入优先。Web 配置仅加载 API/Web/OpenAPI/公开 metadata 字段，不加载后端秘密。根 `docker-compose.yml` 唯一维护应用定义；prod 文件通过 include 复用，生产命令显式 `--env-file .env.prod`；env 文件单独维护 PostgreSQL/Redis/Kafka，本机默认复用已有服务。外部环境不作为应用 depends_on；连接/密钥由环境注入。容器 Web/API 均8080，宿主映射8666/8667；Browser WS3000独立。不得删除用户库/卷或复制 RSSHub、SearXNG、Firecrawl、MinIO 编排。
 
 RSSHub/SearXNG 主机只选 `127.0.0.1`（宿主）或 `host.docker.internal`（Compose），固定1200/8888、路由与引擎，冻结到连接版本；更改主机须重新应用预设。M1/M2 单宿主机 Worker，调度独立扫表；通用 Browser 固定 Playwright Python/Server1.63.0 原生 WS、私有令牌及独立 Squid 出口，初始仅 example.com 探针，真实平台业务仍未准入。
 

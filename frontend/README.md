@@ -9,10 +9,13 @@
 ## 运行
 
 ```bash
-cp .env.example .env.local
+# 首次配置只在仓库根目录执行：cp .env.example .env
+# 在 frontend/ 执行：
 pnpm install
 pnpm dev
 ```
+
+Next 配置与 OpenAPI 生成器从根 `.env` 仅加载 `HOTKEY_API_ORIGIN`、`HOTKEY_WEB_ORIGIN`、`HOTKEY_OPENAPI_URL` 和 `NEXT_PUBLIC_SITE_ORIGIN`；已注入的环境变量优先，GitHub、SMTP、数据库等秘密不加载到 Web 进程。容器只使用 Compose 注入的 Web 字段，不复制环境文件。
 
 本机前端固定监听 `http://127.0.0.1:8666`，后端固定使用 `http://127.0.0.1:8667`；`pnpm dev` 和 `pnpm start` 均使用该前端地址。
 
@@ -58,7 +61,7 @@ src/
 pnpm openapi:generate
 ```
 
-默认地址为 `http://127.0.0.1:8667/openapi.json`；其他环境使用 `HOTKEY_OPENAPI_URL=https://api.example.com/openapi.json pnpm openapi:generate`。该变量需传入命令环境，生成器不自动加载 Next.js 的 `.env.local`。
+默认地址为 `http://127.0.0.1:8667/openapi.json`；其他环境使用 `HOTKEY_OPENAPI_URL=https://api.example.com/openapi.json pnpm openapi:generate`。该变量统一写入根 `.env`，也可通过命令环境显式覆盖。
 
 `@umijs/openapi` 1.14.1 只从 200/201 选择返回模型；配置会在生成器内存中把缺少 200/201 的 202 schema 暴露给其类型解析，运行时 OpenAPI 和真实 HTTP 202 语义保持不变。禁止为规避该限制手改生成文件或在服务端虚报 200。
 

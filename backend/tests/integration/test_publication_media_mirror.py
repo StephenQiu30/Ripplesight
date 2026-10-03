@@ -132,7 +132,7 @@ def prepared(request, monkeypatch):
     if browser:
         rendered_body += '<video src="https://images.example/owned.mp4"></video>'
     private = Settings(
-        _env_file=Path(__file__).resolve().parents[2] / ".env",
+        _env_file=Path(__file__).resolve().parents[3] / ".env",
         environment="test",
         database_url=os.environ["HOTKEY_TEST_DATABASE_URL"],
         ai_enabled=False,

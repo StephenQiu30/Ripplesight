@@ -29,7 +29,9 @@ HotKey 面向关注 AI 等专业方向的用户，是 ToC 信息监控产品；�
 | `docker-compose-env.yml` | 单独启动 PostgreSQL/Redis/Kafka，本地开发默认不启动 |
 | `docker-compose-prod.yml` | 通过 include 复用全部应用定义，以独立密钥启动生产服务 |
 
-本地开发复用已运行的环境，业务数据库名固定为 `hotkey`。首次使用复制模板；已有 `.env` 只补齐连接项，不覆盖现有密钥。配置完整 `HOTKEY_DATABASE_URL`、`HOTKEY_REDIS_URL` 和 `HOTKEY_KAFKA_BOOTSTRAP_SERVERS`，容器访问宿主机使用 `host.docker.internal`。Kafka 的 advertised listeners 也必须能从应用容器访问。
+本地开发复用已运行的环境，业务数据库名固定为 `hotkey`。所有环境文件和唯一 `.env.example` 模板只放仓库根目录；API、Worker、CLI、Web 与 Compose 共用根 `.env`，生产显式使用根 `.env.prod`。首次使用复制模板；已有 `.env` 只补齐连接项，不覆盖现有密钥。配置完整 `HOTKEY_DATABASE_URL`、`HOTKEY_REDIS_URL` 和 `HOTKEY_KAFKA_BOOTSTRAP_SERVERS`，容器访问宿主机使用 `host.docker.internal`。Kafka 的 advertised listeners 也必须能从应用容器访问。
+
+已有 MinIO 和 Firecrawl 的连接通过根 `.env` 的 `HOTKEY_MINIO_*`、`HOTKEY_FIRECRAWL_*` 注入应用；从宿主机启动切换到 Compose 时，沿用已有凭据并将本机连接地址改为 `host.docker.internal`。认证、来源和模型配置统一写入根 `.env`，宿主入口与 Compose 使用同一份配置。
 
 ```bash
 cp .env.example .env
