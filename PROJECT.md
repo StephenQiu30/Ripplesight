@@ -99,6 +99,8 @@ CSP nonce 由 proxy 每请求生成，交互 HTML 按请求渲染，创建页使
 
 主题采集版本固定关键词、排序来源键和请求间隔；名称/报告偏好不升采集版本，旧 Job 不按当前投影重释。jobs 持有到期窗口及预算周期，人工重试仅下一成功领取开启新周期，累计/来源/全局预算不返还；content 只消费这些事实。评论分别保存作品、线程根、直接父节点、回复目标和未知/不可访问关系，不猜父链；可信页尾才确认覆盖。热榜合法空有观察时间与零条目快照，失败保留原到期桶。
 
+四搜索、六榜属于 M1 正式验收范围；公开基础资讯和个人日/周报按所用来源、许可、持久读取及权限条件独立推进，不以完整 M1、模型润色、事件或渠道全部通过为统一前置。发布方原生 RSS/Atom 复用既有编辑来源类型并逐源准入，不增加默认来源枚举。当前公开投影依赖完整编辑结果、个人 `report.weekly` 缺处理器，均按 Design048/BACKLOG 保留待补，不把公开 weekly 刊物算作个人周报。
+
 ## 部署与外部启用
 
 环境文件和唯一 `.env.example` 模板只在仓库根目录：本机所有入口共用根 `.env`，生产使用根 `.env.prod`；Settings 按源码位置解析根目录，进程注入优先。Web 配置仅加载 API/Web/OpenAPI/公开 metadata 字段，不加载后端秘密。根 `docker-compose.yml` 唯一维护应用定义；prod 文件通过 include 复用，生产命令显式 `--env-file .env.prod`；env 文件单独维护 PostgreSQL/Redis/Kafka，本机默认复用已有服务。外部环境不作为应用 depends_on；连接/密钥由环境注入。容器 Web/API 均8080，宿主映射8666/8667；Browser WS3000独立。不得删除用户库/卷或复制 RSSHub、SearXNG、Firecrawl、MinIO 编排。
@@ -107,7 +109,7 @@ RSSHub/SearXNG 主机只选 `127.0.0.1`（宿主）或 `host.docker.internal`（
 
 MediaCrawler 仅本人 B站、个人非商业研究，固定宿主子进程、上游/补丁/适配器三版本与独立 CDP；资料权限700、文件600，拒绝符号链接/宽权限/超限，子进程仅最小环境。每帖同轮一级评论≤20，缺缓存不补网络；验证、登录失效或频繁访问立即停用，本人核查后人工恢复。具体版本/资料见 Design003。
 
-真实 Codex/付费模型继续暂停；X 凭据/月度上限未确认前零真实请求，Reddit 只官方 OAuth。来源预设、能力、授权、频次与预算分别核对，配置/probe 不算 persisted read 成功。报告SMTP默认关闭、飞书暂缓；知识库单向写 `HOTKEY_OBSIDIAN_VAULT_PATH` 的 HotKey 管理区，保留用户区块。不引入独立向量库或搜索引擎；向量仍在 PostgreSQL，由原 Job/AiCall/预算恢复。
+真实 Codex/付费模型继续暂停；X 凭据/月度上限未确认前零真实请求。Reddit 仅考虑当前显式获批的官方 API 路径及 OAuth，商业用途另须书面批准；公共 Data API 迁移/退役及现行合同按 PRD007 官方依据重新核对，OAuth 不证明准入。来源预设、软件许可、平台/数据授权、能力、频次与预算分别核对，配置/probe 不算 persisted read 成功。报告SMTP默认关闭、飞书暂缓；知识库单向写 `HOTKEY_OBSIDIAN_VAULT_PATH` 的 HotKey 管理区，保留用户区块。不引入独立向量库或搜索引擎；向量仍在 PostgreSQL，由原 Job/AiCall/预算恢复。
 
 ## 文档维护
 
