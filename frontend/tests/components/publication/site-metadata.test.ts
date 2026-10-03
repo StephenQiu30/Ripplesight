@@ -26,14 +26,14 @@ it("keeps every login workspace page noindex even when publication indexing is e
   };
   expect(publicPageMetadata(site, options).robots).toEqual({
     index: false,
-    follow: false,
+    follow: true,
   });
   const enabled = { ...site, robots_index: true };
   expect(
     publicPageMetadata(enabled, { ...options, indexable: false }).robots,
-  ).toEqual({ index: false, follow: false });
-  const valid = publicPageMetadata(enabled, options);
-  expect(valid.robots).toEqual({ index: false, follow: false });
+  ).toEqual({ index: false, follow: true });
+  const valid = publicPageMetadata(enabled, { ...options, indexable: true });
+  expect(valid.robots).toEqual({ index: true, follow: true });
   expect(valid.alternates?.canonical).toBe(
     "https://hotkey.example/leaderboard",
   );

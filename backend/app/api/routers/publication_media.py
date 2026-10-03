@@ -10,6 +10,7 @@ from api.dependencies import (
     OperatorWriteScopeDependency,
     PublicationMediaReadingServiceDependency,
     PublicationMediaServiceDependency,
+    PublicPublicationScopeDependency,
     UserScopeDependency,
 )
 from core.errors import ApplicationError
@@ -132,7 +133,7 @@ def read_run(
 def site_media(
     file_id: Annotated[UUID, Path()],
     mode: Mode,
-    owner_id: UserScopeDependency,
+    owner_id: PublicPublicationScopeDependency,
     service: PublicationMediaReadingServiceDependency,
 ) -> Response:
     value = service.read(owner_id=owner_id, file_id=file_id, mode=mode, redistribute=False)
@@ -164,7 +165,7 @@ def site_media(
 def public_media(
     file_id: Annotated[UUID, Path()],
     mode: Mode,
-    owner_id: UserScopeDependency,
+    owner_id: PublicPublicationScopeDependency,
     service: PublicationMediaReadingServiceDependency,
 ) -> Response:
     value = service.read(owner_id=owner_id, file_id=file_id, mode=mode, redistribute=True)

@@ -4,7 +4,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Path, Query, Response
 
-from api.dependencies import PublicationServiceDependency, UserScopeDependency
+from api.dependencies import PublicationServiceDependency, PublicPublicationScopeDependency
 from core.schemas import ErrorView
 from publication.edition_schemas import (
     PublicDailyCalendarView,
@@ -33,7 +33,7 @@ _ERRORS: dict[int | str, dict[str, Any]] = {
 def catalogue(
     response: Response,
     service: PublicationServiceDependency,
-    owner_id: UserScopeDependency,
+    owner_id: PublicPublicationScopeDependency,
     kind: Literal["daily", "weekly", "monthly"] = "daily",
     before_key: Annotated[str | None, Query(min_length=7, max_length=10)] = None,
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
@@ -58,7 +58,7 @@ def navigation(
     key: Annotated[str, Path(min_length=7, max_length=10)],
     response: Response,
     service: PublicationServiceDependency,
-    owner_id: UserScopeDependency,
+    owner_id: PublicPublicationScopeDependency,
 ) -> PublicEditionNavigationView:
     response.headers["cache-control"] = "no-store"
     return service.edition_navigation(owner_id=owner_id, kind=kind, key=key)
@@ -77,7 +77,7 @@ def daily_calendar(
     month: Annotated[str, Path(pattern=r"^[0-9]{4}-(0[1-9]|1[0-2])$")],
     response: Response,
     service: PublicationServiceDependency,
-    owner_id: UserScopeDependency,
+    owner_id: PublicPublicationScopeDependency,
 ) -> PublicDailyCalendarView:
     response.headers["cache-control"] = "no-store"
     return service.daily_calendar(owner_id=owner_id, month=month)

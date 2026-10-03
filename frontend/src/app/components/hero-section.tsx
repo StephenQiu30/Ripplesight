@@ -1,55 +1,39 @@
-import Image from "next/image";
 import Link from "next/link";
+import { ArrowUpRightIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useIdentitySession } from "@/components/auth/session-context";
 
-type HeroSectionProps = {
-  onExample: (trigger: HTMLElement) => void;
-};
-
-export function HeroSection({ onExample }: HeroSectionProps) {
+export function HeroSection() {
   const session = useIdentitySession();
   return (
     <section
-      className="relative flex w-full flex-col items-start gap-9 pt-10 pb-8 md:min-h-108 md:flex-1 md:flex-row md:items-center md:justify-between md:gap-0 md:pt-0 md:pb-12 2xl:min-h-125"
-      aria-label="关注关键词，了解变化"
+      aria-label="公开信息平台"
+      className="flex flex-col gap-6 pb-10 sm:pb-12 lg:flex-row lg:items-end lg:justify-between lg:gap-12"
     >
-      <div className="relative max-w-full md:w-3/5">
-        <h1 className="text-3xl leading-snug font-light tracking-tight sm:text-4xl md:text-5xl md:leading-tight xl:text-6xl 2xl:text-7xl">
-          关注你在意的，
-          <br />
-          看见新的变化。
+      <div className="max-w-2xl">
+        <p className="text-muted-foreground mb-4 text-sm">
+          知微见澜 · 开放的信息平台
+        </p>
+        <h1 className="text-3xl leading-tight font-medium tracking-tight sm:text-4xl lg:text-5xl">
+          在这里，看见正在发生的变化。
         </h1>
-        <div className="mt-7 flex items-center gap-3 md:mt-8 md:gap-3.5">
-          <Button asChild size="hero">
-            <Link href={session ? "/topics" : "/login"}>
-              {session ? "进入系统" : "开始使用"}
-            </Link>
-          </Button>
-          <Button
-            variant="outline"
-            size="hero"
-            onClick={(event) => onExample(event.currentTarget)}
-          >
-            看看示例
-          </Button>
-        </div>
+        <p className="text-muted-foreground mt-5 max-w-xl text-base leading-7">
+          从最新资讯到事件脉络，沿着来源了解技术、产品与行业。公开内容随时阅读，登录后定制关注与周报。
+        </p>
       </div>
-      <Image
-        src="/brand/hero-brand-soft.png"
-        alt=""
-        aria-hidden="true"
-        width={366}
-        height={366}
-        preload
-        sizes="(min-width:1536px) 368px, (min-width:1280px) 320px, 256px"
-        className="pointer-events-none -mt-4 -mb-3 size-64 self-center object-contain md:absolute md:top-1/2 md:left-11/20 md:-mt-8 md:mb-0 md:-translate-x-1/2 md:-translate-y-1/2 lg:left-1/2 xl:size-80 2xl:size-92"
-      />
-      <div className="relative flex flex-col gap-2 text-sm leading-relaxed md:w-56 md:gap-3.5 md:text-base xl:w-72 xl:text-lg 2xl:w-88 2xl:text-xl">
-        <p>选择你关心的话题</p>
-        <p>简单设置，持续关注</p>
-        <p>沿着来源，理解变化</p>
+      <div className="flex shrink-0 flex-wrap items-center gap-3">
+        <Button asChild>
+          <Link href="/discover">
+            浏览资讯
+            <ArrowUpRightIcon data-icon="inline-end" />
+          </Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link href={session ? "/workspace" : "/login?returnTo=%2Fworkspace"}>
+            {session ? "我的工作台" : "定制我的周报"}
+          </Link>
+        </Button>
       </div>
     </section>
   );

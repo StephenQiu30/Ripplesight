@@ -506,6 +506,17 @@ def get_public_contact_scope(request: Request) -> UUID | None:
 PublicContactScopeDependency = Annotated[UUID | None, Depends(get_public_contact_scope)]
 
 
+def get_public_publication_scope(request: Request) -> UUID:
+    """Public reading never selects an account from a cookie or an arbitrary partition."""
+    owner_id = cast(UUID | None, request.app.state.settings.public_publication_owner_id)
+    if owner_id is None:
+        raise ApplicationError("publication_not_configured")
+    return owner_id
+
+
+PublicPublicationScopeDependency = Annotated[UUID, Depends(get_public_publication_scope)]
+
+
 def get_operator_scope(
     request: Request,
     scope_id: UserScopeDependency,

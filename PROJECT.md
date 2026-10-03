@@ -77,7 +77,7 @@ FastAPI 路由装饰器、类型注解和 Pydantic 是唯一可编辑契约。�
 
 每个操作声明稳定唯一 `operation_id`、中文 summary/tag、约束、成功模型和实际可达错误。成功使用资源 DTO、`PageView[T]`（`items/next_cursor`）或 `JobAcceptedView`，受理在持久提交后返回；204/304 无 body，文件/流沿媒体协议。错误统一 `ErrorView(code,message,request_id,details)`，应用错误不带 HTTP 状态，由 API 边界映射。422 details 仅保留安全字段位置/消息/类型；未知 5xx 不公开异常文本。请求 UUID 在响应头、错误体与日志一致；日志只记录方法、路由模板、状态与耗时，不记录原始 URL/query、正文、Cookie、Token 或连接字符串。
 
-公开 `/` 是 SEO Welcome；公开说明仅 `/about`、`/privacy`、`/terms`、`/contact`、`/changelog`。`/login` 不索引，业务 HTML（含预取）、API、媒体及分发出口均验证真实会话，工作区始终 noindex；运营操作额外校验独立令牌。访问、账户与历史分区的完整合同见 [Design001 §9.2](docs/design/001-热点舆情监控平台总体设计.md#92-公开欢迎页登录与个人数据访问)。
+首页是公开信息入口，展示已许可发布的资讯、事件、专题与周报，并提供公开模型榜入口；公开阅读无需登录，创建个人关注、生成或发送报告及管理操作仍验证真实会话。匿名 publication 读取只使用 `HOTKEY_PUBLIC_PUBLICATION_OWNER_ID` 明确指定的发布分区；未指定返回 `publication_not_configured`，不推断账户或回退访问者资料。读前继续复验当前许可、固定版本与撤回。`/login`、`/workspace` 和个人业务始终 noindex，运营写入额外校验独立令牌；完整合同见 [Design001 §9.2](docs/design/001-热点舆情监控平台总体设计.md#92-公开欢迎页登录与个人数据访问)。
 
 密码登录接受已验证邮箱或用户名，只登录已有账户；已验证 GitHub/邮箱首次登录创建个人账户，邮箱验证后缺少密码的账户进入首次设密流程，既有账户也可从账户设置完成。has_password由密码哈希是否存在计算；凭据更新须新近验证或当前密码/绑定邮箱证明，在同事务撤销全部旧会话并建立当前新会话。历史 UUID 只由维护 CLI 显式映射，首个注册者不能取得历史数据。会话固定12小时、可撤销、Cookie HttpOnly/SameSite=Lax、生产 Secure；业务写校验绑定 CSRF，公开登录校验同源 Origin/固定头。OTP 为6位、5分钟、单次、最多5次错误，发送冷却/频次受限；GitHub state 单次、浏览器绑定及 PKCE，验证主邮箱。GitHub/SMTP 配置缺失时明确不可用，认证邮件与报告通知开关独立。
 

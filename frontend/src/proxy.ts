@@ -98,21 +98,26 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       hasPassword = session.user.has_password;
     } catch (error) {
       if (!(error instanceof ApiRequestError && error.status === 401)) {
-        requestHeaders.set("x-hotkey-session-error", "1");
-        const recoveryUrl = new URL("/login", request.url);
-        recoveryUrl.searchParams.set(
-          "returnTo",
-          safeReturnTo(`${request.nextUrl.pathname}${request.nextUrl.search}`),
-        );
-        return setSecurityHeaders(
-          NextResponse.rewrite(recoveryUrl, {
-            status: 503,
-            request: { headers: requestHeaders },
-          }),
-          contentSecurityPolicy,
-        );
+        if (!publicPage || request.nextUrl.pathname === "/login") {
+          requestHeaders.set("x-hotkey-session-error", "1");
+          const recoveryUrl = new URL("/login", request.url);
+          recoveryUrl.searchParams.set(
+            "returnTo",
+            safeReturnTo(
+              `${request.nextUrl.pathname}${request.nextUrl.search}`,
+            ),
+          );
+          return setSecurityHeaders(
+            NextResponse.rewrite(recoveryUrl, {
+              status: 503,
+              request: { headers: requestHeaders },
+            }),
+            contentSecurityPolicy,
+          );
+        }
+      } else {
+        invalidSession = true;
       }
-      invalidSession = true;
     }
   }
 

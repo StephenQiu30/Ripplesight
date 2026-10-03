@@ -6,10 +6,10 @@ from api.dependencies import (
     OperatorScopeDependency,
     OperatorWriteScopeDependency,
     PublicContactScopeDependency,
+    PublicPublicationScopeDependency,
     PublicSiteReadingServiceDependency,
     SiteConfigurationServiceDependency,
     SourceIconReadingServiceDependency,
-    UserScopeDependency,
 )
 from core.schemas import ErrorView
 from operations.site_schemas import (
@@ -25,10 +25,6 @@ _READ_ERRORS: dict[int | str, dict[str, Any]] = {
     404: {"model": ErrorView, "description": "当前未公开该资料"},
     422: {"model": ErrorView, "description": "输入无效"},
     503: {"model": ErrorView, "description": "读取依赖暂不可用"},
-}
-_PRIVATE_READ_ERRORS = {
-    **_READ_ERRORS,
-    401: {"model": ErrorView, "description": "登录会话无效"},
 }
 _WRITE_ERRORS = {
     **_READ_ERRORS,
@@ -49,10 +45,10 @@ def _headers(response: Response) -> None:
     response_model=PublicSiteMetaView,
     status_code=status.HTTP_200_OK,
     summary="站点信息与实际部署开关",
-    responses=_PRIVATE_READ_ERRORS,
+    responses=_READ_ERRORS,
 )
 def site_meta(
-    response: Response, service: SiteConfigurationServiceDependency, scope_id: UserScopeDependency
+    response: Response, service: SiteConfigurationServiceDependency
 ) -> PublicSiteMetaView:
     _headers(response)
     return service.meta()
@@ -64,10 +60,12 @@ def site_meta(
     response_model=PublicSiteStatisticsView,
     status_code=status.HTTP_200_OK,
     summary="当前许可范围内的公开资料统计",
-    responses=_PRIVATE_READ_ERRORS,
+    responses=_READ_ERRORS,
 )
 def site_statistics(
-    response: Response, service: PublicSiteReadingServiceDependency, owner_id: UserScopeDependency
+    response: Response,
+    service: PublicSiteReadingServiceDependency,
+    owner_id: PublicPublicationScopeDependency,
 ) -> PublicSiteStatisticsView:
     _headers(response)
     return service.statistics(owner_id=owner_id)
@@ -123,14 +121,14 @@ def site_contact_image(
     summary="当前公开来源的本地回退图标",
     description="本地生成,不代理任意URL或调用外部服务。撤回后拒绝读取。",
     responses={
-        **_PRIVATE_READ_ERRORS,
+        **_READ_ERRORS,
         200: {"content": {"image/svg+xml": {"schema": {"type": "string"}}}},
     },
 )
 def site_source_icon(
     source_key: Annotated[str, Path(pattern=r"^[a-zA-Z0-9_.-]{1,64}$")],
     service: PublicSiteReadingServiceDependency,
-    owner_id: UserScopeDependency,
+    owner_id: PublicPublicationScopeDependency,
 ) -> Response:
     return Response(
         content=service.source_icon(owner_id=owner_id, source_key=source_key),
@@ -148,7 +146,7 @@ def site_source_icon(
     summary="当前公开来源的已准入头像缓存",
     description="仅当前公开来源且独立MEDIA授权及Evidence缓存有效时读取,GET不采集。",
     responses={
-        **_PRIVATE_READ_ERRORS,
+        **_READ_ERRORS,
         200: {"content": {"image/webp": {"schema": {"type": "string", "format": "binary"}}}},
     },
 )
@@ -157,7 +155,7 @@ def public_source_avatar(
     mode: Literal["avatar-48", "avatar-96"],
     service: PublicSiteReadingServiceDependency,
     icons: SourceIconReadingServiceDependency,
-    owner_id: UserScopeDependency,
+    owner_id: PublicPublicationScopeDependency,
 ) -> Response:
     service.source_icon(owner_id=owner_id, source_key=source_key)
     value = icons.read_by_source_key(owner_id=owner_id, source_key=source_key, mode=mode)

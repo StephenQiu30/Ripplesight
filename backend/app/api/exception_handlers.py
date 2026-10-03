@@ -43,6 +43,9 @@ HTTP_ERRORS: Mapping[int, PublicError] = {
     504: PublicError(504, "upstream_timeout", "上游服务响应超时"),
 }
 APPLICATION_ERRORS: Mapping[str, PublicError] = {
+    "publication_not_configured": PublicError(
+        503, "publication_not_configured", "公开资讯尚未发布"
+    ),
     "invalid_credentials": PublicError(401, "invalid_credentials", "账号或密码错误"),
     "invalid_session": PublicError(401, "invalid_session", "请登录后继续"),
     "invalid_email_code": PublicError(401, "invalid_email_code", "验证码无效或已过期"),

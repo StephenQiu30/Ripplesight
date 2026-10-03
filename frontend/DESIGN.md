@@ -27,26 +27,23 @@
 
 每个切片在 Design 阶段记录组件名称、所属领域、复用范围、目标路径、数据来源及正常、空、加载、部分、错误和无权限状态。
 
-## 首页
+## 公开信息首页与个人工作台
 
-首页在本目录实现，使用 Vercel 黑白留白风格；不增加独立应用、业务状态层或额外配置流程。首页主入口通过 `/login` 进入系统，已登录后创建关注使用现有 `/monitors/new`。主题创建、修改、来源准入与保存使用当前 OpenAPI 生成 API；示例只用于说明，不显示为真实采集结果。
+首页是公开阅读入口，保持黑白留白与现有 BasicLayout。正文优先展示最新资讯及分类、值得关注的事件、公开周报和专题/模型榜入口，主操作直接浏览资讯；登录只在定制个人关注、生成/发送周报及管理时需要。使用现有 Umi publication 与刊物目录函数并行读取，每块独立处理空/错误；未配置公开发布账号显示未发布，真实错误显示重载入口，无模拟资讯、指标或默认账户。
 
-| 组件                                    | 领域与复用范围       | 路径                                  | 数据与状态                                                           |
-| --------------------------------------- | -------------------- | ------------------------------------- | -------------------------------------------------------------------- |
-| HomeContent                             | 首页专属组合         | src/app/components/home-content.tsx   | 静态内容与说明浮层开关；无业务 API                                   |
-| BasicLayout / BasicHeader / BasicFooter | 全站页面骨架与导航   | src/layout/                           | 唯一正文滚动区、路由选中态、品牌、共用指南与真实站点链接；桌面及窄屏 |
-| UsageGuide                              | 首页和导航复用的说明 | src/layout/usage-guide.tsx            | 静态指南/示例 Dialog，关闭后返回触发器焦点                           |
-| HeroSection                             | 首页专属主视觉       | src/app/components/hero-section.tsx   | 选定文案、装饰品牌图、登录/系统入口与示例说明                        |
-| BrandLockup / BrandMark                 | 跨页面品牌           | src/components/brand/brand-lockup.tsx | 复用 src/app/icon.png 母版；无 API 状态                              |
-| Button / Dialog / DropdownMenu          | 跨页面官方基础组件   | src/components/ui/                    | 保留官方 Radix 语义和交互；必要的首页尺寸变体使用命名尺度            |
+| 组件                      | 领域与复用范围 | 目标路径                                                          | 数据与状态                                                                 |
+| ------------------------- | -------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Home / HomeContent        | 首页专属       | src/app/page.tsx；src/app/components/home-content.tsx             | 生成的公开资讯、事件、专题、周刊目录；SSR并行读取、真实空态、局部错误      |
+| HeroSection               | 首页专属       | src/app/components/hero-section.tsx                               | 浏览资讯与安全登录回跳到工作台；真实会话                                   |
+| BasicHeader / AccountMenu | 全站导航       | src/layout/basic-header.tsx；src/components/auth/account-menu.tsx | 桌面资讯/专题/模型榜，已登录增加工作台与账户；窄屏阅读菜单，键盘与焦点恢复 |
+| WorkspacePage             | 个人工作台     | src/app/workspace/page.tsx                                        | 私有路由；按关注报告、资料采集、发布管理展示现有入口                       |
+| PublicationNavigation     | 阅读路由复用   | src/components/publication/reading-navigation.tsx                 | 阅读入口与本机偏好；管理和认证出口移入工作台                               |
 
-装饰主视觉位于 `public/brand/hero-brand-soft.png`，是既定品牌的阴影展示资产，不作为第二套品牌母版。布局使用现有 Tailwind 尺度与标准断点。首页无加载、空、部分或权限状态；业务页面保留当前加载、空、错误重试及成功状态。
+Header不再常驻事件、内容、热榜、来源、运营、帮助等业务菜单；工作台集中这些入口，账户菜单只提供工作台、关注、报告、账户设置与退出。使用指南、关于、隐私、条款和联系仍在Footer。公开内容与个人操作分开，已登录首页仍提供同样的公开阅读导航和真实账户菜单。
 
-## 公开Welcome与登录工作区
+`/discover`（含专题、事件与本机收藏）、`/items`、`/leaderboard`、`/reports/daily|weekly|monthly`及合法刊期阅读公开；`/reports`个人列表、UUID详情与archive、`/editions`编选、个人关注/内容/任务、公告监控及全部管理页面仍经会话守卫。公开publication、刊物目录、正文媒体、来源图标与分享图只使用明确的`HOTKEY_PUBLIC_PUBLICATION_OWNER_ID`，不回退访问者或遍历全部账户；未配置返回503 `publication_not_configured`。RSS、Markdown、MCP及精选同步仍保持原会话边界。
 
-`/`保留既定黑白留白主视觉作为SEO Welcome，公开Header只显示站点说明及登录入口，使用指南放在Footer，不显示工作区菜单；主操作“开始使用”进入 `/login`，登录后默认 `/topics` 或安全站内原目标。已登录工作区使用分组导航、统一容器、固定头尾及唯一正文滚动区，显示账户和退出。公开说明仅about/privacy/terms/contact/changelog，公开文案不读取个人业务统计；login默认noindex，工作区始终noindex，robots/sitemap只列公开路径。
-
-工作区Header在 `md` 及以上保留“我的关注、事件、相关内容、热榜”四个常用入口，其余入口收进“全部导航”，按“内容发现、工作管理、帮助与信息”三列展示。窄屏将常用入口一并收入“菜单”，四组按两列展示；菜单宽高受Radix可用视口限制，矮窗口可在浮层内滚动。使用指南移到Footer，与站点信息并列，打开原有指南Dialog并在关闭后恢复Footer触发器焦点。账户用户名仅在 `xl` 及以上显示文字，较窄屏幕保留带可访问名称的账户图标。路由按最长路径匹配，分组内当前入口显示 `aria-current` 和勾选标识；沿用Radix键盘导航、Escape关闭和触发器焦点恢复。
+公开首页与说明保留SEO；阅读元数据仅在站点允许索引且当前材料许可满足时索引。login和工作台始终noindex，robots对公开阅读路径提供具体allow而私有路径仍disallow，sitemap只列公开入口。会话验证网络故障不清Cookie；公开阅读继续可用，私有页和登录页保留503恢复状态。CSP按请求nonce、private/no-store与SSR逐请求Cookie保持。
 
 登录专属组件归 `src/app/login/components/`，跨页会话/账户与守卫归 `src/components/auth/`；全部类型和请求来自Umi生成的identity API。账号密码、GitHub OAuth App、邮箱验证码共用真实数据库会话，覆盖加载/不可用/字段错误/限流/取消/成功/网络重试。业务深链接和prefetch均先验证会话，网络失败不能当成已退出；SSR按请求转发限定Cookie，代理只转发HotKey身份Cookie/Set-Cookie。保持官方shadcn/Radix表单、按钮、菜单、无装饰边框、语义颜色及命名尺度。
 
@@ -69,7 +66,7 @@ GitHub 按钮使用官方 GitHub-Mark 栅格素材 `public/brand/github-mark.png
 | CredentialsForm                       | 账户设置专属         | src/app/account/components/credentials-form.tsx                        | 当前生成会话、has_password、updateIdentityCredentials、已验证邮箱验证码；首次设置/密码确认/当前密码或邮箱证明/期限/保存轮换/错误/安全回跳    |
 | IdentitySessionProvider / AccountMenu | 全站会话与导航       | src/components/auth/                                                   | 消费proxy验证后的IdentitySessionView；退出真实会话后返回Welcome，失败保留当前账户                                                            |
 | access / layout-session               | 路由和服务端会话读取 | src/components/auth/                                                   | 公开路径、安全站内回跳、限定内部已验证会话头；不保存会话秘密或自行发请求                                                                     |
-| welcomeMetadata / robots / sitemap    | 公开SEO页面          | src/components/site/welcome-metadata.ts；src/app/robots.ts、sitemap.ts | 实际站点origin、canonical/OG；仅Welcome和公开说明入站点地图，工作区始终noindex                                                               |
+| welcomeMetadata / robots / sitemap    | 公开SEO页面          | src/components/site/welcome-metadata.ts；src/app/robots.ts、sitemap.ts | 实际站点origin、canonical/OG；公开首页、说明与阅读入口入站点地图，工作区始终noindex                                                          |
 
 公开站点origin使用`NEXT_PUBLIC_SITE_ORIGIN`或服务端`HOTKEY_WEB_ORIGIN`，本机固定Web8666/API8667，默认origin为`http://127.0.0.1:8666`；不调用私有业务API生成欢迎页元数据。登录页在上游会话验证故障时显示统一PageState和原安全目标重载操作，保持会话故障与未登录状态的区分。修改凭据成功200后撤销所有旧会话并建立当前新会话；已登录无密码账户访问登录页也进入设置步骤。验证码标识仅保存在组件内存中。
 

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from api.dependencies import (
     PublicationMcpServiceDependency,
     PublicationServiceDependency,
+    PublicPublicationScopeDependency,
     SiteConfigurationServiceDependency,
     UserScopeDependency,
     require_identity_session,
@@ -23,6 +24,7 @@ router = APIRouter(
     responses={401: {"model": ErrorView}},
     tags=["公开分发"],
 )
+public_router = APIRouter(tags=["公开分发"])
 _EXPORT_ERRORS: dict[int | str, dict[str, Any]] = {
     422: {"model": ErrorView, "description": "输入无效"},
     503: {"model": ErrorView, "description": "读取依赖暂不可用"},
@@ -58,7 +60,7 @@ def _png(body: bytes, etag: str | None) -> Response:
     )
 
 
-@router.get(
+@public_router.get(
     "/og/site.png",
     operation_id="getPublicSiteShareImage",
     response_model=None,
@@ -73,7 +75,7 @@ def site_share_image(
     return _png(service.share_page(), if_none_match)
 
 
-@router.get(
+@public_router.get(
     "/og/pages/{page}.png",
     operation_id="getPublicPageShareImage",
     response_model=None,
@@ -88,7 +90,7 @@ def page_share_image(
     return _png(service.share_page(page=page), if_none_match)
 
 
-@router.get(
+@public_router.get(
     "/og/items/{content_id}.png",
     operation_id="getPublicationItemShareImage",
     response_model=None,
@@ -100,13 +102,13 @@ def page_share_image(
 def item_share_image(
     content_id: UUID,
     service: PublicationServiceDependency,
-    owner_id: UserScopeDependency,
+    owner_id: PublicPublicationScopeDependency,
     if_none_match: ImageEtag = None,
 ) -> Response:
     return _png(service.share_item(owner_id=owner_id, content_id=content_id), if_none_match)
 
 
-@router.get(
+@public_router.get(
     "/og/posters/{content_id}.png",
     operation_id="getPublicationItemPosterPng",
     response_model=None,
@@ -118,7 +120,7 @@ def item_share_image(
 def item_poster_png(
     content_id: UUID,
     service: PublicationServiceDependency,
-    owner_id: UserScopeDependency,
+    owner_id: PublicPublicationScopeDependency,
     if_none_match: ImageEtag = None,
 ) -> Response:
     return _png(
@@ -126,7 +128,7 @@ def item_poster_png(
     )
 
 
-@router.get(
+@public_router.get(
     "/og/stories/{event_id}.png",
     operation_id="getPublicationStoryShareImage",
     response_model=None,
@@ -138,13 +140,13 @@ def item_poster_png(
 def story_share_image(
     event_id: UUID,
     service: PublicationServiceDependency,
-    owner_id: UserScopeDependency,
+    owner_id: PublicPublicationScopeDependency,
     if_none_match: ImageEtag = None,
 ) -> Response:
     return _png(service.share_story(owner_id=owner_id, event_id=event_id), if_none_match)
 
 
-@router.get(
+@public_router.get(
     "/og/posters/stories/{event_id}.png",
     operation_id="getPublicationStoryPosterPng",
     response_model=None,
@@ -156,7 +158,7 @@ def story_share_image(
 def story_poster_png(
     event_id: UUID,
     service: PublicationServiceDependency,
-    owner_id: UserScopeDependency,
+    owner_id: PublicPublicationScopeDependency,
     if_none_match: ImageEtag = None,
 ) -> Response:
     return _png(
@@ -164,7 +166,7 @@ def story_poster_png(
     )
 
 
-@router.get(
+@public_router.get(
     "/og/reports/{kind}/{key}.png",
     operation_id="getPublicationEditionShareImage",
     response_model=None,
@@ -177,13 +179,13 @@ def edition_share_image(
     kind: Literal["daily", "weekly", "monthly"],
     key: Annotated[str, Path(max_length=10)],
     service: PublicationServiceDependency,
-    owner_id: UserScopeDependency,
+    owner_id: PublicPublicationScopeDependency,
     if_none_match: ImageEtag = None,
 ) -> Response:
     return _png(service.share_edition(owner_id=owner_id, kind=kind, key=key), if_none_match)
 
 
-@router.get(
+@public_router.get(
     "/og/posters/reports/{kind}/{key}.png",
     operation_id="getPublicationEditionPosterPng",
     response_model=None,
@@ -196,7 +198,7 @@ def edition_poster_png(
     kind: Literal["daily", "weekly", "monthly"],
     key: Annotated[str, Path(max_length=10)],
     service: PublicationServiceDependency,
-    owner_id: UserScopeDependency,
+    owner_id: PublicPublicationScopeDependency,
     if_none_match: ImageEtag = None,
 ) -> Response:
     return _png(
@@ -204,7 +206,7 @@ def edition_poster_png(
     )
 
 
-@router.get(
+@public_router.get(
     "/og/topics/{slug}.png",
     operation_id="getPublicationTopicShareImage",
     response_model=None,
@@ -216,7 +218,7 @@ def edition_poster_png(
 def topic_share_image(
     slug: Annotated[str, Path(pattern=r"^[a-z0-9-]{1,80}$")],
     service: PublicationServiceDependency,
-    owner_id: UserScopeDependency,
+    owner_id: PublicPublicationScopeDependency,
     if_none_match: ImageEtag = None,
 ) -> Response:
     return _png(service.share_topic(owner_id=owner_id, slug=slug), if_none_match)
@@ -617,7 +619,7 @@ def mcp_stream() -> Response:
     return Response(status_code=405, headers={"allow": "POST", "cache-control": "no-store"})
 
 
-@router.get(
+@public_router.get(
     "/items/{content_id}/poster.svg",
     operation_id="getPublicationItemPoster",
     response_class=Response,
@@ -630,14 +632,16 @@ def mcp_stream() -> Response:
     },
 )
 def item_poster(
-    content_id: UUID, service: PublicationServiceDependency, owner_id: UserScopeDependency
+    content_id: UUID,
+    service: PublicationServiceDependency,
+    owner_id: PublicPublicationScopeDependency,
 ) -> Response:
     return _xml(
         service.item_poster(owner_id=owner_id, content_id=content_id), media_type="image/svg+xml"
     )
 
 
-@router.get(
+@public_router.get(
     "/events/{event_id}/poster.svg",
     operation_id="getPublicationStoryPoster",
     response_class=Response,
@@ -650,14 +654,16 @@ def item_poster(
     },
 )
 def story_poster(
-    event_id: UUID, service: PublicationServiceDependency, owner_id: UserScopeDependency
+    event_id: UUID,
+    service: PublicationServiceDependency,
+    owner_id: PublicPublicationScopeDependency,
 ) -> Response:
     return _xml(
         service.story_poster(owner_id=owner_id, event_id=event_id), media_type="image/svg+xml"
     )
 
 
-@router.get(
+@public_router.get(
     "/reports/{kind}/{key}/poster.svg",
     operation_id="getPublicationEditionPoster",
     response_class=Response,
@@ -673,7 +679,7 @@ def edition_poster(
     kind: Literal["daily", "weekly", "monthly"],
     key: str,
     service: PublicationServiceDependency,
-    owner_id: UserScopeDependency,
+    owner_id: PublicPublicationScopeDependency,
 ) -> Response:
     return _xml(
         service.edition_poster(owner_id=owner_id, kind=kind, key=key), media_type="image/svg+xml"

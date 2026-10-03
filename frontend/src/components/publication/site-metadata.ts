@@ -15,7 +15,10 @@ export function publicPageMetadata(
   return {
     title: options.title,
     description: options.description,
-    robots: { index: false, follow: false },
+    robots: {
+      index: site.robots_index && options.indexable === true,
+      follow: true,
+    },
     alternates: { canonical },
     openGraph: {
       title: options.title,

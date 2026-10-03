@@ -94,7 +94,7 @@ def editorial_client() -> Iterator[TestClient]:
             )
         )
     ) as client:
-        authenticate_test_client(client)
+        client.app.state.settings.public_publication_owner_id = authenticate_test_client(client)
         yield client
 
 

@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     auth_smtp_from_email: str | None = None
     email_code_hmac_key: SecretStr | None = None
     public_contact_owner_id: UUID | None = None
+    public_publication_owner_id: UUID | None = None
 
     @field_validator(
         "github_client_id",
@@ -62,6 +63,7 @@ class Settings(BaseSettings):
         "auth_smtp_from_email",
         "email_code_hmac_key",
         "public_contact_owner_id",
+        "public_publication_owner_id",
         mode="before",
     )
     @classmethod

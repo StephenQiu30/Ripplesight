@@ -154,7 +154,7 @@ def prepared(request, monkeypatch):
             )
         )
     ) as client:
-        authenticate_test_client(client)
+        client.app.state.settings.public_publication_owner_id = authenticate_test_client(client)
         owner, _, posts = _seed_posts(
             client, [("OpenAI new model", "只含文字和官方附件" if metadata_only else rendered_body)]
         )
