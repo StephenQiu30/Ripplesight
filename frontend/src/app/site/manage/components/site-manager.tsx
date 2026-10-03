@@ -1,6 +1,6 @@
 "use client";
+import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Field, FieldLabel, FieldGroup } from "@/components/ui/field";
 
 import Link from "next/link";
@@ -37,8 +37,7 @@ export function SiteManager() {
   const [feishuImage, setFeishuImage] =
     useState<HotKeyAPI.ContactImageInput | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+
   const operations = useRef(new Map<string, string>());
   const contextRevision = useRef(0);
   useEffect(
@@ -60,7 +59,9 @@ export function SiteManager() {
     setFeishuImage(null);
   }
   function fail(failure: unknown) {
-    setError(
+    if (failure instanceof ApiRequestError && failure.kind === "cancelled")
+      return;
+    toast.error(
       failure instanceof ApiRequestError && failure.status === 409
         ? "配置已被修改或操作冲突，请重新读取后保存。"
         : failure instanceof ApiRequestError &&
@@ -72,8 +73,7 @@ export function SiteManager() {
   async function load() {
     if (!token) return;
     setBusy(true);
-    setError("");
-    setNotice("");
+
     const revision = contextRevision.current;
     try {
       const value = await getOperatorSiteConfiguration({ headers });
@@ -86,13 +86,14 @@ export function SiteManager() {
   }
   async function choose(file: File | undefined, channel: "wechat" | "feishu") {
     if (!file) return;
+    const revision = contextRevision.current;
     if (
       file.size > 2 * 1024 * 1024 ||
       !["image/png", "image/jpeg", "image/webp", "image/gif"].includes(
         file.type,
       )
     ) {
-      setError("图片需为 PNG/JPEG/WebP/GIF，最多 2 MiB。");
+      toast.error("图片需为 PNG/JPEG/WebP/GIF，最多 2 MiB。");
       return;
     }
     try {
@@ -105,6 +106,7 @@ export function SiteManager() {
         reader.onerror = () => reject(new Error("file"));
         reader.readAsDataURL(file);
       });
+      if (revision !== contextRevision.current) return;
       const value: HotKeyAPI.ContactImageInput = {
         mime: file.type as HotKeyAPI.ContactImageInput["mime"],
         data_base64: encoded,
@@ -116,9 +118,9 @@ export function SiteManager() {
         setFeishuImage(value);
         setFeishuAction("replace");
       }
-      setError("");
     } catch {
-      setError("无法读取图片，请重新选择。");
+      if (revision === contextRevision.current)
+        toast.error("无法读取图片，请重新选择。");
     }
   }
   async function save(event: React.FormEvent<HTMLFormElement>) {
@@ -140,8 +142,7 @@ export function SiteManager() {
     if (!operations.current.has(key))
       operations.current.set(key, crypto.randomUUID());
     setBusy(true);
-    setError("");
-    setNotice("");
+
     const revision = contextRevision.current;
     try {
       const value = await saveOperatorSiteConfiguration(
@@ -150,7 +151,7 @@ export function SiteManager() {
       );
       if (revision === contextRevision.current) {
         apply(value);
-        setNotice("已保存。公开联系页按当前启用状态读取。");
+        toast.success("已保存。公开联系页按当前启用状态读取。");
       }
     } catch (failure) {
       if (revision === contextRevision.current) fail(failure);
@@ -177,8 +178,7 @@ export function SiteManager() {
               setToken(event.target.value);
               setView(null);
               setBusy(false);
-              setError("");
-              setNotice("");
+
               operations.current.clear();
             }}
           />
@@ -186,16 +186,7 @@ export function SiteManager() {
             读取配置
           </Button>
         </Field>
-        {error && (
-          <Alert variant="destructive" className="mt-5">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        {notice && (
-          <p role="status" className="mt-5">
-            {notice}
-          </p>
-        )}
+
         {view && (
           <form onSubmit={save}>
             <FieldGroup className="mt-8 flex flex-col gap-y-6">

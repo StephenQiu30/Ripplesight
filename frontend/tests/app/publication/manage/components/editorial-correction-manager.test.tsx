@@ -16,6 +16,9 @@ import {
 } from "@/api/bianjifenxi";
 import { EditorialCorrectionManager } from "@/app/publication/manage/components/editorial-correction-manager";
 
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
+
 vi.mock("@/api/bianjifenxi", () => ({
   correctEditorialRun: vi.fn(),
   getCurrentEditorialRun: vi.fn(),
@@ -55,6 +58,7 @@ async function read() {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
   vi.mocked(getCurrentEditorialRun).mockReset().mockResolvedValue(run);
   vi.mocked(requestEditorialRun)
     .mockReset()
@@ -140,6 +144,7 @@ describe("editorial field correction", () => {
       ).disabled,
     ).toBe(true);
     expect(correctEditorialRun).not.toHaveBeenCalled();
+    expect(notifications.success).not.toHaveBeenCalled();
   });
 });
 
@@ -149,7 +154,12 @@ it("enqueues a fresh full run using the displayed fixed version and preserves op
   await read();
   fireEvent.click(screen.getByRole("button", { name: "重新分析全部阶段" }));
   await waitFor(() => expect(requestEditorialRun).toHaveBeenCalledTimes(1));
-  await screen.findByText("操作未完成，请重新读取后检查。");
+  await waitFor(() =>
+    expect(notifications.error).toHaveBeenCalledWith(
+      "操作未完成，请重新读取后检查。",
+    ),
+  );
+  expect(screen.queryByText("操作未完成，请重新读取后检查。")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "重新分析全部阶段" }));
   await waitFor(() => expect(requestEditorialRun).toHaveBeenCalledTimes(2));
   const first = vi.mocked(requestEditorialRun).mock.calls[0];
@@ -169,7 +179,11 @@ it("enqueues a fresh full run using the displayed fixed version and preserves op
     },
   ]);
   expect(vi.mocked(requestEditorialRun).mock.calls[1]).toEqual(first);
-  await screen.findByText(/已排队/);
+  await waitFor(() =>
+    expect(notifications.success).toHaveBeenCalledWith(
+      "已排队，模型结果完成后再读取当前分析。",
+    ),
+  );
   expect(
     screen.getByRole("link", { name: "查看分析任务" }).getAttribute("href"),
   ).toBe("/jobs/new-original-job");

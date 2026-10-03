@@ -2,6 +2,8 @@
 
 import NextImage from "next/image";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { ApiRequestError } from "@/request";
 
 import {
   getPublicationItemPosterPng,
@@ -17,7 +19,6 @@ type PosterTarget =
 
 export function PosterDownload({ target }: { target: PosterTarget }) {
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
   useEffect(
     () => () => {
@@ -32,7 +33,6 @@ export function PosterDownload({ target }: { target: PosterTarget }) {
         disabled={busy}
         onClick={async () => {
           setBusy(true);
-          setMessage("");
           setPreview(null);
           try {
             const data: unknown =
@@ -62,11 +62,13 @@ export function PosterDownload({ target }: { target: PosterTarget }) {
             )
               throw new Error("invalid_poster");
             setPreview(URL.createObjectURL(data));
-            setMessage(
+            toast.success(
               "海报已生成，包含当前阅读地址的二维码，可以预览后下载。",
             );
-          } catch {
-            setMessage("海报当前不可读取或材料许可已变化，请重新尝试。");
+          } catch (error) {
+            if (error instanceof ApiRequestError && error.kind === "cancelled")
+              return;
+            toast.error("海报当前不可读取或材料许可已变化，请重新尝试。");
           } finally {
             setBusy(false);
           }
@@ -74,11 +76,6 @@ export function PosterDownload({ target }: { target: PosterTarget }) {
       >
         {busy ? "生成海报…" : "生成海报 PNG"}
       </Button>
-      {message ? (
-        <p role="status" className="text-muted-foreground mt-2 text-xs">
-          {message}
-        </p>
-      ) : null}
       {preview ? (
         <div className="mt-4 flex flex-col gap-y-3">
           <NextImage

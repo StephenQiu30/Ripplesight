@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import {
   getPublicFactReports,
   getPublicStoryDevelopments,
@@ -10,6 +11,7 @@ import {
   publicationTime,
 } from "@/components/publication/reading-parts";
 import { Button } from "@/components/ui/button";
+import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { ApiRequestError } from "@/request";
 
 export function GroupExpansion({
@@ -33,10 +35,10 @@ export function GroupExpansion({
   const [revision, setRevision] = useState<string>();
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const [failed, setFailed] = useState(false);
   async function load(nextMode: "reports" | "developments", more = false) {
     setBusy(true);
-    setError(undefined);
+    setFailed(false);
     setMode(nextMode);
     try {
       if (nextMode === "reports") {
@@ -65,10 +67,13 @@ export function GroupExpansion({
         setCursor(page.next_cursor);
       }
     } catch (cause) {
+      if (cause instanceof ApiRequestError && cause.kind === "cancelled")
+        return;
       setReports([]);
       setDevelopments([]);
       setCursor(null);
-      setError(
+      setFailed(true);
+      toast.error(
         cause instanceof ApiRequestError && cause.status === 409
           ? "报道或许可已经变化，请重新展开。"
           : "暂时无法展开，请重新读取。",
@@ -119,9 +124,11 @@ export function GroupExpansion({
           className="bg-muted/30 rounded-lg border p-4"
         >
           {busy ? <p role="status">正在读取当前许可…</p> : null}
-          {error ? (
-            <div role="status">
-              <p>{error}</p>
+          {failed ? (
+            <Empty>
+              <EmptyHeader>
+                <EmptyTitle>展开内容暂不可读</EmptyTitle>
+              </EmptyHeader>
               <Button
                 variant="outline"
                 size="sm"
@@ -129,12 +136,12 @@ export function GroupExpansion({
               >
                 重新展开
               </Button>
-            </div>
+            </Empty>
           ) : null}
-          {!error && mode === "reports" ? (
+          {!failed && mode === "reports" ? (
             <PublicItemCards items={reports} />
           ) : null}
-          {!error && mode === "developments"
+          {!failed && mode === "developments"
             ? developments.map((entry) => (
                 <section key={entry.fact_id}>
                   <p className="text-muted-foreground text-xs">
@@ -145,7 +152,7 @@ export function GroupExpansion({
                 </section>
               ))
             : null}
-          {cursor && !busy && !error ? (
+          {cursor && !busy && !failed ? (
             <Button
               size="sm"
               variant="outline"

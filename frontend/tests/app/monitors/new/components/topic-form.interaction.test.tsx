@@ -7,6 +7,10 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+const toasts = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: toasts }));
+afterEach(() => vi.clearAllMocks());
+
 const api = vi.hoisted(() => ({
   sources: vi.fn(),
   create: vi.fn(),
@@ -46,7 +50,12 @@ describe("core topic creation", () => {
     fireEvent.change(screen.getByLabelText("想关注的关键词"), {
       target: { value: "AI" },
     });
-    await screen.findByText("请求编号：source-error");
+    await waitFor(() =>
+      expect(toasts.error).toHaveBeenCalledWith("来源暂不可用", {
+        description: "请求编号：source-error",
+      }),
+    );
+    expect(screen.queryByText("来源暂不可用")).toBeNull();
     expect((screen.getByLabelText("主题名称") as HTMLInputElement).value).toBe(
       "AI 工具",
     );

@@ -31,7 +31,9 @@
 - SSR origin 在传输层统一解析，限定Cookie逐请求传递，不保存在全局defaults；透明同源代理只做基础设施转发。ESLint检查业务边界，生成漂移检查API，基础设施例外只按确切路径处理。
 - 页面专属组件在app路由components，跨页稳定复用才迁components/<feature>，官方基础组件在ui。根布局装配独立layout目录的BasicLayout/Header/Footer/Container/UsageGuide；不建features/common/patterns/shared或scripts。
 - 各页面只组合正文，不重复主导航、main、全屏高度、外侧宽度/边距。头尾固定、唯一main滚动、统一容器，加载/错误/404/global-error和打印一致；阅读位置使用真实main节点。
+- `/login` 不显示顶部 Header；登录加载和恢复态沿用无 Header 的同一外壳，正文滚动、页脚和全局 Sonner 仍由 BasicLayout 管理。短请求只使用主按钮忙碌/禁用态，不追加中止 HTTP 请求的“取消”按钮；保留离页中止及真实任务取消、编辑/对话框退出。
 - 视觉规范见frontend/DESIGN：黑白留白、语义令牌、无装饰边框、Tailwind命名尺度与标准断点；输入/错误/焦点/浮层保留必要轮廓。组件设计明确名称/领域/复用/路径/数据/加载空态部分错误权限。
+- 操作失败/校验/成功/主动取消统一使用官方shadcn Sonner，BasicLayout仅挂载一个Toaster；禁止表单、菜单或内容底部的临时反馈块和自定义Toast。加载失败保留原生Empty/Alert恢复入口，持久业务错误事实仍作为内容展示；不在传输层自动通知，取消/失效响应不弹错误。
 - Welcome及五个说明页可公开索引；login不索引，工作区HTML含prefetch/API/出口验证真实会话并noindex。网络故障不能当退出。公开元数据使用实际站点origin，无伪统计。
 - CSP每请求nonce，交互HTML动态渲染、private/no-store；创建页connection()，脚本/响应nonce一致且不跨请求复用。生产standalone/非root/只读；浏览器验证冷进入及交互。
 - 测试仅frontend/tests，Vitest只扫描此目录；src不放测试或导入测试框架，生产类型/Docker排除测试，独立测试类型仍检查。后端测试保持backend/tests。

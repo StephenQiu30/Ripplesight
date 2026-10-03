@@ -1,4 +1,6 @@
 "use client";
+
+import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import Link from "next/link";
@@ -19,7 +21,6 @@ type RefreshState =
   | {
       status: "ready";
       readiness: HotKeyAPI.CommentRunReadinessView;
-      message: string | null;
     }
   | { status: "accepted"; jobId: string };
 
@@ -58,15 +59,13 @@ export function commentRefreshReason(
 export function CommentRefreshControls({
   readiness,
   submitting,
-  message,
   onRefresh,
 }: {
   readiness: HotKeyAPI.CommentRunReadinessView;
   submitting: boolean;
-  message: string | null;
   onRefresh: () => void;
 }) {
-  if (!readiness.supported && !message) return null;
+  if (!readiness.supported) return null;
   return (
     <div className="mt-4">
       {readiness.supported ? (
@@ -80,9 +79,9 @@ export function CommentRefreshControls({
           {submitting ? "正在受理…" : "更新评论"}
         </Button>
       ) : null}
-      {readiness.reason || message ? (
+      {readiness.reason ? (
         <p role="status" className="text-muted-foreground mt-2 text-sm">
-          {message ?? commentRefreshReason(readiness.reason)}
+          {commentRefreshReason(readiness.reason)}
         </p>
       ) : null}
     </div>
@@ -90,8 +89,19 @@ export function CommentRefreshControls({
 }
 
 export function CommentRefreshAction({ postId }: { postId: string }) {
+  return <CommentRefreshActionContent key={postId} postId={postId} />;
+}
+
+function CommentRefreshActionContent({ postId }: { postId: string }) {
   const router = useRouter();
   const operation = useRef(new CommentRefreshOperation());
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const [state, setState] = useState<RefreshState>({ status: "loading" });
   const [submitting, setSubmitting] = useState(false);
   const [retryToken, setRetryToken] = useState(0);
@@ -104,18 +114,19 @@ export function CommentRefreshAction({ postId }: { postId: string }) {
     )
       .then((readiness) => {
         if (!controller.signal.aborted)
-          setState({ status: "ready", readiness, message: null });
+          setState({ status: "ready", readiness });
       })
       .catch((error: unknown) => {
+        if (error instanceof ApiRequestError && error.kind === "cancelled")
+          return;
         if (controller.signal.aborted) return;
 
-        setState({
-          status: "error",
-          message:
-            error instanceof ApiRequestError
-              ? `${error.message}${error.requestId ? ` 请求编号：${error.requestId}` : ""}`
-              : "评论更新资格暂不可用，请重试。",
-        });
+        toast.error(
+          error instanceof ApiRequestError
+            ? `${error.message}${error.requestId ? ` 请求编号：${error.requestId}` : ""}`
+            : "评论更新资格暂不可用，请重试。",
+        );
+        setState({ status: "error", message: "请重新加载评论更新资格。" });
       });
     return () => controller.abort();
   }, [postId, retryToken]);
@@ -131,10 +142,16 @@ export function CommentRefreshAction({ postId }: { postId: string }) {
         { operation_id: operationId },
       );
       operation.current.finish(true);
+      if (!mounted.current) return;
       setState({ status: "accepted", jobId: accepted.job_id });
       router.push(`/jobs/${accepted.job_id}`);
     } catch (error) {
       operation.current.finish(false);
+      if (
+        !mounted.current ||
+        (error instanceof ApiRequestError && error.kind === "cancelled")
+      )
+        return;
 
       if (
         error instanceof ApiRequestError &&
@@ -149,20 +166,18 @@ export function CommentRefreshAction({ postId }: { postId: string }) {
             available: false,
             reason: error.code,
           },
-          message: commentRefreshReason(error.code),
         });
+        toast.error(commentRefreshReason(error.code));
       } else {
-        setState({
-          status: "ready",
-          readiness: state.readiness,
-          message:
-            error instanceof ApiRequestError
-              ? `${error.message}。可使用同一次操作标识重试。`
-              : "更新请求未确认，可使用同一次操作标识重试。",
-        });
+        setState({ status: "ready", readiness: state.readiness });
+        toast.error(
+          error instanceof ApiRequestError
+            ? `${error.message}。可使用同一次操作标识重试。`
+            : "更新请求未确认，可使用同一次操作标识重试。",
+        );
       }
     } finally {
-      setSubmitting(false);
+      if (mounted.current) setSubmitting(false);
     }
   }
 
@@ -200,7 +215,6 @@ export function CommentRefreshAction({ postId }: { postId: string }) {
     <CommentRefreshControls
       readiness={state.readiness}
       submitting={submitting}
-      message={state.message}
       onRefresh={() => void refresh()}
     />
   );

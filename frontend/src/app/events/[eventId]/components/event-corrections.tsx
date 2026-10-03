@@ -11,8 +11,8 @@ import {
 
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { correctEvent, listEvents } from "@/api/shijian";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,7 +48,6 @@ export function EventCorrections({
   const [targetId, setTargetId] = useState("");
   const [targetFactId, setTargetFactId] = useState("");
   const [reason, setReason] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const operation = useRef<{ fingerprint: string; id: string } | null>(null);
   useEffect(() => {
@@ -64,8 +63,11 @@ export function EventCorrections({
         setCursor(page.next_cursor);
       })
       .catch((failure: unknown) => {
-        if (!controller.signal.aborted)
-          setError(
+        if (
+          !controller.signal.aborted &&
+          !(failure instanceof ApiRequestError && failure.kind === "cancelled")
+        )
+          toast.error(
             failure instanceof ApiRequestError
               ? failure.message
               : "目标事件读取失败。",
@@ -87,7 +89,9 @@ export function EventCorrections({
       ]);
       setCursor(page.next_cursor);
     } catch (failure: unknown) {
-      setError(
+      if (failure instanceof ApiRequestError && failure.kind === "cancelled")
+        return;
+      toast.error(
         failure instanceof ApiRequestError
           ? failure.message
           : "目标事件读取失败。",
@@ -99,25 +103,25 @@ export function EventCorrections({
     if (submitting) return;
     const target = targets.find((item) => item.id === targetId);
     if ((kind === "merge" || kind === "move") && !target) {
-      setError("请选择目标事件。");
+      toast.error("请选择目标事件。");
       return;
     }
     if (
       kind === "merge_facts" &&
       (selectedFactIds.length < 2 || !selectedFactIds.includes(targetFactId))
     ) {
-      setError("请选择至少两个事实，并指定其中一个作为规范事实。");
+      toast.error("请选择至少两个事实，并指定其中一个作为规范事实。");
       return;
     }
     if (
       !["merge", "merge_facts"].includes(kind) &&
       !selectedContentIds.length
     ) {
-      setError("请先选择可读的当前成员。");
+      toast.error("请先选择可读的当前成员。");
       return;
     }
     if (!reason.trim()) {
-      setError("请填写修订原因。");
+      toast.error("请填写修订原因。");
       return;
     }
     const input = {
@@ -142,7 +146,6 @@ export function EventCorrections({
     const fingerprint = JSON.stringify(input);
     if (operation.current?.fingerprint !== fingerprint)
       operation.current = { fingerprint, id: crypto.randomUUID() };
-    setError(null);
     setSubmitting(true);
     try {
       const result = await correctEvent(
@@ -150,11 +153,14 @@ export function EventCorrections({
         { headers: { "X-HotKey-CSRF": "1" } },
       );
       operation.current = null;
+      toast.success("事件修订已保存。");
       if (result.target_event_id && result.target_event_id !== event.id)
         router.push(`/events/${result.target_event_id}`);
       onChanged();
     } catch (failure: unknown) {
-      setError(
+      if (failure instanceof ApiRequestError && failure.kind === "cancelled")
+        return;
+      toast.error(
         failure instanceof ApiRequestError &&
           failure.code === "event_revision_conflict"
           ? "事件修订已变化。刷新详情并重新选择后再提交。"
@@ -302,12 +308,6 @@ export function EventCorrections({
               onChange={(input) => setReason(input.target.value)}
             />
           </Field>
-          {error ? (
-            <Alert variant="destructive">
-              <AlertTitle>修订未完成</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
           <Button type="submit" disabled={submitting}>
             {submitting ? "正在提交修订…" : "提交人工修订"}
           </Button>

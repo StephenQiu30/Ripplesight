@@ -10,10 +10,12 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  toastError: vi.fn(),
   logout: vi.fn(),
   replace: vi.fn(),
   refresh: vi.fn(),
 }));
+vi.mock("sonner", () => ({ toast: { error: mocks.toastError } }));
 vi.mock("@/api/identity", () => ({ deleteIdentitySession: mocks.logout }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mocks.replace, refresh: mocks.refresh }),
@@ -64,9 +66,9 @@ it("keeps the current session visible when logout fails instead of pretending it
     key: "Enter",
   });
   fireEvent.click(await screen.findByRole("menuitem", { name: "退出登录" }));
-  expect(await screen.findByRole("alert")).toHaveProperty(
-    "textContent",
-    "退出失败，请重试。",
+  await waitFor(() =>
+    expect(mocks.toastError).toHaveBeenCalledWith("退出失败，请重试。"),
   );
+  expect(screen.queryByRole("alert")).toBeNull();
   expect(mocks.replace).not.toHaveBeenCalled();
 });

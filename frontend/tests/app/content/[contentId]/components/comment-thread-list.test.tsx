@@ -72,7 +72,6 @@ describe("comment thread reading", () => {
           reason: "comments_not_ready",
         },
         submitting: false,
-        message: null,
         onRefresh: () => {},
       }),
     );
@@ -86,7 +85,6 @@ describe("comment thread reading", () => {
           reason: "comments_rate_limited",
         },
         submitting: false,
-        message: null,
         onRefresh: () => {},
       }),
     );
@@ -97,7 +95,6 @@ describe("comment thread reading", () => {
       createElement(CommentRefreshControls, {
         readiness: { supported: true, available: true, reason: null },
         submitting: true,
-        message: null,
         onRefresh: () => {},
       }),
     );

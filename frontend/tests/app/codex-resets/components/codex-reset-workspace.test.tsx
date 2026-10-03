@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -8,6 +9,8 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
 
 const api = vi.hoisted(() => ({
   configuration: vi.fn(),
@@ -98,6 +101,7 @@ const snapshot: HotKeyAPI.ResetSnapshot = {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.resetAllMocks();
 });
 
@@ -112,6 +116,24 @@ function ready() {
 }
 
 describe("Codex reset reading", () => {
+  it("announces a failed background probe once while retaining stale data", async () => {
+    ready();
+    api.version.mockRejectedValue(new Error("offline"));
+    vi.useFakeTimers();
+    await act(async () => {
+      render(<CodexResetWorkspace />);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(api.version).toHaveBeenCalledTimes(2);
+    expect(notifications.error).toHaveBeenCalledOnce();
+    expect(screen.getByText(/当前为上次读取的数据/)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: event.title })).toBeTruthy();
+  });
   it("shows unconfigured state without creating records or loading source posts", async () => {
     api.configuration.mockResolvedValue(null);
     api.snapshot.mockResolvedValue(null);
@@ -139,10 +161,12 @@ describe("Codex reset reading", () => {
     ).toBe(event.posts?.[0].url);
     api.snapshot.mockRejectedValue(new Error("offline"));
     fireEvent.click(screen.getByRole("button", { name: "刷新公告" }));
-    expect(
-      await screen.findByText(/刷新失败，仍显示上次读取的数据/),
-    ).toBeTruthy();
+    expect(await screen.findByText(/当前为上次读取的数据/)).toBeTruthy();
     expect(screen.getByRole("heading", { name: event.title })).toBeTruthy();
+    expect(notifications.error).toHaveBeenCalledWith(
+      "公告读取失败，请稍后重试。",
+    );
+    expect(screen.queryByText("公告读取失败，请稍后重试。")).toBeNull();
   });
 
   it("pages persistent posts and resets page on status filter", async () => {
@@ -195,7 +219,11 @@ describe("Codex reset reading", () => {
     expect(
       await screen.findByText(/监控已关闭。下方保留已有记录/),
     ).toBeTruthy();
-    expect(await screen.findByText("源帖子读取失败。")).toBeTruthy();
+    await waitFor(() =>
+      expect(notifications.error).toHaveBeenCalledWith("源帖子读取失败。"),
+    );
+    expect(screen.queryByText("源帖子读取失败。")).toBeNull();
+    expect(screen.getByRole("button", { name: "重试读取帖子" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: event.title })).toBeTruthy();
     expect(screen.getByRole("button", { name: "重试读取帖子" })).toBeTruthy();
   });

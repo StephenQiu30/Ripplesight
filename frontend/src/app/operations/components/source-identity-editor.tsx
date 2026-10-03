@@ -1,4 +1,5 @@
 "use client";
+import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   SelectLabel,
@@ -10,7 +11,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { FieldGroup, FieldLabel, Field } from "@/components/ui/field";
-import { useId, useEffect, useState } from "react";
+import { useId, useEffect, useState, useRef } from "react";
 import {
   listEventAttentionSources,
   upsertEventAttentionSource,
@@ -31,11 +32,19 @@ const blank: HotKeyAPI.AttentionSourceInput = {
   first_party: false,
 };
 export function SourceIdentityEditor({ token }: { token: string }) {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const fieldId = useId();
 
   const [rows, setRows] = useState<HotKeyAPI.AttentionSourceView[]>([]);
   const [draft, setDraft] = useState(blank);
-  const [message, setMessage] = useState("");
+
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     let live = true;
@@ -43,8 +52,10 @@ export function SourceIdentityEditor({ token }: { token: string }) {
       .then((v) => {
         if (live) setRows(v);
       })
-      .catch(() => {
-        if (live) setMessage("来源身份读取失败");
+      .catch((cause) => {
+        if (cause instanceof ApiRequestError && cause.kind === "cancelled")
+          return;
+        if (live) if (mounted.current) toast.error("来源身份读取失败");
       });
     return () => {
       live = false;
@@ -53,7 +64,7 @@ export function SourceIdentityEditor({ token }: { token: string }) {
   async function save(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
-    setMessage("");
+
     try {
       const row = await upsertEventAttentionSource(draft, {
         headers: { "X-HotKey-Operator-Token": token },
@@ -63,13 +74,16 @@ export function SourceIdentityEditor({ token }: { token: string }) {
         row,
       ]);
       setDraft(blank);
-      setMessage("来源身份已保存。");
+      if (mounted.current) toast.success("来源身份已保存。");
     } catch (error) {
-      setMessage(
-        error instanceof ApiRequestError
-          ? error.message
-          : "来源身份保存失败，请刷新版本后重试。",
-      );
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (mounted.current)
+        toast.error(
+          error instanceof ApiRequestError
+            ? error.message
+            : "来源身份保存失败，请刷新版本后重试。",
+        );
     } finally {
       setBusy(false);
     }
@@ -361,11 +375,6 @@ export function SourceIdentityEditor({ token }: { token: string }) {
           </div>
         </FieldGroup>
       </form>
-      {message && (
-        <p role="status" className="text-sm">
-          {message}
-        </p>
-      )}
     </section>
   );
 }

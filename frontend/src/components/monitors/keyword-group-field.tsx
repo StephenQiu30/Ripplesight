@@ -1,9 +1,4 @@
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-} from "@/components/ui/field";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
 
 type KeywordGroupFieldProps = {
@@ -45,15 +40,12 @@ export function KeywordGroupField({
         rows={3}
         maxLength={5_000}
         placeholder="每行一个关键词"
-        aria-describedby={
-          error ? `${id}-error ${id}-description` : `${id}-description`
-        }
+        aria-describedby={`${id}-description`}
         aria-invalid={Boolean(error)}
       />
       <FieldDescription id={`${id}-description`}>
         {description} 当前 {count}/50 个关键词。
       </FieldDescription>
-      {error ? <FieldError id={`${id}-error`}>{error}</FieldError> : null}
     </Field>
   );
 }

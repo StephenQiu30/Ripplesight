@@ -1,12 +1,31 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
 const api = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock("@/api/zhandiziliao", () => ({ getPublicContact: api.get }));
 import { ContactPanel } from "@/app/contact/components/contact-panel";
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();
+});
+it("uses a toast for request failure and retains the recovery control", async () => {
+  api.get.mockRejectedValue(new Error("offline"));
+  render(<ContactPanel />);
+  await waitFor(() =>
+    expect(notifications.error).toHaveBeenCalledWith(
+      "联系资料读取失败，请重新读取。",
+    ),
+  );
+  expect(screen.queryByText("联系资料读取失败，请重新读取。")).toBeNull();
+  expect(screen.getByRole("button", { name: "重新读取" })).toBeTruthy();
 });
 it("removes both QR images and contact text after current configuration is disabled", async () => {
   api.get

@@ -37,6 +37,24 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("BasicLayout", () => {
+  it("omits the login header and restores navigation when leaving login", () => {
+    route.pathname = "/login";
+    const view = render(<BasicLayout>{page}</BasicLayout>);
+    const main = screen.getByRole("main");
+    expect(screen.queryByRole("banner")).toBeNull();
+    expect(screen.queryByRole("navigation", { name: "站点导航" })).toBeNull();
+    expect(screen.getByRole("contentinfo")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "跳到正文" }).getAttribute("href"),
+    ).toBe("#main-content");
+    main.scrollTop = 100;
+    route.pathname = "/";
+    view.rerender(<BasicLayout>{page}</BasicLayout>);
+    expect(screen.getByRole("banner")).toBeTruthy();
+    expect(screen.getByRole("main")).toBe(main);
+    expect(main.scrollTop).toBe(0);
+  });
+
   it("shows public navigation and login without exposing the workspace menu", () => {
     render(<BasicLayout>{page}</BasicLayout>);
     expect(screen.getByRole("navigation", { name: "站点导航" })).toBeTruthy();

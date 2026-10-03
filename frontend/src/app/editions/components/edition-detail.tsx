@@ -17,6 +17,8 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useId, useEffect, useRef, useState, type FormEvent } from "react";
+import { toast } from "sonner";
+import { ApiRequestError } from "@/request";
 import {
   correctReportEdition,
   getReportEdition,
@@ -74,7 +76,6 @@ function EditionCorrection({
 }) {
   const fieldId = useId();
 
-  const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const operation = useRef<{ signature: string; id: string } | null>(null);
   const content = row.content;
@@ -98,16 +99,17 @@ function EditionCorrection({
     if (operation.current?.signature !== signature)
       operation.current = { signature, id: crypto.randomUUID() };
     setBusy(true);
-    setError(undefined);
     try {
       const next = await correctReportEdition(
         { edition_id: row.id },
         { ...changes, operation_id: operation.current.id },
       );
       operation.current = null;
+      toast.success("刊期新修订已保存。");
       saved(next);
     } catch (err) {
-      setError(editionError(err));
+      if (err instanceof ApiRequestError && err.kind === "cancelled") return;
+      toast.error(editionError(err));
     } finally {
       setBusy(false);
     }
@@ -212,11 +214,6 @@ function EditionCorrection({
                 id={`${fieldId}-edition-detail-field-4`}
               />
             </Field>
-            {error ? (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            ) : null}
             <Button type="submit" disabled={busy}>
               {busy ? "保存中…" : "保存新修订"}
             </Button>
@@ -231,7 +228,7 @@ export function EditionDetail({ editionId }: { editionId: string }) {
   const router = useRouter();
   const [row, setRow] = useState<HotKeyAPI.EditionDetailView>();
   const [history, setHistory] = useState<HotKeyAPI.EditionSummaryView[]>([]);
-  const [error, setError] = useState<string>();
+  const [loadFailed, setLoadFailed] = useState(false);
   const [historyError, setHistoryError] = useState(false);
   const [refresh, setRefresh] = useState(0);
   useEffect(() => {
@@ -245,13 +242,17 @@ export function EditionDetail({ editionId }: { editionId: string }) {
         );
         if (controller.signal.aborted) return;
         setRow(next);
-        setError(undefined);
+        setLoadFailed(false);
         if (next.status === "queued" || next.status === "running")
           timer = setTimeout(read, 5000);
       } catch (err) {
-        if (!controller.signal.aborted) {
+        if (
+          !controller.signal.aborted &&
+          !(err instanceof ApiRequestError && err.kind === "cancelled")
+        ) {
           setRow(undefined);
-          setError(editionError(err));
+          setLoadFailed(true);
+          toast.error(editionError(err));
         }
       }
     }
@@ -266,10 +267,14 @@ export function EditionDetail({ editionId }: { editionId: string }) {
           setHistoryError(false);
         }
       })
-      .catch(() => {
-        if (!controller.signal.aborted) {
+      .catch((err: unknown) => {
+        if (
+          !controller.signal.aborted &&
+          !(err instanceof ApiRequestError && err.kind === "cancelled")
+        ) {
           setHistory([]);
           setHistoryError(true);
+          toast.error("历史修订读取失败，刷新后可以重试。");
         }
       });
     return () => {
@@ -289,13 +294,15 @@ export function EditionDetail({ editionId }: { editionId: string }) {
             刷新刊期
           </Button>
         </div>
-        {error ? (
+        {loadFailed ? (
           <Alert variant="destructive">
             <AlertTitle>正文暂不可读</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>
+              刷新后可以重新检查当前刊期许可。
+            </AlertDescription>
           </Alert>
         ) : null}
-        {!row && !error ? <Skeleton className="h-40 w-full" /> : null}
+        {!row && !loadFailed ? <Skeleton className="h-40 w-full" /> : null}
         {row ? (
           <>
             <p className="text-muted-foreground text-sm">
@@ -415,9 +422,10 @@ export function EditionDetail({ editionId }: { editionId: string }) {
         <section className="border-border mt-12 border-t pt-6">
           <h2 className="font-medium">历史修订</h2>
           {historyError ? (
-            <p className="text-muted-foreground mt-4 text-sm">
-              历史修订暂不可读，刷新后重试。
-            </p>
+            <Alert className="mt-4">
+              <AlertTitle>历史修订暂不可读</AlertTitle>
+              <AlertDescription>刷新后可以重新读取历史修订。</AlertDescription>
+            </Alert>
           ) : (
             <ul>
               {history.map((item) => (

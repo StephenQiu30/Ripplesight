@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowRightIcon, CircleAlertIcon, RotateCcwIcon } from "lucide-react";
@@ -29,7 +31,7 @@ export function JobHealthSummaryView({ state }: { state: IssueState }) {
     return (
       <Alert variant="destructive" className="mt-8">
         <AlertTitle>连续失败摘要暂不可用</AlertTitle>
-        <AlertDescription>任务历史仍可查看。{state.message}</AlertDescription>
+        <AlertDescription>任务历史仍可查看，请重试摘要。</AlertDescription>
       </Alert>
     );
   }
@@ -106,10 +108,17 @@ export function JobHealthSummary() {
         }
       })
       .catch((error: unknown) => {
+        if (error instanceof ApiRequestError && error.kind === "cancelled")
+          return;
         if (controller.signal.aborted) {
           return;
         }
 
+        toast.error(
+          error instanceof ApiRequestError
+            ? error.message
+            : "连续失败摘要暂不可用，请稍后重试。",
+        );
         setState({
           status: "error",
           message:

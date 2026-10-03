@@ -1,6 +1,14 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
 import { PublicEditionCatalogue } from "@/components/publication/edition-catalogue";
 const api = vi.hoisted(() => ({ catalogue: vi.fn(), calendar: vi.fn() }));
 vi.mock("@/api/gongkaikanwumulu", () => ({
@@ -61,7 +69,12 @@ it("removes the old calendar when a changed month cannot be read", async () => {
     target: { value: "2026-09" },
   });
   fireEvent.click(screen.getByRole("button", { name: "读取月份" }));
-  await screen.findByText(/暂时无法读取月份日历/);
+  await waitFor(() =>
+    expect(notifications.error).toHaveBeenCalledWith(
+      "暂时无法读取月份日历，请检查月份或重试。",
+    ),
+  );
+  expect(screen.queryByText(/暂时无法读取月份日历/)).toBeNull();
   expect(
     screen.queryByRole("link", { name: "2026-10-01 日报：日报 2026-10-01" }),
   ).toBeNull();

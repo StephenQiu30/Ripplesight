@@ -2,12 +2,12 @@
 import { Button } from "@/components/ui/button";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { getSelectedPublicationSnapshot } from "@/api/gongkaifabu";
 
 export function SelectedSnapshotDownload() {
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
   const mounted = useRef(true);
   const download = useRef<{ url: string; timer: number | null } | null>(null);
   const clearDownload = useCallback(() => {
@@ -29,7 +29,6 @@ export function SelectedSnapshotDownload() {
   async function downloadSnapshot() {
     if (busy) return;
     setBusy(true);
-    setMessage("");
     try {
       const snapshot = await getSelectedPublicationSnapshot({});
       if (!mounted.current) return;
@@ -50,10 +49,10 @@ export function SelectedSnapshotDownload() {
         if (download.current)
           download.current.timer = window.setTimeout(clearDownload, 0);
       }
-      setMessage("快照已下载。");
+      toast.success("快照已下载。");
     } catch {
       clearDownload();
-      if (mounted.current) setMessage("快照暂时无法下载，请重新尝试。");
+      if (mounted.current) toast.error("快照暂时无法下载，请重新尝试。");
     } finally {
       if (mounted.current) setBusy(false);
     }
@@ -70,11 +69,6 @@ export function SelectedSnapshotDownload() {
       >
         {busy ? "正在读取快照…" : "精选同步快照"}
       </Button>
-      {message ? (
-        <span role="status" className="text-muted-foreground text-xs">
-          {message}
-        </span>
-      ) : null}
     </span>
   );
 }

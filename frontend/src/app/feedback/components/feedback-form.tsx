@@ -1,6 +1,7 @@
 "use client";
 import { FieldGroup, FieldLabel, Field } from "@/components/ui/field";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { toast } from "sonner";
 import { submitFeedback } from "@/api/fankui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,15 +37,21 @@ export function FeedbackForm() {
   const [pageUrl, setPageUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState("");
   const operation = useRef<{ fingerprint: string; id: string } | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (pending) return;
     setPending(true);
-    setMessage("");
     try {
       const screenshot = file ? await readImage(file) : null;
+      if (!mounted.current) return;
       const fingerprint = JSON.stringify([
         content.trim(),
         email.trim(),
@@ -60,14 +67,18 @@ export function FeedbackForm() {
         page_url: pageUrl.trim() || null,
         screenshot,
       });
-      setMessage(`反馈已保存，编号 ${saved.id}。`);
+      if (!mounted.current) return;
+      toast.success(`反馈已保存，编号 ${saved.id}。`);
       setContent("");
       setEmail("");
       setPageUrl("");
       setFile(null);
       operation.current = null;
     } catch (error) {
-      setMessage(
+      if (!mounted.current) return;
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      toast.error(
         error instanceof ApiRequestError
           ? error.code === "feedback_rate_limited"
             ? "提交频率过高，请稍后再试；当前内容已保留。"
@@ -77,7 +88,7 @@ export function FeedbackForm() {
             : "反馈提交失败，请保留当前内容后重试。",
       );
     } finally {
-      setPending(false);
+      if (mounted.current) setPending(false);
     }
   }
   return (
@@ -141,11 +152,6 @@ export function FeedbackForm() {
           <Button type="button" variant="ghost" onClick={() => setFile(null)}>
             移除截图 {file.name}
           </Button>
-        )}
-        {message && (
-          <p role="status" className="text-sm break-words">
-            {message}
-          </p>
         )}
         <Button type="submit" disabled={pending} className="justify-self-start">
           {pending ? "正在提交" : "提交反馈"}

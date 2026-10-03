@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDownIcon, ExternalLinkIcon, RotateCcwIcon } from "lucide-react";
 
@@ -42,7 +44,6 @@ function useCommentPage(postId: string, rootId: string | null) {
   const [state, setState] = useState<CommentPageState>({ status: "loading" });
   const [loadingMore, setLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
-  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const request = useRef<AbortController | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
@@ -73,9 +74,17 @@ function useCommentPage(postId: string, rootId: string | null) {
         });
       })
       .catch((error: unknown) => {
+        if (error instanceof ApiRequestError && error.kind === "cancelled")
+          return;
         if (controller.signal.aborted) return;
 
-        setState(toError(error));
+        const failure = toError(error);
+        toast.error(failure.message, {
+          description: failure.requestId
+            ? `请求编号：${failure.requestId}`
+            : undefined,
+        });
+        setState(failure);
       });
     return () => controller.abort();
   }, [fetchPage, reloadToken]);
@@ -84,7 +93,6 @@ function useCommentPage(postId: string, rootId: string | null) {
     request.current?.abort();
     loadingMoreRef.current = false;
     setLoadingMore(false);
-    setLoadMoreError(null);
     setState({ status: "loading" });
     setReloadToken((value) => value + 1);
   }
@@ -100,7 +108,6 @@ function useCommentPage(postId: string, rootId: string | null) {
     if (!controller || controller.signal.aborted) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
-    setLoadMoreError(null);
     try {
       const page = await fetchPage(state.nextCursor, controller.signal);
       if (controller.signal.aborted) return;
@@ -110,8 +117,15 @@ function useCommentPage(postId: string, rootId: string | null) {
         nextCursor: page.next_cursor,
       });
     } catch (error) {
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
       if (controller.signal.aborted) return;
-      setLoadMoreError(toError(error).message);
+      const failure = toError(error);
+      toast.error(failure.message, {
+        description: failure.requestId
+          ? `请求编号：${failure.requestId}`
+          : undefined,
+      });
     } finally {
       if (controller.signal.aborted) return;
       loadingMoreRef.current = false;
@@ -119,7 +133,7 @@ function useCommentPage(postId: string, rootId: string | null) {
     }
   }
 
-  return { state, reload, loadMore, loadingMore, loadMoreError };
+  return { state, reload, loadMore, loadingMore };
 }
 
 export function parentRelationLabel(
@@ -226,10 +240,7 @@ function PageNotice({
     return (
       <Alert variant="destructive" className="mt-4">
         <AlertTitle>评论读取失败</AlertTitle>
-        <AlertDescription>
-          {state.message}
-          {state.requestId ? ` 请求编号：${state.requestId}` : null}
-        </AlertDescription>
+        <AlertDescription>请重新加载已保存评论。</AlertDescription>
         <Button
           type="button"
           variant="secondary"
@@ -252,21 +263,14 @@ function PageNotice({
 function MoreButton({
   cursor,
   loading,
-  error,
   onClick,
 }: {
   cursor: string | null;
   loading: boolean;
-  error: string | null;
   onClick: () => void;
 }) {
   return (
     <div className="mt-4">
-      {error ? (
-        <Alert variant="destructive" className="mb-2">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
       {cursor ? (
         <Button
           type="button"
@@ -314,7 +318,6 @@ function CommentBranch({
         <MoreButton
           cursor={page.state.nextCursor}
           loading={page.loadingMore}
-          error={page.loadMoreError}
           onClick={() => void page.loadMore()}
         />
       ) : null}
@@ -375,7 +378,6 @@ export function CommentThreadList({ postId }: { postId: string }) {
         <MoreButton
           cursor={page.state.nextCursor}
           loading={page.loadingMore}
-          error={page.loadMoreError}
           onClick={() => void page.loadMore()}
         />
       ) : null}

@@ -1,12 +1,13 @@
 "use client";
 
+import { toast } from "sonner";
+
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDownIcon, PlayIcon } from "lucide-react";
 
 import { runMonitorTopic } from "@/api/jiankongzhuti";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible,
@@ -135,15 +136,18 @@ export function TopicRunActions({
   sourceNames,
   disabled = false,
 }: Props) {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const [selected, setSelected] = useState<string[]>(topic.source_keys);
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<HotKeyAPI.MonitorTopicRunView | null>(
     null,
   );
-  const [error, setError] = useState<{
-    message: string;
-    requestId?: string;
-  } | null>(null);
   const controller = useRef(
     createManualRunController((topicId, input) =>
       runMonitorTopic({ topic_id: topicId }, input),
@@ -157,35 +161,39 @@ export function TopicRunActions({
         : [...current, sourceKey],
     );
     setResult(null);
-    setError(null);
     controller.current.reset();
   }
 
   async function submit() {
     if (pending || disabled || topic.status !== "active") return;
     setPending(true);
-    setError(null);
     try {
-      setResult(await controller.current.run(topic.id, selected));
+      const value = await controller.current.run(topic.id, selected);
+      if (mounted.current) setResult(value);
     } catch (cause) {
+      if (!mounted.current) return;
+      if (cause instanceof ApiRequestError && cause.kind === "cancelled")
+        return;
       if (cause instanceof ApiRequestError) {
-        setError({
-          requestId: cause.requestId,
-          message:
-            cause.code === "topic_not_ready"
-              ? "当前所选来源均未受理。请检查来源就绪状态、静默时段和预算。"
-              : cause.code === "idempotency_conflict"
-                ? "请求编号与先前的来源选择冲突，请重新选择后再试。"
-                : cause.message,
-        });
+        toast.error(
+          cause.code === "topic_not_ready"
+            ? "当前所选来源均未受理。请检查来源就绪状态、静默时段和预算。"
+            : cause.code === "idempotency_conflict"
+              ? "请求编号与先前的来源选择冲突，请重新选择后再试。"
+              : cause.message,
+          {
+            description: cause.requestId
+              ? `请求编号：${cause.requestId}`
+              : undefined,
+          },
+        );
       } else {
-        setError({
-          message:
-            cause instanceof Error ? cause.message : "采集请求失败，请重试。",
-        });
+        toast.error(
+          cause instanceof Error ? cause.message : "采集请求失败，请重试。",
+        );
       }
     } finally {
-      setPending(false);
+      if (mounted.current) setPending(false);
     }
   }
 
@@ -275,15 +283,6 @@ export function TopicRunActions({
                 {pending ? "正在受理" : "立即采集"}
               </Button>
             )}
-            {error ? (
-              <Alert variant="destructive" className="mt-4">
-                <AlertTitle>采集未受理</AlertTitle>
-                <AlertDescription>
-                  {error.message}
-                  {error.requestId ? <p>请求编号：{error.requestId}</p> : null}
-                </AlertDescription>
-              </Alert>
-            ) : null}
           </>
         )}
       </CollapsibleContent>

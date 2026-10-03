@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRightIcon, RotateCcwIcon } from "lucide-react";
@@ -53,7 +55,6 @@ export function TopicList() {
   const [reloadVersion, setReloadVersion] = useState(0);
   const [state, setState] = useState<TopicListState>({ status: "loading" });
   const [loadingMore, setLoadingMore] = useState(false);
-  const [moreError, setMoreError] = useState<Failure | null>(null);
   const generation = useRef(0);
   const firstController = useRef<AbortController | null>(null);
   const moreController = useRef<AbortController | null>(null);
@@ -76,8 +77,17 @@ export function TopicList() {
           });
       })
       .catch((error: unknown) => {
-        if (current === generation.current && !controller.signal.aborted)
-          setState({ status: "error", ...toFailure(error) });
+        if (error instanceof ApiRequestError && error.kind === "cancelled")
+          return;
+        if (current === generation.current && !controller.signal.aborted) {
+          const failure = toFailure(error);
+          toast.error(failure.message, {
+            description: failure.requestId
+              ? `请求编号：${failure.requestId}`
+              : undefined,
+          });
+          setState({ status: "error", ...failure });
+        }
       });
     return () => {
       controller.abort();
@@ -91,7 +101,6 @@ export function TopicList() {
     moreController.current?.abort();
     morePending.current = false;
     setLoadingMore(false);
-    setMoreError(null);
     setState({ status: "loading" });
     if (archived === includeArchived) setReloadVersion((value) => value + 1);
     else setIncludeArchived(archived);
@@ -106,7 +115,6 @@ export function TopicList() {
     moreController.current = controller;
     morePending.current = true;
     setLoadingMore(true);
-    setMoreError(null);
     try {
       const page = await listMonitorTopics(
         { include_archived: includeArchived, limit: 20, cursor },
@@ -130,8 +138,16 @@ export function TopicList() {
           : previous,
       );
     } catch (error) {
-      if (current === generation.current && !controller.signal.aborted)
-        setMoreError(toFailure(error));
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (current === generation.current && !controller.signal.aborted) {
+        const failure = toFailure(error);
+        toast.error(failure.message, {
+          description: failure.requestId
+            ? `请求编号：${failure.requestId}`
+            : undefined,
+        });
+      }
     } finally {
       if (current === generation.current) {
         morePending.current = false;
@@ -167,10 +183,7 @@ export function TopicList() {
       {state.status === "error" ? (
         <Alert variant="destructive">
           <AlertTitle>暂时无法读取关注</AlertTitle>
-          <AlertDescription>
-            {state.message}
-            {state.requestId ? <p>请求编号：{state.requestId}</p> : null}
-          </AlertDescription>
+          <AlertDescription>请重新加载关注列表。</AlertDescription>
           <Button
             type="button"
             variant="outline"
@@ -233,17 +246,6 @@ export function TopicList() {
           ))}
         </ItemGroup>
       ) : null}
-      {moreError ? (
-        <Alert variant="destructive" className="mt-6">
-          <AlertTitle>更多关注暂时无法读取</AlertTitle>
-          <AlertDescription>
-            {moreError.message}
-            {moreError.requestId ? (
-              <p>请求编号：{moreError.requestId}</p>
-            ) : null}
-          </AlertDescription>
-        </Alert>
-      ) : null}
       {state.status === "ready" && state.nextCursor ? (
         <Button
           type="button"
@@ -256,7 +258,7 @@ export function TopicList() {
           {loadingMore ? (
             <Spinner data-icon="inline-start" aria-hidden="true" />
           ) : null}
-          {loadingMore ? "正在读取" : moreError ? "重试加载更多" : "加载更多"}
+          {loadingMore ? "正在读取" : "加载更多"}
         </Button>
       ) : null}
     </section>

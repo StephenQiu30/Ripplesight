@@ -8,6 +8,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const toasts = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: toasts }));
+afterEach(() => vi.clearAllMocks());
+
 const api = vi.hoisted(() => ({ list: vi.fn() }));
 vi.mock("@/api/jiankongzhuti", () => ({ listMonitorTopics: api.list }));
 import { ApiRequestError } from "@/request";
@@ -55,9 +59,14 @@ describe("topic list pagination", () => {
     render(<TopicList />);
     await screen.findByText("第一条关注");
     fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
-    await screen.findByText("请求编号：page-error");
+    await waitFor(() =>
+      expect(toasts.error).toHaveBeenCalledWith("读取暂不可用", {
+        description: "请求编号：page-error",
+      }),
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getByText("第一条关注")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "重试加载更多" }));
+    fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
     await screen.findByText("第二条关注");
     expect(api.list.mock.calls[1][0]).toEqual({
       include_archived: false,

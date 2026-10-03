@@ -9,6 +9,9 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorialSourceManager } from "@/app/editorial-sources/components/editorial-source-manager";
 
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
+
 const api = vi.hoisted(() => ({
   listEditorialSourceProfiles: vi.fn(),
   getEditorialSourceIcon: vi.fn(),
@@ -108,6 +111,31 @@ describe("editable source operations", () => {
     expect(
       api.createEditorialSourceProfile.mock.calls[0][0].operation_id,
     ).toBeTruthy();
+  });
+  it("reports invalid configuration with Sonner while retaining the editable form", async () => {
+    render(<EditorialSourceManager />);
+    fireEvent.change(screen.getByLabelText("操作员令牌"), {
+      target: { value: "controlled" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "新增来源" }));
+    fireEvent.change(screen.getByLabelText("来源名称"), {
+      target: { value: "Controlled feed" },
+    });
+    fireEvent.change(screen.getByLabelText("操作原因"), {
+      target: { value: "验证配置" },
+    });
+    fireEvent.change(screen.getByLabelText("配置 JSON"), {
+      target: { value: "invalid JSON" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "创建关闭来源" }));
+    expect(notifications.error).toHaveBeenCalledExactlyOnceWith(
+      "配置 JSON 必须是对应来源类型的对象。",
+    );
+    expect(api.createEditorialSourceProfile).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(
+      (screen.getByLabelText("配置 JSON") as HTMLTextAreaElement).value,
+    ).toBe("invalid JSON");
   });
 });
 

@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -28,7 +30,6 @@ import { Button } from "@/components/ui/button";
 import {
   Field,
   FieldDescription,
-  FieldError,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
@@ -76,6 +77,13 @@ function toSourcesError(error: unknown): SourcesState {
 }
 
 export function TopicForm() {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const router = useRouter();
   const [sourcesState, setSourcesState] = useState<SourcesState>({
     status: "loading",
@@ -89,8 +97,11 @@ export function TopicForm() {
     useState(1800);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittingRef = useRef(false);
-  const [submissionError, setSubmissionError] =
-    useState<SubmissionError | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<TopicFieldErrors>({});
+  const formRef = useRef<HTMLFormElement | null>(null);
+  useEffect(() => {
+    formRef.current?.querySelector<HTMLElement>("[aria-invalid=true]")?.focus();
+  }, [fieldErrors]);
 
   useEffect(() => {
     let isCurrent = true;
@@ -103,7 +114,18 @@ export function TopicForm() {
           });
       })
       .catch((error: unknown) => {
-        if (isCurrent) setSourcesState(toSourcesError(error));
+        if (error instanceof ApiRequestError && error.kind === "cancelled")
+          return;
+        if (isCurrent) {
+          const failure = toSourcesError(error);
+          if (failure.status === "error")
+            toast.error(failure.message, {
+              description: failure.requestId
+                ? `请求编号：${failure.requestId}`
+                : undefined,
+            });
+          setSourcesState(failure);
+        }
       });
     return () => {
       isCurrent = false;
@@ -114,12 +136,23 @@ export function TopicForm() {
     setSourcesState({ status: "loading" });
     try {
       const page = await listSourceCapabilities();
+      if (!mounted.current) return;
       setSourcesState({
         status: "ready",
         sourceOptions: selectableTopicSources(page.items),
       });
     } catch (error) {
-      setSourcesState(toSourcesError(error));
+      if (!mounted.current) return;
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      const failure = toSourcesError(error);
+      if (failure.status === "error")
+        toast.error(failure.message, {
+          description: failure.requestId
+            ? `请求编号：${failure.requestId}`
+            : undefined,
+        });
+      setSourcesState(failure);
     }
   }
 
@@ -139,12 +172,13 @@ export function TopicForm() {
     )
       fields.collection_interval_seconds = "请输入 600—86400 之间的整数秒。";
     if (Object.keys(fields).length) {
-      setSubmissionError({ message: "请检查填写的内容。", fields });
+      setFieldErrors(fields);
+      toast.error(Object.values(fields).join(" "));
       submittingRef.current = false;
       return;
     }
     setIsSubmitting(true);
-    setSubmissionError(null);
+    setFieldErrors({});
     try {
       const payload: HotKeyAPI.MonitorTopicCreateInput = {
         name: name.trim(),
@@ -155,13 +189,27 @@ export function TopicForm() {
         collection_interval_seconds: collectionIntervalSeconds,
       };
       const topic = await createMonitorTopic(payload);
+      if (!mounted.current) return;
       router.replace(`/monitors/${topic.id}`);
       router.refresh();
     } catch (error) {
-      setSubmissionError(toSubmissionError(error));
+      if (!mounted.current) return;
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      const failure = toSubmissionError(error);
+      setFieldErrors(failure.fields ?? {});
+      toast.error(failure.message, {
+        description:
+          [
+            ...Object.values(failure.fields ?? {}),
+            failure.requestId ? `请求编号：${failure.requestId}` : null,
+          ]
+            .filter(Boolean)
+            .join(" ") || undefined,
+      });
     } finally {
       submittingRef.current = false;
-      setIsSubmitting(false);
+      if (mounted.current) setIsSubmitting(false);
     }
   }
 
@@ -182,11 +230,16 @@ export function TopicForm() {
             选好关键词和信息来源，以适合自己的节奏了解新的变化。
           </p>
         </section>
-        <form onSubmit={handleSubmit} noValidate aria-busy={isSubmitting}>
+        <form
+          ref={formRef}
+          onSubmit={handleSubmit}
+          noValidate
+          aria-busy={isSubmitting}
+        >
           <FieldGroup className="gap-8">
             <Field
               data-disabled={isSubmitting}
-              data-invalid={Boolean(submissionError?.fields?.name)}
+              data-invalid={Boolean(fieldErrors.name)}
             >
               <FieldLabel htmlFor="topic-name">主题名称</FieldLabel>
               <Input
@@ -198,22 +251,12 @@ export function TopicForm() {
                 maxLength={80}
                 required
                 placeholder="例如：AI 产品与工具"
-                aria-invalid={Boolean(submissionError?.fields?.name)}
-                aria-describedby={
-                  submissionError?.fields?.name
-                    ? "topic-name-error"
-                    : "topic-name-description"
-                }
+                aria-invalid={Boolean(fieldErrors.name)}
+                aria-describedby="topic-name-description"
               />
-              {submissionError?.fields?.name ? (
-                <FieldError id="topic-name-error">
-                  {submissionError.fields.name}
-                </FieldError>
-              ) : (
-                <FieldDescription id="topic-name-description">
-                  起一个容易辨认的名字，之后可以随时修改。
-                </FieldDescription>
-              )}
+              <FieldDescription id="topic-name-description">
+                起一个容易辨认的名字，之后可以随时修改。
+              </FieldDescription>
             </Field>
             <KeywordGroupField
               id="match-any"
@@ -222,7 +265,7 @@ export function TopicForm() {
               value={matchAny}
               onChange={setMatchAny}
               disabled={isSubmitting}
-              error={submissionError?.fields?.match_any}
+              error={fieldErrors.match_any}
             />
             {sourcesState.status === "ready" ? (
               <TopicSettingsFields
@@ -230,7 +273,7 @@ export function TopicForm() {
                 sourceKeys={sourceKeys}
                 onSourceKeysChange={setSourceKeys}
                 disabled={isSubmitting}
-                fieldErrors={submissionError?.fields}
+                fieldErrors={fieldErrors}
               />
             ) : sourcesState.status === "loading" ? (
               <Field>
@@ -244,10 +287,6 @@ export function TopicForm() {
               <Alert variant="destructive">
                 <AlertTitle>信息来源暂时不可用</AlertTitle>
                 <AlertDescription>
-                  {sourcesState.message}
-                  {sourcesState.requestId ? (
-                    <p>请求编号：{sourcesState.requestId}</p>
-                  ) : null}
                   <p>可以先保存关注，之后再配置来源。</p>
                 </AlertDescription>
                 <Button
@@ -270,19 +309,8 @@ export function TopicForm() {
               collectionIntervalSeconds={collectionIntervalSeconds}
               onCollectionIntervalSecondsChange={setCollectionIntervalSeconds}
               disabled={isSubmitting}
-              fieldErrors={submissionError?.fields}
+              fieldErrors={fieldErrors}
             />
-            {submissionError ? (
-              <Alert variant="destructive">
-                <AlertTitle>无法保存关注</AlertTitle>
-                <AlertDescription>
-                  {submissionError.message}
-                  {submissionError.requestId ? (
-                    <p>请求编号：{submissionError.requestId}</p>
-                  ) : null}
-                </AlertDescription>
-              </Alert>
-            ) : null}
             <Field
               orientation="horizontal"
               className="flex-wrap justify-between gap-3"

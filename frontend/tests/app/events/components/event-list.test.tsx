@@ -8,6 +8,8 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
 
 const api = vi.hoisted(() => ({
   events: vi.fn(),
@@ -22,6 +24,7 @@ vi.mock("@/api/jiankongzhuti", () => ({ listMonitorTopics: api.topics }));
 vi.mock("@/api/laiyuannengli", () => ({ listSourceCapabilities: api.sources }));
 
 import { EventList } from "@/app/events/components/event-list";
+import { ApiRequestError } from "@/request";
 
 afterEach(() => {
   cleanup();
@@ -29,6 +32,17 @@ afterEach(() => {
 });
 
 describe("confirmed event list", () => {
+  it("does not notify when an in-flight read is cancelled", async () => {
+    api.topics.mockResolvedValue({ items: [], next_cursor: null });
+    api.sources.mockResolvedValue({ items: [], next_cursor: null });
+    api.events.mockRejectedValue(
+      new ApiRequestError({ kind: "cancelled", message: "cancelled" }),
+    );
+    render(<EventList />);
+    await waitFor(() => expect(api.events).toHaveBeenCalledOnce());
+    expect(notifications.error).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "重试事件读取" })).toBeNull();
+  });
   it("reads real event results, applies search and keeps an unavailable title explicit", async () => {
     api.topics.mockResolvedValue({ items: [], next_cursor: null });
     api.sources.mockResolvedValue({ items: [], next_cursor: null });
@@ -79,6 +93,10 @@ describe("confirmed event list", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "重试事件读取" }),
     );
+    expect(notifications.error).toHaveBeenCalledWith(
+      "事件读取失败，请稍后重试。",
+    );
+    expect(screen.queryByText("事件读取失败，请稍后重试。")).toBeNull();
     fireEvent.click(
       await screen.findByRole("button", { name: "加载更多事件" }),
     );
@@ -88,5 +106,39 @@ describe("confirmed event list", () => {
         expect.anything(),
       ),
     );
+  });
+
+  it("keeps readable rows and the same pagination cursor after a failed action", async () => {
+    api.topics.mockResolvedValue({ items: [], next_cursor: null });
+    api.sources.mockResolvedValue({ items: [], next_cursor: null });
+    api.events
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: "event-a",
+            title: "已读取事件",
+            summary: null,
+            member_count: 1,
+            readable_member_count: 1,
+            evidence_state: "complete",
+            source_counts: {},
+            first_seen_at: "2026-10-02T00:00:00Z",
+          },
+        ],
+        next_cursor: "same-cursor",
+      })
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({ items: [], next_cursor: null });
+    render(<EventList />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "加载更多事件" }),
+    );
+    await waitFor(() => expect(notifications.error).toHaveBeenCalledOnce());
+    expect(screen.getByRole("link", { name: "已读取事件" })).toBeTruthy();
+    expect(screen.queryByText("事件读取失败，请稍后重试。")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "加载更多事件" }));
+    await waitFor(() => expect(api.events).toHaveBeenCalledTimes(3));
+    expect(api.events.mock.calls[1][0].cursor).toBe("same-cursor");
+    expect(api.events.mock.calls[2][0].cursor).toBe("same-cursor");
   });
 });

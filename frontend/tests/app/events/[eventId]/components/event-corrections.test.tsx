@@ -8,6 +8,8 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
 
 const api = vi.hoisted(() => ({
   correct: vi.fn(),
@@ -69,9 +71,14 @@ describe("manual event correction", () => {
       target: { value: "独立事实" },
     });
     fireEvent.click(screen.getByRole("button", { name: "提交人工修订" }));
+    await waitFor(() =>
+      expect(notifications.error).toHaveBeenCalledWith(
+        "修订提交失败。重试将复用本次操作编号。",
+      ),
+    );
     expect(
-      await screen.findByText("修订提交失败。重试将复用本次操作编号。"),
-    ).toBeTruthy();
+      screen.queryByText("修订提交失败。重试将复用本次操作编号。"),
+    ).toBeNull();
     const operationId = api.correct.mock.calls[0][0].operation_id;
     fireEvent.click(screen.getByRole("button", { name: "提交人工修订" }));
     await waitFor(() => expect(changed).toHaveBeenCalledOnce());
@@ -119,9 +126,14 @@ describe("manual event correction", () => {
       target: { value: "同故事" },
     });
     fireEvent.click(screen.getByRole("button", { name: "提交人工修订" }));
+    await waitFor(() =>
+      expect(notifications.error).toHaveBeenCalledWith(
+        "事件修订已变化。刷新详情并重新选择后再提交。",
+      ),
+    );
     expect(
-      await screen.findByText("事件修订已变化。刷新详情并重新选择后再提交。"),
-    ).toBeTruthy();
+      screen.queryByText("事件修订已变化。刷新详情并重新选择后再提交。"),
+    ).toBeNull();
     expect(api.correct).toHaveBeenCalledOnce();
     expect(api.correct.mock.calls[0][0]).toMatchObject({
       kind: "merge",

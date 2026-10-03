@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RotateCcwIcon, XIcon } from "lucide-react";
 
@@ -103,7 +105,7 @@ export function SourceSettings() {
     HotKeyAPI.SourcePlatformView[] | null
   >(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [readFailed, setReadFailed] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
   const origin = useRef<HTMLButtonElement | null>(null);
@@ -118,8 +120,14 @@ export function SourceSettings() {
           if (!current.signal.aborted) setPlatforms(page.items);
         })
         .catch((failure: unknown) => {
+          if (
+            failure instanceof ApiRequestError &&
+            failure.kind === "cancelled"
+          )
+            return;
           if (current.signal.aborted) return;
-          setError(
+          setReadFailed(true);
+          toast.error(
             failure instanceof ApiRequestError
               ? `${failure.message}${failure.requestId ? ` 请求编号：${failure.requestId}` : ""}`
               : "来源状态加载失败，请重试。",
@@ -136,7 +144,7 @@ export function SourceSettings() {
     const current = new AbortController();
     controller.current = current;
     setLoading(true);
-    setError(null);
+    setReadFailed(false);
     await read(current);
   }, [read]);
 
@@ -171,11 +179,11 @@ export function SourceSettings() {
           {loading && platforms ? "正在刷新…" : "刷新状态"}
         </Button>
       </div>
-      {error ? (
+      {readFailed ? (
         <Alert variant="destructive">
           <AlertTitle>暂时无法读取来源状态</AlertTitle>
           <AlertDescription>
-            <p>{error}</p>
+            <p>请重新加载来源状态。</p>
             {platforms ? (
               <p>当前显示上次读取的状态，请重新加载后再核对。</p>
             ) : null}

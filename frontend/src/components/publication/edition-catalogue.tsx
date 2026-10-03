@@ -4,6 +4,8 @@ import { FieldLabel, Field } from "@/components/ui/field";
 
 import Link from "next/link";
 import { useId, useState } from "react";
+import { toast } from "sonner";
+import { ApiRequestError } from "@/request";
 import {
   getPublicDailyCalendar,
   listPublicEditionCatalogue,
@@ -26,11 +28,9 @@ export function PublicEditionCatalogue({
   const [calendar, setCalendar] = useState(initialCalendar);
   const [month, setMonth] = useState(initialCalendar?.month ?? "");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
   async function more() {
     if (!next) return;
     setBusy(true);
-    setError(undefined);
     try {
       const page = await listPublicEditionCatalogue({
         kind: initial.kind,
@@ -44,20 +44,23 @@ export function PublicEditionCatalogue({
         ),
       ]);
       setNext(page.next_before_key);
-    } catch {
-      setError("暂时无法读取更多刊期，请重试。");
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      toast.error("暂时无法读取更多刊期，请重试。");
     } finally {
       setBusy(false);
     }
   }
   async function loadMonth() {
     setBusy(true);
-    setError(undefined);
     setCalendar(undefined);
     try {
       setCalendar(await getPublicDailyCalendar({ month }));
-    } catch {
-      setError("暂时无法读取月份日历，请检查月份或重试。");
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      toast.error("暂时无法读取月份日历，请检查月份或重试。");
     } finally {
       setBusy(false);
     }
@@ -132,11 +135,6 @@ export function PublicEditionCatalogue({
           ))}
         </ol>
       )}
-      {error ? (
-        <p role="status" className="text-sm">
-          {error}
-        </p>
-      ) : null}
       {next ? (
         <Button variant="outline" disabled={busy} onClick={() => void more()}>
           {busy ? "正在读取…" : "更早刊期"}

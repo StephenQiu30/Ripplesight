@@ -11,11 +11,13 @@
 ## 组件
 
 - shadcn/Radix 基础组件放在 `src/components/ui/`。
-- 全部页面的交互控件只组合官方 shadcn/ui + Radix：选择使用 Select/SelectGroup，布尔选项使用 Checkbox/Switch，折叠内容使用 Collapsible，数据表使用 Table，表单使用 FieldGroup/Field/FieldLabel，错误提示使用 Alert。业务源码不手写 button、input、select、textarea、details 或表格组件；ESLint 检查此边界。文档标题、段落、列表、页面结构、链接及音视频仍保留必要语义标签，不为它们增加包装组件。
+- 全部页面的交互控件只组合官方 shadcn/ui + Radix：选择使用 Select/SelectGroup，布尔选项使用 Checkbox/Switch，折叠内容使用 Collapsible，数据表使用 Table，表单使用 FieldGroup/Field/FieldLabel。业务源码不手写 button、input、select、textarea、details 或表格组件；ESLint 检查此边界。文档标题、段落、列表、页面结构、链接及音视频仍保留必要语义标签，不为它们增加包装组件。
+- 全站操作反馈使用官方 shadcn Sonner：失败和提交校验使用 `toast.error`，成功使用 `toast.success`，主动取消使用 `toast.info`。BasicLayout 唯一挂载 Toaster，统一右上角、可关闭、语义颜色和无障碍通知；业务组件直接调用 `sonner`，传输层不自动弹提示。不在表单、菜单或内容底部保留错误/成功消息块，不创建自定义 Toast 或通知包装层。字段可保留 `data-invalid`/`aria-invalid` 和纠错焦点；加载失败只保留原生 Empty/Alert 的恢复入口及稳定说明，具体请求错误由 Sonner 提示。持久任务失败事实、权限/覆盖状态和全局恢复页面仍使用原生 shadcn 组件；请求取消、失效响应和重新渲染不得重复通知。
 - 组件使用原生 variant/size，className 只调整布局；避免额外卡片、阴影和装饰边框。表单窄屏单列、控件允许收缩、长选项在触发器中截断并在浮层中换行。Select 的“全部/清除覆盖”保留空值和原 FormData；Collapsible 关闭时保留内部已填状态。间距使用 flex/grid + gap，不使用 space-x/space-y。
 - 跨页面复用组件按功能领域放在 `src/components/<feature>/`。
 - 页面专属组件放在对应 `src/app/<route>/components/`；根页面使用 `src/app/components/`。
 - 全站外壳统一在独立 `src/layout/`：BasicLayout 在根 App Router layout 装配，BasicHeader、BasicFooter 和共用 UsageGuide 在同目录。外壳使用 `h-dvh` 的 flex 布局，头尾不收缩，正文 main 独立滚动；所有页面的头尾及正文统一 `max-w-7xl`、`px-5 sm:px-8`，正文 `py-10 sm:py-12`。仅保留一个 main，页面组件不再设置全屏高度、页面级最大宽度和外侧内边距；内部表单、文章、表格按内容保留合理尺度。路由切换重置正文滚动，提供跳到正文的键盘入口；打印恢复正常流并隐藏头尾。
+- `/login` 在 BasicLayout 内省略顶部 Header，加载、错误恢复和正常表单保持相同外壳；正文、页脚和 Sonner 沿用全局实现。短请求的登录、发送验证码、保存等操作只显示主按钮忙碌并禁用重复提交，不额外追加请求取消按钮；保留离页自动中止以及真正的任务取消、编辑退出和对话框取消。
 - LayoutContainer 是头尾和正文的唯一宽度定义；三处 region 同时预留对称的稳定滚动条槽，长页/短页切换不会产生容器宽度偏移。阅读进度通过布局提供的滚动节点保存与恢复，保留本机数据格式。
 - 不创建 `features`、`common`、`patterns` 或 `shared` 目录。
 - `page.tsx` 只处理页面入口、数据边界和组件组合。
@@ -79,6 +81,7 @@ GitHub 按钮使用官方 GitHub-Mark 栅格素材 `public/brand/github-mark.png
 - Agent 页专属 `SelectedSnapshotDownload` 位于 `src/app/agent/components/selected-snapshot-download.tsx`，使用生成的 `getSelectedPublicationSnapshot` 下载 JSON 快照，覆盖加载、错误和再次下载；不手写 API 地址。
 - 测试统一在 `tests/`，按原业务路径组织 `app/`、`components/`，根配置测试归 `tests/config/`；`src/` 只放业务源码和生成客户端。Vitest 仅扫描 tests，生产类型检查及 Docker 构建排除测试；独立测试 TypeScript 配置继续检查所有测试，ESLint 拒绝业务目录中的测试或测试依赖。
 - App Router 统一提供 loading、error、global-error 和 not-found 边界。
+- 全局 loading 在既有外壳内提供可访问的加载状态，页面有专属布局时使用对应路由骨架。登录页的路由等待、登录方式请求和失败重试复用同一 LoginExperience / LoginFormLayout，使用原生 Skeleton 并预留表单高度；标题、品牌和条款不随方式加载而跳位，窄屏与减少动效模式沿用同一布局。业务提交继续保留当前内容和按钮忙碌状态。
 - `src/components/system/page-state.tsx` 中的 `PageState` 只处理正文错误、空态、无权限和恢复操作。加载、错误和404沿用根 BasicLayout，读取失败时主导航及页脚继续存在；global-error 替代根布局时独立装配 BasicLayout。不在状态组件内部请求业务数据。
 
 ## 可访问性与运行

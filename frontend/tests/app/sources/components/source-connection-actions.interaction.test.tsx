@@ -10,6 +10,10 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const updateSourceConnection = vi.hoisted(() => vi.fn().mockResolvedValue({}));
+const toasts = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: toasts }));
+afterEach(() => vi.clearAllMocks());
+
 vi.mock("@/api/laiyuannengli", () => ({ updateSourceConnection }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
 
@@ -153,12 +157,18 @@ describe("Bilibili safety recovery", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "重新启用" }));
     fireEvent.click(screen.getByRole("button", { name: "确认" }));
-    expect((await screen.findByRole("alert")).textContent).toContain(
-      "source-version-conflict",
+    await waitFor(() =>
+      expect(toasts.error).toHaveBeenCalledWith(
+        "连接版本已变化，请刷新后重试。 请求编号：source-version-conflict",
+        expect.objectContaining({
+          action: expect.objectContaining({ label: "刷新状态" }),
+        }),
+      ),
     );
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(updateSourceConnection).toHaveBeenCalledOnce();
     expect(onChanged).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "刷新状态" }));
+    toasts.error.mock.calls.at(-1)?.[1].action.onClick();
     await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
     expect(updateSourceConnection).toHaveBeenCalledOnce();
   });

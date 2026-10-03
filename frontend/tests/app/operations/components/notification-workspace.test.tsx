@@ -7,6 +7,9 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
+
 const api = vi.hoisted(() => ({
   targets: vi.fn(),
   deliveries: vi.fn(),
@@ -43,7 +46,12 @@ it("keeps new targets disabled and the operation identity stable after an uncert
     target: { value: "配置主题报告邮件" },
   });
   fireEvent.click(screen.getByRole("button", { name: "保存通知目标" }));
-  await screen.findByText("通知操作失败，请保留输入后重试。");
+  await waitFor(() =>
+    expect(notifications.error).toHaveBeenCalledWith(
+      "通知操作失败，请保留输入后重试。",
+    ),
+  );
+  expect(screen.queryByText("通知操作失败，请保留输入后重试。")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "保存通知目标" }));
   await waitFor(() => expect(api.save).toHaveBeenCalledTimes(2));
   const first = api.save.mock.calls[0][0];

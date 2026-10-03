@@ -7,6 +7,8 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
 import { SavedItems } from "@/components/publication/local-reading";
 import { SAVED_KEY } from "@/components/publication/local-state";
 const api = vi.hoisted(() => ({ read: vi.fn() }));
@@ -39,7 +41,17 @@ it("keeps unreadable saved IDs removable and clamps pagination after cross-tab r
 it("reports corrupted stored JSON and preserves the raw bytes for explicit export", async () => {
   localStorage.setItem(SAVED_KEY, "broken JSON");
   render(<SavedItems full />);
-  await screen.findByText(/原始数据保留/);
+  await waitFor(() =>
+    expect(notifications.error).toHaveBeenCalledWith(
+      expect.stringContaining("原始数据保留"),
+    ),
+  );
+  expect(screen.queryByText(/原始数据保留/)).toBeNull();
+  fireEvent(window, new Event("storage"));
+  await waitFor(() =>
+    expect(screen.queryByText("正在读取当前公开材料…")).toBeNull(),
+  );
+  expect(notifications.error).toHaveBeenCalledOnce();
   expect(localStorage.getItem(SAVED_KEY)).toBe("broken JSON");
   expect(screen.getByRole("button", { name: "导出原始数据" })).toBeTruthy();
   expect(api.read).not.toHaveBeenCalled();

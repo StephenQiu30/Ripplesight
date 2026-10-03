@@ -8,6 +8,8 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
 import { PosterDownload } from "@/components/publication/poster-download";
 const api = vi.hoisted(() => ({
   item: vi.fn(),
@@ -53,7 +55,12 @@ it("downloads guarded server PNG bytes and removes an old preview when a new req
   );
   expect(create).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole("button", { name: "生成海报 PNG" }));
-  await screen.findByText(/许可已变化/);
+  await waitFor(() =>
+    expect(notifications.error).toHaveBeenCalledWith(
+      expect.stringContaining("许可已变化"),
+    ),
+  );
+  expect(screen.queryByText(/许可已变化/)).toBeNull();
   expect(screen.queryByRole("link", { name: "下载海报 PNG" })).toBeNull();
   await waitFor(() => expect(revoke).toHaveBeenCalledWith("blob:guarded-png"));
 });
@@ -65,7 +72,12 @@ it("rejects a typed error payload disguised as PNG without creating a downloadab
   );
   render(<PosterDownload target={{ contentId: "fixed-item" }} />);
   fireEvent.click(screen.getByRole("button", { name: "生成海报 PNG" }));
-  await screen.findByText(/当前不可读取/);
+  await waitFor(() =>
+    expect(notifications.error).toHaveBeenCalledWith(
+      expect.stringContaining("当前不可读取"),
+    ),
+  );
+  expect(screen.queryByText(/当前不可读取/)).toBeNull();
   expect(create).not.toHaveBeenCalled();
   expect(screen.queryByRole("link", { name: "下载海报 PNG" })).toBeNull();
 });

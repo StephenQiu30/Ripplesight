@@ -7,6 +7,8 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications, Toaster: () => null }));
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/items/00000000-0000-4000-8000-000000000001",
@@ -18,6 +20,8 @@ import { BasicLayout } from "@/layout/basic-layout";
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
+  vi.clearAllMocks();
   localStorage.clear();
   window.scrollTo(0, 0);
 });
@@ -118,6 +122,21 @@ it("rejects invalid local saved material instead of trusting it as public conten
 });
 
 const readingKey = `hotkey.reading.v1.${item.id}.${item.revision}`;
+
+it("reports clipboard denial through Sonner without adding a footer message", async () => {
+  const clipboard = vi
+    .spyOn(navigator.clipboard, "writeText")
+    .mockRejectedValue(new Error("denied"));
+  render(<ItemReader item={item} />);
+  fireEvent.click(screen.getByRole("button", { name: "复制阅读链接" }));
+  await waitFor(() =>
+    expect(notifications.error).toHaveBeenCalledWith(
+      "暂时无法复制，请复制浏览器地址。",
+    ),
+  );
+  expect(clipboard).toHaveBeenCalledOnce();
+  expect(screen.queryByText("暂时无法复制，请复制浏览器地址。")).toBeNull();
+});
 
 it("restores the saved reading position, note and translation inside the layout scroll container", async () => {
   localStorage.setItem(

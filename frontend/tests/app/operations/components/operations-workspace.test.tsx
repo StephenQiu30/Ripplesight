@@ -8,6 +8,10 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import { ApiRequestError } from "@/request";
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
+
 const api = vi.hoisted(() => ({
   health: vi.fn(),
   maintenance: vi.fn(),
@@ -63,7 +67,7 @@ it("makes no operator request before token entry and writes a dictionary with it
     { id: "d", kind: "glossary", version: 4, content: { Acme: ["艾克米"] } },
   ]);
   api.save.mockResolvedValue({ version: 5 });
-  api.selectBench.mockResolvedValue({ items: [], next_cursor: null });
+  api.selectBench.mockResolvedValue([]);
   render(<OperationsWorkspace />);
   expect(api.health).not.toHaveBeenCalled();
   expect(api.selectBench).not.toHaveBeenCalled();
@@ -114,8 +118,40 @@ function prepareWorkspace() {
   api.dictionaries.mockResolvedValue([
     { id: "d", kind: "glossary", version: 4, content: { Acme: ["艾克米"] } },
   ]);
-  api.selectBench.mockResolvedValue({ items: [], next_cursor: null });
+  api.selectBench.mockResolvedValue([]);
 }
+
+it("uses Sonner for an operator read failure and keeps the entry available for retry", async () => {
+  prepareWorkspace();
+  api.health.mockRejectedValue(
+    new ApiRequestError({
+      kind: "http",
+      status: 403,
+      code: "operator_unauthorized",
+      message: "运营令牌无效",
+      requestId: "controlled-request",
+    }),
+  );
+  render(<OperationsWorkspace />);
+  fireEvent.change(screen.getByLabelText("运营 Token"), {
+    target: { value: "controlled" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "进入运营工作区" }));
+  await waitFor(() =>
+    expect(notifications.error).toHaveBeenCalledExactlyOnceWith(
+      "运营令牌无效（请求 controlled-request）",
+    ),
+  );
+  expect(screen.queryByText(/运营令牌无效/)).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "进入运营工作区",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(false);
+});
 
 function deferred() {
   let resolve!: (value: unknown) => void;
@@ -179,6 +215,8 @@ it("does not issue a refresh from a mutation that completes after operator exit"
     late.resolve({ version: 5 });
   });
   await waitFor(() => expect(api.health).toHaveBeenCalledTimes(1));
+  expect(notifications.success).not.toHaveBeenCalled();
+  expect(notifications.error).not.toHaveBeenCalled();
   expect(screen.queryByRole("button", { name: "退出运营工作区" })).toBeNull();
   expect(screen.getByLabelText("运营 Token")).toHaveProperty("value", "");
 });

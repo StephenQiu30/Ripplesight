@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { type FormEvent, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { getEvent } from "@/api/shijian";
 import { EventHeat } from "./event-heat";
 import { EventMemberList } from "@/app/events/[eventId]/components/event-member-list";
@@ -20,7 +21,7 @@ type DetailState =
   | { status: "loading" }
   | { status: "ready"; event: HotKeyAPI.EventReadView }
   | { status: "not-found" }
-  | { status: "error"; message: string };
+  | { status: "error" };
 
 export function EventDetail({ eventId }: { eventId: string }) {
   const [state, setState] = useState<DetailState>({ status: "loading" });
@@ -37,20 +38,23 @@ export function EventDetail({ eventId }: { eventId: string }) {
         if (!controller.signal.aborted) setState({ status: "ready", event });
       })
       .catch((error: unknown) => {
-        if (controller.signal.aborted) return;
+        if (
+          controller.signal.aborted ||
+          (error instanceof ApiRequestError && error.kind === "cancelled")
+        )
+          return;
         if (
           error instanceof ApiRequestError &&
           error.code === "resource_not_found"
         ) {
           setState({ status: "not-found" });
         } else {
-          setState({
-            status: "error",
-            message:
-              error instanceof ApiRequestError
-                ? `${error.message}${error.requestId ? ` 请求编号：${error.requestId}` : ""}`
-                : "事件详情读取失败，请稍后重试。",
-          });
+          setState({ status: "error" });
+          toast.error(
+            error instanceof ApiRequestError
+              ? `${error.message}${error.requestId ? ` 请求编号：${error.requestId}` : ""}`
+              : "事件详情读取失败，请稍后重试。",
+          );
         }
       });
     return () => controller.abort();
@@ -66,7 +70,7 @@ export function EventDetail({ eventId }: { eventId: string }) {
         description={
           state.status === "not-found"
             ? "此事件不存在于当前工作区，或其固定成员证据已经不可读。"
-            : state.message
+            : "可以重试详情读取，或返回事件列表。"
         }
         action={
           <div className="flex flex-wrap gap-3">
@@ -114,7 +118,6 @@ function EventReading({
 }) {
   const [revision, setRevision] = useState(event.revision);
   const [revisionInput, setRevisionInput] = useState(String(event.revision));
-  const [revisionError, setRevisionError] = useState<string | null>(null);
   const [selectedContentIds, setSelectedContentIds] = useState<string[]>([]);
   const [selectedFactIds, setSelectedFactIds] = useState<string[]>([]);
   const [facts, setFacts] = useState<HotKeyAPI.EventFactView[]>([]);
@@ -126,10 +129,9 @@ function EventReading({
       selected < 1 ||
       selected > event.revision
     ) {
-      setRevisionError(`请选择 1 至 ${event.revision} 的事件修订。`);
+      toast.error(`请选择 1 至 ${event.revision} 的事件修订。`);
       return;
     }
-    setRevisionError(null);
     setRevision(selected);
     setSelectedContentIds([]);
     setSelectedFactIds([]);
@@ -239,11 +241,6 @@ function EventReading({
               <Button variant="outline" type="submit">
                 读取该修订成员
               </Button>
-              {revisionError ? (
-                <Alert variant="destructive">
-                  <AlertDescription>{revisionError}</AlertDescription>
-                </Alert>
-              ) : null}
             </FieldGroup>
           </form>
         ) : null}

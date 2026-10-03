@@ -7,6 +7,8 @@ import {
   cleanup,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
 import { EditionDetail } from "@/app/editions/components/edition-detail";
 
 const mocks = vi.hoisted(() => ({
@@ -108,6 +110,10 @@ describe("Edition reading", () => {
       expect(screen.queryAllByText("已许可导读")).toHaveLength(0),
     );
     expect(screen.getByText("正文暂不可读")).toBeTruthy();
+    expect(notifications.error).toHaveBeenCalledWith(
+      "暂时无法读取刊期，请重试。",
+    );
+    expect(screen.queryByText("暂时无法读取刊期，请重试。")).toBeNull();
   });
 });
 

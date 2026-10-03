@@ -67,7 +67,7 @@ describe("topic source settings", () => {
     expect(html).toContain("disabled");
   });
 
-  it("renders 422 messages beside the affected controls", () => {
+  it("marks affected controls invalid without duplicating toast feedback", () => {
     const keyword = renderToStaticMarkup(
       createElement(KeywordGroupField, {
         id: "match-any",
@@ -78,7 +78,7 @@ describe("topic source settings", () => {
         error: "关键词过长",
       }),
     );
-    expect(keyword).toContain("关键词过长");
+    expect(keyword).not.toContain("关键词过长");
     expect(keyword).toContain('aria-invalid="true"');
     const settings = renderToStaticMarkup(
       createElement(TopicAdvancedFields, {
@@ -92,7 +92,7 @@ describe("topic source settings", () => {
         fieldErrors: { collection_interval_seconds: "必须不少于 600" },
       }),
     );
-    expect(settings).toContain("必须不少于 600");
+    expect(settings).not.toContain("必须不少于 600");
     expect(settings).toContain('aria-invalid="true"');
   });
 });

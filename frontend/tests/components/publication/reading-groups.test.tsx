@@ -1,6 +1,14 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
 import { ApiRequestError } from "@/request";
 import { GroupExpansion } from "@/components/publication/reading-groups";
 
@@ -86,7 +94,12 @@ it("binds expansion to the same filters and revision, and clears old reports aft
   fireEvent.click(screen.getByRole("button", { name: "展开同事实报道" }));
   await screen.findByText("固定许可报道");
   fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
-  await screen.findByText("报道或许可已经变化，请重新展开。");
+  await waitFor(() =>
+    expect(notifications.error).toHaveBeenCalledWith(
+      "报道或许可已经变化，请重新展开。",
+    ),
+  );
+  expect(screen.queryByText("报道或许可已经变化，请重新展开。")).toBeNull();
   expect(screen.queryByText("固定许可报道")).toBeNull();
   expect(api.reports).toHaveBeenNthCalledWith(2, {
     ...filters,

@@ -1,8 +1,28 @@
+// @vitest-environment happy-dom
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+const api = vi.hoisted(() => ({ list: vi.fn() }));
+const toasts = vi.hoisted(() => ({ error: vi.fn() }));
+vi.mock("@/api/caijirenwu", () => ({ listCollectionJobs: api.list }));
+vi.mock("sonner", () => ({ toast: toasts }));
+vi.mock("@/app/jobs/components/job-health-summary", () => ({
+  JobHealthSummary: () => null,
+}));
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 import {
+  JobHistory,
   JobHistoryCard,
   JobHistoryContent,
 } from "@/app/jobs/components/job-history";
@@ -40,7 +60,6 @@ describe("job history content", () => {
         items: [],
         nextCursor: null,
         isLoadingMore: false,
-        loadMoreError: null,
         onLoadMore: () => {},
       }),
     );
@@ -57,7 +76,6 @@ describe("job history content", () => {
         items: [job],
         nextCursor: "job-1",
         isLoadingMore: false,
-        loadMoreError: null,
         onLoadMore: () => {},
       }),
     );
@@ -65,20 +83,30 @@ describe("job history content", () => {
     expect(html).toContain('href="/jobs/job-1"');
     expect(html).toContain("加载更多");
   });
+});
 
-  it("keeps load-more failures visible without discarding the current page", () => {
-    const html = renderToStaticMarkup(
-      createElement(JobHistoryContent, {
-        items: [job],
-        nextCursor: "job-1",
-        isLoadingMore: false,
-        loadMoreError: "后续任务加载失败，请重试。",
-        onLoadMore: () => {},
-      }),
+describe("job history pagination feedback", () => {
+  it("toasts pagination failure while preserving records and the retry cursor", async () => {
+    api.list
+      .mockResolvedValueOnce({ items: [job], next_cursor: "next-page" })
+      .mockRejectedValueOnce(new Error("network failure"))
+      .mockResolvedValueOnce({
+        items: [{ ...job, id: "job-two" }],
+        next_cursor: null,
+      });
+    render(createElement(JobHistory));
+    await screen.findByRole("link", { name: "查看详情" });
+    fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
+    await waitFor(() =>
+      expect(toasts.error).toHaveBeenCalledWith("后续任务加载失败，请重试。"),
     );
-
-    expect(html).toContain('role="alert"');
-    expect(html).toContain("后续任务加载失败，请重试。");
-    expect(html).toContain('href="/jobs/job-1"');
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("link", { name: "查看详情" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
+    await waitFor(() =>
+      expect(screen.getAllByRole("link", { name: "查看详情" })).toHaveLength(2),
+    );
+    expect(api.list.mock.calls[1][0].cursor).toBe("next-page");
+    expect(api.list.mock.calls[2][0].cursor).toBe("next-page");
   });
 });

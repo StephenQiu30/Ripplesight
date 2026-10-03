@@ -3,6 +3,8 @@ import { FieldGroup, FieldLabel, Field } from "@/components/ui/field";
 
 import Link from "next/link";
 import { useId, useEffect, useRef, useState, type FormEvent } from "react";
+import { toast } from "sonner";
+import { ApiRequestError } from "@/request";
 import { listReportEditions, requestReportEdition } from "@/api/rizhouyuekan";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -19,7 +21,7 @@ export function EditionList() {
   const [rows, setRows] = useState<HotKeyAPI.EditionSummaryView[]>([]);
   const [before, setBefore] = useState<string>();
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>();
+  const [loadFailed, setLoadFailed] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [saving, setSaving] = useState(false);
   const [accepted, setAccepted] = useState<HotKeyAPI.EditionDetailView>();
@@ -34,13 +36,17 @@ export function EditionList() {
       .then((items) => {
         if (!controller.signal.aborted) {
           setRows(items);
-          setError(undefined);
+          setLoadFailed(false);
         }
       })
       .catch((err: unknown) => {
-        if (!controller.signal.aborted) {
+        if (
+          !controller.signal.aborted &&
+          !(err instanceof ApiRequestError && err.kind === "cancelled")
+        ) {
           setRows([]);
-          setError(editionError(err));
+          setLoadFailed(true);
+          toast.error(editionError(err));
         }
       })
       .finally(() => {
@@ -61,7 +67,6 @@ export function EditionList() {
       operation.current = { signature, id: crypto.randomUUID() };
     }
     setSaving(true);
-    setError(undefined);
     setAccepted(undefined);
     try {
       const row = await requestReportEdition({
@@ -72,10 +77,12 @@ export function EditionList() {
         operation_id: operation.current.id,
       });
       setAccepted(row);
+      toast.success("刊期编选已受理，可查看进度与正文。");
       operation.current = null;
       setRefresh((value) => value + 1);
     } catch (err) {
-      setError(editionError(err));
+      if (err instanceof ApiRequestError && err.kind === "cancelled") return;
+      toast.error(editionError(err));
     } finally {
       setSaving(false);
     }
@@ -115,17 +122,17 @@ export function EditionList() {
             刷新
           </Button>
         </nav>
-        {error ? (
+        {loadFailed ? (
           <Alert variant="destructive">
             <AlertTitle>刊期暂不可用</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>刷新后可以重新读取刊期档案。</AlertDescription>
           </Alert>
         ) : null}
         <div className="grid gap-12 lg:grid-cols-3">
           <section className="lg:col-span-2" aria-label="刊期档案">
             {loading ? (
               <Skeleton className="h-32 w-full" />
-            ) : rows.length ? (
+            ) : loadFailed ? null : rows.length ? (
               <ul>
                 {rows.map((row) => (
                   <EditionCard key={row.id} row={row} />

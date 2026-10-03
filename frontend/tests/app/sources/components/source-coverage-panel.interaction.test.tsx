@@ -37,6 +37,10 @@ const navigation = vi.hoisted(() => {
   };
 });
 
+const toasts = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: toasts }));
+afterEach(() => vi.clearAllMocks());
+
 vi.mock("next/navigation", async () => {
   const { useSyncExternalStore } = await import("react");
   return {
@@ -215,10 +219,12 @@ describe("source coverage interaction", () => {
       }),
     );
     const { unmount } = render(<SourceCoveragePanel />);
-    expect(await screen.findByText(/依赖服务暂时不可用/)).toBeTruthy();
-    expect(screen.getByRole("alert").textContent).toContain(
-      "request-dependency",
+    await waitFor(() =>
+      expect(toasts.error).toHaveBeenCalledWith("依赖服务暂时不可用", {
+        description: "请求编号：request-dependency",
+      }),
     );
+    expect(screen.queryByText("依赖服务暂时不可用")).toBeNull();
     expect(navigation.href).toBe(url("old_source"));
     fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
     expect(await screen.findByText("此筛选下暂无到期窗口")).toBeTruthy();
@@ -250,9 +256,10 @@ describe("source coverage interaction", () => {
     );
     render(<SourceCoveragePanel />);
     expect(await screen.findByText("来源选项加载失败")).toBeTruthy();
-    expect(screen.getByRole("alert").textContent).toContain(
-      "request-source-options",
-    );
+    expect(toasts.error).toHaveBeenCalledWith("来源服务暂不可用", {
+      description: "请求编号：request-source-options",
+    });
+    expect(screen.queryByText("来源服务暂不可用")).toBeNull();
     expect(await screen.findByText("此筛选下暂无到期窗口")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
