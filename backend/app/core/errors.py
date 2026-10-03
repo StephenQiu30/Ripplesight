@@ -49,6 +49,7 @@ ERROR_CATEGORIES: Mapping[str, ErrorCategory] = MappingProxyType(
         "indexnow_budget_unavailable": ErrorCategory.DEPENDENCY_UNAVAILABLE,
         "indexnow_submission_unknown": ErrorCategory.DEPENDENCY_UNAVAILABLE,
         "indexnow_submission_rejected": ErrorCategory.DEPENDENCY_UNAVAILABLE,
+        "publication_not_configured": ErrorCategory.DEPENDENCY_UNAVAILABLE,
         "publication_search_busy": ErrorCategory.DEPENDENCY_UNAVAILABLE,
         "invalid_evaluation_input": ErrorCategory.INVALID_INPUT,
         "evaluation_input_conflict": ErrorCategory.CONFLICT,

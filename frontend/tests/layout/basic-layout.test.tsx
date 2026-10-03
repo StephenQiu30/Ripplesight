@@ -70,8 +70,9 @@ describe("BasicLayout", () => {
   it("keeps welcome navigation public after login while offering the real workspace entry", () => {
     render(<BasicLayout session={session}>{page}</BasicLayout>);
     expect(
-      screen.getByRole("link", { name: "进入系统" }).getAttribute("href"),
-    ).toBe("/topics");
+      screen.getByRole("link", { name: "工作台" }).getAttribute("href"),
+    ).toBe("/workspace");
+    expect(screen.getByRole("button", { name: "账户菜单" })).toBeTruthy();
     expect(screen.queryByRole("navigation", { name: "工作区导航" })).toBeNull();
   });
 
@@ -110,55 +111,44 @@ describe("BasicLayout", () => {
   });
 
   it.each([
-    ["/monitors/topic-1", "我的关注", "/topics"],
-    ["/events/event-1", "事件", "/events"],
-    ["/content/content-1", "相关内容", "/content"],
-  ])(
-    "identifies the workspace destination of nested route %s",
-    (pathname, label, href) => {
-      route.pathname = pathname;
-      render(<BasicLayout session={session}>{page}</BasicLayout>);
+    "/monitors/topic-1",
+    "/events/event-1",
+    "/content/content-1",
+    "/operations/models",
+  ])("keeps private route %s under the workspace entry", (pathname) => {
+    route.pathname = pathname;
+    render(<BasicLayout session={session}>{page}</BasicLayout>);
+    const navigation = screen.getByRole("navigation", { name: "站点导航" });
+    expect(
+      within(navigation)
+        .getByRole("link", { name: "工作台", current: "page" })
+        .getAttribute("href"),
+    ).toBe("/workspace");
+    expect(
+      within(navigation).queryByRole("link", { name: "来源设置" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "全部导航" })).toBeNull();
+  });
 
-      const navigation = screen.getByRole("navigation", { name: "工作区导航" });
-      const current = within(navigation).getByRole("link", {
-        name: label,
-        current: "page",
-      });
-      expect(current.getAttribute("href")).toBe(href);
-      expect(
-        within(navigation).getAllByRole("link", { current: "page" }),
-      ).toHaveLength(1);
-    },
-  );
-
-  it.each([
-    ["/discover/topics/topic-1", "行业主题", "内容发现"],
-    ["/reports/weekly/edition-1", "公开刊物", "内容发现"],
-    ["/operations/models/capability-1", "模型能力配置", "工作管理"],
-    ["/codex-resets/notice-1", "Codex 公告", "帮助与信息"],
-  ])(
-    "groups navigation and selects the most specific route for %s",
-    async (pathname, label, group) => {
-      route.pathname = pathname;
-      render(<BasicLayout session={session}>{page}</BasicLayout>);
-      const trigger = screen.getByRole("button", { name: "全部导航" });
-      fireEvent.keyDown(trigger, { key: "ArrowDown" });
-
-      const menu = await screen.findByRole("menu", { name: "全部导航" });
-      const section = within(menu).getByRole("group", { name: group });
-      expect(
-        within(section)
-          .getByRole("menuitem", { name: label })
-          .getAttribute("aria-current"),
-      ).toBe("page");
-      expect(menu.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
-      expect(within(menu).getAllByRole("menuitem")).toHaveLength(18);
-
-      fireEvent.keyDown(menu, { key: "Escape" });
-      await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
-      await waitFor(() => expect(document.activeElement).toBe(trigger));
-    },
-  );
+  it("selects the specific public topic route and restores mobile menu focus", async () => {
+    route.pathname = "/discover/topics/topic-1";
+    render(<BasicLayout session={session}>{page}</BasicLayout>);
+    expect(
+      screen.getByRole("link", { name: "专题", current: "page" }),
+    ).toBeTruthy();
+    const trigger = screen.getByRole("button", { name: "阅读导航" });
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    const menu = await screen.findByRole("menu", { name: "阅读导航" });
+    expect(
+      within(menu)
+        .getByRole("menuitem", { name: "专题" })
+        .getAttribute("aria-current"),
+    ).toBe("page");
+    expect(within(menu).getAllByRole("menuitem")).toHaveLength(4);
+    fireEvent.keyDown(menu, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
 
   it("resets the body scroll position when a different route renders", async () => {
     route.pathname = "/events";
@@ -230,9 +220,9 @@ describe("BasicLayout", () => {
     view.rerender(<BasicLayout session={session}>{page}</BasicLayout>);
 
     expect(
-      within(screen.getByRole("navigation", { name: "工作区导航" })).getByRole(
+      within(screen.getByRole("navigation", { name: "站点导航" })).getByRole(
         "link",
-        { name: "事件", current: "page" },
+        { name: "工作台", current: "page" },
       ),
     ).toBeTruthy();
   });

@@ -11,6 +11,7 @@ from api.docs import register_documentation
 from api.exception_handlers import register_exception_handlers
 from api.middleware import register_middleware
 from api.router import api_router
+from api.routers.publication_exports import public_router as public_publication_exports_router
 from api.routers.publication_exports import router as publication_exports_router
 from core.config import Settings, get_settings
 from core.logging import configure_logging
@@ -90,4 +91,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_documentation(app)
     app.include_router(api_router)
     app.include_router(publication_exports_router)
+    app.include_router(public_publication_exports_router)
     return app

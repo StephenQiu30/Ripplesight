@@ -19,7 +19,7 @@ it("generates canonical and sharing metadata for the configured welcome site", (
   });
 });
 
-it("includes only the welcome and public explanation pages in the native sitemap", () => {
+it("includes the public information and explanation pages in the native sitemap", () => {
   vi.stubEnv("NEXT_PUBLIC_SITE_ORIGIN", "https://welcome.example");
   expect(sitemap().map((entry) => new URL(entry.url).pathname)).toEqual([
     "/",
@@ -28,10 +28,20 @@ it("includes only the welcome and public explanation pages in the native sitemap
     "/terms",
     "/contact",
     "/changelog",
+    "/discover",
+    "/leaderboard",
+    "/reports/daily",
+    "/reports/weekly",
+    "/reports/monthly",
   ]);
   expect(robots().rules).toMatchObject({
     userAgent: "*",
-    allow: "/",
+    allow: expect.arrayContaining([
+      "/",
+      "/discover",
+      "/leaderboard",
+      "/reports/weekly",
+    ]),
     disallow: expect.arrayContaining([
       "/login",
       "/api/",

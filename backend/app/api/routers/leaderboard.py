@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Path, Response, status
+from fastapi import APIRouter, Path, Response, status
 
-from api.dependencies import LeaderboardReadServiceDependency, require_identity_session
+from api.dependencies import LeaderboardReadServiceDependency
 from core.schemas import ErrorView
 from leaderboard.schemas import (
     BoardKey,
@@ -16,8 +16,6 @@ from leaderboard.schemas import (
 )
 
 router = APIRouter(
-    dependencies=[Depends(require_identity_session)],
-    responses={401: {"model": ErrorView}},
     prefix="/leaderboard",
     tags=["模型榜"],
 )

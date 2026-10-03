@@ -11,6 +11,14 @@ describe("welcome and workspace access", () => {
     "/terms",
     "/contact",
     "/changelog",
+    "/discover",
+    "/discover/topics/ai",
+    "/items/content-1",
+    "/leaderboard/models/model-1",
+    "/reports/daily",
+    "/reports/daily/2026-10-03",
+    "/reports/weekly/2026-W40",
+    "/reports/monthly/2026-10",
   ])("keeps %s public", (path) => {
     expect(isPublicPagePath(path)).toBe(true);
   });
@@ -18,8 +26,13 @@ describe("welcome and workspace access", () => {
   it.each([
     "/topics",
     "/monitors/new",
-    "/discover",
-    "/reports/daily",
+    "/workspace",
+    "/reports/report-1",
+    "/reports/weekly/archive",
+    "/reports/weekly/not-a-key",
+    "/editions",
+    "/codex-resets/manage",
+    "/publication/manage",
     "/operations/models",
     "/account",
   ])("keeps %s behind login", (path) => {

@@ -151,7 +151,8 @@ describe("authenticated navigation and CSP", () => {
     "/events",
     "/reports",
     "/monitors/new",
-    "/leaderboard",
+    "/workspace",
+    "/publication/manage",
     "/feeds",
     "/operations",
   ])(
@@ -185,11 +186,32 @@ describe("authenticated navigation and CSP", () => {
     "/terms",
     "/contact",
     "/changelog",
+    "/discover",
+    "/discover/topics/ai",
+    "/items/content-1",
+    "/leaderboard",
+    "/reports/weekly",
+    "/reports/weekly/2026-W40",
   ])("keeps %s public", async (path) => {
     const response = await proxy(new NextRequest(`https://hotkey.test${path}`));
     expect(response.status).toBe(200);
     expect(response.headers.get("x-middleware-next")).toBe("1");
     expect(getIdentitySession).not.toHaveBeenCalled();
+  });
+
+  it("keeps public reading available during a session outage without deleting the cookie", async () => {
+    getIdentitySession.mockRejectedValue(new Error("upstream unavailable"));
+    const response = await proxy(
+      new NextRequest("https://hotkey.test/discover", {
+        headers: { Cookie: "hotkey_session=existing" },
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(
+      response.headers.get("x-middleware-request-x-hotkey-session"),
+    ).toBeNull();
   });
 
   it("verifies the real session and replaces caller-supplied identity headers", async () => {

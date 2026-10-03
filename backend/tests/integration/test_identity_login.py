@@ -97,7 +97,7 @@ def test_password_session_cookie_digest_csrf_and_logout(identity_app) -> None:
     owner = create_account(app, "owner.one")
     assert client.get("/api/topics").status_code == 401
     assert client.get("/feed.xml").status_code == 401
-    assert client.get("/api/leaderboard/rules").status_code == 401
+    assert client.get("/api/leaderboard/rules").status_code == 200
     response = login(client, "Owner.One")
     assert response.json()["user"] == {
         "id": str(owner),

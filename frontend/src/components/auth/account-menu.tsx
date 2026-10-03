@@ -65,6 +65,15 @@ export function AccountMenu() {
         </DropdownMenuLabel>
         <DropdownMenuGroup>
           <DropdownMenuItem asChild>
+            <Link href="/workspace">我的工作台</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/topics">我的关注</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/reports">我的报告</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
             <Link href="/account">账户设置</Link>
           </DropdownMenuItem>
           <DropdownMenuItem

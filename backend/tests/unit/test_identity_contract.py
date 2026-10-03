@@ -113,7 +113,7 @@ def test_openapi_exposes_session_security_and_never_credentials_as_query(app: Fa
             if method not in {"get", "post", "put", "patch", "delete", "head"}:
                 continue
             assert not any(p["in"] == "cookie" for p in operation.get("parameters", []))
-            if path in {"/api/topics", "/api/contents", "/feed.xml", "/api/leaderboard/rules"}:
+            if path in {"/api/topics", "/api/contents", "/feed.xml"}:
                 assert operation["security"] == [{"SessionCookie": []}]
                 assert "401" in operation["responses"]
     identity = schema["components"]["schemas"]["IdentitySessionView"]
