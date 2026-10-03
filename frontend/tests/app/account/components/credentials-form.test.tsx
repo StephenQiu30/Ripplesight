@@ -11,10 +11,22 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  toastError: vi.fn(),
+  toastSuccess: vi.fn(),
+  toastInfo: vi.fn(),
+  toastDismiss: vi.fn(),
   update: vi.fn(),
   send: vi.fn(),
   replace: vi.fn(),
   refresh: vi.fn(),
+}));
+vi.mock("sonner", () => ({
+  toast: {
+    error: mocks.toastError,
+    success: mocks.toastSuccess,
+    info: mocks.toastInfo,
+    dismiss: mocks.toastDismiss,
+  },
 }));
 vi.mock("@/api/identity", () => ({
   updateIdentityCredentials: mocks.update,
@@ -101,9 +113,11 @@ it("changes an existing password through the generated API and keeps the renewed
       { signal: expect.any(AbortSignal) },
     ),
   );
-  expect(
-    await screen.findByText(/密码已保存。下次可使用邮箱或用户名和密码登录/),
-  ).toBeTruthy();
+  await waitFor(() =>
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      expect.stringContaining("密码已保存。下次可使用邮箱或用户名和密码登录"),
+    ),
+  );
   expect(mocks.replace).not.toHaveBeenCalled();
   expect(mocks.refresh).toHaveBeenCalledTimes(1);
   expect(screen.getByLabelText("新密码")).toHaveProperty("value", "");
@@ -165,7 +179,11 @@ it("lets an existing email-only user set a password from account settings and st
   expect(screen.getByRole("button", { name: "保存密码" })).toBeTruthy();
   setPassword();
   submit();
-  await screen.findByText(/密码已保存。下次可使用邮箱或用户名和密码登录/);
+  await waitFor(() =>
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      expect.stringContaining("密码已保存。下次可使用邮箱或用户名和密码登录"),
+    ),
+  );
   expect(mocks.replace).not.toHaveBeenCalled();
   expect(mocks.refresh).toHaveBeenCalledTimes(1);
 });
@@ -177,10 +195,10 @@ it("rejects a mismatched password confirmation before any mutation", async () =>
     target: { value: "different-test-password" },
   });
   submit();
-  expect(await screen.findByRole("alert")).toHaveProperty(
-    "textContent",
-    "两次输入的新密码不一致。",
+  await waitFor(() =>
+    expect(mocks.toastError).toHaveBeenCalledWith("两次输入的新密码不一致。"),
   );
+  expect(screen.queryByRole("alert")).toBeNull();
   expect(mocks.update).not.toHaveBeenCalled();
 });
 
@@ -190,10 +208,10 @@ it.each(["too-short", "a".repeat(129)])(
     render(<CredentialsForm session={passwordless} />);
     setPassword(password);
     submit();
-    expect(await screen.findByRole("alert")).toHaveProperty(
-      "textContent",
-      "密码需要 12–128 个字符。",
+    await waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledWith("密码需要 12–128 个字符。"),
     );
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(mocks.update).not.toHaveBeenCalled();
   },
 );
@@ -202,10 +220,12 @@ it("requires proof for an account with an existing password", async () => {
   render(<CredentialsForm session={session} />);
   setPassword();
   submit();
-  expect(await screen.findByRole("alert")).toHaveProperty(
-    "textContent",
-    "请输入当前密码，或使用邮箱验证码验证。",
+  await waitFor(() =>
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      "请输入当前密码，或使用邮箱验证码验证。",
+    ),
   );
+  expect(screen.queryByRole("alert")).toBeNull();
   expect(mocks.update).not.toHaveBeenCalled();
 });
 
@@ -251,10 +271,12 @@ it("recovers expired recent verification by requesting a fresh code for the boun
   );
   setPassword();
   submit();
-  expect(await screen.findByRole("alert")).toHaveProperty(
-    "textContent",
-    "登录验证已过期，请重新验证下方已绑定邮箱后设置密码。",
+  await waitFor(() =>
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      "登录验证已过期，请重新验证下方已绑定邮箱后设置密码。",
+    ),
   );
+  expect(screen.queryByRole("alert")).toBeNull();
   expect(screen.queryByLabelText("当前密码", { selector: "input" })).toBeNull();
   expect(screen.getByLabelText("新密码")).toHaveProperty(
     "value",
@@ -281,10 +303,12 @@ it("keeps a failed code send on the setup form and allows a deliberate retry", a
   render(<CredentialsForm session={passwordless} initialSetup />);
   fireEvent.click(screen.getByRole("button", { name: "重新验证邮箱" }));
   fireEvent.click(screen.getByRole("button", { name: "发送验证码" }));
-  expect(await screen.findByRole("alert")).toHaveProperty(
-    "textContent",
-    "暂时无法连接服务，请稍后重试。",
+  await waitFor(() =>
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      "暂时无法连接服务，请稍后重试。",
+    ),
   );
+  expect(screen.queryByRole("alert")).toBeNull();
   await sendAndFillCode();
   expect(mocks.send).toHaveBeenCalledTimes(2);
   expect(mocks.update).not.toHaveBeenCalled();
@@ -310,10 +334,12 @@ it("keeps an incorrect mailbox code editable so setup can retry without losing i
   fireEvent.click(screen.getByRole("button", { name: "重新验证邮箱" }));
   await sendAndFillCode();
   submit();
-  expect(await screen.findByRole("alert")).toHaveProperty(
-    "textContent",
-    "验证未通过，请检查输入后重试。",
+  await waitFor(() =>
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      "验证未通过，请检查输入后重试。",
+    ),
   );
+  expect(screen.queryByRole("alert")).toBeNull();
   expect(screen.getByLabelText("新密码")).toHaveProperty(
     "value",
     "next-test-password",
@@ -364,34 +390,39 @@ it("enforces code resend cooldown and blocks an expired code before saving", asy
     screen.getByLabelText("邮箱验证码", { selector: "input" }),
   ).toHaveProperty("disabled", true);
   submit();
-  expect(screen.getByRole("alert")).toHaveProperty(
-    "textContent",
+  expect(mocks.toastError).toHaveBeenCalledWith(
     "请发送并填写有效的邮箱验证码。",
   );
+  expect(screen.queryByRole("alert")).toBeNull();
   expect(mocks.update).not.toHaveBeenCalled();
 });
 
-it("ignores a cancelled save that completes late instead of navigating with a stale result", async () => {
+it("keeps save busy without a cancellation button and ignores completion after leaving", async () => {
   let finish!: (value: HotKeyAPI.IdentitySessionView) => void;
   mocks.update.mockReturnValueOnce(
     new Promise((resolve) => {
       finish = resolve;
     }),
   );
-  render(<CredentialsForm session={passwordless} initialSetup />);
+  const view = render(<CredentialsForm session={passwordless} initialSetup />);
   setPassword();
   submit();
   await waitFor(() => expect(mocks.update).toHaveBeenCalled());
-  fireEvent.click(screen.getByRole("button", { name: "取消" }));
+  expect(screen.getByRole("button", { name: "正在保存…" })).toHaveProperty(
+    "disabled",
+    true,
+  );
+  expect(screen.queryByRole("button", { name: "取消" })).toBeNull();
+  submit();
+  expect(mocks.update).toHaveBeenCalledTimes(1);
+  view.unmount();
   expect(mocks.update.mock.calls[0][1].signal.aborted).toBe(true);
   await act(async () => {
     finish(session);
   });
-  expect(screen.getByRole("alert")).toHaveProperty(
-    "textContent",
-    "请求已取消，可以重新操作。",
-  );
+  expect(mocks.toastInfo).not.toHaveBeenCalled();
+  expect(mocks.toastSuccess).not.toHaveBeenCalled();
+  expect(mocks.toastError).not.toHaveBeenCalled();
   expect(mocks.replace).not.toHaveBeenCalled();
   expect(mocks.refresh).not.toHaveBeenCalled();
-  expect(screen.getByRole("heading", { name: "设置登录密码" })).toBeTruthy();
 });

@@ -4,6 +4,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { getPublicContact } from "@/api/zhandiziliao";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,7 @@ import { ApiRequestError } from "@/request";
 
 export function ContactPanel() {
   const [view, setView] = useState<HotKeyAPI.PublicContactView | null>(null);
-  const [error, setError] = useState("");
+  const [failed, setFailed] = useState(false);
   const [refresh, setRefresh] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
@@ -19,22 +20,23 @@ export function ContactPanel() {
       .then((value) => {
         if (controller.signal.aborted) return;
         setView(value);
-        setError("");
+        setFailed(false);
       })
       .catch((failure) => {
         if (controller.signal.aborted) return;
         if (failure instanceof ApiRequestError && failure.kind === "cancelled")
           return;
         setView(null);
-        setError("联系资料读取失败，请重新读取。");
+        setFailed(true);
+        toast.error("联系资料读取失败，请重新读取。");
       });
     return () => controller.abort();
   }, [refresh]);
   return (
     <section aria-label="联系资料" className="flex flex-col gap-y-6">
-      {error ? (
+      {failed ? (
         <Alert>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>联系资料暂不可用，可以重新读取。</AlertDescription>
         </Alert>
       ) : !view ? (
         <p role="status">正在读取…</p>

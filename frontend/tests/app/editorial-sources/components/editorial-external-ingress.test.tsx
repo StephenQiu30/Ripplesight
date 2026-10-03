@@ -9,6 +9,9 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { EditorialExternalIngress } from "@/app/editorial-sources/components/editorial-external-ingress";
 
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
+
 const api = vi.hoisted(() => ({ submit: vi.fn(), read: vi.fn() }));
 vi.mock("@/api/bianjilaiyuan", () => ({
   ingestExternalEditorialSource: api.submit,
@@ -95,7 +98,12 @@ it("enforces 50 items and four MiB before submission without preventing per-row 
   render(<EditorialExternalIngress {...props} />);
   fill(JSON.stringify(Array.from({ length: 51 }, () => ({}))));
   fireEvent.click(screen.getByRole("button", { name: "受理材料摄入" }));
-  await screen.findByText(/材料必须为 1—50 项/);
+  await waitFor(() =>
+    expect(notifications.error).toHaveBeenCalledWith(
+      expect.stringContaining("材料必须为 1—50 项"),
+    ),
+  );
+  expect(screen.queryByRole("alert")).toBeNull();
   expect(api.submit).not.toHaveBeenCalled();
   fireEvent.change(screen.getByLabelText("材料 JSON 数组"), {
     target: { value: JSON.stringify([{ body: "中".repeat(1_398_102) }]) },

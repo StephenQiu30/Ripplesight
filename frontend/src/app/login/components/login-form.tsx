@@ -1,11 +1,10 @@
 "use client";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 
-import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { EyeIcon, EyeOffIcon, KeyRoundIcon, MailIcon } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 
 import {
   createIdentitySession,
@@ -24,6 +23,12 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  Empty,
+  EmptyContent,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Separator } from "@/components/ui/separator";
 import {
   InputGroup,
@@ -31,6 +36,7 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
+import { LoginFormLayout, LoginFormSkeleton } from "./login-form-layout";
 
 type LoginMethod = "password" | "email" | "github";
 
@@ -45,7 +51,7 @@ export function LoginForm({
   const [options, setOptions] = useState<HotKeyAPI.LoginOptionsView | null>(
     null,
   );
-  const [optionError, setOptionError] = useState("");
+  const [optionError, setOptionError] = useState(false);
   const [reload, setReload] = useState(0);
   const [method, setMethod] = useState<LoginMethod>("password");
   const [username, setUsername] = useState("");
@@ -58,9 +64,8 @@ export function LoginForm({
   const [resendAt, setResendAt] = useState(0);
   const [now, setNow] = useState(0);
   const [busy, setBusy] = useState<LoginMethod | "email-code" | null>(null);
-  const [error, setError] = useState(
-    oauthFailed ? "GitHub 登录未完成，请重新尝试。" : "",
-  );
+  const feedbackId = useId();
+  const oauthNoticeShown = useRef(false);
   const operation = useRef<AbortController | null>(null);
   const credentialInput = useRef<HTMLInputElement | null>(null);
   const focusNextMethod = useRef(false);
@@ -71,19 +76,28 @@ export function LoginForm({
       .then((value) => {
         if (controller.signal.aborted) return;
         setOptions(value);
-        setOptionError("");
+        setOptionError(false);
         setMethod(
           value.password ? "password" : value.email ? "email" : "github",
         );
       })
       .catch((failure) => {
-        if (!controller.signal.aborted)
-          setOptionError(
-            authErrorMessage(failure, "登录方式读取失败，请重试。"),
-          );
+        if (!controller.signal.aborted) {
+          setOptionError(true);
+          toast.error(authErrorMessage(failure, "登录方式读取失败，请重试。"), {
+            id: feedbackId,
+          });
+        }
       });
     return () => controller.abort();
-  }, [reload]);
+  }, [reload, feedbackId]);
+
+  useEffect(() => {
+    if (oauthFailed && !oauthNoticeShown.current) {
+      oauthNoticeShown.current = true;
+      toast.error("GitHub 登录未完成，请重新尝试。", { id: feedbackId });
+    }
+  }, [oauthFailed, feedbackId]);
 
   useEffect(() => {
     if (!challenge) return;
@@ -112,12 +126,14 @@ export function LoginForm({
     const controller = new AbortController();
     operation.current = controller;
     setBusy(kind);
-    setError("");
+    toast.dismiss(feedbackId);
     try {
       await action(controller.signal);
     } catch (failure) {
       if (!controller.signal.aborted)
-        setError(authErrorMessage(failure, "登录未完成，请重试。"));
+        toast.error(authErrorMessage(failure, "登录未完成，请重试。"), {
+          id: feedbackId,
+        });
     } finally {
       if (operation.current === controller) {
         operation.current = null;
@@ -190,42 +206,30 @@ export function LoginForm({
     focusNextMethod.current = true;
     setMethod(next);
     setShowPassword(false);
-    setError("");
+    toast.dismiss(feedbackId);
   }
 
   return (
-    <section
-      aria-labelledby="login-title"
-      className="mx-auto w-full max-w-104 lg:mr-0 lg:translate-y-6"
-    >
-      <div className="mb-9 flex flex-col gap-y-3">
-        <h1 id="login-title" className="text-3xl font-medium tracking-tight">
-          登录知微见澜
-        </h1>
-        <p className="text-muted-foreground text-sm leading-6">
-          继续关注你在意的，沿着来源看见变化。
-        </p>
-      </div>
-      {!options && !optionError && (
-        <p role="status" className="text-muted-foreground text-sm">
-          正在读取登录方式…
-        </p>
-      )}
+    <LoginFormLayout loading={!options && !optionError}>
+      {!options && !optionError && <LoginFormSkeleton />}
       {optionError && (
-        <div className="flex flex-col gap-y-3">
-          <Alert variant="destructive">
-            <AlertDescription>{optionError}</AlertDescription>
-          </Alert>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setOptionError("");
-              setReload((value) => value + 1);
-            }}
-          >
-            重新读取
-          </Button>
-        </div>
+        <Empty>
+          <EmptyHeader>
+            <EmptyTitle>登录方式暂时不可用</EmptyTitle>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button
+              variant="outline"
+              onClick={() => {
+                toast.dismiss(feedbackId);
+                setOptionError(false);
+                setReload((value) => value + 1);
+              }}
+            >
+              重新读取
+            </Button>
+          </EmptyContent>
+        </Empty>
       )}
       {options && (
         <>
@@ -318,7 +322,7 @@ export function LoginForm({
                       setEmail(event.target.value);
                       setChallenge(null);
                       setCode("");
-                      setError("");
+                      toast.dismiss(feedbackId);
                     }}
                     disabled={!ready}
                   />
@@ -453,40 +457,6 @@ export function LoginForm({
           </div>
         </>
       )}
-      {error && (
-        <Alert variant="destructive" className="mt-5">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      {busy && (
-        <Button
-          variant="ghost"
-          className="mt-3 min-h-11"
-          onClick={() => {
-            operation.current?.abort();
-            setError("请求已取消，可以重新操作。");
-          }}
-        >
-          取消
-        </Button>
-      )}
-      <p className="text-muted-foreground mt-8 text-xs leading-6">
-        登录即表示你已阅读
-        <Link
-          href="/terms"
-          className="text-foreground underline underline-offset-4"
-        >
-          使用条款
-        </Link>
-        与
-        <Link
-          href="/privacy"
-          className="text-foreground underline underline-offset-4"
-        >
-          隐私说明
-        </Link>
-        。
-      </p>
-    </section>
+    </LoginFormLayout>
   );
 }

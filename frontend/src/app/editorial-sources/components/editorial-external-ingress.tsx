@@ -1,5 +1,5 @@
 "use client";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { toast } from "sonner";
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -37,7 +37,7 @@ export function EditorialExternalIngress({
   const [receipt, setReceipt] =
     useState<HotKeyAPI.ExternalIngressReceipt | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+
   const epoch = useRef(0);
   const working = useRef(false);
   const operations = useRef(new Map<string, string>());
@@ -54,7 +54,6 @@ export function EditorialExternalIngress({
     setBusy(false);
     setToken(value);
     setReceipt(null);
-    setError("");
   }
   async function perform(
     work: () => Promise<HotKeyAPI.ExternalIngressReceipt>,
@@ -64,16 +63,18 @@ export function EditorialExternalIngress({
     const captured = epoch.current;
     working.current = true;
     setBusy(true);
-    setError("");
+
     try {
       const result = await work();
       if (captured === epoch.current) setReceipt(result);
     } catch (cause) {
+      if (cause instanceof ApiRequestError && cause.kind === "cancelled")
+        return;
       if (captured !== epoch.current) return;
       const unknown =
         cause instanceof ApiRequestError &&
         ["network", "timeout", "protocol"].includes(cause.kind);
-      setError(
+      toast.error(
         `${cause instanceof ApiRequestError ? cause.message : "摄入或回执读取失败，请核对输入与授权。"}${unknown && operationId ? ` 受理结果尚未确认，操作编号 ${operationId}；重试相同输入会复用该编号。` : ""}`,
       );
     } finally {
@@ -96,7 +97,9 @@ export function EditorialExternalIngress({
         throw new Error();
       input = value as HotKeyAPI.ExternalEditorialInput["materials"];
     } catch {
-      setError("材料必须为 1—50 项 JSON 数组，总体积不能超过 4 MiB（UTF-8）。");
+      toast.error(
+        "材料必须为 1—50 项 JSON 数组，总体积不能超过 4 MiB（UTF-8）。",
+      );
       return;
     }
     const body = {
@@ -166,11 +169,7 @@ export function EditorialExternalIngress({
       <Button disabled={busy || token.length < 32 || !enabled} onClick={submit}>
         受理材料摄入
       </Button>
-      {error ? (
-        <Alert variant="destructive" className="break-words">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
+
       {receipt ? (
         <div className="flex flex-col gap-y-3 text-sm">
           <p>

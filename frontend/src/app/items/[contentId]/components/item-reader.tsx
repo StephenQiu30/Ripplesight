@@ -4,6 +4,7 @@ import { FieldLabel } from "@/components/ui/field";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { SaveItem, MarkItemRead } from "@/components/publication/local-reading";
 import { MediaGallery } from "@/components/publication/media-gallery";
@@ -28,7 +29,6 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
   const scrollContainer = useLayoutScrollContainer();
   const [mode, setMode] = useState<"original" | "translated">("original");
   const [note, setNote] = useState("");
-  const [notice, setNotice] = useState("");
   const key = `hotkey.reading.v1.${item.id}.${item.revision}`;
   useEffect(() => {
     const scrollElement = scrollContainer?.current;
@@ -117,9 +117,9 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
           onClick={async () => {
             try {
               await navigator.clipboard.writeText(window.location.href);
-              setNotice("阅读链接已复制。");
+              toast.success("阅读链接已复制。");
             } catch {
-              setNotice("暂时无法复制，请复制浏览器地址。");
+              toast.error("暂时无法复制，请复制浏览器地址。");
             }
           }}
         >
@@ -317,19 +317,14 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
                   scroll: scrollContainer?.current?.scrollTop ?? 0,
                 }),
               );
-              setNotice("已保存在本机。");
+              toast.success("已保存在本机。");
             } catch {
-              setNotice("本机存储不可用，未保存。");
+              toast.error("本机存储不可用，未保存。");
             }
           }}
         >
           保存笔记
         </Button>
-        {notice ? (
-          <p role="status" className="text-muted-foreground mt-2 text-xs">
-            {notice}
-          </p>
-        ) : null}
       </section>
     </div>
   );

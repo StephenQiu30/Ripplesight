@@ -1,6 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { toast } from "sonner";
+
+import { useEffect, useRef, useState } from "react";
 
 import { updateSourceConnection } from "@/api/laiyuannengli";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -10,7 +12,6 @@ import {
   Field,
   FieldContent,
   FieldDescription,
-  FieldError,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
@@ -33,6 +34,13 @@ export function SourceConnectionActions({
   platform: HotKeyAPI.SourcePlatformView;
   onChanged: () => Promise<void>;
 }) {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const submitting = useRef(false);
   const confirmOrigin = useRef<HTMLButtonElement | null>(null);
   const enableButton = useRef<HTMLButtonElement | null>(null);
@@ -40,8 +48,6 @@ export function SourceConnectionActions({
   const [pending, setPending] = useState(false);
   const [confirm, setConfirm] =
     useState<HotKeyAPI.SourceConnectionStatus | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [reviewed, setReviewed] = useState(false);
   const [hostsText, setHostsText] = useState(platform.allowed_hosts.join("\n"));
   const editableHosts = platform.source_key === "web";
@@ -86,8 +92,6 @@ export function SourceConnectionActions({
       return;
     submitting.current = true;
     setPending(true);
-    setError(null);
-    setNotice(null);
     try {
       await updateSourceConnection(
         { source_key: platform.source_key },
@@ -100,25 +104,31 @@ export function SourceConnectionActions({
             : {}),
         },
       );
-      setNotice(
+      if (!mounted.current) return;
+      toast.success(
         status === "disabled"
           ? "连接已停用，历史资料仍可读取。"
           : "连接已保存，能力仍需重新验证。",
       );
       await onChanged();
+      if (!mounted.current) return;
       setConfirm(null);
       setReviewed(false);
     } catch (failure) {
+      if (!mounted.current) return;
+      if (failure instanceof ApiRequestError && failure.kind === "cancelled")
+        return;
       setConfirm(null);
       setReviewed(false);
-      setError(
+      toast.error(
         failure instanceof ApiRequestError
           ? `${failure.message}${failure.requestId ? ` 请求编号：${failure.requestId}` : ""}`
           : "连接更新失败，请刷新状态后重试。",
+        { action: { label: "刷新状态", onClick: () => void onChanged() } },
       );
     } finally {
       submitting.current = false;
-      setPending(false);
+      if (mounted.current) setPending(false);
     }
   }
 
@@ -137,7 +147,15 @@ export function SourceConnectionActions({
             <Textarea
               id="source-allowed-hosts"
               value={hostsText}
-              onChange={(event) => setHostsText(event.target.value)}
+              onChange={(event) => {
+                const next = event.target.value;
+                setHostsText(next);
+                if (
+                  new Set(next.split(/\s+/).filter(Boolean)).size > 32 &&
+                  !hostsInvalid
+                )
+                  toast.error("最多允许 32 个域名。");
+              }}
               disabled={pending}
               aria-invalid={hostsInvalid}
               aria-describedby="source-hosts-description"
@@ -147,9 +165,6 @@ export function SourceConnectionActions({
               每行一个精确域名，最多 32
               个，不包含协议、路径或通配符。保存后仍需由维护者配置准入政策并完成验证。
             </FieldDescription>
-            {hostsInvalid ? (
-              <FieldError>最多允许 32 个域名。</FieldError>
-            ) : null}
           </Field>
         </FieldGroup>
       ) : null}
@@ -198,26 +213,6 @@ export function SourceConnectionActions({
             ? "尚未完成来源配置。请维护者配置对应来源预设；需要凭据的来源，请维护者先配置服务端凭据。"
             : "请维护者先配置服务端凭据。"}
           页面不接收或显示会话秘密。
-        </p>
-      ) : null}
-      {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>连接未能更新</AlertTitle>
-          <AlertDescription>
-            <p>{error}</p>
-            <Button
-              variant="outline"
-              disabled={pending}
-              onClick={() => void onChanged()}
-            >
-              刷新状态
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      {notice ? (
-        <p role="status" className="text-muted-foreground text-sm">
-          {notice}
         </p>
       ) : null}
       <AlertDialog

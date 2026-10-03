@@ -1,5 +1,5 @@
 "use client";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { toast } from "sonner";
 import {
   SelectLabel,
   Select,
@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Field, FieldLabel } from "@/components/ui/field";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   acknowledgeAiCostCircuit,
   getAiModelConfiguration,
@@ -244,9 +244,14 @@ export function ModelManager() {
     null,
   );
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState("");
-  const [error, setError] = useState("");
+
   const context = useRef(0);
+  useEffect(
+    () => () => {
+      context.current += 1;
+    },
+    [],
+  );
   const operations = useRef(new Map<string, string>());
   const active = useRef(false);
   function changeToken(value: string) {
@@ -257,8 +262,6 @@ export function ModelManager() {
     setConfiguration(null);
     setOverview(null);
     setBusy(false);
-    setError("");
-    setNotice("");
   }
   const headers = { "X-HotKey-Operator-Token": token, "X-HotKey-CSRF": "1" };
   function operation(body: object) {
@@ -292,17 +295,18 @@ export function ModelManager() {
       readHeaders = { ...headers };
     active.current = true;
     setBusy(true);
-    setError("");
-    setNotice("");
+
     try {
       await action(captured, readHeaders);
     } catch (cause) {
+      if (cause instanceof ApiRequestError && cause.kind === "cancelled")
+        return;
       if (captured !== context.current) return;
       const known = cause instanceof ApiRequestError;
       const conflict = known && cause.code === "ai_configuration_conflict";
       const uncertain =
         known && ["network", "timeout", "protocol"].includes(cause.kind);
-      setError(
+      toast.error(
         `${conflict ? "配置版本已变化，请重新读取后再修改。" : known ? cause.message : "暂时无法完成操作，请重新读取。"}${known && cause.requestId ? ` 请求编号：${cause.requestId}` : ""}${uncertain && operationId ? ` 结果尚未确认，操作编号：${operationId}。重试相同输入将复用此编号。` : ""}`,
       );
     } finally {
@@ -322,7 +326,7 @@ export function ModelManager() {
       if (captured !== context.current) return;
       await read(captured, readHeaders);
       if (captured === context.current)
-        setNotice(
+        toast.success(
           `切换已记录，返回配置版本 ${result.version}。仅之后受理的任务采用新配置。`,
         );
     }, operationId);
@@ -339,7 +343,7 @@ export function ModelManager() {
       if (captured !== context.current) return;
       await read(captured, readHeaders);
       if (captured === context.current)
-        setNotice(
+        toast.success(
           "具体调用的成本核对已记录。未知调用仍保持未知，不会因核对自动重发。",
         );
     }, operationId);
@@ -396,16 +400,7 @@ export function ModelManager() {
         <p className="text-muted-foreground text-xs">
           令牌只保存在本页内存，清除或离开页面后不再保留。
         </p>
-        {error ? (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        ) : null}
-        {notice ? (
-          <p role="status" className="text-sm">
-            {notice}
-          </p>
-        ) : null}
+
         {busy ? <p role="status">正在读取或提交…</p> : null}
         {configuration ? (
           <>

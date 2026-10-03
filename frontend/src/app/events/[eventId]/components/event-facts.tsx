@@ -2,6 +2,7 @@
 import { FieldLabel, Field } from "@/components/ui/field";
 
 import { useId, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { listEventFacts } from "@/api/shijian";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -34,7 +35,7 @@ export function EventFacts({
   const fieldId = useId();
 
   const [facts, setFacts] = useState<HotKeyAPI.EventFactView[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
@@ -48,12 +49,17 @@ export function EventFacts({
         onFactsLoaded(page.facts);
       })
       .catch((failure: unknown) => {
-        if (!controller.signal.aborted)
-          setError(
+        if (
+          !controller.signal.aborted &&
+          !(failure instanceof ApiRequestError && failure.kind === "cancelled")
+        ) {
+          setFailed(true);
+          toast.error(
             failure instanceof ApiRequestError
               ? failure.message
               : "事实关系暂时读取失败。",
           );
+        }
       });
     return () => controller.abort();
   }, [eventId, revision, retry, onFactsLoaded]);
@@ -65,15 +71,15 @@ export function EventFacts({
       <p className="text-muted-foreground mt-3 leading-7">
         重复报道归于同一事实；直接进展和背景保留各自身份与根事实关系。
       </p>
-      {error ? (
+      {failed ? (
         <Alert className="mt-6" variant="destructive">
           <AlertTitle>无法读取事实</AlertTitle>
           <AlertDescription>
-            {error}
+            可以重新读取所选修订的事实关系。
             <Button
               variant="outline"
               onClick={() => {
-                setError(null);
+                setFailed(false);
                 setFacts(null);
                 setRetry((value) => value + 1);
               }}

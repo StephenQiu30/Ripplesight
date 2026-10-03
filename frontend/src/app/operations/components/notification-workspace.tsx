@@ -1,4 +1,5 @@
 "use client";
+import { toast } from "sonner";
 import { ChevronDownIcon } from "lucide-react";
 import {
   Collapsible,
@@ -68,6 +69,14 @@ function TargetEditor({
   options: RequestOptions;
   saved: () => Promise<void>;
 }) {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const fieldId = useId();
 
   const [name, setName] = useState(row?.name ?? "");
@@ -84,7 +93,7 @@ function TargetEditor({
   );
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+
   const operation = useOperation();
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -114,10 +123,12 @@ function TargetEditor({
         options,
       );
       operation.done();
-      setMessage("通知目标已保存。");
+      if (mounted.current) toast.success("通知目标已保存。");
       await saved();
     } catch (error) {
-      setMessage(explain(error));
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (mounted.current) toast.error(explain(error));
     } finally {
       setBusy(false);
     }
@@ -249,11 +260,6 @@ function TargetEditor({
               : "未启用"}
           </p>
         )}
-        {message && (
-          <p role="status" className="sm:col-span-2">
-            {message}
-          </p>
-        )}
       </FieldGroup>
     </form>
   );
@@ -267,6 +273,14 @@ function UnknownResolution({
   options: RequestOptions;
   saved: () => Promise<void>;
 }) {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const fieldId = useId();
 
   const [outcome, setOutcome] = useState<"delivered" | "not_delivered">(
@@ -274,7 +288,7 @@ function UnknownResolution({
   );
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+
   const operation = useOperation();
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -289,7 +303,9 @@ function UnknownResolution({
       operation.done();
       await saved();
     } catch (error) {
-      setMessage(explain(error));
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (mounted.current) toast.error(explain(error));
     } finally {
       setBusy(false);
     }
@@ -344,7 +360,6 @@ function UnknownResolution({
         <Button type="submit" disabled={busy}>
           保存人工核对
         </Button>
-        {message && <p role="status">{message}</p>}
       </FieldGroup>
     </form>
   );
@@ -359,7 +374,7 @@ export function NotificationWorkspace({ token }: { token: string }) {
     HotKeyAPI.NotificationDeliveryView[]
   >([]);
   const [cursor, setCursor] = useState<string | null>(null);
-  const [message, setMessage] = useState("");
+
   const [busy, setBusy] = useState(false);
   const sequence = useRef(0);
   const reload = useCallback(async () => {
@@ -374,9 +389,10 @@ export function NotificationWorkspace({ token }: { token: string }) {
       setTargets(rows);
       setDeliveries(page.items);
       setCursor(page.next_cursor);
-      setMessage("");
     } catch (error) {
-      if (sequence.current === current) setMessage(explain(error));
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (sequence.current === current) toast.error(explain(error));
     } finally {
       if (sequence.current === current) setBusy(false);
     }
@@ -394,10 +410,11 @@ export function NotificationWorkspace({ token }: { token: string }) {
         setTargets(rows);
         setDeliveries(page.items);
         setCursor(page.next_cursor);
-        setMessage("");
       })
       .catch((error) => {
-        if (pending.current === current) setMessage(explain(error));
+        if (error instanceof ApiRequestError && error.kind === "cancelled")
+          return;
+        if (pending.current === current) toast.error(explain(error));
       });
     return () => {
       pending.current++;
@@ -406,18 +423,22 @@ export function NotificationWorkspace({ token }: { token: string }) {
   const options = { headers: { "X-HotKey-Operator-Token": token } };
   async function more() {
     if (!cursor) return;
+    const current = sequence.current;
     setBusy(true);
     try {
       const page = await listOperatorNotificationDeliveries(
         { cursor, limit: 50 },
         options,
       );
+      if (sequence.current !== current) return;
       setDeliveries((old) => [...old, ...page.items]);
       setCursor(page.next_cursor);
     } catch (error) {
-      setMessage(explain(error));
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (sequence.current === current) toast.error(explain(error));
     } finally {
-      setBusy(false);
+      if (sequence.current === current) setBusy(false);
     }
   }
   const target = targets.find((row) => row.id === selected);
@@ -479,7 +500,7 @@ export function NotificationWorkspace({ token }: { token: string }) {
         options={options}
         saved={reload}
       />
-      {message && <p role="status">{message}</p>}
+
       {deliveries.length === 0 && (
         <p className="text-muted-foreground">暂无投递记录。</p>
       )}

@@ -9,6 +9,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const toasts = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: toasts }));
+afterEach(() => vi.clearAllMocks());
+
 const api = vi.hoisted(() => ({
   get: vi.fn(),
   update: vi.fn(),
@@ -78,11 +82,15 @@ describe("Demo topic editing", () => {
     );
     fireEvent.change(name, { target: { value: "尚未保存的草稿" } });
     fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
-    expect(
-      await screen.findByText(
+    await waitFor(() =>
+      expect(toasts.error).toHaveBeenCalledWith(
         "这个主题已在其他页面更新。重新读取后再确认你的修改。",
+        expect.objectContaining({
+          action: expect.objectContaining({ label: "重新读取" }),
+        }),
       ),
-    ).toBeTruthy();
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
     expect((name as HTMLInputElement).value).toBe("尚未保存的草稿");
     expect(api.push).not.toHaveBeenCalled();
     api.get.mockResolvedValueOnce({
@@ -90,7 +98,7 @@ describe("Demo topic editing", () => {
       name: "其他页面已保存",
       current_version: 2,
     });
-    fireEvent.click(screen.getByRole("button", { name: "重新读取" }));
+    toasts.error.mock.calls.at(-1)?.[1].action.onClick();
     await waitFor(() =>
       expect(
         (screen.getByLabelText("主题名称") as HTMLInputElement).value,
@@ -99,7 +107,7 @@ describe("Demo topic editing", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("keeps business errors and request IDs inline without losing the draft", async () => {
+  it("toasts business errors and request IDs without losing the draft", async () => {
     api.update.mockRejectedValueOnce(
       new ApiRequestError({
         kind: "http",
@@ -114,13 +122,14 @@ describe("Demo topic editing", () => {
     fireEvent.change(name, { target: { value: "尚未保存的草稿" } });
     fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
     await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toContain(
-        "request-dependency",
+      expect(toasts.error).toHaveBeenCalledWith(
+        "依赖服务暂时不可用",
+        expect.objectContaining({
+          description: "请求编号：request-dependency",
+        }),
       ),
     );
-    expect(screen.getByRole("alert").textContent).toContain(
-      "依赖服务暂时不可用",
-    );
+    expect(screen.queryByRole("alert")).toBeNull();
     expect((name as HTMLInputElement).value).toBe("尚未保存的草稿");
     expect(api.push).not.toHaveBeenCalled();
   });
@@ -184,6 +193,13 @@ describe("Demo topic editing", () => {
       }),
     );
     expect(await screen.findByLabelText("全部包含")).toBeTruthy();
-    expect(screen.getByText("关键词过长")).toBeTruthy();
+    expect(toasts.error).toHaveBeenCalledWith(
+      "输入不符合要求",
+      expect.objectContaining({ description: "关键词过长" }),
+    );
+    expect(screen.getByLabelText("全部包含").getAttribute("aria-invalid")).toBe(
+      "true",
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

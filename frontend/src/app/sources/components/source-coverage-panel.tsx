@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { RotateCcwIcon, XIcon } from "lucide-react";
@@ -24,7 +26,6 @@ import {
 import {
   Field,
   FieldDescription,
-  FieldError,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
@@ -287,8 +288,9 @@ function QueryFailure({
       </AlertTitle>
       <AlertDescription>
         <p>
-          {failure.message}
-          {failure.requestId ? ` 请求编号：${failure.requestId}` : ""}
+          {failure.kind === "forbidden"
+            ? "请检查当前账户的访问权限。"
+            : "请重新加载当前查询。"}
         </p>
         {failure.kind === "error" ? (
           <Button type="button" size="sm" variant="outline" onClick={onRetry}>
@@ -443,7 +445,6 @@ export function SourceCoveragePanel() {
   const [loadMoreState, setLoadMoreState] = useState<{
     key: string;
     loading: boolean;
-    error: string | null;
   } | null>(null);
   const pageController = useRef<AbortController | null>(null);
   const detailOrigin = useRef<HTMLElement | null>(null);
@@ -452,8 +453,6 @@ export function SourceCoveragePanel() {
   const detailKey = `${selectedWindow ?? ""}:${detailRefreshCount}`;
   const loadingMore =
     loadMoreState?.key === requestKey && loadMoreState.loading;
-  const moreError =
-    loadMoreState?.key === requestKey ? loadMoreState.error : null;
 
   useEffect(() => {
     if (!searchParams.get("start") && !searchParams.get("end")) {
@@ -471,8 +470,16 @@ export function SourceCoveragePanel() {
         }
       })
       .catch((error: unknown) => {
+        if (error instanceof ApiRequestError && error.kind === "cancelled")
+          return;
         if (controller.signal.aborted) return;
-        setSourcesFailure(readFailure(error, "来源选项加载失败，请重试。"));
+        const failure = readFailure(error, "来源选项加载失败，请重试。");
+        toast.error(failure.message, {
+          description: failure.requestId
+            ? `请求编号：${failure.requestId}`
+            : undefined,
+        });
+        setSourcesFailure(failure);
       });
     return () => controller.abort();
   }, [sourcesRefresh]);
@@ -495,11 +502,20 @@ export function SourceCoveragePanel() {
         }
       })
       .catch((error: unknown) => {
+        if (error instanceof ApiRequestError && error.kind === "cancelled")
+          return;
         if (controller.signal.aborted) return;
+
+        const failure = readFailure(error, "覆盖窗口加载失败，请重试。");
+        toast.error(failure.message, {
+          description: failure.requestId
+            ? `请求编号：${failure.requestId}`
+            : undefined,
+        });
         setList({
           key: requestKey,
           status: "error",
-          failure: readFailure(error, "覆盖窗口加载失败，请重试。"),
+          failure,
         });
       });
     void getCollectionCoverageMetrics(params, { signal: controller.signal })
@@ -508,11 +524,20 @@ export function SourceCoveragePanel() {
           setMetrics({ key: requestKey, status: "ready", value });
       })
       .catch((error: unknown) => {
+        if (error instanceof ApiRequestError && error.kind === "cancelled")
+          return;
         if (controller.signal.aborted) return;
+
+        const failure = readFailure(error, "逐来源指标加载失败，请重试。");
+        toast.error(failure.message, {
+          description: failure.requestId
+            ? `请求编号：${failure.requestId}`
+            : undefined,
+        });
         setMetrics({
           key: requestKey,
           status: "error",
-          failure: readFailure(error, "逐来源指标加载失败，请重试。"),
+          failure,
         });
       });
     return () => {
@@ -533,11 +558,20 @@ export function SourceCoveragePanel() {
           setDetail({ key: detailKey, status: "ready", value });
       })
       .catch((error: unknown) => {
+        if (error instanceof ApiRequestError && error.kind === "cancelled")
+          return;
         if (controller.signal.aborted) return;
+
+        const failure = readFailure(error, "窗口详情加载失败，请重试。");
+        toast.error(failure.message, {
+          description: failure.requestId
+            ? `请求编号：${failure.requestId}`
+            : undefined,
+        });
         setDetail({
           key: detailKey,
           status: "error",
-          failure: readFailure(error, "窗口详情加载失败，请重试。"),
+          failure,
         });
       });
     return () => controller.abort();
@@ -551,6 +585,7 @@ export function SourceCoveragePanel() {
     event.preventDefault();
     const result = coverageQueryFromDraft(draft);
     setValidation(result.error);
+    if (result.error) toast.error(result.error);
     if (result.query)
       router.replace(coverageUrl(result.query), { scroll: false });
   }
@@ -568,7 +603,7 @@ export function SourceCoveragePanel() {
     const controller = new AbortController();
     pageController.current?.abort();
     pageController.current = controller;
-    setLoadMoreState({ key, loading: true, error: null });
+    setLoadMoreState({ key, loading: true });
     try {
       const page = await readCoveragePage(
         applied,
@@ -586,11 +621,14 @@ export function SourceCoveragePanel() {
           : current,
       );
     } catch (error) {
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
       if (controller.signal.aborted) return;
-      setLoadMoreState({
-        key,
-        loading: false,
-        error: readFailure(error, "后续窗口加载失败，请重试。").message,
+      const failure = readFailure(error, "后续窗口加载失败，请重试。");
+      toast.error(failure.message, {
+        description: failure.requestId
+          ? `请求编号：${failure.requestId}`
+          : undefined,
       });
     } finally {
       if (!controller.signal.aborted)
@@ -716,7 +754,6 @@ export function SourceCoveragePanel() {
               }
               required
               aria-invalid={!!validation}
-              aria-describedby={validation ? "coverage-validation" : undefined}
             />
           </Field>
           <Field data-invalid={!!validation}>
@@ -730,16 +767,12 @@ export function SourceCoveragePanel() {
               }
               required
               aria-invalid={!!validation}
-              aria-describedby={validation ? "coverage-validation" : undefined}
             />
           </Field>
           <Field className="sm:col-span-2">
             <FieldDescription>
               时间范围不超过 31 天，包含起点，不包含终点。
             </FieldDescription>
-            {validation ? (
-              <FieldError id="coverage-validation">{validation}</FieldError>
-            ) : null}
             <div>
               <Button type="submit">查询窗口</Button>
             </div>
@@ -837,12 +870,6 @@ export function SourceCoveragePanel() {
                       {loadingMore ? "正在加载…" : "加载更多"}
                     </Button>
                   </div>
-                ) : null}
-                {moreError ? (
-                  <Alert variant="destructive" className="mt-3">
-                    <AlertTitle>后续窗口加载失败</AlertTitle>
-                    <AlertDescription>{moreError}</AlertDescription>
-                  </Alert>
                 ) : null}
               </>
             )}

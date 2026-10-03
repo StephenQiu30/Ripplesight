@@ -1,4 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { NextRequest } from "next/server";
 
 import { proxy } from "@/proxy";
@@ -22,8 +26,30 @@ const SESSION = {
 beforeEach(() => {
   getIdentitySession.mockReset();
 });
+afterEach(() => vi.unstubAllEnvs());
 
 describe("authenticated navigation and CSP", () => {
+  it("allows exactly the installed Sonner stylesheet in production without allowing arbitrary inline styles", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const require = createRequire(import.meta.url);
+    const dist = dirname(require.resolve("sonner"));
+    const hashes = ["index.js", "index.mjs"].map((file) => {
+      const source = readFileSync(join(dist, file), "utf8");
+      const match = source.match(/__insertCSS\(("(?:[^"\\]|\\.)*")\);?/);
+      expect(match).not.toBeNull();
+      const css = JSON.parse(match![1]) as string;
+      return createHash("sha256").update(css).digest("base64");
+    });
+    const response = await proxy(new NextRequest("https://hotkey.test/login"));
+    const stylePolicy = response.headers
+      .get("content-security-policy")!
+      .split("; ")
+      .find((directive) => directive.startsWith("style-src "))!;
+    for (const hash of hashes)
+      expect(stylePolicy).toContain(`'sha256-${hash}'`);
+    expect(stylePolicy).toMatch(/'nonce-[^']+'/);
+    expect(stylePolicy).not.toContain("'unsafe-inline'");
+  });
   it.each([
     "/topics",
     "/events",

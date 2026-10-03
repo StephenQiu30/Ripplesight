@@ -11,6 +11,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiRequestError } from "@/request";
 import { CodexResetManager } from "@/app/codex-resets/manage/components/codex-reset-manager";
 
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
+
 const api = vi.hoisted(() => ({
   getCodexResetConfiguration: vi.fn(),
   configureCodexResetMonitor: vi.fn(),
@@ -144,8 +147,12 @@ describe("announcement operational UI", () => {
     await openRelink();
     await selectOption(screen.getByLabelText("目标公告"), "目标公告 · 修订 8");
     fireEvent.click(screen.getByRole("button", { name: "保存帖子归属" }));
-    await screen.findByRole("alert");
-    expect(screen.getByRole("alert").textContent).toContain("操作结果尚未确认");
+    await waitFor(() =>
+      expect(notifications.error).toHaveBeenCalledWith(
+        expect.stringContaining("操作结果尚未确认"),
+      ),
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "保存帖子归属" }));
     await waitFor(() =>
       expect(api.relinkCodexResetPost).toHaveBeenCalledTimes(2),
@@ -176,7 +183,7 @@ describe("announcement operational UI", () => {
       ).toBe(""),
     );
     expect(screen.queryByRole("region", { name: "帖子公告归属" })).toBeNull();
-    expect(screen.queryByText("帖子归属与双方公告修订已保存。")).toBeNull();
+    expect(notifications.success).not.toHaveBeenCalled();
     expect(api.getCodexResetSnapshot).toHaveBeenCalledTimes(reads);
   });
   it("creates a disabled configuration only with explicit reason and in-memory token", async () => {

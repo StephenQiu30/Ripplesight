@@ -1,4 +1,5 @@
 "use client";
+import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronDownIcon } from "lucide-react";
 import {
@@ -138,6 +139,14 @@ export function normalizeRelationPredictions(
 }
 
 export function RelationBench({ token }: { token: string }) {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const fieldId = useId();
 
   const [runs, setRuns] = useState<HotKeyAPI.SelectBenchRunView[]>([]);
@@ -157,7 +166,7 @@ export function RelationBench({ token }: { token: string }) {
   const [errors, setErrors] = useState(false);
   const [jobs, setJobs] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+
   const operation = useRef<{ payload: string; id: string } | null>(null);
   const options = { headers: { "X-HotKey-Operator-Token": token } };
   useEffect(() => {
@@ -166,21 +175,27 @@ export function RelationBench({ token }: { token: string }) {
       .then((rows) => {
         if (active) setRuns(rows.filter((row) => row.kind === "relation"));
       })
-      .catch(() => {
-        if (active) setMessage("关系评测目录读取失败,可以按编号读取。");
+      .catch((cause) => {
+        if (cause instanceof ApiRequestError && cause.kind === "cancelled")
+          return;
+        if (active)
+          if (mounted.current)
+            toast.error("关系评测目录读取失败,可以按编号读取。");
       });
     return () => {
       active = false;
     };
   }, [token]);
   function fail(error: unknown) {
-    setMessage(
-      error instanceof ApiRequestError
-        ? `${error.message}。输入已保留。`
-        : error instanceof SyntaxError
-          ? "JSON 格式无效,输入已保留。"
-          : `${error instanceof Error ? error.message : "评测操作失败"}。输入已保留。`,
-    );
+    if (error instanceof ApiRequestError && error.kind === "cancelled") return;
+    if (mounted.current)
+      toast.error(
+        error instanceof ApiRequestError
+          ? `${error.message}。输入已保留。`
+          : error instanceof SyntaxError
+            ? "JSON 格式无效,输入已保留。"
+            : `${error instanceof Error ? error.message : "评测操作失败"}。输入已保留。`,
+      );
   }
   async function load(runId = selected, cursor?: string) {
     if (!runId) return;
@@ -196,7 +211,6 @@ export function RelationBench({ token }: { token: string }) {
           : result,
       );
       setSelected(runId);
-      setMessage("");
     } catch (error) {
       fail(error);
     } finally {
@@ -207,7 +221,7 @@ export function RelationBench({ token }: { token: string }) {
     event.preventDefault();
     if (!file) return;
     setBusy(true);
-    setMessage("");
+
     try {
       if (file.size > 20 * 1024 * 1024) throw new Error("文件不得超过 20 MiB");
       const text = await file.text();
@@ -253,11 +267,12 @@ export function RelationBench({ token }: { token: string }) {
       setRuns((old) => [run, ...old.filter((item) => item.id !== run.id)]);
       setSelected(run.id);
       setPage(null);
-      setMessage(
-        predictions
-          ? "结果已导入,服务端按逐条预测复算指标。"
-          : "固定报道对已排队。未知响应保留待核查,不会自动重新付费。",
-      );
+      if (mounted.current)
+        toast.success(
+          predictions
+            ? "结果已导入,服务端按逐条预测复算指标。"
+            : "固定报道对已排队。未知响应保留待核查,不会自动重新付费。",
+        );
     } catch (error) {
       fail(error);
     } finally {
@@ -580,11 +595,6 @@ export function RelationBench({ token }: { token: string }) {
             </Button>
           ) : null}
         </>
-      ) : null}
-      {message ? (
-        <p role="status" className="text-sm">
-          {message}
-        </p>
       ) : null}
     </section>
   );

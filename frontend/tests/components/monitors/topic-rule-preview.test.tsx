@@ -10,6 +10,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const toasts = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: toasts }));
+afterEach(() => vi.clearAllMocks());
+
 const api = vi.hoisted(() => ({
   samples: vi.fn(),
   title: vi.fn(),
@@ -156,7 +160,9 @@ describe("persisted rule samples", () => {
     openPreview();
     readSamples();
     await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toContain("request-059"),
+      expect(toasts.error).toHaveBeenCalledWith("暂时无法读取样本", {
+        description: "请求编号：request-059",
+      }),
     );
     api.samples.mockRejectedValueOnce(
       new ApiRequestError({
@@ -169,12 +175,11 @@ describe("persisted rule samples", () => {
     );
     readSamples();
     await waitFor(() => {
-      expect(screen.getByRole("alert").textContent).toContain(
+      expect(toasts.error).toHaveBeenCalledWith(
         "依赖服务暂时不可用，无法读取样本",
+        { description: "请求编号：request-dependency" },
       );
-      expect(screen.getByRole("alert").textContent).toContain(
-        "request-dependency",
-      );
+      expect(screen.queryByRole("alert")).toBeNull();
     });
     api.samples.mockResolvedValueOnce(preview);
     readSamples();

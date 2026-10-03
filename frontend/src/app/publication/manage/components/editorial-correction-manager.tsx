@@ -1,4 +1,5 @@
 "use client";
+import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import {
   SelectLabel,
@@ -12,7 +13,7 @@ import {
 import { FieldGroup, FieldLabel, Field } from "@/components/ui/field";
 
 import Link from "next/link";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   correctEditorialRun,
   getCurrentEditorialRun,
@@ -20,6 +21,7 @@ import {
 } from "@/api/bianjifenxi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ApiRequestError } from "@/request";
 import { publicationError } from "./publication-manager";
 
 const FIELDS = [
@@ -52,15 +54,21 @@ export function EditorialCorrectionManager({
   const [token, setToken] = useState("");
   const [contentId, setContentId] = useState(initialContentId);
   const [run, setRun] = useState<HotKeyAPI.EditorialRunView | null>(null);
-  const [message, setMessage] = useState("");
+
   const [busy, setBusy] = useState(false);
   const context = useRef(0);
+  useEffect(
+    () => () => {
+      context.current += 1;
+    },
+    [],
+  );
   const operations = useRef(new Map<string, string>());
   const headers = { "X-HotKey-Operator-Token": token, "X-HotKey-CSRF": "1" };
   function changed(change: () => void) {
     context.current += 1;
     setRun(null);
-    setMessage("");
+
     setBusy(false);
     change();
   }
@@ -70,15 +78,17 @@ export function EditorialCorrectionManager({
   ) {
     const epoch = context.current;
     setBusy(true);
-    setMessage("");
+
     try {
       const next = await work();
       if (epoch === context.current) {
         setRun(next);
-        setMessage(success);
+        toast.success(success);
       }
     } catch (error) {
-      if (epoch === context.current) setMessage(publicationError(error));
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (epoch === context.current) toast.error(publicationError(error));
     } finally {
       if (epoch === context.current) setBusy(false);
     }
@@ -87,7 +97,7 @@ export function EditorialCorrectionManager({
     if (!run) return;
     const reason = String(form.get("reason") ?? "").trim();
     if (!reason) {
-      setMessage("请填写本次纠正原因。");
+      toast.error("请填写本次纠正原因。");
       return;
     }
     const body: HotKeyAPI.EditorialOverrideInput = {
@@ -230,11 +240,7 @@ export function EditorialCorrectionManager({
           </div>
         </FieldGroup>
       </form>
-      {message ? (
-        <p role="status" className="bg-muted rounded-md p-4 text-sm leading-7">
-          {message}
-        </p>
-      ) : null}
+
       {run ? (
         <form
           key={`${run.id}:${run.manual_version}`}

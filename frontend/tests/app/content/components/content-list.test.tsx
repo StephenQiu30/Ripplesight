@@ -12,6 +12,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const toasts = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: toasts }));
+afterEach(() => vi.clearAllMocks());
+
 const api = vi.hoisted(() => ({
   list: vi.fn(),
   sources: vi.fn(),
@@ -177,7 +181,10 @@ describe("content list request recovery", () => {
     render(createElement(ContentList));
     await screen.findByRole("link", { name: content.external_id });
     fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
-    await screen.findByText("后续作品加载失败，请重试。");
+    await waitFor(() =>
+      expect(toasts.error).toHaveBeenCalledWith("后续作品加载失败，请重试。"),
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(
       screen.getByRole("link", { name: content.external_id }),
     ).toBeTruthy();

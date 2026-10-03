@@ -15,7 +15,6 @@ import {
   Field,
   FieldContent,
   FieldDescription,
-  FieldError,
   FieldGroup,
   FieldLabel,
   FieldLegend,
@@ -130,11 +129,7 @@ export function TopicSettingsFields({
                   }
                   disabled={disabled || unavailable}
                   aria-invalid={Boolean(fieldErrors.source_keys)}
-                  aria-describedby={
-                    fieldErrors.source_keys
-                      ? "source-selection-error"
-                      : `source-${source.sourceKey}-description`
-                  }
+                  aria-describedby={`source-${source.sourceKey}-description`}
                 />
                 <FieldContent>
                   <FieldLabel htmlFor={`source-${source.sourceKey}`}>
@@ -155,11 +150,6 @@ export function TopicSettingsFields({
           还没有可选来源。先到来源设置应用搜索预设，或保存后再设置。
         </FieldDescription>
       )}
-      {fieldErrors.source_keys ? (
-        <FieldError id="source-selection-error">
-          {fieldErrors.source_keys}
-        </FieldError>
-      ) : null}
       <Button asChild variant="link" className="w-fit px-0">
         <Link href="/sources">管理来源</Link>
       </Button>
@@ -282,11 +272,6 @@ export function TopicAdvancedFields({
             <FieldDescription id="collection-frequency-description">
               实际采集也会遵循来源自身的频次限制。
             </FieldDescription>
-            {fieldErrors.collection_interval_seconds ? (
-              <FieldError id="collection-frequency-error">
-                {fieldErrors.collection_interval_seconds}
-              </FieldError>
-            ) : null}
           </Field>
           {customInterval ? (
             <Field
@@ -312,11 +297,7 @@ export function TopicAdvancedFields({
                 }
                 disabled={disabled}
                 aria-invalid={Boolean(fieldErrors.collection_interval_seconds)}
-                aria-describedby={
-                  fieldErrors.collection_interval_seconds
-                    ? "collection-frequency-error"
-                    : "collection-interval-description"
-                }
+                aria-describedby="collection-interval-description"
               />
               <FieldDescription id="collection-interval-description">
                 填写 600—86400 之间的整数秒。

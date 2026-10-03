@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -8,9 +9,13 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import { ApiRequestError } from "@/request";
 
 import { requestPublicationMediaMirror } from "@/api/fabumeiti";
 import { PublicationManager } from "@/app/publication/manage/components/publication-manager";
+
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
 
 const policies = vi.hoisted(() => ({ list: vi.fn(), save: vi.fn() }));
 vi.mock("@/api/gongkaifabu", () => ({
@@ -108,7 +113,9 @@ it("edits only source permissions and leaves fixed material format outside the p
     target: { value: "controlled-token" },
   });
   fireEvent.click(screen.getByRole("button", { name: "读取策略" }));
-  await screen.findByText(/已读取当前策略/);
+  await waitFor(() =>
+    expect(notifications.success).toHaveBeenCalledWith("已读取当前策略。"),
+  );
   expect(screen.queryByLabelText("原文格式")).toBeNull();
   expect(screen.getByText(/正文格式由固定材料记录决定/)).toBeTruthy();
   const form = screen.getByLabelText("来源标识").closest("form")!;
@@ -130,4 +137,77 @@ it("edits only source permissions and leaves fixed material format outside the p
   expect(body.expected_revision).toBe(3);
   expect(body).not.toHaveProperty("body_format");
   expect(body).not.toHaveProperty("format");
+});
+
+it("reports a policy read failure through Sonner with a retryable form", async () => {
+  policies.list.mockRejectedValue(
+    new ApiRequestError({
+      kind: "http",
+      status: 403,
+      code: "operator_unauthorized",
+      message: "unauthorized",
+    }),
+  );
+  render(<PublicationManager />);
+  fireEvent.change(screen.getByLabelText("操作员令牌"), {
+    target: { value: "controlled-token" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "读取策略" }));
+  await waitFor(() =>
+    expect(notifications.error).toHaveBeenCalledExactlyOnceWith(
+      "操作员入口尚未启用或缺少写入授权。",
+    ),
+  );
+  expect(screen.queryByText("操作员入口尚未启用或缺少写入授权。")).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(
+    (screen.getByRole("button", { name: "读取策略" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(false);
+});
+
+it.each(["resolve", "reject"] as const)(
+  "discards a late policy %s after the operator token is cleared",
+  async (outcome) => {
+    let finish!: () => void;
+    policies.list.mockImplementation(
+      () =>
+        new Promise((resolve, reject) => {
+          finish = () => {
+            if (outcome === "resolve")
+              resolve([{ source_key: "旧来源", revision: 1 }]);
+            else reject(new Error("old operator failure"));
+          };
+        }),
+    );
+    render(<PublicationManager />);
+    fireEvent.change(screen.getByLabelText("操作员令牌"), {
+      target: { value: "old-token" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "读取策略" }));
+    fireEvent.click(screen.getByRole("button", { name: "清除令牌" }));
+    notifications.success.mockClear();
+    await act(async () => finish());
+    expect(screen.queryByText("旧来源")).toBeNull();
+    expect(notifications.success).not.toHaveBeenCalled();
+    expect(notifications.error).not.toHaveBeenCalled();
+    expect(
+      (screen.getByRole("button", { name: "读取策略" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  },
+);
+
+it("silences cancelled policy requests", async () => {
+  policies.list.mockRejectedValue(
+    new ApiRequestError({ kind: "cancelled", message: "读取已取消" }),
+  );
+  render(<PublicationManager />);
+  fireEvent.change(screen.getByLabelText("操作员令牌"), {
+    target: { value: "controlled-token" },
+  });
+  const read = screen.getByRole("button", { name: "读取策略" });
+  fireEvent.click(read);
+  await waitFor(() => expect((read as HTMLButtonElement).disabled).toBe(false));
+  expect(notifications.error).not.toHaveBeenCalled();
 });

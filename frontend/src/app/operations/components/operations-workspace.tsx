@@ -1,4 +1,5 @@
 "use client";
+import { toast } from "sonner";
 import {
   SelectLabel,
   Select,
@@ -84,6 +85,14 @@ function BudgetEditor({
   options: RequestOptions;
   saved: () => Promise<void>;
 }) {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const fieldId = useId();
 
   const [limit, setLimit] = useState(String(row.limit_units));
@@ -91,7 +100,7 @@ function BudgetEditor({
   const [enabled, setEnabled] = useState(row.enabled);
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState("");
+
   const operation = useOperationIdentity();
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -116,10 +125,12 @@ function BudgetEditor({
         options,
       );
       operation.done("budget");
-      setMessage("预算已保存。");
+      if (mounted.current) toast.success("预算已保存。");
       await saved();
     } catch (error) {
-      setMessage(explain(error));
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (mounted.current) toast.error(explain(error));
     } finally {
       setPending(false);
     }
@@ -189,11 +200,6 @@ function BudgetEditor({
         <Button disabled={pending} type="submit" className="justify-self-start">
           保存预算
         </Button>
-        {message && (
-          <p role="status" className="sm:col-span-2">
-            {message}
-          </p>
-        )}
       </FieldGroup>
     </form>
   );
@@ -205,6 +211,14 @@ function BudgetCreator({
   options: RequestOptions;
   saved: () => Promise<void>;
 }) {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const fieldId = useId();
 
   const [key, setKey] = useState("");
@@ -217,7 +231,7 @@ function BudgetCreator({
   const [anchor] = useState(() => new Date().toISOString());
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState("");
+
   const operation = useOperationIdentity();
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -243,10 +257,12 @@ function BudgetCreator({
       );
       operation.done("create-budget");
       setKey("");
-      setMessage("预算已创建。");
+      if (mounted.current) toast.success("预算已创建。");
       await saved();
     } catch (error) {
-      setMessage(explain(error));
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (mounted.current) toast.error(explain(error));
     } finally {
       setPending(false);
     }
@@ -414,7 +430,6 @@ function BudgetCreator({
             <Button type="submit" disabled={pending}>
               创建硬预算
             </Button>
-            {message && <p role="status">{message}</p>}
           </FieldGroup>
         </form>
       </CollapsibleContent>
@@ -433,13 +448,21 @@ function FeedbackReview({
   saved: () => Promise<void>;
   active: () => boolean;
 }) {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const fieldId = useId();
 
   const [status, setStatus] = useState(row.status);
   const [note, setNote] = useState(row.note ?? "");
   const [reason, setReason] = useState("");
   const [banned, setBanned] = useState(row.banned);
-  const [message, setMessage] = useState("");
+
   const [pending, setPending] = useState(false);
   const operation = useOperationIdentity();
   async function submit(e: React.FormEvent) {
@@ -461,7 +484,9 @@ function FeedbackReview({
       operation.done("feedback");
       await saved();
     } catch (error) {
-      setMessage(explain(error));
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (mounted.current) toast.error(explain(error));
     } finally {
       setPending(false);
     }
@@ -482,7 +507,9 @@ function FeedbackReview({
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 10000);
     } catch (error) {
-      setMessage(explain(error));
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (mounted.current) toast.error(explain(error));
     }
   }
   return (
@@ -599,7 +626,6 @@ function FeedbackReview({
           保存后会清除正文、联系方式和截图。
         </p>
       )}
-      {message && <p role="status">{message}</p>}
     </article>
   );
 }
@@ -612,6 +638,14 @@ function DictionaryEditor({
   options: RequestOptions;
   saved: () => Promise<void>;
 }) {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const fieldId = useId();
 
   const [kind, setKind] =
@@ -625,7 +659,7 @@ function DictionaryEditor({
   );
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState("");
+
   const operation = useOperationIdentity();
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -643,14 +677,17 @@ function DictionaryEditor({
         options,
       );
       operation.done("dictionary");
-      setMessage("词典新版本已保存。");
+      if (mounted.current) toast.success("词典新版本已保存。");
       await saved();
     } catch (error) {
-      setMessage(
-        error instanceof SyntaxError
-          ? "词典需要有效 JSON：名称对应别名数组。"
-          : explain(error),
-      );
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (mounted.current)
+        toast.error(
+          error instanceof SyntaxError
+            ? "词典需要有效 JSON：名称对应别名数组。"
+            : explain(error),
+        );
     } finally {
       setPending(false);
     }
@@ -733,7 +770,6 @@ function DictionaryEditor({
           >
             保存词典新版本
           </Button>
-          {message && <p role="status">{message}</p>}
         </FieldGroup>
       </form>
     </section>
@@ -748,11 +784,19 @@ function AuditResolution({
   options: RequestOptions;
   saved: () => Promise<void>;
 }) {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const [outcome, setOutcome] =
     useState<HotKeyAPI.AuditResolutionInput["outcome"]>("not_delivered");
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState("");
+
   const operation = useOperationIdentity();
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -767,7 +811,9 @@ function AuditResolution({
       operation.done("resolve");
       await saved();
     } catch (error) {
-      setMessage(explain(error));
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (mounted.current) toast.error(explain(error));
     } finally {
       setPending(false);
     }
@@ -815,7 +861,6 @@ function AuditResolution({
         <Button type="submit" disabled={pending} className="justify-self-start">
           记录投递核对
         </Button>
-        {message && <p role="status">{message}</p>}
       </FieldGroup>
     </form>
   );
@@ -836,7 +881,7 @@ export function OperationsWorkspace() {
   const [dictionaries, setDictionaries] = useState<HotKeyAPI.DictionaryView[]>(
     [],
   );
-  const [message, setMessage] = useState("");
+
   const [pending, setPending] = useState(false);
   const [action, setAction] =
     useState<HotKeyAPI.MaintenanceInput["action"]>("recover");
@@ -879,7 +924,7 @@ export function OperationsWorkspace() {
     setDictionaries([]);
     setReason("");
     setBackupId("");
-    setMessage("");
+
     setPending(false);
   }
   function enter() {
@@ -897,7 +942,7 @@ export function OperationsWorkspace() {
     const current = () =>
       isCurrent(currentToken, captured) && sequence === refreshSequence.current;
     setPending(true);
-    setMessage("");
+
     const request = { headers: { "X-HotKey-Operator-Token": currentToken } };
     try {
       const [health, state, feedback, audit, dictionaries] = await Promise.all([
@@ -918,7 +963,9 @@ export function OperationsWorkspace() {
       setToken(currentToken);
       setInput("");
     } catch (error) {
-      if (current()) setMessage(explain(error));
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (current()) toast.error(explain(error));
     } finally {
       if (current()) setPending(false);
     }
@@ -941,9 +988,11 @@ export function OperationsWorkspace() {
       );
       if (!isCurrent(currentToken, captured)) return;
       operation.done("maintenance");
-      setMessage(`维护任务已受理：${job.job_id}。执行结果请刷新审计。`);
+      toast.success(`维护任务已受理：${job.job_id}。执行结果请刷新审计。`);
     } catch (error) {
-      if (isCurrent(currentToken, captured)) setMessage(explain(error));
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (isCurrent(currentToken, captured)) toast.error(explain(error));
     } finally {
       if (isCurrent(currentToken, captured)) setPending(false);
     }
@@ -961,7 +1010,9 @@ export function OperationsWorkspace() {
       setFeedback((v) => [...v, ...page.items]);
       setFeedbackCursor(page.next_cursor);
     } catch (error) {
-      if (isCurrent(currentToken, captured)) setMessage(explain(error));
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (isCurrent(currentToken, captured)) toast.error(explain(error));
     }
   }
   async function moreAudit() {
@@ -977,7 +1028,9 @@ export function OperationsWorkspace() {
       setAudits((v) => [...v, ...page.items]);
       setAuditCursor(page.next_cursor);
     } catch (error) {
-      if (isCurrent(currentToken, captured)) setMessage(explain(error));
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (isCurrent(currentToken, captured)) toast.error(explain(error));
     }
   }
   return (
@@ -1038,11 +1091,7 @@ export function OperationsWorkspace() {
             </Button>
           </div>
         )}
-        {message && (
-          <p role="status" className="text-sm break-words">
-            {message}
-          </p>
-        )}
+
         {token && health && (
           <>
             <section className="grid gap-5">

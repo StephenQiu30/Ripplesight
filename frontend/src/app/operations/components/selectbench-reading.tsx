@@ -1,4 +1,5 @@
 "use client";
+import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   SelectLabel,
@@ -28,6 +29,14 @@ import { Input } from "@/components/ui/input";
 import { ApiRequestError } from "@/request";
 
 export function SelectBenchReading({ token }: { token: string }) {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const fieldId = useId();
 
   const [runs, setRuns] = useState<HotKeyAPI.SelectBenchRunView[]>([]);
@@ -43,7 +52,7 @@ export function SelectBenchReading({ token }: { token: string }) {
   const [label, setLabel] = useState("");
   const [prompt, setPrompt] = useState("");
   const [reason, setReason] = useState("");
-  const [message, setMessage] = useState("");
+
   const [busy, setBusy] = useState(false);
   const identity = useRef<{ payload: string; id: string } | null>(null);
   useEffect(() => {
@@ -52,8 +61,10 @@ export function SelectBenchReading({ token }: { token: string }) {
       .then((rows) => {
         if (live) setRuns(rows);
       })
-      .catch(() => {
-        if (live) setMessage("评测读取失败");
+      .catch((cause) => {
+        if (cause instanceof ApiRequestError && cause.kind === "cancelled")
+          return;
+        if (live) if (mounted.current) toast.error("评测读取失败");
       });
     return () => {
       live = false;
@@ -61,13 +72,15 @@ export function SelectBenchReading({ token }: { token: string }) {
   }, [token]);
   const options = { headers: { "X-HotKey-Operator-Token": token } };
   function fail(error: unknown) {
-    setMessage(
-      error instanceof ApiRequestError
-        ? error.message
-        : error instanceof SyntaxError
-          ? "文件包含无效 JSON。"
-          : "评测操作失败，请保留输入后重试。",
-    );
+    if (error instanceof ApiRequestError && error.kind === "cancelled") return;
+    if (mounted.current)
+      toast.error(
+        error instanceof ApiRequestError
+          ? error.message
+          : error instanceof SyntaxError
+            ? "文件包含无效 JSON。"
+            : "评测操作失败，请保留输入后重试。",
+      );
   }
   async function load(runId = selected, cursor?: string) {
     if (!runId) return;
@@ -92,7 +105,6 @@ export function SelectBenchReading({ token }: { token: string }) {
           : page,
       );
       setSelected(runId);
-      setMessage("");
     } catch (error) {
       fail(error);
     } finally {
@@ -161,7 +173,8 @@ export function SelectBenchReading({ token }: { token: string }) {
       identity.current = null;
       setRuns((v) => [row, ...v.filter((item) => item.id !== row.id)]);
       setSelected(row.id);
-      setMessage("评测已导入，指标由服务端按逐条结果重新计算。");
+      if (mounted.current)
+        toast.success("评测已导入，指标由服务端按逐条结果重新计算。");
       setFile(null);
       setBusy(false);
       await load(row.id);
@@ -443,11 +456,6 @@ export function SelectBenchReading({ token }: { token: string }) {
             </Button>
           )}
         </>
-      )}
-      {message && (
-        <p role="status" className="text-sm">
-          {message}
-        </p>
       )}
     </section>
   );

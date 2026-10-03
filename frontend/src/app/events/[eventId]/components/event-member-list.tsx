@@ -9,6 +9,7 @@ import { FieldLabel, Field } from "@/components/ui/field";
 
 import Link from "next/link";
 import { useId, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { listEventMembers } from "@/api/shijian";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +20,7 @@ import { ApiRequestError } from "@/request";
 
 type MemberState =
   | { status: "loading" }
-  | { status: "error"; message: string }
+  | { status: "error" }
   | { status: "ready"; page: HotKeyAPI.EventMemberPageView };
 
 const scopeLabels: Record<HotKeyAPI.ContentTextScope, string> = {
@@ -68,7 +69,6 @@ export function EventMemberList({
   const [state, setState] = useState<MemberState>({ status: "loading" });
   const [retry, setRetry] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [pageError, setPageError] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
   useEffect(() => {
     const current = new AbortController();
@@ -81,8 +81,13 @@ export function EventMemberList({
         if (!current.signal.aborted) setState({ status: "ready", page });
       })
       .catch((error: unknown) => {
-        if (!current.signal.aborted)
-          setState({ status: "error", message: errorMessage(error) });
+        if (
+          !current.signal.aborted &&
+          !(error instanceof ApiRequestError && error.kind === "cancelled")
+        ) {
+          setState({ status: "error" });
+          toast.error(errorMessage(error));
+        }
       });
     return () => current.abort();
   }, [eventId, revision, retry]);
@@ -92,7 +97,6 @@ export function EventMemberList({
       return;
     const signal = controller.current?.signal;
     setLoadingMore(true);
-    setPageError(null);
     try {
       const page = await listEventMembers(
         {
@@ -119,7 +123,11 @@ export function EventMemberList({
           },
         });
     } catch (error: unknown) {
-      if (!signal?.aborted) setPageError(errorMessage(error));
+      if (
+        !signal?.aborted &&
+        !(error instanceof ApiRequestError && error.kind === "cancelled")
+      )
+        toast.error(errorMessage(error));
     } finally {
       if (!signal?.aborted) setLoadingMore(false);
     }
@@ -137,7 +145,7 @@ export function EventMemberList({
       <Alert variant="destructive" className="mt-8">
         <AlertTitle>无法读取此修订成员</AlertTitle>
         <AlertDescription>
-          {state.message}
+          可以重新读取所选修订的固定成员。
           <Button
             variant="outline"
             onClick={() => {
@@ -186,11 +194,6 @@ export function EventMemberList({
           <MemberReading member={member} />
         </div>
       ))}
-      {pageError ? (
-        <Alert variant="destructive">
-          <AlertDescription>{pageError}</AlertDescription>
-        </Alert>
-      ) : null}
       {state.page.next_cursor ? (
         <Button
           variant="outline"

@@ -7,6 +7,9 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
+
 const api = vi.hoisted(() => ({ get: vi.fn(), save: vi.fn() }));
 vi.mock("@/api/zhandiziliao", () => ({
   getOperatorSiteConfiguration: api.get,
@@ -47,7 +50,8 @@ it("keeps the operation identity and user's edit after an uncertain save", async
     target: { value: "维护联系资料" },
   });
   fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
-  await screen.findByRole("alert");
+  await waitFor(() => expect(notifications.error).toHaveBeenCalledOnce());
+  expect(screen.queryByRole("alert")).toBeNull();
   expect((screen.getByLabelText("联系说明") as HTMLTextAreaElement).value).toBe(
     "准备保存的真实资料",
   );

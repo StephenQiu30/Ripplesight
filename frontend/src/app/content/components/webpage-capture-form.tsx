@@ -1,8 +1,9 @@
 "use client";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+
+import { toast } from "sonner";
 
 import { useRouter } from "next/navigation";
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { ArrowRightIcon, LoaderCircleIcon } from "lucide-react";
 
 import { createCollectionJob } from "@/api/caijirenwu";
@@ -11,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import {
   Field,
   FieldDescription,
-  FieldError,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
@@ -61,11 +61,16 @@ function toSubmissionError(error: unknown): SubmissionError {
 }
 
 export function WebPageCaptureForm() {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const router = useRouter();
   const [target, setTarget] = useState("");
   const [fieldError, setFieldError] = useState<string | null>(null);
-  const [submissionError, setSubmissionError] =
-    useState<SubmissionError | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
   const pendingOperationRef = useRef<PendingOperation | null>(null);
@@ -80,6 +85,10 @@ export function WebPageCaptureForm() {
     const validationError = validateWebPageTarget(normalizedTarget);
     if (validationError) {
       setFieldError(validationError);
+      toast.error(validationError);
+      event.currentTarget
+        .querySelector<HTMLInputElement>("#webpage-url")
+        ?.focus();
       return;
     }
 
@@ -92,7 +101,6 @@ export function WebPageCaptureForm() {
     isSubmittingRef.current = true;
     setIsSubmitting(true);
     setFieldError(null);
-    setSubmissionError(null);
 
     try {
       const job = await createCollectionJob({
@@ -100,12 +108,20 @@ export function WebPageCaptureForm() {
         kind: "webpage.collect",
         url: normalizedTarget,
       });
-      router.push(`/jobs/${job.job_id}`);
+      if (mounted.current) router.push(`/jobs/${job.job_id}`);
     } catch (error) {
-      setSubmissionError(toSubmissionError(error));
+      if (!mounted.current) return;
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      const failure = toSubmissionError(error);
+      toast.error(failure.message, {
+        description: failure.requestId
+          ? `请求编号：${failure.requestId}`
+          : undefined,
+      });
     } finally {
       isSubmittingRef.current = false;
-      setIsSubmitting(false);
+      if (mounted.current) setIsSubmitting(false);
     }
   }
 
@@ -143,19 +159,14 @@ export function WebPageCaptureForm() {
                 const nextTarget = event.target.value;
                 setTarget(nextTarget);
                 setFieldError(null);
-                setSubmissionError(null);
                 if (pendingOperationRef.current?.target !== nextTarget.trim()) {
                   pendingOperationRef.current = null;
                 }
               }}
               aria-invalid={fieldError ? true : undefined}
-              aria-describedby={fieldError ? "webpage-url-error" : undefined}
               disabled={isSubmitting}
               required
             />
-            {fieldError ? (
-              <FieldError id="webpage-url-error">{fieldError}</FieldError>
-            ) : null}
             <FieldDescription>
               提交后进入任务页查看受理状态，受理不表示已采集完成。
             </FieldDescription>
@@ -182,16 +193,6 @@ export function WebPageCaptureForm() {
             )}
           </Button>
         </FieldGroup>
-        {submissionError ? (
-          <Alert variant="destructive" className="mt-3">
-            <AlertDescription>
-              {submissionError.message}
-              {submissionError.requestId
-                ? ` 请求编号：${submissionError.requestId}`
-                : null}
-            </AlertDescription>
-          </Alert>
-        ) : null}
       </form>
     </section>
   );

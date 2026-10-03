@@ -7,7 +7,11 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { ApiRequestError } from "@/request";
 import { EditorialSourceMaterials } from "@/app/editorial-sources/components/editorial-source-materials";
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
+
 const api = vi.hoisted(() => ({ list: vi.fn() }));
 vi.mock("@/api/zuopinziliao", () => ({ listContentRecords: api.list }));
 beforeEach(() => vi.resetAllMocks());
@@ -74,7 +78,12 @@ it("follows an opaque cursor and keeps already loaded rows on a later-page failu
   render(<EditorialSourceMaterials {...props} />);
   fireEvent.click(screen.getByRole("button", { name: "读取来源材料" }));
   fireEvent.click(await screen.findByRole("button", { name: "读取更多材料" }));
-  await screen.findByRole("alert");
+  await waitFor(() =>
+    expect(notifications.error).toHaveBeenCalledWith(
+      expect.stringContaining("已加载材料保留"),
+    ),
+  );
+  expect(screen.queryByRole("alert")).toBeNull();
   expect(screen.getByText("首条材料")).toBeTruthy();
   expect(api.list.mock.calls[1][0]).toEqual({
     source_key: "ed_rss_one",
@@ -115,4 +124,17 @@ it("makes no anonymous request and ignores a response after changing the source 
   complete({ items: [item("old", "旧来源晚响应")], next_cursor: null });
   expect(screen.queryByText("旧来源晚响应")).toBeNull();
   expect(screen.getByText("另一个来源 · 原材料")).toBeTruthy();
+});
+
+it("silences a cancelled material read and restores the retry control", async () => {
+  api.list.mockRejectedValue(
+    new ApiRequestError({ kind: "cancelled", message: "读取已取消" }),
+  );
+  render(<EditorialSourceMaterials {...props} />);
+  const read = screen.getByRole("button", { name: "读取来源材料" });
+  fireEvent.click(read);
+  await waitFor(() => expect((read as HTMLButtonElement).disabled).toBe(false));
+  expect(api.list).toHaveBeenCalledOnce();
+  expect(notifications.error).not.toHaveBeenCalled();
+  expect(screen.queryByRole("alert")).toBeNull();
 });

@@ -1,4 +1,5 @@
 "use client";
+import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   SelectLabel,
@@ -12,7 +13,7 @@ import {
 import { FieldGroup, FieldLabel, Field } from "@/components/ui/field";
 
 import Link from "next/link";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import {
   getPublicationRepublishRun,
@@ -45,12 +46,28 @@ export function PublicationManager() {
   const [token, setToken] = useState("");
   const [policies, setPolicies] = useState<HotKeyAPI.SourcePolicyView[]>([]);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+
   const [run, setRun] = useState<HotKeyAPI.RepublishRunView | null>(null);
   const [mediaRun, setMediaRun] = useState<HotKeyAPI.MediaMirrorRunView | null>(
     null,
   );
   const operations = useRef(new Map<string, string>());
+  const context = useRef(0);
+  useEffect(
+    () => () => {
+      context.current += 1;
+    },
+    [],
+  );
+  function changeToken(value: string) {
+    context.current += 1;
+    operations.current.clear();
+    setToken(value);
+    setPolicies([]);
+    setRun(null);
+    setMediaRun(null);
+    setBusy(false);
+  }
   function operationId(form: FormData, kind: string) {
     const key = JSON.stringify([kind, [...form.entries()]]);
     const existing = operations.current.get(key);
@@ -60,15 +77,19 @@ export function PublicationManager() {
     return id;
   }
   const headers = { "X-HotKey-Operator-Token": token, "X-HotKey-CSRF": "1" };
-  async function action(work: () => Promise<void>) {
+  async function action(work: (current: () => boolean) => Promise<void>) {
+    const epoch = context.current;
+    const current = () => epoch === context.current;
     setBusy(true);
-    setMessage("");
+
     try {
-      await work();
+      await work(current);
     } catch (error) {
-      setMessage(publicationError(error));
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (current()) toast.error(publicationError(error));
     } finally {
-      setBusy(false);
+      if (current()) setBusy(false);
     }
   }
   return (
@@ -76,9 +97,11 @@ export function PublicationManager() {
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          void action(async () => {
-            setPolicies(await listPublicationPolicies({ headers }));
-            setMessage("已读取当前策略。");
+          void action(async (current) => {
+            const policies = await listPublicationPolicies({ headers });
+            if (!current()) return;
+            setPolicies(policies);
+            toast.success("已读取当前策略。");
           });
         }}
       >
@@ -91,7 +114,7 @@ export function PublicationManager() {
               autoComplete="off"
               type="password"
               value={token}
-              onChange={(event) => setToken(event.target.value)}
+              onChange={(event) => changeToken(event.target.value)}
               required
               id={`${fieldId}-publication-manager-field-1`}
             />
@@ -101,22 +124,15 @@ export function PublicationManager() {
             variant="ghost"
             type="button"
             onClick={() => {
-              setToken("");
-              setPolicies([]);
-              setRun(null);
-              setMediaRun(null);
-              setMessage("已清除内存令牌。");
+              changeToken("");
+              toast.success("已清除内存令牌。");
             }}
           >
             清除令牌
           </Button>
         </FieldGroup>
       </form>
-      {message ? (
-        <p role="status" className="bg-muted rounded-md p-4 text-sm leading-6">
-          {message}
-        </p>
-      ) : null}
+
       {policies.length ? (
         <section>
           <h2 className="text-lg font-medium">当前来源策略</h2>
@@ -150,7 +166,7 @@ export function PublicationManager() {
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
-            void action(async () => {
+            void action(async (current) => {
               const policy = await savePublicationSourcePolicy(
                 { source_key: String(form.get("source")) },
                 {
@@ -169,11 +185,12 @@ export function PublicationManager() {
                 },
                 { headers },
               );
+              if (!current()) return;
               setPolicies((old) => [
                 ...old.filter((item) => item.source_key !== policy.source_key),
                 policy,
               ]);
-              setMessage(
+              toast.success(
                 `策略已保存为修订 ${policy.revision}；增加权限需另受理重建。`,
               );
             });
@@ -321,18 +338,18 @@ export function PublicationManager() {
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
-            void action(async () => {
-              setRun(
-                await republishPublicationSource(
-                  { source_key: String(form.get("source")) },
-                  {
-                    operation_id: operationId(form, "republish"),
-                    expected_policy_revision: Number(form.get("revision")),
-                  },
-                  { headers },
-                ),
+            void action(async (current) => {
+              const result = await republishPublicationSource(
+                { source_key: String(form.get("source")) },
+                {
+                  operation_id: operationId(form, "republish"),
+                  expected_policy_revision: Number(form.get("revision")),
+                },
+                { headers },
               );
-              setMessage("已受理重建任务；不重新抓取来源或调用模型。");
+              if (!current()) return;
+              setRun(result);
+              toast.success("已受理重建任务；不重新抓取来源或调用模型。");
             });
           }}
         >
@@ -376,13 +393,12 @@ export function PublicationManager() {
               variant="outline"
               disabled={busy}
               onClick={() =>
-                void action(async () => {
-                  setRun(
-                    await getPublicationRepublishRun(
-                      { run_id: run.id },
-                      { headers },
-                    ),
+                void action(async (current) => {
+                  const result = await getPublicationRepublishRun(
+                    { run_id: run.id },
+                    { headers },
                   );
+                  if (current()) setRun(result);
                 })
               }
             >
@@ -397,7 +413,7 @@ export function PublicationManager() {
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
-            void action(async () => {
+            void action(async (current) => {
               const receipt = await overridePublication(
                 { content_id: String(form.get("content")) },
                 {
@@ -412,7 +428,8 @@ export function PublicationManager() {
                 },
                 { headers },
               );
-              setMessage(
+              if (!current()) return;
+              toast.success(
                 `公开范围已修订为 ${receipt.visibility}，修订 ${receipt.revision}。`,
               );
             });
@@ -517,19 +534,19 @@ export function PublicationManager() {
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
-            void action(async () => {
-              setMediaRun(
-                await requestPublicationMediaMirror(
-                  { content_id: String(form.get("content")) },
-                  {
-                    operation_id: operationId(form, "media"),
-                    content_version_id: String(form.get("version")),
-                    policy_revision: Number(form.get("revision")),
-                  },
-                  { headers },
-                ),
+            void action(async (current) => {
+              const result = await requestPublicationMediaMirror(
+                { content_id: String(form.get("content")) },
+                {
+                  operation_id: operationId(form, "media"),
+                  content_version_id: String(form.get("version")),
+                  policy_revision: Number(form.get("revision")),
+                },
+                { headers },
               );
-              setMessage(
+              if (!current()) return;
+              setMediaRun(result);
+              toast.success(
                 "已读取媒体任务回执，实际请求仍受网络开关和持久预算控制。",
               );
             });
@@ -580,14 +597,13 @@ export function PublicationManager() {
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
-            void action(async () =>
-              setMediaRun(
-                await getPublicationMediaMirrorRun(
-                  { run_id: String(form.get("run")) },
-                  { headers },
-                ),
-              ),
-            );
+            void action(async (current) => {
+              const result = await getPublicationMediaMirrorRun(
+                { run_id: String(form.get("run")) },
+                { headers },
+              );
+              if (current()) setMediaRun(result);
+            });
           }}
         >
           <FieldGroup className="mt-5 flex flex-row flex-wrap items-end gap-3">
@@ -622,14 +638,13 @@ export function PublicationManager() {
               variant="outline"
               disabled={busy || !token}
               onClick={() =>
-                void action(async () =>
-                  setMediaRun(
-                    await getPublicationMediaMirrorRun(
-                      { run_id: mediaRun.id },
-                      { headers },
-                    ),
-                  ),
-                )
+                void action(async (current) => {
+                  const result = await getPublicationMediaMirrorRun(
+                    { run_id: mediaRun.id },
+                    { headers },
+                  );
+                  if (current()) setMediaRun(result);
+                })
               }
             >
               读取媒体进度

@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { SearchCheckIcon } from "lucide-react";
@@ -22,7 +24,6 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiRequestError } from "@/request";
 
@@ -37,14 +38,12 @@ type TopicRulePreviewProps = {
 type PreviewState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "ready"; preview: HotKeyAPI.MonitorTopicPreviewView }
-  | { status: "error"; message: string; requestId?: string };
+  | { status: "ready"; preview: HotKeyAPI.MonitorTopicPreviewView };
 
 type SampleState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "ready"; preview: HotKeyAPI.ContentSamplePreviewView }
-  | { status: "error"; message: string; requestId?: string };
+  | { status: "ready"; preview: HotKeyAPI.ContentSamplePreviewView };
 
 export function TopicRulePreview(props: TopicRulePreviewProps) {
   return (
@@ -89,7 +88,7 @@ function TopicRulePreviewDialog({
       parseKeywordLines(matchAny).length === 0 &&
       parseKeywordLines(matchAll).length === 0
     ) {
-      setSampleState({ status: "error", message: "至少填写一个包含关键词。" });
+      toast.error("至少填写一个包含关键词。");
       return;
     }
     sampleSubmittingRef.current = true;
@@ -103,17 +102,24 @@ function TopicRulePreviewDialog({
       });
       if (mountedRef.current) setSampleState({ status: "ready", preview });
     } catch (error) {
+      if (error instanceof ApiRequestError && error.kind === "cancelled") {
+        if (mountedRef.current) setSampleState({ status: "idle" });
+        return;
+      }
       if (!mountedRef.current) return;
 
-      setSampleState({
-        status: "error",
-        message:
-          error instanceof ApiRequestError
-            ? error.message
-            : "样本预览失败，请重试。",
-        requestId:
-          error instanceof ApiRequestError ? error.requestId : undefined,
-      });
+      setSampleState({ status: "idle" });
+      toast.error(
+        error instanceof ApiRequestError
+          ? error.message
+          : "样本预览失败，请重试。",
+        {
+          description:
+            error instanceof ApiRequestError && error.requestId
+              ? `请求编号：${error.requestId}`
+              : undefined,
+        },
+      );
     } finally {
       sampleSubmittingRef.current = false;
     }
@@ -126,10 +132,7 @@ function TopicRulePreviewDialog({
     const any = parseKeywordLines(matchAny);
     const all = parseKeywordLines(matchAll);
     if (any.length === 0 && all.length === 0) {
-      setState({
-        status: "error",
-        message: "至少填写一个“任意命中”或“全部包含”关键词。",
-      });
+      toast.error("至少填写一个“任意命中”或“全部包含”关键词。");
       return;
     }
 
@@ -146,19 +149,26 @@ function TopicRulePreviewDialog({
         setState({ status: "ready", preview });
       }
     } catch (error) {
+      if (error instanceof ApiRequestError && error.kind === "cancelled") {
+        if (mountedRef.current) setState({ status: "idle" });
+        return;
+      }
       if (!mountedRef.current) return;
 
-      setState({
-        status: "error",
-        message:
-          error instanceof ApiRequestError
-            ? error.status === 422 && error.details?.[0]
-              ? error.details[0].message
-              : error.message
-            : "规则预览失败，请稍后重试。",
-        requestId:
-          error instanceof ApiRequestError ? error.requestId : undefined,
-      });
+      setState({ status: "idle" });
+      toast.error(
+        error instanceof ApiRequestError
+          ? error.status === 422 && error.details?.[0]
+            ? error.details[0].message
+            : error.message
+          : "规则预览失败，请稍后重试。",
+        {
+          description:
+            error instanceof ApiRequestError && error.requestId
+              ? `请求编号：${error.requestId}`
+              : undefined,
+        },
+      );
     } finally {
       submittingRef.current = false;
     }
@@ -210,17 +220,6 @@ function TopicRulePreviewDialog({
             读取所选来源最近 7 天的最多 20
             条可读内容；未选择来源时读取全部已有来源。包含未命中与排除样本，只说明本地草稿匹配。
           </p>
-          {sampleState.status === "error" ? (
-            <Alert variant="destructive">
-              <AlertTitle>样本暂时不可用</AlertTitle>
-              <AlertDescription>
-                {sampleState.message}
-                {sampleState.requestId ? (
-                  <p>请求编号：{sampleState.requestId}</p>
-                ) : null}
-              </AlertDescription>
-            </Alert>
-          ) : null}
           {sampleState.status === "ready" ? (
             <div className="flex flex-col gap-3" aria-live="polite">
               <p className="text-muted-foreground text-xs leading-5">
@@ -323,16 +322,6 @@ function TopicRulePreviewDialog({
             </Button>
           </FieldGroup>
         </form>
-
-        {state.status === "error" ? (
-          <Alert variant="destructive">
-            <AlertTitle>规则预览未完成</AlertTitle>
-            <AlertDescription>
-              {state.message}
-              {state.requestId ? <p>请求编号：{state.requestId}</p> : null}
-            </AlertDescription>
-          </Alert>
-        ) : null}
 
         {state.status === "ready" && sample ? (
           <div className="flex flex-col gap-4" aria-live="polite">

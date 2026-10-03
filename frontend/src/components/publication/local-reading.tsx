@@ -12,10 +12,12 @@ import {
 import { FieldLabel, Field } from "@/components/ui/field";
 
 import Link from "next/link";
-import { useId, useEffect, useState } from "react";
+import { useId, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { getSitePublicationItem } from "@/api/gongkaifabu";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
 import {
   LOCAL_CHANGE,
@@ -102,6 +104,7 @@ export function LocalReadingPreferences() {
           } catch {
             applyTheme(value);
             setTheme(value);
+            toast.error("阅读主题已应用，但本机存储不可用，未保存偏好。");
           }
         }}
       >
@@ -133,20 +136,34 @@ export function LocalReadingPreferences() {
 
 export function MarkItemRead({ id }: { id: string }) {
   useEffect(() => {
-    void markRead(id).catch(() => undefined);
+    let active = true;
+    void markRead(id).catch(() => {
+      if (active)
+        toast.error("本机存储不可用，未保存已读标记。", {
+          id: "local-reading-storage",
+        });
+    });
+    return () => {
+      active = false;
+    };
   }, [id]);
   return null;
 }
 
 export function SaveItem({ id }: { id: string }) {
   const [saved, setSaved] = useState(false);
-  const [error, setError] = useState(false);
+  const storageFailed = useRef(false);
   useEffect(() => {
     const update = () => {
       try {
         setSaved(savedIds(localStorage).includes(id));
+        storageFailed.current = false;
       } catch {
-        setError(true);
+        if (!storageFailed.current)
+          toast.error("本机收藏暂时无法读取，请检查本机存储。", {
+            id: "local-reading-storage",
+          });
+        storageFailed.current = true;
       }
     };
     const frame = requestAnimationFrame(update);
@@ -166,18 +183,12 @@ export function SaveItem({ id }: { id: string }) {
           void toggleSaved(id)
             .then((value) => {
               setSaved(value);
-              setError(false);
             })
-            .catch(() => setError(true));
+            .catch(() => toast.error("本机存储不可用，未保存收藏。"));
         }}
       >
         {saved ? "取消本机收藏" : "本机收藏"}
       </Button>
-      {error ? (
-        <p role="status" className="text-muted-foreground text-xs">
-          本机存储不可用，未保存。
-        </p>
-      ) : null}
     </>
   );
 }
@@ -190,7 +201,8 @@ export function SavedItems({ full = false }: { full?: boolean }) {
   const [read, setRead] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(true);
-  const [notice, setNotice] = useState("");
+  const [storageUnavailable, setStorageUnavailable] = useState(false);
+  const storageFailed = useRef(false);
   const [generation, setGeneration] = useState(0);
   useEffect(() => {
     const update = () => setGeneration((old) => old + 1);
@@ -214,10 +226,12 @@ export function SavedItems({ full = false }: { full?: boolean }) {
     const frame = requestAnimationFrame(() => {
       setBusy(true);
       setIds(selected);
-      if (readingError)
-        setNotice(
+      setStorageUnavailable(readingError);
+      if (readingError && !storageFailed.current)
+        toast.error(
           "本机收藏无法读取。原始数据保留，请先导出原始数据后核查；不会覆盖它。",
         );
+      storageFailed.current = readingError;
       const lastPage = Math.max(1, Math.ceil(selected.length / 20));
       if (page > lastPage) {
         setPage(lastPage);
@@ -240,6 +254,8 @@ export function SavedItems({ full = false }: { full?: boolean }) {
             ),
           );
           setBusy(false);
+          if (results.some((result) => result.status === "rejected"))
+            toast.error("部分收藏暂时无法读取，请重新读取或检查当前许可。");
         }
       });
     });
@@ -270,6 +286,13 @@ export function SavedItems({ full = false }: { full?: boolean }) {
         <p role="status" className="mt-4 text-sm">
           正在读取当前公开材料…
         </p>
+      ) : storageUnavailable ? (
+        <Alert className="mt-4">
+          <AlertTitle>本机收藏暂不可读</AlertTitle>
+          <AlertDescription>
+            可以导出原始数据核查，或重新读取。
+          </AlertDescription>
+        </Alert>
       ) : items.length ? (
         <ul className="mt-4 flex flex-col gap-y-4">
           {items.map((item) => (
@@ -291,7 +314,7 @@ export function SavedItems({ full = false }: { full?: boolean }) {
                   variant="ghost"
                   onClick={() =>
                     void removeSaved(item.id).catch(() =>
-                      setNotice("存储不可用，未删除。"),
+                      toast.error("存储不可用，未删除。"),
                     )
                   }
                 >
@@ -334,7 +357,7 @@ export function SavedItems({ full = false }: { full?: boolean }) {
                       variant="ghost"
                       onClick={() =>
                         void removeSaved(id).catch(() =>
-                          setNotice("存储不可用，未删除。"),
+                          toast.error("存储不可用，未删除。"),
                         )
                       }
                     >
@@ -375,7 +398,7 @@ export function SavedItems({ full = false }: { full?: boolean }) {
                     "hotkey-reading-v1.json",
                   );
                 } catch (error) {
-                  setNotice(
+                  toast.error(
                     error instanceof Error ? error.message : "无法导出。",
                   );
                 }
@@ -396,16 +419,17 @@ export function SavedItems({ full = false }: { full?: boolean }) {
                   event.target.value = "";
                   if (!file) return;
                   if (file.size > IMPORT_MAX_CHARS) {
-                    setNotice("文件过大，上限 2 MB。");
+                    toast.error("文件过大，上限 2 MB。");
                     return;
                   }
                   try {
                     const report = await importLocalBundle(await file.text());
-                    setNotice(
-                      `新增 ${report.savedAdded} 篇收藏、${report.readAdded} 个已读标记，跳过 ${report.skipped} 条。${report.readFailed ? "已读标记写入失败；收藏已保存。" : ""}`,
-                    );
+                    const summary = `新增 ${report.savedAdded} 篇收藏、${report.readAdded} 个已读标记，跳过 ${report.skipped} 条。`;
+                    if (report.readFailed)
+                      toast.error(`${summary}已读标记写入失败；收藏已保存。`);
+                    else toast.success(summary);
                   } catch (error) {
-                    setNotice(
+                    toast.error(
                       error instanceof Error ? error.message : "导入失败。",
                     );
                   }
@@ -425,7 +449,7 @@ export function SavedItems({ full = false }: { full?: boolean }) {
                     "hotkey-reading-raw.json",
                   );
                 } catch {
-                  setNotice("无法读取本机原始数据。");
+                  toast.error("无法读取本机原始数据。");
                 }
               }}
             >
@@ -437,17 +461,14 @@ export function SavedItems({ full = false }: { full?: boolean }) {
                 void clearLocalReading()
                   .then(() => {
                     setPage(1);
-                    setNotice("已清空本机收藏与已读标记。");
+                    toast.success("已清空本机收藏与已读标记。");
                   })
-                  .catch(() => setNotice("存储不可用，未清空。"))
+                  .catch(() => toast.error("存储不可用，未清空。"))
               }
             >
               明确清空本机数据
             </Button>
           </div>
-          <p role="status" className="text-muted-foreground mt-3 text-sm">
-            {notice}
-          </p>
         </>
       ) : (
         <Link

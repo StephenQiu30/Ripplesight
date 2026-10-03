@@ -1,5 +1,6 @@
 "use client";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+
+import { toast } from "sonner";
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -102,7 +103,6 @@ type JobHistoryContentProps = {
   items: HotKeyAPI.JobHistoryItemView[];
   nextCursor: string | null;
   isLoadingMore: boolean;
-  loadMoreError: string | null;
   onLoadMore: () => void;
 };
 
@@ -110,7 +110,6 @@ export function JobHistoryContent({
   items,
   nextCursor,
   isLoadingMore,
-  loadMoreError,
   onLoadMore,
 }: JobHistoryContentProps) {
   return (
@@ -144,11 +143,6 @@ export function JobHistoryContent({
           </Button>
         </div>
       ) : null}
-      {loadMoreError ? (
-        <Alert variant="destructive" className="mt-3">
-          <AlertDescription>{loadMoreError}</AlertDescription>
-        </Alert>
-      ) : null}
     </>
   );
 }
@@ -156,7 +150,6 @@ export function JobHistoryContent({
 export function JobHistory() {
   const [state, setState] = useState<HistoryState>({ status: "loading" });
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const request = useRef<AbortController | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const loadingMoreRef = useRef(false);
@@ -175,11 +168,19 @@ export function JobHistory() {
         }
       })
       .catch((error: unknown) => {
+        if (error instanceof ApiRequestError && error.kind === "cancelled")
+          return;
         if (controller.signal.aborted) {
           return;
         }
 
-        setState(toErrorState(error));
+        const failure = toErrorState(error);
+        toast.error(failure.message, {
+          description: failure.requestId
+            ? `请求编号：${failure.requestId}`
+            : undefined,
+        });
+        setState(failure);
       });
     return () => {
       controller.abort();
@@ -190,7 +191,6 @@ export function JobHistory() {
     request.current?.abort();
     loadingMoreRef.current = false;
     setIsLoadingMore(false);
-    setLoadMoreError(null);
     setState({ status: "loading" });
     setReloadToken((value) => value + 1);
   }
@@ -207,7 +207,6 @@ export function JobHistory() {
     if (!controller || controller.signal.aborted) return;
     loadingMoreRef.current = true;
     setIsLoadingMore(true);
-    setLoadMoreError(null);
     try {
       const page = await listCollectionJobs(
         {
@@ -223,8 +222,10 @@ export function JobHistory() {
         nextCursor: page.next_cursor,
       });
     } catch (error) {
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
       if (controller.signal.aborted) return;
-      setLoadMoreError(
+      toast.error(
         error instanceof ApiRequestError
           ? error.message
           : "后续任务加载失败，请重试。",
@@ -252,11 +253,7 @@ export function JobHistory() {
       <PageState
         eyebrow="加载失败"
         title="暂时无法读取任务记录"
-        description={
-          state.requestId
-            ? `${state.message} 请求编号：${state.requestId}`
-            : state.message
-        }
+        description="请重新加载任务记录。"
         action={
           <Button onClick={() => void reload()}>
             <RotateCcwIcon data-icon="inline-start" />
@@ -282,7 +279,6 @@ export function JobHistory() {
         items={state.items}
         nextCursor={state.nextCursor}
         isLoadingMore={isLoadingMore}
-        loadMoreError={loadMoreError}
         onLoadMore={() => void loadMore()}
       />
     </div>

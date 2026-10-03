@@ -1,8 +1,8 @@
 "use client";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 
 import { sendEmailLoginCode, updateIdentityCredentials } from "@/api/identity";
 import { safeReturnTo } from "@/components/auth/access";
@@ -42,8 +42,6 @@ export function CredentialsForm({
   const [resendAt, setResendAt] = useState(0);
   const [now, setNow] = useState(0);
   const [busy, setBusy] = useState<"save" | "send" | null>(null);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const operation = useRef<AbortController | null>(null);
   const hasPassword = account.user.has_password;
 
@@ -59,8 +57,6 @@ export function CredentialsForm({
     const controller = new AbortController();
     operation.current = controller;
     setBusy("send");
-    setError("");
-    setSuccess("");
     try {
       const value = await sendEmailLoginCode(
         { email: account.user.email },
@@ -74,7 +70,7 @@ export function CredentialsForm({
       setResendAt(sentAt + value.resend_after_seconds * 1000);
     } catch (failure) {
       if (!controller.signal.aborted)
-        setError(authErrorMessage(failure, "验证码发送失败，请重试。"));
+        toast.error(authErrorMessage(failure, "验证码发送失败，请重试。"));
     } finally {
       if (operation.current === controller) {
         operation.current = null;
@@ -86,17 +82,16 @@ export function CredentialsForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
-    setSuccess("");
     if (password !== confirmation) {
-      setError("两次输入的新密码不一致。");
+      toast.error("两次输入的新密码不一致。");
       return;
     }
     if (password.length < 12 || password.length > 128) {
-      setError("密码需要 12–128 个字符。");
+      toast.error("密码需要 12–128 个字符。");
       return;
     }
     if (verification === "password" && !currentPassword) {
-      setError("请输入当前密码，或使用邮箱验证码验证。");
+      toast.error("请输入当前密码，或使用邮箱验证码验证。");
       return;
     }
     if (
@@ -105,13 +100,12 @@ export function CredentialsForm({
         now >= Date.parse(challenge.expires_at) ||
         !/^[0-9]{6}$/.test(code))
     ) {
-      setError("请发送并填写有效的邮箱验证码。");
+      toast.error("请发送并填写有效的邮箱验证码。");
       return;
     }
     const controller = new AbortController();
     operation.current = controller;
     setBusy("save");
-    setError("");
     try {
       const updated = await updateIdentityCredentials(
         {
@@ -137,7 +131,7 @@ export function CredentialsForm({
       if (initialSetup && !hasPassword) {
         router.replace(safeReturnTo(returnTo));
       } else {
-        setSuccess(
+        toast.success(
           "密码已保存。下次可使用邮箱或用户名和密码登录。其他设备的旧会话已退出。",
         );
       }
@@ -153,9 +147,9 @@ export function CredentialsForm({
           setVerification("email");
           setChallenge(null);
           setCode("");
-          setError("登录验证已过期，请重新验证下方已绑定邮箱后设置密码。");
+          toast.error("登录验证已过期，请重新验证下方已绑定邮箱后设置密码。");
         } else {
-          setError(authErrorMessage(failure, "账户设置保存失败，请重试。"));
+          toast.error(authErrorMessage(failure, "账户设置保存失败，请重试。"));
         }
       }
     } finally {
@@ -292,7 +286,6 @@ export function CredentialsForm({
               value={verification}
               onValueChange={(value) => {
                 setVerification(value as "password" | "email");
-                setError("");
               }}
             >
               {account.user.email && (
@@ -339,21 +332,10 @@ export function CredentialsForm({
               disabled={!!busy}
               onClick={() => {
                 setVerification("email");
-                setError("");
               }}
             >
               重新验证邮箱
             </Button>
-          )}
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          {success && (
-            <p role="status" className="text-sm leading-6">
-              {success}
-            </p>
           )}
           <Button
             type="submit"
@@ -366,19 +348,6 @@ export function CredentialsForm({
                 ? "设置密码并进入工作区"
                 : "保存密码"}
           </Button>
-          {busy && (
-            <Button
-              type="button"
-              variant="ghost"
-              className="min-h-11 self-start"
-              onClick={() => {
-                operation.current?.abort();
-                setError("请求已取消，可以重新操作。");
-              }}
-            >
-              取消
-            </Button>
-          )}
         </FieldGroup>
       </form>
     </section>

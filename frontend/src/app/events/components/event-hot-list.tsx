@@ -2,6 +2,8 @@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { ApiRequestError } from "@/request";
 import { listHotEvents } from "@/api/shijian";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,8 +22,14 @@ export function EventHotList({ topicId }: { topicId?: string }) {
           setState("ready");
         }
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setState("error");
+      .catch((error: unknown) => {
+        if (
+          !controller.signal.aborted &&
+          !(error instanceof ApiRequestError && error.kind === "cancelled")
+        ) {
+          setState("error");
+          toast.error("热榜读取失败，请重试。");
+        }
       });
     return () => controller.abort();
   }, [topicId, retry]);

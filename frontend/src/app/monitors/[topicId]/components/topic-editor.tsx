@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -11,11 +13,9 @@ import {
 } from "react";
 import {
   ArchiveIcon,
-  CheckCircle2Icon,
   CopyIcon,
   PauseIcon,
   PlayIcon,
-  RefreshCwIcon,
   RotateCcwIcon,
   SaveIcon,
 } from "lucide-react";
@@ -53,10 +53,8 @@ import {
   FieldGroup,
   FieldLabel,
   FieldDescription,
-  FieldError,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { ApiRequestError } from "@/request";
 
@@ -120,6 +118,13 @@ function toActionFeedback(error: unknown): ActionFeedback {
 }
 
 export function TopicEditor({ topicId }: TopicEditorProps) {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const router = useRouter();
   const [state, setState] = useState<EditorState>({ status: "loading" });
   const [name, setName] = useState("");
@@ -134,7 +139,11 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
     null,
   );
   const pendingActionRef = useRef(false);
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<TopicFieldErrors>({});
+  const formRef = useRef<HTMLFormElement | null>(null);
+  useEffect(() => {
+    formRef.current?.querySelector<HTMLElement>("[aria-invalid=true]")?.focus();
+  }, [fieldErrors]);
   const isBusy = pendingAction !== null;
 
   const applyTopic = useCallback((value: HotKeyAPI.MonitorTopicView) => {
@@ -148,29 +157,39 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
   }, []);
 
   const loadTopic = useCallback(async () => {
-    setFeedback(null);
+    setFieldErrors({});
     try {
       const [topic, sourcePage] = await Promise.all([
         getMonitorTopic({ topic_id: topicId }),
         listSourceCapabilities(),
       ]);
+      if (!mounted.current) return;
       setSourceOptions(
         selectableTopicSources(sourcePage.items, topic.source_keys),
       );
       applyTopic(topic);
     } catch (error) {
+      if (!mounted.current) return;
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
       if (
         error instanceof ApiRequestError &&
         error.code === "resource_not_found"
       ) {
         setState({ status: "not-found" });
       } else if (error instanceof ApiRequestError) {
+        toast.error(error.message, {
+          description: error.requestId
+            ? `请求编号：${error.requestId}`
+            : undefined,
+        });
         setState({
           status: "error",
           message: error.message,
           requestId: error.requestId,
         });
       } else {
+        toast.error("主题加载失败，请稍后重试。");
         setState({ status: "error", message: "主题加载失败，请稍后重试。" });
       }
     }
@@ -191,6 +210,8 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
         }
       })
       .catch((error: unknown) => {
+        if (error instanceof ApiRequestError && error.kind === "cancelled")
+          return;
         if (!isCurrent) {
           return;
         }
@@ -200,12 +221,18 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
         ) {
           setState({ status: "not-found" });
         } else if (error instanceof ApiRequestError) {
+          toast.error(error.message, {
+            description: error.requestId
+              ? `请求编号：${error.requestId}`
+              : undefined,
+          });
           setState({
             status: "error",
             message: error.message,
             requestId: error.requestId,
           });
         } else {
+          toast.error("主题加载失败，请稍后重试。");
           setState({
             status: "error",
             message: "主题加载失败，请稍后重试。",
@@ -228,20 +255,14 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
     const any = parseKeywordLines(matchAny);
     const all = parseKeywordLines(matchAll);
     if (!name.trim()) {
-      setFeedback({
-        kind: "error",
-        message: "请填写关注名称。",
-        fields: { name: "请填写关注名称。" },
-      });
+      setFieldErrors({ name: "请填写关注名称。" });
+      toast.error("请填写关注名称。");
       pendingActionRef.current = false;
       return;
     }
     if (any.length === 0 && all.length === 0) {
-      setFeedback({
-        kind: "error",
-        message: "至少填写一个“任意命中”或“全部包含”关键词。",
-        fields: { match_any: "请填写至少一个关注关键词。" },
-      });
+      setFieldErrors({ match_any: "请填写至少一个关注关键词。" });
+      toast.error("至少填写一个“任意命中”或“全部包含”关键词。");
       pendingActionRef.current = false;
       return;
     }
@@ -250,20 +271,16 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
       collectionIntervalSeconds < 600 ||
       collectionIntervalSeconds > 86400
     ) {
-      setFeedback({
-        kind: "error",
-        message: "采集频率必须是 600—86400 之间的整数秒。",
-        fields: {
-          collection_interval_seconds:
-            "采集频率必须是 600—86400 之间的整数秒。",
-        },
+      setFieldErrors({
+        collection_interval_seconds: "采集频率必须是 600—86400 之间的整数秒。",
       });
+      toast.error("采集频率必须是 600—86400 之间的整数秒。");
       pendingActionRef.current = false;
       return;
     }
 
     setPendingAction("save");
-    setFeedback(null);
+    setFieldErrors({});
     try {
       const payload: HotKeyAPI.MonitorTopicUpdateInput = {
         name: name.trim(),
@@ -278,16 +295,31 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
         notification_target_names: state.topic.notification_target_names,
       };
       const topic = await updateMonitorTopic({ topic_id: topicId }, payload);
+      if (!mounted.current) return;
       applyTopic(topic);
-      setFeedback({
-        kind: "success",
-        message: `已保存。当前规则版本为 v${topic.current_version}。`,
-      });
+      toast.success(`已保存。当前规则版本为 v${topic.current_version}。`);
     } catch (error) {
-      setFeedback(toActionFeedback(error));
+      if (!mounted.current) return;
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      const failure = toActionFeedback(error);
+      setFieldErrors(failure.fields ?? {});
+      toast.error(failure.message, {
+        description:
+          [
+            ...Object.values(failure.fields ?? {}),
+            failure.requestId ? `请求编号：${failure.requestId}` : null,
+          ]
+            .filter(Boolean)
+            .join(" ") || undefined,
+        action:
+          failure.kind === "conflict"
+            ? { label: "重新读取", onClick: () => void loadTopic() }
+            : undefined,
+      });
     } finally {
       pendingActionRef.current = false;
-      setPendingAction(null);
+      if (mounted.current) setPendingAction(null);
     }
   }
 
@@ -301,10 +333,11 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
       return;
     }
     setPendingAction(action);
-    setFeedback(null);
+    setFieldErrors({});
     try {
       if (action === "clone") {
         const clone = await cloneMonitorTopic({ topic_id: topicId });
+        if (!mounted.current) return;
         router.push(`/monitors/${clone.id}`);
         return;
       }
@@ -315,21 +348,37 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
             ? pauseMonitorTopic
             : resumeMonitorTopic;
       const topic = await operation({ topic_id: topicId });
+      if (!mounted.current) return;
       applyTopic(topic);
-      setFeedback({
-        kind: "success",
-        message:
-          action === "archive"
-            ? "主题已归档，规则历史仍会保留。"
-            : action === "pause"
-              ? "主题已暂停；正在运行的任务需在任务详情单独取消。"
-              : "主题已恢复。",
-      });
+      toast.success(
+        action === "archive"
+          ? "主题已归档，规则历史仍会保留。"
+          : action === "pause"
+            ? "主题已暂停；正在运行的任务需在任务详情单独取消。"
+            : "主题已恢复。",
+      );
     } catch (error) {
-      setFeedback(toActionFeedback(error));
+      if (!mounted.current) return;
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      const failure = toActionFeedback(error);
+      setFieldErrors(failure.fields ?? {});
+      toast.error(failure.message, {
+        description:
+          [
+            ...Object.values(failure.fields ?? {}),
+            failure.requestId ? `请求编号：${failure.requestId}` : null,
+          ]
+            .filter(Boolean)
+            .join(" ") || undefined,
+        action:
+          failure.kind === "conflict"
+            ? { label: "重新读取", onClick: () => void loadTopic() }
+            : undefined,
+      });
     } finally {
       pendingActionRef.current = false;
-      setPendingAction(null);
+      if (mounted.current) setPendingAction(null);
     }
   }
 
@@ -361,11 +410,7 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
       <PageState
         eyebrow="加载失败"
         title="暂时无法读取主题"
-        description={
-          state.requestId
-            ? `${state.message} 请求编号：${state.requestId}`
-            : state.message
-        }
+        description="请重新加载主题。"
         action={
           <Button type="button" onClick={() => void loadTopic()}>
             <RotateCcwIcon data-icon="inline-start" />
@@ -463,11 +508,16 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
             />
           </div>
         </section>
-        <form onSubmit={handleSubmit} noValidate aria-busy={isBusy}>
+        <form
+          ref={formRef}
+          onSubmit={handleSubmit}
+          noValidate
+          aria-busy={isBusy}
+        >
           <FieldGroup className="gap-8">
             <Field
               data-disabled={formDisabled}
-              data-invalid={Boolean(feedback?.fields?.name)}
+              data-invalid={Boolean(fieldErrors.name)}
             >
               <FieldLabel htmlFor="topic-name">主题名称</FieldLabel>
               <Input
@@ -478,16 +528,8 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
                 minLength={1}
                 maxLength={80}
                 required
-                aria-invalid={Boolean(feedback?.fields?.name)}
-                aria-describedby={
-                  feedback?.fields?.name ? "topic-name-error" : undefined
-                }
+                aria-invalid={Boolean(fieldErrors.name)}
               />
-              {feedback?.fields?.name ? (
-                <FieldError id="topic-name-error">
-                  {feedback.fields.name}
-                </FieldError>
-              ) : null}
             </Field>
             <KeywordGroupField
               id="match-any"
@@ -496,14 +538,14 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
               value={matchAny}
               onChange={setMatchAny}
               disabled={formDisabled}
-              error={feedback?.fields?.match_any}
+              error={fieldErrors.match_any}
             />
             <TopicSettingsFields
               sourceOptions={sourceOptions}
               sourceKeys={sourceKeys}
               onSourceKeysChange={setSourceKeys}
               disabled={formDisabled}
-              fieldErrors={feedback?.fields}
+              fieldErrors={fieldErrors}
             />
             <TopicAdvancedFields
               key={`${topic.id}:${topic.current_version}`}
@@ -514,43 +556,8 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
               collectionIntervalSeconds={collectionIntervalSeconds}
               onCollectionIntervalSecondsChange={setCollectionIntervalSeconds}
               disabled={formDisabled}
-              fieldErrors={feedback?.fields}
+              fieldErrors={fieldErrors}
             />
-            {feedback ? (
-              <Alert
-                role={feedback.kind === "success" ? "status" : "alert"}
-                variant={
-                  feedback.kind === "success" ? "default" : "destructive"
-                }
-              >
-                {feedback.kind === "success" ? <CheckCircle2Icon /> : null}
-                <AlertTitle>
-                  {feedback.kind === "success"
-                    ? "已保存"
-                    : feedback.kind === "conflict"
-                      ? "需要重新确认"
-                      : "操作未完成"}
-                </AlertTitle>
-                <AlertDescription>
-                  {feedback.message}
-                  {feedback.requestId ? (
-                    <p>请求编号：{feedback.requestId}</p>
-                  ) : null}
-                </AlertDescription>
-                {feedback.kind === "conflict" ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="navigation"
-                    disabled={isBusy}
-                    onClick={() => void loadTopic()}
-                  >
-                    <RefreshCwIcon data-icon="inline-start" />
-                    重新读取
-                  </Button>
-                ) : null}
-              </Alert>
-            ) : null}
             <Field
               orientation="horizontal"
               className="flex-wrap justify-between gap-3"

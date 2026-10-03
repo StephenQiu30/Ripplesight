@@ -1,4 +1,5 @@
 "use client";
+import { toast } from "sonner";
 import { FieldGroup, FieldLabel, Field } from "@/components/ui/field";
 import { ChevronDownIcon } from "lucide-react";
 import {
@@ -6,7 +7,7 @@ import {
   CollapsibleTrigger,
   CollapsibleContent,
 } from "@/components/ui/collapsible";
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, useEffect } from "react";
 import Link from "next/link";
 import { runOperatorSelectBench } from "@/api/yunyingweihu";
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,14 @@ export function SelectBenchRunner({
   token: string;
   accepted: (run: HotKeyAPI.SelectBenchRunView) => void;
 }) {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const fieldId = useId();
 
   const [file, setFile] = useState<File | null>(null);
@@ -96,7 +105,7 @@ export function SelectBenchRunner({
   const [sample, setSample] = useState("100");
   const [seed, setSeed] = useState("42");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+
   const [jobIds, setJobIds] = useState<string[]>([]);
   const operation = useRef<{ payload: string; id: string } | null>(null);
   async function submit(event: React.FormEvent) {
@@ -124,18 +133,23 @@ export function SelectBenchRunner({
         { ...input, operation_id: operation.current.id },
         { headers: { "X-HotKey-Operator-Token": token } },
       );
+      if (!mounted.current) return;
       operation.current = null;
       setJobIds(result.job_ids);
       accepted(result.run);
-      setMessage(
-        `评测已受理：${result.run.sample_size} 条样本，${result.job_ids.length} 个原任务。请刷新评测结果查看进度。`,
-      );
+      if (mounted.current)
+        toast.success(
+          `评测已受理：${result.run.sample_size} 条样本，${result.job_ids.length} 个原任务。请刷新评测结果查看进度。`,
+        );
     } catch (error) {
-      setMessage(
-        error instanceof ApiRequestError
-          ? error.message
-          : "黄金集格式无效或评测未受理，请保留输入后重试。",
-      );
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (mounted.current)
+        toast.error(
+          error instanceof ApiRequestError
+            ? error.message
+            : "黄金集格式无效或评测未受理，请保留输入后重试。",
+        );
     } finally {
       setBusy(false);
     }
@@ -251,11 +265,7 @@ export function SelectBenchRunner({
             </Button>
           </FieldGroup>
         </form>
-        {message && (
-          <p role="status" className="mt-3 text-sm">
-            {message}
-          </p>
-        )}
+
         {jobIds.length > 0 && (
           <div className="mt-3 flex max-h-32 flex-wrap gap-2 overflow-auto text-xs">
             {jobIds.map((id) => (

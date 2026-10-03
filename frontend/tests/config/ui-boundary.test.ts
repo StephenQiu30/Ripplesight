@@ -46,4 +46,14 @@ describe("official UI component boundary", () => {
       await uiViolations(`export default () => <div role="button" />;`),
     ).toHaveLength(1);
   });
+  it.each(["div", "span", "p"])(
+    "rejects a handmade %s error alert",
+    async (tag) => {
+      expect(
+        await uiViolations(
+          `export default () => <${tag} role="alert">失败</${tag}>;`,
+        ),
+      ).toHaveLength(1);
+    },
+  );
 });

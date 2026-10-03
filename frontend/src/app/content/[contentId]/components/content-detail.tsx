@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
@@ -303,6 +305,8 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
         }
       })
       .catch((error: unknown) => {
+        if (error instanceof ApiRequestError && error.kind === "cancelled")
+          return;
         if (controller.signal.aborted) {
           return;
         }
@@ -312,6 +316,17 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
         ) {
           setState({ status: "not-found" });
         } else {
+          toast.error(
+            error instanceof ApiRequestError
+              ? error.message
+              : "作品资料加载失败，请稍后重试。",
+            {
+              description:
+                error instanceof ApiRequestError && error.requestId
+                  ? `请求编号：${error.requestId}`
+                  : undefined,
+            },
+          );
           setState(
             error instanceof ApiRequestError
               ? {
@@ -361,11 +376,7 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
       <PageState
         eyebrow="加载失败"
         title="暂时无法读取作品"
-        description={
-          state.requestId
-            ? `${state.message} 请求编号：${state.requestId}`
-            : state.message
-        }
+        description="请重新加载作品资料。"
         action={
           <Button
             type="button"

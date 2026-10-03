@@ -9,6 +9,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const toasts = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: toasts }));
+afterEach(() => vi.clearAllMocks());
+
 const api = vi.hoisted(() => ({ topics: vi.fn(), reports: vi.fn() }));
 vi.mock("@/api/jiankongzhuti", () => ({ listMonitorTopics: api.topics }));
 vi.mock("@/api/ribao", () => ({ listReports: api.reports }));
@@ -54,9 +58,11 @@ describe("report reads from Swagger operations", () => {
       });
     render(<ReportList />);
     fireEvent.click(await screen.findByRole("button", { name: "加载更多" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "重试加载更多" }),
+    await waitFor(() =>
+      expect(toasts.error).toHaveBeenCalledWith("报告加载失败，请稍后重试。"),
     );
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "加载更多" }));
     await waitFor(() =>
       expect(screen.getAllByRole("link", { name: "查看报告" })).toHaveLength(2),
     );

@@ -7,16 +7,18 @@ import {
 } from "@/components/ui/collapsible";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { listCodexResetPosts } from "@/api/zhongzhigonggao";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { ApiRequestError } from "@/request";
 import { beijingTime } from "./reset-timeline";
 
 type Filter = NonNullable<HotKeyAPI.listCodexResetPostsParams["filter_key"]>;
 type PostsState =
   | { status: "loading" }
-  | { status: "error"; message: string }
+  | { status: "error" }
   | { status: "ready"; posts: HotKeyAPI.ResetPostView[] };
 const filters: { value: Filter; label: string }[] = [
   { value: "all", label: "全部帖子" },
@@ -43,14 +45,14 @@ export function ResetSourcePosts({ refresh }: { refresh: number }) {
         if (
           !controller.signal.aborted &&
           !(error instanceof ApiRequestError && error.kind === "cancelled")
-        )
-          setState({
-            status: "error",
-            message:
-              error instanceof ApiRequestError
-                ? `${error.message}${error.requestId ? ` 请求编号：${error.requestId}` : ""}`
-                : "源帖子读取失败。",
-          });
+        ) {
+          setState({ status: "error" });
+          toast.error(
+            error instanceof ApiRequestError
+              ? `${error.message}${error.requestId ? ` 请求编号：${error.requestId}` : ""}`
+              : "源帖子读取失败。",
+          );
+        }
       });
     return () => controller.abort();
   }, [page, filter, retry, refresh]);
@@ -94,8 +96,10 @@ export function ResetSourcePosts({ refresh }: { refresh: number }) {
         </p>
       )}
       {state.status === "error" && (
-        <div role="alert" className="flex flex-col gap-y-3">
-          <p>{state.message}</p>
+        <Empty>
+          <EmptyHeader>
+            <EmptyTitle>源帖子暂不可读</EmptyTitle>
+          </EmptyHeader>
           <Button
             variant="outline"
             onClick={() => {
@@ -105,7 +109,7 @@ export function ResetSourcePosts({ refresh }: { refresh: number }) {
           >
             重试读取帖子
           </Button>
-        </div>
+        </Empty>
       )}
       {state.status === "ready" && (
         <>

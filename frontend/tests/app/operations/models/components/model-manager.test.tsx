@@ -11,6 +11,9 @@ import { afterEach, expect, it, vi } from "vitest";
 import { ApiRequestError } from "@/request";
 import { ModelManager } from "@/app/operations/models/components/model-manager";
 
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
+
 const api = vi.hoisted(() => ({
   configuration: vi.fn(),
   overview: vi.fn(),
@@ -166,7 +169,11 @@ it("captures version/reason/inherit-null and reuses the same operation after an 
     target: { value: "恢复环境选择" },
   });
   fireEvent.click(screen.getByRole("button", { name: "保存 score" }));
-  await screen.findByText(/结果尚未确认/);
+  await waitFor(() =>
+    expect(notifications.error).toHaveBeenCalledWith(
+      expect.stringContaining("结果尚未确认"),
+    ),
+  );
   const body = api.switchModel.mock.calls[0][0];
   expect(body).toMatchObject({
     capability: "score",
@@ -224,7 +231,11 @@ it("acknowledges the exact cost circuit with captured config CAS and preserves u
     target: { value: "核对供应商原回执" },
   });
   fireEvent.click(screen.getByRole("button", { name: "确认已核对该调用成本" }));
-  await screen.findByText(/具体调用的成本核对已记录/);
+  await waitFor(() =>
+    expect(notifications.success).toHaveBeenCalledWith(
+      expect.stringContaining("具体调用的成本核对已记录"),
+    ),
+  );
   expect(api.ack.mock.calls[0][0]).toMatchObject({
     expected_version: 3,
     call_id: circuit.call_id,
@@ -261,9 +272,14 @@ it("keeps the previous configuration visible after a stale-version rejection wit
     target: { value: "受控切换" },
   });
   fireEvent.click(screen.getByRole("button", { name: "保存 score" }));
-  await screen.findByText(/配置版本已变化/);
+  await waitFor(() =>
+    expect(notifications.error).toHaveBeenCalledWith(
+      expect.stringContaining("配置版本已变化"),
+    ),
+  );
+  expect(screen.queryByRole("alert")).toBeNull();
   expect(screen.getByText("配置版本 3")).toBeTruthy();
-  expect(screen.queryByText(/切换已记录/)).toBeNull();
+  expect(notifications.success).not.toHaveBeenCalled();
   expect(api.configuration).toHaveBeenCalledTimes(1);
 });
 

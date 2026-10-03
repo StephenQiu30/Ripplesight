@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ChevronDownIcon, RotateCcwIcon } from "lucide-react";
@@ -52,7 +54,22 @@ function ReportDetailContent({ reportId }: { reportId: string }) {
         if (!current.signal.aborted) setState({ status: "ready", report });
       })
       .catch((error: unknown) => {
+        if (error instanceof ApiRequestError && error.kind === "cancelled")
+          return;
         if (current.signal.aborted) return;
+        if (!(error instanceof ApiRequestError && error.status === 404)) {
+          toast.error(
+            error instanceof ApiRequestError
+              ? error.message
+              : "报告加载失败，请稍后重试。",
+            {
+              description:
+                error instanceof ApiRequestError && error.requestId
+                  ? `请求编号：${error.requestId}`
+                  : undefined,
+            },
+          );
+        }
         setState(
           error instanceof ApiRequestError && error.status === 404
             ? { status: "not-found" }
@@ -98,7 +115,7 @@ function ReportDetailContent({ reportId }: { reportId: string }) {
         <Alert variant="destructive">
           <AlertTitle>暂时无法读取报告</AlertTitle>
           <AlertDescription>
-            <p>{state.message}</p>
+            <p>请重新加载报告内容。</p>
             <Button
               variant="outline"
               className="mt-4"

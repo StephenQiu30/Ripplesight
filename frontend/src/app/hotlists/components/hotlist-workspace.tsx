@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import {
   ArrowDownIcon,
   ArrowRightIcon,
@@ -54,7 +55,7 @@ const SOURCES = [
 type SourcesState =
   | { status: "loading" }
   | { status: "ready"; items: HotKeyAPI.HotlistSourceView[] }
-  | { status: "error"; message: string; requestId?: string };
+  | { status: "error" };
 
 type HistoryState =
   | { status: "loading"; sourceKey: string }
@@ -64,7 +65,7 @@ type HistoryState =
       items: HotKeyAPI.HotlistSnapshotSummaryView[];
       nextCursor: string | null;
     }
-  | { status: "error"; sourceKey: string; message: string; requestId?: string };
+  | { status: "error"; sourceKey: string };
 
 type DetailState =
   | { status: "loading"; snapshotId: string }
@@ -76,8 +77,6 @@ type DetailState =
   | {
       status: "error";
       snapshotId: string;
-      message: string;
-      requestId?: string;
       forbidden: boolean;
     };
 
@@ -279,7 +278,6 @@ export function HotlistWorkspace() {
   const [detail, setDetail] = useState<DetailState | null>(null);
   const [loadingHistoryMore, setLoadingHistoryMore] = useState(false);
   const [loadingEntriesMore, setLoadingEntriesMore] = useState(false);
-  const [moreError, setMoreError] = useState<string | null>(null);
   const [historyRefresh, setHistoryRefresh] = useState(0);
   const [detailRefresh, setDetailRefresh] = useState(0);
   const historyRequest = useRef<AbortController | null>(null);
@@ -296,10 +294,15 @@ export function HotlistWorkspace() {
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
+        const failure = readError(error, "热榜来源加载失败，请重试。");
+        toast.error(failure.message, {
+          description: failure.requestId
+            ? `请求编号：${failure.requestId}`
+            : undefined,
+        });
 
         setSources({
           status: "error",
-          ...readError(error, "热榜来源加载失败，请重试。"),
         });
       });
     return () => {
@@ -326,7 +329,6 @@ export function HotlistWorkspace() {
       .then((page) => {
         if (controller.signal.aborted) return;
         setLoadingHistoryMore(false);
-        setMoreError(null);
         setHistory({
           status: "ready",
           sourceKey: activeSource,
@@ -336,11 +338,16 @@ export function HotlistWorkspace() {
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
+        const failure = readError(error, "热榜历史加载失败，请重试。");
+        toast.error(failure.message, {
+          description: failure.requestId
+            ? `请求编号：${failure.requestId}`
+            : undefined,
+        });
 
         setHistory({
           status: "error",
           sourceKey: activeSource,
-          ...readError(error, "热榜历史加载失败，请重试。"),
         });
       });
     return () => controller.abort();
@@ -364,7 +371,6 @@ export function HotlistWorkspace() {
       .then((snapshot) => {
         if (!snapshot || controller.signal.aborted) return;
         setLoadingEntriesMore(false);
-        setMoreError(null);
         setDetail({
           status: "ready",
           snapshotId: selectedSnapshot,
@@ -373,6 +379,12 @@ export function HotlistWorkspace() {
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
+        const failure = readError(error, "快照加载失败，请重试。");
+        toast.error(failure.message, {
+          description: failure.requestId
+            ? `请求编号：${failure.requestId}`
+            : undefined,
+        });
 
         setDetail({
           status: "error",
@@ -380,7 +392,6 @@ export function HotlistWorkspace() {
           forbidden:
             error instanceof ApiRequestError &&
             (error.status === 403 || error.status === 404),
-          ...readError(error, "快照加载失败，请重试。"),
         });
       });
     return () => controller.abort();
@@ -393,7 +404,6 @@ export function HotlistWorkspace() {
     entriesMorePending.current = false;
     setLoadingHistoryMore(false);
     setLoadingEntriesMore(false);
-    setMoreError(null);
     router.replace(`/hotlists?source=${encodeURIComponent(sourceKey)}`);
   }
 
@@ -402,7 +412,6 @@ export function HotlistWorkspace() {
     detailRequest.current?.abort();
     entriesMorePending.current = false;
     setLoadingEntriesMore(false);
-    setMoreError(null);
     router.replace(
       `/hotlists?source=${encodeURIComponent(activeSource)}&snapshot=${encodeURIComponent(snapshotId)}`,
     );
@@ -421,7 +430,6 @@ export function HotlistWorkspace() {
     if (!controller || controller.signal.aborted) return;
     historyMorePending.current = true;
     setLoadingHistoryMore(true);
-    setMoreError(null);
     try {
       const page = await listHotlistSnapshots(
         {
@@ -443,7 +451,7 @@ export function HotlistWorkspace() {
       );
     } catch (error) {
       if (controller.signal.aborted) return;
-      setMoreError(readError(error, "后续历史加载失败，请重试。").message);
+      toast.error(readError(error, "后续历史加载失败，请重试。").message);
     } finally {
       if (!controller.signal.aborted) {
         historyMorePending.current = false;
@@ -466,7 +474,6 @@ export function HotlistWorkspace() {
     if (!controller || controller.signal.aborted) return;
     entriesMorePending.current = true;
     setLoadingEntriesMore(true);
-    setMoreError(null);
     try {
       const page = await getHistoricalHotlistSnapshot(
         {
@@ -492,7 +499,7 @@ export function HotlistWorkspace() {
       );
     } catch (error) {
       if (controller.signal.aborted) return;
-      setMoreError(readError(error, "后续榜位加载失败，请重试。").message);
+      toast.error(readError(error, "后续榜位加载失败，请重试。").message);
     } finally {
       if (!controller.signal.aborted) {
         entriesMorePending.current = false;
@@ -514,11 +521,7 @@ export function HotlistWorkspace() {
       <PageState
         eyebrow="加载失败"
         title="暂时无法打开热榜"
-        description={
-          sources.requestId
-            ? `${sources.message} 请求编号：${sources.requestId}`
-            : sources.message
-        }
+        description="请重新加载以读取已应用的热榜来源。"
         action={
           <Button onClick={() => window.location.reload()}>
             <RotateCcwIcon data-icon="inline-start" />
@@ -583,11 +586,7 @@ export function HotlistWorkspace() {
         <InlineState
           eyebrow="加载失败"
           title="无法读取历史快照"
-          description={
-            history.requestId
-              ? `${history.message} 请求编号：${history.requestId}`
-              : history.message
-          }
+          description="请重新加载以读取当前来源的历史快照。"
           action={
             <Button
               onClick={() => {
@@ -646,11 +645,7 @@ export function HotlistWorkspace() {
             <InlineState
               eyebrow={detail.forbidden ? "不可访问" : "加载失败"}
               title={detail.forbidden ? "快照不存在或无权访问" : "无法读取快照"}
-              description={
-                detail.requestId
-                  ? `${detail.message} 请求编号：${detail.requestId}`
-                  : detail.message
-              }
+              description="请选择其他快照，或重新加载当前快照。"
               action={
                 <Button
                   onClick={() => {
@@ -671,11 +666,6 @@ export function HotlistWorkspace() {
               <Skeleton className="h-28 w-full" />
             </div>
           )}
-          {moreError ? (
-            <Alert variant="destructive" className="mt-4">
-              <AlertDescription>{moreError}</AlertDescription>
-            </Alert>
-          ) : null}
         </>
       )}
     </div>

@@ -10,6 +10,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const toasts = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: toasts }));
+afterEach(() => vi.clearAllMocks());
+
 vi.mock("@/api/laiyuannengli", () => ({
   listSourceCapabilities: vi.fn(),
   updateSourceConnection: vi.fn(),
@@ -93,10 +97,12 @@ describe("source settings", () => {
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: "刷新状态" }));
-    expect(await screen.findByRole("alert")).toHaveProperty(
-      "textContent",
-      expect.stringContaining("source-request-1"),
+    await waitFor(() =>
+      expect(toasts.error).toHaveBeenCalledWith(
+        "来源状态暂不可用 请求编号：source-request-1",
+      ),
     );
+    expect(screen.queryByText("来源状态暂不可用")).toBeNull();
     expect(
       screen.getByRole("button", { name: "管理Hacker News" }),
     ).toBeTruthy();

@@ -1,10 +1,10 @@
 "use client";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogOutIcon, UserRoundIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { deleteIdentitySession } from "@/api/identity";
 import { Button } from "@/components/ui/button";
@@ -23,20 +23,28 @@ export function AccountMenu() {
   const session = useIdentitySession();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   if (!session) return null;
 
   async function logout() {
+    if (busy) return;
     setBusy(true);
-    setError("");
     try {
       await deleteIdentitySession();
+      if (!mounted.current) return;
       router.replace("/");
       router.refresh();
     } catch (failure) {
-      setError(authErrorMessage(failure, "退出失败，请重试。"));
+      if (mounted.current)
+        toast.error(authErrorMessage(failure, "退出失败，请重试。"));
     } finally {
-      setBusy(false);
+      if (mounted.current) setBusy(false);
     }
   }
 
@@ -69,11 +77,6 @@ export function AccountMenu() {
             {busy ? "正在退出…" : "退出登录"}
           </DropdownMenuItem>
         </DropdownMenuGroup>
-        {error && (
-          <Alert variant="destructive" className="px-2 py-2">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

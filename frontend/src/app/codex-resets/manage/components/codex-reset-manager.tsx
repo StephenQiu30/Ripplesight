@@ -1,4 +1,5 @@
 "use client";
+import { toast } from "sonner";
 import {
   SelectLabel,
   Select,
@@ -10,7 +11,6 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import Link from "next/link";
 import { useId, useEffect, useRef, useState } from "react";
@@ -59,8 +59,7 @@ export function CodexResetManager() {
   const [lookback, setLookback] = useState(24);
   const [job, setJob] = useState<HotKeyAPI.JobView | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+
   const [relinkPost, setRelinkPost] = useState<HotKeyAPI.ResetPostView | null>(
     null,
   );
@@ -96,8 +95,7 @@ export function CodexResetManager() {
     setRelinkPost(null);
     setRelinkSource(null);
     setRelinkTarget(null);
-    setError("");
-    setNotice("");
+
     setJob(null);
     setBusy(false);
   }
@@ -108,8 +106,10 @@ export function CodexResetManager() {
         if (!controller.signal.aborted) applyMonitor(value);
       })
       .catch((cause) => {
+        if (cause instanceof ApiRequestError && cause.kind === "cancelled")
+          return;
         if (!controller.signal.aborted)
-          setError(
+          toast.error(
             cause instanceof ApiRequestError ? cause.message : "配置读取失败。",
           );
       });
@@ -121,11 +121,12 @@ export function CodexResetManager() {
   async function perform(action: () => Promise<void>, operationId?: string) {
     const epoch = context.current;
     setBusy(true);
-    setError("");
-    setNotice("");
+
     try {
       await action();
     } catch (cause) {
+      if (cause instanceof ApiRequestError && cause.kind === "cancelled")
+        return;
       if (epoch !== context.current) return;
       const message =
         cause instanceof ApiRequestError
@@ -134,7 +135,7 @@ export function CodexResetManager() {
       const unknown =
         cause instanceof ApiRequestError &&
         ["network", "timeout", "protocol"].includes(cause.kind);
-      setError(
+      toast.error(
         `${message}${cause instanceof ApiRequestError && cause.requestId ? ` 请求编号：${cause.requestId}` : ""}${unknown && operationId ? ` 操作结果尚未确认，操作编号：${operationId}。请先重新读取配置与复核状态。` : ""}`,
       );
     } finally {
@@ -194,7 +195,7 @@ export function CodexResetManager() {
       setRelinkPost(null);
       setRelinkSource(null);
       setRelinkTarget(null);
-      setNotice("帖子归属与双方公告修订已保存。");
+      toast.success("帖子归属与双方公告修订已保存。");
     }, command.review.operation_id);
   }
   function save() {
@@ -217,7 +218,7 @@ export function CodexResetManager() {
       );
       if (epoch !== context.current) return;
       if (saved) applyMonitor(saved);
-      setNotice("公告配置已保存。真实扫描仍服从来源授权、预算和运行开关。");
+      toast.success("公告配置已保存。真实扫描仍服从来源授权、预算和运行开关。");
     }, operationId);
   }
   function reviewPost(
@@ -244,7 +245,9 @@ export function CodexResetManager() {
       if (epoch !== context.current) return;
       await read(page, epoch);
       if (epoch !== context.current) return;
-      setNotice("帖子复核已记录。再次识别只会在明确许可与模型准入通过后运行。");
+      toast.success(
+        "帖子复核已记录。再次识别只会在明确许可与模型准入通过后运行。",
+      );
     }, operationId);
   }
   function reviewGap(
@@ -271,7 +274,7 @@ export function CodexResetManager() {
       if (epoch !== context.current) return;
       await read(page, epoch);
       if (epoch !== context.current) return;
-      setNotice("扫描缺口复核已记录。确认缺口不会推进已核验水位。");
+      toast.success("扫描缺口复核已记录。确认缺口不会推进已核验水位。");
     }, operationId);
   }
   function correct(patchValue: HotKeyAPI.EventPatch) {
@@ -292,7 +295,7 @@ export function CodexResetManager() {
       setEvent(result);
       await read(page, epoch);
       if (epoch !== context.current) return;
-      setNotice("公告修订与审计已保存。");
+      toast.success("公告修订与审计已保存。");
     }, operationId);
   }
   function correctJson() {
@@ -307,13 +310,13 @@ export function CodexResetManager() {
         throw new Error();
       correct(value as HotKeyAPI.EventPatch);
     } catch {
-      setError("公告修订 JSON 必须是非空对象，日期需显式填写。");
+      toast.error("公告修订 JSON 必须是非空对象，日期需显式填写。");
     }
   }
   function receipt() {
     const confirmed = new Date(`${receiptTime}:00+08:00`);
     if (Number.isNaN(confirmed.valueOf())) {
-      setError("请填写有效的北京时间到账时间。");
+      toast.error("请填写有效的北京时间到账时间。");
       return;
     }
     correct({
@@ -340,7 +343,7 @@ export function CodexResetManager() {
       );
       if (epoch !== context.current) return;
       setJob(result);
-      setNotice("扫描任务已受理，请查看任务回执。");
+      toast.success("扫描任务已受理，请查看任务回执。");
     }, operationId);
   }
   const canWrite = !!token && !!reason.trim() && !busy;
@@ -404,12 +407,7 @@ export function CodexResetManager() {
           </Button>
         </div>
       </section>
-      {error && (
-        <Alert variant="destructive" className="break-words">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      {notice && <p role="status">{notice}</p>}
+
       <section className="flex flex-col gap-y-5" aria-label="官方监控配置">
         <h2 className="text-xl font-medium">
           {monitor

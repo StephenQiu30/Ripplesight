@@ -2,7 +2,8 @@
 import { FieldLabel, Field } from "@/components/ui/field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-import { useId, useEffect, useState } from "react";
+import { useId, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import Link from "next/link";
 import {
   getCodexResetConfiguration,
@@ -27,8 +28,8 @@ type Reading = {
 type State =
   | { status: "loading" }
   | { status: "unconfigured" }
-  | { status: "error"; message: string }
-  | { status: "ready"; data: Reading; refreshing?: boolean; warning?: string };
+  | { status: "error" }
+  | { status: "ready"; data: Reading; refreshing?: boolean; stale?: boolean };
 const healthLabel: Record<HotKeyAPI.ResetHealth["status"], string> = {
   unknown: "暂无完整核验",
   attention: "需要关注",
@@ -50,6 +51,7 @@ export function CodexResetWorkspace() {
   const [range, setRange] = useState<"all" | "recent">("all");
   const [includeWithdrawn, setIncludeWithdrawn] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const versionProbeFailed = useRef(false);
   const version = state.status === "ready" ? state.data.snapshot.version : null;
   useEffect(() => {
     const controller = new AbortController();
@@ -73,6 +75,7 @@ export function CodexResetWorkspace() {
           status: "ready",
           data: { configuration, snapshot, recent },
         });
+        versionProbeFailed.current = false;
       })
       .catch((error) => {
         if (
@@ -80,14 +83,15 @@ export function CodexResetWorkspace() {
           (error instanceof ApiRequestError && error.kind === "cancelled")
         )
           return;
+        toast.error(errorMessage(error));
         setState((previous) =>
           previous.status === "ready"
             ? {
                 ...previous,
                 refreshing: false,
-                warning: `刷新失败，仍显示上次读取的数据。${errorMessage(error)}`,
+                stale: true,
               }
-            : { status: "error", message: errorMessage(error) },
+            : { status: "error" },
         );
       });
     return () => controller.abort();
@@ -100,6 +104,7 @@ export function CodexResetWorkspace() {
       if (document.visibilityState === "hidden") return;
       void getCodexResetVersion({ signal: controller.signal })
         .then((probe) => {
+          if (!controller.signal.aborted) versionProbeFailed.current = false;
           if (!controller.signal.aborted && probe?.version !== version)
             setRefresh((value) => value + 1);
         })
@@ -107,15 +112,18 @@ export function CodexResetWorkspace() {
           if (
             !controller.signal.aborted &&
             !(error instanceof ApiRequestError && error.kind === "cancelled")
-          )
+          ) {
+            if (!versionProbeFailed.current) toast.error(errorMessage(error));
+            versionProbeFailed.current = true;
             setState((previous) =>
               previous.status === "ready"
                 ? {
                     ...previous,
-                    warning: `版本检查失败，当前为上次读取的数据。${errorMessage(error)}`,
+                    stale: true,
                   }
                 : previous,
             );
+          }
         });
     }, 60_000);
     return () => {
@@ -127,7 +135,7 @@ export function CodexResetWorkspace() {
   function reload() {
     setState((previous) =>
       previous.status === "ready"
-        ? { ...previous, refreshing: true, warning: undefined }
+        ? { ...previous, refreshing: true, stale: undefined }
         : { status: "loading" },
     );
     setRefresh((value) => value + 1);
@@ -146,7 +154,7 @@ export function CodexResetWorkspace() {
       <PageState
         eyebrow="公告读取"
         title="暂时无法读取公告"
-        description={state.message}
+        description="可以重新读取公告与日历。"
         action={<Button onClick={reload}>重试读取公告</Button>}
       />
     );
@@ -200,9 +208,11 @@ export function CodexResetWorkspace() {
           {state.refreshing ? "正在刷新…" : "刷新公告"}
         </Button>
       </div>
-      {state.warning && (
-        <Alert variant="destructive" className="mt-6">
-          <AlertDescription>{state.warning}</AlertDescription>
+      {state.stale && (
+        <Alert className="mt-6">
+          <AlertDescription>
+            当前为上次读取的数据，刷新后可以检查最新公告。
+          </AlertDescription>
         </Alert>
       )}
       {!configuration.enabled && (

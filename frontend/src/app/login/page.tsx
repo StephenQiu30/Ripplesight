@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 
 import { safeReturnTo } from "@/components/auth/access";
 import { LoginExperience } from "./components/login-experience";
+import { LoginForm } from "./components/login-form";
 import { PageState } from "@/components/system/page-state";
 import { Button } from "@/components/ui/button";
 
@@ -41,5 +42,9 @@ export default async function LoginPage({
         }
       />
     );
-  return <LoginExperience returnTo={returnTo} oauthFailed={!!params.error} />;
+  return (
+    <LoginExperience>
+      <LoginForm returnTo={returnTo} oauthFailed={!!params.error} />
+    </LoginExperience>
+  );
 }

@@ -14,6 +14,7 @@ import { BasicFooter } from "./basic-footer";
 import { BasicHeader } from "./basic-header";
 import { LayoutContainer } from "./layout-container";
 import { IdentitySessionProvider } from "@/components/auth/session-context";
+import { Toaster } from "@/components/ui/sonner";
 
 const LayoutScrollContext = createContext<RefObject<HTMLElement | null> | null>(
   null,
@@ -47,7 +48,7 @@ export function BasicLayout({
           >
             跳到正文
           </a>
-          <BasicHeader />
+          {pathname !== "/login" && <BasicHeader />}
           <main
             id="main-content"
             ref={mainRef}
@@ -60,6 +61,12 @@ export function BasicLayout({
           </main>
           <BasicFooter />
         </div>
+        <Toaster
+          position="top-right"
+          closeButton
+          duration={6000}
+          containerAriaLabel="通知"
+        />
       </LayoutScrollContext.Provider>
     </IdentitySessionProvider>
   );

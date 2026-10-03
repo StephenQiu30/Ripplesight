@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRightIcon, ChevronDownIcon, RotateCcwIcon } from "lucide-react";
@@ -72,10 +74,6 @@ export function ReportList() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [reloadToken, setReloadToken] = useState(0);
-  const rangeError =
-    dateFrom && dateTo && dateFrom > dateTo
-      ? "开始日期不能晚于结束日期。"
-      : null;
 
   useEffect(() => {
     const current = new AbortController();
@@ -99,8 +97,17 @@ export function ReportList() {
         setTopics(all);
         setTopicOptionsError(false);
       }
-    })().catch(() => {
-      if (!current.signal.aborted) setTopicOptionsError(true);
+    })().catch((error: unknown) => {
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (!current.signal.aborted) {
+        toast.error(
+          error instanceof ApiRequestError
+            ? error.message
+            : "主题选项暂时无法读取。",
+        );
+        setTopicOptionsError(true);
+      }
     });
     return () => current.abort();
   }, [reloadToken]);
@@ -158,7 +165,14 @@ export function ReportList() {
                 id="report-date-from"
                 type="date"
                 value={dateFrom}
-                onChange={(event) => setDateFrom(event.target.value)}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  if (next && dateTo && next > dateTo) {
+                    toast.error("开始日期不能晚于结束日期。");
+                    return;
+                  }
+                  setDateFrom(next);
+                }}
               />
             </Field>
             <Field>
@@ -167,7 +181,14 @@ export function ReportList() {
                 id="report-date-to"
                 type="date"
                 value={dateTo}
-                onChange={(event) => setDateTo(event.target.value)}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  if (next && dateFrom && dateFrom > next) {
+                    toast.error("开始日期不能晚于结束日期。");
+                    return;
+                  }
+                  setDateTo(next);
+                }}
               />
             </Field>
           </div>
@@ -178,20 +199,13 @@ export function ReportList() {
           ) : null}
         </CollapsibleContent>
       </Collapsible>
-      {rangeError ? (
-        <Alert variant="destructive" className="mt-6">
-          <AlertDescription>{rangeError}</AlertDescription>
-        </Alert>
-      ) : null}
-      {!rangeError ? (
-        <ReportResults
-          key={`${topicId}|${dateFrom}|${dateTo}|${reloadToken}`}
-          topicId={topicId}
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          onRetry={() => setReloadToken((value) => value + 1)}
-        />
-      ) : null}
+      <ReportResults
+        key={`${topicId}|${dateFrom}|${dateTo}|${reloadToken}`}
+        topicId={topicId}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onRetry={() => setReloadToken((value) => value + 1)}
+      />
     </div>
   );
 }
@@ -209,7 +223,6 @@ function ReportResults({
 }) {
   const [state, setState] = useState<ListState>({ status: "loading" });
   const [loadingMore, setLoadingMore] = useState(false);
-  const [pageError, setPageError] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
   const paginationLock = useRef(false);
   useEffect(() => {
@@ -235,8 +248,12 @@ function ReportResults({
           });
       })
       .catch((error: unknown) => {
-        if (!current.signal.aborted)
+        if (error instanceof ApiRequestError && error.kind === "cancelled")
+          return;
+        if (!current.signal.aborted) {
+          toast.error(errorMessage(error));
           setState({ status: "error", message: errorMessage(error) });
+        }
       });
     return () => current.abort();
   }, [topicId, dateFrom, dateTo]);
@@ -253,7 +270,6 @@ function ReportResults({
       return;
     paginationLock.current = true;
     setLoadingMore(true);
-    setPageError(null);
     try {
       const page = await listReports(
         {
@@ -273,7 +289,9 @@ function ReportResults({
           nextCursor: page.next_cursor,
         });
     } catch (error) {
-      if (!current.signal.aborted) setPageError(errorMessage(error));
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      if (!current.signal.aborted) toast.error(errorMessage(error));
     } finally {
       if (!current.signal.aborted) {
         paginationLock.current = false;
@@ -294,7 +312,7 @@ function ReportResults({
         <Alert variant="destructive" className="mt-10">
           <AlertTitle>暂时无法读取报告</AlertTitle>
           <AlertDescription>
-            <p>{state.message}</p>
+            <p>请重新加载报告。</p>
             <Button variant="outline" className="mt-4" onClick={onRetry}>
               重新加载
             </Button>
@@ -339,11 +357,6 @@ function ReportResults({
               ))}
             </ItemGroup>
           )}
-          {pageError ? (
-            <Alert variant="destructive" className="mt-6">
-              <AlertDescription>{pageError}</AlertDescription>
-            </Alert>
-          ) : null}
           {state.nextCursor ? (
             <Button
               variant="outline"
@@ -351,11 +364,7 @@ function ReportResults({
               disabled={loadingMore}
               onClick={() => void loadMore()}
             >
-              {loadingMore
-                ? "正在加载"
-                : pageError
-                  ? "重试加载更多"
-                  : "加载更多"}
+              {loadingMore ? "正在加载" : "加载更多"}
             </Button>
           ) : null}
         </section>

@@ -1,4 +1,5 @@
 "use client";
+import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   SelectLabel,
@@ -10,10 +11,9 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import Link from "next/link";
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, useEffect } from "react";
 import {
   createEditorialSourceProfile,
   getEditorialSourceIcon,
@@ -79,6 +79,14 @@ const time = (value: string | null) =>
     : "暂无";
 
 export function EditorialSourceManager() {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const fieldId = useId();
 
   const [token, setToken] = useState("");
@@ -114,8 +122,7 @@ export function EditorialSourceManager() {
   const [groupReason, setGroupReason] = useState("");
   const [job, setJob] = useState<HotKeyAPI.JobView | null>(null);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState("");
-  const [error, setError] = useState("");
+
   const operations = useRef(new Map<string, string>());
   const headers = { "X-HotKey-Operator-Token": token, "X-HotKey-CSRF": "1" };
   function operation(value: object) {
@@ -126,11 +133,12 @@ export function EditorialSourceManager() {
   }
   async function perform(action: () => Promise<void>, operationId?: string) {
     setBusy(true);
-    setError("");
-    setNotice("");
+
     try {
       await action();
     } catch (cause) {
+      if (cause instanceof ApiRequestError && cause.kind === "cancelled")
+        return;
       const message =
         cause instanceof ApiRequestError
           ? cause.code === "editorial_version_conflict"
@@ -140,9 +148,10 @@ export function EditorialSourceManager() {
       const unknown =
         cause instanceof ApiRequestError &&
         ["network", "timeout", "protocol"].includes(cause.kind);
-      setError(
-        `${message}${cause instanceof ApiRequestError && cause.requestId ? ` 请求编号：${cause.requestId}` : ""}${unknown && operationId ? ` 本次受理结果尚未确认，操作编号：${operationId}。请先读取来源运行记录。` : ""}`,
-      );
+      if (mounted.current)
+        toast.error(
+          `${message}${cause instanceof ApiRequestError && cause.requestId ? ` 请求编号：${cause.requestId}` : ""}${unknown && operationId ? ` 本次受理结果尚未确认，操作编号：${operationId}。请先读取来源运行记录。` : ""}`,
+        );
     } finally {
       setBusy(false);
     }
@@ -172,9 +181,10 @@ export function EditorialSourceManager() {
         { headers },
       );
       await reload();
-      setNotice(
-        "原分组积压已复核并退回保存水位。旧成功时钟保留，采集仍需当前许可和各成员预算。",
-      );
+      if (mounted.current)
+        toast.success(
+          "原分组积压已复核并退回保存水位。旧成功时钟保留，采集仍需当前许可和各成员预算。",
+        );
     }, operationId);
   }
   function edit(profile: HotKeyAPI.EditorialProfileView | null) {
@@ -224,7 +234,10 @@ export function EditorialSourceManager() {
       setIcon(
         await getEditorialSourceIcon({ profile_id: selected.id }, { headers }),
       );
-      setNotice("图标任务已受理。仍需独立MEDIA许可与预算，真实外采默认关闭。");
+      if (mounted.current)
+        toast.success(
+          "图标任务已受理。仍需独立MEDIA许可与预算，真实外采默认关闭。",
+        );
     }, id);
   }
   function save() {
@@ -240,7 +253,7 @@ export function EditorialSourceManager() {
         throw new Error();
       configuration = value as HotKeyAPI.EditorialSourceConfiguration;
     } catch {
-      setError("配置 JSON 必须是对应来源类型的对象。");
+      if (mounted.current) toast.error("配置 JSON 必须是对应来源类型的对象。");
       return;
     }
     const value: Omit<HotKeyAPI.EditorialProfileInput, "operation_id"> = {
@@ -272,7 +285,8 @@ export function EditorialSourceManager() {
         );
       await reload();
       setEditing(false);
-      setNotice("来源配置已保存。运行状态以许可、预算和采集回执为准。");
+      if (mounted.current)
+        toast.success("来源配置已保存。运行状态以许可、预算和采集回执为准。");
     }, id);
   }
   function poll() {
@@ -290,7 +304,7 @@ export function EditorialSourceManager() {
           { headers },
         ),
       );
-      setNotice("采集任务已受理，请查看任务回执。");
+      if (mounted.current) toast.success("采集任务已受理，请查看任务回执。");
     }, id);
   }
   function review(
@@ -318,7 +332,8 @@ export function EditorialSourceManager() {
         ),
       );
       await reload();
-      setNotice("人工复核已记录。再次采集需要明确受理新任务。");
+      if (mounted.current)
+        toast.success("人工复核已记录。再次采集需要明确受理新任务。");
     }, id);
   }
   return (
@@ -382,12 +397,7 @@ export function EditorialSourceManager() {
             </Button>
           </div>
         </section>
-        {error && (
-          <Alert variant="destructive" className="break-words">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        {notice && <p role="status">{notice}</p>}
+
         {profiles?.length === 0 && (
           <p>暂无编辑来源。先创建关闭配置，再批准来源许可与保留策略。</p>
         )}

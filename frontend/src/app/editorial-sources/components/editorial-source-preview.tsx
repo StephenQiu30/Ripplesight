@@ -1,5 +1,5 @@
 "use client";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { toast } from "sonner";
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -54,7 +54,7 @@ export function EditorialSourcePreview({
     null,
   );
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+
   const [reviewed, setReviewed] = useState(false);
   const [remoteAttempt, setRemoteAttempt] = useState(0);
   const epoch = useRef(0);
@@ -79,15 +79,17 @@ export function EditorialSourcePreview({
     const captured = epoch.current;
     const current = () => epoch.current === captured;
     setBusy(true);
-    setMessage("");
+
     try {
       await work(current);
     } catch (cause) {
+      if (cause instanceof ApiRequestError && cause.kind === "cancelled")
+        return;
       if (!current()) return;
       const unconfirmed =
         cause instanceof ApiRequestError &&
         ["network", "timeout", "protocol"].includes(cause.kind);
-      setMessage(
+      toast.error(
         `${cause instanceof ApiRequestError ? cause.message : "试抓读取或解析失败，请检查配置。"}${unconfirmed && operationId ? ` 操作响应尚未确认；操作编号 ${operationId}。重试同一输入会复用此编号，请先核对任务。` : ""}`,
       );
     } finally {
@@ -96,7 +98,7 @@ export function EditorialSourcePreview({
   }
   function parseSample() {
     if (new TextEncoder().encode(sample).byteLength > 1_000_000) {
-      setMessage(
+      toast.error(
         "样本不能超过 1 MB（1,000,000 UTF-8 字节），请缩小样本再解析。",
       );
       return;
@@ -113,7 +115,7 @@ export function EditorialSourcePreview({
         throw new Error();
       configuration = parsed as HotKeyAPI.EditorialSourceConfiguration;
     } catch {
-      setMessage("配置 JSON 必须是当前来源类型的对象。");
+      toast.error("配置 JSON 必须是当前来源类型的对象。");
       return;
     }
     const input = { configuration, sample, reason: reason.trim() };
@@ -269,11 +271,7 @@ export function EditorialSourcePreview({
           </div>
         </>
       )}
-      {message ? (
-        <Alert variant="destructive" className="break-words">
-          <AlertDescription>{message}</AlertDescription>
-        </Alert>
-      ) : null}
+
       {job ? (
         <div className="flex flex-col gap-y-3 text-sm">
           <p>

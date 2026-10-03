@@ -9,6 +9,9 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { EditorialSourcePreview } from "@/app/editorial-sources/components/editorial-source-preview";
 
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
+
 const api = vi.hoisted(() => ({
   sample: vi.fn(),
   remote: vi.fn(),
@@ -198,7 +201,8 @@ it("does not unlock an unknown request when manual review fails and preserves th
   fireEvent.click(await screen.findByRole("button", { name: "读取试抓结果" }));
   const review = await screen.findByRole("button", { name: "已核对未知试抓" });
   fireEvent.click(review);
-  await screen.findByRole("alert");
+  await waitFor(() => expect(notifications.error).toHaveBeenCalled());
+  expect(screen.queryByRole("alert")).toBeNull();
   expect(
     (screen.getByRole("button", { name: "受理远程试抓" }) as HTMLButtonElement)
       .disabled,
@@ -250,7 +254,11 @@ it("makes no anonymous preview and rejects a sample exceeding the byte limit", a
     target: { value: "中".repeat(333_334) },
   });
   fireEvent.click(screen.getByRole("button", { name: "解析本地样本" }));
-  await screen.findByText(/样本不能超过 1 MB/);
+  await waitFor(() =>
+    expect(notifications.error).toHaveBeenCalledWith(
+      expect.stringContaining("样本不能超过 1 MB"),
+    ),
+  );
   expect(api.sample).not.toHaveBeenCalled();
 });
 it("accepts exactly one million UTF-8 bytes rather than counting characters", async () => {

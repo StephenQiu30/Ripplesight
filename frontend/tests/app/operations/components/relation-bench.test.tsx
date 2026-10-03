@@ -12,6 +12,9 @@ import {
   normalizeRelationPredictions,
   RelationBench,
 } from "@/app/operations/components/relation-bench";
+const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: notifications }));
+
 const api = vi.hoisted(() => ({
   list: vi.fn(),
   get: vi.fn(),
@@ -90,7 +93,12 @@ it("keeps failed admission identity for explicit replay and never auto-runs from
     screen.getByRole("button", { name: "排队关系评测" }).closest("form")!,
   );
   await waitFor(() => expect(api.run).toHaveBeenCalledTimes(1));
-  await screen.findByText(/输入已保留/);
+  await waitFor(() =>
+    expect(notifications.error).toHaveBeenCalledWith(
+      expect.stringContaining("输入已保留"),
+    ),
+  );
+  expect(screen.queryByText(/输入已保留/)).toBeNull();
   fireEvent.submit(
     screen.getByRole("button", { name: "排队关系评测" }).closest("form")!,
   );

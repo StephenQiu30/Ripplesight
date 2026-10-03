@@ -1,5 +1,5 @@
 "use client";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { toast } from "sonner";
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -26,7 +26,7 @@ export function EditorialSourceMaterials({ token, sourceKey, name }: Props) {
   );
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+
   const epoch = useRef(0);
   const loading = useRef(false);
   const controllers = useRef(new Set<AbortController>());
@@ -41,7 +41,7 @@ export function EditorialSourceMaterials({ token, sourceKey, name }: Props) {
     if (!token || loading.current) return;
     loading.current = true;
     setBusy(true);
-    setError("");
+
     const captured = epoch.current;
     const controller = new AbortController();
     controllers.current.add(controller);
@@ -68,11 +68,11 @@ export function EditorialSourceMaterials({ token, sourceKey, name }: Props) {
       });
       setCursor(page.next_cursor ?? null);
     } catch (cause) {
+      if (cause instanceof ApiRequestError && cause.kind === "cancelled")
+        return;
       if (captured === epoch.current)
-        setError(
-          cause instanceof ApiRequestError
-            ? cause.message
-            : "来源材料读取失败，请重新读取或重试当前页。",
+        toast.error(
+          `${cause instanceof ApiRequestError ? cause.message : "来源材料读取失败，请重新读取或重试当前页。"}${rows?.length ? " 已加载材料保留；当前页尚未读完。" : ""}`,
         );
     } finally {
       controllers.current.delete(controller);
@@ -96,14 +96,7 @@ export function EditorialSourceMaterials({ token, sourceKey, name }: Props) {
         读取来源材料
       </Button>
       {busy ? <p role="status">正在读取来源材料…</p> : null}
-      {error ? (
-        <Alert variant="destructive">
-          <AlertDescription>
-            {error}
-            {rows?.length ? " 已加载材料保留；当前页尚未读完。" : ""}
-          </AlertDescription>
-        </Alert>
-      ) : null}
+
       {rows?.length === 0 ? (
         <p>此来源暂无当前可读材料；不代表来源历史为空。</p>
       ) : null}

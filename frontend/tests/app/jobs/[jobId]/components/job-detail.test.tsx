@@ -11,6 +11,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const toasts = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast: toasts }));
+afterEach(() => vi.clearAllMocks());
+
 const api = vi.hoisted(() => ({
   get: vi.fn(),
   cancel: vi.fn(),
@@ -330,11 +334,13 @@ describe("job detail controls", () => {
     await screen.findByText("已持久保存 3 条结果。");
     fireEvent.click(screen.getByRole("button", { name: "刷新状态" }));
     await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toContain(
-        "当前显示的是上次读取的状态",
-      ),
+      expect(toasts.error).toHaveBeenCalledWith("刷新失败，请重试。", {
+        description: "当前显示上次读取的状态，请刷新后再核对。",
+      }),
     );
     expect(screen.getByText("已持久保存 3 条结果。")).toBeTruthy();
     expect(screen.getByText("执行中")).toBeTruthy();
+    expect(screen.getByText("状态待刷新")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

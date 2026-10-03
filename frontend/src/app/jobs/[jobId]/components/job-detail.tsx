@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -37,11 +39,6 @@ type DetailState =
   | { status: "ready"; job: HotKeyAPI.JobStatusView }
   | { status: "not-found" }
   | { status: "error"; message: string; requestId?: string };
-
-type ActionError = {
-  message: string;
-  requestId?: string;
-};
 
 const STAGE_LABELS: Record<HotKeyAPI.JobStage, string> = {
   request: "请求来源",
@@ -354,9 +351,9 @@ export function JobCoverageWindows({
 export function JobDetail({ jobId }: JobDetailProps) {
   const [state, setState] = useState<DetailState>({ status: "loading" });
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isStale, setIsStale] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
-  const [actionError, setActionError] = useState<ActionError | null>(null);
   const request = useRef<AbortController | null>(null);
   const actionPending = useRef(false);
   const [reloadToken, setReloadToken] = useState(0);
@@ -368,9 +365,12 @@ export function JobDetail({ jobId }: JobDetailProps) {
       .then((job) => {
         if (!controller.signal.aborted) {
           setState({ status: "ready", job });
+          setIsStale(false);
         }
       })
       .catch((error: unknown) => {
+        if (error instanceof ApiRequestError && error.kind === "cancelled")
+          return;
         if (controller.signal.aborted) {
           return;
         }
@@ -380,7 +380,13 @@ export function JobDetail({ jobId }: JobDetailProps) {
         ) {
           setState({ status: "not-found" });
         } else {
-          setState(toErrorState(error));
+          const failure = toErrorState(error);
+          toast.error(failure.message, {
+            description: failure.requestId
+              ? `请求编号：${failure.requestId}`
+              : undefined,
+          });
+          setState(failure);
         }
       });
     return () => {
@@ -396,7 +402,6 @@ export function JobDetail({ jobId }: JobDetailProps) {
     const controller = new AbortController();
     request.current = controller;
     setIsRefreshing(true);
-    setActionError(null);
     try {
       const job = await getCollectionJob(
         { job_id: jobId },
@@ -404,15 +409,24 @@ export function JobDetail({ jobId }: JobDetailProps) {
       );
       if (controller.signal.aborted) return;
       setState({ status: "ready", job });
+      setIsStale(false);
     } catch (error) {
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
       if (controller.signal.aborted) return;
-      setActionError(
-        error instanceof ApiRequestError
-          ? {
-              message: `${error.message} 当前显示的是上次读取的状态。`,
-              requestId: error.requestId,
-            }
-          : { message: "刷新失败，当前显示的是上次读取的状态。" },
+      setIsStale(true);
+      toast.error(
+        error instanceof ApiRequestError ? error.message : "刷新失败，请重试。",
+        {
+          description: [
+            "当前显示上次读取的状态，请刷新后再核对。",
+            error instanceof ApiRequestError && error.requestId
+              ? `请求编号：${error.requestId}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" "),
+        },
       );
     } finally {
       actionPending.current = false;
@@ -427,7 +441,6 @@ export function JobDetail({ jobId }: JobDetailProps) {
     const controller = new AbortController();
     request.current = controller;
     setIsCancelling(true);
-    setActionError(null);
     try {
       const job = await cancelCollectionJob(
         { job_id: jobId },
@@ -435,12 +448,19 @@ export function JobDetail({ jobId }: JobDetailProps) {
       );
       if (controller.signal.aborted) return;
       setState({ status: "ready", job });
+      setIsStale(false);
     } catch (error) {
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
       if (controller.signal.aborted) return;
-      setActionError(
-        error instanceof ApiRequestError
-          ? { message: error.message, requestId: error.requestId }
-          : { message: "取消失败，请重试。" },
+      toast.error(
+        error instanceof ApiRequestError ? error.message : "操作失败，请重试。",
+        {
+          description:
+            error instanceof ApiRequestError && error.requestId
+              ? `请求编号：${error.requestId}`
+              : undefined,
+        },
       );
     } finally {
       actionPending.current = false;
@@ -455,7 +475,6 @@ export function JobDetail({ jobId }: JobDetailProps) {
     const controller = new AbortController();
     request.current = controller;
     setIsRetrying(true);
-    setActionError(null);
     try {
       const job = await retryCollectionJob(
         { job_id: jobId },
@@ -463,12 +482,19 @@ export function JobDetail({ jobId }: JobDetailProps) {
       );
       if (controller.signal.aborted) return;
       setState({ status: "ready", job });
+      setIsStale(false);
     } catch (error) {
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
       if (controller.signal.aborted) return;
-      setActionError(
-        error instanceof ApiRequestError
-          ? { message: error.message, requestId: error.requestId }
-          : { message: "重试提交失败，请检查任务状态后再试。" },
+      toast.error(
+        error instanceof ApiRequestError ? error.message : "操作失败，请重试。",
+        {
+          description:
+            error instanceof ApiRequestError && error.requestId
+              ? `请求编号：${error.requestId}`
+              : undefined,
+        },
       );
     } finally {
       actionPending.current = false;
@@ -505,14 +531,11 @@ export function JobDetail({ jobId }: JobDetailProps) {
   }
 
   if (state.status === "error") {
-    const description = state.requestId
-      ? `${state.message} 请求编号：${state.requestId}`
-      : state.message;
     return (
       <PageState
         eyebrow="加载失败"
         title="暂时无法读取任务"
-        description={description}
+        description="请重新加载任务状态。"
         action={
           <Button
             type="button"
@@ -554,6 +577,7 @@ export function JobDetail({ jobId }: JobDetailProps) {
             >
               {STATUS_LABELS[job.status]}
             </Badge>
+            {isStale ? <Badge variant="outline">状态待刷新</Badge> : null}
           </div>
           <p className="text-muted-foreground mt-3 text-sm">
             受理后在这里查看采集进度与结果。
@@ -627,18 +651,6 @@ export function JobDetail({ jobId }: JobDetailProps) {
                 ? ` 下次尝试：${formatTime(job.next_run_at)}。`
                 : " 当前没有自动重试计划。"}
             </p>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      {actionError ? (
-        <Alert variant="destructive" className="mt-5">
-          <AlertTitle>操作未完成</AlertTitle>
-          <AlertDescription>
-            {actionError.message}
-            {actionError.requestId
-              ? ` 请求编号：${actionError.requestId}`
-              : null}
           </AlertDescription>
         </Alert>
       ) : null}

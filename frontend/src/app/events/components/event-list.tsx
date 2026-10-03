@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { listEvents } from "@/api/shijian";
 import { EventHotList } from "./event-hot-list";
 import { listMonitorTopics } from "@/api/jiankongzhuti";
@@ -29,7 +30,7 @@ import { ApiRequestError } from "@/request";
 
 type ResultState =
   | { status: "loading" }
-  | { status: "error"; message: string }
+  | { status: "error" }
   | { status: "ready"; page: HotKeyAPI.PageViewEventReadView_ };
 
 function message(error: unknown): string {
@@ -48,7 +49,6 @@ export function EventList() {
   const [refresh, setRefresh] = useState(0);
   const [topics, setTopics] = useState<HotKeyAPI.MonitorTopicView[]>([]);
   const [sources, setSources] = useState<HotKeyAPI.SourcePlatformView[]>([]);
-  const [optionsError, setOptionsError] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -77,11 +77,14 @@ export function EventList() {
         if (!controller.signal.aborted) {
           setSources(sourcePage.items);
           setTopics(topicItems);
-          setOptionsError(false);
         }
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setOptionsError(true);
+      .catch((error: unknown) => {
+        if (
+          !controller.signal.aborted &&
+          !(error instanceof ApiRequestError && error.kind === "cancelled")
+        )
+          toast.error("筛选选项暂时不可用，仍可搜索事件。刷新可重试。");
       });
     return () => controller.abort();
   }, [refresh]);
@@ -163,11 +166,6 @@ export function EventList() {
         </FieldGroup>
       </form>
       <EventHotList topicId={params.topic_id ?? undefined} />
-      {optionsError ? (
-        <p role="status" className="text-muted-foreground mt-4 text-sm">
-          筛选选项暂时不可用，仍可搜索事件。刷新可重试。
-        </p>
-      ) : null}
       <EventResults
         key={`${JSON.stringify(params)}:${refresh}`}
         params={params}
@@ -187,7 +185,6 @@ function EventResults({
   const [state, setState] = useState<ResultState>({ status: "loading" });
   const [retry, setRetry] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [pageError, setPageError] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -198,8 +195,13 @@ function EventResults({
         if (!current.signal.aborted) setState({ status: "ready", page });
       })
       .catch((error: unknown) => {
-        if (!current.signal.aborted)
-          setState({ status: "error", message: message(error) });
+        if (
+          !current.signal.aborted &&
+          !(error instanceof ApiRequestError && error.kind === "cancelled")
+        ) {
+          setState({ status: "error" });
+          toast.error(message(error));
+        }
       });
     return () => current.abort();
   }, [params, retry]);
@@ -208,7 +210,6 @@ function EventResults({
     if (state.status !== "ready" || !state.page.next_cursor || loadingMore)
       return;
     setLoadingMore(true);
-    setPageError(null);
     const signal = controller.current?.signal;
     try {
       const page = await listEvents(
@@ -232,7 +233,11 @@ function EventResults({
         });
       }
     } catch (error: unknown) {
-      if (!signal?.aborted) setPageError(message(error));
+      if (
+        !signal?.aborted &&
+        !(error instanceof ApiRequestError && error.kind === "cancelled")
+      )
+        toast.error(message(error));
     } finally {
       if (!signal?.aborted) setLoadingMore(false);
     }
@@ -251,7 +256,7 @@ function EventResults({
       <Alert variant="destructive" className="mt-10">
         <AlertTitle>无法读取事件</AlertTitle>
         <AlertDescription>
-          {state.message}
+          可以重新读取当前筛选下的事件。
           <Button
             variant="outline"
             onClick={() => {
@@ -328,11 +333,6 @@ function EventResults({
           </article>
         ))
       )}
-      {pageError ? (
-        <Alert variant="destructive">
-          <AlertDescription>{pageError}</AlertDescription>
-        </Alert>
-      ) : null}
       {state.page.next_cursor ? (
         <Button
           variant="outline"

@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/collapsible";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { ApiRequestError } from "@/request";
 import { getEventHeat, listEventHeatHistory } from "@/api/shijian";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,8 +49,14 @@ export function EventHeat({ eventId }: { eventId: string }) {
           setFailed(false);
         }
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setFailed(true);
+      .catch((error: unknown) => {
+        if (
+          !controller.signal.aborted &&
+          !(error instanceof ApiRequestError && error.kind === "cancelled")
+        ) {
+          setFailed(true);
+          toast.error("热度读取失败，请重试。");
+        }
       });
     return () => controller.abort();
   }, [eventId, retry]);

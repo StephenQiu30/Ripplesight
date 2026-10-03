@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+
 import Link from "next/link";
 import {
   type FormEvent,
@@ -45,7 +47,6 @@ import {
 import {
   Field,
   FieldDescription,
-  FieldError,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
@@ -245,9 +246,7 @@ export function ContentList() {
   const [draft, setDraft] = useState<ContentFilters>(EMPTY_FILTERS);
   const [applied, setApplied] = useState<ContentFilters>(EMPTY_FILTERS);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [filterError, setFilterError] = useState<string | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const dataRequest = useRef<AbortController | null>(null);
   const optionRequest = useRef<AbortController | null>(null);
   const loadingMore = useRef(false);
@@ -260,8 +259,17 @@ export function ContentList() {
       .then((result) => {
         if (!controller.signal.aborted) setOptions(result);
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setOptions({ status: "error" });
+      .catch((error: unknown) => {
+        if (error instanceof ApiRequestError && error.kind === "cancelled")
+          return;
+        if (!controller.signal.aborted) {
+          toast.error(
+            error instanceof ApiRequestError
+              ? error.message
+              : "来源和主题暂时无法加载，日期筛选仍可使用。",
+          );
+          setOptions({ status: "error" });
+        }
       });
   }, []);
 
@@ -281,7 +289,17 @@ export function ContentList() {
           });
       })
       .catch((error: unknown) => {
-        if (!controller.signal.aborted) setState(toErrorState(error));
+        if (error instanceof ApiRequestError && error.kind === "cancelled")
+          return;
+        if (!controller.signal.aborted) {
+          const failure = toErrorState(error);
+          toast.error(failure.message, {
+            description: failure.requestId
+              ? `请求编号：${failure.requestId}`
+              : undefined,
+          });
+          setState(failure);
+        }
       });
   }, []);
 
@@ -298,7 +316,6 @@ export function ContentList() {
     loadingMore.current = false;
     setState({ status: "loading" });
     setIsLoadingMore(false);
-    setLoadMoreError(null);
     void load(filters);
   }
 
@@ -306,12 +323,13 @@ export function ContentList() {
     event.preventDefault();
     try {
       contentListParams(draft);
-      setFilterError(null);
       setApplied(draft);
       setFilterOpen(false);
       reload(draft);
     } catch (error) {
-      setFilterError(error instanceof Error ? error.message : "筛选条件无效。");
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
+      toast.error(error instanceof Error ? error.message : "筛选条件无效。");
     }
   }
 
@@ -322,7 +340,6 @@ export function ContentList() {
     if (!controller || controller.signal.aborted) return;
     loadingMore.current = true;
     setIsLoadingMore(true);
-    setLoadMoreError(null);
     try {
       const page = await listContentRecords(
         contentListParams(applied, state.nextCursor),
@@ -339,8 +356,10 @@ export function ContentList() {
           : current,
       );
     } catch (error) {
+      if (error instanceof ApiRequestError && error.kind === "cancelled")
+        return;
       if (!controller.signal.aborted)
-        setLoadMoreError(
+        toast.error(
           error instanceof ApiRequestError
             ? error.message
             : "后续作品加载失败，请重试。",
@@ -531,8 +550,7 @@ export function ContentList() {
                     </FieldDescription>
                   </Field>
                   {options.status === "error" ? (
-                    <FieldError>
-                      来源和主题暂时无法加载，日期筛选仍可使用。
+                    <FieldDescription>
                       <Button
                         type="button"
                         variant="link"
@@ -540,9 +558,8 @@ export function ContentList() {
                       >
                         重试加载筛选项
                       </Button>
-                    </FieldError>
+                    </FieldDescription>
                   ) : null}
-                  {filterError ? <FieldError>{filterError}</FieldError> : null}
                   <div className="flex flex-wrap gap-3">
                     <Button type="submit">应用筛选</Button>
                     <Button
@@ -551,7 +568,6 @@ export function ContentList() {
                       onClick={() => {
                         setDraft(EMPTY_FILTERS);
                         setApplied(EMPTY_FILTERS);
-                        setFilterError(null);
                         setFilterOpen(false);
                         reload(EMPTY_FILTERS);
                       }}
@@ -596,8 +612,7 @@ export function ContentList() {
         <Alert variant="destructive" className="mt-12">
           <AlertTitle>暂时无法读取作品</AlertTitle>
           <AlertDescription>
-            {state.message}
-            {state.requestId ? ` 请求编号：${state.requestId}` : null}
+            请重新加载作品资料。
             <Button variant="outline" onClick={() => reload(applied)}>
               <RotateCcwIcon data-icon="inline-start" />
               重新加载
@@ -699,11 +714,6 @@ export function ContentList() {
                 {isLoadingMore ? "正在加载" : "加载更多"}
               </Button>
             </div>
-          ) : null}
-          {loadMoreError ? (
-            <Alert variant="destructive" className="mt-4">
-              <AlertDescription>{loadMoreError}</AlertDescription>
-            </Alert>
           ) : null}
         </>
       ) : null}

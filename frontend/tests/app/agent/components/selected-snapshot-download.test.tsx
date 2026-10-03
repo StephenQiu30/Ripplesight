@@ -11,7 +11,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SelectedSnapshotDownload } from "@/app/agent/components/selected-snapshot-download";
 
-const api = vi.hoisted(() => ({ snapshot: vi.fn() }));
+const api = vi.hoisted(() => ({
+  snapshot: vi.fn(),
+  toastError: vi.fn(),
+  toastSuccess: vi.fn(),
+}));
+vi.mock("sonner", () => ({
+  toast: { error: api.toastError, success: api.toastSuccess },
+}));
 
 vi.mock("@/api/gongkaifabu", () => ({
   getSelectedPublicationSnapshot: api.snapshot,
@@ -92,7 +99,12 @@ describe("selected snapshot download", () => {
 
     render(<SelectedSnapshotDownload />);
     fireEvent.click(screen.getByRole("button", { name: "精选同步快照" }));
-    await screen.findByText("快照暂时无法下载，请重新尝试。");
+    await waitFor(() =>
+      expect(api.toastError).toHaveBeenCalledWith(
+        "快照暂时无法下载，请重新尝试。",
+      ),
+    );
+    expect(screen.queryByRole("status")).toBeNull();
     expect(create).not.toHaveBeenCalled();
     expect(click).not.toHaveBeenCalled();
     expect(

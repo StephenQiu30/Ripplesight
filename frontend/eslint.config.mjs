@@ -103,7 +103,7 @@ const eslintConfig = defineConfig([
         },
         {
           selector:
-            "JSXOpeningElement[name.name=/^(div|span)$/] > JSXAttribute[name.name='role'][value.value=/^(button|checkbox|switch|tab|dialog)$/]",
+            "JSXOpeningElement[name.name=/^(div|span|p)$/] > JSXAttribute[name.name='role'][value.value=/^(button|checkbox|switch|tab|dialog|alert)$/]",
           message: "使用对应的 shadcn/Radix 交互组件，不手写交互角色。",
         },
       ],
