@@ -47,7 +47,7 @@ export function isPublicPagePath(pathname: string | null) {
     PUBLIC_PAGE_PATHS.some((path) => path === pathname) ||
     PUBLIC_READING_PREFIXES.some((path) => {
       if (path.startsWith("/reports/")) {
-        if (pathname === path) return true;
+        if (pathname === path || pathname === `${path}/archive`) return true;
         const key = pathname?.slice(path.length + 1);
         return Boolean(
           pathname?.startsWith(`${path}/`) &&

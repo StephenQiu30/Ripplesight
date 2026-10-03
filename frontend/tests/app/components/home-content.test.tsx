@@ -20,7 +20,7 @@ it("offers public reading before account actions and keeps unpublished content h
     screen.getByRole("link", { name: "阅读公开周报" }).getAttribute("href"),
   ).toBe("/reports/weekly");
   expect(
-    screen.getByRole("link", { name: "定制我的周报" }).getAttribute("href"),
+    screen.getByRole("link", { name: "定制我的关注" }).getAttribute("href"),
   ).toBe("/login?returnTo=%2Fworkspace");
   expect(screen.getAllByText("等待新的公开内容")).toHaveLength(2);
   expect(screen.queryByText("暂时无法读取")).toBeNull();
@@ -57,7 +57,7 @@ it("preserves available stories when the news section cannot be read", () => {
   ).toBeNull();
 });
 
-it("continues to personal reporting through the real session", () => {
+it("continues to personal interests through the real session", () => {
   render(
     <IdentitySessionProvider
       session={{
@@ -75,6 +75,6 @@ it("continues to personal reporting through the real session", () => {
     </IdentitySessionProvider>,
   );
   expect(
-    screen.getByRole("link", { name: "管理我的周报" }).getAttribute("href"),
+    screen.getByRole("link", { name: "管理个人关注" }).getAttribute("href"),
   ).toBe("/workspace");
 });

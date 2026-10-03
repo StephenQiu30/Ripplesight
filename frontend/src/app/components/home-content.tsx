@@ -171,7 +171,7 @@ export function HomeContent({
               每周，读懂重要变化
             </h2>
             <p className="text-muted-foreground mt-3 text-sm leading-6">
-              公开周报汇集已发布的资讯。创建个人关注、生成报告与发送通知时，再登录你的账户。
+              公开周报汇集已发布的资讯。登录后可配置个人关键词，并查看已生成的报告。
             </p>
             {reading.editions.length ? (
               <ItemGroup className="mt-4">
@@ -206,7 +206,7 @@ export function HomeContent({
                 <Link
                   href={session ? "/workspace" : "/login?returnTo=%2Fworkspace"}
                 >
-                  {session ? "管理我的周报" : "登录定制周报"}
+                  {session ? "管理个人关注" : "登录设置关注"}
                 </Link>
               </Button>
             </div>
