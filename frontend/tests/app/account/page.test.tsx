@@ -27,6 +27,10 @@ vi.mock("@/app/account/components/credentials-form", () => ({
   ),
 }));
 
+vi.mock("@/app/account/components/identity-connections", () => ({
+  IdentityConnections: () => <div data-testid="connections" />,
+}));
+
 import AccountPage from "@/app/account/page";
 
 const session: HotKeyAPI.IdentitySessionView = {
@@ -35,6 +39,7 @@ const session: HotKeyAPI.IdentitySessionView = {
     username: "reader",
     email: "reader@example.com",
     has_password: false,
+    github_connected: false,
   },
   expires_at: "2100-01-01T00:00:00Z",
 };

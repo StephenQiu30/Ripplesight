@@ -77,8 +77,9 @@ _CONSUME_OAUTH_SCRIPT = """
 if redis.call('HGET', KEYS[1], 'binding') ~= ARGV[1] then return nil end
 local verifier = redis.call('HGET', KEYS[1], 'verifier')
 local return_to = redis.call('HGET', KEYS[1], 'return_to')
+local session_id = redis.call('HGET', KEYS[1], 'session_id') or ''
 redis.call('DEL', KEYS[1])
-return {verifier, return_to}
+return {verifier, return_to, session_id}
 """
 
 
@@ -97,6 +98,7 @@ class OAuthFlow:
     verifier: str = field(repr=False)
     challenge: str
     return_to: str
+    session_id: str = ""
 
 
 def _text(value: object) -> str:
@@ -225,7 +227,7 @@ class VerificationStore:
             raise ApplicationError("invalid_email_code")
         return _text(result[1])
 
-    def create_oauth_flow(self, return_to: str) -> OAuthFlow:
+    def create_oauth_flow(self, return_to: str, *, session_id: str = "") -> OAuthFlow:
         verifier = secrets.token_urlsafe(64)
         flow = OAuthFlow(
             state=secrets.token_urlsafe(32),
@@ -233,6 +235,7 @@ class VerificationStore:
             verifier=verifier,
             challenge=_challenge(verifier),
             return_to=return_to,
+            session_id=session_id,
         )
         key = self._key("oauth", flow.state)
         try:
@@ -243,6 +246,7 @@ class VerificationStore:
                         "binding": hashlib.sha256(flow.binding.encode()).hexdigest(),
                         "verifier": flow.verifier,
                         "return_to": return_to,
+                        "session_id": session_id,
                     },
                 )
                 pipeline.expire(key, 300)
@@ -259,7 +263,7 @@ class VerificationStore:
             [self._key("oauth", state)],
             [hashlib.sha256(binding.encode()).hexdigest()],
         )
-        if not isinstance(result, list) or len(result) != 2:
+        if not isinstance(result, list) or len(result) != 3:
             raise ApplicationError("invalid_oauth_state")
-        verifier, return_to = (_text(value) for value in result)
-        return OAuthFlow(state, binding, verifier, _challenge(verifier), return_to)
+        verifier, return_to, session_id = (_text(value) for value in result)
+        return OAuthFlow(state, binding, verifier, _challenge(verifier), return_to, session_id)

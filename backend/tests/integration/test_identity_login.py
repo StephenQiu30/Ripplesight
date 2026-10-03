@@ -104,6 +104,7 @@ def test_password_session_cookie_digest_csrf_and_logout(identity_app) -> None:
         "username": "owner.one",
         "email": None,
         "has_password": True,
+        "github_connected": False,
     }
     cookies = response.headers.get_list("set-cookie")
     assert len(cookies) == 2 and "HttpOnly" in cookies[0] and "SameSite=lax" in cookies[0]
@@ -215,6 +216,7 @@ def test_email_real_redis_single_use_and_first_password_then_revocation(identity
         "username": "new.user",
         "email": "new.user@example.com",
         "has_password": True,
+        "github_connected": False,
     }
     assert updated.headers["cache-control"] == "no-store"
     assert client.cookies.get("hotkey_session") != old_token
@@ -649,3 +651,308 @@ def test_expired_session_does_not_block_a_new_anonymous_email_login(identity_app
         },
     )
     assert verified.status_code == 200
+
+
+def link_code(client: TestClient, mail: RecordedEmail, email: str) -> dict[str, str]:
+    response = client.post(
+        "/api/identity/email/link/challenges", headers=write_headers(client), json={"email": email}
+    )
+    assert response.status_code == 200, response.text
+    return {"challenge_id": response.json()["challenge_id"], "code": mail.codes[email]}
+
+
+def test_github_account_binds_new_email_without_changing_owner_or_provider(identity_app) -> None:
+    app, client, mail, _store = identity_app
+    with app.state.session_factory() as session:
+        created = IdentityService(session, app.state.settings)._verified_login(
+            email="github.primary@example.com", github_user_id="12345"
+        )
+    client.cookies.set("hotkey_session", created.session_token, domain="127.0.0.1")
+    client.cookies.set("hotkey_csrf", created.csrf_token, domain="127.0.0.1")
+    payload = link_code(client, mail, "login.mail@example.com")
+    # A binding proof is not a login proof, even on the same browser.
+    rejected = client.post(
+        "/api/identity/email/sessions", json=payload, headers={"X-HotKey-CSRF": "1"}
+    )
+    assert rejected.status_code == 401
+    changed = client.put("/api/identity/email/link", headers=write_headers(client), json=payload)
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["user"]["id"] == str(created.view.user.id)
+    assert changed.json()["user"]["github_connected"] is True
+    assert changed.json()["user"]["email"] == "login.mail@example.com"
+    assert client.cookies["hotkey_session"] != created.session_token
+    assert (
+        client.get(
+            "/api/identity/session", headers={"Cookie": f"hotkey_session={created.session_token}"}
+        ).status_code
+        == 401
+    )
+    assert (
+        client.put(
+            "/api/identity/email/link", headers=write_headers(client), json=payload
+        ).status_code
+        == 401
+    )
+    with app.state.session_factory() as session:
+        user = session.get(IdentityUser, created.view.user.id)
+        assert user.github_user_id == "12345"
+        assert user.credential_version == 2
+        rows = session.scalars(select(IdentityUser)).all()
+        assert len(rows) == 1
+        # GitHub login continues to find the same account after the login email changed.
+    with app.state.session_factory() as session:
+        github_login = IdentityService(session, app.state.settings)._verified_login(
+            email="github.primary@example.com", github_user_id="12345"
+        )
+        assert github_login.view.user.id == created.view.user.id
+        assert github_login.view.user.email == "login.mail@example.com"
+
+
+def test_email_link_rejects_other_owner_and_preserves_current_session(identity_app) -> None:
+    app, client, mail, _store = identity_app
+    owner = create_account(app, "link.owner", "owner@example.com")
+    other = create_account(app, "link.other", "taken@example.com")
+    login(client, "link.owner")
+    original = client.cookies["hotkey_session"]
+    payload = link_code(client, mail, "taken@example.com")
+    changed = client.put("/api/identity/email/link", headers=write_headers(client), json=payload)
+    assert changed.status_code == 409 and changed.json()["code"] == "identity_link_conflict"
+    assert client.cookies["hotkey_session"] == original
+    assert client.get("/api/identity/session").json()["user"]["id"] == str(owner)
+    with app.state.session_factory() as session:
+        assert session.get(IdentityUser, owner).email == "owner@example.com"
+        assert session.get(IdentityUser, other).email == "taken@example.com"
+
+
+@pytest.mark.parametrize("proof", ["other_account", "other_session", "login", "credentials"])
+def test_email_binding_proof_cannot_be_reused_for_another_purpose_or_session(
+    identity_app, proof
+) -> None:
+    app, client, mail, store = identity_app
+    owner = create_account(app, "link.first", "first@example.com")
+    create_account(app, "link.second")
+    login(client, "link.first")
+    if proof in {"login", "credentials"}:
+        purpose = "login" if proof == "login" else "credentials_update"
+        challenge = store.send_email_challenge(
+            "proof@example.com",
+            "10.0.0.1",
+            purpose=purpose,
+            user_id=str(owner) if proof == "credentials" else None,
+        )
+        payload = {"challenge_id": challenge.challenge_id, "code": challenge.code}
+    else:
+        payload = link_code(client, mail, "proof@example.com")
+        client.cookies.clear()
+        login(client, "link.second" if proof == "other_account" else "link.first")
+    response = client.put("/api/identity/email/link", headers=write_headers(client), json=payload)
+    assert response.status_code == 401 and response.json()["code"] == "invalid_email_code"
+    with app.state.session_factory() as session:
+        assert session.get(IdentityUser, owner).email == "first@example.com"
+
+
+def github_link_flow(app: FastAPI, client: TestClient, provider_id: str = "98765") -> str:
+    from urllib.parse import parse_qs, urlsplit
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("access_token"):
+            return httpx.Response(
+                200, json={"access_token": "controlled-token", "token_type": "bearer"}
+            )
+        if request.url.path == "/user":
+            return httpx.Response(200, json={"id": int(provider_id)})
+        return httpx.Response(
+            200, json=[{"email": "different.github@example.com", "verified": True, "primary": True}]
+        )
+
+    app.state.identity_github = GitHubAdapter(
+        httpx.Client(transport=httpx.MockTransport(handler)),
+        "test-app",
+        "test-secret",
+        app.state.settings.web_origin + "/api/identity/github/callback",
+    )
+    started = client.post("/api/identity/github/link", headers=write_headers(client))
+    assert started.status_code == 200, started.text
+    params = parse_qs(urlsplit(started.json()["authorization_url"]).query)
+    assert params["scope"] == ["user:email"]
+    return params["state"][0]
+
+
+def test_email_account_explicitly_connects_github_with_a_different_email(identity_app) -> None:
+    app, client, _mail, _store = identity_app
+    owner = create_account(app, "github.link.owner", "email.login@example.com")
+    login(client, "github.link.owner")
+    old_token = client.cookies["hotkey_session"]
+    state = github_link_flow(app, client)
+    result = client.get(
+        "/api/identity/github/callback",
+        params={"state": state, "code": "controlled-code"},
+        follow_redirects=False,
+    )
+    assert result.status_code == 303 and result.headers["location"] == "/account?linked=github"
+    view = client.get("/api/identity/session").json()["user"]
+    assert (
+        view["id"] == str(owner)
+        and view["email"] == "email.login@example.com"
+        and view["github_connected"] is True
+    )
+    assert client.cookies["hotkey_session"] != old_token
+    assert (
+        client.get(
+            "/api/identity/session", headers={"Cookie": f"hotkey_session={old_token}"}
+        ).status_code
+        == 401
+    )
+    with app.state.session_factory() as session:
+        assert session.get(IdentityUser, owner).github_user_id == "98765"
+        assert len(session.scalars(select(IdentityUser)).all()) == 1
+
+
+@pytest.mark.parametrize("failure", ["conflict", "switch", "logout", "cancel", "replace"])
+def test_github_link_rejects_conflicts_changed_sessions_and_cancel(identity_app, failure) -> None:
+    app, client, _mail, _store = identity_app
+    owner = create_account(app, "github.link.first", "first@example.com")
+    other = create_account(app, "github.link.second", "second@example.com")
+    if failure == "conflict":
+        with app.state.session_factory() as session, session.begin():
+            session.get(IdentityUser, other).github_user_id = "98765"
+    elif failure == "replace":
+        with app.state.session_factory() as session, session.begin():
+            session.get(IdentityUser, owner).github_user_id = "55555"
+    login(client, "github.link.first")
+    state = github_link_flow(app, client)
+    binding = client.cookies["hotkey_oauth"]
+    if failure == "switch":
+        client.cookies.clear()
+        login(client, "github.link.second")
+        client.cookies.set("hotkey_oauth", binding)
+    if failure == "logout":
+        client.delete("/api/identity/session", headers=write_headers(client))
+    params = (
+        {"state": state, "error": "access_denied"}
+        if failure == "cancel"
+        else {"state": state, "code": "controlled-code"}
+    )
+    result = client.get("/api/identity/github/callback", params=params, follow_redirects=False)
+    assert result.status_code == 303
+    assert "error=" in result.headers["location"]
+    assert result.headers["location"].startswith("/account?")
+    with app.state.session_factory() as session:
+        assert session.get(IdentityUser, owner).github_user_id == (
+            "55555" if failure == "replace" else None
+        )
+        assert session.get(IdentityUser, owner).credential_version == 1
+
+
+def test_binding_endpoints_require_authentication_and_csrf(identity_app) -> None:
+    app, client, _mail, _store = identity_app
+    endpoints = [
+        ("post", "/api/identity/email/link/challenges", {"email": "new@example.com"}),
+        ("put", "/api/identity/email/link", {"challenge_id": str(uuid4()), "code": "123456"}),
+        ("post", "/api/identity/github/link", None),
+    ]
+    for method, path, payload in endpoints:
+        assert client.request(method, path, json=payload).status_code == 401
+    create_account(app, "csrf.link")
+    login(client, "csrf.link")
+    for method, path, payload in endpoints:
+        assert (
+            client.request(method, path, json=payload, headers={"X-HotKey-CSRF": "1"}).status_code
+            == 403
+        )
+
+
+@pytest.mark.parametrize(
+    "change", ["ownership", "revoked", "expired", "credential_version", "user_version"]
+)
+def test_email_link_rechecks_locked_session_after_ownership_verification(
+    identity_app, change
+) -> None:
+    app, client, mail, store = identity_app
+    owner = create_account(app, "recheck.link", "original@example.com")
+    other = create_account(app, "recheck.other")
+    created = login(client, "recheck.link")
+    with app.state.session_factory() as session:
+        identity = IdentityService(session, app.state.settings).authenticate(
+            client.cookies["hotkey_session"]
+        )
+    proof = link_code(client, mail, "verified@example.com")
+    changes = {
+        "ownership": {"user_id": other},
+        "revoked": {"revoked_at": datetime.now(UTC), "revoked_reason": "logout"},
+        "expired": {
+            "created_at": datetime.now(UTC) - timedelta(hours=2),
+            "expires_at": datetime.now(UTC) - timedelta(hours=1),
+        },
+        "credential_version": {"credential_version": 2},
+    }
+    with app.state.session_factory() as session, session.begin():
+        if change == "user_version":
+            session.execute(
+                update(IdentityUser).where(IdentityUser.id == owner).values(credential_version=2)
+            )
+        else:
+            session.execute(
+                update(IdentitySession)
+                .where(IdentitySession.id == identity.session_id)
+                .values(**changes[change])
+            )
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ApplicationError, match="invalid_session"),
+    ):
+        IdentityService(session, app.state.settings, verification=store).link_email(
+            identity=identity,
+            challenge_id=UUID(proof["challenge_id"]),
+            code=proof["code"],
+            client_ip="127.0.0.1",
+        )
+    with app.state.session_factory() as session:
+        assert session.get(IdentityUser, owner).email == "original@example.com"
+        assert session.get(IdentityUser, other).email is None
+        assert session.get(IdentityUser, owner).credential_version == (
+            2 if change == "user_version" else 1
+        )
+    assert created.json()["user"]["id"] == str(owner)
+
+
+def test_parallel_email_claims_have_one_winner_and_roll_back_the_other_session(
+    identity_app,
+) -> None:
+    app, client, _mail, _store = identity_app
+    identities = []
+    tokens = []
+    for username in ("parallel.link.first", "parallel.link.second"):
+        create_account(app, username)
+        client.cookies.clear()
+        login(client, username)
+        tokens.append(client.cookies["hotkey_session"])
+        with app.state.session_factory() as session:
+            identities.append(IdentityService(session, app.state.settings).authenticate(tokens[-1]))
+
+    def claim(identity):
+        with app.state.session_factory() as session:
+            try:
+                IdentityService(session, app.state.settings)._link_identity(
+                    identity, email="single.owner@example.com"
+                )
+                return "linked"
+            except ApplicationError as error:
+                return error.code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(claim, identities))
+    assert sorted(results) == ["identity_link_conflict", "linked"]
+    for identity, token, result in zip(identities, tokens, results, strict=True):
+        with app.state.session_factory() as session:
+            user = session.get(IdentityUser, identity.view.user.id)
+            assert user.email == ("single.owner@example.com" if result == "linked" else None)
+        with app.state.session_factory() as session:
+            if result == "linked":
+                with pytest.raises(ApplicationError, match="invalid_session"):
+                    IdentityService(session, app.state.settings).authenticate(token)
+            else:
+                assert (
+                    IdentityService(session, app.state.settings).authenticate(token).view.user.id
+                    == identity.view.user.id
+                )

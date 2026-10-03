@@ -121,6 +121,18 @@ def test_openapi_exposes_session_security_and_never_credentials_as_query(app: Fa
     user = schema["components"]["schemas"]["IdentityUserView"]
     assert user["properties"]["has_password"]["type"] == "boolean"
     assert "has_password" in user["required"]
+    assert user["properties"]["github_connected"]["type"] == "boolean"
+    assert "github_connected" in user["required"]
+    for path, method in (
+        ("/api/identity/email/link/challenges", "post"),
+        ("/api/identity/email/link", "put"),
+        ("/api/identity/github/link", "post"),
+    ):
+        operation = schema["paths"][path][method]
+        assert operation["security"] == [{"SessionCookie": []}]
+        assert {"200", "401", "403", "422", "429", "503", "500"} <= set(operation["responses"])
+        assert any(p["name"] == "X-HotKey-CSRF" for p in operation["parameters"])
+    assert "409" in schema["paths"]["/api/identity/email/link"]["put"]["responses"]
     login = schema["components"]["schemas"]["IdentityPasswordLoginInput"]
     assert login["properties"]["username"]["maxLength"] == 254
     credentials = schema["components"]["schemas"]["IdentityCredentialsUpdateInput"]

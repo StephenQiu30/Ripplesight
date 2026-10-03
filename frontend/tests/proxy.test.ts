@@ -18,6 +18,7 @@ const SESSION = {
     id: "bd0ae74e-23c8-456a-8b60-0905031e39bc",
     username: "reader",
     has_password: true,
+    github_connected: false,
     email: null,
   },
   expires_at: "2026-10-03T00:00:00Z",

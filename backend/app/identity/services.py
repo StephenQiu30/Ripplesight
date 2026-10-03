@@ -106,6 +106,7 @@ class IdentityService:
                 username=user.username,
                 email=user.email,
                 has_password=user.password_hash is not None,
+                github_connected=user.github_user_id is not None,
             ),
             expires_at=expires_at,
         )
@@ -198,17 +199,24 @@ class IdentityService:
             model.revoked_at, model.revoked_reason = datetime.now(UTC), "logout"
 
     def send_email_code(
-        self, *, email: str, client_ip: str, identity: AuthenticatedIdentity | None = None
+        self,
+        *,
+        email: str,
+        client_ip: str,
+        identity: AuthenticatedIdentity | None = None,
+        linking: bool = False,
     ) -> EmailChallengeView:
         if not self.options().email or self.email is None:
             raise ApplicationError("email_login_unavailable")
-        if identity is not None and identity.view.user.email != email:
+        if identity is not None and not linking and identity.view.user.email != email:
             raise ApplicationError("invalid_email_code")
         challenge = self._store().send_email_challenge(
             email,
             client_ip,
-            purpose="credentials_update" if identity else "login",
-            user_id=str(identity.view.user.id) if identity else None,
+            purpose="email_link" if linking else "credentials_update" if identity else "login",
+            user_id=(str(identity.session_id) if linking else str(identity.view.user.id))
+            if identity
+            else None,
         )
         try:
             self.email.send_code(email, challenge.code)
@@ -229,26 +237,102 @@ class IdentityService:
         email = self._store().consume_email_challenge(str(challenge_id), code, client_ip)
         return self._verified_login(email=email, github_user_id=None)
 
-    def start_github(self, *, return_to: str, client_ip: str) -> tuple[str, str]:
+    def start_github(
+        self, *, return_to: str, client_ip: str, identity: AuthenticatedIdentity | None = None
+    ) -> tuple[str, str]:
         if not self.options().github or self.github is None:
             raise ApplicationError("github_login_unavailable")
         self._store().limit_password("github_authorize", client_ip)
-        flow = self._store().create_oauth_flow(safe_return_to(return_to))
+        flow = self._store().create_oauth_flow(
+            "/account" if identity else safe_return_to(return_to),
+            session_id=str(identity.session_id) if identity else "",
+        )
         return self.github.authorization_url(flow.state, flow.challenge), flow.binding
 
-    def cancel_github(self, *, state: str, binding: str) -> None:
-        self._store().consume_oauth_flow(state, binding)
+    def cancel_github(self, *, state: str, binding: str) -> str:
+        flow = self._store().consume_oauth_flow(state, binding)
+        return "/account" if flow.session_id else "/login"
 
     def complete_github(
-        self, *, code: str, state: str, binding: str
+        self, *, code: str, state: str, binding: str, session_token: str | None = None
     ) -> tuple[CreatedIdentitySession, str]:
-        if not self.options().github or self.github is None:
-            raise ApplicationError("github_login_unavailable")
         flow = self._store().consume_oauth_flow(state, binding)
-        verified = self.github.authenticate(code, flow.verifier)
-        return self._verified_login(
-            email=verified.email, github_user_id=verified.user_id
-        ), safe_return_to(flow.return_to)
+        try:
+            if not self.options().github or self.github is None:
+                raise ApplicationError("github_login_unavailable")
+            identity = self.authenticate(session_token) if flow.session_id else None
+            if identity is not None and str(identity.session_id) != flow.session_id:
+                raise ApplicationError("invalid_oauth_state")
+            verified = self.github.authenticate(code, flow.verifier)
+            if identity is not None:
+                return self._link_identity(
+                    identity, github_user_id=verified.user_id
+                ), "/account?linked=github"
+            return self._verified_login(
+                email=verified.email, github_user_id=verified.user_id
+            ), safe_return_to(flow.return_to)
+        except ApplicationError as failure:
+            if flow.session_id:
+                raise ApplicationError(failure.code, context={"identity_link": True}) from None
+            raise
+
+    def link_email(
+        self, *, identity: AuthenticatedIdentity, challenge_id: UUID, code: str, client_ip: str
+    ) -> CreatedIdentitySession:
+        if not self.options().email:
+            raise ApplicationError("email_login_unavailable")
+        email = self._store().consume_email_challenge(
+            str(challenge_id),
+            code,
+            client_ip,
+            purpose="email_link",
+            user_id=str(identity.session_id),
+        )
+        return self._link_identity(identity, email=email)
+
+    def _link_identity(
+        self,
+        identity: AuthenticatedIdentity,
+        *,
+        email: str | None = None,
+        github_user_id: str | None = None,
+    ) -> CreatedIdentitySession:
+        now = datetime.now(UTC)
+        try:
+            with self.session.begin():
+                user = self.session.get(
+                    IdentityUser,
+                    identity.view.user.id,
+                    with_for_update=True,
+                    populate_existing=True,
+                )
+                active = self.session.get(
+                    IdentitySession,
+                    identity.session_id,
+                    with_for_update=True,
+                    populate_existing=True,
+                )
+                if (
+                    user is None
+                    or active is None
+                    or active.user_id != user.id
+                    or active.revoked_at is not None
+                    or active.expires_at <= now
+                    or active.credential_version != user.credential_version
+                ):
+                    raise ApplicationError("invalid_session")
+                if github_user_id is not None:
+                    if user.github_user_id not in {None, github_user_id}:
+                        raise ApplicationError("identity_link_conflict")
+                    user.github_user_id = github_user_id
+                if email is not None:
+                    user.email = email
+                user.credential_version += 1
+                user.updated_at = now
+                self._revoke_all(user.id, now, reason="identity_changed")
+                return self._new_session(user, now)
+        except IntegrityError:
+            raise ApplicationError("identity_link_conflict") from None
 
     def _verified_login(self, *, email: str, github_user_id: str | None) -> CreatedIdentitySession:
         now = datetime.now(UTC)
@@ -363,11 +447,13 @@ class IdentityService:
         except IntegrityError:
             raise ApplicationError("username_unavailable") from None
 
-    def _revoke_all(self, user_id: UUID, now: datetime) -> None:
+    def _revoke_all(
+        self, user_id: UUID, now: datetime, *, reason: str = "password_changed"
+    ) -> None:
         self.session.execute(
             update(IdentitySession)
             .where(IdentitySession.user_id == user_id, IdentitySession.revoked_at.is_(None))
-            .values(revoked_at=now, revoked_reason="password_changed")
+            .values(revoked_at=now, revoked_reason=reason)
         )
 
     def create_account(

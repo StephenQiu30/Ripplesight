@@ -137,3 +137,5 @@ GitHub 按钮使用官方 GitHub-Mark 栅格素材 `public/brand/github-mark.png
 `/discover/starred`复用publication本机状态组件，500收藏/5000已读、ID导入导出、坏数据/存储失败与跨tab变更可见，不持久正文。`/about`、`/privacy`、`/terms`、`/changelog`是本地说明；`/contact`只读启用后的实际联系DTO；`/site/manage`专属配置组件以会话内运营令牌保存CAS/原因/图片，禁用后旧二维码不可读。所有业务数据仍经生成客户端，静态说明不显示伪统计。
 
 `/reports/[reportId]/[key]`（reportId严格为kind）为公开刊期只读阅读页，kind仅daily/weekly/monthly，专属PublicEditionReader消费getPublicEdition及复用publication稿件组件。与原监控主题报告及/editions修订操作分离，公开稿只读最新完整修订且ALL引用当前许可有效；404撤回整稿、错误可重试、无生成或编辑控件。公开故事/刊期/专题Metadata按实际DTO.indexable决定noindex；故事和刊期要求所有固定叙事成员的当前索引许可。IndexNow根验证文件经固定Next rewrite及代理白名单，不开放任意文本文件代理。
+
+账户设置在密码表单下展示“登录方式”：当前邮箱及绑定/更换按钮、GitHub连接状态及连接按钮。邮箱验证使用原生Dialog、FieldGroup和Input，验证码限时且发送有冷却；GitHub复用OAuth App回调，成功/失败用Sonner反馈。加载时按钮禁用，离页/关闭邮箱Dialog中止短请求并忽略失效响应，不追加HTTP取消按钮。页面随轮换后的会话更新，旧邮箱凭据表单不继续使用旧挑战。专属组件为 `src/app/account/components/identity-connections.tsx`，请求仅用同提交生成的getLoginOptions、sendEmailLinkCode、linkIdentityEmail、startGithubLink。

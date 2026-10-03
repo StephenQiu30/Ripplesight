@@ -242,6 +242,82 @@ def github_start(
     return GithubAuthorizationView(authorization_url=url)
 
 
+@router.post(
+    "/email/link/challenges",
+    operation_id="sendEmailLinkCode",
+    status_code=200,
+    summary="发送账户绑定邮箱验证码",
+    response_model=EmailChallengeView,
+    responses=_AUTH_ERRORS,
+)
+def email_link_challenge(
+    payload: EmailCodeInput,
+    request: Request,
+    response: Response,
+    service: IdentityServiceDependency,
+    identity: CsrfProtectedIdentityDependency,
+) -> EmailChallengeView:
+    response.headers["cache-control"] = "no-store"
+    return service.send_email_code(
+        email=payload.email, client_ip=_client_ip(request), identity=identity, linking=True
+    )
+
+
+@router.put(
+    "/email/link",
+    operation_id="linkIdentityEmail",
+    status_code=200,
+    summary="验证并绑定当前账户邮箱",
+    response_model=IdentitySessionView,
+    responses={**_AUTH_ERRORS, 409: {"model": ErrorView}},
+)
+def email_link(
+    payload: VerifyEmailCodeInput,
+    request: Request,
+    response: Response,
+    service: IdentityServiceDependency,
+    identity: CsrfProtectedIdentityDependency,
+) -> IdentitySessionView:
+    created = service.link_email(
+        identity=identity,
+        challenge_id=payload.challenge_id,
+        code=payload.code,
+        client_ip=_client_ip(request),
+    )
+    _set_cookies(response, service, created)
+    return created.view
+
+
+@router.post(
+    "/github/link",
+    operation_id="startGithubLink",
+    status_code=200,
+    summary="连接当前账户的GitHub身份",
+    response_model=GithubAuthorizationView,
+    responses=_AUTH_ERRORS,
+)
+def github_link(
+    request: Request,
+    response: Response,
+    service: IdentityServiceDependency,
+    identity: CsrfProtectedIdentityDependency,
+) -> GithubAuthorizationView:
+    url, binding = service.start_github(
+        return_to="/account", client_ip=_client_ip(request), identity=identity
+    )
+    response.set_cookie(
+        "hotkey_oauth",
+        binding,
+        httponly=True,
+        secure=service.cookie_secure,
+        samesite="lax",
+        path="/",
+        max_age=300,
+    )
+    response.headers["cache-control"] = "no-store"
+    return GithubAuthorizationView(authorization_url=url)
+
+
 @router.get(
     "/github/callback",
     operation_id="completeGithubLogin",
@@ -263,14 +339,20 @@ def github_callback(
     state: Annotated[str | None, Query(max_length=256)] = None,
     error: Annotated[str | None, Query(max_length=128)] = None,
     binding: Annotated[str | None, Cookie(alias="hotkey_oauth", include_in_schema=False)] = None,
+    session_cookie: Annotated[
+        str | None, Cookie(alias="hotkey_session", include_in_schema=False)
+    ] = None,
 ) -> Response:
     response = Response(status_code=303, headers={"cache-control": "no-store"})
+    failure_destination = "/login"
     try:
         if error is not None or code is None or state is None or binding is None:
             if state and binding:
-                service.cancel_github(state=state, binding=binding)
+                failure_destination = service.cancel_github(state=state, binding=binding)
             raise ApplicationError("invalid_oauth_state")
-        created, destination = service.complete_github(code=code, state=state, binding=binding)
+        created, destination = service.complete_github(
+            code=code, state=state, binding=binding, session_token=session_cookie
+        )
         _set_cookies(response, service, created)
         response.headers["location"] = destination
     except ApplicationError as failure:
@@ -282,7 +364,9 @@ def github_callback(
             "auth_dependency_unavailable",
         }
         result = failure.code if failure.code in safe_codes else "github_authentication_failed"
-        response.headers["location"] = f"/login?error={result}"
+        if failure.context.get("identity_link"):
+            failure_destination = "/account"
+        response.headers["location"] = f"{failure_destination}?error={result}"
     response.delete_cookie(
         "hotkey_oauth", path="/", httponly=True, secure=service.cookie_secure, samesite="lax"
     )
