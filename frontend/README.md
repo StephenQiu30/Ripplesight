@@ -20,7 +20,7 @@ pnpm dev
 
 ## 公开页面与登录工作区
 
-本机页面统一使用 `HOTKEY_WEB_ORIGIN` 指定的地址（默认 `http://127.0.0.1:8666`）。同协议、同端口的 `localhost` / `127.0.0.1` / `[::1]` 页面访问先跳转到该地址，避免登录 Origin、会话 Cookie 和 OAuth 回调使用不同主机；API 写入仍严格校验原 Origin，不重写来源或重放跨源提交。GitHub App 需配置 `HOTKEY_GITHUB_CLIENT_ID`、`HOTKEY_GITHUB_CLIENT_SECRET`，Callback URL 为 `${HOTKEY_WEB_ORIGIN}/api/identity/github/callback`，账户权限仅启用邮箱读取；密钥只放本机未跟踪 `.env`。
+本机页面统一使用 `HOTKEY_WEB_ORIGIN` 指定的地址（默认 `http://127.0.0.1:8666`）。同协议、同端口的 `localhost` / `127.0.0.1` / `[::1]` 页面访问先跳转到该地址，避免登录 Origin、会话 Cookie 和 OAuth 回调使用不同主机；API 写入仍严格校验原 Origin，不重写来源或重放跨源提交。GitHub OAuth App 需配置 `HOTKEY_GITHUB_CLIENT_ID`、`HOTKEY_GITHUB_CLIENT_SECRET`，Callback URL 为 `${HOTKEY_WEB_ORIGIN}/api/identity/github/callback`，OAuth App 的授权仅请求 `user:email`；密钥只放本机未跟踪 `.env`。
 
 公开页面为首页、关于、隐私、条款、联系与变更说明，保留 SEO metadata、robots 和 sitemap。`/login` 提供账号密码、GitHub、邮箱验证码三种方式；第三方与邮件可用性读取实际服务配置。登录后才能访问原“更多”中的工作区页面，默认进入 `/topics` 或安全站内原目标。工作区始终 noindex，沿用原导航与统一 BasicLayout；账户菜单支持退出及 `/account` 凭据设置。来源授权与凭据仍独立处理。
 

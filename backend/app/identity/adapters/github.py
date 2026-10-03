@@ -51,6 +51,7 @@ class GitHubAdapter:
                 "state": state,
                 "code_challenge": challenge,
                 "code_challenge_method": "S256",
+                "scope": "user:email",
             }
         )
         return f"{_AUTHORIZE_URL}?{query}"

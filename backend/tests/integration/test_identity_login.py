@@ -471,7 +471,8 @@ def test_github_http_adapter_state_binding_and_email_links_same_user(identity_ap
         )
         assert response.status_code == 200, response.text
         params = httpx.URL(response.json()["authorization_url"]).params
-        assert params["code_challenge_method"] == "S256" and "scope" not in params
+        assert params["code_challenge_method"] == "S256"
+        assert params["scope"] == "user:email"
         state = params["state"]
         callback = client.get(
             "/api/identity/github/callback",

@@ -14,6 +14,17 @@ from identity.adapters.email import SmtpEmailAdapter
 from identity.adapters.github import GitHubAdapter
 
 
+def test_oauth_app_requests_only_email_read_scope_with_pkce() -> None:
+    with httpx.Client() as client:
+        adapter = GitHubAdapter(client, "test-client", "secret", "https://example.com/callback")
+        url = httpx.URL(adapter.authorization_url("state", "challenge"))
+
+    assert url.params["scope"] == "user:email"
+    assert url.params["code_challenge_method"] == "S256"
+    assert url.params["redirect_uri"] == "https://example.com/callback"
+    assert url.params["state"] == "state"
+
+
 @pytest.mark.parametrize(
     "emails",
     [
