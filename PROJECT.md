@@ -49,7 +49,7 @@ hotkey-server/
 
 | 领域 | 唯一责任 |
 |---|---|
-| identity | 账户、Argon2 密码、数据库会话、邮箱验证码、GitHub 状态与适配器 |
+| identity | 账户与基本资料、规范化用户头像、Argon2 密码、数据库会话、邮箱验证码、GitHub 状态与适配器 |
 | monitors | 主题、不可变采集配置版本、调度投影与账号追踪 |
 | jobs | Job、Outbox、预算、租约、执行状态、取消、恢复与到期事实 |
 | connections | 来源连接版本、准入、授权、能力及状态证据 |

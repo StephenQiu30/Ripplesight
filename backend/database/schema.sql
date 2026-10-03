@@ -19,6 +19,14 @@ CREATE TABLE identity_users (
     email VARCHAR(254) UNIQUE,
     github_user_id VARCHAR(32) UNIQUE,
     password_hash TEXT,
+    avatar_data BYTEA,
+    avatar_sha256 BYTEA,
+    CONSTRAINT identity_users_avatar_check CHECK (
+        (avatar_data IS NULL AND avatar_sha256 IS NULL) OR
+        (avatar_data IS NOT NULL AND avatar_sha256 IS NOT NULL
+         AND octet_length(avatar_data) BETWEEN 1 AND 262144
+         AND octet_length(avatar_sha256) = 32)
+    ),
     credential_version INTEGER NOT NULL DEFAULT 1
         CONSTRAINT identity_users_credential_version_check CHECK (credential_version >= 1),
     created_at TIMESTAMPTZ NOT NULL,

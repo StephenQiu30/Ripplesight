@@ -50,6 +50,7 @@ class IdentityUserView(OutputModel):
     username: str
     email: str | None
     has_password: bool
+    avatar_sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     github_connected: bool
 
 

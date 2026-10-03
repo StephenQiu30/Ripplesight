@@ -27,6 +27,7 @@ from events.corrections import EventCorrectionService
 from events.facts import EventFactReadService
 from events.heat import EventHeatService
 from events.reads import EventReadService
+from identity.profile_services import IdentityProfileService
 from identity.services import AuthenticatedIdentity, IdentityService
 from identity.services import CreatedIdentitySession as CreatedIdentitySession
 from jobs.coverage import CollectionCoverageQueryService
@@ -438,6 +439,15 @@ def get_identity_service(request: Request, session: SessionDependency) -> Identi
 
 
 IdentityServiceDependency = Annotated[IdentityService, Depends(get_identity_service)]
+
+
+def get_identity_profile_service(session: SessionDependency) -> IdentityProfileService:
+    return IdentityProfileService(session)
+
+
+IdentityProfileServiceDependency = Annotated[
+    IdentityProfileService, Depends(get_identity_profile_service)
+]
 _SESSION_COOKIE = APIKeyCookie(name="hotkey_session", scheme_name="SessionCookie", auto_error=False)
 
 

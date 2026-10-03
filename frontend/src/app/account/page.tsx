@@ -5,8 +5,7 @@ import { readLayoutSession } from "@/components/auth/layout-session";
 import { safeReturnTo } from "@/components/auth/access";
 import { PageState } from "@/components/system/page-state";
 import { Button } from "@/components/ui/button";
-import { IdentityConnections } from "./components/identity-connections";
-import { CredentialsForm } from "./components/credentials-form";
+import { AccountSettings } from "./components/account-settings";
 
 export const metadata: Metadata = {
   title: "账户设置",
@@ -44,19 +43,13 @@ export default async function AccountPage({
       />
     );
   return (
-    <div key={session.expires_at} className="flex flex-col gap-12">
-      <CredentialsForm
-        session={session}
-        initialSetup={params.setup === "1" && !session.user.has_password}
-        returnTo={returnTo}
-      />
-      <IdentityConnections
-        session={session}
-        oauthError={params.error}
-        githubLinked={
-          params.linked === "github" && session.user.github_connected
-        }
-      />
-    </div>
+    <AccountSettings
+      key={session.expires_at}
+      session={session}
+      initialSetup={params.setup === "1" && !session.user.has_password}
+      returnTo={returnTo}
+      oauthError={params.error}
+      githubLinked={params.linked === "github" && session.user.github_connected}
+    />
   );
 }

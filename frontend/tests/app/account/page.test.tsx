@@ -8,8 +8,8 @@ vi.mock("next/server", () => ({ connection: mocks.connection }));
 vi.mock("@/components/auth/layout-session", () => ({
   readLayoutSession: mocks.session,
 }));
-vi.mock("@/app/account/components/credentials-form", () => ({
-  CredentialsForm: ({
+vi.mock("@/app/account/components/account-settings", () => ({
+  AccountSettings: ({
     session,
     initialSetup,
     returnTo,
@@ -25,10 +25,6 @@ vi.mock("@/app/account/components/credentials-form", () => ({
       data-has-password={String(session.user.has_password)}
     />
   ),
-}));
-
-vi.mock("@/app/account/components/identity-connections", () => ({
-  IdentityConnections: () => <div data-testid="connections" />,
 }));
 
 import AccountPage from "@/app/account/page";

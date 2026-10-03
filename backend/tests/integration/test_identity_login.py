@@ -105,6 +105,7 @@ def test_password_session_cookie_digest_csrf_and_logout(identity_app) -> None:
         "email": None,
         "has_password": True,
         "github_connected": False,
+        "avatar_sha256": None,
     }
     cookies = response.headers.get_list("set-cookie")
     assert len(cookies) == 2 and "HttpOnly" in cookies[0] and "SameSite=lax" in cookies[0]
@@ -217,6 +218,7 @@ def test_email_real_redis_single_use_and_first_password_then_revocation(identity
         "email": "new.user@example.com",
         "has_password": True,
         "github_connected": False,
+        "avatar_sha256": None,
     }
     assert updated.headers["cache-control"] == "no-store"
     assert client.cookies.get("hotkey_session") != old_token
