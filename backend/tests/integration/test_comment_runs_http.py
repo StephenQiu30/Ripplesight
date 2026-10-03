@@ -339,7 +339,9 @@ def _execute_manual_comments(
 
     class TailEvidenceAdapter(HackerNewsAdapter):
         def _comments(self, request: CommentsRequest) -> SourcePage:
-            page = super()._comments(request)
+            # The executor and admission services share this frozen clock. A wall-clock
+            # observation can move past it under load and become an invalid future sample.
+            page = super()._comments(request).model_copy(update={"observed_at": now})
             if terminal_proof == "missing" or page.state is SourcePageState.MORE:
                 return page
             return page.model_copy(
