@@ -1,6 +1,23 @@
 "use client";
+import {
+  SelectLabel,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+} from "@/components/ui/select";
+import { ChevronDownIcon } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
+import { Checkbox } from "@/components/ui/checkbox";
+import { FieldGroup, FieldLabel, Field } from "@/components/ui/field";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useId, useEffect, useRef, useState } from "react";
 import {
   getOperationsHealth,
   getOperatorMaintenance,
@@ -67,6 +84,8 @@ function BudgetEditor({
   options: RequestOptions;
   saved: () => Promise<void>;
 }) {
+  const fieldId = useId();
+
   const [limit, setLimit] = useState(String(row.limit_units));
   const [window, setWindow] = useState(String(row.window_seconds));
   const [enabled, setEnabled] = useState(row.enabled);
@@ -106,66 +125,76 @@ function BudgetEditor({
     }
   }
   return (
-    <form
-      onSubmit={submit}
-      className="bg-muted/40 grid gap-3 rounded-lg p-4 sm:grid-cols-2"
-    >
-      <p className="break-all sm:col-span-2">
-        {row.budget_key} · {row.metric} · {row.scope_kind}
-        {row.scope_reference ? `:${row.scope_reference}` : ""}
-        <span className="text-muted-foreground block text-sm">
-          已用 {row.used_units} · 预留 {row.reserved_units} · 剩余{" "}
-          {row.remaining_units} · 版本 {row.policy_version}
-        </span>
-      </p>
-      <label className="grid gap-1">
-        上限
-        <Input
-          aria-label={`${row.budget_key} 上限`}
-          type="number"
-          required
-          min={1}
-          step={1}
-          value={limit}
-          onChange={(e) => setLimit(e.target.value)}
-        />
-      </label>
-      <label className="grid gap-1">
-        窗口（秒）
-        <Input
-          type="number"
-          required
-          min={1}
-          step={1}
-          value={window}
-          onChange={(e) => setWindow(e.target.value)}
-        />
-      </label>
-      <label className="grid gap-1 sm:col-span-2">
-        修改原因
-        <Input
-          required
-          maxLength={2000}
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-        />
-      </label>
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => setEnabled(e.target.checked)}
-        />
-        启用硬预算
-      </label>
-      <Button disabled={pending} type="submit" className="justify-self-start">
-        保存预算
-      </Button>
-      {message && (
-        <p role="status" className="sm:col-span-2">
-          {message}
+    <form onSubmit={submit}>
+      <FieldGroup className="bg-muted/40 grid gap-3 rounded-lg p-4 sm:grid-cols-2">
+        <p className="break-all sm:col-span-2">
+          {row.budget_key} · {row.metric} · {row.scope_kind}
+          {row.scope_reference ? `:${row.scope_reference}` : ""}
+          <span className="text-muted-foreground block text-sm">
+            已用 {row.used_units} · 预留 {row.reserved_units} · 剩余{" "}
+            {row.remaining_units} · 版本 {row.policy_version}
+          </span>
         </p>
-      )}
+        <Field className="min-w-0">
+          <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-1`}>
+            上限
+          </FieldLabel>
+          <Input
+            aria-label={`${row.budget_key} 上限`}
+            type="number"
+            required
+            min={1}
+            step={1}
+            value={limit}
+            onChange={(e) => setLimit(e.target.value)}
+            id={`${fieldId}-operations-workspace-field-1`}
+          />
+        </Field>
+        <Field className="min-w-0">
+          <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-2`}>
+            窗口（秒）
+          </FieldLabel>
+          <Input
+            type="number"
+            required
+            min={1}
+            step={1}
+            value={window}
+            onChange={(e) => setWindow(e.target.value)}
+            id={`${fieldId}-operations-workspace-field-2`}
+          />
+        </Field>
+        <Field className="min-w-0 sm:col-span-2">
+          <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-3`}>
+            修改原因
+          </FieldLabel>
+          <Input
+            required
+            maxLength={2000}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            id={`${fieldId}-operations-workspace-field-3`}
+          />
+        </Field>
+        <Field orientation="horizontal" className="w-auto">
+          <Checkbox
+            checked={enabled}
+            onCheckedChange={(checked) => setEnabled(checked === true)}
+            id={`${fieldId}-operations-workspace-field-4`}
+          />
+          <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-4`}>
+            启用硬预算
+          </FieldLabel>
+        </Field>
+        <Button disabled={pending} type="submit" className="justify-self-start">
+          保存预算
+        </Button>
+        {message && (
+          <p role="status" className="sm:col-span-2">
+            {message}
+          </p>
+        )}
+      </FieldGroup>
     </form>
   );
 }
@@ -176,6 +205,8 @@ function BudgetCreator({
   options: RequestOptions;
   saved: () => Promise<void>;
 }) {
+  const fieldId = useId();
+
   const [key, setKey] = useState("");
   const [metric, setMetric] =
     useState<HotKeyAPI.BudgetMetric>("network_request");
@@ -221,105 +252,173 @@ function BudgetCreator({
     }
   }
   return (
-    <details className="bg-muted/30 rounded-lg p-4">
-      <summary className="cursor-pointer font-medium">创建预算政策</summary>
-      <form onSubmit={submit} className="mt-3 grid gap-3 sm:grid-cols-2">
-        <label className="grid gap-1">
-          预算名称
-          <Input
-            required
-            pattern="[a-z][a-z0-9_.:-]*"
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
+    <Collapsible className="bg-muted/30 rounded-lg p-4">
+      <CollapsibleTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
+        >
+          <span className="min-w-0 text-left">创建预算政策</span>
+          <ChevronDownIcon
+            aria-hidden="true"
+            data-icon="inline-end"
+            className="group-data-[state=open]:rotate-180"
           />
-        </label>
-        <label className="grid gap-1">
-          计量单位
-          <select
-            className="bg-muted rounded-md p-2"
-            value={metric}
-            onChange={(e) =>
-              setMetric(e.target.value as HotKeyAPI.BudgetMetric)
-            }
-          >
-            {(
-              [
-                "network_request",
-                "collector_call",
-                "analysis_attempt",
-                "concurrency_slot",
-                "x_api_usd_micros",
-                "provider_cny_micros",
-                "provider_usd_micros",
-              ] as const
-            ).map((value) => (
-              <option key={value}>{value}</option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-1">
-          范围
-          <select
-            className="bg-muted rounded-md p-2"
-            value={scope}
-            onChange={(e) =>
-              setScope(e.target.value as HotKeyAPI.BudgetScopeKind)
-            }
-          >
-            {(["global", "source", "connection", "job"] as const).map(
-              (value) => (
-                <option key={value}>{value}</option>
-              ),
-            )}
-          </select>
-        </label>
-        {scope !== "global" && (
-          <label className="grid gap-1">
-            范围引用
-            <Input
-              required
-              value={ref}
-              onChange={(e) => setRef(e.target.value)}
-            />
-          </label>
-        )}
-        <label className="grid gap-1">
-          创建预算上限
-          <Input
-            required
-            type="number"
-            min={1}
-            step={1}
-            value={limit}
-            onChange={(e) => setLimit(e.target.value)}
-          />
-        </label>
-        <label className="grid gap-1">
-          创建预算窗口（秒）
-          <Input
-            required
-            type="number"
-            min={1}
-            step={1}
-            value={window}
-            onChange={(e) => setWindow(e.target.value)}
-          />
-        </label>
-        <label className="grid gap-1 sm:col-span-2">
-          创建预算原因
-          <Input
-            required
-            maxLength={2000}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
-        </label>
-        <Button type="submit" disabled={pending}>
-          创建硬预算
         </Button>
-        {message && <p role="status">{message}</p>}
-      </form>
-    </details>
+      </CollapsibleTrigger>
+      <CollapsibleContent forceMount className="data-[state=closed]:hidden">
+        <form onSubmit={submit}>
+          <FieldGroup className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-5`}>
+                预算名称
+              </FieldLabel>
+              <Input
+                required
+                pattern="[a-z][a-z0-9_.:-]*"
+                value={key}
+                onChange={(e) => setKey(e.target.value)}
+                id={`${fieldId}-operations-workspace-field-5`}
+              />
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-6`}>
+                计量单位
+              </FieldLabel>
+              <Select
+                value={metric}
+                onValueChange={(selectedValue) =>
+                  setMetric(selectedValue as HotKeyAPI.BudgetMetric)
+                }
+              >
+                <SelectTrigger
+                  id={`${fieldId}-operations-workspace-field-6`}
+                  className="w-full min-w-0"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectGroup>
+                    <SelectLabel className="sr-only">计量单位</SelectLabel>
+                    {(
+                      [
+                        "network_request",
+                        "collector_call",
+                        "analysis_attempt",
+                        "concurrency_slot",
+                        "x_api_usd_micros",
+                        "provider_cny_micros",
+                        "provider_usd_micros",
+                      ] as const
+                    ).map((value) => (
+                      <SelectItem
+                        key={value}
+                        value={value}
+                        className="whitespace-normal"
+                      >
+                        {value}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-7`}>
+                范围
+              </FieldLabel>
+              <Select
+                value={scope}
+                onValueChange={(selectedValue) =>
+                  setScope(selectedValue as HotKeyAPI.BudgetScopeKind)
+                }
+              >
+                <SelectTrigger
+                  id={`${fieldId}-operations-workspace-field-7`}
+                  className="w-full min-w-0"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectGroup>
+                    <SelectLabel className="sr-only">范围</SelectLabel>
+                    {(["global", "source", "connection", "job"] as const).map(
+                      (value) => (
+                        <SelectItem
+                          key={value}
+                          value={value}
+                          className="whitespace-normal"
+                        >
+                          {value}
+                        </SelectItem>
+                      ),
+                    )}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            {scope !== "global" && (
+              <Field className="min-w-0">
+                <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-8`}>
+                  范围引用
+                </FieldLabel>
+                <Input
+                  required
+                  value={ref}
+                  onChange={(e) => setRef(e.target.value)}
+                  id={`${fieldId}-operations-workspace-field-8`}
+                />
+              </Field>
+            )}
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-9`}>
+                创建预算上限
+              </FieldLabel>
+              <Input
+                required
+                type="number"
+                min={1}
+                step={1}
+                value={limit}
+                onChange={(e) => setLimit(e.target.value)}
+                id={`${fieldId}-operations-workspace-field-9`}
+              />
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-10`}>
+                创建预算窗口（秒）
+              </FieldLabel>
+              <Input
+                required
+                type="number"
+                min={1}
+                step={1}
+                value={window}
+                onChange={(e) => setWindow(e.target.value)}
+                id={`${fieldId}-operations-workspace-field-10`}
+              />
+            </Field>
+            <Field className="min-w-0 sm:col-span-2">
+              <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-11`}>
+                创建预算原因
+              </FieldLabel>
+              <Input
+                required
+                maxLength={2000}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                id={`${fieldId}-operations-workspace-field-11`}
+              />
+            </Field>
+            <Button type="submit" disabled={pending}>
+              创建硬预算
+            </Button>
+            {message && <p role="status">{message}</p>}
+          </FieldGroup>
+        </form>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -334,6 +433,8 @@ function FeedbackReview({
   saved: () => Promise<void>;
   active: () => boolean;
 }) {
+  const fieldId = useId();
+
   const [status, setStatus] = useState(row.status);
   const [note, setNote] = useState(row.note ?? "");
   const [reason, setReason] = useState("");
@@ -414,52 +515,84 @@ function FeedbackReview({
           相关页面
         </a>
       )}
-      <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
-        <label className="grid gap-1">
-          处理状态
-          <select
-            aria-label="反馈处理状态"
-            className="bg-background rounded-md p-2"
-            value={status}
-            onChange={(e) =>
-              setStatus(e.target.value as HotKeyAPI.FeedbackView["status"])
-            }
+      <form onSubmit={submit}>
+        <FieldGroup className="grid gap-3 sm:grid-cols-2">
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-12`}>
+              处理状态
+            </FieldLabel>
+            <Select
+              value={status}
+              onValueChange={(selectedValue) =>
+                setStatus(selectedValue as HotKeyAPI.FeedbackView["status"])
+              }
+            >
+              <SelectTrigger
+                aria-label="反馈处理状态"
+                id={`${fieldId}-operations-workspace-field-12`}
+                className="w-full min-w-0"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectGroup>
+                  <SelectLabel className="sr-only">处理状态</SelectLabel>
+                  {["new", "reviewing", "resolved", "rejected", "deleted"].map(
+                    (value) => (
+                      <SelectItem
+                        key={value}
+                        value={value}
+                        className="whitespace-normal"
+                      >
+                        {value}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field orientation="horizontal" className="w-auto">
+            <Checkbox
+              checked={banned}
+              onCheckedChange={(checked) => setBanned(checked === true)}
+              id={`${fieldId}-operations-workspace-field-13`}
+            />
+            <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-13`}>
+              封禁此匿名来源
+            </FieldLabel>
+          </Field>
+          <Field className="min-w-0 sm:col-span-2">
+            <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-14`}>
+              处理备注
+            </FieldLabel>
+            <Textarea
+              maxLength={2000}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              id={`${fieldId}-operations-workspace-field-14`}
+            />
+          </Field>
+          <Field className="min-w-0 sm:col-span-2">
+            <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-15`}>
+              操作原因
+            </FieldLabel>
+            <Input
+              required
+              maxLength={2000}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              id={`${fieldId}-operations-workspace-field-15`}
+            />
+          </Field>
+          <Button
+            disabled={pending}
+            type="submit"
+            className="justify-self-start"
           >
-            {["new", "reviewing", "resolved", "rejected", "deleted"].map(
-              (value) => (
-                <option key={value}>{value}</option>
-              ),
-            )}
-          </select>
-        </label>
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={banned}
-            onChange={(e) => setBanned(e.target.checked)}
-          />
-          封禁此匿名来源
-        </label>
-        <label className="grid gap-1 sm:col-span-2">
-          处理备注
-          <Textarea
-            maxLength={2000}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-          />
-        </label>
-        <label className="grid gap-1 sm:col-span-2">
-          操作原因
-          <Input
-            required
-            maxLength={2000}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
-        </label>
-        <Button disabled={pending} type="submit" className="justify-self-start">
-          保存反馈处置
-        </Button>
+            保存反馈处置
+          </Button>
+        </FieldGroup>
       </form>
       {status === "deleted" && (
         <p className="text-muted-foreground text-sm">
@@ -479,6 +612,8 @@ function DictionaryEditor({
   options: RequestOptions;
   saved: () => Promise<void>;
 }) {
+  const fieldId = useId();
+
   const [kind, setKind] =
     useState<HotKeyAPI.DictionaryInput["kind"]>("glossary");
   const [text, setText] = useState(
@@ -523,55 +658,83 @@ function DictionaryEditor({
   return (
     <section className="grid gap-4">
       <h2 className="text-xl font-semibold">词典版本</h2>
-      <form onSubmit={submit} className="grid gap-3">
-        <label className="grid gap-1">
-          词典
-          <select
-            aria-label="词典类型"
-            className="bg-muted rounded-md p-2"
-            value={kind}
-            onChange={(e) => {
-              const value = e.target.value as HotKeyAPI.DictionaryInput["kind"];
-              setKind(value);
-              setText(
-                JSON.stringify(
-                  rows.find((row) => row.kind === value)?.content ?? {},
-                  null,
-                  2,
-                ),
-              );
-            }}
-          >
-            {["glossary", "entities", "categories"].map((value) => (
-              <option key={value}>{value}</option>
-            ))}
-          </select>
-        </label>
-        <p className="text-sm">
-          当前版本{" "}
-          {rows.find((row) => row.kind === kind)?.version ?? "尚未创建"}
-        </p>
-        <Textarea
-          aria-label="词典内容"
-          rows={8}
-          required
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-        />
-        <label className="grid gap-1">
-          词典修改原因
-          <Input
-            aria-label="词典修改原因"
+      <form onSubmit={submit}>
+        <FieldGroup className="grid gap-3">
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-16`}>
+              词典
+            </FieldLabel>
+            <Select
+              value={kind}
+              onValueChange={(selectedValue) => {
+                const value =
+                  selectedValue as HotKeyAPI.DictionaryInput["kind"];
+                setKind(value);
+                setText(
+                  JSON.stringify(
+                    rows.find((row) => row.kind === value)?.content ?? {},
+                    null,
+                    2,
+                  ),
+                );
+              }}
+            >
+              <SelectTrigger
+                aria-label="词典类型"
+                id={`${fieldId}-operations-workspace-field-16`}
+                className="w-full min-w-0"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectGroup>
+                  <SelectLabel className="sr-only">词典</SelectLabel>
+                  {["glossary", "entities", "categories"].map((value) => (
+                    <SelectItem
+                      key={value}
+                      value={value}
+                      className="whitespace-normal"
+                    >
+                      {value}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <p className="text-sm">
+            当前版本{" "}
+            {rows.find((row) => row.kind === kind)?.version ?? "尚未创建"}
+          </p>
+          <Textarea
+            aria-label="词典内容"
+            rows={8}
             required
-            maxLength={2000}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
           />
-        </label>
-        <Button disabled={pending} type="submit" className="justify-self-start">
-          保存词典新版本
-        </Button>
-        {message && <p role="status">{message}</p>}
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-17`}>
+              词典修改原因
+            </FieldLabel>
+            <Input
+              aria-label="词典修改原因"
+              required
+              maxLength={2000}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              id={`${fieldId}-operations-workspace-field-17`}
+            />
+          </Field>
+          <Button
+            disabled={pending}
+            type="submit"
+            className="justify-self-start"
+          >
+            保存词典新版本
+          </Button>
+          {message && <p role="status">{message}</p>}
+        </FieldGroup>
       </form>
     </section>
   );
@@ -610,40 +773,57 @@ function AuditResolution({
     }
   }
   return (
-    <form onSubmit={submit} className="mt-3 grid gap-3">
-      <p className="text-sm">
-        请先在目的地核对实际投递；核对结果不会自动再次发送。
-      </p>
-      <select
-        aria-label="未知投递核对结果"
-        className="bg-background rounded-md p-2"
-        value={outcome}
-        onChange={(e) =>
-          setOutcome(
-            e.target.value as HotKeyAPI.AuditResolutionInput["outcome"],
-          )
-        }
-      >
-        <option value="not_delivered">确认未送达</option>
-        <option value="delivered">确认已送达</option>
-      </select>
-      <Input
-        aria-label="投递核对证据"
-        placeholder="核对依据与原因"
-        required
-        maxLength={2000}
-        value={reason}
-        onChange={(e) => setReason(e.target.value)}
-      />
-      <Button type="submit" disabled={pending} className="justify-self-start">
-        记录投递核对
-      </Button>
-      {message && <p role="status">{message}</p>}
+    <form onSubmit={submit}>
+      <FieldGroup className="mt-3 grid gap-3">
+        <p className="text-sm">
+          请先在目的地核对实际投递；核对结果不会自动再次发送。
+        </p>
+        <Select
+          value={outcome}
+          onValueChange={(selectedValue) =>
+            setOutcome(
+              selectedValue as HotKeyAPI.AuditResolutionInput["outcome"],
+            )
+          }
+        >
+          <SelectTrigger
+            aria-label="未知投递核对结果"
+            className="w-full min-w-0"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            <SelectGroup>
+              <SelectLabel className="sr-only">未知投递核对结果</SelectLabel>
+              <SelectItem value="not_delivered" className="whitespace-normal">
+                确认未送达
+              </SelectItem>
+              <SelectItem value="delivered" className="whitespace-normal">
+                确认已送达
+              </SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <Input
+          aria-label="投递核对证据"
+          placeholder="核对依据与原因"
+          required
+          maxLength={2000}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+        <Button type="submit" disabled={pending} className="justify-self-start">
+          记录投递核对
+        </Button>
+        {message && <p role="status">{message}</p>}
+      </FieldGroup>
     </form>
   );
 }
 
 export function OperationsWorkspace() {
+  const fieldId = useId();
+
   const [input, setInput] = useState("");
   const [token, setToken] = useState("");
   const [health, setHealth] = useState<HotKeyAPI.OperationsHealthView | null>(
@@ -816,31 +996,37 @@ export function OperationsWorkspace() {
         </div>
         {!token ? (
           <form
-            className="grid max-w-lg gap-4"
             onSubmit={(e) => {
               e.preventDefault();
               enter();
             }}
           >
-            <label className="grid gap-2">
-              运营 Token
-              <Input
-                aria-label="运营 Token"
-                type="password"
-                autoComplete="off"
-                required
-                maxLength={512}
-                value={input}
-                onChange={(e) => clearAccess(e.target.value)}
-              />
-            </label>
-            <Button
-              type="submit"
-              disabled={pending}
-              className="justify-self-start"
-            >
-              进入运营工作区
-            </Button>
+            <FieldGroup className="grid max-w-lg gap-4">
+              <Field className="min-w-0">
+                <FieldLabel
+                  htmlFor={`${fieldId}-operations-workspace-field-18`}
+                >
+                  运营 Token
+                </FieldLabel>
+                <Input
+                  aria-label="运营 Token"
+                  type="password"
+                  autoComplete="off"
+                  required
+                  maxLength={512}
+                  value={input}
+                  onChange={(e) => clearAccess(e.target.value)}
+                  id={`${fieldId}-operations-workspace-field-18`}
+                />
+              </Field>
+              <Button
+                type="submit"
+                disabled={pending}
+                className="justify-self-start"
+              >
+                进入运营工作区
+              </Button>
+            </FieldGroup>
           </form>
         ) : (
           <div className="flex gap-2">
@@ -968,53 +1154,84 @@ export function OperationsWorkspace() {
                     </span>
                   </p>
                 ))}
-                <form onSubmit={run} className="grid gap-3 sm:grid-cols-2">
-                  <label className="grid gap-1">
-                    维护操作
-                    <select
-                      className="bg-muted rounded-md p-2"
-                      value={action}
-                      onChange={(e) =>
-                        setAction(
-                          e.target
-                            .value as HotKeyAPI.MaintenanceInput["action"],
-                        )
-                      }
-                    >
-                      {Object.entries(labels).map(([key, value]) => (
-                        <option value={key} key={key}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="grid gap-1">
-                    维护原因
-                    <Input
-                      required
-                      maxLength={2000}
-                      value={reason}
-                      onChange={(e) => setReason(e.target.value)}
-                    />
-                  </label>
-                  {action === "verify_backup" && (
-                    <label className="grid gap-1 sm:col-span-2">
-                      备份编号
+                <form onSubmit={run}>
+                  <FieldGroup className="grid gap-3 sm:grid-cols-2">
+                    <Field className="min-w-0">
+                      <FieldLabel
+                        htmlFor={`${fieldId}-operations-workspace-field-19`}
+                      >
+                        维护操作
+                      </FieldLabel>
+                      <Select
+                        value={action}
+                        onValueChange={(selectedValue) =>
+                          setAction(
+                            selectedValue as HotKeyAPI.MaintenanceInput["action"],
+                          )
+                        }
+                      >
+                        <SelectTrigger
+                          id={`${fieldId}-operations-workspace-field-19`}
+                          className="w-full min-w-0"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent position="popper">
+                          <SelectGroup>
+                            <SelectLabel className="sr-only">
+                              维护操作
+                            </SelectLabel>
+                            {Object.entries(labels).map(([key, value]) => (
+                              <SelectItem
+                                key={key}
+                                value={key}
+                                className="whitespace-normal"
+                              >
+                                {value}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field className="min-w-0">
+                      <FieldLabel
+                        htmlFor={`${fieldId}-operations-workspace-field-20`}
+                      >
+                        维护原因
+                      </FieldLabel>
                       <Input
                         required
-                        value={backupId}
-                        onChange={(e) => setBackupId(e.target.value)}
-                        placeholder="已完成备份的 UUID"
+                        maxLength={2000}
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                        id={`${fieldId}-operations-workspace-field-20`}
                       />
-                    </label>
-                  )}
-                  <Button
-                    type="submit"
-                    disabled={pending}
-                    className="justify-self-start"
-                  >
-                    受理维护任务
-                  </Button>
+                    </Field>
+                    {action === "verify_backup" && (
+                      <Field className="min-w-0 sm:col-span-2">
+                        <FieldLabel
+                          htmlFor={`${fieldId}-operations-workspace-field-21`}
+                        >
+                          备份编号
+                        </FieldLabel>
+                        <Input
+                          required
+                          value={backupId}
+                          onChange={(e) => setBackupId(e.target.value)}
+                          placeholder="已完成备份的 UUID"
+                          id={`${fieldId}-operations-workspace-field-21`}
+                        />
+                      </Field>
+                    )}
+                    <Button
+                      type="submit"
+                      disabled={pending}
+                      className="justify-self-start"
+                    >
+                      受理维护任务
+                    </Button>
+                  </FieldGroup>
                 </form>
                 <div className="grid gap-3">
                   {maintenance.backups.map((row) => (

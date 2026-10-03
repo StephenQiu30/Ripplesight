@@ -1,4 +1,5 @@
 "use client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import { useRouter } from "next/navigation";
 import { type FormEvent, useRef, useState } from "react";
@@ -182,12 +183,14 @@ export function WebPageCaptureForm() {
           </Button>
         </FieldGroup>
         {submissionError ? (
-          <p role="alert" className="text-destructive mt-3 text-sm">
-            {submissionError.message}
-            {submissionError.requestId
-              ? ` 请求编号：${submissionError.requestId}`
-              : null}
-          </p>
+          <Alert variant="destructive" className="mt-3">
+            <AlertDescription>
+              {submissionError.message}
+              {submissionError.requestId
+                ? ` 请求编号：${submissionError.requestId}`
+                : null}
+            </AlertDescription>
+          </Alert>
         ) : null}
       </form>
     </section>

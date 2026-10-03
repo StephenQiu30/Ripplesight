@@ -1,5 +1,22 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  SelectLabel,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+} from "@/components/ui/select";
+import { ChevronDownIcon } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
+import { FieldGroup, FieldLabel, Field } from "@/components/ui/field";
+import { useId, useEffect, useRef, useState } from "react";
 import {
   listOperatorSelectBench,
   getOperatorSelectBench,
@@ -11,6 +28,8 @@ import { Input } from "@/components/ui/input";
 import { ApiRequestError } from "@/request";
 
 export function SelectBenchReading({ token }: { token: string }) {
+  const fieldId = useId();
+
   const [runs, setRuns] = useState<HotKeyAPI.SelectBenchRunView[]>([]);
   const [selected, setSelected] = useState("");
   const [cases, setCases] = useState<HotKeyAPI.SelectBenchCasesView | null>(
@@ -170,46 +189,60 @@ export function SelectBenchReading({ token }: { token: string }) {
           刷新当前评测
         </Button>
       )}
-      <form onSubmit={importReport} className="grid gap-3 sm:grid-cols-2">
-        <label className="grid gap-1">
-          评测名称
-          <Input
-            required
-            maxLength={200}
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-          />
-        </label>
-        <label className="grid gap-1">
-          提示词版本
-          <Input
-            required
-            maxLength={100}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-          />
-        </label>
-        <label className="grid gap-1 sm:col-span-2">
-          导入原因
-          <Input
-            required
-            maxLength={2000}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
-        </label>
-        <label className="grid min-w-0 gap-1 sm:col-span-2">
-          评测 JSON（最多 20 MiB）
-          <Input
-            type="file"
-            accept="application/json,.json"
-            required
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          />
-        </label>
-        <Button type="submit" disabled={busy} className="justify-self-start">
-          导入并复算评测
-        </Button>
+      <form onSubmit={importReport}>
+        <FieldGroup className="grid gap-3 sm:grid-cols-2">
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${fieldId}-selectbench-reading-field-1`}>
+              评测名称
+            </FieldLabel>
+            <Input
+              required
+              maxLength={200}
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              id={`${fieldId}-selectbench-reading-field-1`}
+            />
+          </Field>
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${fieldId}-selectbench-reading-field-2`}>
+              提示词版本
+            </FieldLabel>
+            <Input
+              required
+              maxLength={100}
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              id={`${fieldId}-selectbench-reading-field-2`}
+            />
+          </Field>
+          <Field className="min-w-0 sm:col-span-2">
+            <FieldLabel htmlFor={`${fieldId}-selectbench-reading-field-3`}>
+              导入原因
+            </FieldLabel>
+            <Input
+              required
+              maxLength={2000}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              id={`${fieldId}-selectbench-reading-field-3`}
+            />
+          </Field>
+          <Field className="min-w-0 sm:col-span-2">
+            <FieldLabel htmlFor={`${fieldId}-selectbench-reading-field-4`}>
+              评测 JSON（最多 20 MiB）
+            </FieldLabel>
+            <Input
+              type="file"
+              accept="application/json,.json"
+              required
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              id={`${fieldId}-selectbench-reading-field-4`}
+            />
+          </Field>
+          <Button type="submit" disabled={busy} className="justify-self-start">
+            导入并复算评测
+          </Button>
+        </FieldGroup>
       </form>
       <div className="flex flex-wrap gap-2">
         {runs.map((row) => (
@@ -228,67 +261,145 @@ export function SelectBenchReading({ token }: { token: string }) {
             黄金集 {cases.run.gold_fingerprint} · {cases.run.prompt_version} ·{" "}
             {cases.run.split ?? "无分组"} · seed {cases.run.seed ?? "未知"}
           </p>
-          <details>
-            <summary className="cursor-pointer">指标与阈值扫描</summary>
-            <pre className="bg-muted/40 mt-3 max-h-96 overflow-auto rounded-lg p-4 text-xs">
-              {JSON.stringify(cases.run.summary, null, 2)}
-            </pre>
-          </details>
+          <Collapsible>
+            <CollapsibleTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
+              >
+                <span className="min-w-0 text-left">指标与阈值扫描</span>
+                <ChevronDownIcon
+                  aria-hidden="true"
+                  data-icon="inline-end"
+                  className="group-data-[state=open]:rotate-180"
+                />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent
+              forceMount
+              className="data-[state=closed]:hidden"
+            >
+              <pre className="bg-muted/40 mt-3 max-h-96 overflow-auto rounded-lg p-4 text-xs">
+                {JSON.stringify(cases.run.summary, null, 2)}
+              </pre>
+            </CollapsibleContent>
+          </Collapsible>
           <form
-            className="grid gap-3 sm:grid-cols-4"
             onSubmit={(e) => {
               e.preventDefault();
               void load();
             }}
           >
-            <label className="grid gap-1">
-              模型
-              <select
-                className="bg-muted rounded-md p-2"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
+            <FieldGroup className="grid gap-3 sm:grid-cols-4">
+              <Field className="min-w-0">
+                <FieldLabel htmlFor={`${fieldId}-selectbench-reading-field-5`}>
+                  模型
+                </FieldLabel>
+                <Select
+                  value={model}
+                  onValueChange={(selectedValue) =>
+                    setModel(selectedValue === "__none__" ? "" : selectedValue)
+                  }
+                >
+                  <SelectTrigger
+                    id={`${fieldId}-selectbench-reading-field-5`}
+                    className="w-full min-w-0"
+                  >
+                    <SelectValue placeholder="全部模型" />
+                  </SelectTrigger>
+                  <SelectContent position="popper">
+                    <SelectGroup>
+                      <SelectLabel className="sr-only">模型</SelectLabel>
+                      <SelectItem
+                        value="__none__"
+                        className="whitespace-normal"
+                      >
+                        全部模型
+                      </SelectItem>
+                      {cases.run.models.map((name) => (
+                        <SelectItem
+                          key={name}
+                          value={name}
+                          className="whitespace-normal"
+                        >
+                          {name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field className="min-w-0">
+                <FieldLabel htmlFor={`${fieldId}-selectbench-reading-field-6`}>
+                  误判类型
+                </FieldLabel>
+                <Select
+                  value={outcome}
+                  onValueChange={(selectedValue) =>
+                    setOutcome(
+                      selectedValue === "__none__" ? "" : selectedValue,
+                    )
+                  }
+                >
+                  <SelectTrigger
+                    id={`${fieldId}-selectbench-reading-field-6`}
+                    className="w-full min-w-0"
+                  >
+                    <SelectValue placeholder="全部" />
+                  </SelectTrigger>
+                  <SelectContent position="popper">
+                    <SelectGroup>
+                      <SelectLabel className="sr-only">误判类型</SelectLabel>
+                      <SelectItem
+                        value="__none__"
+                        className="whitespace-normal"
+                      >
+                        全部
+                      </SelectItem>
+                      {["tp", "fp", "tn", "fn", "either", "error"].map(
+                        (name) => (
+                          <SelectItem
+                            key={name}
+                            value={name}
+                            className="whitespace-normal"
+                          >
+                            {name}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field className="min-w-0">
+                <FieldLabel htmlFor={`${fieldId}-selectbench-reading-field-7`}>
+                  样本分层
+                </FieldLabel>
+                <Input
+                  value={stratum}
+                  onChange={(e) => setStratum(e.target.value)}
+                  id={`${fieldId}-selectbench-reading-field-7`}
+                />
+              </Field>
+              <Field orientation="horizontal" className="w-auto">
+                <Checkbox
+                  checked={disagree}
+                  onCheckedChange={(checked) => setDisagree(checked === true)}
+                  id={`${fieldId}-selectbench-reading-field-8`}
+                />
+                <FieldLabel htmlFor={`${fieldId}-selectbench-reading-field-8`}>
+                  仅模型分歧
+                </FieldLabel>
+              </Field>
+              <Button
+                disabled={busy}
+                type="submit"
+                className="justify-self-start"
               >
-                <option value="">全部模型</option>
-                {cases.run.models.map((name) => (
-                  <option key={name}>{name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="grid gap-1">
-              误判类型
-              <select
-                className="bg-muted rounded-md p-2"
-                value={outcome}
-                onChange={(e) => setOutcome(e.target.value)}
-              >
-                <option value="">全部</option>
-                {["tp", "fp", "tn", "fn", "either", "error"].map((name) => (
-                  <option key={name}>{name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="grid gap-1">
-              样本分层
-              <Input
-                value={stratum}
-                onChange={(e) => setStratum(e.target.value)}
-              />
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={disagree}
-                onChange={(e) => setDisagree(e.target.checked)}
-              />
-              仅模型分歧
-            </label>
-            <Button
-              disabled={busy}
-              type="submit"
-              className="justify-self-start"
-            >
-              应用评测筛选
-            </Button>
+                应用评测筛选
+              </Button>
+            </FieldGroup>
           </form>
           <div className="grid gap-4">
             {cases.items.map((row) => (

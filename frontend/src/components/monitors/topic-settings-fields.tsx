@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
+  SelectLabel,
   Select,
   SelectContent,
   SelectGroup,
@@ -268,6 +269,7 @@ export function TopicAdvancedFields({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
+                  <SelectLabel className="sr-only">更新频率</SelectLabel>
                   {INTERVALS.map((item) => (
                     <SelectItem key={item.value} value={String(item.value)}>
                       {item.label}

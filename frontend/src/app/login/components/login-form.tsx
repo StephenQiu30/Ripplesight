@@ -1,4 +1,5 @@
 "use client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import Link from "next/link";
 import Image from "next/image";
@@ -197,7 +198,7 @@ export function LoginForm({
       aria-labelledby="login-title"
       className="mx-auto w-full max-w-104 lg:mr-0 lg:translate-y-6"
     >
-      <div className="mb-9 space-y-3">
+      <div className="mb-9 flex flex-col gap-y-3">
         <h1 id="login-title" className="text-3xl font-medium tracking-tight">
           登录知微见澜
         </h1>
@@ -211,10 +212,10 @@ export function LoginForm({
         </p>
       )}
       {optionError && (
-        <div className="space-y-3">
-          <p role="alert" className="text-destructive text-sm">
-            {optionError}
-          </p>
+        <div className="flex flex-col gap-y-3">
+          <Alert variant="destructive">
+            <AlertDescription>{optionError}</AlertDescription>
+          </Alert>
           <Button
             variant="outline"
             onClick={() => {
@@ -231,7 +232,7 @@ export function LoginForm({
           {method === "password" && options.password && (
             <form onSubmit={submitPassword} aria-label="账号密码登录">
               <FieldGroup className="gap-6">
-                <Field>
+                <Field data-disabled={!ready}>
                   <FieldLabel htmlFor="login-username">邮箱或用户名</FieldLabel>
                   <Input
                     ref={credentialInput}
@@ -299,7 +300,7 @@ export function LoginForm({
           {method === "email" && options.email && (
             <form onSubmit={submitEmail} aria-label="邮箱验证码登录">
               <FieldGroup className="gap-6">
-                <Field>
+                <Field data-disabled={!ready}>
                   <FieldLabel htmlFor="login-email">邮箱</FieldLabel>
                   <Input
                     ref={credentialInput}
@@ -326,7 +327,7 @@ export function LoginForm({
                   </FieldDescription>
                 </Field>
                 {challenge && (
-                  <Field>
+                  <Field data-disabled={!ready || expired}>
                     <FieldLabel htmlFor="login-code">验证码</FieldLabel>
                     <Input
                       id="login-code"
@@ -386,7 +387,11 @@ export function LoginForm({
               请选择下方可用的登录方式。
             </p>
           )}
-          <div className="mt-7 space-y-3" aria-label="其他登录方式">
+          <div
+            className="mt-7 flex flex-col gap-y-3"
+            role="group"
+            aria-label="其他登录方式"
+          >
             <div className="text-muted-foreground mb-4 flex items-center gap-4 text-xs">
               <Separator className="flex-1" />
               <span>或使用其他方式</span>
@@ -449,9 +454,9 @@ export function LoginForm({
         </>
       )}
       {error && (
-        <p role="alert" className="text-destructive mt-5 text-sm leading-6">
-          {error}
-        </p>
+        <Alert variant="destructive" className="mt-5">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
       {busy && (
         <Button

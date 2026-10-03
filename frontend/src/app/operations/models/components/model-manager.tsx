@@ -1,4 +1,15 @@
 "use client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  SelectLabel,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+} from "@/components/ui/select";
+import { Field, FieldLabel } from "@/components/ui/field";
 
 import { useRef, useState } from "react";
 import {
@@ -78,7 +89,7 @@ function CapabilityCard({
   );
   const [reason, setReason] = useState("");
   return (
-    <section className="bg-muted/30 space-y-4 rounded-xl p-5">
+    <section className="bg-muted/30 flex min-w-0 flex-col gap-y-4 rounded-xl p-5">
       <h2 className="font-medium">{capability.label}</h2>
       <p className="text-muted-foreground text-sm">
         当前 {capability.current.provider} / {capability.current.model} ·{" "}
@@ -88,35 +99,51 @@ function CapabilityCard({
       <p className="text-muted-foreground text-xs">
         {capability.env} · 默认 {capability.default_model ?? "default"}
       </p>
-      <div className="space-y-2">
-        <Label htmlFor={`model-${capability.key}`}>
+      <Field className="min-w-0" data-disabled={busy}>
+        <FieldLabel htmlFor={`model-${capability.key}`}>
           {capability.label} 目标模型
-        </Label>
-        <select
-          id={`model-${capability.key}`}
+        </FieldLabel>
+        <Select
           value={model}
           disabled={busy}
-          onChange={(event) => setModel(event.target.value)}
-          className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
+          onValueChange={(selectedValue) =>
+            setModel(selectedValue === "__none__" ? "" : selectedValue)
+          }
         >
-          <option value="">继承环境或服务端默认（清除运营覆盖）</option>
-          {configuration.choices.map((choice) => (
-            <option
-              key={choice.key}
-              value={choice.key}
-              disabled={!choice.configured}
-            >
-              {choice.key} · {choice.provider}/{choice.model} ·{" "}
-              {choice.vision ? "视觉" : "文本"}
-              {choice.configured ? "" : " · 尚未配置"}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={`reason-${capability.key}`}>
+          <SelectTrigger
+            id={`model-${capability.key}`}
+            className="w-full min-w-0"
+          >
+            <SelectValue placeholder="继承环境或服务端默认（清除运营覆盖）" />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            <SelectGroup>
+              <SelectLabel className="sr-only">
+                {capability.label} 目标模型
+              </SelectLabel>
+              <SelectItem value="__none__" className="whitespace-normal">
+                继承环境或服务端默认（清除运营覆盖）
+              </SelectItem>
+              {configuration.choices.map((choice) => (
+                <SelectItem
+                  key={choice.key}
+                  disabled={!choice.configured}
+                  value={choice.key}
+                  className="whitespace-normal"
+                >
+                  {choice.key} · {choice.provider}/{choice.model} ·{" "}
+                  {choice.vision ? "视觉" : "文本"}
+                  {choice.configured ? "" : " · 尚未配置"}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field className="min-w-0" data-disabled={busy}>
+        <FieldLabel htmlFor={`reason-${capability.key}`}>
           {capability.label} 切换原因
-        </Label>
+        </FieldLabel>
         <Textarea
           id={`reason-${capability.key}`}
           value={reason}
@@ -124,7 +151,7 @@ function CapabilityCard({
           maxLength={1000}
           onChange={(event) => setReason(event.target.value)}
         />
-      </div>
+      </Field>
       <Button
         variant="outline"
         disabled={busy || !reason.trim()}
@@ -159,7 +186,7 @@ function CostCircuitCard({
 }) {
   const [reason, setReason] = useState("");
   return (
-    <section className="bg-muted/30 space-y-3 rounded-lg p-4">
+    <section className="bg-muted/30 flex flex-col gap-y-3 rounded-lg p-4">
       <p className="text-sm font-medium">
         {circuit.provider}/{circuit.model} ·{" "}
         {circuit.acknowledged ? "已人工核对" : "成本熔断待核对"}
@@ -319,8 +346,8 @@ export function ModelManager() {
   }
   return (
     <>
-      <div className="space-y-8">
-        <header className="space-y-3">
+      <div className="flex flex-col gap-y-8">
+        <header className="flex flex-col gap-y-3">
           <h1 className="text-3xl font-medium tracking-tight">
             模型配置与费用
           </h1>
@@ -330,8 +357,8 @@ export function ModelManager() {
           </p>
         </header>
         <section className="flex flex-wrap items-end gap-3">
-          <div className="min-w-64 flex-1 space-y-2">
-            <Label htmlFor="operator-token">操作员令牌</Label>
+          <Field className="min-w-0 flex-1 basis-full gap-2 sm:basis-64">
+            <FieldLabel htmlFor="operator-token">操作员令牌</FieldLabel>
             <Input
               id="operator-token"
               type="password"
@@ -339,12 +366,12 @@ export function ModelManager() {
               autoComplete="off"
               onChange={(event) => changeToken(event.target.value)}
             />
-          </div>
+          </Field>
           <Button variant="outline" onClick={() => changeToken("")}>
             清除令牌
           </Button>
-          <div className="space-y-2">
-            <Label htmlFor="days">统计天数</Label>
+          <Field className="w-28" data-disabled={busy}>
+            <FieldLabel htmlFor="days">统计天数</FieldLabel>
             <Input
               id="days"
               type="number"
@@ -358,7 +385,7 @@ export function ModelManager() {
                 )
               }
             />
-          </div>
+          </Field>
           <Button
             disabled={!token.trim() || busy}
             onClick={() => void perform(read)}
@@ -370,9 +397,9 @@ export function ModelManager() {
           令牌只保存在本页内存，清除或离开页面后不再保留。
         </p>
         {error ? (
-          <p role="alert" className="text-destructive text-sm">
-            {error}
-          </p>
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         ) : null}
         {notice ? (
           <p role="status" className="text-sm">
@@ -382,7 +409,7 @@ export function ModelManager() {
         {busy ? <p role="status">正在读取或提交…</p> : null}
         {configuration ? (
           <>
-            <section className="space-y-2">
+            <section className="flex flex-col gap-y-2">
               <h2 className="font-medium">配置版本 {configuration.version}</h2>
               <p className="text-muted-foreground text-sm">
                 {configuration.calls_enabled
@@ -401,7 +428,7 @@ export function ModelManager() {
                 这些开关是当前执行许可。模型目录的视觉声明表示输入能力，质量与真实供应商可用性需独立验证。
               </p>
             </section>
-            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
               {configuration.capabilities.map((capability) => (
                 <CapabilityCard
                   key={`${capability.key}:${configuration.version}`}
@@ -420,7 +447,7 @@ export function ModelManager() {
         )}
         {overview ? (
           <>
-            <section className="space-y-4">
+            <section className="flex flex-col gap-y-4">
               <h2 className="text-xl font-medium">
                 原调用账本 · 最近 {overview.days} 天
               </h2>
@@ -428,11 +455,11 @@ export function ModelManager() {
                 估计、供应商实际与冻结上限分列；币种分别显示。未知结果不计作成功。
               </p>
               {overview.usage.length ? (
-                <div className="space-y-4">
+                <div className="flex flex-col gap-y-4">
                   {overview.usage.map((row, index) => (
                     <article
                       key={`${row.purpose}:${row.provider}:${row.model}:${row.currency}:${index}`}
-                      className="bg-muted/30 space-y-3 rounded-lg p-4"
+                      className="bg-muted/30 flex flex-col gap-y-3 rounded-lg p-4"
                     >
                       <p className="text-sm font-medium">
                         {row.capability} · {row.provider}/{row.model} ·{" "}
@@ -483,7 +510,7 @@ export function ModelManager() {
                 </p>
               )}
             </section>
-            <section className="space-y-4">
+            <section className="flex flex-col gap-y-4">
               <h2 className="text-xl font-medium">成本熔断核对</h2>
               <p className="text-muted-foreground text-sm">
                 按具体超额调用与当前配置版本核对，只解除该成本阻断。
@@ -504,10 +531,10 @@ export function ModelManager() {
                 </p>
               )}
             </section>
-            <section className="space-y-4">
+            <section className="flex flex-col gap-y-4">
               <h2 className="text-xl font-medium">配置与成本核对审计</h2>
               {overview.history.length ? (
-                <ul className="space-y-4">
+                <ul className="flex flex-col gap-y-4">
                   {overview.history.map((entry) => (
                     <li
                       key={entry.id}

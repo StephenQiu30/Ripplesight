@@ -1,4 +1,5 @@
 "use client";
+import { Button } from "@/components/ui/button";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -60,14 +61,15 @@ export function SelectedSnapshotDownload() {
 
   return (
     <span className="inline-flex flex-col items-start gap-2">
-      <button
+      <Button
         type="button"
         disabled={busy}
-        className="cursor-pointer underline disabled:cursor-wait disabled:opacity-50"
         onClick={downloadSnapshot}
+        variant="link"
+        className="justify-start px-0"
       >
         {busy ? "正在读取快照…" : "精选同步快照"}
-      </button>
+      </Button>
       {message ? (
         <span role="status" className="text-muted-foreground text-xs">
           {message}

@@ -1,4 +1,10 @@
 "use client";
+import { ChevronDownIcon } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
 
 import { useEffect, useState } from "react";
 import { listCodexResetPosts } from "@/api/zhongzhigonggao";
@@ -59,7 +65,7 @@ export function ResetSourcePosts({ refresh }: { refresh: number }) {
     setPage((value) => value + delta);
   }
   return (
-    <section aria-label="公告源帖子" className="mt-14 space-y-6">
+    <section aria-label="公告源帖子" className="mt-14 flex flex-col gap-y-6">
       <div>
         <h2 className="text-xl font-medium">公告源帖子</h2>
         <p className="text-muted-foreground mt-2 text-sm">
@@ -88,7 +94,7 @@ export function ResetSourcePosts({ refresh }: { refresh: number }) {
         </p>
       )}
       {state.status === "error" && (
-        <div role="alert" className="space-y-3">
+        <div role="alert" className="flex flex-col gap-y-3">
           <p>{state.message}</p>
           <Button
             variant="outline"
@@ -106,9 +112,9 @@ export function ResetSourcePosts({ refresh }: { refresh: number }) {
           {state.posts.length === 0 && (
             <p className="text-muted-foreground py-6">当前筛选没有帖子。</p>
           )}
-          <ol className="space-y-8">
+          <ol className="flex flex-col gap-y-8">
             {state.posts.map((post) => (
-              <li key={post.id} className="space-y-3">
+              <li key={post.id} className="flex flex-col gap-y-3">
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                   <span className="text-muted-foreground">
                     {beijingTime(post.published_at)}
@@ -131,39 +137,58 @@ export function ResetSourcePosts({ refresh }: { refresh: number }) {
                     {post.translation_zh}
                   </p>
                 )}
-                <details open={!post.translation_zh} className="text-sm">
-                  <summary className="text-muted-foreground cursor-pointer">
-                    原文与上下文
-                  </summary>
-                  <p className="mt-3 leading-7 whitespace-pre-wrap">
-                    {post.text}
-                  </p>
-                  {post.context.map((context) => (
-                    <blockquote
-                      key={`${context.relation}-${context.id}`}
-                      className="bg-muted/40 mt-3 rounded-lg p-4"
+                <Collapsible
+                  className="text-sm"
+                  defaultOpen={!post.translation_zh}
+                >
+                  <CollapsibleTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
                     >
-                      <p className="text-muted-foreground mb-2">
-                        {context.relation === "reply"
-                          ? "回复上下文"
-                          : "引用上下文"}{" "}
-                        · {context.author}
-                      </p>
-                      <p className="leading-6 whitespace-pre-wrap">
-                        {context.text_zh ?? context.original_text}
-                      </p>
-                      <Button asChild variant="link" className="px-0">
-                        <a
-                          href={context.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          阅读上下文原帖
-                        </a>
-                      </Button>
-                    </blockquote>
-                  ))}
-                </details>
+                      <span className="min-w-0 text-left">原文与上下文</span>
+                      <ChevronDownIcon
+                        aria-hidden="true"
+                        data-icon="inline-end"
+                        className="group-data-[state=open]:rotate-180"
+                      />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent
+                    forceMount
+                    className="data-[state=closed]:hidden"
+                  >
+                    <p className="mt-3 leading-7 whitespace-pre-wrap">
+                      {post.text}
+                    </p>
+                    {post.context.map((context) => (
+                      <blockquote
+                        key={`${context.relation}-${context.id}`}
+                        className="bg-muted/40 mt-3 rounded-lg p-4"
+                      >
+                        <p className="text-muted-foreground mb-2">
+                          {context.relation === "reply"
+                            ? "回复上下文"
+                            : "引用上下文"}{" "}
+                          · {context.author}
+                        </p>
+                        <p className="leading-6 whitespace-pre-wrap">
+                          {context.text_zh ?? context.original_text}
+                        </p>
+                        <Button asChild variant="link" className="px-0">
+                          <a
+                            href={context.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            阅读上下文原帖
+                          </a>
+                        </Button>
+                      </blockquote>
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
                 <Button asChild variant="link" className="px-0">
                   <a href={post.url} target="_blank" rel="noopener noreferrer">
                     阅读源帖子

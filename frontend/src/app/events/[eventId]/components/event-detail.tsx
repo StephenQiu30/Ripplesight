@@ -11,7 +11,7 @@ import { PageState } from "@/components/system/page-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { FieldGroup, Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiRequestError } from "@/request";
@@ -90,7 +90,7 @@ export function EventDetail({ eventId }: { eventId: string }) {
         </Button>
       </div>
       {state.status === "loading" ? (
-        <div aria-label="正在读取事件详情" className="space-y-6">
+        <div aria-label="正在读取事件详情" className="flex flex-col gap-y-6">
           <Skeleton className="h-12 w-3/4" />
           <Skeleton className="h-32 w-full" />
         </div>
@@ -223,29 +223,28 @@ function EventReading({
           正文对应事件归并时选定的版本；观察指标和可见性分别标明时间。
         </p>
         {event.revision > 1 ? (
-          <form
-            onSubmit={selectRevision}
-            className="mt-6 flex flex-wrap items-end gap-4"
-          >
-            <Field className="w-40">
-              <FieldLabel htmlFor="event-revision">事件修订</FieldLabel>
-              <Input
-                id="event-revision"
-                type="number"
-                min={1}
-                max={event.revision}
-                value={revisionInput}
-                onChange={(input) => setRevisionInput(input.target.value)}
-              />
-            </Field>
-            <Button variant="outline" type="submit">
-              读取该修订成员
-            </Button>
-            {revisionError ? (
-              <p role="alert" className="text-destructive text-sm">
-                {revisionError}
-              </p>
-            ) : null}
+          <form onSubmit={selectRevision}>
+            <FieldGroup className="mt-6 flex flex-row flex-wrap items-end gap-4">
+              <Field className="w-40">
+                <FieldLabel htmlFor="event-revision">事件修订</FieldLabel>
+                <Input
+                  id="event-revision"
+                  type="number"
+                  min={1}
+                  max={event.revision}
+                  value={revisionInput}
+                  onChange={(input) => setRevisionInput(input.target.value)}
+                />
+              </Field>
+              <Button variant="outline" type="submit">
+                读取该修订成员
+              </Button>
+              {revisionError ? (
+                <Alert variant="destructive">
+                  <AlertDescription>{revisionError}</AlertDescription>
+                </Alert>
+              ) : null}
+            </FieldGroup>
           </form>
         ) : null}
         <EventMemberList

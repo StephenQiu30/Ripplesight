@@ -18,7 +18,7 @@ export function evidenceDate(value: string | null) {
 
 export function RunStamp({ run }: { run: HotKeyAPI.RunView | null }) {
   return (
-    <div className="text-muted-foreground space-y-1 text-sm leading-6">
+    <div className="text-muted-foreground flex flex-col gap-y-1 text-sm leading-6">
       <p>
         {run
           ? `发布轮次：${evidenceDate(run.generated_at)}（北京时间）`
@@ -77,7 +77,7 @@ export function OfficialPrice({
     ? price.cny_cached_input_price
     : price.cached_input_price;
   return (
-    <div className="space-y-1 text-sm leading-6">
+    <div className="flex flex-col gap-y-1 text-sm leading-6">
       <p className="font-mono">
         {priceAmount(input, currency)} / {priceAmount(output, currency)}
       </p>

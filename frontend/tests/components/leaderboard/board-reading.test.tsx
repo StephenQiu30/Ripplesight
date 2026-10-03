@@ -81,8 +81,8 @@ describe("model leaderboard reading", () => {
     expect(
       screen
         .getByRole("checkbox", { name: "国内模型" })
-        .hasAttribute("checked"),
-    ).toBe(true);
+        .getAttribute("aria-checked"),
+    ).toBe("true");
     expect(screen.queryByText("¥0")).toBeNull();
   });
 

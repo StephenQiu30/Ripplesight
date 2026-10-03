@@ -1,3 +1,4 @@
+import { selectOption } from "../../../../select";
 // @vitest-environment happy-dom
 import {
   cleanup,
@@ -72,12 +73,8 @@ describe("editorial field correction", () => {
   it("sends only the changed false field with current version and operator headers", async () => {
     render(<EditorialCorrectionManager initialContentId={run.content_id} />);
     await read();
-    fireEvent.change(screen.getByLabelText("精选操作"), {
-      target: { value: "replace" },
-    });
-    fireEvent.change(screen.getByLabelText("精选"), {
-      target: { value: "false" },
-    });
+    await selectOption(screen.getByLabelText("精选操作"), "人工覆盖");
+    await selectOption(screen.getByLabelText("精选"), "关闭");
     fireEvent.change(screen.getByLabelText("纠正原因"), {
       target: { value: "暂不精选" },
     });
@@ -106,9 +103,7 @@ describe("editorial field correction", () => {
   it("restores all automatic evidence without also replacing any field", async () => {
     render(<EditorialCorrectionManager initialContentId={run.content_id} />);
     await read();
-    fireEvent.change(screen.getByLabelText("静默推送操作"), {
-      target: { value: "clear" },
-    });
+    await selectOption(screen.getByLabelText("静默推送操作"), "恢复自动");
     fireEvent.change(screen.getByLabelText("纠正原因"), {
       target: { value: "恢复自动" },
     });
@@ -183,15 +178,9 @@ it("enqueues a fresh full run using the displayed fixed version and preserves op
 it("separates public recommendation copy from private correction reason", async () => {
   render(<EditorialCorrectionManager initialContentId={run.content_id} />);
   await read();
-  fireEvent.change(screen.getByLabelText("分类操作"), {
-    target: { value: "replace" },
-  });
-  fireEvent.change(screen.getByLabelText("分类"), {
-    target: { value: "paper" },
-  });
-  fireEvent.change(screen.getByLabelText("公开推荐理由操作"), {
-    target: { value: "replace" },
-  });
+  await selectOption(screen.getByLabelText("分类操作"), "人工覆盖");
+  await selectOption(screen.getByLabelText("分类"), "论文");
+  await selectOption(screen.getByLabelText("公开推荐理由操作"), "人工覆盖");
   fireEvent.change(screen.getByLabelText("公开推荐理由"), {
     target: { value: "公开说明" },
   });

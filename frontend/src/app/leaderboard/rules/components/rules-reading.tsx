@@ -1,3 +1,10 @@
+import { ChevronDownIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
 import Link from "next/link";
 
 import { RunStamp } from "@/components/leaderboard/reading-parts";
@@ -12,8 +19,8 @@ import {
 
 export function RulesReading({ data }: { data: HotKeyAPI.RulesView }) {
   return (
-    <div className="space-y-10">
-      <header className="max-w-3xl space-y-4">
+    <div className="flex flex-col gap-y-10">
+      <header className="flex max-w-3xl flex-col gap-y-4">
         <p className="text-muted-foreground text-sm">模型榜</p>
         <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
           计算规则与证据边界
@@ -27,7 +34,7 @@ export function RulesReading({ data }: { data: HotKeyAPI.RulesView }) {
           {data.methodology_version} · {data.display_method}
         </p>
       </header>
-      <section className="max-w-3xl space-y-4">
+      <section className="flex max-w-3xl flex-col gap-y-4">
         <h2 className="text-xl font-medium">怎样理解排名和指数</h2>
         <p className="text-muted-foreground leading-7">
           每项证据只比较双方均已测评的配置。有标准误或置信区间时使用正态分布软支持；没有误差信息时只使用原始高低顺序。排序使违反来源偏好的加权代价最小，采用整数规划和明确的最优性边界。
@@ -36,15 +43,30 @@ export function RulesReading({ data }: { data: HotKeyAPI.RulesView }) {
           页面指数来自累计 Kemeny
           排序支持相对固定锚点的映射。它用于阅读顺序，不能解释为能力差距、百分位或校准胜率。删掉单运营方/证据和调整权重的重算用于显示排名敏感性，不构成统计置信区间。
         </p>
-        <details className="text-muted-foreground text-sm">
-          <summary className="cursor-pointer">实际运行时定义</summary>
-          <p className="mt-3 break-all">{data.score_definition}</p>
-          <p className="mt-2 font-mono break-all">
-            平手规则：{data.tie_policy}
-          </p>
-        </details>
+        <Collapsible className="text-muted-foreground text-sm">
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
+            >
+              <span className="min-w-0 text-left">实际运行时定义</span>
+              <ChevronDownIcon
+                aria-hidden="true"
+                data-icon="inline-end"
+                className="group-data-[state=open]:rotate-180"
+              />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent forceMount className="data-[state=closed]:hidden">
+            <p className="mt-3 break-all">{data.score_definition}</p>
+            <p className="mt-2 font-mono break-all">
+              平手规则：{data.tie_policy}
+            </p>
+          </CollapsibleContent>
+        </Collapsible>
       </section>
-      <section className="space-y-4">
+      <section className="flex flex-col gap-y-4">
         <h2 className="text-xl font-medium">固定预算</h2>
         <p className="text-muted-foreground text-sm leading-6">
           总预算保持固定。来源停用或模型缺少某项时，该份额空缺，不转给其他证据。同机构、同家族不因为拆成多张榜就获得更多独立资格。
@@ -83,7 +105,7 @@ export function RulesReading({ data }: { data: HotKeyAPI.RulesView }) {
         </Table>
       </section>
       <section className="grid gap-8 md:grid-cols-2">
-        <div className="space-y-4">
+        <div className="flex flex-col gap-y-4">
           <h2 className="text-xl font-medium">配置与证据资格</h2>
           <p className="text-muted-foreground leading-7">
             配置政策{" "}
@@ -98,7 +120,7 @@ export function RulesReading({ data }: { data: HotKeyAPI.RulesView }) {
             天，明确的新排除不会被旧成绩覆盖。上游测评时间和本地验证时间分别保存，不拿抓取时间当发布日期。
           </p>
         </div>
-        <div className="space-y-4">
+        <div className="flex flex-col gap-y-4">
           <h2 className="text-xl font-medium">发布与失败保留</h2>
           <p className="text-muted-foreground leading-7">
             综合榜至少 {data.overall_minimum_models} 个模型、
@@ -112,7 +134,7 @@ export function RulesReading({ data }: { data: HotKeyAPI.RulesView }) {
           </p>
         </div>
       </section>
-      <section className="space-y-4">
+      <section className="flex flex-col gap-y-4">
         <h2 className="text-xl font-medium">固定锚点</h2>
         <p className="text-muted-foreground text-sm">
           锚点用于稳定指数的比较基准，缺失锚点不自动换成当前榜首。

@@ -1,3 +1,4 @@
+import { selectOption } from "../../../../select";
 // @vitest-environment happy-dom
 import {
   cleanup,
@@ -108,13 +109,12 @@ describe("manual event correction", () => {
         onChanged={vi.fn()}
       />,
     );
-    fireEvent.change(screen.getByLabelText("修订操作"), {
-      target: { value: "merge" },
-    });
-    await screen.findByRole("option", { name: "目标事件 · 修订 7" });
-    fireEvent.change(screen.getByLabelText("目标事件"), {
-      target: { value: "target" },
-    });
+    await selectOption(
+      screen.getByLabelText("修订操作"),
+      "将整个事件合并到其他事件",
+    );
+    await screen.findByLabelText("目标事件");
+    await selectOption(screen.getByLabelText("目标事件"), "目标事件 · 修订 7");
     fireEvent.change(screen.getByLabelText("修订原因"), {
       target: { value: "同故事" },
     });

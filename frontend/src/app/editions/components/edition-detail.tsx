@@ -1,8 +1,22 @@
 "use client";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  FieldGroup,
+  FieldLabel,
+  Field,
+  FieldLegend,
+  FieldSet,
+} from "@/components/ui/field";
+import { ChevronDownIcon } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useId, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   correctReportEdition,
   getReportEdition,
@@ -29,11 +43,11 @@ function EditionReferences({
   entries: HotKeyAPI.ReportPublicationCandidate[];
 }) {
   return (
-    <ul className="space-y-5">
+    <ul className="flex flex-col gap-y-5">
       {ids.map((id) => {
         const entry = entries.find((row) => row.content_id === id);
         return entry ? (
-          <li key={id} className="space-y-2">
+          <li key={id} className="flex flex-col gap-y-2">
             <Link href={`/items/${id}`} className="leading-7 font-medium">
               {entry.title_zh}
             </Link>
@@ -58,6 +72,8 @@ function EditionCorrection({
   row: HotKeyAPI.EditionDetailView;
   saved: (row: HotKeyAPI.EditionDetailView) => void;
 }) {
+  const fieldId = useId();
+
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const operation = useRef<{ signature: string; id: string } | null>(null);
@@ -97,78 +113,117 @@ function EditionCorrection({
     }
   }
   return (
-    <details className="border-border mt-12 border-t pt-6">
-      <summary className="cursor-pointer font-medium">修订本刊</summary>
-      <form onSubmit={submit} className="mt-6 max-w-3xl space-y-5">
-        <label className="block space-y-2 text-sm">
-          标题
-          <Input
-            name="title"
-            required
-            maxLength={120}
-            defaultValue={content.title}
+    <Collapsible className="border-border mt-12 border-t pt-6">
+      <CollapsibleTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
+        >
+          <span className="min-w-0 text-left">修订本刊</span>
+          <ChevronDownIcon
+            aria-hidden="true"
+            data-icon="inline-end"
+            className="group-data-[state=open]:rotate-180"
           />
-        </label>
-        <label className="block space-y-2 text-sm">
-          导读
-          <Textarea
-            name="lead"
-            required
-            maxLength={1500}
-            defaultValue={content.lead}
-            rows={5}
-          />
-        </label>
-        <fieldset className="space-y-3">
-          <legend className="mb-3 text-sm">重点资讯（最多六项）</legend>
-          {content.entries.map((entry) => (
-            <label
-              key={entry.content_id}
-              className="flex gap-3 text-sm leading-6"
-            >
-              <input
-                type="checkbox"
-                name="highlights"
-                value={entry.content_id}
-                defaultChecked={content.highlights.includes(entry.content_id)}
-              />
-              {entry.title_zh}
-            </label>
-          ))}
-        </fieldset>
-        {content.themes.map((theme, i) => (
-          <fieldset key={i} className="space-y-3">
-            <legend className="text-sm">主题 {i + 1}</legend>
-            <Input
-              aria-label={`主题 ${i + 1} 标题`}
-              name={`heading-${i}`}
-              required
-              maxLength={60}
-              defaultValue={theme.heading}
-            />
-            <Textarea
-              aria-label={`主题 ${i + 1} 摘要`}
-              name={`summary-${i}`}
-              required
-              maxLength={800}
-              defaultValue={theme.summary}
-            />
-          </fieldset>
-        ))}
-        <label className="block space-y-2 text-sm">
-          修订原因
-          <Input name="reason" required maxLength={1000} />
-        </label>
-        {error ? (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        ) : null}
-        <Button type="submit" disabled={busy}>
-          {busy ? "保存中…" : "保存新修订"}
         </Button>
-      </form>
-    </details>
+      </CollapsibleTrigger>
+      <CollapsibleContent forceMount className="data-[state=closed]:hidden">
+        <form onSubmit={submit}>
+          <FieldGroup className="mt-6 flex max-w-3xl flex-col gap-y-5">
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-edition-detail-field-1`}>
+                标题
+              </FieldLabel>
+              <Input
+                name="title"
+                required
+                maxLength={120}
+                defaultValue={content.title}
+                id={`${fieldId}-edition-detail-field-1`}
+              />
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-edition-detail-field-2`}>
+                导读
+              </FieldLabel>
+              <Textarea
+                name="lead"
+                required
+                maxLength={1500}
+                defaultValue={content.lead}
+                rows={5}
+                id={`${fieldId}-edition-detail-field-2`}
+              />
+            </Field>
+            <FieldSet className="flex flex-col gap-y-3">
+              <FieldLegend className="mb-3 text-sm">
+                重点资讯（最多六项）
+              </FieldLegend>
+              {content.entries.map((entry) => (
+                <Field
+                  key={entry.content_id}
+                  orientation="horizontal"
+                  className="w-auto"
+                >
+                  <Checkbox
+                    name="highlights"
+                    value={entry.content_id}
+                    defaultChecked={content.highlights.includes(
+                      entry.content_id,
+                    )}
+                    id={`${fieldId}-edition-detail-field-3-${entry.content_id}`}
+                  />
+                  <FieldLabel
+                    htmlFor={`${fieldId}-edition-detail-field-3-${entry.content_id}`}
+                  >
+                    {entry.title_zh}
+                  </FieldLabel>
+                </Field>
+              ))}
+            </FieldSet>
+            {content.themes.map((theme, i) => (
+              <FieldSet key={i} className="flex flex-col gap-y-3">
+                <FieldLegend className="text-sm">主题 {i + 1}</FieldLegend>
+                <Input
+                  aria-label={`主题 ${i + 1} 标题`}
+                  name={`heading-${i}`}
+                  required
+                  maxLength={60}
+                  defaultValue={theme.heading}
+                />
+                <Textarea
+                  aria-label={`主题 ${i + 1} 摘要`}
+                  name={`summary-${i}`}
+                  required
+                  maxLength={800}
+                  defaultValue={theme.summary}
+                />
+              </FieldSet>
+            ))}
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-edition-detail-field-4`}>
+                修订原因
+              </FieldLabel>
+              <Input
+                name="reason"
+                required
+                maxLength={1000}
+                id={`${fieldId}-edition-detail-field-4`}
+              />
+            </Field>
+            {error ? (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : null}
+            <Button type="submit" disabled={busy}>
+              {busy ? "保存中…" : "保存新修订"}
+            </Button>
+          </FieldGroup>
+        </form>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -288,7 +343,7 @@ export function EditionDetail({ editionId }: { editionId: string }) {
                   ))}
                 </dl>
                 {content.highlights.length ? (
-                  <section className="my-10 space-y-6">
+                  <section className="my-10 flex flex-col gap-y-6">
                     <h2 className="text-xl font-medium">重点关注</h2>
                     <EditionReferences
                       ids={content.highlights}
@@ -297,7 +352,10 @@ export function EditionDetail({ editionId }: { editionId: string }) {
                   </section>
                 ) : null}
                 {content.themes.map((theme) => (
-                  <section key={theme.heading} className="my-10 space-y-5">
+                  <section
+                    key={theme.heading}
+                    className="my-10 flex flex-col gap-y-5"
+                  >
                     <h2 className="text-xl font-medium">{theme.heading}</h2>
                     <p className="text-muted-foreground leading-7 whitespace-pre-wrap">
                       {theme.summary}
@@ -311,7 +369,10 @@ export function EditionDetail({ editionId }: { editionId: string }) {
                 {content.sections
                   .filter((section) => section.content_ids.length)
                   .map((section) => (
-                    <section key={section.label} className="my-10 space-y-6">
+                    <section
+                      key={section.label}
+                      className="my-10 flex flex-col gap-y-6"
+                    >
                       <h2 className="text-xl font-medium">{section.label}</h2>
                       <EditionReferences
                         ids={section.content_ids}
@@ -320,7 +381,7 @@ export function EditionDetail({ editionId }: { editionId: string }) {
                     </section>
                   ))}
                 {content.flashes.length ? (
-                  <section className="my-10 space-y-6">
+                  <section className="my-10 flex flex-col gap-y-6">
                     <h2 className="text-xl font-medium">快讯</h2>
                     <EditionReferences
                       ids={content.flashes}

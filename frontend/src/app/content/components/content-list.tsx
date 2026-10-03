@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
+  SelectLabel,
   Select,
   SelectContent,
   SelectGroup,
@@ -397,7 +398,7 @@ export function ContentList() {
                       个不同词，多个词以空格分隔并同时命中。
                     </FieldDescription>
                   </Field>
-                  <Field>
+                  <Field data-disabled={options.status !== "ready"}>
                     <FieldLabel htmlFor="content-source">来源</FieldLabel>
                     <Select
                       value={draft.sourceKey || "all"}
@@ -414,6 +415,7 @@ export function ContentList() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
+                          <SelectLabel className="sr-only">来源</SelectLabel>
                           <SelectItem value="all">全部来源</SelectItem>
                           {options.status === "ready"
                             ? options.sources.map((source) => (
@@ -429,7 +431,7 @@ export function ContentList() {
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field>
+                  <Field data-disabled={options.status !== "ready"}>
                     <FieldLabel htmlFor="content-topic">主题</FieldLabel>
                     <Select
                       value={draft.topicId || "all"}
@@ -447,6 +449,7 @@ export function ContentList() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
+                          <SelectLabel className="sr-only">主题</SelectLabel>
                           <SelectItem value="all">全部主题</SelectItem>
                           {options.status === "ready"
                             ? options.topics.map((topic) => (
@@ -511,6 +514,9 @@ export function ContentList() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
+                          <SelectLabel className="sr-only">
+                            标注状态
+                          </SelectLabel>
                           <SelectItem value="all">全部状态</SelectItem>
                           <SelectItem value="missing">暂无标注记录</SelectItem>
                           <SelectItem value="pending">等待标注</SelectItem>
@@ -695,9 +701,9 @@ export function ContentList() {
             </div>
           ) : null}
           {loadMoreError ? (
-            <p role="alert" className="text-destructive mt-4 text-sm">
-              {loadMoreError}
-            </p>
+            <Alert variant="destructive" className="mt-4">
+              <AlertDescription>{loadMoreError}</AlertDescription>
+            </Alert>
           ) : null}
         </>
       ) : null}

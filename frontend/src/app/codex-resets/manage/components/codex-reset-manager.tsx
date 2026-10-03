@@ -1,7 +1,19 @@
 "use client";
+import {
+  SelectLabel,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useId, useEffect, useRef, useState } from "react";
 import {
   configureCodexResetMonitor,
   correctCodexResetEvent,
@@ -21,6 +33,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { ApiRequestError } from "@/request";
 
 export function CodexResetManager() {
+  const fieldId = useId();
+
   const [monitor, setMonitor] = useState<HotKeyAPI.MonitorView | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [token, setToken] = useState("");
@@ -331,7 +345,7 @@ export function CodexResetManager() {
   }
   const canWrite = !!token && !!reason.trim() && !busy;
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col gap-y-8">
       <div>
         <h1 className="text-3xl font-medium">公告配置与人工复核</h1>
         <p className="text-muted-foreground mt-3">
@@ -346,7 +360,7 @@ export function CodexResetManager() {
         </Link>
       </div>
       <section
-        className="bg-muted/40 space-y-4 rounded-xl p-5"
+        className="bg-muted/40 flex flex-col gap-y-4 rounded-xl p-5"
         aria-label="运营权限与原因"
       >
         <Label htmlFor="codex-operator">操作员令牌</Label>
@@ -391,12 +405,12 @@ export function CodexResetManager() {
         </div>
       </section>
       {error && (
-        <p role="alert" className="text-destructive break-words">
-          {error}
-        </p>
+        <Alert variant="destructive" className="break-words">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
       {notice && <p role="status">{notice}</p>}
-      <section className="space-y-5" aria-label="官方监控配置">
+      <section className="flex flex-col gap-y-5" aria-label="官方监控配置">
         <h2 className="text-xl font-medium">
           {monitor
             ? `监控修订 ${monitor.revision} · 配置版本 ${monitor.configuration_version}`
@@ -405,8 +419,8 @@ export function CodexResetManager() {
               : "正在读取配置…"}
         </h2>
         <div className="grid gap-5 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="codex-author-id">官方作者外部 ID</Label>
+          <Field className="flex flex-col gap-y-2">
+            <FieldLabel htmlFor="codex-author-id">官方作者外部 ID</FieldLabel>
             <Input
               id="codex-author-id"
               value={configuration.author_external_id ?? ""}
@@ -418,9 +432,11 @@ export function CodexResetManager() {
                 })
               }
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="codex-connection">批准的官方 X 连接 ID</Label>
+          </Field>
+          <Field className="flex flex-col gap-y-2">
+            <FieldLabel htmlFor="codex-connection">
+              批准的官方 X 连接 ID
+            </FieldLabel>
             <Input
               id="codex-connection"
               value={configuration.connection_id ?? ""}
@@ -431,9 +447,9 @@ export function CodexResetManager() {
                 })
               }
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="codex-connection-version">连接版本</Label>
+          </Field>
+          <Field className="flex flex-col gap-y-2">
+            <FieldLabel htmlFor="codex-connection-version">连接版本</FieldLabel>
             <Input
               id="codex-connection-version"
               type="number"
@@ -446,9 +462,9 @@ export function CodexResetManager() {
                 })
               }
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="codex-max-pages">单轮新帖子页上限</Label>
+          </Field>
+          <Field className="flex flex-col gap-y-2">
+            <FieldLabel htmlFor="codex-max-pages">单轮新帖子页上限</FieldLabel>
             <Input
               id="codex-max-pages"
               type="number"
@@ -462,9 +478,9 @@ export function CodexResetManager() {
                 })
               }
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="codex-normal">正常扫描间隔（秒）</Label>
+          </Field>
+          <Field className="flex flex-col gap-y-2">
+            <FieldLabel htmlFor="codex-normal">正常扫描间隔（秒）</FieldLabel>
             <Input
               id="codex-normal"
               type="number"
@@ -472,9 +488,9 @@ export function CodexResetManager() {
               value={configuration.normal_interval_seconds ?? 300}
               readOnly
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="codex-hot">临近公告扫描间隔（秒）</Label>
+          </Field>
+          <Field className="flex flex-col gap-y-2">
+            <FieldLabel htmlFor="codex-hot">临近公告扫描间隔（秒）</FieldLabel>
             <Input
               id="codex-hot"
               type="number"
@@ -482,17 +498,19 @@ export function CodexResetManager() {
               value={configuration.hot_interval_seconds ?? 180}
               readOnly
             />
-          </div>
+          </Field>
         </div>
         {monitor && (
-          <label className="flex items-center gap-3">
-            <input
-              type="checkbox"
+          <Field orientation="horizontal" className="w-auto">
+            <Checkbox
               checked={enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
+              onCheckedChange={(checked) => setEnabled(checked === true)}
+              id={`${fieldId}-codex-reset-manager-field-1`}
             />
-            启用公告监控（仍需真实授权与预算）
-          </label>
+            <FieldLabel htmlFor={`${fieldId}-codex-reset-manager-field-1`}>
+              启用公告监控（仍需真实授权与预算）
+            </FieldLabel>
+          </Field>
         )}
         <Button disabled={!canWrite || !loaded} onClick={save}>
           {monitor ? "保存公告配置" : "创建关闭公告监控"}
@@ -503,7 +521,7 @@ export function CodexResetManager() {
         </p>
       </section>
       {monitor && (
-        <section className="space-y-4" aria-label="人工扫描">
+        <section className="flex flex-col gap-y-4" aria-label="人工扫描">
           <h2 className="text-xl font-medium">人工受理扫描</h2>
           <Label htmlFor="codex-lookback">回看小时数</Label>
           <Input
@@ -531,12 +549,15 @@ export function CodexResetManager() {
         </section>
       )}
       {!!gaps.length && (
-        <section className="space-y-4" aria-label="分页积压与未知请求">
+        <section
+          className="flex flex-col gap-y-4"
+          aria-label="分页积压与未知请求"
+        >
           <h2 className="text-xl font-medium">扫描缺口</h2>
           {gaps.map((gap) => (
             <article
               key={gap.id}
-              className="bg-muted/30 space-y-3 rounded-xl p-5"
+              className="bg-muted/30 flex flex-col gap-y-3 rounded-xl p-5"
             >
               <p className="break-words">
                 {gap.state} · {gap.failure_code ?? "未完成窗口"} · 配置版本{" "}
@@ -569,12 +590,12 @@ export function CodexResetManager() {
         </section>
       )}
       {monitor && (
-        <section className="space-y-4" aria-label="帖子复核">
+        <section className="flex flex-col gap-y-4" aria-label="帖子复核">
           <h2 className="text-xl font-medium">源帖子复核 · 第 {page} 页</h2>
           {posts.map((post) => (
             <article
               key={post.id}
-              className="bg-muted/30 space-y-3 rounded-xl p-5"
+              className="bg-muted/30 flex flex-col gap-y-3 rounded-xl p-5"
             >
               <p className="break-words whitespace-pre-wrap">{post.text}</p>
               <p className="text-muted-foreground text-sm">
@@ -655,7 +676,7 @@ export function CodexResetManager() {
       )}
       {relinkPost && relinkSource && (
         <section
-          className="bg-muted/30 space-y-4 rounded-xl p-5"
+          className="bg-muted/30 flex flex-col gap-y-4 rounded-xl p-5"
           aria-label="帖子公告归属"
         >
           <h2 className="text-xl font-medium">更改帖子公告归属</h2>
@@ -664,48 +685,74 @@ export function CodexResetManager() {
             ；两份公告均按打开表单时的修订提交。版本冲突后请重读并重新打开，不自动覆盖。
           </p>
           <Label htmlFor="codex-relink-source">原公告</Label>
-          <select
-            id="codex-relink-source"
+          <Select
             value={relinkSource.id}
-            className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
             disabled={busy}
-            onChange={(event) => {
+            onValueChange={(selectedValue) => {
               setRelinkSource(
-                events.find((item) => item.id === event.target.value) ?? null,
+                events.find((item) => item.id === selectedValue) ?? null,
               );
               setRelinkTarget(null);
             }}
           >
-            {events
-              .filter((item) => relinkPost.event_ids?.includes(item.id))
-              .map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.title || item.id} · 修订 {item.revision}
-                </option>
-              ))}
-          </select>
+            <SelectTrigger id="codex-relink-source" className="w-full min-w-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper">
+              <SelectGroup>
+                <SelectLabel className="sr-only">原公告</SelectLabel>
+                {events
+                  .filter((item) => relinkPost.event_ids?.includes(item.id))
+                  .map((item) => (
+                    <SelectItem
+                      key={item.id}
+                      value={item.id}
+                      className="whitespace-normal"
+                    >
+                      {item.title || item.id} · 修订 {item.revision}
+                    </SelectItem>
+                  ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
           <p className="text-sm">原公告预期修订 {relinkSource.revision}</p>
           <Label htmlFor="codex-relink-target">目标公告</Label>
-          <select
-            id="codex-relink-target"
+          <Select
             value={relinkTarget?.id ?? ""}
-            className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
             disabled={busy}
-            onChange={(event) =>
+            onValueChange={(selectedValue) =>
               setRelinkTarget(
-                events.find((item) => item.id === event.target.value) ?? null,
+                events.find(
+                  (item) =>
+                    item.id ===
+                    (selectedValue === "__none__" ? "" : selectedValue),
+                ) ?? null,
               )
             }
           >
-            <option value="">解除此公告关联（不归入其他公告）</option>
-            {events
-              .filter((item) => item.id !== relinkSource.id)
-              .map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.title || item.id} · 修订 {item.revision}
-                </option>
-              ))}
-          </select>
+            <SelectTrigger id="codex-relink-target" className="w-full min-w-0">
+              <SelectValue placeholder="解除此公告关联（不归入其他公告）" />
+            </SelectTrigger>
+            <SelectContent position="popper">
+              <SelectGroup>
+                <SelectLabel className="sr-only">原公告</SelectLabel>
+                <SelectItem value="__none__" className="whitespace-normal">
+                  解除此公告关联（不归入其他公告）
+                </SelectItem>
+                {events
+                  .filter((item) => item.id !== relinkSource.id)
+                  .map((item) => (
+                    <SelectItem
+                      key={item.id}
+                      value={item.id}
+                      className="whitespace-normal"
+                    >
+                      {item.title || item.id} · 修订 {item.revision}
+                    </SelectItem>
+                  ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
           <p className="text-sm">
             {relinkTarget
               ? `目标公告预期修订 ${relinkTarget.revision}`
@@ -729,12 +776,15 @@ export function CodexResetManager() {
         </section>
       )}
       {!!events.length && (
-        <section className="space-y-4" aria-label="公告日期与到账复核">
+        <section
+          className="flex flex-col gap-y-4"
+          aria-label="公告日期与到账复核"
+        >
           <h2 className="text-xl font-medium">公告日期与到账复核</h2>
           {events.map((item) => (
             <article
               key={item.id}
-              className="bg-muted/30 space-y-3 rounded-xl p-5"
+              className="bg-muted/30 flex flex-col gap-y-3 rounded-xl p-5"
             >
               <p>
                 {item.title ?? item.kind} · {item.status} · 修订 {item.revision}{" "}
@@ -756,7 +806,7 @@ export function CodexResetManager() {
         </section>
       )}
       {event && (
-        <section className="space-y-5" aria-label="公告修订表单">
+        <section className="flex flex-col gap-y-5" aria-label="公告修订表单">
           <h2 className="text-xl font-medium">
             修订公告 · 预期版本 {event.revision}
           </h2>
@@ -785,28 +835,28 @@ export function CodexResetManager() {
             </Button>
           </div>
           <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="codex-receipt-date">
+            <Field className="flex flex-col gap-y-2">
+              <FieldLabel htmlFor="codex-receipt-date">
                 人工核验到账日期（北京）
-              </Label>
+              </FieldLabel>
               <Input
                 id="codex-receipt-date"
                 type="date"
                 value={receiptDate}
                 onChange={(e) => setReceiptDate(e.target.value)}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="codex-receipt-time">
+            </Field>
+            <Field className="flex flex-col gap-y-2">
+              <FieldLabel htmlFor="codex-receipt-time">
                 人工核验到账时间（北京）
-              </Label>
+              </FieldLabel>
               <Input
                 id="codex-receipt-time"
                 type="datetime-local"
                 value={receiptTime}
                 onChange={(e) => setReceiptTime(e.target.value)}
               />
-            </div>
+            </Field>
           </div>
           <Button
             disabled={!canWrite || !receiptDate || !receiptTime}

@@ -5,8 +5,8 @@ import { Badge } from "@/components/ui/badge";
 
 export function SourcesReading({ data }: { data: HotKeyAPI.SourcesView }) {
   return (
-    <div className="space-y-10">
-      <header className="max-w-3xl space-y-4">
+    <div className="flex flex-col gap-y-10">
+      <header className="flex max-w-3xl flex-col gap-y-4">
         <p className="text-muted-foreground text-sm">模型榜</p>
         <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
           评测来源与覆盖
@@ -21,8 +21,8 @@ export function SourcesReading({ data }: { data: HotKeyAPI.SourcesView }) {
         </p>
       </header>
       {data.groups.map((group) => (
-        <section key={group.key} className="space-y-5">
-          <div className="space-y-2">
+        <section key={group.key} className="flex flex-col gap-y-5">
+          <div className="flex flex-col gap-y-2">
             <h2 className="text-xl font-medium">{group.name}</h2>
             <p className="text-muted-foreground text-sm">{group.blurb}</p>
           </div>
@@ -30,7 +30,7 @@ export function SourcesReading({ data }: { data: HotKeyAPI.SourcesView }) {
             {group.sources.map((source) => (
               <article
                 key={source.key}
-                className="bg-muted/40 space-y-3 rounded-xl p-5"
+                className="bg-muted/40 flex flex-col gap-y-3 rounded-xl p-5"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <Link

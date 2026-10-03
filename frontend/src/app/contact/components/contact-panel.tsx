@@ -1,4 +1,5 @@
 "use client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -30,9 +31,11 @@ export function ContactPanel() {
     return () => controller.abort();
   }, [refresh]);
   return (
-    <section aria-label="联系资料" className="space-y-6">
+    <section aria-label="联系资料" className="flex flex-col gap-y-6">
       {error ? (
-        <p role="alert">{error}</p>
+        <Alert>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : !view ? (
         <p role="status">正在读取…</p>
       ) : view.enabled ? (
@@ -55,7 +58,7 @@ export function ContactPanel() {
           ].map(
             ({ url, label }) =>
               url && (
-                <figure key={label} className="space-y-2">
+                <figure key={label} className="flex flex-col gap-y-2">
                   <figcaption className="text-sm">{label}</figcaption>
                   <Image
                     src={url}

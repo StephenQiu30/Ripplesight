@@ -1,4 +1,5 @@
 "use client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { listHotEvents } from "@/api/shijian";
@@ -38,7 +39,9 @@ export function EventHotList({ topicId }: { topicId?: string }) {
         </p>
       ) : state === "error" ? (
         <div className="mt-4">
-          <p role="alert">热榜读取失败。</p>
+          <Alert>
+            <AlertDescription>热榜读取失败。</AlertDescription>
+          </Alert>
           <Button
             variant="outline"
             className="mt-3"

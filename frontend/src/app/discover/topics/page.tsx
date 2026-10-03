@@ -32,7 +32,7 @@ export default async function PublicTopicsPage() {
   return (
     <>
       <PublicationNavigation />
-      <div className="space-y-10">
+      <div className="flex flex-col gap-y-10">
         <header>
           <h1 className="text-3xl font-medium">行业专题</h1>
           <p className="text-muted-foreground mt-3 text-sm">

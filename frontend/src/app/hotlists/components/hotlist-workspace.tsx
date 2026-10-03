@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/empty";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import {
+  SelectLabel,
   Select,
   SelectContent,
   SelectGroup,
@@ -545,6 +546,7 @@ export function HotlistWorkspace() {
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
+                  <SelectLabel className="sr-only">来源</SelectLabel>
                   {sources.items.map((source) => (
                     <SelectItem
                       key={source.source_key}
@@ -670,9 +672,9 @@ export function HotlistWorkspace() {
             </div>
           )}
           {moreError ? (
-            <p role="alert" className="text-destructive mt-4 text-sm">
-              {moreError}
-            </p>
+            <Alert variant="destructive" className="mt-4">
+              <AlertDescription>{moreError}</AlertDescription>
+            </Alert>
           ) : null}
         </>
       )}

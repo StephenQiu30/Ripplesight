@@ -1,4 +1,5 @@
 "use client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -169,9 +170,9 @@ export function CommentRefreshAction({ postId }: { postId: string }) {
   if (state.status === "error") {
     return (
       <div className="mt-4 flex flex-col items-start gap-3">
-        <p role="alert" className="text-destructive text-sm">
-          {state.message}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{state.message}</AlertDescription>
+        </Alert>
         <Button
           variant="outline"
           onClick={() => {

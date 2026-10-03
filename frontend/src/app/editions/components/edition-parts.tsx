@@ -26,7 +26,7 @@ export function editionError(error: unknown): string {
 
 export function EditionCard({ row }: { row: HotKeyAPI.EditionSummaryView }) {
   return (
-    <li className="border-border space-y-3 border-b py-6">
+    <li className="border-border flex flex-col gap-y-3 border-b py-6">
       <div className="text-muted-foreground flex flex-wrap gap-3 text-xs">
         <span>
           {editionKinds[row.kind]} · {row.key}

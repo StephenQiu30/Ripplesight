@@ -1,7 +1,14 @@
 "use client";
+import { ChevronDownIcon } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
+import { FieldLabel, Field } from "@/components/ui/field";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useId, useEffect, useRef, useState } from "react";
 import { listEventMembers } from "@/api/shijian";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -56,6 +63,8 @@ export function EventMemberList({
   selectedContentIds?: string[];
   onToggleContent?: (contentId: string) => void;
 }) {
+  const fieldId = useId();
+
   const [state, setState] = useState<MemberState>({ status: "loading" });
   const [retry, setRetry] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -118,7 +127,7 @@ export function EventMemberList({
 
   if (state.status === "loading")
     return (
-      <div aria-label="正在读取成员证据" className="mt-8 space-y-5">
+      <div aria-label="正在读取成员证据" className="mt-8 flex flex-col gap-y-5">
         <Skeleton className="h-40 w-full" />
         <Skeleton className="h-40 w-full" />
       </div>
@@ -142,7 +151,7 @@ export function EventMemberList({
       </Alert>
     );
   return (
-    <div className="mt-8 space-y-8">
+    <div className="mt-8 flex flex-col gap-y-8">
       <p className="text-muted-foreground text-sm">
         正在阅读修订 {state.page.revision} 的固定成员。
       </p>
@@ -161,23 +170,26 @@ export function EventMemberList({
         </p>
       ) : null}
       {state.page.items.map((member) => (
-        <div key={member.id} className="space-y-3">
+        <div key={member.id} className="flex flex-col gap-y-3">
           {onToggleContent && member.availability === "readable" ? (
-            <label className="flex items-center gap-3 text-sm">
+            <Field orientation="horizontal" className="w-auto">
               <Checkbox
                 checked={selectedContentIds.includes(member.content_id)}
                 onCheckedChange={() => onToggleContent(member.content_id)}
+                id={`${fieldId}-event-member-list-field-1`}
               />
-              选择此成员进行人工修订
-            </label>
+              <FieldLabel htmlFor={`${fieldId}-event-member-list-field-1`}>
+                选择此成员进行人工修订
+              </FieldLabel>
+            </Field>
           ) : null}
           <MemberReading member={member} />
         </div>
       ))}
       {pageError ? (
-        <p role="alert" className="text-destructive">
-          {pageError}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{pageError}</AlertDescription>
+        </Alert>
       ) : null}
       {state.page.next_cursor ? (
         <Button
@@ -271,7 +283,7 @@ function MemberReading({ member }: { member: HotKeyAPI.EventMemberReadView }) {
         </p>
       ) : null}
       {version?.relations.length ? (
-        <div className="mt-6 space-y-2">
+        <div className="mt-6 flex flex-col gap-y-2">
           {version.relations.map((relation, index) => (
             <p
               key={`${relation.relation_type}:${relation.target_external_id}:${index}`}
@@ -327,19 +339,34 @@ function MemberReading({ member }: { member: HotKeyAPI.EventMemberReadView }) {
           <Link href={`/content/${reading.id}`}>查看当前内容记录</Link>
         </Button>
       </div>
-      <details className="text-muted-foreground mt-6 text-sm">
-        <summary className="cursor-pointer">证据记录与归入修订</summary>
-        <div className="mt-3 space-y-2 break-all">
-          <p>内容版本：{member.content_version_id}</p>
-          <p>观察：{observation.id}</p>
-          <p>
-            加入修订：{member.added_revision}
-            {member.removed_revision
-              ? `；移除修订：${member.removed_revision}`
-              : ""}
-          </p>
-        </div>
-      </details>
+      <Collapsible className="text-muted-foreground mt-6 text-sm">
+        <CollapsibleTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
+          >
+            <span className="min-w-0 text-left">证据记录与归入修订</span>
+            <ChevronDownIcon
+              aria-hidden="true"
+              data-icon="inline-end"
+              className="group-data-[state=open]:rotate-180"
+            />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent forceMount className="data-[state=closed]:hidden">
+          <div className="mt-3 flex flex-col gap-y-2 break-all">
+            <p>内容版本：{member.content_version_id}</p>
+            <p>观察：{observation.id}</p>
+            <p>
+              加入修订：{member.added_revision}
+              {member.removed_revision
+                ? `；移除修订：${member.removed_revision}`
+                : ""}
+            </p>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </article>
   );
 }

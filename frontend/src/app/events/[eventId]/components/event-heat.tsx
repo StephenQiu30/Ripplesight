@@ -1,4 +1,19 @@
 "use client";
+import {
+  TableHead,
+  TableRow,
+  TableHeader,
+  TableCell,
+  TableBody,
+  Table,
+} from "@/components/ui/table";
+import { ChevronDownIcon } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useEffect, useState } from "react";
 import { getEventHeat, listEventHeatHistory } from "@/api/shijian";
 import { Badge } from "@/components/ui/badge";
@@ -44,7 +59,9 @@ export function EventHeat({ eventId }: { eventId: string }) {
       </h2>
       {failed ? (
         <div className="mt-4">
-          <p role="alert">热度读取失败。</p>
+          <Alert>
+            <AlertDescription>热度读取失败。</AlertDescription>
+          </Alert>
           <Button
             variant="outline"
             onClick={() => setRetry((value) => value + 1)}
@@ -135,41 +152,61 @@ export function EventHeat({ eventId }: { eventId: string }) {
               </p>
             </div>
           ) : null}
-          <details className="mt-6">
-            <summary className="cursor-pointer font-medium">
-              小时热度历史（{history.length}）
-            </summary>
-            {history.length ? (
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-left">
-                      <th className="py-2">窗口结束</th>
-                      <th>热度</th>
-                      <th>参与者</th>
-                      <th>覆盖</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {history.map((row) => (
-                      <tr key={row.window_end} className="border-b">
-                        <td className="py-2 whitespace-nowrap">
-                          {new Date(row.window_end).toLocaleString("zh-CN")}
-                        </td>
-                        <td>{row.heat.toFixed(1)}</td>
-                        <td>{row.participant_count}</td>
-                        <td>{row.complete ? "完整" : "待补全"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="text-muted-foreground mt-3 text-sm">
-                尚无当前修订的实际小时快照。
-              </p>
-            )}
-          </details>
+          <Collapsible className="mt-6">
+            <CollapsibleTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
+              >
+                <span className="min-w-0 text-left">
+                  小时热度历史（{history.length}）
+                </span>
+                <ChevronDownIcon
+                  aria-hidden="true"
+                  data-icon="inline-end"
+                  className="group-data-[state=open]:rotate-180"
+                />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent
+              forceMount
+              className="data-[state=closed]:hidden"
+            >
+              {history.length ? (
+                <div className="mt-3 overflow-x-auto">
+                  <Table className="w-full text-sm">
+                    <TableHeader>
+                      <TableRow className="border-b text-left">
+                        <TableHead className="py-2">窗口结束</TableHead>
+                        <TableHead>热度</TableHead>
+                        <TableHead>参与者</TableHead>
+                        <TableHead>覆盖</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {history.map((row) => (
+                        <TableRow key={row.window_end} className="border-b">
+                          <TableCell className="py-2 whitespace-nowrap">
+                            {new Date(row.window_end).toLocaleString("zh-CN")}
+                          </TableCell>
+                          <TableCell>{row.heat.toFixed(1)}</TableCell>
+                          <TableCell>{row.participant_count}</TableCell>
+                          <TableCell>
+                            {row.complete ? "完整" : "待补全"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <p className="text-muted-foreground mt-3 text-sm">
+                  尚无当前修订的实际小时快照。
+                </p>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
         </>
       )}
     </section>

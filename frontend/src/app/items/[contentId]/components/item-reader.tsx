@@ -1,4 +1,6 @@
 "use client";
+import { Textarea } from "@/components/ui/textarea";
+import { FieldLabel } from "@/components/ui/field";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -190,11 +192,11 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
                 <p className="whitespace-pre-wrap">{item.body.original}</p>
               )}
             </article>
-            <aside className="space-y-8">
+            <aside className="flex flex-col gap-y-8">
               {item.body.outline?.length && mode === "original" ? (
                 <nav aria-label="文章目录">
                   <h2 className="text-sm font-medium">目录</h2>
-                  <ul className="mt-3 space-y-3 text-xs leading-5">
+                  <ul className="mt-3 flex flex-col gap-y-3 text-xs leading-5">
                     {item.body.outline.map((entry) => (
                       <li key={entry.id}>
                         <a href={`#${entry.id}`}>{entry.title}</a>
@@ -257,7 +259,7 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
       ) : null}
       {item.fact_id ? (
         <section
-          className="mt-10 max-w-3xl space-y-4"
+          className="mt-10 flex max-w-3xl flex-col gap-y-4"
           aria-label="其他报道与进展"
         >
           <h2 className="text-lg font-medium">其他报道与进展</h2>
@@ -268,7 +270,10 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
         </section>
       ) : null}
       {item.related_stories?.length ? (
-        <section className="mt-10 max-w-3xl space-y-4" aria-label="相关事件">
+        <section
+          className="mt-10 flex max-w-3xl flex-col gap-y-4"
+          aria-label="相关事件"
+        >
           <h2 className="text-lg font-medium">相关事件</h2>
           {item.related_stories.map((story) => (
             <article key={story.id} className="rounded-lg border p-4">
@@ -291,15 +296,13 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
         </section>
       ) : null}
       <section className="mt-12 max-w-3xl">
-        <label htmlFor="reading-note" className="text-sm font-medium">
-          本机阅读笔记
-        </label>
-        <textarea
+        <FieldLabel htmlFor="reading-note">本机阅读笔记</FieldLabel>
+        <Textarea
           id="reading-note"
           maxLength={2000}
           value={note}
           onChange={(event) => setNote(event.target.value)}
-          className="bg-muted mt-3 block min-h-24 w-full rounded-md p-4 text-sm"
+          className="mt-3 block min-h-24 w-full p-4"
         />
         <Button
           variant="outline"

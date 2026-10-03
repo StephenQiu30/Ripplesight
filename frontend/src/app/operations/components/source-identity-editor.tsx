@@ -1,5 +1,16 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  SelectLabel,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+} from "@/components/ui/select";
+import { FieldGroup, FieldLabel, Field } from "@/components/ui/field";
+import { useId, useEffect, useState } from "react";
 import {
   listEventAttentionSources,
   upsertEventAttentionSource,
@@ -20,6 +31,8 @@ const blank: HotKeyAPI.AttentionSourceInput = {
   first_party: false,
 };
 export function SourceIdentityEditor({ token }: { token: string }) {
+  const fieldId = useId();
+
   const [rows, setRows] = useState<HotKeyAPI.AttentionSourceView[]>([]);
   const [draft, setDraft] = useState(blank);
   const [message, setMessage] = useState("");
@@ -106,152 +119,247 @@ export function SourceIdentityEditor({ token }: { token: string }) {
           </div>
         ))}
       </div>
-      <form onSubmit={save} className="grid gap-4 sm:grid-cols-2">
-        <label className="grid gap-2">
-          来源键
-          <Input
-            required
-            maxLength={64}
-            value={draft.source_key}
-            disabled={draft.expected_revision != null}
-            onChange={(e) => setDraft({ ...draft, source_key: e.target.value })}
-          />
-        </label>
-        <label className="grid gap-2">
-          来源名称
-          <Input
-            required
-            maxLength={200}
-            value={draft.name}
-            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-          />
-        </label>
-        <label className="grid gap-2">
-          范围类型
-          <select
-            className="bg-muted rounded-md p-2"
-            value={draft.selector_kind}
-            disabled={draft.expected_revision != null}
-            onChange={(e) =>
-              setDraft({
-                ...draft,
-                selector_kind: e.target
-                  .value as HotKeyAPI.AttentionSourceInput["selector_kind"],
-              })
-            }
+      <form onSubmit={save}>
+        <FieldGroup className="grid gap-4 sm:grid-cols-2">
+          <Field
+            className="min-w-0"
+            data-disabled={draft.expected_revision != null}
           >
-            {["native_scope", "source", "author", "canonical_host"].map(
-              (value) => (
-                <option key={value}>{value}</option>
+            <FieldLabel htmlFor={`${fieldId}-source-identity-editor-field-1`}>
+              来源键
+            </FieldLabel>
+            <Input
+              required
+              maxLength={64}
+              value={draft.source_key}
+              disabled={draft.expected_revision != null}
+              onChange={(e) =>
+                setDraft({ ...draft, source_key: e.target.value })
+              }
+              id={`${fieldId}-source-identity-editor-field-1`}
+            />
+          </Field>
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${fieldId}-source-identity-editor-field-2`}>
+              来源名称
+            </FieldLabel>
+            <Input
+              required
+              maxLength={200}
+              value={draft.name}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              id={`${fieldId}-source-identity-editor-field-2`}
+            />
+          </Field>
+          <Field
+            className="min-w-0"
+            data-disabled={draft.expected_revision != null}
+          >
+            <FieldLabel htmlFor={`${fieldId}-source-identity-editor-field-3`}>
+              范围类型
+            </FieldLabel>
+            <Select
+              value={draft.selector_kind}
+              disabled={draft.expected_revision != null}
+              onValueChange={(selectedValue) =>
+                setDraft({
+                  ...draft,
+                  selector_kind:
+                    selectedValue as HotKeyAPI.AttentionSourceInput["selector_kind"],
+                })
+              }
+            >
+              <SelectTrigger
+                id={`${fieldId}-source-identity-editor-field-3`}
+                className="w-full min-w-0"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectGroup>
+                  <SelectLabel className="sr-only">范围类型</SelectLabel>
+                  {["native_scope", "source", "author", "canonical_host"].map(
+                    (value) => (
+                      <SelectItem
+                        key={value}
+                        value={value}
+                        className="whitespace-normal"
+                      >
+                        {value}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field
+            className="min-w-0"
+            data-disabled={draft.expected_revision != null}
+          >
+            <FieldLabel htmlFor={`${fieldId}-source-identity-editor-field-4`}>
+              范围标识
+            </FieldLabel>
+            <Input
+              required
+              maxLength={512}
+              disabled={draft.expected_revision != null}
+              value={draft.selector_ref}
+              onChange={(e) =>
+                setDraft({ ...draft, selector_ref: e.target.value })
+              }
+              placeholder="hotlist:weibo 或 search:请求哈希"
+              id={`${fieldId}-source-identity-editor-field-4`}
+            />
+          </Field>
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${fieldId}-source-identity-editor-field-5`}>
+              角色
+            </FieldLabel>
+            <Select
+              value={draft.mode}
+              onValueChange={(selectedValue) =>
+                setDraft({
+                  ...draft,
+                  mode: selectedValue as HotKeyAPI.AttentionSourceInput["mode"],
+                })
+              }
+            >
+              <SelectTrigger
+                id={`${fieldId}-source-identity-editor-field-5`}
+                className="w-full min-w-0"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectGroup>
+                  <SelectLabel className="sr-only">角色</SelectLabel>
+                  <SelectItem value="editorial" className="whitespace-normal">
+                    编辑报道
+                  </SelectItem>
+                  <SelectItem value="signal" className="whitespace-normal">
+                    传播信号
+                  </SelectItem>
+                  <SelectItem value="isolated" className="whitespace-normal">
+                    隔离
+                  </SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${fieldId}-source-identity-editor-field-6`}>
+              质量层级
+            </FieldLabel>
+            <Select
+              value={draft.tier ?? ""}
+              onValueChange={(selectedValue) =>
+                setDraft({
+                  ...draft,
+                  tier: ((selectedValue === "__none__" ? "" : selectedValue) ||
+                    null) as HotKeyAPI.AttentionSourceInput["tier"],
+                })
+              }
+            >
+              <SelectTrigger
+                id={`${fieldId}-source-identity-editor-field-6`}
+                className="w-full min-w-0"
+              >
+                <SelectValue placeholder="未分级" />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectGroup>
+                  <SelectLabel className="sr-only">质量层级</SelectLabel>
+                  <SelectItem value="__none__" className="whitespace-normal">
+                    未分级
+                  </SelectItem>
+                  {["T1", "T1_5", "T2"].map((value) => (
+                    <SelectItem
+                      key={value}
+                      value={value}
+                      className="whitespace-normal"
+                    >
+                      {value}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${fieldId}-source-identity-editor-field-7`}>
+              集团键
+            </FieldLabel>
+            <Input
+              maxLength={128}
+              value={draft.group_key ?? ""}
+              onChange={(e) =>
+                setDraft({ ...draft, group_key: e.target.value || null })
+              }
+              id={`${fieldId}-source-identity-editor-field-7`}
+            />
+          </Field>
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${fieldId}-source-identity-editor-field-8`}>
+              实体键
+            </FieldLabel>
+            <Input
+              maxLength={128}
+              value={draft.owner_entity_key ?? ""}
+              onChange={(e) =>
+                setDraft({ ...draft, owner_entity_key: e.target.value || null })
+              }
+              id={`${fieldId}-source-identity-editor-field-8`}
+            />
+          </Field>
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${fieldId}-source-identity-editor-field-9`}>
+              计划间隔（秒）
+            </FieldLabel>
+            <Input
+              type="number"
+              min={60}
+              max={604800}
+              value={draft.interval_seconds}
+              onChange={(e) =>
+                setDraft({ ...draft, interval_seconds: Number(e.target.value) })
+              }
+              id={`${fieldId}-source-identity-editor-field-9`}
+            />
+          </Field>
+          <div className="flex flex-wrap items-center gap-4">
+            {(["enabled", "scheduled", "first_party"] as const).map(
+              (key, index) => (
+                <Field key={key} orientation="horizontal" className="w-auto">
+                  <Checkbox
+                    checked={draft[key] ?? false}
+                    onCheckedChange={(checked) =>
+                      setDraft({ ...draft, [key]: checked === true })
+                    }
+                    id={`${fieldId}-source-identity-editor-field-10-${key}`}
+                  />
+                  <FieldLabel
+                    htmlFor={`${fieldId}-source-identity-editor-field-10-${key}`}
+                  >
+                    {["启用", "计划采集", "第一方"][index]}
+                  </FieldLabel>
+                </Field>
               ),
             )}
-          </select>
-        </label>
-        <label className="grid gap-2">
-          范围标识
-          <Input
-            required
-            maxLength={512}
-            disabled={draft.expected_revision != null}
-            value={draft.selector_ref}
-            onChange={(e) =>
-              setDraft({ ...draft, selector_ref: e.target.value })
-            }
-            placeholder="hotlist:weibo 或 search:请求哈希"
-          />
-        </label>
-        <label className="grid gap-2">
-          角色
-          <select
-            className="bg-muted rounded-md p-2"
-            value={draft.mode}
-            onChange={(e) =>
-              setDraft({
-                ...draft,
-                mode: e.target.value as HotKeyAPI.AttentionSourceInput["mode"],
-              })
-            }
-          >
-            <option value="editorial">编辑报道</option>
-            <option value="signal">传播信号</option>
-            <option value="isolated">隔离</option>
-          </select>
-        </label>
-        <label className="grid gap-2">
-          质量层级
-          <select
-            className="bg-muted rounded-md p-2"
-            value={draft.tier ?? ""}
-            onChange={(e) =>
-              setDraft({
-                ...draft,
-                tier: (e.target.value ||
-                  null) as HotKeyAPI.AttentionSourceInput["tier"],
-              })
-            }
-          >
-            <option value="">未分级</option>
-            {["T1", "T1_5", "T2"].map((value) => (
-              <option key={value}>{value}</option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-2">
-          集团键
-          <Input
-            maxLength={128}
-            value={draft.group_key ?? ""}
-            onChange={(e) =>
-              setDraft({ ...draft, group_key: e.target.value || null })
-            }
-          />
-        </label>
-        <label className="grid gap-2">
-          实体键
-          <Input
-            maxLength={128}
-            value={draft.owner_entity_key ?? ""}
-            onChange={(e) =>
-              setDraft({ ...draft, owner_entity_key: e.target.value || null })
-            }
-          />
-        </label>
-        <label className="grid gap-2">
-          计划间隔（秒）
-          <Input
-            type="number"
-            min={60}
-            max={604800}
-            value={draft.interval_seconds}
-            onChange={(e) =>
-              setDraft({ ...draft, interval_seconds: Number(e.target.value) })
-            }
-          />
-        </label>
-        <div className="flex flex-wrap items-center gap-4">
-          {(["enabled", "scheduled", "first_party"] as const).map(
-            (key, index) => (
-              <label key={key} className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={draft[key] ?? false}
-                  onChange={(e) =>
-                    setDraft({ ...draft, [key]: e.target.checked })
-                  }
-                />
-                {["启用", "计划采集", "第一方"][index]}
-              </label>
-            ),
-          )}
-        </div>
-        <div className="flex gap-2">
-          <Button disabled={busy} type="submit">
-            保存来源身份
-          </Button>
-          <Button type="button" variant="ghost" onClick={() => setDraft(blank)}>
-            新建来源身份
-          </Button>
-        </div>
+          </div>
+          <div className="flex gap-2">
+            <Button disabled={busy} type="submit">
+              保存来源身份
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setDraft(blank)}
+            >
+              新建来源身份
+            </Button>
+          </div>
+        </FieldGroup>
       </form>
       {message && (
         <p role="status" className="text-sm">

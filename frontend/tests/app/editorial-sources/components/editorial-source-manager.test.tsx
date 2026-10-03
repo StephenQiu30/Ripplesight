@@ -54,7 +54,10 @@ describe("editable source operations", () => {
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: "新增来源" }));
-    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(
+    fireEvent.keyDown(screen.getByLabelText("来源类型"), { key: "ArrowDown" });
+    expect(
+      (await screen.findAllByRole("option")).map((o) => o.textContent),
+    ).toEqual(
       expect.arrayContaining([
         "RSS / Atom",
         "网页列表",
@@ -64,6 +67,7 @@ describe("editable source operations", () => {
         "外部摄入",
       ]),
     );
+    fireEvent.click(screen.getByRole("option", { name: "RSS / Atom" }));
     fireEvent.click(screen.getByRole("button", { name: "清除令牌" }));
     expect(
       (screen.getByLabelText("操作员令牌") as HTMLInputElement).value,

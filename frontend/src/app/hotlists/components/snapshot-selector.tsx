@@ -3,6 +3,7 @@
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import {
+  SelectLabel,
   Select,
   SelectContent,
   SelectGroup,
@@ -46,6 +47,7 @@ export function SnapshotSelector({
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
+              <SelectLabel className="sr-only">观察时间</SelectLabel>
               {snapshots.map((snapshot) => (
                 <SelectItem
                   key={snapshot.snapshot_id}

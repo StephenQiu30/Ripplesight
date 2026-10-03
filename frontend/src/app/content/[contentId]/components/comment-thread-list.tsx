@@ -263,9 +263,9 @@ function MoreButton({
   return (
     <div className="mt-4">
       {error ? (
-        <p role="alert" className="text-destructive mb-2 text-sm">
-          {error}
-        </p>
+        <Alert variant="destructive" className="mb-2">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
       {cursor ? (
         <Button

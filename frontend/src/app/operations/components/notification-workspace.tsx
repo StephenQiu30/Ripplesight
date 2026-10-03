@@ -1,5 +1,28 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronDownIcon } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  SelectLabel,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+} from "@/components/ui/select";
+import {
+  FieldGroup,
+  FieldLabel,
+  Field,
+  FieldLegend,
+  FieldSet,
+} from "@/components/ui/field";
+import { useId, useCallback, useEffect, useRef, useState } from "react";
 import {
   listOperatorNotificationTargets,
   saveOperatorNotificationTarget,
@@ -45,6 +68,8 @@ function TargetEditor({
   options: RequestOptions;
   saved: () => Promise<void>;
 }) {
+  const fieldId = useId();
+
   const [name, setName] = useState(row?.name ?? "");
   const [channel, setChannel] = useState<HotKeyAPI.NotificationChannel>(
     row?.channel ?? "email",
@@ -98,105 +123,138 @@ function TargetEditor({
     }
   }
   return (
-    <form
-      onSubmit={submit}
-      className="bg-muted/30 grid gap-3 rounded-lg p-4 sm:grid-cols-2"
-    >
-      <label className="grid gap-1">
-        目标名称
-        <Input
-          required
-          maxLength={80}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-      </label>
-      <label className="grid gap-1">
-        通知渠道
-        <select
-          className="bg-muted rounded-md p-2"
-          value={channel}
-          onChange={(e) =>
-            setChannel(e.target.value as HotKeyAPI.NotificationChannel)
-          }
-        >
-          <option value="email">邮件 SMTP</option>
-          <option value="feishu">飞书</option>
-        </select>
-      </label>
-      {channel === "email" ? (
-        <label className="grid gap-1 sm:col-span-2">
-          收件人邮箱（逗号分隔，最多 20 个）
+    <form onSubmit={submit}>
+      <FieldGroup className="bg-muted/30 grid gap-3 rounded-lg p-4 sm:grid-cols-2">
+        <Field className="min-w-0">
+          <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-1`}>
+            目标名称
+          </FieldLabel>
           <Input
             required
-            value={recipients}
-            onChange={(e) => setRecipients(e.target.value)}
+            maxLength={80}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            id={`${fieldId}-notification-workspace-field-1`}
           />
-        </label>
-      ) : (
-        <label className="grid gap-1 sm:col-span-2">
-          签名密钥环境变量名（可选，HOTKEY_ 前缀）
+        </Field>
+        <Field className="min-w-0">
+          <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-2`}>
+            通知渠道
+          </FieldLabel>
+          <Select
+            value={channel}
+            onValueChange={(selectedValue) =>
+              setChannel(selectedValue as HotKeyAPI.NotificationChannel)
+            }
+          >
+            <SelectTrigger
+              id={`${fieldId}-notification-workspace-field-2`}
+              className="w-full min-w-0"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper">
+              <SelectGroup>
+                <SelectLabel className="sr-only">通知渠道</SelectLabel>
+                <SelectItem value="email" className="whitespace-normal">
+                  邮件 SMTP
+                </SelectItem>
+                <SelectItem value="feishu" className="whitespace-normal">
+                  飞书
+                </SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
+        {channel === "email" ? (
+          <Field className="min-w-0 sm:col-span-2">
+            <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-3`}>
+              收件人邮箱（逗号分隔，最多 20 个）
+            </FieldLabel>
+            <Input
+              required
+              value={recipients}
+              onChange={(e) => setRecipients(e.target.value)}
+              id={`${fieldId}-notification-workspace-field-3`}
+            />
+          </Field>
+        ) : (
+          <Field className="min-w-0 sm:col-span-2">
+            <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-4`}>
+              签名密钥环境变量名（可选，HOTKEY_ 前缀）
+            </FieldLabel>
+            <Input
+              maxLength={128}
+              value={secretRef}
+              onChange={(e) => setSecretRef(e.target.value)}
+              id={`${fieldId}-notification-workspace-field-4`}
+            />
+          </Field>
+        )}
+        <FieldSet className="grid gap-2 sm:col-span-2">
+          <FieldLegend className="mb-2">订阅类别</FieldLegend>
+          <div className="flex flex-wrap gap-4">
+            {(Object.keys(kinds) as Kind[]).map((kind) => (
+              <Field key={kind} orientation="horizontal" className="w-auto">
+                <Checkbox
+                  checked={subscriptions.includes(kind)}
+                  onCheckedChange={(checked) =>
+                    setSubscriptions((old) =>
+                      checked === true
+                        ? [...old, kind]
+                        : old.filter((value) => value !== kind),
+                    )
+                  }
+                  id={`${fieldId}-notification-workspace-field-5-${kind}`}
+                />
+                <FieldLabel
+                  htmlFor={`${fieldId}-notification-workspace-field-5-${kind}`}
+                >
+                  {kinds[kind]}
+                </FieldLabel>
+              </Field>
+            ))}
+          </div>
+        </FieldSet>
+        <Field className="min-w-0 sm:col-span-2">
+          <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-6`}>
+            通知配置原因
+          </FieldLabel>
           <Input
-            maxLength={128}
-            value={secretRef}
-            onChange={(e) => setSecretRef(e.target.value)}
+            required
+            maxLength={2000}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            id={`${fieldId}-notification-workspace-field-6`}
           />
-        </label>
-      )}
-      <fieldset className="grid gap-2 sm:col-span-2">
-        <legend className="mb-2">订阅类别</legend>
-        <div className="flex flex-wrap gap-4">
-          {(Object.keys(kinds) as Kind[]).map((kind) => (
-            <label key={kind} className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={subscriptions.includes(kind)}
-                onChange={(e) =>
-                  setSubscriptions((old) =>
-                    e.target.checked
-                      ? [...old, kind]
-                      : old.filter((value) => value !== kind),
-                  )
-                }
-              />
-              {kinds[kind]}
-            </label>
-          ))}
-        </div>
-      </fieldset>
-      <label className="grid gap-1 sm:col-span-2">
-        通知配置原因
-        <Input
-          required
-          maxLength={2000}
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-        />
-      </label>
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => setEnabled(e.target.checked)}
-        />
-        启用此目标
-      </label>
-      <Button disabled={busy} type="submit">
-        保存通知目标
-      </Button>
-      {row && (
-        <p className="text-muted-foreground text-sm sm:col-span-2">
-          修订 {row.revision} · 启用时间{" "}
-          {row.enabled_at
-            ? new Date(row.enabled_at).toLocaleString("zh-CN")
-            : "未启用"}
-        </p>
-      )}
-      {message && (
-        <p role="status" className="sm:col-span-2">
-          {message}
-        </p>
-      )}
+        </Field>
+        <Field orientation="horizontal" className="w-auto">
+          <Checkbox
+            checked={enabled}
+            onCheckedChange={(checked) => setEnabled(checked === true)}
+            id={`${fieldId}-notification-workspace-field-7`}
+          />
+          <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-7`}>
+            启用此目标
+          </FieldLabel>
+        </Field>
+        <Button disabled={busy} type="submit">
+          保存通知目标
+        </Button>
+        {row && (
+          <p className="text-muted-foreground text-sm sm:col-span-2">
+            修订 {row.revision} · 启用时间{" "}
+            {row.enabled_at
+              ? new Date(row.enabled_at).toLocaleString("zh-CN")
+              : "未启用"}
+          </p>
+        )}
+        {message && (
+          <p role="status" className="sm:col-span-2">
+            {message}
+          </p>
+        )}
+      </FieldGroup>
     </form>
   );
 }
@@ -209,6 +267,8 @@ function UnknownResolution({
   options: RequestOptions;
   saved: () => Promise<void>;
 }) {
+  const fieldId = useId();
+
   const [outcome, setOutcome] = useState<"delivered" | "not_delivered">(
     "not_delivered",
   );
@@ -235,39 +295,64 @@ function UnknownResolution({
     }
   }
   return (
-    <form onSubmit={submit} className="mt-3 grid gap-3 sm:grid-cols-2">
-      <label className="grid gap-1">
-        目的地核对结果
-        <select
-          className="bg-muted rounded-md p-2"
-          value={outcome}
-          onChange={(e) => setOutcome(e.target.value as typeof outcome)}
-        >
-          <option value="not_delivered">确认未送达</option>
-          <option value="delivered">确认已送达</option>
-        </select>
-      </label>
-      <label className="grid gap-1">
-        核对依据
-        <Input
-          required
-          maxLength={2000}
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-        />
-      </label>
-      <p className="text-muted-foreground text-sm sm:col-span-2">
-        核对仅更新账本与原任务重试资格。确认未送达后，请到原任务显式重试；不会立即重发。
-      </p>
-      <Button type="submit" disabled={busy}>
-        保存人工核对
-      </Button>
-      {message && <p role="status">{message}</p>}
+    <form onSubmit={submit}>
+      <FieldGroup className="mt-3 grid gap-3 sm:grid-cols-2">
+        <Field className="min-w-0">
+          <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-8`}>
+            目的地核对结果
+          </FieldLabel>
+          <Select
+            value={outcome}
+            onValueChange={(selectedValue) =>
+              setOutcome(selectedValue as typeof outcome)
+            }
+          >
+            <SelectTrigger
+              id={`${fieldId}-notification-workspace-field-8`}
+              className="w-full min-w-0"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper">
+              <SelectGroup>
+                <SelectLabel className="sr-only">目的地核对结果</SelectLabel>
+                <SelectItem value="not_delivered" className="whitespace-normal">
+                  确认未送达
+                </SelectItem>
+                <SelectItem value="delivered" className="whitespace-normal">
+                  确认已送达
+                </SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field className="min-w-0">
+          <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-9`}>
+            核对依据
+          </FieldLabel>
+          <Input
+            required
+            maxLength={2000}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            id={`${fieldId}-notification-workspace-field-9`}
+          />
+        </Field>
+        <p className="text-muted-foreground text-sm sm:col-span-2">
+          核对仅更新账本与原任务重试资格。确认未送达后，请到原任务显式重试；不会立即重发。
+        </p>
+        <Button type="submit" disabled={busy}>
+          保存人工核对
+        </Button>
+        {message && <p role="status">{message}</p>}
+      </FieldGroup>
     </form>
   );
 }
 
 export function NotificationWorkspace({ token }: { token: string }) {
+  const fieldId = useId();
+
   const [targets, setTargets] = useState<HotKeyAPI.TargetView[]>([]);
   const [selected, setSelected] = useState("");
   const [deliveries, setDeliveries] = useState<
@@ -353,21 +438,41 @@ export function NotificationWorkspace({ token }: { token: string }) {
         和飞书凭据在服务端环境中配置，新目标默认停用。主题报告还需在关注主题中绑定目标名称；全站刊物由刊物订阅处理。保存启用配置后从新的启用时间开始扫描，首个扫描窗口可能等待
         5 分钟。
       </p>
-      <label className="grid gap-1">
-        选择通知目标
-        <select
-          className="bg-muted rounded-md p-2"
+      <Field className="min-w-0">
+        <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-10`}>
+          选择通知目标
+        </FieldLabel>
+        <Select
           value={selected}
-          onChange={(e) => setSelected(e.target.value)}
+          onValueChange={(selectedValue) =>
+            setSelected(selectedValue === "__none__" ? "" : selectedValue)
+          }
         >
-          <option value="">创建新目标</option>
-          {targets.map((row) => (
-            <option key={row.id} value={row.id}>
-              {row.name} · {row.enabled ? "已启用" : "已停用"}
-            </option>
-          ))}
-        </select>
-      </label>
+          <SelectTrigger
+            id={`${fieldId}-notification-workspace-field-10`}
+            className="w-full min-w-0"
+          >
+            <SelectValue placeholder="创建新目标" />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            <SelectGroup>
+              <SelectLabel className="sr-only">选择通知目标</SelectLabel>
+              <SelectItem value="__none__" className="whitespace-normal">
+                创建新目标
+              </SelectItem>
+              {targets.map((row) => (
+                <SelectItem
+                  key={row.id}
+                  value={row.id}
+                  className="whitespace-normal"
+                >
+                  {row.name} · {row.enabled ? "已启用" : "已停用"}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </Field>
       <TargetEditor
         key={target ? `${target.id}:${target.revision}` : "new"}
         row={target}
@@ -398,14 +503,32 @@ export function NotificationWorkspace({ token }: { token: string }) {
             <p className="mt-2 text-sm">{row.last_error_code}</p>
           )}
           {Object.keys(row.provider_receipt).length > 0 && (
-            <details className="mt-3">
-              <summary className="cursor-pointer text-sm">
-                渠道实际回执（SMTP 受理不表示已到达收件箱）
-              </summary>
-              <pre className="mt-2 overflow-auto text-xs">
-                {JSON.stringify(row.provider_receipt, null, 2)}
-              </pre>
-            </details>
+            <Collapsible className="mt-3">
+              <CollapsibleTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
+                >
+                  <span className="min-w-0 text-left">
+                    渠道实际回执（SMTP 受理不表示已到达收件箱）
+                  </span>
+                  <ChevronDownIcon
+                    aria-hidden="true"
+                    data-icon="inline-end"
+                    className="group-data-[state=open]:rotate-180"
+                  />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent
+                forceMount
+                className="data-[state=closed]:hidden"
+              >
+                <pre className="mt-2 overflow-auto text-xs">
+                  {JSON.stringify(row.provider_receipt, null, 2)}
+                </pre>
+              </CollapsibleContent>
+            </Collapsible>
           )}
           {row.status === "unknown" && (
             <UnknownResolution row={row} options={options} saved={reload} />

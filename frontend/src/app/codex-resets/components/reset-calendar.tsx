@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { cn } from "@/lib/utils";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -82,24 +83,38 @@ export function ResetCalendar({
             )
             .join("；");
           return (
-            <button
+            <Button
               key={date}
               type="button"
               aria-label={`${date}${label ? `，${label}` : "，无公告记录"}`}
               aria-pressed={selectedDate === date}
               onClick={() => onSelect(selectedDate === date ? null : date)}
-              className={`focus-visible:ring-ring flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg text-sm outline-none focus-visible:ring-2 ${selectedDate === date ? "bg-primary text-primary-foreground" : date === snapshot.today ? "bg-secondary font-medium" : "hover:bg-secondary"}`}
+              variant={
+                selectedDate === date
+                  ? "default"
+                  : date === snapshot.today
+                    ? "secondary"
+                    : "ghost"
+              }
+              className="h-auto min-h-14 min-w-0 flex-col gap-1 px-0"
             >
               <span>{index + 1}</span>
               <span aria-hidden="true" className="flex min-h-1 gap-1">
                 {daily.map((mark) => (
                   <span
                     key={mark.event_id}
-                    className={`size-1 rounded-full ${mark.state === "confirmed" ? "bg-chart-1" : mark.state === "likely" ? "bg-chart-3" : "bg-muted-foreground"}`}
+                    className={cn(
+                      "size-1 rounded-full",
+                      mark.state === "confirmed"
+                        ? "bg-chart-1"
+                        : mark.state === "likely"
+                          ? "bg-chart-3"
+                          : "bg-muted-foreground",
+                    )}
                   />
                 ))}
               </span>
-            </button>
+            </Button>
           );
         })}
       </div>
