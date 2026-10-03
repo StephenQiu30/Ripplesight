@@ -1,4 +1,23 @@
 "use client";
+import { format } from "date-fns";
+import { zhCN } from "react-day-picker/locale";
+import { Calendar } from "@/components/ui/calendar";
+import { TableCell } from "@/components/ui/table";
+import {
+  NavigationMenu,
+  NavigationMenuList,
+  NavigationMenuItem,
+  NavigationMenuLink,
+} from "@/components/ui/navigation-menu";
+
+import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
+import {
+  Item,
+  ItemContent,
+  ItemGroup,
+  ItemTitle,
+  ItemDescription,
+} from "@/components/ui/item";
 import { Input } from "@/components/ui/input";
 import { FieldLabel, Field } from "@/components/ui/field";
 
@@ -68,72 +87,102 @@ export function PublicEditionCatalogue({
   return (
     <div className="flex flex-col gap-y-8">
       <h1 className="text-3xl font-medium">{labels[initial.kind]}历史</h1>
-      <nav aria-label="公开刊物" className="flex flex-wrap gap-5 text-sm">
-        {(["daily", "weekly", "monthly"] as const).map((kind) => (
-          <Link
-            key={kind}
-            href={`/reports/${kind}/archive`}
-            aria-current={kind === initial.kind ? "page" : undefined}
-          >
-            {labels[kind]}历史
-          </Link>
-        ))}
-        <Link href={`/reports/${initial.kind}`}>
-          最新{labels[initial.kind]}
-        </Link>
-      </nav>
+      <NavigationMenu
+        viewport={false}
+        className="max-w-full justify-start"
+        aria-label="公开刊物"
+      >
+        <NavigationMenuList className="flex-wrap justify-start gap-2">
+          {(["daily", "weekly", "monthly"] as const).map((kind) => (
+            <NavigationMenuItem key={kind}>
+              <NavigationMenuLink asChild active={kind === initial.kind}>
+                <Link
+                  href={`/reports/${kind}/archive`}
+                  aria-current={kind === initial.kind ? "page" : undefined}
+                >
+                  {labels[kind]}历史
+                </Link>
+              </NavigationMenuLink>
+            </NavigationMenuItem>
+          ))}
+          <NavigationMenuItem>
+            <NavigationMenuLink asChild>
+              <Link href={`/reports/${initial.kind}`}>
+                最新{labels[initial.kind]}
+              </Link>
+            </NavigationMenuLink>
+          </NavigationMenuItem>
+        </NavigationMenuList>
+      </NavigationMenu>
       {initial.kind === "daily" ? (
-        <section
-          aria-label="日报月份日历"
-          className="flex flex-col gap-y-4 rounded-lg border p-5"
-        >
-          <h2 className="font-medium">月份日历</h2>
-          <div className="flex flex-wrap items-end gap-3">
-            <Field className="w-full min-w-0 sm:w-auto">
-              <FieldLabel htmlFor={`${fieldId}-edition-catalogue-field-1`}>
-                月份
-              </FieldLabel>
-              <Input
-                aria-label="日报月份"
-                type="month"
-                value={month}
-                onChange={(event) => setMonth(event.target.value)}
-                className="block p-2"
-                id={`${fieldId}-edition-catalogue-field-1`}
-              />
-            </Field>
-            <Button
-              variant="outline"
-              disabled={busy || !/^\d{4}-\d{2}$/.test(month)}
-              onClick={() => void loadMonth()}
-            >
-              读取月份
-            </Button>
-          </div>
-          {calendar ? <DailyCalendar calendar={calendar} /> : null}
-        </section>
+        <Item variant="outline" asChild>
+          <section
+            aria-label="日报月份日历"
+            className="flex flex-col gap-y-4 p-5"
+          >
+            <ItemContent className="min-w-0 gap-3">
+              <ItemTitle className="line-clamp-none w-full">
+                <h2>月份日历</h2>
+              </ItemTitle>
+              <div className="flex flex-wrap items-end gap-3">
+                <Field className="w-full min-w-0 sm:w-auto">
+                  <FieldLabel htmlFor={`${fieldId}-edition-catalogue-field-1`}>
+                    月份
+                  </FieldLabel>
+                  <Input
+                    aria-label="日报月份"
+                    type="month"
+                    value={month}
+                    onChange={(event) => setMonth(event.target.value)}
+                    className="block p-2"
+                    id={`${fieldId}-edition-catalogue-field-1`}
+                  />
+                </Field>
+                <Button
+                  variant="outline"
+                  disabled={busy || !/^\d{4}-\d{2}$/.test(month)}
+                  onClick={() => void loadMonth()}
+                >
+                  读取月份
+                </Button>
+              </div>
+              {calendar ? <DailyCalendar calendar={calendar} /> : null}
+            </ItemContent>
+          </section>
+        </Item>
       ) : null}
       {!entries.length ? (
-        <p className="text-muted-foreground text-sm">
-          当前还没有可公开的{labels[initial.kind]}。
-        </p>
+        <Empty>
+          <EmptyHeader>
+            <EmptyDescription>
+              当前还没有可公开的{labels[initial.kind]}。
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
-        <ol className="divide-y">
+        <ItemGroup className="">
           {entries.map((entry) => (
-            <li key={entry.key} className="py-5">
-              <p className="text-muted-foreground mb-2 text-xs">
-                {entry.key} · 修订 {entry.revision} ·{" "}
-                {publicationTime(entry.created_at)}
-              </p>
-              <Link
-                href={entry.reading_url}
-                className="font-medium underline underline-offset-4"
-              >
-                {entry.title}
-              </Link>
-            </li>
+            <Item
+              role="listitem"
+              variant="default"
+              key={entry.key}
+              className="py-5"
+            >
+              <ItemContent className="min-w-0 gap-3">
+                <ItemDescription className="mb-2 line-clamp-none">
+                  {entry.key} · 修订 {entry.revision} ·{" "}
+                  {publicationTime(entry.created_at)}
+                </ItemDescription>
+                <Link
+                  href={entry.reading_url}
+                  className="font-medium underline underline-offset-4"
+                >
+                  {entry.title}
+                </Link>
+              </ItemContent>
+            </Item>
           ))}
-        </ol>
+        </ItemGroup>
       )}
       {next ? (
         <Button variant="outline" disabled={busy} onClick={() => void more()}>
@@ -149,48 +198,51 @@ export function DailyCalendar({
 }: {
   calendar: HotKeyAPI.PublicDailyCalendarView;
 }) {
-  const [year, month] = calendar.month.split("-").map(Number);
-  const first = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
-  const days = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  const entries = new Map(
-    calendar.entries.map((entry) => [Number(entry.key.slice(-2)), entry]),
-  );
+  const entries = new Map(calendar.entries.map((entry) => [entry.key, entry]));
   return (
-    <div
-      className="grid grid-cols-7 gap-2 text-center text-sm"
+    <Calendar
+      locale={zhCN}
+      timeZone="Asia/Shanghai"
+      weekStartsOn={0}
+      month={new Date(`${calendar.month}-01T00:00:00+08:00`)}
+      hideNavigation
+      showOutsideDays={false}
+      className="w-full"
       aria-label={`${calendar.month} 已公开日报`}
-    >
-      {["日", "一", "二", "三", "四", "五", "六"].map((label) => (
-        <span key={label} className="text-muted-foreground py-1">
-          {label}
-        </span>
-      ))}
-      {Array.from({ length: first }, (_, i) => (
-        <span key={`blank${i}`} aria-hidden />
-      ))}
-      {Array.from({ length: days }, (_, i) => {
-        const day = i + 1,
-          entry = entries.get(day);
-        return entry ? (
-          <Link
-            key={day}
-            href={entry.reading_url}
-            title={entry.title}
-            aria-label={`${entry.key} 日报：${entry.title}`}
-            className="bg-secondary rounded-md p-2 underline"
-          >
-            {day}
-          </Link>
-        ) : (
-          <span
-            key={day}
-            className="text-muted-foreground/60 p-2"
-            aria-label={`${calendar.month}-${String(day).padStart(2, "0")} 暂无公开日报`}
-          >
-            {day}
-          </span>
-        );
-      })}
-    </div>
+      components={{
+        Day: ({ day, modifiers, children, ...props }) => {
+          const key = format(day.date, "yyyy-MM-dd");
+          const entry = entries.get(key);
+          return (
+            <TableCell {...props}>
+              {modifiers.hidden ? null : entry ? (
+                <Button
+                  asChild
+                  variant="secondary"
+                  className="size-full min-w-0 px-0"
+                >
+                  <Link
+                    href={entry.reading_url}
+                    title={entry.title}
+                    aria-label={`${entry.key} 日报：${entry.title}`}
+                  >
+                    {children}
+                  </Link>
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  disabled
+                  className="size-full min-w-0 px-0"
+                  aria-label={`${key} 暂无公开日报`}
+                >
+                  {children}
+                </Button>
+              )}
+            </TableCell>
+          );
+        },
+      }}
+    />
   );
 }

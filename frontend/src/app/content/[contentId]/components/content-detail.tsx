@@ -1,4 +1,5 @@
 "use client";
+import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 
 import { toast } from "sonner";
 
@@ -71,9 +72,13 @@ function ContentVersionSection({
         </h2>
         <div className="mt-6">
           <p className="font-medium">未取得正文</p>
-          <p className="text-muted-foreground mt-2 text-sm leading-6">
-            当前观察没有可用正文版本；未知不等于空正文。
-          </p>
+          <Empty className="mt-2 leading-6">
+            <EmptyHeader>
+              <EmptyDescription>
+                当前观察没有可用正文版本；未知不等于空正文。
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         </div>
       </section>
     );
@@ -128,7 +133,6 @@ function ContentVersionSection({
           </Collapsible>
         ) : null}
       </div>
-
       {version.relations.length > 0 ? (
         <div className="mt-6 grid gap-6 sm:grid-cols-2">
           {version.relations.map((relation) => (
@@ -203,9 +207,13 @@ function VisibilitySummary({
             </p>
           </>
         ) : (
-          <p className="text-muted-foreground text-sm leading-6">
-            尚无独立来源状态观察，不能据此判断作品当前是否可见。
-          </p>
+          <Empty className="leading-6">
+            <EmptyHeader>
+              <EmptyDescription>
+                尚无独立来源状态观察，不能据此判断作品当前是否可见。
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         )}
       </div>
     </section>
@@ -484,9 +492,7 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
             </dl>
           </section>
           <VersionHistory history={content.version_history} />
-
           <VisibilityHistory history={content.visibility_history} />
-
           <section aria-labelledby="metrics-heading" className="mt-10">
             <h2 id="metrics-heading" className="text-xl font-medium">
               最近指标观察
@@ -502,7 +508,6 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
               ))}
             </dl>
           </section>
-
           <section aria-labelledby="discoveries-heading" className="mt-10">
             <h2 id="discoveries-heading" className="text-xl font-medium">
               发现依据

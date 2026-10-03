@@ -26,6 +26,7 @@ const session: HotKeyAPI.IdentitySessionView = {
     username: "reader",
     has_password: true,
     github_connected: false,
+
     email: null,
   },
   expires_at: "2100-01-01T00:00:00Z",
@@ -62,7 +63,7 @@ describe("BasicLayout", () => {
     expect(
       screen.getByRole("link", { name: "登录" }).getAttribute("href"),
     ).toBe("/login");
-    expect(screen.queryByRole("button", { name: "更多页面" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "全部导航" })).toBeNull();
     expect(screen.queryByRole("button", { name: "账户菜单" })).toBeNull();
   });
 
@@ -130,6 +131,35 @@ describe("BasicLayout", () => {
     },
   );
 
+  it.each([
+    ["/discover/topics/topic-1", "行业主题", "内容发现"],
+    ["/reports/weekly/edition-1", "公开刊物", "内容发现"],
+    ["/operations/models/capability-1", "模型能力配置", "工作管理"],
+    ["/codex-resets/notice-1", "Codex 公告", "帮助与信息"],
+  ])(
+    "groups navigation and selects the most specific route for %s",
+    async (pathname, label, group) => {
+      route.pathname = pathname;
+      render(<BasicLayout session={session}>{page}</BasicLayout>);
+      const trigger = screen.getByRole("button", { name: "全部导航" });
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+
+      const menu = await screen.findByRole("menu", { name: "全部导航" });
+      const section = within(menu).getByRole("group", { name: group });
+      expect(
+        within(section)
+          .getByRole("menuitem", { name: label })
+          .getAttribute("aria-current"),
+      ).toBe("page");
+      expect(menu.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+      expect(within(menu).getAllByRole("menuitem")).toHaveLength(18);
+
+      fireEvent.keyDown(menu, { key: "Escape" });
+      await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+      await waitFor(() => expect(document.activeElement).toBe(trigger));
+    },
+  );
+
   it("resets the body scroll position when a different route renders", async () => {
     route.pathname = "/events";
     const view = render(<BasicLayout session={session}>{page}</BasicLayout>);
@@ -164,9 +194,19 @@ describe("BasicLayout", () => {
     expect(main.scrollTop).toBe(480);
   });
 
-  it("opens the guide and restores focus to its trigger on close", async () => {
+  it("opens the guide from the footer and restores focus on close", async () => {
     render(<BasicLayout session={session}>{page}</BasicLayout>);
-    const trigger = screen.getByRole("button", { name: "使用指南" });
+    expect(
+      within(screen.getByRole("banner")).queryByRole("button", {
+        name: "使用指南",
+      }),
+    ).toBeNull();
+    const trigger = within(screen.getByRole("contentinfo")).getByRole(
+      "button",
+      {
+        name: "使用指南",
+      },
+    );
     trigger.focus();
     fireEvent.click(trigger);
 

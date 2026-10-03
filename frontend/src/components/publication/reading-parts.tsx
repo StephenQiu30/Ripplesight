@@ -1,3 +1,18 @@
+import { Badge } from "@/components/ui/badge";
+import {
+  Item,
+  ItemContent,
+  ItemGroup,
+  ItemTitle,
+  ItemDescription,
+} from "@/components/ui/item";
+import {
+  NavigationMenu,
+  NavigationMenuList,
+  NavigationMenuItem,
+  NavigationMenuLink,
+} from "@/components/ui/navigation-menu";
+import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -28,18 +43,47 @@ export function publicationTime(value: string | null) {
 export function PublicationNavigation() {
   return (
     <>
-      <nav
+      <NavigationMenu
+        viewport={false}
+        className="mb-8 max-w-full justify-start"
         aria-label="资讯阅读入口"
-        className="mb-8 flex flex-wrap items-center gap-5 text-sm"
       >
-        <Link href="/discover">资讯</Link>
-        <Link href="/discover/topics">行业专题</Link>
-        <Link href="/reports/daily">日周月刊</Link>
-        <Link href="/feeds">订阅</Link>
-        <Link href="/agent">Agent 接入</Link>
-        <Link href="/publication/manage">发布管理</Link>
-        <LocalReadingPreferences />
-      </nav>
+        <NavigationMenuList className="flex-wrap justify-start gap-2">
+          <NavigationMenuItem>
+            <NavigationMenuLink asChild>
+              <Link href="/discover">资讯</Link>
+            </NavigationMenuLink>
+          </NavigationMenuItem>
+          <NavigationMenuItem>
+            <NavigationMenuLink asChild>
+              <Link href="/discover/topics">行业专题</Link>
+            </NavigationMenuLink>
+          </NavigationMenuItem>
+          <NavigationMenuItem>
+            <NavigationMenuLink asChild>
+              <Link href="/reports/daily">日周月刊</Link>
+            </NavigationMenuLink>
+          </NavigationMenuItem>
+          <NavigationMenuItem>
+            <NavigationMenuLink asChild>
+              <Link href="/feeds">订阅</Link>
+            </NavigationMenuLink>
+          </NavigationMenuItem>
+          <NavigationMenuItem>
+            <NavigationMenuLink asChild>
+              <Link href="/agent">Agent 接入</Link>
+            </NavigationMenuLink>
+          </NavigationMenuItem>
+          <NavigationMenuItem>
+            <NavigationMenuLink asChild>
+              <Link href="/publication/manage">发布管理</Link>
+            </NavigationMenuLink>
+          </NavigationMenuItem>
+          <NavigationMenuItem>
+            <LocalReadingPreferences />
+          </NavigationMenuItem>
+        </NavigationMenuList>
+      </NavigationMenu>
     </>
   );
 }
@@ -85,66 +129,76 @@ export function PublicItemCards({
 }) {
   if (!items.length)
     return (
-      <p className="text-muted-foreground py-12 text-sm">
-        当前条件下还没有可公开的资讯。
-      </p>
+      <Empty className="py-12">
+        <EmptyHeader>
+          <EmptyDescription>当前条件下还没有可公开的资讯。</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     );
   return (
-    <div className="divide-muted divide-y">
+    <ItemGroup>
       {items.map((item) => (
-        <article key={item.id} className="flex flex-col gap-y-3 py-7">
-          <div className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs">
-            <span>
-              {item.source.icon_url &&
-              [
-                `/api/site/source-icons/${encodeURIComponent(item.source.key)}.svg`,
-                `/api/site/source-icons/${encodeURIComponent(item.source.key)}/avatar-48`,
-              ].includes(item.source.icon_url) ? (
-                <Image
-                  src={item.source.icon_url}
-                  alt=""
-                  unoptimized
-                  width={16}
-                  height={16}
-                  className="mr-2 inline-block h-4 w-4 rounded-sm"
-                />
+        <Item asChild key={item.id}>
+          <article role="listitem">
+            <ItemContent className="min-w-0 gap-3">
+              <div className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                <span>
+                  {item.source.icon_url &&
+                  [
+                    `/api/site/source-icons/${encodeURIComponent(item.source.key)}.svg`,
+                    `/api/site/source-icons/${encodeURIComponent(item.source.key)}/avatar-48`,
+                  ].includes(item.source.icon_url) ? (
+                    <Image
+                      src={item.source.icon_url}
+                      alt=""
+                      unoptimized
+                      width={16}
+                      height={16}
+                      className="mr-2 inline-block size-4 rounded-sm"
+                    />
+                  ) : null}
+                  {item.source.name}
+                  {item.source.first_party ? " · 第一方" : ""}
+                </span>
+                <time dateTime={item.timeline_at}>
+                  {publicationTime(item.timeline_at)}
+                </time>
+                {item.category ? (
+                  <span>
+                    {categories.find(([key]) => key === item.category)?.[1]}
+                  </span>
+                ) : null}
+                {item.selected ? <Badge variant="secondary">精选</Badge> : null}
+              </div>
+              <ItemTitle className="line-clamp-none">
+                <h2>
+                  <Link href={item.reading_url}>{item.title}</Link>
+                </h2>
+              </ItemTitle>
+              {item.summary ? (
+                <ItemDescription className="line-clamp-none">
+                  {item.summary}
+                </ItemDescription>
               ) : null}
-              {item.source.name}
-              {item.source.first_party ? " · 第一方" : ""}
-            </span>
-            <time dateTime={item.timeline_at}>
-              {publicationTime(item.timeline_at)}
-            </time>
-            {item.category ? (
-              <span>
-                {categories.find(([key]) => key === item.category)?.[1]}
-              </span>
-            ) : null}
-            {item.selected ? <span>精选</span> : null}
-          </div>
-          <h2 className="text-lg leading-7 font-medium">
-            <Link href={item.reading_url}>{item.title}</Link>
-          </h2>
-          {item.summary ? (
-            <p className="text-muted-foreground text-sm leading-7">
-              {item.summary}
-            </p>
-          ) : null}
-          <div className="text-muted-foreground flex flex-wrap gap-3 text-xs">
-            {item.tags.map((tag) => (
-              <span key={tag}>#{tag}</span>
-            ))}
-            {item.original_url ? (
-              <a href={item.original_url} target="_blank" rel="noreferrer">
-                来源原文 ↗
-              </a>
-            ) : null}
-            {item.event_id ? (
-              <Link href={`/discover/stories/${item.event_id}`}>查看事件</Link>
-            ) : null}
-          </div>
-        </article>
+              <div className="text-muted-foreground flex flex-wrap gap-3 text-xs">
+                {item.tags.map((tag) => (
+                  <span key={tag}>#{tag}</span>
+                ))}
+                {item.original_url ? (
+                  <a href={item.original_url} target="_blank" rel="noreferrer">
+                    来源原文 ↗
+                  </a>
+                ) : null}
+                {item.event_id ? (
+                  <Link href={`/discover/stories/${item.event_id}`}>
+                    查看事件
+                  </Link>
+                ) : null}
+              </div>
+            </ItemContent>
+          </article>
+        </Item>
       ))}
-    </div>
+    </ItemGroup>
   );
 }

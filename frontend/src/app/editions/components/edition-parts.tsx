@@ -1,3 +1,4 @@
+import { Item, ItemContent } from "@/components/ui/item";
 import Link from "next/link";
 import { ApiRequestError } from "@/request";
 import { Badge } from "@/components/ui/badge";
@@ -26,29 +27,35 @@ export function editionError(error: unknown): string {
 
 export function EditionCard({ row }: { row: HotKeyAPI.EditionSummaryView }) {
   return (
-    <li className="border-border flex flex-col gap-y-3 border-b py-6">
-      <div className="text-muted-foreground flex flex-wrap gap-3 text-xs">
-        <span>
-          {editionKinds[row.kind]} · {row.key}
-        </span>
-        <Badge variant="outline">{editionStates[row.status]}</Badge>
-        <span>修订 {row.revision}</span>
-      </div>
-      <Link href={`/editions/${row.id}`} className="text-xl font-medium">
-        {row.valid && row.title
-          ? row.title
-          : `${row.key} ${editionKinds[row.kind]}`}
-      </Link>
-      {row.valid && row.status === "complete" && (
-        <p>
-          <Link
-            href={`/reports/${row.kind}/${row.key}`}
-            className="text-primary text-sm underline-offset-4 hover:underline"
-          >
-            公开阅读
-          </Link>
-        </p>
-      )}
-    </li>
+    <Item
+      role="listitem"
+      variant="outline"
+      className="flex flex-col gap-y-3 py-6"
+    >
+      <ItemContent className="min-w-0 gap-3">
+        <div className="text-muted-foreground flex flex-wrap gap-3 text-xs">
+          <span>
+            {editionKinds[row.kind]} · {row.key}
+          </span>
+          <Badge variant="outline">{editionStates[row.status]}</Badge>
+          <span>修订 {row.revision}</span>
+        </div>
+        <Link href={`/editions/${row.id}`} className="text-xl font-medium">
+          {row.valid && row.title
+            ? row.title
+            : `${row.key} ${editionKinds[row.kind]}`}
+        </Link>
+        {row.valid && row.status === "complete" && (
+          <p>
+            <Link
+              href={`/reports/${row.kind}/${row.key}`}
+              className="text-primary text-sm underline-offset-4 hover:underline"
+            >
+              公开阅读
+            </Link>
+          </p>
+        )}
+      </ItemContent>
+    </Item>
   );
 }

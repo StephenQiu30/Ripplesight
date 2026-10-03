@@ -12,6 +12,8 @@
 
 - shadcn/Radix 基础组件放在 `src/components/ui/`。
 - 全部页面的交互控件只组合官方 shadcn/ui + Radix：选择使用 Select/SelectGroup，布尔选项使用 Checkbox/Switch，折叠内容使用 Collapsible，数据表使用 Table，表单使用 FieldGroup/Field/FieldLabel。业务源码不手写 button、input、select、textarea、details 或表格组件；ESLint 检查此边界。文档标题、段落、列表、页面结构、链接及音视频仍保留必要语义标签，不为它们增加包装组件。
+- 信息面板和数据列表组合 Item/ItemContent/ItemTitle/ItemDescription/ItemGroup，持久提示使用 Alert，空状态使用 Empty，分隔线使用 Separator，导航使用 NavigationMenu。业务页面不再用原生容器绘制圆角面板、提示和分隔线；ESLint 对手写控件及这些视觉容器统一检查。
+- 日期组件使用官方 Calendar（React Day Picker），公告单日选择和刊期只读日历均保持北京时间、真实数据及真实刊期链接。互斥范围、状态和刊期类型使用 ToggleGroup；业务逻辑保留已有筛选和分页重置。基础组件通过官方 shadcn CLI 引入，不建立替代基础组件的自定义包装层。
 - 全站操作反馈使用官方 shadcn Sonner：失败和提交校验使用 `toast.error`，成功使用 `toast.success`，主动取消使用 `toast.info`。BasicLayout 唯一挂载 Toaster，统一右上角、可关闭、语义颜色和无障碍通知；业务组件直接调用 `sonner`，传输层不自动弹提示。不在表单、菜单或内容底部保留错误/成功消息块，不创建自定义 Toast 或通知包装层。字段可保留 `data-invalid`/`aria-invalid` 和纠错焦点；加载失败只保留原生 Empty/Alert 的恢复入口及稳定说明，具体请求错误由 Sonner 提示。持久任务失败事实、权限/覆盖状态和全局恢复页面仍使用原生 shadcn 组件；请求取消、失效响应和重新渲染不得重复通知。
 - 组件使用原生 variant/size，className 只调整布局；避免额外卡片、阴影和装饰边框。表单窄屏单列、控件允许收缩、长选项在触发器中截断并在浮层中换行。Select 的“全部/清除覆盖”保留空值和原 FormData；Collapsible 关闭时保留内部已填状态。间距使用 flex/grid + gap，不使用 space-x/space-y。
 - 跨页面复用组件按功能领域放在 `src/components/<feature>/`。
@@ -42,7 +44,9 @@
 
 ## 公开Welcome与登录工作区
 
-`/`保留既定黑白留白主视觉作为SEO Welcome，公开Header只显示站点说明/指南及登录入口，不显示工作区菜单；主操作“开始使用”进入 `/login`，登录后默认 `/topics` 或安全站内原目标。已登录工作区保留原“更多”导航、统一容器、固定头尾及唯一正文滚动区，显示账户和退出。公开说明仅about/privacy/terms/contact/changelog，公开文案不读取个人业务统计；login默认noindex，工作区始终noindex，robots/sitemap只列公开路径。
+`/`保留既定黑白留白主视觉作为SEO Welcome，公开Header只显示站点说明及登录入口，使用指南放在Footer，不显示工作区菜单；主操作“开始使用”进入 `/login`，登录后默认 `/topics` 或安全站内原目标。已登录工作区使用分组导航、统一容器、固定头尾及唯一正文滚动区，显示账户和退出。公开说明仅about/privacy/terms/contact/changelog，公开文案不读取个人业务统计；login默认noindex，工作区始终noindex，robots/sitemap只列公开路径。
+
+工作区Header在 `md` 及以上保留“我的关注、事件、相关内容、热榜”四个常用入口，其余入口收进“全部导航”，按“内容发现、工作管理、帮助与信息”三列展示。窄屏将常用入口一并收入“菜单”，四组按两列展示；菜单宽高受Radix可用视口限制，矮窗口可在浮层内滚动。使用指南移到Footer，与站点信息并列，打开原有指南Dialog并在关闭后恢复Footer触发器焦点。账户用户名仅在 `xl` 及以上显示文字，较窄屏幕保留带可访问名称的账户图标。路由按最长路径匹配，分组内当前入口显示 `aria-current` 和勾选标识；沿用Radix键盘导航、Escape关闭和触发器焦点恢复。
 
 登录专属组件归 `src/app/login/components/`，跨页会话/账户与守卫归 `src/components/auth/`；全部类型和请求来自Umi生成的identity API。账号密码、GitHub OAuth App、邮箱验证码共用真实数据库会话，覆盖加载/不可用/字段错误/限流/取消/成功/网络重试。业务深链接和prefetch均先验证会话，网络失败不能当成已退出；SSR按请求转发限定Cookie，代理只转发HotKey身份Cookie/Set-Cookie。保持官方shadcn/Radix表单、按钮、菜单、无装饰边框、语义颜色及命名尺度。
 
@@ -103,7 +107,7 @@ GitHub 按钮使用官方 GitHub-Mark 栅格素材 `public/brand/github-mark.png
 
 | 组件                                                                             | 领域与复用范围                   | 目标路径                                                                 | 数据来源与状态覆盖                                                                                                                       |
 | -------------------------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| BasicHeader                                                                      | 全站主导航                       | src/layout/basic-header.tsx                                              | 静态真实会话与公开/工作区路由；统一桌面/手机导航、路由匹配与当前页语义，指南 Dialog                                                      |
+| BasicHeader                                                                      | 全站主导航                       | src/layout/basic-header.tsx                                              | 静态真实会话与公开/工作区路由；统一桌面/手机分组导航、路由匹配与当前页语义；指南 Dialog 由 BasicFooter 打开                              |
 | TopicsWorkspace / TopicList                                                      | 关注入口 / 列表                  | src/app/topics/components/；src/components/monitors/topic-list.tsx       | listMonitorTopics；加载、空、分页、归档筛选、错误重试                                                                                    |
 | EventList / EventHotList                                                         | 已确认事件列表与关注热度         | src/app/events/components/                                               | listEvents / listHotEvents；主题、来源与搜索筛选、游标分页、真实热度、加载、空、权限和错误重试                                           |
 | TopicForm / TopicEditor                                                          | 创建 / 编辑专属                  | src/app/monitors/new/components/；src/app/monitors/[topicId]/components/ | create/get/update/clone/pause/resume/archiveMonitorTopic；来源加载、字段422、版本冲突、重复提交、保存状态                                |

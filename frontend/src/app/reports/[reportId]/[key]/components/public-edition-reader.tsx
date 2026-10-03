@@ -1,3 +1,9 @@
+import {
+  NavigationMenu,
+  NavigationMenuList,
+  NavigationMenuItem,
+  NavigationMenuLink,
+} from "@/components/ui/navigation-menu";
 import { ChevronDownIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -103,27 +109,46 @@ export function PublicEditionReader({
           <PublicItemCards items={edition.entries} />
         </CollapsibleContent>
       </Collapsible>
-      <nav
+      <NavigationMenu
+        viewport={false}
+        className="max-w-full justify-start print:hidden"
         aria-label="刊期导航"
-        className="flex flex-wrap gap-5 text-sm print:hidden"
       >
-        {navigation?.previous ? (
-          <Link href={navigation.previous.reading_url} className="underline">
-            ← 上一期 · {navigation.previous.key}
-          </Link>
-        ) : null}
-        <Link href={`/reports/${edition.kind}/archive`} className="underline">
-          全部{labels[edition.kind]}历史
-        </Link>
-        <Link href={`/reports/${edition.kind}`} className="underline">
-          最新{labels[edition.kind]}
-        </Link>
-        {navigation?.next ? (
-          <Link href={navigation.next.reading_url} className="underline">
-            下一期 · {navigation.next.key} →
-          </Link>
-        ) : null}
-      </nav>
+        <NavigationMenuList className="flex-wrap justify-start gap-2">
+          {navigation?.previous ? (
+            <NavigationMenuItem>
+              <NavigationMenuLink asChild>
+                <Link href={navigation.previous.reading_url}>
+                  ← 上一期 · {navigation.previous.key}
+                </Link>
+              </NavigationMenuLink>
+            </NavigationMenuItem>
+          ) : null}
+          <NavigationMenuItem>
+            <NavigationMenuLink asChild>
+              <Link href={`/reports/${edition.kind}/archive`}>
+                全部{labels[edition.kind]}历史
+              </Link>
+            </NavigationMenuLink>
+          </NavigationMenuItem>
+          <NavigationMenuItem>
+            <NavigationMenuLink asChild>
+              <Link href={`/reports/${edition.kind}`}>
+                最新{labels[edition.kind]}
+              </Link>
+            </NavigationMenuLink>
+          </NavigationMenuItem>
+          {navigation?.next ? (
+            <NavigationMenuItem>
+              <NavigationMenuLink asChild>
+                <Link href={navigation.next.reading_url}>
+                  下一期 · {navigation.next.key} →
+                </Link>
+              </NavigationMenuLink>
+            </NavigationMenuItem>
+          ) : null}
+        </NavigationMenuList>
+      </NavigationMenu>
       <div className="flex flex-wrap items-start gap-4 print:hidden">
         <EditionPrint />
         <PosterDownload target={{ kind: edition.kind, key: edition.key }} />

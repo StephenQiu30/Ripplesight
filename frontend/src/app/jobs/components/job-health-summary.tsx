@@ -1,4 +1,6 @@
 "use client";
+import { Spinner } from "@/components/ui/spinner";
+import { Item, ItemContent, ItemDescription } from "@/components/ui/item";
 
 import { toast } from "sonner";
 
@@ -21,9 +23,14 @@ type IssueState =
 export function JobHealthSummaryView({ state }: { state: IssueState }) {
   if (state.status === "loading") {
     return (
-      <p className="text-muted-foreground mt-8 text-sm" role="status">
-        正在检查连续失败状态…
-      </p>
+      <Item className="mt-8" role="status">
+        <Spinner aria-hidden="true" />
+        <ItemContent>
+          <ItemDescription className="line-clamp-none">
+            正在检查连续失败状态…
+          </ItemDescription>
+        </ItemContent>
+      </Item>
     );
   }
 
@@ -38,9 +45,9 @@ export function JobHealthSummaryView({ state }: { state: IssueState }) {
 
   if (state.issues.length === 0) {
     return (
-      <p className="text-muted-foreground mt-8 text-sm" role="status">
-        当前没有连续失败提示。
-      </p>
+      <Alert className="mt-8" role="status">
+        <AlertDescription>当前没有连续失败提示。</AlertDescription>
+      </Alert>
     );
   }
 

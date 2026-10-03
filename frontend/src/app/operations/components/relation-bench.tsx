@@ -1,4 +1,10 @@
 "use client";
+import {
+  Item,
+  ItemContent,
+  ItemTitle,
+  ItemDescription,
+} from "@/components/ui/item";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronDownIcon } from "lucide-react";
@@ -528,60 +534,65 @@ export function RelationBench({ token }: { token: string }) {
           </form>
           <div className="grid gap-4">
             {page.items.map((row) => (
-              <article
-                key={row.case.case_id}
-                className="bg-muted/40 min-w-0 rounded-lg p-4"
-              >
-                <h3 className="font-medium">
-                  {row.case.case_id} · gold {relations[row.case.gold_relation]}
-                </h3>
-                <p className="text-muted-foreground text-xs">
-                  {row.case.stratum ?? "未分层"} · {row.case.split ?? "无分组"}
-                </p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {(["a", "b"] as const).map((key) => (
-                    <div key={key}>
-                      <p>
-                        {key.toUpperCase()} · {row.case[key].source}{" "}
-                        {row.case[key].first_party ? "· 第一方" : ""}
-                      </p>
-                      <p className="font-medium">{row.case[key].title}</p>
-                      <p className="text-muted-foreground text-sm">
-                        {row.case[key].summary}
-                      </p>
-                      {row.case[key].frame ? (
-                        <pre className="mt-2 overflow-auto text-xs">
-                          {JSON.stringify(row.case[key].frame, null, 2)}
-                        </pre>
-                      ) : null}
+              <Item variant="muted" key={row.case.case_id} asChild>
+                <article className="min-w-0 p-4">
+                  <ItemContent className="min-w-0 gap-3">
+                    <ItemTitle className="line-clamp-none w-full">
+                      <h3>
+                        {row.case.case_id} · gold{" "}
+                        {relations[row.case.gold_relation]}
+                      </h3>
+                    </ItemTitle>
+                    <ItemDescription className="line-clamp-none">
+                      {row.case.stratum ?? "未分层"} ·{" "}
+                      {row.case.split ?? "无分组"}
+                    </ItemDescription>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      {(["a", "b"] as const).map((key) => (
+                        <div key={key}>
+                          <p>
+                            {key.toUpperCase()} · {row.case[key].source}{" "}
+                            {row.case[key].first_party ? "· 第一方" : ""}
+                          </p>
+                          <p className="font-medium">{row.case[key].title}</p>
+                          <p className="text-muted-foreground text-sm">
+                            {row.case[key].summary}
+                          </p>
+                          {row.case[key].frame ? (
+                            <pre className="mt-2 overflow-auto text-xs">
+                              {JSON.stringify(row.case[key].frame, null, 2)}
+                            </pre>
+                          ) : null}
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  {Object.entries(row.by_model).map(([model, value]) => {
-                    const prediction =
-                      value as HotKeyAPI.RelationPredictionInput;
-                    return (
-                      <div key={model} className="min-w-0">
-                        <p className="break-all">
-                          {model} ·{" "}
-                          {prediction.relation
-                            ? relations[prediction.relation]
-                            : "错误 / 未知"}
-                          {prediction.confidence == null
-                            ? ""
-                            : ` · ${(prediction.confidence * 100).toFixed(1)}%`}
-                        </p>
-                        <p className="text-muted-foreground text-sm">
-                          {prediction.error_code ??
-                            prediction.difference ??
-                            "未提供差异说明"}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </article>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      {Object.entries(row.by_model).map(([model, value]) => {
+                        const prediction =
+                          value as HotKeyAPI.RelationPredictionInput;
+                        return (
+                          <div key={model} className="min-w-0">
+                            <p className="break-all">
+                              {model} ·{" "}
+                              {prediction.relation
+                                ? relations[prediction.relation]
+                                : "错误 / 未知"}
+                              {prediction.confidence == null
+                                ? ""
+                                : ` · ${(prediction.confidence * 100).toFixed(1)}%`}
+                            </p>
+                            <p className="text-muted-foreground text-sm">
+                              {prediction.error_code ??
+                                prediction.difference ??
+                                "未提供差异说明"}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ItemContent>
+                </article>
+              </Item>
             ))}
           </div>
           {page.next_cursor ? (

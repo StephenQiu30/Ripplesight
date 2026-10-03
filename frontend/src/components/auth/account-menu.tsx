@@ -54,7 +54,7 @@ export function AccountMenu() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="navigation" aria-label="账户菜单">
           <UserAvatar user={session.user} className="size-7" />
-          <span className="hidden max-w-24 truncate lg:inline">
+          <span className="hidden max-w-24 truncate xl:inline">
             {session.user.username}
           </span>
         </Button>

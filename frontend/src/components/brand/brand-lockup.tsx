@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -30,25 +31,30 @@ export function BrandLockup({
   showEnglish = false,
 }: BrandLockupProps) {
   return (
-    <Link
-      href={href}
-      aria-label={href === "/" ? "知微见澜首页" : "知微见澜工作台"}
-      className="focus-visible:ring-ring flex min-h-11 items-center gap-3 rounded-sm focus-visible:ring-2 focus-visible:outline-none"
+    <Button
+      asChild
+      variant="ghost"
+      className="h-auto min-h-11 gap-3 px-0 hover:bg-transparent"
     >
-      <BrandMark />
-      <span
-        className={cn(
-          "text-base font-semibold tracking-tight sm:text-lg",
-          compactOnMobile && "hidden sm:inline",
-        )}
+      <Link
+        href={href}
+        aria-label={href === "/" ? "知微见澜首页" : "知微见澜工作台"}
       >
-        知微见澜
-      </span>
-      {showEnglish ? (
-        <span className="text-muted-foreground hidden text-sm sm:inline">
-          / Ripplesight
+        <BrandMark />
+        <span
+          className={cn(
+            "text-base font-semibold tracking-tight sm:text-lg",
+            compactOnMobile && "hidden sm:inline",
+          )}
+        >
+          知微见澜
         </span>
-      ) : null}
-    </Link>
+        {showEnglish ? (
+          <span className="text-muted-foreground hidden text-sm sm:inline">
+            / Ripplesight
+          </span>
+        ) : null}
+      </Link>
+    </Button>
   );
 }

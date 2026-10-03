@@ -1,4 +1,6 @@
 "use client";
+import { Spinner } from "@/components/ui/spinner";
+import { Item, ItemContent, ItemDescription } from "@/components/ui/item";
 import { FieldLabel, Field } from "@/components/ui/field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -14,6 +16,7 @@ import {
 import { PageState } from "@/components/system/page-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ApiRequestError } from "@/request";
 import { ResetCalendar } from "./reset-calendar";
@@ -144,9 +147,14 @@ export function CodexResetWorkspace() {
     return (
       <div>
         <h1 className="text-3xl font-medium">Codex 重置公告</h1>
-        <p role="status" className="text-muted-foreground mt-6">
-          正在读取公告与日历…
-        </p>
+        <Item role="status" className="mt-6">
+          <Spinner aria-hidden="true" />
+          <ItemContent>
+            <ItemDescription className="line-clamp-none">
+              正在读取公告与日历…
+            </ItemDescription>
+          </ItemContent>
+        </Item>
       </div>
     );
   if (state.status === "error")
@@ -216,9 +224,11 @@ export function CodexResetWorkspace() {
         </Alert>
       )}
       {!configuration.enabled && (
-        <p role="status" className="bg-secondary mt-6 rounded-xl p-4 text-sm">
-          监控已关闭。下方保留已有记录，暂无新扫描或识别。
-        </p>
+        <Alert role="status" className="mt-6 p-4">
+          <AlertDescription>
+            监控已关闭。下方保留已有记录，暂无新扫描或识别。
+          </AlertDescription>
+        </Alert>
       )}
       <section
         aria-label="公告监控健康"
@@ -271,26 +281,19 @@ export function CodexResetWorkspace() {
         />
         <div>
           <div className="mb-7 flex flex-wrap items-center gap-3">
-            <Button
-              variant={range === "all" ? "secondary" : "ghost"}
-              aria-pressed={range === "all"}
-              onClick={() => {
-                setRange("all");
+            <ToggleGroup
+              type="single"
+              value={range}
+              aria-label="公告日期范围"
+              onValueChange={(value) => {
+                if (!value) return;
+                setRange(value as typeof range);
                 setSelectedDate(null);
               }}
             >
-              完整记录
-            </Button>
-            <Button
-              variant={range === "recent" ? "secondary" : "ghost"}
-              aria-pressed={range === "recent"}
-              onClick={() => {
-                setRange("recent");
-                setSelectedDate(null);
-              }}
-            >
-              最近七日
-            </Button>
+              <ToggleGroupItem value="all">完整记录</ToggleGroupItem>
+              <ToggleGroupItem value="recent">最近七日</ToggleGroupItem>
+            </ToggleGroup>
             <Field
               orientation="horizontal"
               className="w-auto"

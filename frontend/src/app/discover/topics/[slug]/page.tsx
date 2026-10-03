@@ -1,3 +1,9 @@
+import {
+  NavigationMenu,
+  NavigationMenuList,
+  NavigationMenuItem,
+  NavigationMenuLink,
+} from "@/components/ui/navigation-menu";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -10,7 +16,6 @@ import {
   PublicationFailure,
   PublicationNavigation,
 } from "@/components/publication/reading-parts";
-import { Button } from "@/components/ui/button";
 export async function generateMetadata({
   params,
 }: {
@@ -86,37 +91,56 @@ export default async function TopicPage({
           {page.topic.total} 篇精选 · 最近 30 天 {page.topic.recent} 篇
         </p>
         {page.related.length ? (
-          <nav
+          <NavigationMenu
+            viewport={false}
+            className="mt-5 max-w-full justify-start"
             aria-label="相关专题"
-            className="mt-5 flex flex-wrap gap-4 text-sm"
           >
-            {page.related.map((topic) => (
-              <Link key={topic.slug} href={`/discover/topics/${topic.slug}`}>
-                {topic.name}
-              </Link>
-            ))}
-          </nav>
+            <NavigationMenuList className="flex-wrap justify-start gap-2">
+              {page.related.map((topic) => (
+                <NavigationMenuItem key={topic.slug}>
+                  <NavigationMenuLink asChild>
+                    <Link href={`/discover/topics/${topic.slug}`}>
+                      {topic.name}
+                    </Link>
+                  </NavigationMenuLink>
+                </NavigationMenuItem>
+              ))}
+            </NavigationMenuList>
+          </NavigationMenu>
         ) : null}
         <PublicItemCards items={page.items} />
-        <nav aria-label="专题分页" className="mt-7 flex items-center gap-4">
-          {page.page > 1 ? (
-            <Button variant="outline" asChild>
-              <Link href={`/discover/topics/${slug}?page=${page.page - 1}`}>
-                上一页
-              </Link>
-            </Button>
-          ) : null}
-          <span className="text-muted-foreground text-sm">
-            第 {page.page} / {page.page_count} 页
-          </span>
-          {page.page < page.page_count ? (
-            <Button variant="outline" asChild>
-              <Link href={`/discover/topics/${slug}?page=${page.page + 1}`}>
-                下一页
-              </Link>
-            </Button>
-          ) : null}
-        </nav>
+        <NavigationMenu
+          viewport={false}
+          className="mt-7 max-w-full justify-start"
+          aria-label="专题分页"
+        >
+          <NavigationMenuList className="flex-wrap justify-start gap-2">
+            {page.page > 1 ? (
+              <NavigationMenuItem>
+                <NavigationMenuLink asChild>
+                  <Link href={`/discover/topics/${slug}?page=${page.page - 1}`}>
+                    上一页
+                  </Link>
+                </NavigationMenuLink>
+              </NavigationMenuItem>
+            ) : null}
+            <NavigationMenuItem>
+              <span className="text-muted-foreground text-sm">
+                第 {page.page} / {page.page_count} 页
+              </span>
+            </NavigationMenuItem>
+            {page.page < page.page_count ? (
+              <NavigationMenuItem>
+                <NavigationMenuLink asChild>
+                  <Link href={`/discover/topics/${slug}?page=${page.page + 1}`}>
+                    下一页
+                  </Link>
+                </NavigationMenuLink>
+              </NavigationMenuItem>
+            ) : null}
+          </NavigationMenuList>
+        </NavigationMenu>
       </div>
     </>
   );

@@ -1,4 +1,5 @@
 "use client";
+import { Button } from "@/components/ui/button";
 
 import { usePathname } from "next/navigation";
 import {
@@ -42,12 +43,12 @@ export function BasicLayout({
     <IdentitySessionProvider session={session}>
       <LayoutScrollContext.Provider value={mainRef}>
         <div className="bg-background flex h-dvh flex-col overflow-hidden print:h-auto print:overflow-visible">
-          <a
-            href="#main-content"
-            className="bg-background text-foreground sr-only rounded-md px-4 py-3 focus:not-sr-only focus:fixed focus:top-3 focus:left-5 focus:z-50"
+          <Button
+            asChild
+            className="sr-only focus-within:not-sr-only focus-within:fixed focus-within:top-3 focus-within:left-5 focus-within:z-50"
           >
-            跳到正文
-          </a>
+            <a href="#main-content">跳到正文</a>
+          </Button>
           {pathname !== "/login" && <BasicHeader />}
           <main
             id="main-content"

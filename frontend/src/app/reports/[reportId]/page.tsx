@@ -1,3 +1,4 @@
+import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
@@ -88,7 +89,13 @@ export default async function ReportDetailPage({ params }: Parameters) {
         <PublicationNavigation />
         <div className="flex flex-col gap-y-5">
           <h1 className="text-3xl font-medium">最新{labels[kind]}</h1>
-          <p>当前还没有可公开的{labels[kind]}。</p>
+          <Empty>
+            <EmptyHeader>
+              <EmptyDescription>
+                当前还没有可公开的{labels[kind]}。
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
           <Link href={`/reports/${kind}/archive`} className="underline">
             读取刊物历史
           </Link>

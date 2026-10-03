@@ -1,3 +1,5 @@
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import Link from "next/link";
 
 import { PageState } from "@/components/system/page-state";
@@ -41,12 +43,9 @@ export function RunStamp({ run }: { run: HotKeyAPI.RunView | null }) {
 
 export function ModelMark({ model }: { model: HotKeyAPI.ModelRefView }) {
   return (
-    <span
-      aria-hidden="true"
-      className="bg-muted text-muted-foreground inline-flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-medium"
-    >
-      {model.brand.monogram}
-    </span>
+    <Avatar aria-hidden="true">
+      <AvatarFallback>{model.brand.monogram}</AvatarFallback>
+    </Avatar>
   );
 }
 
@@ -67,7 +66,13 @@ export function OfficialPrice({
   compact?: boolean;
 }) {
   if (!price)
-    return <p className="text-muted-foreground text-sm">暂无公开价格</p>;
+    return (
+      <Empty>
+        <EmptyHeader>
+          <EmptyDescription>暂无公开价格</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    );
   const hasCny =
     price.cny_input_price !== null || price.cny_output_price !== null;
   const currency = hasCny ? "CNY" : price.currency;

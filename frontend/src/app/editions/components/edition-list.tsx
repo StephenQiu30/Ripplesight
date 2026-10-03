@@ -1,4 +1,6 @@
 "use client";
+import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
+import { ItemGroup } from "@/components/ui/item";
 import { FieldGroup, FieldLabel, Field } from "@/components/ui/field";
 
 import Link from "next/link";
@@ -11,6 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { EditionCard, editionError, editionKinds } from "./edition-parts";
 
 export function EditionList() {
@@ -95,23 +98,28 @@ export function EditionList() {
         <p className="text-muted-foreground mt-4 leading-7">
           按北京时间的完整自然刊期编选资讯，阅读来源、关键事实和历史修订。
         </p>
-        <nav aria-label="刊期类型" className="my-7 flex gap-3">
-          {Object.entries(editionKinds).map(([key, label]) => (
-            <Button
-              key={key}
-              variant={kind === key ? "secondary" : "outline"}
-              aria-pressed={kind === key}
-              onClick={() => {
-                setKind(key as typeof kind);
+        <div className="my-7 flex flex-wrap gap-3">
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            value={kind}
+            aria-label="刊期类型"
+            onValueChange={(value) => {
+              if (value) {
+                setKind(value as typeof kind);
                 setBefore(undefined);
                 setRows([]);
                 setLoading(true);
                 setAccepted(undefined);
-              }}
-            >
-              {label}
-            </Button>
-          ))}
+              }
+            }}
+          >
+            {Object.entries(editionKinds).map(([key, label]) => (
+              <ToggleGroupItem key={key} value={key}>
+                {label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
           <Button
             variant="ghost"
             onClick={() => {
@@ -121,7 +129,7 @@ export function EditionList() {
           >
             刷新
           </Button>
-        </nav>
+        </div>
         {loadFailed ? (
           <Alert variant="destructive">
             <AlertTitle>刊期暂不可用</AlertTitle>
@@ -133,15 +141,19 @@ export function EditionList() {
             {loading ? (
               <Skeleton className="h-32 w-full" />
             ) : loadFailed ? null : rows.length ? (
-              <ul>
+              <ItemGroup>
                 {rows.map((row) => (
                   <EditionCard key={row.id} row={row} />
                 ))}
-              </ul>
+              </ItemGroup>
             ) : (
-              <p className="text-muted-foreground py-10">
-                暂无{editionKinds[kind]}刊期。
-              </p>
+              <Empty className="py-10">
+                <EmptyHeader>
+                  <EmptyDescription>
+                    暂无{editionKinds[kind]}刊期。
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             )}
             {rows.length === 20 ? (
               <Button
@@ -211,12 +223,14 @@ export function EditionList() {
               </FieldGroup>
             </form>
             {accepted ? (
-              <p role="status" className="mt-5 text-sm">
-                已受理。
-                <Link href={`/editions/${accepted.id}`} className="underline">
-                  查看进度与正文
-                </Link>
-              </p>
+              <Alert role="status" className="mt-5">
+                <AlertDescription>
+                  已受理。
+                  <Link href={`/editions/${accepted.id}`} className="underline">
+                    查看进度与正文
+                  </Link>
+                </AlertDescription>
+              </Alert>
             ) : null}
           </aside>
         </div>

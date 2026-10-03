@@ -20,7 +20,7 @@ describe("official UI component boundary", () => {
     await eslint.calculateConfigForFile("src/app/example/page.tsx");
   });
 
-  it.each(["button", "input", "select", "textarea", "details", "table"])(
+  it.each(["button", "input", "select", "textarea", "details", "table", "nav"])(
     "rejects a handwritten %s in a page",
     async (tag) => {
       expect(
@@ -40,6 +40,28 @@ describe("official UI component boundary", () => {
         "src/components/ui/button.tsx",
       ),
     ).toHaveLength(0);
+  });
+  it.each(["bg-muted rounded-lg p-4", "divide-y", "border-t pt-4"])(
+    "rejects a handmade surface or separator: %s",
+    async (className) => {
+      expect(
+        await uiViolations(
+          `export default () => <section className="${className}" />;`,
+        ),
+      ).toHaveLength(1);
+    },
+  );
+  it("allows semantic article styling and official surfaces", async () => {
+    expect(
+      await uiViolations(
+        `export default () => <Item><ItemContent><article className="[&_pre]:rounded-md"><p>正文</p></article><Alert /><Separator /></ItemContent></Item>;`,
+      ),
+    ).toHaveLength(0);
+  });
+  it("rejects a handwritten status message", async () => {
+    expect(
+      await uiViolations(`export default () => <p role="status">正在读取</p>;`),
+    ).toHaveLength(1);
   });
   it("rejects a handmade clickable container", async () => {
     expect(

@@ -1,4 +1,13 @@
 "use client";
+import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Item,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemTitle,
+} from "@/components/ui/item";
 import { toast } from "sonner";
 import {
   SelectLabel,
@@ -89,85 +98,91 @@ function CapabilityCard({
   );
   const [reason, setReason] = useState("");
   return (
-    <section className="bg-muted/30 flex min-w-0 flex-col gap-y-4 rounded-xl p-5">
-      <h2 className="font-medium">{capability.label}</h2>
-      <p className="text-muted-foreground text-sm">
-        当前 {capability.current.provider} / {capability.current.model} ·{" "}
-        {sourceLabels[capability.source]} ·{" "}
-        {capability.current.vision ? "支持视觉输入" : "文本输入"}
-      </p>
-      <p className="text-muted-foreground text-xs">
-        {capability.env} · 默认 {capability.default_model ?? "default"}
-      </p>
-      <Field className="min-w-0" data-disabled={busy}>
-        <FieldLabel htmlFor={`model-${capability.key}`}>
-          {capability.label} 目标模型
-        </FieldLabel>
-        <Select
-          value={model}
-          disabled={busy}
-          onValueChange={(selectedValue) =>
-            setModel(selectedValue === "__none__" ? "" : selectedValue)
-          }
-        >
-          <SelectTrigger
-            id={`model-${capability.key}`}
-            className="w-full min-w-0"
+    <Item variant="muted" asChild>
+      <section className="flex min-w-0 flex-col gap-y-4 p-5">
+        <ItemContent className="min-w-0 gap-3">
+          <ItemTitle className="line-clamp-none w-full">
+            <h2>{capability.label}</h2>
+          </ItemTitle>
+          <ItemDescription className="line-clamp-none">
+            当前 {capability.current.provider} / {capability.current.model} ·{" "}
+            {sourceLabels[capability.source]} ·{" "}
+            {capability.current.vision ? "支持视觉输入" : "文本输入"}
+          </ItemDescription>
+          <ItemDescription className="line-clamp-none">
+            {capability.env} · 默认 {capability.default_model ?? "default"}
+          </ItemDescription>
+          <Field className="min-w-0" data-disabled={busy}>
+            <FieldLabel htmlFor={`model-${capability.key}`}>
+              {capability.label} 目标模型
+            </FieldLabel>
+            <Select
+              value={model}
+              disabled={busy}
+              onValueChange={(selectedValue) =>
+                setModel(selectedValue === "__none__" ? "" : selectedValue)
+              }
+            >
+              <SelectTrigger
+                id={`model-${capability.key}`}
+                className="w-full min-w-0"
+              >
+                <SelectValue placeholder="继承环境或服务端默认（清除运营覆盖）" />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectGroup>
+                  <SelectLabel className="sr-only">
+                    {capability.label} 目标模型
+                  </SelectLabel>
+                  <SelectItem value="__none__" className="whitespace-normal">
+                    继承环境或服务端默认（清除运营覆盖）
+                  </SelectItem>
+                  {configuration.choices.map((choice) => (
+                    <SelectItem
+                      key={choice.key}
+                      disabled={!choice.configured}
+                      value={choice.key}
+                      className="whitespace-normal"
+                    >
+                      {choice.key} · {choice.provider}/{choice.model} ·{" "}
+                      {choice.vision ? "视觉" : "文本"}
+                      {choice.configured ? "" : " · 尚未配置"}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field className="min-w-0" data-disabled={busy}>
+            <FieldLabel htmlFor={`reason-${capability.key}`}>
+              {capability.label} 切换原因
+            </FieldLabel>
+            <Textarea
+              id={`reason-${capability.key}`}
+              value={reason}
+              disabled={busy}
+              maxLength={1000}
+              onChange={(event) => setReason(event.target.value)}
+            />
+          </Field>
+          <Button
+            variant="outline"
+            disabled={busy || !reason.trim()}
+            onClick={() =>
+              save({
+                expected_version: configuration.version,
+                capability: capability.key,
+                model_key: model || null,
+                reason: reason.trim(),
+                actor: "Workspace operator",
+              })
+            }
           >
-            <SelectValue placeholder="继承环境或服务端默认（清除运营覆盖）" />
-          </SelectTrigger>
-          <SelectContent position="popper">
-            <SelectGroup>
-              <SelectLabel className="sr-only">
-                {capability.label} 目标模型
-              </SelectLabel>
-              <SelectItem value="__none__" className="whitespace-normal">
-                继承环境或服务端默认（清除运营覆盖）
-              </SelectItem>
-              {configuration.choices.map((choice) => (
-                <SelectItem
-                  key={choice.key}
-                  disabled={!choice.configured}
-                  value={choice.key}
-                  className="whitespace-normal"
-                >
-                  {choice.key} · {choice.provider}/{choice.model} ·{" "}
-                  {choice.vision ? "视觉" : "文本"}
-                  {choice.configured ? "" : " · 尚未配置"}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      </Field>
-      <Field className="min-w-0" data-disabled={busy}>
-        <FieldLabel htmlFor={`reason-${capability.key}`}>
-          {capability.label} 切换原因
-        </FieldLabel>
-        <Textarea
-          id={`reason-${capability.key}`}
-          value={reason}
-          disabled={busy}
-          maxLength={1000}
-          onChange={(event) => setReason(event.target.value)}
-        />
-      </Field>
-      <Button
-        variant="outline"
-        disabled={busy || !reason.trim()}
-        onClick={() =>
-          save({
-            expected_version: configuration.version,
-            capability: capability.key,
-            model_key: model || null,
-            reason: reason.trim(),
-            actor: "Workspace operator",
-          })
-        }
-      >
-        保存 {capability.label}
-      </Button>
-    </section>
+            保存 {capability.label}
+          </Button>
+        </ItemContent>
+      </section>
+    </Item>
   );
 }
 
@@ -186,52 +201,56 @@ function CostCircuitCard({
 }) {
   const [reason, setReason] = useState("");
   return (
-    <section className="bg-muted/30 flex flex-col gap-y-3 rounded-lg p-4">
-      <p className="text-sm font-medium">
-        {circuit.provider}/{circuit.model} ·{" "}
-        {circuit.acknowledged ? "已人工核对" : "成本熔断待核对"}
-      </p>
-      <p className="text-muted-foreground text-xs">
-        调用 {circuit.call_id} · {time(circuit.created_at)}
-      </p>
-      <dl className="grid grid-cols-2 gap-3 text-sm">
-        <div>
-          <dt>供应商实际</dt>
-          <dd>{money(circuit.cost_actual_micros, circuit.currency)}</dd>
-        </div>
-        <div>
-          <dt>冻结上限</dt>
-          <dd>{money(circuit.cost_cap_micros, circuit.currency)}</dd>
-        </div>
-      </dl>
-      {!circuit.acknowledged ? (
-        <>
-          <Label htmlFor={`ack-${circuit.call_id}`}>
-            成本核对原因 {circuit.call_id}
-          </Label>
-          <Textarea
-            id={`ack-${circuit.call_id}`}
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            maxLength={1000}
-            disabled={busy}
-          />
-          <Button
-            disabled={busy || !reason.trim()}
-            variant="outline"
-            onClick={() =>
-              acknowledge({
-                call_id: circuit.call_id,
-                expected_version: version,
-                reason: reason.trim(),
-              })
-            }
-          >
-            确认已核对该调用成本
-          </Button>
-        </>
-      ) : null}
-    </section>
+    <Item variant="muted" asChild>
+      <section className="flex flex-col gap-y-3 p-4">
+        <ItemContent className="min-w-0 gap-3">
+          <p className="text-sm font-medium">
+            {circuit.provider}/{circuit.model} ·{" "}
+            {circuit.acknowledged ? "已人工核对" : "成本熔断待核对"}
+          </p>
+          <ItemDescription className="line-clamp-none">
+            调用 {circuit.call_id} · {time(circuit.created_at)}
+          </ItemDescription>
+          <dl className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <dt>供应商实际</dt>
+              <dd>{money(circuit.cost_actual_micros, circuit.currency)}</dd>
+            </div>
+            <div>
+              <dt>冻结上限</dt>
+              <dd>{money(circuit.cost_cap_micros, circuit.currency)}</dd>
+            </div>
+          </dl>
+          {!circuit.acknowledged ? (
+            <>
+              <Label htmlFor={`ack-${circuit.call_id}`}>
+                成本核对原因 {circuit.call_id}
+              </Label>
+              <Textarea
+                id={`ack-${circuit.call_id}`}
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                maxLength={1000}
+                disabled={busy}
+              />
+              <Button
+                disabled={busy || !reason.trim()}
+                variant="outline"
+                onClick={() =>
+                  acknowledge({
+                    call_id: circuit.call_id,
+                    expected_version: version,
+                    reason: reason.trim(),
+                  })
+                }
+              >
+                确认已核对该调用成本
+              </Button>
+            </>
+          ) : null}
+        </ItemContent>
+      </section>
+    </Item>
   );
 }
 
@@ -400,8 +419,16 @@ export function ModelManager() {
         <p className="text-muted-foreground text-xs">
           令牌只保存在本页内存，清除或离开页面后不再保留。
         </p>
-
-        {busy ? <p role="status">正在读取或提交…</p> : null}
+        {busy ? (
+          <Item role="status">
+            <Spinner aria-hidden="true" />
+            <ItemContent>
+              <ItemDescription className="line-clamp-none">
+                正在读取或提交…
+              </ItemDescription>
+            </ItemContent>
+          </Item>
+        ) : null}
         {configuration ? (
           <>
             <section className="flex flex-col gap-y-2">
@@ -452,51 +479,60 @@ export function ModelManager() {
               {overview.usage.length ? (
                 <div className="flex flex-col gap-y-4">
                   {overview.usage.map((row, index) => (
-                    <article
+                    <Item
+                      variant="muted"
                       key={`${row.purpose}:${row.provider}:${row.model}:${row.currency}:${index}`}
-                      className="bg-muted/30 flex flex-col gap-y-3 rounded-lg p-4"
+                      asChild
                     >
-                      <p className="text-sm font-medium">
-                        {row.capability} · {row.provider}/{row.model} ·{" "}
-                        {row.prompt_version}
-                      </p>
-                      <p className="text-muted-foreground text-xs">
-                        {row.purpose} · 调用 {row.calls} · 成功 {row.succeeded}{" "}
-                        · 失败 {row.failed} ·{" "}
-                        <span>进行中 {row.running ?? 0}</span> ·{" "}
-                        <span>未知 {row.unknown}</span>
-                      </p>
-                      <dl className="grid gap-3 text-sm sm:grid-cols-3">
-                        <div>
-                          <dt>估计费用</dt>
-                          <dd>
-                            {money(row.cost_estimate_micros, row.currency)}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>供应商实际</dt>
-                          <dd>{money(row.cost_actual_micros, row.currency)}</dd>
-                        </div>
-                        <div>
-                          <dt>冻结上限</dt>
-                          <dd>{money(row.cost_cap_micros, row.currency)}</dd>
-                        </div>
-                        <div>
-                          <dt>输入 / 缓存 / 输出 token</dt>
-                          <dd>
-                            {row.input_tokens} / {row.cached_input_tokens} /{" "}
-                            {row.output_tokens}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>延迟 p50 / p95</dt>
-                          <dd>
-                            {row.latency_p50_ms ?? "未知"} /{" "}
-                            {row.latency_p95_ms ?? "未知"} ms
-                          </dd>
-                        </div>
-                      </dl>
-                    </article>
+                      <article className="flex flex-col gap-y-3 p-4">
+                        <ItemContent className="min-w-0 gap-3">
+                          <p className="text-sm font-medium">
+                            {row.capability} · {row.provider}/{row.model} ·{" "}
+                            {row.prompt_version}
+                          </p>
+                          <ItemDescription className="line-clamp-none">
+                            {row.purpose} · 调用 {row.calls} · 成功{" "}
+                            {row.succeeded}· 失败 {row.failed} ·{" "}
+                            <span>进行中 {row.running ?? 0}</span> ·{" "}
+                            <span>未知 {row.unknown}</span>
+                          </ItemDescription>
+                          <dl className="grid gap-3 text-sm sm:grid-cols-3">
+                            <div>
+                              <dt>估计费用</dt>
+                              <dd>
+                                {money(row.cost_estimate_micros, row.currency)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>供应商实际</dt>
+                              <dd>
+                                {money(row.cost_actual_micros, row.currency)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>冻结上限</dt>
+                              <dd>
+                                {money(row.cost_cap_micros, row.currency)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>输入 / 缓存 / 输出 token</dt>
+                              <dd>
+                                {row.input_tokens} / {row.cached_input_tokens} /{" "}
+                                {row.output_tokens}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>延迟 p50 / p95</dt>
+                              <dd>
+                                {row.latency_p50_ms ?? "未知"} /{" "}
+                                {row.latency_p95_ms ?? "未知"} ms
+                              </dd>
+                            </div>
+                          </dl>
+                        </ItemContent>
+                      </article>
+                    </Item>
                   ))}
                 </div>
               ) : (
@@ -529,42 +565,50 @@ export function ModelManager() {
             <section className="flex flex-col gap-y-4">
               <h2 className="text-xl font-medium">配置与成本核对审计</h2>
               {overview.history.length ? (
-                <ul className="flex flex-col gap-y-4">
+                <ItemGroup className="flex flex-col gap-y-4">
                   {overview.history.map((entry) => (
-                    <li
+                    <Item
+                      role="listitem"
+                      variant="muted"
                       key={entry.id}
-                      className="bg-muted/30 rounded-lg p-4 text-sm"
+                      className="p-4"
                     >
-                      <p>
-                        {entry.action} · {entry.target_ref} · {entry.status}
-                      </p>
-                      <p>{entry.reason}</p>
-                      <p className="text-muted-foreground text-xs">
-                        版本{" "}
-                        {typeof entry.before_state.version === "number"
-                          ? entry.before_state.version
-                          : "未知"}{" "}
-                        →{" "}
-                        {typeof entry.after_state.version === "number"
-                          ? entry.after_state.version
-                          : "未知"}
-                        {auditModel(entry.before_state, entry.target_ref) &&
-                        auditModel(entry.after_state, entry.target_ref)
-                          ? ` · ${auditModel(entry.before_state, entry.target_ref)} → ${auditModel(entry.after_state, entry.target_ref)}`
-                          : ""}
-                      </p>
-                      <p className="text-muted-foreground text-xs">
-                        {entry.actor} · {time(entry.created_at)} · 操作{" "}
-                        {entry.operation_id}
-                        {entry.error_code ? ` · ${entry.error_code}` : ""}
-                      </p>
-                    </li>
+                      <ItemContent className="min-w-0 gap-3">
+                        <p>
+                          {entry.action} · {entry.target_ref} · {entry.status}
+                        </p>
+                        <p>{entry.reason}</p>
+                        <ItemDescription className="line-clamp-none">
+                          版本{" "}
+                          {typeof entry.before_state.version === "number"
+                            ? entry.before_state.version
+                            : "未知"}{" "}
+                          →{" "}
+                          {typeof entry.after_state.version === "number"
+                            ? entry.after_state.version
+                            : "未知"}
+                          {auditModel(entry.before_state, entry.target_ref) &&
+                          auditModel(entry.after_state, entry.target_ref)
+                            ? ` · ${auditModel(entry.before_state, entry.target_ref)} → ${auditModel(entry.after_state, entry.target_ref)}`
+                            : ""}
+                        </ItemDescription>
+                        <ItemDescription className="line-clamp-none">
+                          {entry.actor} · {time(entry.created_at)} · 操作{" "}
+                          {entry.operation_id}
+                          {entry.error_code ? ` · ${entry.error_code}` : ""}
+                        </ItemDescription>
+                      </ItemContent>
+                    </Item>
                   ))}
-                </ul>
+                </ItemGroup>
               ) : (
-                <p className="text-muted-foreground text-sm">
-                  尚无配置切换或成本核对记录。
-                </p>
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyDescription>
+                      尚无配置切换或成本核对记录。
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               )}
             </section>
           </>

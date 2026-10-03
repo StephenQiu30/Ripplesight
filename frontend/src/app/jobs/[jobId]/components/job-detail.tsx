@@ -1,4 +1,6 @@
 "use client";
+import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
+import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 
 import { toast } from "sonner";
 
@@ -295,9 +297,13 @@ export function JobResult({
             </Link>
           </Button>
         ) : (
-          <p className="text-muted-foreground mt-3 text-sm leading-6">
-            当前没有可打开的作品资料；失败或部分原因以上方持久状态为准。
-          </p>
+          <Empty className="mt-3 leading-6">
+            <EmptyHeader>
+              <EmptyDescription>
+                当前没有可打开的作品资料；失败或部分原因以上方持久状态为准。
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         )}
       </div>
     </section>
@@ -321,29 +327,33 @@ export function JobCoverageWindows({
       <p className="text-muted-foreground mt-2 text-sm leading-6">
         仅展示已保存窗口，不代表未记录范围已完整覆盖。
       </p>
-      <ul className="mt-4 grid gap-3">
+      <ItemGroup className="mt-4 grid gap-3">
         {windows.map((window) => (
-          <li
+          <Item
+            role="listitem"
+            variant="default"
             key={window.id}
             className="flex flex-col items-start gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
           >
-            <div>
-              <p className="font-medium">
-                {formatTime(window.starts_at)} — {formatTime(window.ends_at)}
-              </p>
-              <p className="text-muted-foreground mt-1 text-sm">
-                {window.page_count} 页
-                {window.stop_reason
-                  ? ` · ${COVERAGE_STOP_REASON_LABELS[window.stop_reason] ?? "窗口尚未确认"}`
-                  : ""}
-              </p>
-            </div>
-            <Badge variant="secondary">
-              {COVERAGE_STATUS_LABELS[window.status]}
-            </Badge>
-          </li>
+            <ItemContent className="min-w-0 gap-3">
+              <div>
+                <p className="font-medium">
+                  {formatTime(window.starts_at)} — {formatTime(window.ends_at)}
+                </p>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  {window.page_count} 页
+                  {window.stop_reason
+                    ? ` · ${COVERAGE_STOP_REASON_LABELS[window.stop_reason] ?? "窗口尚未确认"}`
+                    : ""}
+                </p>
+              </div>
+              <Badge variant="secondary">
+                {COVERAGE_STATUS_LABELS[window.status]}
+              </Badge>
+            </ItemContent>
+          </Item>
         ))}
-      </ul>
+      </ItemGroup>
     </section>
   );
 }
@@ -620,7 +630,6 @@ export function JobDetail({ jobId }: JobDetailProps) {
           ) : null}
         </div>
       </div>
-
       {job.cancellation ? (
         <Alert
           variant={job.cancellation.timed_out ? "destructive" : "default"}
@@ -654,7 +663,6 @@ export function JobDetail({ jobId }: JobDetailProps) {
           </AlertDescription>
         </Alert>
       ) : null}
-
       <section
         className="mt-10 grid gap-4 sm:grid-cols-3"
         aria-label="任务进度"
@@ -676,13 +684,11 @@ export function JobDetail({ jobId }: JobDetailProps) {
           <p className="mt-2 text-xl font-medium">{job.progress.items_saved}</p>
         </div>
       </section>
-
       <JobResult
         resultContentId={job.result_content_id}
         savedDescription={savedDescription}
         updatedAt={job.progress.updated_at}
       />
-
       <Collapsible className="mt-10">
         <CollapsibleTrigger asChild>
           <Button variant="ghost">
@@ -695,9 +701,7 @@ export function JobDetail({ jobId }: JobDetailProps) {
           {job.source_freshness ? (
             <JobSourceFreshness freshness={job.source_freshness} />
           ) : null}
-
           <JobCoverageWindows windows={job.coverage_windows ?? []} />
-
           <section className="mt-10" aria-labelledby="job-facts-title">
             <h2 id="job-facts-title" className="text-xl font-medium">
               执行信息

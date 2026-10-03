@@ -1,3 +1,4 @@
+import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
 import { ChevronDownIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -139,16 +140,18 @@ export function RulesReading({ data }: { data: HotKeyAPI.RulesView }) {
         <p className="text-muted-foreground text-sm">
           锚点用于稳定指数的比较基准，缺失锚点不自动换成当前榜首。
         </p>
-        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <ItemGroup className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {data.anchors.map((anchor) => (
-            <li
+            <Item
+              role="listitem"
+              variant="muted"
               key={anchor}
-              className="bg-muted/40 rounded-md px-3 py-2 font-mono text-xs"
+              className="px-3 py-2 font-mono"
             >
-              {anchor}
-            </li>
+              <ItemContent className="min-w-0 gap-3">{anchor}</ItemContent>
+            </Item>
           ))}
-        </ul>
+        </ItemGroup>
       </section>
       <p className="text-muted-foreground max-w-3xl text-sm leading-6">
         方法、配置与来源注册表移植自 AIHOT 固定代码版本，保留 MIT

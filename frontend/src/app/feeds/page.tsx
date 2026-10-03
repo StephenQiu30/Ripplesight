@@ -1,3 +1,4 @@
+import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
 import type { Metadata } from "next";
 import { connection } from "next/server";
 
@@ -30,30 +31,50 @@ export default async function FeedsPage() {
           复制链接到 RSS
           阅读器。全文订阅只包含有明确再分发许可的正文，其余条目保留摘要和站内阅读入口。
         </p>
-        <ul className="mt-8 flex flex-col gap-y-5">
+        <ItemGroup className="mt-8 flex flex-col gap-y-5">
           {feeds.map(([href, label]) => (
-            <li key={href} className="flex flex-wrap gap-3">
-              <span className="w-24 text-sm">{label}</span>
-              <a href={href} className="font-mono text-sm break-all underline">
-                {href}
-              </a>
-            </li>
+            <Item
+              role="listitem"
+              variant="default"
+              key={href}
+              className="flex flex-wrap gap-3"
+            >
+              <ItemContent className="min-w-0 gap-3">
+                <span className="w-24 text-sm">{label}</span>
+                <a
+                  href={href}
+                  className="font-mono text-sm break-all underline"
+                >
+                  {href}
+                </a>
+              </ItemContent>
+            </Item>
           ))}
-        </ul>
+        </ItemGroup>
         <h2 className="mt-12 text-lg font-medium">分类精选</h2>
-        <ul className="mt-5 flex flex-col gap-y-4">
+        <ItemGroup className="mt-5 flex flex-col gap-y-4">
           {categories.map(([key, label]) => (
-            <li key={key} className="flex flex-wrap gap-4 text-sm">
-              <span className="w-16">{label}</span>
-              <a href={`/feed/category/${key}.xml`} className="underline">
-                摘要
-              </a>
-              <a href={`/feed/full/category/${key}.xml`} className="underline">
-                获准全文
-              </a>
-            </li>
+            <Item
+              role="listitem"
+              variant="default"
+              key={key}
+              className="flex flex-wrap gap-4"
+            >
+              <ItemContent className="min-w-0 gap-3">
+                <span className="w-16">{label}</span>
+                <a href={`/feed/category/${key}.xml`} className="underline">
+                  摘要
+                </a>
+                <a
+                  href={`/feed/full/category/${key}.xml`}
+                  className="underline"
+                >
+                  获准全文
+                </a>
+              </ItemContent>
+            </Item>
           ))}
-        </ul>
+        </ItemGroup>
         <h2 className="mt-12 text-lg font-medium">其他格式</h2>
         <p className="mt-5 flex flex-wrap gap-5 text-sm">
           <a href="/selected.md" className="underline">

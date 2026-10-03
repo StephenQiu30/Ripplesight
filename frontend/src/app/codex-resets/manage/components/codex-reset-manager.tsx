@@ -1,4 +1,11 @@
 "use client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Item,
+  ItemContent,
+  ItemDescription,
+  ItemTitle,
+} from "@/components/ui/item";
 import { toast } from "sonner";
 import {
   SelectLabel,
@@ -362,52 +369,55 @@ export function CodexResetManager() {
           返回公告日历
         </Link>
       </div>
-      <section
-        className="bg-muted/40 flex flex-col gap-y-4 rounded-xl p-5"
-        aria-label="运营权限与原因"
-      >
-        <Label htmlFor="codex-operator">操作员令牌</Label>
-        <Input
-          id="codex-operator"
-          type="password"
-          autoComplete="off"
-          value={token}
-          onChange={(e) => changeToken(e.target.value)}
-        />
-        <p className="text-muted-foreground text-sm">
-          令牌仅用于当前页面内存。服务端未配置权限时，写入保持关闭。
-        </p>
-        <Label htmlFor="codex-reason">操作与复核原因</Label>
-        <Textarea
-          id="codex-reason"
-          value={reason}
-          maxLength={2000}
-          onChange={(e) => setReason(e.target.value)}
-        />
-        <div className="flex flex-wrap gap-3">
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={() =>
-              void perform(async () =>
-                applyMonitor(await getCodexResetConfiguration()),
-              )
-            }
-          >
-            重读配置
-          </Button>
-          <Button
-            disabled={!token || busy}
-            onClick={() => void perform(() => read())}
-          >
-            读取待复核与公告
-          </Button>
-          <Button variant="ghost" onClick={() => changeToken("")}>
-            清除令牌
-          </Button>
-        </div>
-      </section>
-
+      <Item variant="muted" asChild>
+        <section
+          className="flex flex-col gap-y-4 p-5"
+          aria-label="运营权限与原因"
+        >
+          <ItemContent className="min-w-0 gap-3">
+            <Label htmlFor="codex-operator">操作员令牌</Label>
+            <Input
+              id="codex-operator"
+              type="password"
+              autoComplete="off"
+              value={token}
+              onChange={(e) => changeToken(e.target.value)}
+            />
+            <ItemDescription className="line-clamp-none">
+              令牌仅用于当前页面内存。服务端未配置权限时，写入保持关闭。
+            </ItemDescription>
+            <Label htmlFor="codex-reason">操作与复核原因</Label>
+            <Textarea
+              id="codex-reason"
+              value={reason}
+              maxLength={2000}
+              onChange={(e) => setReason(e.target.value)}
+            />
+            <div className="flex flex-wrap gap-3">
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() =>
+                  void perform(async () =>
+                    applyMonitor(await getCodexResetConfiguration()),
+                  )
+                }
+              >
+                重读配置
+              </Button>
+              <Button
+                disabled={!token || busy}
+                onClick={() => void perform(() => read())}
+              >
+                读取待复核与公告
+              </Button>
+              <Button variant="ghost" onClick={() => changeToken("")}>
+                清除令牌
+              </Button>
+            </div>
+          </ItemContent>
+        </section>
+      </Item>
       <section className="flex flex-col gap-y-5" aria-label="官方监控配置">
         <h2 className="text-xl font-medium">
           {monitor
@@ -534,15 +544,17 @@ export function CodexResetManager() {
             受理一次公告扫描
           </Button>
           {job && (
-            <p role="status">
-              任务已受理：
-              <Link
-                href={`/jobs/${job.id}`}
-                className="underline underline-offset-4"
-              >
-                查看任务 {job.id}
-              </Link>
-            </p>
+            <Alert role="status">
+              <AlertDescription>
+                任务已受理：
+                <Link
+                  href={`/jobs/${job.id}`}
+                  className="underline underline-offset-4"
+                >
+                  查看任务 {job.id}
+                </Link>
+              </AlertDescription>
+            </Alert>
           )}
         </section>
       )}
@@ -553,37 +565,38 @@ export function CodexResetManager() {
         >
           <h2 className="text-xl font-medium">扫描缺口</h2>
           {gaps.map((gap) => (
-            <article
-              key={gap.id}
-              className="bg-muted/30 flex flex-col gap-y-3 rounded-xl p-5"
-            >
-              <p className="break-words">
-                {gap.state} · {gap.failure_code ?? "未完成窗口"} · 配置版本{" "}
-                {gap.configuration_version}
-              </p>
-              <p className="text-muted-foreground text-sm break-all">
-                查询 {gap.query} ·{" "}
-                {gap.has_resume_token ? "已保留分页凭证" : "无分页凭证"}
-              </p>
-              {gap.state !== "complete" && (
-                <div className="flex flex-wrap gap-3">
-                  <Button
-                    variant="outline"
-                    disabled={!canWrite}
-                    onClick={() => reviewGap(gap, "retry")}
-                  >
-                    允许恢复此窗口
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    disabled={!canWrite}
-                    onClick={() => reviewGap(gap, "acknowledge")}
-                  >
-                    确认此缺口
-                  </Button>
-                </div>
-              )}
-            </article>
+            <Item variant="muted" key={gap.id} asChild>
+              <article className="flex flex-col gap-y-3 p-5">
+                <ItemContent className="min-w-0 gap-3">
+                  <p className="break-words">
+                    {gap.state} · {gap.failure_code ?? "未完成窗口"} · 配置版本{" "}
+                    {gap.configuration_version}
+                  </p>
+                  <ItemDescription className="line-clamp-none break-all">
+                    查询 {gap.query} ·{" "}
+                    {gap.has_resume_token ? "已保留分页凭证" : "无分页凭证"}
+                  </ItemDescription>
+                  {gap.state !== "complete" && (
+                    <div className="flex flex-wrap gap-3">
+                      <Button
+                        variant="outline"
+                        disabled={!canWrite}
+                        onClick={() => reviewGap(gap, "retry")}
+                      >
+                        允许恢复此窗口
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        disabled={!canWrite}
+                        onClick={() => reviewGap(gap, "acknowledge")}
+                      >
+                        确认此缺口
+                      </Button>
+                    </div>
+                  )}
+                </ItemContent>
+              </article>
+            </Item>
           ))}
         </section>
       )}
@@ -591,68 +604,69 @@ export function CodexResetManager() {
         <section className="flex flex-col gap-y-4" aria-label="帖子复核">
           <h2 className="text-xl font-medium">源帖子复核 · 第 {page} 页</h2>
           {posts.map((post) => (
-            <article
-              key={post.id}
-              className="bg-muted/30 flex flex-col gap-y-3 rounded-xl p-5"
-            >
-              <p className="break-words whitespace-pre-wrap">{post.text}</p>
-              <p className="text-muted-foreground text-sm">
-                复核版本 {post.review_version} ·{" "}
-                {post.failure_code ?? (post.reviewed ? "已复核" : "待处理")} ·
-                失败 {post.failure_count}
-              </p>
-              <a
-                href={post.url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-sm underline underline-offset-4"
-              >
-                官方原帖
-              </a>
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  variant="outline"
-                  disabled={!canWrite}
-                  onClick={() => reviewPost(post, "reviewed")}
-                >
-                  标记已复核
-                </Button>
-                <Button
-                  variant="ghost"
-                  disabled={!canWrite}
-                  onClick={() => reviewPost(post, "skip")}
-                >
-                  跳过此帖子
-                </Button>
-                {post.needs_review && (
-                  <Button
-                    disabled={!canWrite}
-                    onClick={() => reviewPost(post, "retry")}
+            <Item variant="muted" key={post.id} asChild>
+              <article className="flex flex-col gap-y-3 p-5">
+                <ItemContent className="min-w-0 gap-3">
+                  <p className="break-words whitespace-pre-wrap">{post.text}</p>
+                  <ItemDescription className="line-clamp-none">
+                    复核版本 {post.review_version} ·{" "}
+                    {post.failure_code ?? (post.reviewed ? "已复核" : "待处理")}{" "}
+                    · 失败 {post.failure_count}
+                  </ItemDescription>
+                  <a
+                    href={post.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm underline underline-offset-4"
                   >
-                    明确允许再次识别
-                  </Button>
-                )}
-                {!!post.event_ids?.some((eventId) =>
-                  events.some((item) => item.id === eventId),
-                ) && (
-                  <Button
-                    variant="outline"
-                    disabled={!token || busy}
-                    onClick={() => {
-                      setRelinkPost(post);
-                      setRelinkSource(
-                        events.find((item) =>
-                          post.event_ids?.includes(item.id),
-                        ) ?? null,
-                      );
-                      setRelinkTarget(null);
-                    }}
-                  >
-                    更改公告归属
-                  </Button>
-                )}
-              </div>
-            </article>
+                    官方原帖
+                  </a>
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      variant="outline"
+                      disabled={!canWrite}
+                      onClick={() => reviewPost(post, "reviewed")}
+                    >
+                      标记已复核
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      disabled={!canWrite}
+                      onClick={() => reviewPost(post, "skip")}
+                    >
+                      跳过此帖子
+                    </Button>
+                    {post.needs_review && (
+                      <Button
+                        disabled={!canWrite}
+                        onClick={() => reviewPost(post, "retry")}
+                      >
+                        明确允许再次识别
+                      </Button>
+                    )}
+                    {!!post.event_ids?.some((eventId) =>
+                      events.some((item) => item.id === eventId),
+                    ) && (
+                      <Button
+                        variant="outline"
+                        disabled={!token || busy}
+                        onClick={() => {
+                          setRelinkPost(post);
+                          setRelinkSource(
+                            events.find((item) =>
+                              post.event_ids?.includes(item.id),
+                            ) ?? null,
+                          );
+                          setRelinkTarget(null);
+                        }}
+                      >
+                        更改公告归属
+                      </Button>
+                    )}
+                  </div>
+                </ItemContent>
+              </article>
+            </Item>
           ))}
           <div className="flex gap-3">
             <Button
@@ -673,105 +687,117 @@ export function CodexResetManager() {
         </section>
       )}
       {relinkPost && relinkSource && (
-        <section
-          className="bg-muted/30 flex flex-col gap-y-4 rounded-xl p-5"
-          aria-label="帖子公告归属"
-        >
-          <h2 className="text-xl font-medium">更改帖子公告归属</h2>
-          <p className="text-sm leading-7">
-            帖子 {relinkPost.external_id}
-            ；两份公告均按打开表单时的修订提交。版本冲突后请重读并重新打开，不自动覆盖。
-          </p>
-          <Label htmlFor="codex-relink-source">原公告</Label>
-          <Select
-            value={relinkSource.id}
-            disabled={busy}
-            onValueChange={(selectedValue) => {
-              setRelinkSource(
-                events.find((item) => item.id === selectedValue) ?? null,
-              );
-              setRelinkTarget(null);
-            }}
+        <Item variant="muted" asChild>
+          <section
+            className="flex flex-col gap-y-4 p-5"
+            aria-label="帖子公告归属"
           >
-            <SelectTrigger id="codex-relink-source" className="w-full min-w-0">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectGroup>
-                <SelectLabel className="sr-only">原公告</SelectLabel>
-                {events
-                  .filter((item) => relinkPost.event_ids?.includes(item.id))
-                  .map((item) => (
-                    <SelectItem
-                      key={item.id}
-                      value={item.id}
-                      className="whitespace-normal"
-                    >
-                      {item.title || item.id} · 修订 {item.revision}
+            <ItemContent className="min-w-0 gap-3">
+              <ItemTitle className="line-clamp-none w-full">
+                <h2>更改帖子公告归属</h2>
+              </ItemTitle>
+              <p className="text-sm leading-7">
+                帖子 {relinkPost.external_id}
+                ；两份公告均按打开表单时的修订提交。版本冲突后请重读并重新打开，不自动覆盖。
+              </p>
+              <Label htmlFor="codex-relink-source">原公告</Label>
+              <Select
+                value={relinkSource.id}
+                disabled={busy}
+                onValueChange={(selectedValue) => {
+                  setRelinkSource(
+                    events.find((item) => item.id === selectedValue) ?? null,
+                  );
+                  setRelinkTarget(null);
+                }}
+              >
+                <SelectTrigger
+                  id="codex-relink-source"
+                  className="w-full min-w-0"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectGroup>
+                    <SelectLabel className="sr-only">原公告</SelectLabel>
+                    {events
+                      .filter((item) => relinkPost.event_ids?.includes(item.id))
+                      .map((item) => (
+                        <SelectItem
+                          key={item.id}
+                          value={item.id}
+                          className="whitespace-normal"
+                        >
+                          {item.title || item.id} · 修订 {item.revision}
+                        </SelectItem>
+                      ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <p className="text-sm">原公告预期修订 {relinkSource.revision}</p>
+              <Label htmlFor="codex-relink-target">目标公告</Label>
+              <Select
+                value={relinkTarget?.id ?? ""}
+                disabled={busy}
+                onValueChange={(selectedValue) =>
+                  setRelinkTarget(
+                    events.find(
+                      (item) =>
+                        item.id ===
+                        (selectedValue === "__none__" ? "" : selectedValue),
+                    ) ?? null,
+                  )
+                }
+              >
+                <SelectTrigger
+                  id="codex-relink-target"
+                  className="w-full min-w-0"
+                >
+                  <SelectValue placeholder="解除此公告关联（不归入其他公告）" />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectGroup>
+                    <SelectLabel className="sr-only">原公告</SelectLabel>
+                    <SelectItem value="__none__" className="whitespace-normal">
+                      解除此公告关联（不归入其他公告）
                     </SelectItem>
-                  ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <p className="text-sm">原公告预期修订 {relinkSource.revision}</p>
-          <Label htmlFor="codex-relink-target">目标公告</Label>
-          <Select
-            value={relinkTarget?.id ?? ""}
-            disabled={busy}
-            onValueChange={(selectedValue) =>
-              setRelinkTarget(
-                events.find(
-                  (item) =>
-                    item.id ===
-                    (selectedValue === "__none__" ? "" : selectedValue),
-                ) ?? null,
-              )
-            }
-          >
-            <SelectTrigger id="codex-relink-target" className="w-full min-w-0">
-              <SelectValue placeholder="解除此公告关联（不归入其他公告）" />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectGroup>
-                <SelectLabel className="sr-only">原公告</SelectLabel>
-                <SelectItem value="__none__" className="whitespace-normal">
-                  解除此公告关联（不归入其他公告）
-                </SelectItem>
-                {events
-                  .filter((item) => item.id !== relinkSource.id)
-                  .map((item) => (
-                    <SelectItem
-                      key={item.id}
-                      value={item.id}
-                      className="whitespace-normal"
-                    >
-                      {item.title || item.id} · 修订 {item.revision}
-                    </SelectItem>
-                  ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <p className="text-sm">
-            {relinkTarget
-              ? `目标公告预期修订 ${relinkTarget.revision}`
-              : "目标公告与目标修订均为空；仅解除原关联。"}
-          </p>
-          <p className="text-muted-foreground text-sm">
-            使用上方复核原因记录审计。此操作只修正帖子关联，不调用模型，不确认到账。
-          </p>
-          <div className="flex gap-3">
-            <Button disabled={!canWrite} onClick={relink}>
-              保存帖子归属
-            </Button>
-            <Button
-              variant="ghost"
-              disabled={busy}
-              onClick={() => setRelinkPost(null)}
-            >
-              关闭归属表单
-            </Button>
-          </div>
-        </section>
+                    {events
+                      .filter((item) => item.id !== relinkSource.id)
+                      .map((item) => (
+                        <SelectItem
+                          key={item.id}
+                          value={item.id}
+                          className="whitespace-normal"
+                        >
+                          {item.title || item.id} · 修订 {item.revision}
+                        </SelectItem>
+                      ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <p className="text-sm">
+                {relinkTarget
+                  ? `目标公告预期修订 ${relinkTarget.revision}`
+                  : "目标公告与目标修订均为空；仅解除原关联。"}
+              </p>
+              <ItemDescription className="line-clamp-none">
+                使用上方复核原因记录审计。此操作只修正帖子关联，不调用模型，不确认到账。
+              </ItemDescription>
+              <div className="flex gap-3">
+                <Button disabled={!canWrite} onClick={relink}>
+                  保存帖子归属
+                </Button>
+                <Button
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => setRelinkPost(null)}
+                >
+                  关闭归属表单
+                </Button>
+              </div>
+            </ItemContent>
+          </section>
+        </Item>
       )}
       {!!events.length && (
         <section
@@ -780,26 +806,27 @@ export function CodexResetManager() {
         >
           <h2 className="text-xl font-medium">公告日期与到账复核</h2>
           {events.map((item) => (
-            <article
-              key={item.id}
-              className="bg-muted/30 flex flex-col gap-y-3 rounded-xl p-5"
-            >
-              <p>
-                {item.title ?? item.kind} · {item.status} · 修订 {item.revision}{" "}
-                · {item.withdrawn ? "已撤回" : "有效"}
-              </p>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setEvent(item);
-                  setPatch(JSON.stringify({ kind: item.kind }, null, 2));
-                  setReceiptDate(item.occurred_on ?? "");
-                  setReceiptTime("");
-                }}
-              >
-                修订此公告
-              </Button>
-            </article>
+            <Item variant="muted" key={item.id} asChild>
+              <article className="flex flex-col gap-y-3 p-5">
+                <ItemContent className="min-w-0 gap-3">
+                  <p>
+                    {item.title ?? item.kind} · {item.status} · 修订{" "}
+                    {item.revision}· {item.withdrawn ? "已撤回" : "有效"}
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setEvent(item);
+                      setPatch(JSON.stringify({ kind: item.kind }, null, 2));
+                      setReceiptDate(item.occurred_on ?? "");
+                      setReceiptTime("");
+                    }}
+                  >
+                    修订此公告
+                  </Button>
+                </ItemContent>
+              </article>
+            </Item>
           ))}
         </section>
       )}

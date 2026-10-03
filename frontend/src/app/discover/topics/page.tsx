@@ -1,3 +1,9 @@
+import {
+  Item,
+  ItemContent,
+  ItemTitle,
+  ItemDescription,
+} from "@/components/ui/item";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
@@ -46,19 +52,21 @@ export default async function PublicTopicsPage() {
               {directory.topics
                 .filter((topic) => topic.group === group)
                 .map((topic) => (
-                  <Link
-                    key={topic.slug}
-                    href={`/discover/topics/${topic.slug}`}
-                    className="hover:bg-muted/40 rounded-lg border p-5"
-                  >
-                    <h3 className="font-medium">{topic.name}</h3>
-                    <p className="text-muted-foreground mt-2 text-sm leading-6">
-                      {topic.definition}
-                    </p>
-                    <p className="mt-4 text-xs">
-                      {topic.total} 篇精选 · 最近 30 天 {topic.recent} 篇
-                    </p>
-                  </Link>
+                  <Item asChild variant="outline" key={topic.slug}>
+                    <Link href={`/discover/topics/${topic.slug}`}>
+                      <ItemContent className="min-w-0 gap-3">
+                        <ItemTitle>
+                          <h3>{topic.name}</h3>
+                        </ItemTitle>
+                        <ItemDescription className="line-clamp-none">
+                          {topic.definition}
+                        </ItemDescription>
+                        <p className="mt-4 text-xs">
+                          {topic.total} 篇精选 · 最近 30 天 {topic.recent} 篇
+                        </p>
+                      </ItemContent>
+                    </Link>
+                  </Item>
                 ))}
             </div>
           </section>

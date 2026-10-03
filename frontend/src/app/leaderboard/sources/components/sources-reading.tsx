@@ -1,3 +1,4 @@
+import { Item, ItemContent, ItemDescription } from "@/components/ui/item";
 import Link from "next/link";
 
 import { RunStamp, SourceStatus } from "@/components/leaderboard/reading-parts";
@@ -28,32 +29,33 @@ export function SourcesReading({ data }: { data: HotKeyAPI.SourcesView }) {
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             {group.sources.map((source) => (
-              <article
-                key={source.key}
-                className="bg-muted/40 flex flex-col gap-y-3 rounded-xl p-5"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <Link
-                    className="font-medium hover:underline"
-                    href={`/leaderboard/sources/${source.key}`}
-                  >
-                    {source.name}
-                  </Link>
-                  <SourceStatus source={source} />
-                </div>
-                <p className="text-muted-foreground text-sm leading-6">
-                  {source.description}
-                </p>
-                <p className="text-sm">
-                  {source.operator} · 预算{" "}
-                  <span className="font-mono">
-                    {(source.weight * 100).toFixed(1)}%
-                  </span>
-                </p>
-                <Badge variant="secondary">
-                  {source.collected ? "本轮有证据" : "本轮无证据"}
-                </Badge>
-              </article>
+              <Item variant="muted" key={source.key} asChild>
+                <article className="flex flex-col gap-y-3 p-5">
+                  <ItemContent className="min-w-0 gap-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <Link
+                        className="font-medium hover:underline"
+                        href={`/leaderboard/sources/${source.key}`}
+                      >
+                        {source.name}
+                      </Link>
+                      <SourceStatus source={source} />
+                    </div>
+                    <ItemDescription className="line-clamp-none leading-6">
+                      {source.description}
+                    </ItemDescription>
+                    <p className="text-sm">
+                      {source.operator} · 预算{" "}
+                      <span className="font-mono">
+                        {(source.weight * 100).toFixed(1)}%
+                      </span>
+                    </p>
+                    <Badge variant="secondary">
+                      {source.collected ? "本轮有证据" : "本轮无证据"}
+                    </Badge>
+                  </ItemContent>
+                </article>
+              </Item>
             ))}
           </div>
         </section>

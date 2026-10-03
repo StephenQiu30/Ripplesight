@@ -1,4 +1,5 @@
 "use client";
+import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -188,81 +189,88 @@ export function SnapshotDetail({
           </EmptyHeader>
         </Empty>
       ) : (
-        <ol className="mt-10 flex flex-col gap-8">
+        <ItemGroup className="mt-10 flex flex-col gap-8">
           {snapshot.items.map((entry) => {
             const originalHref = safeExternalHref(entry.url);
             return (
-              <li key={entry.rank} className="py-4">
-                <div className="flex items-start gap-4">
-                  <span className="text-muted-foreground w-8 shrink-0 text-xl tabular-nums">
-                    {entry.rank}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge
-                        variant={
-                          entry.rank_change === "up" ? "secondary" : "outline"
-                        }
-                      >
-                        {entry.rank_change === "up" ? (
-                          <ArrowUpIcon aria-hidden="true" />
-                        ) : null}
-                        {entry.rank_change === "down" ? (
-                          <ArrowDownIcon aria-hidden="true" />
-                        ) : null}
-                        {rankLabel(entry)}
-                      </Badge>
-                      {entry.matched ? (
-                        <Badge variant="secondary">命中主题</Badge>
-                      ) : null}
-                    </div>
-                    <h3 className="mt-3 text-base leading-7 font-medium break-words">
-                      {entry.title}
-                    </h3>
-                    {entry.summary ? (
-                      <p className="text-muted-foreground mt-2 line-clamp-3 text-sm leading-6 break-words">
-                        {entry.summary}
-                      </p>
-                    ) : null}
-                    {entry.matched_topic_names.length > 0 ? (
-                      <p className="text-muted-foreground mt-3 text-xs">
-                        主题：{entry.matched_topic_names.join("、")}
-                      </p>
-                    ) : null}
-                    <div className="mt-4 flex flex-wrap gap-4 text-sm">
-                      {entry.content_id ? (
-                        <Link
-                          className="text-foreground inline-flex items-center gap-1 underline underline-offset-4"
-                          href={`/content/${entry.content_id}`}
+              <Item
+                role="listitem"
+                variant="default"
+                key={entry.rank}
+                className="py-4"
+              >
+                <ItemContent className="min-w-0 gap-3">
+                  <div className="flex items-start gap-4">
+                    <span className="text-muted-foreground w-8 shrink-0 text-xl tabular-nums">
+                      {entry.rank}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge
+                          variant={
+                            entry.rank_change === "up" ? "secondary" : "outline"
+                          }
                         >
-                          查看作品资料{" "}
-                          <ArrowRightIcon
-                            className="size-4"
-                            aria-hidden="true"
-                          />
-                        </Link>
+                          {entry.rank_change === "up" ? (
+                            <ArrowUpIcon aria-hidden="true" />
+                          ) : null}
+                          {entry.rank_change === "down" ? (
+                            <ArrowDownIcon aria-hidden="true" />
+                          ) : null}
+                          {rankLabel(entry)}
+                        </Badge>
+                        {entry.matched ? (
+                          <Badge variant="secondary">命中主题</Badge>
+                        ) : null}
+                      </div>
+                      <h3 className="mt-3 text-base leading-7 font-medium break-words">
+                        {entry.title}
+                      </h3>
+                      {entry.summary ? (
+                        <p className="text-muted-foreground mt-2 line-clamp-3 text-sm leading-6 break-words">
+                          {entry.summary}
+                        </p>
                       ) : null}
-                      {originalHref ? (
-                        <a
-                          className="text-muted-foreground inline-flex items-center gap-1 underline underline-offset-4"
-                          href={originalHref}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          打开原文{" "}
-                          <ExternalLinkIcon
-                            className="size-4"
-                            aria-hidden="true"
-                          />
-                        </a>
+                      {entry.matched_topic_names.length > 0 ? (
+                        <p className="text-muted-foreground mt-3 text-xs">
+                          主题：{entry.matched_topic_names.join("、")}
+                        </p>
                       ) : null}
+                      <div className="mt-4 flex flex-wrap gap-4 text-sm">
+                        {entry.content_id ? (
+                          <Link
+                            className="text-foreground inline-flex items-center gap-1 underline underline-offset-4"
+                            href={`/content/${entry.content_id}`}
+                          >
+                            查看作品资料{" "}
+                            <ArrowRightIcon
+                              className="size-4"
+                              aria-hidden="true"
+                            />
+                          </Link>
+                        ) : null}
+                        {originalHref ? (
+                          <a
+                            className="text-muted-foreground inline-flex items-center gap-1 underline underline-offset-4"
+                            href={originalHref}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            打开原文{" "}
+                            <ExternalLinkIcon
+                              className="size-4"
+                              aria-hidden="true"
+                            />
+                          </a>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </li>
+                </ItemContent>
+              </Item>
             );
           })}
-        </ol>
+        </ItemGroup>
       )}
     </section>
   );

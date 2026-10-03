@@ -1,4 +1,12 @@
 "use client";
+import { AlertDescription, Alert } from "@/components/ui/alert";
+import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
+import {
+  Item,
+  ItemContent,
+  ItemDescription,
+  ItemTitle,
+} from "@/components/ui/item";
 import { toast } from "sonner";
 import {
   SelectLabel,
@@ -137,70 +145,76 @@ function BudgetEditor({
   }
   return (
     <form onSubmit={submit}>
-      <FieldGroup className="bg-muted/40 grid gap-3 rounded-lg p-4 sm:grid-cols-2">
-        <p className="break-all sm:col-span-2">
-          {row.budget_key} · {row.metric} · {row.scope_kind}
-          {row.scope_reference ? `:${row.scope_reference}` : ""}
-          <span className="text-muted-foreground block text-sm">
-            已用 {row.used_units} · 预留 {row.reserved_units} · 剩余{" "}
-            {row.remaining_units} · 版本 {row.policy_version}
-          </span>
-        </p>
-        <Field className="min-w-0">
-          <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-1`}>
-            上限
-          </FieldLabel>
-          <Input
-            aria-label={`${row.budget_key} 上限`}
-            type="number"
-            required
-            min={1}
-            step={1}
-            value={limit}
-            onChange={(e) => setLimit(e.target.value)}
-            id={`${fieldId}-operations-workspace-field-1`}
-          />
-        </Field>
-        <Field className="min-w-0">
-          <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-2`}>
-            窗口（秒）
-          </FieldLabel>
-          <Input
-            type="number"
-            required
-            min={1}
-            step={1}
-            value={window}
-            onChange={(e) => setWindow(e.target.value)}
-            id={`${fieldId}-operations-workspace-field-2`}
-          />
-        </Field>
-        <Field className="min-w-0 sm:col-span-2">
-          <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-3`}>
-            修改原因
-          </FieldLabel>
-          <Input
-            required
-            maxLength={2000}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            id={`${fieldId}-operations-workspace-field-3`}
-          />
-        </Field>
-        <Field orientation="horizontal" className="w-auto">
-          <Checkbox
-            checked={enabled}
-            onCheckedChange={(checked) => setEnabled(checked === true)}
-            id={`${fieldId}-operations-workspace-field-4`}
-          />
-          <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-4`}>
-            启用硬预算
-          </FieldLabel>
-        </Field>
-        <Button disabled={pending} type="submit" className="justify-self-start">
-          保存预算
-        </Button>
-      </FieldGroup>
+      <Item variant="muted" asChild>
+        <FieldGroup className="grid gap-3 p-4 sm:grid-cols-2">
+          <p className="break-all sm:col-span-2">
+            {row.budget_key} · {row.metric} · {row.scope_kind}
+            {row.scope_reference ? `:${row.scope_reference}` : ""}
+            <span className="text-muted-foreground block text-sm">
+              已用 {row.used_units} · 预留 {row.reserved_units} · 剩余{" "}
+              {row.remaining_units} · 版本 {row.policy_version}
+            </span>
+          </p>
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-1`}>
+              上限
+            </FieldLabel>
+            <Input
+              aria-label={`${row.budget_key} 上限`}
+              type="number"
+              required
+              min={1}
+              step={1}
+              value={limit}
+              onChange={(e) => setLimit(e.target.value)}
+              id={`${fieldId}-operations-workspace-field-1`}
+            />
+          </Field>
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-2`}>
+              窗口（秒）
+            </FieldLabel>
+            <Input
+              type="number"
+              required
+              min={1}
+              step={1}
+              value={window}
+              onChange={(e) => setWindow(e.target.value)}
+              id={`${fieldId}-operations-workspace-field-2`}
+            />
+          </Field>
+          <Field className="min-w-0 sm:col-span-2">
+            <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-3`}>
+              修改原因
+            </FieldLabel>
+            <Input
+              required
+              maxLength={2000}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              id={`${fieldId}-operations-workspace-field-3`}
+            />
+          </Field>
+          <Field orientation="horizontal" className="w-auto">
+            <Checkbox
+              checked={enabled}
+              onCheckedChange={(checked) => setEnabled(checked === true)}
+              id={`${fieldId}-operations-workspace-field-4`}
+            />
+            <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-4`}>
+              启用硬预算
+            </FieldLabel>
+          </Field>
+          <Button
+            disabled={pending}
+            type="submit"
+            className="justify-self-start"
+          >
+            保存预算
+          </Button>
+        </FieldGroup>
+      </Item>
     </form>
   );
 }
@@ -268,99 +282,67 @@ function BudgetCreator({
     }
   }
   return (
-    <Collapsible className="bg-muted/30 rounded-lg p-4">
-      <CollapsibleTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
-        >
-          <span className="min-w-0 text-left">创建预算政策</span>
-          <ChevronDownIcon
-            aria-hidden="true"
-            data-icon="inline-end"
-            className="group-data-[state=open]:rotate-180"
-          />
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent forceMount className="data-[state=closed]:hidden">
-        <form onSubmit={submit}>
-          <FieldGroup className="mt-3 grid gap-3 sm:grid-cols-2">
-            <Field className="min-w-0">
-              <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-5`}>
-                预算名称
-              </FieldLabel>
-              <Input
-                required
-                pattern="[a-z][a-z0-9_.:-]*"
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-                id={`${fieldId}-operations-workspace-field-5`}
-              />
-            </Field>
-            <Field className="min-w-0">
-              <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-6`}>
-                计量单位
-              </FieldLabel>
-              <Select
-                value={metric}
-                onValueChange={(selectedValue) =>
-                  setMetric(selectedValue as HotKeyAPI.BudgetMetric)
-                }
-              >
-                <SelectTrigger
-                  id={`${fieldId}-operations-workspace-field-6`}
-                  className="w-full min-w-0"
+    <Item variant="muted" asChild>
+      <Collapsible className="p-4">
+        <CollapsibleTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
+          >
+            <span className="min-w-0 text-left">创建预算政策</span>
+            <ChevronDownIcon
+              aria-hidden="true"
+              data-icon="inline-end"
+              className="group-data-[state=open]:rotate-180"
+            />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent forceMount className="data-[state=closed]:hidden">
+          <form onSubmit={submit}>
+            <FieldGroup className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Field className="min-w-0">
+                <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-5`}>
+                  预算名称
+                </FieldLabel>
+                <Input
+                  required
+                  pattern="[a-z][a-z0-9_.:-]*"
+                  value={key}
+                  onChange={(e) => setKey(e.target.value)}
+                  id={`${fieldId}-operations-workspace-field-5`}
+                />
+              </Field>
+              <Field className="min-w-0">
+                <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-6`}>
+                  计量单位
+                </FieldLabel>
+                <Select
+                  value={metric}
+                  onValueChange={(selectedValue) =>
+                    setMetric(selectedValue as HotKeyAPI.BudgetMetric)
+                  }
                 >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent position="popper">
-                  <SelectGroup>
-                    <SelectLabel className="sr-only">计量单位</SelectLabel>
-                    {(
-                      [
-                        "network_request",
-                        "collector_call",
-                        "analysis_attempt",
-                        "concurrency_slot",
-                        "x_api_usd_micros",
-                        "provider_cny_micros",
-                        "provider_usd_micros",
-                      ] as const
-                    ).map((value) => (
-                      <SelectItem
-                        key={value}
-                        value={value}
-                        className="whitespace-normal"
-                      >
-                        {value}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field className="min-w-0">
-              <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-7`}>
-                范围
-              </FieldLabel>
-              <Select
-                value={scope}
-                onValueChange={(selectedValue) =>
-                  setScope(selectedValue as HotKeyAPI.BudgetScopeKind)
-                }
-              >
-                <SelectTrigger
-                  id={`${fieldId}-operations-workspace-field-7`}
-                  className="w-full min-w-0"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent position="popper">
-                  <SelectGroup>
-                    <SelectLabel className="sr-only">范围</SelectLabel>
-                    {(["global", "source", "connection", "job"] as const).map(
-                      (value) => (
+                  <SelectTrigger
+                    id={`${fieldId}-operations-workspace-field-6`}
+                    className="w-full min-w-0"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper">
+                    <SelectGroup>
+                      <SelectLabel className="sr-only">计量单位</SelectLabel>
+                      {(
+                        [
+                          "network_request",
+                          "collector_call",
+                          "analysis_attempt",
+                          "concurrency_slot",
+                          "x_api_usd_micros",
+                          "provider_cny_micros",
+                          "provider_usd_micros",
+                        ] as const
+                      ).map((value) => (
                         <SelectItem
                           key={value}
                           value={value}
@@ -368,72 +350,112 @@ function BudgetCreator({
                         >
                           {value}
                         </SelectItem>
-                      ),
-                    )}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
-            {scope !== "global" && (
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
               <Field className="min-w-0">
-                <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-8`}>
-                  范围引用
+                <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-7`}>
+                  范围
+                </FieldLabel>
+                <Select
+                  value={scope}
+                  onValueChange={(selectedValue) =>
+                    setScope(selectedValue as HotKeyAPI.BudgetScopeKind)
+                  }
+                >
+                  <SelectTrigger
+                    id={`${fieldId}-operations-workspace-field-7`}
+                    className="w-full min-w-0"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper">
+                    <SelectGroup>
+                      <SelectLabel className="sr-only">范围</SelectLabel>
+                      {(["global", "source", "connection", "job"] as const).map(
+                        (value) => (
+                          <SelectItem
+                            key={value}
+                            value={value}
+                            className="whitespace-normal"
+                          >
+                            {value}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              {scope !== "global" && (
+                <Field className="min-w-0">
+                  <FieldLabel
+                    htmlFor={`${fieldId}-operations-workspace-field-8`}
+                  >
+                    范围引用
+                  </FieldLabel>
+                  <Input
+                    required
+                    value={ref}
+                    onChange={(e) => setRef(e.target.value)}
+                    id={`${fieldId}-operations-workspace-field-8`}
+                  />
+                </Field>
+              )}
+              <Field className="min-w-0">
+                <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-9`}>
+                  创建预算上限
                 </FieldLabel>
                 <Input
                   required
-                  value={ref}
-                  onChange={(e) => setRef(e.target.value)}
-                  id={`${fieldId}-operations-workspace-field-8`}
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={limit}
+                  onChange={(e) => setLimit(e.target.value)}
+                  id={`${fieldId}-operations-workspace-field-9`}
                 />
               </Field>
-            )}
-            <Field className="min-w-0">
-              <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-9`}>
-                创建预算上限
-              </FieldLabel>
-              <Input
-                required
-                type="number"
-                min={1}
-                step={1}
-                value={limit}
-                onChange={(e) => setLimit(e.target.value)}
-                id={`${fieldId}-operations-workspace-field-9`}
-              />
-            </Field>
-            <Field className="min-w-0">
-              <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-10`}>
-                创建预算窗口（秒）
-              </FieldLabel>
-              <Input
-                required
-                type="number"
-                min={1}
-                step={1}
-                value={window}
-                onChange={(e) => setWindow(e.target.value)}
-                id={`${fieldId}-operations-workspace-field-10`}
-              />
-            </Field>
-            <Field className="min-w-0 sm:col-span-2">
-              <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-11`}>
-                创建预算原因
-              </FieldLabel>
-              <Input
-                required
-                maxLength={2000}
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                id={`${fieldId}-operations-workspace-field-11`}
-              />
-            </Field>
-            <Button type="submit" disabled={pending}>
-              创建硬预算
-            </Button>
-          </FieldGroup>
-        </form>
-      </CollapsibleContent>
-    </Collapsible>
+              <Field className="min-w-0">
+                <FieldLabel
+                  htmlFor={`${fieldId}-operations-workspace-field-10`}
+                >
+                  创建预算窗口（秒）
+                </FieldLabel>
+                <Input
+                  required
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={window}
+                  onChange={(e) => setWindow(e.target.value)}
+                  id={`${fieldId}-operations-workspace-field-10`}
+                />
+              </Field>
+              <Field className="min-w-0 sm:col-span-2">
+                <FieldLabel
+                  htmlFor={`${fieldId}-operations-workspace-field-11`}
+                >
+                  创建预算原因
+                </FieldLabel>
+                <Input
+                  required
+                  maxLength={2000}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  id={`${fieldId}-operations-workspace-field-11`}
+                />
+              </Field>
+              <Button type="submit" disabled={pending}>
+                创建硬预算
+              </Button>
+            </FieldGroup>
+          </form>
+        </CollapsibleContent>
+      </Collapsible>
+    </Item>
   );
 }
 
@@ -513,120 +535,136 @@ function FeedbackReview({
     }
   }
   return (
-    <article className="bg-muted/40 grid gap-3 rounded-lg p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="text-sm break-all">
-          {row.id} · {row.status} · 版本 {row.revision}
-          <span className="text-muted-foreground block">
-            {row.created_at} · 转发{" "}
-            {row.forwarded_at ?? row.forward_error ?? "未发送"}
-          </span>
-        </p>
-        {row.attachment_id && (
-          <Button variant="ghost" onClick={screenshot}>
-            下载私有截图
-          </Button>
-        )}
-      </div>
-      <p className="break-words whitespace-pre-wrap">
-        {row.content ?? "内容已删除"}
-      </p>
-      {row.email && <p className="text-sm break-all">{row.email}</p>}
-      {row.page_url && (
-        <a
-          className="text-sm break-all underline"
-          href={row.page_url}
-          target="_blank"
-          rel="noreferrer"
-        >
-          相关页面
-        </a>
-      )}
-      <form onSubmit={submit}>
-        <FieldGroup className="grid gap-3 sm:grid-cols-2">
-          <Field className="min-w-0">
-            <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-12`}>
-              处理状态
-            </FieldLabel>
-            <Select
-              value={status}
-              onValueChange={(selectedValue) =>
-                setStatus(selectedValue as HotKeyAPI.FeedbackView["status"])
-              }
+    <Item variant="muted" asChild>
+      <article className="grid gap-3 p-4">
+        <ItemContent className="min-w-0 gap-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <p className="text-sm break-all">
+              {row.id} · {row.status} · 版本 {row.revision}
+              <span className="text-muted-foreground block">
+                {row.created_at} · 转发{" "}
+                {row.forwarded_at ?? row.forward_error ?? "未发送"}
+              </span>
+            </p>
+            {row.attachment_id && (
+              <Button variant="ghost" onClick={screenshot}>
+                下载私有截图
+              </Button>
+            )}
+          </div>
+          <p className="break-words whitespace-pre-wrap">
+            {row.content ?? "内容已删除"}
+          </p>
+          {row.email && <p className="text-sm break-all">{row.email}</p>}
+          {row.page_url && (
+            <a
+              className="text-sm break-all underline"
+              href={row.page_url}
+              target="_blank"
+              rel="noreferrer"
             >
-              <SelectTrigger
-                aria-label="反馈处理状态"
-                id={`${fieldId}-operations-workspace-field-12`}
-                className="w-full min-w-0"
+              相关页面
+            </a>
+          )}
+          <form onSubmit={submit}>
+            <FieldGroup className="grid gap-3 sm:grid-cols-2">
+              <Field className="min-w-0">
+                <FieldLabel
+                  htmlFor={`${fieldId}-operations-workspace-field-12`}
+                >
+                  处理状态
+                </FieldLabel>
+                <Select
+                  value={status}
+                  onValueChange={(selectedValue) =>
+                    setStatus(selectedValue as HotKeyAPI.FeedbackView["status"])
+                  }
+                >
+                  <SelectTrigger
+                    aria-label="反馈处理状态"
+                    id={`${fieldId}-operations-workspace-field-12`}
+                    className="w-full min-w-0"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper">
+                    <SelectGroup>
+                      <SelectLabel className="sr-only">处理状态</SelectLabel>
+                      {[
+                        "new",
+                        "reviewing",
+                        "resolved",
+                        "rejected",
+                        "deleted",
+                      ].map((value) => (
+                        <SelectItem
+                          key={value}
+                          value={value}
+                          className="whitespace-normal"
+                        >
+                          {value}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field orientation="horizontal" className="w-auto">
+                <Checkbox
+                  checked={banned}
+                  onCheckedChange={(checked) => setBanned(checked === true)}
+                  id={`${fieldId}-operations-workspace-field-13`}
+                />
+                <FieldLabel
+                  htmlFor={`${fieldId}-operations-workspace-field-13`}
+                >
+                  封禁此匿名来源
+                </FieldLabel>
+              </Field>
+              <Field className="min-w-0 sm:col-span-2">
+                <FieldLabel
+                  htmlFor={`${fieldId}-operations-workspace-field-14`}
+                >
+                  处理备注
+                </FieldLabel>
+                <Textarea
+                  maxLength={2000}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  id={`${fieldId}-operations-workspace-field-14`}
+                />
+              </Field>
+              <Field className="min-w-0 sm:col-span-2">
+                <FieldLabel
+                  htmlFor={`${fieldId}-operations-workspace-field-15`}
+                >
+                  操作原因
+                </FieldLabel>
+                <Input
+                  required
+                  maxLength={2000}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  id={`${fieldId}-operations-workspace-field-15`}
+                />
+              </Field>
+              <Button
+                disabled={pending}
+                type="submit"
+                className="justify-self-start"
               >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent position="popper">
-                <SelectGroup>
-                  <SelectLabel className="sr-only">处理状态</SelectLabel>
-                  {["new", "reviewing", "resolved", "rejected", "deleted"].map(
-                    (value) => (
-                      <SelectItem
-                        key={value}
-                        value={value}
-                        className="whitespace-normal"
-                      >
-                        {value}
-                      </SelectItem>
-                    ),
-                  )}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field orientation="horizontal" className="w-auto">
-            <Checkbox
-              checked={banned}
-              onCheckedChange={(checked) => setBanned(checked === true)}
-              id={`${fieldId}-operations-workspace-field-13`}
-            />
-            <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-13`}>
-              封禁此匿名来源
-            </FieldLabel>
-          </Field>
-          <Field className="min-w-0 sm:col-span-2">
-            <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-14`}>
-              处理备注
-            </FieldLabel>
-            <Textarea
-              maxLength={2000}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              id={`${fieldId}-operations-workspace-field-14`}
-            />
-          </Field>
-          <Field className="min-w-0 sm:col-span-2">
-            <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-15`}>
-              操作原因
-            </FieldLabel>
-            <Input
-              required
-              maxLength={2000}
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              id={`${fieldId}-operations-workspace-field-15`}
-            />
-          </Field>
-          <Button
-            disabled={pending}
-            type="submit"
-            className="justify-self-start"
-          >
-            保存反馈处置
-          </Button>
-        </FieldGroup>
-      </form>
-      {status === "deleted" && (
-        <p className="text-muted-foreground text-sm">
-          保存后会清除正文、联系方式和截图。
-        </p>
-      )}
-    </article>
+                保存反馈处置
+              </Button>
+            </FieldGroup>
+          </form>
+          {status === "deleted" && (
+            <ItemDescription className="line-clamp-none">
+              保存后会清除正文、联系方式和截图。
+            </ItemDescription>
+          )}
+        </ItemContent>
+      </article>
+    </Item>
   );
 }
 function DictionaryEditor({
@@ -1091,7 +1129,6 @@ export function OperationsWorkspace() {
             </Button>
           </div>
         )}
-
         {token && health && (
           <>
             <section className="grid gap-5">
@@ -1112,19 +1149,22 @@ export function OperationsWorkspace() {
                 </span>
               </div>
               {health.heartbeats.length === 0 ? (
-                <p className="text-muted-foreground">尚无真实进程心跳。</p>
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyDescription>尚无真实进程心跳。</EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   {health.heartbeats.map((row) => (
-                    <p
-                      key={row.instance_id}
-                      className="bg-muted/40 rounded-lg p-4"
-                    >
-                      {row.role} · {row.state}
-                      <span className="text-muted-foreground block text-sm">
-                        PID {row.pid} · {row.age_seconds} 秒前
-                      </span>
-                    </p>
+                    <Alert role="note" key={row.instance_id} className="p-4">
+                      <AlertDescription>
+                        {row.role} · {row.state}
+                        <span className="text-muted-foreground block text-sm">
+                          PID {row.pid} · {row.age_seconds} 秒前
+                        </span>
+                      </AlertDescription>
+                    </Alert>
                   ))}
                 </div>
               )}
@@ -1153,19 +1193,20 @@ export function OperationsWorkspace() {
                 <h2 className="text-xl font-semibold">维护与恢复</h2>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {maintenance.schedules.map((row) => (
-                    <div
-                      key={row.action}
-                      className="bg-muted/40 rounded-lg p-4"
-                    >
-                      <p>
-                        {labels[row.action] ?? row.action} ·{" "}
-                        {row.enabled ? "已启用" : "已关闭"}
-                      </p>
-                      <p className="text-muted-foreground text-sm">
-                        间隔 {row.interval_seconds} 秒 · 最近{" "}
-                        {row.latest_audit?.status ?? "无执行记录"}
-                      </p>
-                    </div>
+                    <Item variant="muted" key={row.action} asChild>
+                      <div className="p-4">
+                        <ItemContent className="min-w-0 gap-3">
+                          <p>
+                            {labels[row.action] ?? row.action} ·{" "}
+                            {row.enabled ? "已启用" : "已关闭"}
+                          </p>
+                          <ItemDescription className="line-clamp-none">
+                            间隔 {row.interval_seconds} 秒 · 最近{" "}
+                            {row.latest_audit?.status ?? "无执行记录"}
+                          </ItemDescription>
+                        </ItemContent>
+                      </div>
+                    </Item>
                   ))}
                 </div>
                 {maintenance.schedules.map((row) => {
@@ -1177,31 +1218,36 @@ export function OperationsWorkspace() {
                   )
                     return null;
                   return (
-                    <section
-                      key="source-health-report"
-                      className="bg-muted/40 rounded-lg p-4"
-                    >
-                      <h3 className="font-semibold">最近来源周报</h3>
-                      <p className="text-muted-foreground mt-2 text-sm whitespace-pre-wrap">
-                        {report}
-                      </p>
-                      <p className="text-muted-foreground mt-2 text-xs">
-                        {row.latest_audit?.after_state?.delivered === true
-                          ? "已保存渠道成功回执"
-                          : row.latest_audit?.status === "unknown"
-                            ? "渠道结果未知，请核对后处理"
-                            : "本地报告已保存；请在审计中查看投递状态"}
-                      </p>
-                    </section>
+                    <Item variant="muted" key="source-health-report" asChild>
+                      <section className="p-4">
+                        <ItemContent className="min-w-0 gap-3">
+                          <ItemTitle className="line-clamp-none w-full">
+                            <h3>最近来源周报</h3>
+                          </ItemTitle>
+                          <ItemDescription className="mt-2 line-clamp-none whitespace-pre-wrap">
+                            {report}
+                          </ItemDescription>
+                          <ItemDescription className="mt-2 line-clamp-none">
+                            {row.latest_audit?.after_state?.delivered === true
+                              ? "已保存渠道成功回执"
+                              : row.latest_audit?.status === "unknown"
+                                ? "渠道结果未知，请核对后处理"
+                                : "本地报告已保存；请在审计中查看投递状态"}
+                          </ItemDescription>
+                        </ItemContent>
+                      </section>
+                    </Item>
                   );
                 })}
                 {maintenance.findings.map((row) => (
-                  <p key={row.key} className="bg-muted/40 rounded-lg p-4">
-                    <strong>{row.title}</strong> · {row.severity}
-                    <span className="text-muted-foreground block text-sm">
-                      {row.detail}
-                    </span>
-                  </p>
+                  <Alert role="note" key={row.key} className="p-4">
+                    <AlertDescription>
+                      <strong>{row.title}</strong> · {row.severity}
+                      <span className="text-muted-foreground block text-sm">
+                        {row.detail}
+                      </span>
+                    </AlertDescription>
+                  </Alert>
                 ))}
                 <form onSubmit={run}>
                   <FieldGroup className="grid gap-3 sm:grid-cols-2">
@@ -1284,22 +1330,26 @@ export function OperationsWorkspace() {
                 </form>
                 <div className="grid gap-3">
                   {maintenance.backups.map((row) => (
-                    <div key={row.id} className="bg-muted/40 rounded-lg p-4">
-                      <p>
-                        {row.action} · {row.status}
-                      </p>
-                      <pre className="mt-2 overflow-auto text-xs">
-                        {JSON.stringify(row.after_state, null, 2)}
-                      </pre>
-                      {row.job_id && (
-                        <Link
-                          className="text-sm underline"
-                          href={`/jobs/${row.job_id}`}
-                        >
-                          查看原任务
-                        </Link>
-                      )}
-                    </div>
+                    <Item variant="muted" key={row.id} asChild>
+                      <div className="p-4">
+                        <ItemContent className="min-w-0 gap-3">
+                          <p>
+                            {row.action} · {row.status}
+                          </p>
+                          <pre className="mt-2 overflow-auto text-xs">
+                            {JSON.stringify(row.after_state, null, 2)}
+                          </pre>
+                          {row.job_id && (
+                            <Link
+                              className="text-sm underline"
+                              href={`/jobs/${row.job_id}`}
+                            >
+                              查看原任务
+                            </Link>
+                          )}
+                        </ItemContent>
+                      </div>
+                    </Item>
                   ))}
                 </div>
               </section>
@@ -1319,7 +1369,13 @@ export function OperationsWorkspace() {
                   active={() => isCurrent(token, accessEpoch)}
                 />
               ))}
-              {feedback.length === 0 && <p>暂无反馈。</p>}
+              {feedback.length === 0 && (
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyDescription>暂无反馈。</EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              )}
               {feedbackCursor && (
                 <Button
                   variant="ghost"
@@ -1343,32 +1399,36 @@ export function OperationsWorkspace() {
             <section className="grid gap-4">
               <h2 className="text-xl font-semibold">操作审计</h2>
               {audits.map((row) => (
-                <article key={row.id} className="bg-muted/40 rounded-lg p-4">
-                  <p className="break-all">
-                    {row.action} · {row.status}
-                    <span className="text-muted-foreground block text-sm">
-                      {row.created_at} · {row.reason}
-                    </span>
-                  </p>
-                  {row.error_code && (
-                    <p className="text-sm">{row.error_code}</p>
-                  )}
-                  {row.job_id && (
-                    <Link
-                      className="text-sm underline"
-                      href={`/jobs/${row.job_id}`}
-                    >
-                      查看原任务
-                    </Link>
-                  )}
-                  {row.status === "unknown" && (
-                    <AuditResolution
-                      row={row}
-                      options={options}
-                      saved={() => refresh()}
-                    />
-                  )}
-                </article>
+                <Item variant="muted" key={row.id} asChild>
+                  <article className="p-4">
+                    <ItemContent className="min-w-0 gap-3">
+                      <p className="break-all">
+                        {row.action} · {row.status}
+                        <span className="text-muted-foreground block text-sm">
+                          {row.created_at} · {row.reason}
+                        </span>
+                      </p>
+                      {row.error_code && (
+                        <p className="text-sm">{row.error_code}</p>
+                      )}
+                      {row.job_id && (
+                        <Link
+                          className="text-sm underline"
+                          href={`/jobs/${row.job_id}`}
+                        >
+                          查看原任务
+                        </Link>
+                      )}
+                      {row.status === "unknown" && (
+                        <AuditResolution
+                          row={row}
+                          options={options}
+                          saved={() => refresh()}
+                        />
+                      )}
+                    </ItemContent>
+                  </article>
+                </Item>
               ))}
               {auditCursor && (
                 <Button

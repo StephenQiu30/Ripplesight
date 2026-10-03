@@ -1,4 +1,6 @@
 "use client";
+import { Spinner } from "@/components/ui/spinner";
+import { Item, ItemContent, ItemDescription } from "@/components/ui/item";
 import { toast } from "sonner";
 
 import Link from "next/link";
@@ -95,8 +97,16 @@ export function EditorialSourceMaterials({ token, sourceKey, name }: Props) {
       >
         读取来源材料
       </Button>
-      {busy ? <p role="status">正在读取来源材料…</p> : null}
-
+      {busy ? (
+        <Item role="status">
+          <Spinner aria-hidden="true" />
+          <ItemContent>
+            <ItemDescription className="line-clamp-none">
+              正在读取来源材料…
+            </ItemDescription>
+          </ItemContent>
+        </Item>
+      ) : null}
       {rows?.length === 0 ? (
         <p>此来源暂无当前可读材料；不代表来源历史为空。</p>
       ) : null}
@@ -107,51 +117,52 @@ export function EditorialSourceMaterials({ token, sourceKey, name }: Props) {
             {cursor ? "，还有后页" : "，当前分页已到末尾"}。
           </p>
           {rows.map((item) => (
-            <article
-              key={item.id}
-              className="bg-muted/30 flex flex-col gap-y-3 rounded-xl p-4"
-            >
-              <p className="font-medium break-words">
-                {item.latest_observation.content_version?.title ||
-                  item.latest_observation.content_version?.body?.slice(
-                    0,
-                    120,
-                  ) ||
-                  "可读材料暂无文字"}
-              </p>
-              <p className="text-muted-foreground text-sm">
-                {item.analysis_state
-                  ? states[item.analysis_state]
-                  : "未指定监控标注状态"}{" "}
-                ·{" "}
-                {item.current_visibility
-                  ? visibilityStatusLabel(item.current_visibility.status)
-                  : "可见性状态未知"}{" "}
-                · 时间{" "}
-                {formatTime(
-                  item.timeline_at ??
-                    item.latest_observation.published_at ??
-                    item.latest_observation.observed_at,
-                )}
-              </p>
-              <p className="text-muted-foreground text-xs break-all">
-                作品编号 {item.id}
-              </p>
-              <div className="flex flex-wrap gap-4 text-sm">
-                <Link
-                  href={`/content/${item.id}`}
-                  className="underline underline-offset-4"
-                >
-                  查看原材料 {item.id}
-                </Link>
-                <Link
-                  href={`/publication/manage?content_id=${encodeURIComponent(item.id)}`}
-                  className="underline underline-offset-4"
-                >
-                  编辑分析与发布 {item.id}
-                </Link>
-              </div>
-            </article>
+            <Item variant="muted" key={item.id} asChild>
+              <article className="flex flex-col gap-y-3 p-4">
+                <ItemContent className="min-w-0 gap-3">
+                  <p className="font-medium break-words">
+                    {item.latest_observation.content_version?.title ||
+                      item.latest_observation.content_version?.body?.slice(
+                        0,
+                        120,
+                      ) ||
+                      "可读材料暂无文字"}
+                  </p>
+                  <ItemDescription className="line-clamp-none">
+                    {item.analysis_state
+                      ? states[item.analysis_state]
+                      : "未指定监控标注状态"}{" "}
+                    ·{" "}
+                    {item.current_visibility
+                      ? visibilityStatusLabel(item.current_visibility.status)
+                      : "可见性状态未知"}{" "}
+                    · 时间{" "}
+                    {formatTime(
+                      item.timeline_at ??
+                        item.latest_observation.published_at ??
+                        item.latest_observation.observed_at,
+                    )}
+                  </ItemDescription>
+                  <ItemDescription className="line-clamp-none break-all">
+                    作品编号 {item.id}
+                  </ItemDescription>
+                  <div className="flex flex-wrap gap-4 text-sm">
+                    <Link
+                      href={`/content/${item.id}`}
+                      className="underline underline-offset-4"
+                    >
+                      查看原材料 {item.id}
+                    </Link>
+                    <Link
+                      href={`/publication/manage?content_id=${encodeURIComponent(item.id)}`}
+                      className="underline underline-offset-4"
+                    >
+                      编辑分析与发布 {item.id}
+                    </Link>
+                  </div>
+                </ItemContent>
+              </article>
+            </Item>
           ))}
           {cursor ? (
             <Button

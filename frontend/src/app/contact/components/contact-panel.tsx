@@ -1,4 +1,6 @@
 "use client";
+import { Spinner } from "@/components/ui/spinner";
+import { Item, ItemContent, ItemDescription } from "@/components/ui/item";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import Image from "next/image";
@@ -39,7 +41,14 @@ export function ContactPanel() {
           <AlertDescription>联系资料暂不可用，可以重新读取。</AlertDescription>
         </Alert>
       ) : !view ? (
-        <p role="status">正在读取…</p>
+        <Item role="status">
+          <Spinner aria-hidden="true" />
+          <ItemContent>
+            <ItemDescription className="line-clamp-none">
+              正在读取…
+            </ItemDescription>
+          </ItemContent>
+        </Item>
       ) : view.enabled ? (
         <>
           <h2 className="text-foreground text-lg font-medium">{view.title}</h2>

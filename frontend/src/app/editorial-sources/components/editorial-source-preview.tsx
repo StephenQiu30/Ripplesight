@@ -1,4 +1,14 @@
 "use client";
+import { Separator } from "@/components/ui/separator";
+
+import {
+  Item,
+  ItemContent,
+  ItemTitle,
+  ItemDescription,
+} from "@/components/ui/item";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import { toast } from "sonner";
 
 import Link from "next/link";
@@ -195,168 +205,187 @@ export function EditorialSourcePreview({
   const unsupported = kind === "mp_account" || kind === "external";
   const allowed = !!token && !!reason.trim() && !busy;
   return (
-    <section
-      aria-label="配置试抓"
-      className="bg-muted/30 flex flex-col gap-y-4 rounded-xl p-5"
-    >
-      <h3 className="text-lg font-medium">配置试抓</h3>
-      <p className="text-muted-foreground text-sm leading-7">
-        试抓不写入正式材料、不推进采集游标。本地样本只解析当前表单；远程试抓使用已保存配置，可能产生来源费用，仍需现行许可与预算。
-      </p>
-      {unsupported ? (
-        <p>公众号与外部摄入不支持试抓；请使用对应的正式有界入口。</p>
-      ) : (
-        <>
-          <Label htmlFor="source-preview-reason">试抓原因</Label>
-          <Input
-            id="source-preview-reason"
-            value={reason}
-            maxLength={1000}
-            onChange={(event) => setReason(event.target.value)}
-          />
-          {localKinds.has(kind) ? (
+    <Item variant="muted" asChild>
+      <section aria-label="配置试抓" className="flex flex-col gap-y-4 p-5">
+        <ItemContent className="min-w-0 gap-3">
+          <ItemTitle className="line-clamp-none w-full">
+            <h3>配置试抓</h3>
+          </ItemTitle>
+          <ItemDescription className="line-clamp-none leading-7">
+            试抓不写入正式材料、不推进采集游标。本地样本只解析当前表单；远程试抓使用已保存配置，可能产生来源费用，仍需现行许可与预算。
+          </ItemDescription>
+          {unsupported ? (
+            <p>公众号与外部摄入不支持试抓；请使用对应的正式有界入口。</p>
+          ) : (
             <>
-              <Label htmlFor="source-preview-sample">本地样本文本</Label>
-              <Textarea
-                id="source-preview-sample"
-                value={sample}
-                maxLength={1_000_000}
-                className="min-h-36 font-mono text-sm"
-                onChange={(event) => setSample(event.target.value)}
+              <Label htmlFor="source-preview-reason">试抓原因</Label>
+              <Input
+                id="source-preview-reason"
+                value={reason}
+                maxLength={1000}
+                onChange={(event) => setReason(event.target.value)}
               />
-              <p className="text-muted-foreground text-sm">
-                粘贴 RSS/XML、网页/Markdown 或 JSON 样本，最多 1 MB（1,000,000
-                UTF-8 字节），不存储样本文本，不请求来源网站。
+              {localKinds.has(kind) ? (
+                <>
+                  <Label htmlFor="source-preview-sample">本地样本文本</Label>
+                  <Textarea
+                    id="source-preview-sample"
+                    value={sample}
+                    maxLength={1_000_000}
+                    className="min-h-36 font-mono text-sm"
+                    onChange={(event) => setSample(event.target.value)}
+                  />
+                  <ItemDescription className="line-clamp-none">
+                    粘贴 RSS/XML、网页/Markdown 或 JSON 样本，最多 1
+                    MB（1,000,000 UTF-8 字节），不存储样本文本，不请求来源网站。
+                  </ItemDescription>
+                  <Button
+                    variant="outline"
+                    disabled={!allowed || !sample.trim()}
+                    onClick={parseSample}
+                  >
+                    解析本地样本
+                  </Button>
+                </>
+              ) : (
+                <ItemDescription className="line-clamp-none">
+                  X 本地样本解析未提供；保存并批准官方连接后可受理单页远程试抓。
+                </ItemDescription>
+              )}
+              <div className="flex flex-col gap-y-3 pt-4">
+                <Separator />
+                <p className="text-sm">
+                  {profileId
+                    ? `远程试抓预期来源修订 ${expectedRevision}。未保存的表单改动不会参与远程试抓。`
+                    : "远程试抓需要先保存关闭来源配置，再批准许可与来源开关。"}
+                </p>
+                <p className="text-muted-foreground text-sm">
+                  远程试抓只读列表，X 限单页；网页不抓取详情。仅显示最多 20
+                  条摘要，不能用来证明全历史完整。
+                </p>
+                <Button
+                  disabled={
+                    !allowed ||
+                    !profileId ||
+                    !sourceEnabled ||
+                    (!!job && !reviewed) ||
+                    (preview?.status === "unknown" && !reviewed)
+                  }
+                  onClick={remote}
+                >
+                  受理远程试抓
+                </Button>
+                {profileId && !sourceEnabled ? (
+                  <p className="text-muted-foreground text-sm">
+                    已保存来源尚未启用；本地样本仍可解析。
+                  </p>
+                ) : null}
+              </div>
+            </>
+          )}
+          {job ? (
+            <div className="flex flex-col gap-y-3 text-sm">
+              <p>
+                试抓任务 {jobStatus?.status ?? job.status} ·{" "}
+                <Link
+                  href={`/jobs/${job.id}`}
+                  className="underline underline-offset-4"
+                >
+                  查看任务回执
+                </Link>
               </p>
               <Button
                 variant="outline"
-                disabled={!allowed || !sample.trim()}
-                onClick={parseSample}
+                disabled={busy || !token}
+                onClick={read}
               >
-                解析本地样本
+                读取试抓结果
               </Button>
-            </>
-          ) : (
-            <p className="text-muted-foreground text-sm">
-              X 本地样本解析未提供；保存并批准官方连接后可受理单页远程试抓。
-            </p>
-          )}
-          <div className="flex flex-col gap-y-3 border-t pt-4">
-            <p className="text-sm">
-              {profileId
-                ? `远程试抓预期来源修订 ${expectedRevision}。未保存的表单改动不会参与远程试抓。`
-                : "远程试抓需要先保存关闭来源配置，再批准许可与来源开关。"}
-            </p>
-            <p className="text-muted-foreground text-sm">
-              远程试抓只读列表，X 限单页；网页不抓取详情。仅显示最多 20
-              条摘要，不能用来证明全历史完整。
-            </p>
-            <Button
-              disabled={
-                !allowed ||
-                !profileId ||
-                !sourceEnabled ||
-                (!!job && !reviewed) ||
-                (preview?.status === "unknown" && !reviewed)
-              }
-              onClick={remote}
-            >
-              受理远程试抓
-            </Button>
-            {profileId && !sourceEnabled ? (
-              <p className="text-muted-foreground text-sm">
-                已保存来源尚未启用；本地样本仍可解析。
-              </p>
-            ) : null}
-          </div>
-        </>
-      )}
-
-      {job ? (
-        <div className="flex flex-col gap-y-3 text-sm">
-          <p>
-            试抓任务 {jobStatus?.status ?? job.status} ·{" "}
-            <Link
-              href={`/jobs/${job.id}`}
-              className="underline underline-offset-4"
-            >
-              查看任务回执
-            </Link>
-          </p>
-          <Button variant="outline" disabled={busy || !token} onClick={read}>
-            读取试抓结果
-          </Button>
-          {!preview ? (
-            <p>
-              尚无可读试抓结果，请按任务状态处理后再次读取。读取不会发起新的来源请求。
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-      {preview ? (
-        <div className="flex flex-col gap-y-3 text-sm">
-          <p role="status">
-            {statuses[preview.status]} ·{" "}
-            {preview.mode === "sample" ? "本地样本" : "远程列表"} · 本次候选{" "}
-            {preview.count} · 展示 {preview.items.length} · {preview.ms} ms ·
-            请求数 {preview.requests}
-          </p>
-          {preview.reason ? (
-            <p className="break-words">{preview.reason}</p>
-          ) : null}
-          {preview.status === "unknown" ? (
-            <div className="flex flex-col gap-y-3">
-              <p>
-                请先在任务回执核验未知结果，不会自动重试或额外发送收费请求。人工核对保留原未知结果与保守预算回执。
-              </p>
-              {reviewed ? (
-                <p>
-                  已记录人工核对；原结果仍为未知。如确需再次试抓，请显式点击受理远程试抓，新任务仍需当前许可与预算。
-                </p>
-              ) : job?.operation_id ? (
-                <Button
-                  variant="outline"
-                  disabled={!allowed}
-                  onClick={reviewUnknown}
-                >
-                  已核对未知试抓
-                </Button>
+              {!preview ? (
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyDescription>
+                      尚无可读试抓结果，请按任务状态处理后再次读取。读取不会发起新的来源请求。
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               ) : null}
             </div>
           ) : null}
-          {!preview.items.length && preview.status === "complete" ? (
-            <p>本次已完成解析，未发现候选；不表示来源历史为空。</p>
+          {preview ? (
+            <div className="flex flex-col gap-y-3 text-sm">
+              <Alert role="status">
+                <AlertDescription>
+                  {statuses[preview.status]} ·{" "}
+                  {preview.mode === "sample" ? "本地样本" : "远程列表"} ·
+                  本次候选{preview.count} · 展示 {preview.items.length} ·{" "}
+                  {preview.ms} ms · 请求数 {preview.requests}
+                </AlertDescription>
+              </Alert>
+              {preview.reason ? (
+                <p className="break-words">{preview.reason}</p>
+              ) : null}
+              {preview.status === "unknown" ? (
+                <div className="flex flex-col gap-y-3">
+                  <p>
+                    请先在任务回执核验未知结果，不会自动重试或额外发送收费请求。人工核对保留原未知结果与保守预算回执。
+                  </p>
+                  {reviewed ? (
+                    <p>
+                      已记录人工核对；原结果仍为未知。如确需再次试抓，请显式点击受理远程试抓，新任务仍需当前许可与预算。
+                    </p>
+                  ) : job?.operation_id ? (
+                    <Button
+                      variant="outline"
+                      disabled={!allowed}
+                      onClick={reviewUnknown}
+                    >
+                      已核对未知试抓
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+              {!preview.items.length && preview.status === "complete" ? (
+                <p>本次已完成解析，未发现候选；不表示来源历史为空。</p>
+              ) : null}
+              {preview.items.map((item, index) => (
+                <Item variant="muted" key={`${item.url}:${index}`} asChild>
+                  <article className="flex flex-col gap-y-2 p-3">
+                    <ItemContent className="min-w-0 gap-3">
+                      <p className="font-medium">{item.title}</p>
+                      <ItemDescription className="line-clamp-none">
+                        {item.published_at
+                          ? new Date(item.published_at).toLocaleString(
+                              "zh-CN",
+                              {
+                                timeZone: "Asia/Shanghai",
+                              },
+                            )
+                          : "发布时间未知"}
+                      </ItemDescription>
+                      {safeExternalHref(item.url) ? (
+                        <a
+                          href={safeExternalHref(item.url)!}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="break-all underline underline-offset-4"
+                        >
+                          {item.url}
+                        </a>
+                      ) : (
+                        <p className="break-all">{item.url}</p>
+                      )}
+                      <p className="break-words whitespace-pre-wrap">
+                        {item.excerpt}
+                      </p>
+                    </ItemContent>
+                  </article>
+                </Item>
+              ))}
+            </div>
           ) : null}
-          {preview.items.map((item, index) => (
-            <article
-              key={`${item.url}:${index}`}
-              className="bg-background flex flex-col gap-y-2 rounded-md p-3"
-            >
-              <p className="font-medium">{item.title}</p>
-              <p className="text-muted-foreground">
-                {item.published_at
-                  ? new Date(item.published_at).toLocaleString("zh-CN", {
-                      timeZone: "Asia/Shanghai",
-                    })
-                  : "发布时间未知"}
-              </p>
-              {safeExternalHref(item.url) ? (
-                <a
-                  href={safeExternalHref(item.url)!}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="break-all underline underline-offset-4"
-                >
-                  {item.url}
-                </a>
-              ) : (
-                <p className="break-all">{item.url}</p>
-              )}
-              <p className="break-words whitespace-pre-wrap">{item.excerpt}</p>
-            </article>
-          ))}
-        </div>
-      ) : null}
-    </section>
+        </ItemContent>
+      </section>
+    </Item>
   );
 }

@@ -1,3 +1,10 @@
+import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
+import {
+  Item,
+  ItemContent,
+  ItemGroup,
+  ItemDescription,
+} from "@/components/ui/item";
 import { DiscoveryFilters } from "./components/discovery-filters";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -152,26 +159,32 @@ export default async function DiscoverPage({
             <section>
               <h2 className="font-medium">事件热度</h2>
               {hot?.stories.length ? (
-                <ul className="mt-4 flex flex-col gap-y-5">
+                <ItemGroup className="mt-4 flex flex-col gap-y-5">
                   {hot.stories.map((story) => (
-                    <li key={story.id}>
-                      <Link
-                        href={`/discover/stories/${story.id}`}
-                        className="text-sm leading-6 font-medium"
-                      >
-                        {story.title}
-                      </Link>
-                      <p className="text-muted-foreground mt-1 text-xs">
-                        热度 {story.heat?.toFixed(1) ?? "未知"} ·{" "}
-                        {story.attention?.participant_count ?? 0} 个参与方
-                      </p>
-                    </li>
+                    <Item role="listitem" variant="default" key={story.id}>
+                      <ItemContent className="min-w-0 gap-3">
+                        <Link
+                          href={`/discover/stories/${story.id}`}
+                          className="text-sm leading-6 font-medium"
+                        >
+                          {story.title}
+                        </Link>
+                        <ItemDescription className="mt-1 line-clamp-none">
+                          热度 {story.heat?.toFixed(1) ?? "未知"} ·{" "}
+                          {story.attention?.participant_count ?? 0} 个参与方
+                        </ItemDescription>
+                      </ItemContent>
+                    </Item>
                   ))}
-                </ul>
+                </ItemGroup>
               ) : (
-                <p className="text-muted-foreground mt-4 text-sm">
-                  暂无符合热度条件的公开事件。
-                </p>
+                <Empty className="mt-4">
+                  <EmptyHeader>
+                    <EmptyDescription>
+                      暂无符合热度条件的公开事件。
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               )}
             </section>
             <SavedItems />

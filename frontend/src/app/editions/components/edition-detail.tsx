@@ -1,4 +1,12 @@
 "use client";
+import { Separator } from "@/components/ui/separator";
+
+import {
+  Item,
+  ItemContent,
+  ItemGroup,
+  ItemDescription,
+} from "@/components/ui/item";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   FieldGroup,
@@ -45,25 +53,32 @@ function EditionReferences({
   entries: HotKeyAPI.ReportPublicationCandidate[];
 }) {
   return (
-    <ul className="flex flex-col gap-y-5">
+    <ItemGroup className="flex flex-col gap-y-5">
       {ids.map((id) => {
         const entry = entries.find((row) => row.content_id === id);
         return entry ? (
-          <li key={id} className="flex flex-col gap-y-2">
-            <Link href={`/items/${id}`} className="leading-7 font-medium">
-              {entry.title_zh}
-            </Link>
-            <p className="text-muted-foreground text-sm leading-7">
-              {entry.summary_zh}
-            </p>
-            <p className="text-muted-foreground text-xs">
-              {entry.source_name}
-              {entry.first_party ? " · 一手来源" : ""}
-            </p>
-          </li>
+          <Item
+            role="listitem"
+            variant="default"
+            key={id}
+            className="flex flex-col gap-y-2"
+          >
+            <ItemContent className="min-w-0 gap-3">
+              <Link href={`/items/${id}`} className="leading-7 font-medium">
+                {entry.title_zh}
+              </Link>
+              <ItemDescription className="line-clamp-none leading-7">
+                {entry.summary_zh}
+              </ItemDescription>
+              <ItemDescription className="line-clamp-none">
+                {entry.source_name}
+                {entry.first_party ? " · 一手来源" : ""}
+              </ItemDescription>
+            </ItemContent>
+          </Item>
         ) : null;
       })}
-    </ul>
+    </ItemGroup>
   );
 }
 
@@ -115,7 +130,8 @@ function EditionCorrection({
     }
   }
   return (
-    <Collapsible className="border-border mt-12 border-t pt-6">
+    <Collapsible className="mt-12 pt-6">
+      <Separator className="mb-6" />
       <CollapsibleTrigger asChild>
         <Button
           type="button"
@@ -336,7 +352,8 @@ export function EditionDetail({ editionId }: { editionId: string }) {
                 <p className="text-muted-foreground mt-7 text-lg leading-8 whitespace-pre-wrap">
                   {content.lead}
                 </p>
-                <dl className="border-border my-8 grid grid-cols-2 gap-5 border-y py-6 sm:grid-cols-4">
+                <Separator className="mt-8" />
+                <dl className="my-6 grid grid-cols-2 gap-5 sm:grid-cols-4">
                   {[
                     ["资讯", content.metrics.selected_count],
                     ["事实", content.metrics.facts_count],
@@ -349,6 +366,7 @@ export function EditionDetail({ editionId }: { editionId: string }) {
                     </div>
                   ))}
                 </dl>
+                <Separator className="mb-8" />
                 {content.highlights.length ? (
                   <section className="my-10 flex flex-col gap-y-6">
                     <h2 className="text-xl font-medium">重点关注</h2>
@@ -419,7 +437,8 @@ export function EditionDetail({ editionId }: { editionId: string }) {
             )}
           </>
         ) : null}
-        <section className="border-border mt-12 border-t pt-6">
+        <section className="mt-12 pt-6">
+          <Separator className="mb-6" />
           <h2 className="font-medium">历史修订</h2>
           {historyError ? (
             <Alert className="mt-4">
@@ -427,11 +446,11 @@ export function EditionDetail({ editionId }: { editionId: string }) {
               <AlertDescription>刷新后可以重新读取历史修订。</AlertDescription>
             </Alert>
           ) : (
-            <ul>
+            <ItemGroup>
               {history.map((item) => (
                 <EditionCard row={item} key={item.id} />
               ))}
-            </ul>
+            </ItemGroup>
           )}
         </section>
       </div>
