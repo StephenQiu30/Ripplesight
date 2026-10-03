@@ -1,3 +1,7 @@
+import { loadRootWebEnvironment } from "./env.config.mjs";
+
+loadRootWebEnvironment();
+
 type OpenApiOperation = {
   responses?: Record<string, unknown>;
 };

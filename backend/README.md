@@ -6,12 +6,12 @@ Python 3.12、FastAPI、Uvicorn、Pydantic 2、SQLAlchemy 2、psycopg 3、Postgr
 
 ## 执行入口
 
-复制 `.env.example` 为未跟踪的 `.env`，填写数据库凭据并指向业务库 `hotkey`。在 `backend/` 执行 `uv sync --locked`；从 `backend/app/` 执行以下独立入口：
+只在仓库根目录复制 `.env.example` 为未跟踪的 `.env`，统一填写数据库、认证、来源及模型配置；不创建子目录环境文件。Settings 固定读取根 `.env`，显式注入的进程环境优先。数据库指向业务库 `hotkey`。在 `backend/` 执行 `uv sync --locked` 和以下独立入口：
 
 ```bash
-uv run --locked uvicorn main:create_app --factory --host 127.0.0.1 --port 8667 --no-proxy-headers --no-access-log
-uv run --locked python -m worker
-uv run --locked python -m cli
+uv run --locked --env-file ../.env uvicorn main:create_app --factory --app-dir app --host 127.0.0.1 --port 8667 --no-proxy-headers --no-access-log
+PYTHONPATH=app uv run --locked --env-file ../.env python -m worker
+PYTHONPATH=app uv run --locked --env-file ../.env python -m cli
 ```
 
 API、Worker 和 CLI 分别启动。应用启动不会创建或修改数据库结构。
@@ -23,8 +23,8 @@ API、Worker 和 CLI 分别启动。应用启动不会创建或修改数据库�
 浏览器登录状态维护仅适用于数据库中已存在的 `browser_state` 连接；目前尚无真实平台连接创建入口。操作者在本机设置 `HOTKEY_BROWSER_STATE_DIR` 为已存在、权限 0700 的绝对目录，捕获文件必须位于 0700 目录、权限 0600，且不得是符号链接。CLI 不接收 Cookie 正文参数，不打印捕获内容或路径：
 
 ```bash
-uv run --locked python -m cli connections rotate-browser-state --owner-id OWNER_UUID --connection-id CONNECTION_UUID --expected-version 1 --capture-file /absolute/private/storage-state.json
-uv run --locked python -m cli connections disable-browser-state --owner-id OWNER_UUID --connection-id CONNECTION_UUID --expected-version 2
+PYTHONPATH=app uv run --locked --env-file ../.env python -m cli connections rotate-browser-state --owner-id OWNER_UUID --connection-id CONNECTION_UUID --expected-version 1 --capture-file /absolute/private/storage-state.json
+PYTHONPATH=app uv run --locked --env-file ../.env python -m cli connections disable-browser-state --owner-id OWNER_UUID --connection-id CONNECTION_UUID --expected-version 2
 ```
 
 停用后需导入新的人工登录状态才能重新启用；未接入平台适配器前，这些命令不代表平台采集可用。
@@ -60,12 +60,12 @@ docker compose --env-file .env up --detach --build --wait
 docker compose run --rm cli lifecycle cleanup-once --limit 100
 ```
 
-来源凭据只由维护者写入未跟踪的 `backend/.env`（开发 Compose 使用根 `.env`，生产显式使用根 `.env.prod`）中的 `HOTKEY_SOURCE_CREDENTIALS` JSON 映射，键仅允许 `x`、`douyin`，值为对应获授权凭据，默认 `{}`。不要把真实值放入命令参数、聊天、Git 或日志。修改后只替换现有 API/Worker 进程，再从 `/sources` 确认配置或替换；页面不提供秘密输入/回读。数据库只存不可逆指纹引用，移除或替换环境值会使原连接需重新授权。停用不删除历史资料，重新启用产生新版本并重新验证；配置完成不等于获准采集或能力可用。
+来源凭据只由维护者写入未跟踪的根 `.env`（生产显式使用根 `.env.prod`）中的 `HOTKEY_SOURCE_CREDENTIALS` JSON 映射，键仅允许 `x`、`douyin`，值为对应获授权凭据，默认 `{}`。不要把真实值放入命令参数、聊天、Git 或日志。修改后只替换现有 API/Worker 进程，再从 `/sources` 确认配置或替换；页面不提供秘密输入/回读。数据库只存不可逆指纹引用，移除或替换环境值会使原连接需重新授权。停用不删除历史资料，重新启用产生新版本并重新验证；配置完成不等于获准采集或能力可用。
 
 来源维护者完成一次显式探测后，可在现有环境登记稳定结果：
 
 ```bash
-uv run --env-file .env python -m cli connections record-probe \
+PYTHONPATH=app uv run --env-file ../.env python -m cli connections record-probe \
   --owner-id OWNER_UUID \
   --connection-id CONNECTION_UUID \
   --connection-version 1 \
@@ -82,14 +82,14 @@ uv run --env-file .env python -m cli connections record-probe \
 维护者可在现有本机环境显式指定一个已存在的受控目录，生成 PostgreSQL custom-format 候选归档、MinIO 证据对象内容和引用清单：
 
 ```bash
-PYTHONPATH=app uv run --env-file .env python -m cli backup create-candidate \
+PYTHONPATH=app uv run --env-file ../.env python -m cli backup create-candidate \
   --destination /absolute/protected/backup-root
 ```
 
 命令不创建服务、不修改数据库，也不把凭据写入参数或候选包。可在同一 PostgreSQL 服务中，以单独维护库的连接环境变量运行实际恢复验证；MinIO 内容会写到随机临时对象名前缀、回读校验后清理：
 
 ```bash
-PYTHONPATH=app uv run --env-file .env python -m cli backup verify-restore \
+PYTHONPATH=app uv run --env-file ../.env python -m cli backup verify-restore \
   --candidate /absolute/protected/backup-root/hotkey-backup-... \
   --isolation-url-env HOTKEY_TEST_DATABASE_URL
 ```

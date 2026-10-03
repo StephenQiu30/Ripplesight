@@ -15,6 +15,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from ai.capability_schemas import AI_CAPABILITIES, AiModelServerSpec
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
+_REPOSITORY_ROOT = _BACKEND_ROOT.parent
 BROWSER_EXECUTION_TIMEOUT_MAX_SECONDS = 45
 BROWSER_CLOSE_TIMEOUT_SECONDS = 5
 BROWSER_CLOSE_STEP_COUNT = 3
@@ -27,7 +28,8 @@ KAFKA_POLL_SAFETY_MARGIN_SECONDS = 5
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=_BACKEND_ROOT / ".env",
+        env_file=_REPOSITORY_ROOT / ".env",
+        env_ignore_empty=True,
         env_prefix="HOTKEY_",
         extra="ignore",
         hide_input_in_errors=True,

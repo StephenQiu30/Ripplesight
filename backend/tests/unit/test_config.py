@@ -4,6 +4,37 @@ from pydantic import ValidationError
 from core.config import Settings
 
 
+def test_blank_root_environment_fields_keep_defaults_and_optional_credentials_unset(
+    tmp_path, monkeypatch
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "HOTKEY_DATABASE_URL=postgresql+psycopg://test:test@127.0.0.1/hotkey_test\n"
+        "HOTKEY_LOG_LEVEL=\n"
+        "HOTKEY_GITHUB_CLIENT_ID=\n"
+        "HOTKEY_GITHUB_CLIENT_SECRET=\n"
+        "HOTKEY_NOTIFICATION_SMTP_HOST=\n"
+        "HOTKEY_NOTIFICATION_SMTP_FROM_EMAIL=\n"
+    )
+    for key in (
+        "HOTKEY_DATABASE_URL",
+        "HOTKEY_LOG_LEVEL",
+        "HOTKEY_GITHUB_CLIENT_ID",
+        "HOTKEY_GITHUB_CLIENT_SECRET",
+        "HOTKEY_NOTIFICATION_SMTP_HOST",
+        "HOTKEY_NOTIFICATION_SMTP_FROM_EMAIL",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    settings = Settings(_env_file=env_file)
+
+    assert settings.log_level == "INFO"
+    assert settings.github_client_id is None
+    assert settings.github_client_secret is None
+    assert settings.notification_smtp_host is None
+    assert settings.notification_smtp_from_email is None
+
+
 def test_settings_use_hotkey_environment_prefix(monkeypatch) -> None:
     monkeypatch.setenv("HOTKEY_APP_NAME", "HotKey Test")
 
