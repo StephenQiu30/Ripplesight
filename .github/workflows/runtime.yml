@@ -232,6 +232,7 @@ jobs:
           import urllib.error
           import urllib.parse
           import urllib.request
+          import xml.etree.ElementTree as ET
           from html.parser import HTMLParser
 
           origin = "http://127.0.0.1:8666"
@@ -261,17 +262,27 @@ jobs:
 
           assert request("/")[0] == request("/login")[0] == 200
           status, _, content = request("/sitemap.xml")
-          assert status == 200 and content.count(b"<loc>") == 6
-          assert b"<loc>http://127.0.0.1:8666/</loc>" in content
-          assert b"/topics" not in content and b"/login" not in content
+          assert status == 200
+          public_paths = {
+              "/", "/about", "/privacy", "/terms", "/contact", "/changelog",
+              "/discover", "/leaderboard", "/reports/daily", "/reports/weekly", "/reports/monthly",
+          }
+          locations = [entry.text for entry in ET.fromstring(content).findall(
+              "{http://www.sitemaps.org/schemas/sitemap/0.9}url/{http://www.sitemaps.org/schemas/sitemap/0.9}loc"
+          )]
+          assert len(locations) == len(public_paths)
+          assert set(locations) == {origin + path for path in public_paths}
+          for path in public_paths:
+              assert request(path)[0] == 200, path
           status, _, content = request("/robots.txt")
           assert status == 200 and b"Disallow: /topics" in content
           assert b"Sitemap: http://127.0.0.1:8666/sitemap.xml" in content
           assert request("/api/identity/options")[0] == 200
-          for path in ("/api/topics", "/api/source-capabilities", "/api/identity/session", "/api/leaderboard/rules", "/api/__exports/feed.xml"):
+          assert request("/api/leaderboard/rules")[0] == 200
+          for path in ("/api/topics", "/api/source-capabilities", "/api/identity/session", "/api/__exports/feed.xml"):
               status, _, content = request(path)
               assert status == 401 and json.loads(content)["code"] == "invalid_session", path
-          for path in ("/events", "/monitors/new", "/leaderboard"):
+          for path in ("/events", "/monitors/new", "/workspace"):
               status, headers, _ = request(path)
               assert status == 307
               target = urllib.parse.urlsplit(headers["Location"])
