@@ -3079,6 +3079,8 @@ declare namespace HotKeyAPI {
     email: string | null;
     /** Has Password */
     has_password: boolean;
+    /** Github Connected */
+    github_connected: boolean;
   };
 
   type ingestExternalEditorialSourceParams = {

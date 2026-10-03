@@ -45,6 +45,7 @@ const session: HotKeyAPI.IdentitySessionView = {
     username: "reader",
     email: "reader@example.com",
     has_password: true,
+    github_connected: false,
   },
   expires_at: "2100-01-01T00:00:00Z",
 };
@@ -54,6 +55,7 @@ const passwordless: HotKeyAPI.IdentitySessionView = {
     ...session.user,
     username: "user_random_internal",
     has_password: false,
+    github_connected: false,
   },
 };
 

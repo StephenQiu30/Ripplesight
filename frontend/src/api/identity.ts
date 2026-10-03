@@ -35,6 +35,39 @@ export async function sendEmailLoginCode(
   );
 }
 
+/** 验证并绑定当前账户邮箱 PUT /api/identity/email/link */
+export async function linkIdentityEmail(
+  body: HotKeyAPI.VerifyEmailCodeInput,
+  options?: import("@/request").RequestOptions,
+) {
+  return request<HotKeyAPI.IdentitySessionView>("/api/identity/email/link", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    data: body,
+    ...(options || {}),
+  });
+}
+
+/** 发送账户绑定邮箱验证码 POST /api/identity/email/link/challenges */
+export async function sendEmailLinkCode(
+  body: HotKeyAPI.EmailCodeInput,
+  options?: import("@/request").RequestOptions,
+) {
+  return request<HotKeyAPI.EmailChallengeView>(
+    "/api/identity/email/link/challenges",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      data: body,
+      ...(options || {}),
+    },
+  );
+}
+
 /** Email Login POST /api/identity/email/sessions */
 export async function verifyEmailLoginCode(
   body: HotKeyAPI.VerifyEmailCodeInput,
@@ -84,6 +117,19 @@ export async function completeGithubLogin(
     },
     ...(options || {}),
   });
+}
+
+/** 连接当前账户的GitHub身份 POST /api/identity/github/link */
+export async function startGithubLink(
+  options?: import("@/request").RequestOptions,
+) {
+  return request<HotKeyAPI.GithubAuthorizationView>(
+    "/api/identity/github/link",
+    {
+      method: "POST",
+      ...(options || {}),
+    },
+  );
 }
 
 /** Options GET /api/identity/options */

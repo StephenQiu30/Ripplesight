@@ -5,6 +5,7 @@ import { readLayoutSession } from "@/components/auth/layout-session";
 import { safeReturnTo } from "@/components/auth/access";
 import { PageState } from "@/components/system/page-state";
 import { Button } from "@/components/ui/button";
+import { IdentityConnections } from "./components/identity-connections";
 import { CredentialsForm } from "./components/credentials-form";
 
 export const metadata: Metadata = {
@@ -15,7 +16,12 @@ export const metadata: Metadata = {
 export default async function AccountPage({
   searchParams,
 }: {
-  searchParams: Promise<{ setup?: string; returnTo?: string }>;
+  searchParams: Promise<{
+    setup?: string;
+    returnTo?: string;
+    error?: string;
+    linked?: string;
+  }>;
 }) {
   await connection();
   const params = await searchParams;
@@ -38,10 +44,19 @@ export default async function AccountPage({
       />
     );
   return (
-    <CredentialsForm
-      session={session}
-      initialSetup={params.setup === "1" && !session.user.has_password}
-      returnTo={returnTo}
-    />
+    <div key={session.expires_at} className="flex flex-col gap-12">
+      <CredentialsForm
+        session={session}
+        initialSetup={params.setup === "1" && !session.user.has_password}
+        returnTo={returnTo}
+      />
+      <IdentityConnections
+        session={session}
+        oauthError={params.error}
+        githubLinked={
+          params.linked === "github" && session.user.github_connected
+        }
+      />
+    </div>
   );
 }

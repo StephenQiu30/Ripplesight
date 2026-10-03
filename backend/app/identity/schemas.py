@@ -50,6 +50,7 @@ class IdentityUserView(OutputModel):
     username: str
     email: str | None
     has_password: bool
+    github_connected: bool
 
 
 class IdentitySessionView(OutputModel):
