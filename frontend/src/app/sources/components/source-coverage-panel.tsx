@@ -841,12 +841,11 @@ export function SourceCoveragePanel() {
                     !["complete", "empty"].includes(row.coverage_status) ||
                     row.gaps.length > 0,
                 ) ? (
-                  <p
-                    role="status"
-                    className="text-muted-foreground mt-5 text-sm"
-                  >
-                    列表含未完成、失败或未确认缺口的窗口，请逐项打开核对。
-                  </p>
+                  <Alert role="status" className="mt-5">
+                    <AlertDescription>
+                      列表含未完成、失败或未确认缺口的窗口，请逐项打开核对。
+                    </AlertDescription>
+                  </Alert>
                 ) : null}
                 <CoverageWindowTable
                   items={visibleList.items}

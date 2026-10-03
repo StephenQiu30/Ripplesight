@@ -1,3 +1,11 @@
+import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
+import {
+  Item,
+  ItemContent,
+  ItemGroup,
+  ItemTitle,
+  ItemDescription,
+} from "@/components/ui/item";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -40,22 +48,34 @@ export function ResetTimeline({
   return (
     <section aria-label="公告进展" className="flex flex-col gap-y-8">
       {outage && (
-        <article className="bg-secondary rounded-xl p-5">
-          <h3 className="font-medium">
-            {outage.recovered_at ? "故障后已发布恢复说明" : "有源帖子报告故障"}
-          </h3>
-          <p className="text-muted-foreground mt-2 text-sm leading-6 whitespace-pre-wrap">
-            {outage.translation_zh ?? outage.original_text}
-          </p>
-          <Button asChild variant="link" className="px-0">
-            <a href={outage.url} target="_blank" rel="noopener noreferrer">
-              阅读故障原帖
-            </a>
-          </Button>
-        </article>
+        <Item variant="muted" asChild>
+          <article className="p-5">
+            <ItemContent className="min-w-0 gap-3">
+              <ItemTitle className="line-clamp-none w-full">
+                <h3>
+                  {outage.recovered_at
+                    ? "故障后已发布恢复说明"
+                    : "有源帖子报告故障"}
+                </h3>
+              </ItemTitle>
+              <ItemDescription className="mt-2 line-clamp-none leading-6 whitespace-pre-wrap">
+                {outage.translation_zh ?? outage.original_text}
+              </ItemDescription>
+              <Button asChild variant="link" className="px-0">
+                <a href={outage.url} target="_blank" rel="noopener noreferrer">
+                  阅读故障原帖
+                </a>
+              </Button>
+            </ItemContent>
+          </article>
+        </Item>
       )}
       {events.length === 0 && (
-        <p className="text-muted-foreground py-8">当前范围没有公告记录。</p>
+        <Empty className="py-8">
+          <EmptyHeader>
+            <EmptyDescription>当前范围没有公告记录。</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
       {events.map((event) => (
         <article key={event.id} className="flex flex-col gap-y-4">
@@ -108,32 +128,42 @@ export function ResetTimeline({
               。此时间不是账户精确到账时间。
             </p>
           )}
-          <ol className="flex flex-col gap-y-3">
+          <ItemGroup className="flex flex-col gap-y-3">
             {(event.posts ?? []).map((post) => (
-              <li key={`${post.post_id}-${post.action}`} className="text-sm">
-                <p className="text-muted-foreground">
-                  {beijingTime(post.published_at)} ·{" "}
-                  {post.action === "confirm"
-                    ? "源确认"
-                    : post.action === "withdraw"
-                      ? "撤回"
-                      : post.action === "amend"
-                        ? "公告修订"
-                        : post.action === "progress"
-                          ? "进展"
-                          : "公告"}
-                </p>
-                <p className="mt-1 leading-6 whitespace-pre-wrap">
-                  {post.excerpt_zh || post.translation_zh || post.excerpt}
-                </p>
-                <Button asChild variant="link" className="px-0">
-                  <a href={post.url} target="_blank" rel="noopener noreferrer">
-                    阅读公告原帖
-                  </a>
-                </Button>
-              </li>
+              <Item
+                role="listitem"
+                variant="default"
+                key={`${post.post_id}-${post.action}`}
+              >
+                <ItemContent className="min-w-0 gap-3">
+                  <ItemDescription className="line-clamp-none">
+                    {beijingTime(post.published_at)} ·{" "}
+                    {post.action === "confirm"
+                      ? "源确认"
+                      : post.action === "withdraw"
+                        ? "撤回"
+                        : post.action === "amend"
+                          ? "公告修订"
+                          : post.action === "progress"
+                            ? "进展"
+                            : "公告"}
+                  </ItemDescription>
+                  <p className="mt-1 leading-6 whitespace-pre-wrap">
+                    {post.excerpt_zh || post.translation_zh || post.excerpt}
+                  </p>
+                  <Button asChild variant="link" className="px-0">
+                    <a
+                      href={post.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      阅读公告原帖
+                    </a>
+                  </Button>
+                </ItemContent>
+              </Item>
             ))}
-          </ol>
+          </ItemGroup>
         </article>
       ))}
     </section>

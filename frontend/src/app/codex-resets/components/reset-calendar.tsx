@@ -1,10 +1,19 @@
 "use client";
 
-import { useState } from "react";
-import { cn } from "@/lib/utils";
-import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useCallback, useMemo, useState, type ComponentProps } from "react";
+import { format } from "date-fns";
+import { zhCN } from "react-day-picker/locale";
+
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Calendar, CalendarDayButton } from "@/components/ui/calendar";
+import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import {
+  Item,
+  ItemContent,
+  ItemDescription,
+  ItemTitle,
+} from "@/components/ui/item";
 
 const stateLabels: Record<HotKeyAPI.CalendarMark["state"], string> = {
   confirmed: "已确认",
@@ -21,120 +30,138 @@ export function ResetCalendar({
   selectedDate: string | null;
   onSelect: (date: string | null) => void;
 }) {
-  const [month, setMonth] = useState(snapshot.today.slice(0, 7));
-  const [year, number] = month.split("-").map(Number);
-  const first = new Date(Date.UTC(year, number - 1, 1));
-  const offset = (first.getUTCDay() + 6) % 7;
-  const count = new Date(Date.UTC(year, number, 0)).getUTCDate();
-  const marks = snapshot.calendar.filter((mark) => mark.date.startsWith(month));
-  function changeMonth(delta: number) {
-    setMonth(
-      new Date(Date.UTC(year, number - 1 + delta, 1)).toISOString().slice(0, 7),
-    );
-    onSelect(null);
-  }
-  return (
-    <section
-      aria-label="重置公告日历"
-      className="bg-muted/40 rounded-2xl p-5 sm:p-6"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-xl font-medium">
-          {year} 年 {number} 月
-        </h2>
-        <div className="flex gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="上个月"
-            onClick={() => changeMonth(-1)}
-          >
-            <ChevronLeftIcon />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="下个月"
-            onClick={() => changeMonth(1)}
-          >
-            <ChevronRightIcon />
-          </Button>
-        </div>
-      </div>
-      <p className="text-muted-foreground mt-2 text-sm">
-        日期按北京时间。推测状态不表示已确认到账。
-      </p>
-      <div className="mt-6 grid grid-cols-7 gap-1 text-center text-sm">
-        {["一", "二", "三", "四", "五", "六", "日"].map((day) => (
-          <span key={day} className="text-muted-foreground py-2">
-            {day}
+  const [month, setMonth] = useState(
+    () => new Date(`${snapshot.today.slice(0, 7)}-01T00:00:00+08:00`),
+  );
+  const marksByDate = useMemo(() => {
+    const entries = new Map<string, HotKeyAPI.CalendarMark[]>();
+    for (const mark of snapshot.calendar) {
+      const daily = entries.get(mark.date) ?? [];
+      daily.push(mark);
+      entries.set(mark.date, daily);
+    }
+    return entries;
+  }, [snapshot.calendar]);
+  const renderDay = useCallback(
+    function MarkedDay({
+      day,
+      modifiers,
+      ...props
+    }: ComponentProps<typeof CalendarDayButton>) {
+      const date = format(day.date, "yyyy-MM-dd");
+      const daily = marksByDate.get(date) ?? [];
+      const label = daily
+        .map(
+          (mark) =>
+            `${mark.kind === "reset_credit" ? "重置额度" : "直接重置"}，${stateLabels[mark.state]}`,
+        )
+        .join("；");
+      return (
+        <CalendarDayButton
+          {...props}
+          day={day}
+          modifiers={modifiers}
+          aria-label={`${date}${label ? `，${label}` : "，无公告记录"}`}
+          className="aspect-auto min-h-11 min-w-0 sm:min-h-14"
+        >
+          {day.date.getDate()}
+          <span aria-hidden="true" className="flex min-h-1.5 gap-1">
+            {daily.map((mark) => (
+              <Badge
+                key={mark.event_id}
+                variant={
+                  mark.state === "confirmed"
+                    ? "default"
+                    : mark.state === "likely"
+                      ? "secondary"
+                      : "outline"
+                }
+                className="size-1.5 p-0"
+              >
+                <span className="sr-only">{stateLabels[mark.state]}</span>
+              </Badge>
+            ))}
           </span>
-        ))}
-        {Array.from({ length: offset }, (_, index) => (
-          <span key={`empty-${index}`} aria-hidden="true" />
-        ))}
-        {Array.from({ length: count }, (_, index) => {
-          const date = `${month}-${String(index + 1).padStart(2, "0")}`;
-          const daily = marks.filter((mark) => mark.date === date);
-          const label = daily
-            .map(
-              (mark) =>
-                `${mark.kind === "reset_credit" ? "重置额度" : "直接重置"}，${stateLabels[mark.state]}`,
-            )
-            .join("；");
-          return (
-            <Button
-              key={date}
-              type="button"
-              aria-label={`${date}${label ? `，${label}` : "，无公告记录"}`}
-              aria-pressed={selectedDate === date}
-              onClick={() => onSelect(selectedDate === date ? null : date)}
-              variant={
-                selectedDate === date
-                  ? "default"
-                  : date === snapshot.today
-                    ? "secondary"
-                    : "ghost"
-              }
-              className="h-auto min-h-14 min-w-0 flex-col gap-1 px-0"
-            >
-              <span>{index + 1}</span>
-              <span aria-hidden="true" className="flex min-h-1 gap-1">
-                {daily.map((mark) => (
-                  <span
-                    key={mark.event_id}
-                    className={cn(
-                      "size-1 rounded-full",
-                      mark.state === "confirmed"
-                        ? "bg-chart-1"
-                        : mark.state === "likely"
-                          ? "bg-chart-3"
-                          : "bg-muted-foreground",
-                    )}
-                  />
-                ))}
-              </span>
+        </CalendarDayButton>
+      );
+    },
+    [marksByDate],
+  );
+  const monthKey = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+  }).format(month);
+  const marks = snapshot.calendar.filter((mark) =>
+    mark.date.startsWith(monthKey),
+  );
+  return (
+    <Item variant="muted" asChild>
+      <section aria-label="重置公告日历" className="min-w-0 p-5 sm:p-6">
+        <ItemContent className="min-w-0 gap-4">
+          <ItemTitle>
+            <h2>重置公告日历</h2>
+          </ItemTitle>
+          <ItemDescription className="line-clamp-none">
+            日期按北京时间。推测状态不表示已确认到账。
+          </ItemDescription>
+          <Calendar
+            mode="single"
+            locale={zhCN}
+            timeZone="Asia/Shanghai"
+            weekStartsOn={1}
+            month={month}
+            today={new Date(`${snapshot.today}T00:00:00+08:00`)}
+            selected={
+              selectedDate
+                ? new Date(`${selectedDate}T00:00:00+08:00`)
+                : undefined
+            }
+            onSelect={(date) =>
+              onSelect(date ? format(date, "yyyy-MM-dd") : null)
+            }
+            onMonthChange={(value) => {
+              setMonth(value);
+              onSelect(null);
+            }}
+            showOutsideDays={false}
+            className="w-full"
+            labels={{
+              labelPrevious: () => "上个月",
+              labelNext: () => "下个月",
+            }}
+            components={{ DayButton: renderDay }}
+          />
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(stateLabels).map(([key, label]) => (
+              <Badge
+                key={key}
+                variant={
+                  key === "confirmed"
+                    ? "default"
+                    : key === "likely"
+                      ? "secondary"
+                      : "outline"
+                }
+              >
+                {label}
+              </Badge>
+            ))}
+          </div>
+          {marks.length === 0 && (
+            <Empty>
+              <EmptyHeader>
+                <EmptyDescription>这个月没有公告记录。</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          )}
+          {selectedDate && (
+            <Button variant="ghost" onClick={() => onSelect(null)}>
+              清除日期筛选
             </Button>
-          );
-        })}
-      </div>
-      <div className="mt-5 flex flex-wrap gap-2">
-        {Object.entries(stateLabels).map(([key, label]) => (
-          <Badge key={key} variant="secondary">
-            {label}
-          </Badge>
-        ))}
-      </div>
-      {marks.length === 0 && (
-        <p className="text-muted-foreground mt-4 text-sm">
-          这个月没有公告记录。
-        </p>
-      )}
-      {selectedDate && (
-        <Button variant="ghost" className="mt-3" onClick={() => onSelect(null)}>
-          清除日期筛选
-        </Button>
-      )}
-    </section>
+          )}
+        </ItemContent>
+      </section>
+    </Item>
   );
 }

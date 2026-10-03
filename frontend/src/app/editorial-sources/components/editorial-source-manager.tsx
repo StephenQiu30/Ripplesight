@@ -1,4 +1,13 @@
 "use client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
+import {
+  Item,
+  ItemContent,
+  ItemGroup,
+  ItemDescription,
+  ItemTitle,
+} from "@/components/ui/item";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -345,61 +354,70 @@ export function EditorialSourceManager() {
             六类来源共用批准策略、原内容版本和任务回执。来源健康依据真实完整抓取，默认关闭。
           </p>
         </div>
-        <section
-          className="bg-muted/40 flex flex-col gap-y-4 rounded-xl p-5"
-          aria-label="操作员权限"
-        >
-          <Label htmlFor="operator-token">操作员令牌</Label>
-          <Input
-            id="operator-token"
-            type="password"
-            autoComplete="off"
-            value={token}
-            disabled={busy}
-            onChange={(e) => {
-              setToken(e.target.value);
-              setPreviewEpoch((value) => value + 1);
-            }}
-          />
-          <p className="text-muted-foreground text-sm">
-            令牌仅在当前页面内存中使用。服务端未配置操作员权限时保持关闭。
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <Button
-              disabled={!token || busy}
-              onClick={() => void perform(reload)}
-            >
-              读取来源
-            </Button>
-            <Button
-              variant="ghost"
-              disabled={busy}
-              onClick={() => {
-                setToken("");
-                setProfiles(null);
-                setIcon(null);
-                setIconReason("");
-                setGroups([]);
-                setRuns([]);
-                setJob(null);
-                setSelected(null);
-                setEditing(false);
-              }}
-            >
-              清除令牌
-            </Button>
-            <Button
-              variant="outline"
-              disabled={!token || busy}
-              onClick={() => edit(null)}
-            >
-              新增来源
-            </Button>
-          </div>
-        </section>
-
+        <Item variant="muted" asChild>
+          <section
+            className="flex flex-col gap-y-4 p-5"
+            aria-label="操作员权限"
+          >
+            <ItemContent className="min-w-0 gap-3">
+              <Label htmlFor="operator-token">操作员令牌</Label>
+              <Input
+                id="operator-token"
+                type="password"
+                autoComplete="off"
+                value={token}
+                disabled={busy}
+                onChange={(e) => {
+                  setToken(e.target.value);
+                  setPreviewEpoch((value) => value + 1);
+                }}
+              />
+              <ItemDescription className="line-clamp-none">
+                令牌仅在当前页面内存中使用。服务端未配置操作员权限时保持关闭。
+              </ItemDescription>
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  disabled={!token || busy}
+                  onClick={() => void perform(reload)}
+                >
+                  读取来源
+                </Button>
+                <Button
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => {
+                    setToken("");
+                    setProfiles(null);
+                    setIcon(null);
+                    setIconReason("");
+                    setGroups([]);
+                    setRuns([]);
+                    setJob(null);
+                    setSelected(null);
+                    setEditing(false);
+                  }}
+                >
+                  清除令牌
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={!token || busy}
+                  onClick={() => edit(null)}
+                >
+                  新增来源
+                </Button>
+              </div>
+            </ItemContent>
+          </section>
+        </Item>
         {profiles?.length === 0 && (
-          <p>暂无编辑来源。先创建关闭配置，再批准来源许可与保留策略。</p>
+          <Empty>
+            <EmptyHeader>
+              <EmptyDescription>
+                暂无编辑来源。先创建关闭配置，再批准来源许可与保留策略。
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         )}
         {!!profiles?.length && (
           <section
@@ -407,42 +425,45 @@ export function EditorialSourceManager() {
             aria-label="来源与健康"
           >
             {profiles.map((p) => (
-              <article
-                key={p.id}
-                className="bg-muted/30 flex flex-col gap-y-3 rounded-xl p-5"
-              >
-                <h2 className="font-medium">{p.name}</h2>
-                <p className="text-muted-foreground text-sm">
-                  {kinds.find(([key]) => key === p.configuration.kind)?.[1]} ·{" "}
-                  {p.enabled ? "配置已启用" : "配置关闭"} ·{" "}
-                  {p.participation_mode} · {p.tier}
-                </p>
-                <p className="text-sm">
-                  健康：{p.health} · 连续失败 {p.failure_count} ·{" "}
-                  {p.has_unknown_run
-                    ? "存在未知请求，需人工复核"
-                    : p.has_backlog
-                      ? "存在扫描积压"
-                      : "无已记录积压"}
-                </p>
-                <dl className="text-muted-foreground flex flex-col gap-y-1 text-sm">
-                  <div>最近完整抓取：{time(p.last_ok_at)}</div>
-                  <div>最近尝试：{time(p.last_fetch_at)}</div>
-                  <div>下次计划：{time(p.next_fetch_at)}</div>
-                  <div className="break-all">来源标识：{p.source_key}</div>
-                  <div>
-                    修订 {p.revision} · 配置版本 {p.configuration_version} ·
-                    许可版本 {p.policy_version}
-                  </div>
-                </dl>
-                <Button
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() => edit(p)}
-                >
-                  管理 {p.name}
-                </Button>
-              </article>
+              <Item variant="muted" key={p.id} asChild>
+                <article className="flex flex-col gap-y-3 p-5">
+                  <ItemContent className="min-w-0 gap-3">
+                    <ItemTitle className="line-clamp-none w-full">
+                      <h2>{p.name}</h2>
+                    </ItemTitle>
+                    <ItemDescription className="line-clamp-none">
+                      {kinds.find(([key]) => key === p.configuration.kind)?.[1]}{" "}
+                      ·{p.enabled ? "配置已启用" : "配置关闭"} ·{" "}
+                      {p.participation_mode} · {p.tier}
+                    </ItemDescription>
+                    <p className="text-sm">
+                      健康：{p.health} · 连续失败 {p.failure_count} ·{" "}
+                      {p.has_unknown_run
+                        ? "存在未知请求，需人工复核"
+                        : p.has_backlog
+                          ? "存在扫描积压"
+                          : "无已记录积压"}
+                    </p>
+                    <dl className="text-muted-foreground flex flex-col gap-y-1 text-sm">
+                      <div>最近完整抓取：{time(p.last_ok_at)}</div>
+                      <div>最近尝试：{time(p.last_fetch_at)}</div>
+                      <div>下次计划：{time(p.next_fetch_at)}</div>
+                      <div className="break-all">来源标识：{p.source_key}</div>
+                      <div>
+                        修订 {p.revision} · 配置版本 {p.configuration_version} ·
+                        许可版本 {p.policy_version}
+                      </div>
+                    </dl>
+                    <Button
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => edit(p)}
+                    >
+                      管理 {p.name}
+                    </Button>
+                  </ItemContent>
+                </article>
+              </Item>
             ))}
           </section>
         )}
@@ -465,28 +486,35 @@ export function EditorialSourceManager() {
               onChange={(event) => setGroupReason(event.target.value)}
             />
             {groups.map((group) => (
-              <article
-                key={group.group_sha256}
-                className="bg-muted/30 flex flex-col gap-y-3 rounded-xl p-4"
-              >
-                <p className="break-all">{group.query}</p>
-                <p className="text-sm">积压状态：{group.state}</p>
-                <ul className="flex flex-col gap-y-1 text-sm">
-                  {group.members.map((member) => (
-                    <li key={member.profile_id}>
-                      {member.name} · 修订 {member.revision} · 配置{" "}
-                      {member.configuration_version}
-                    </li>
-                  ))}
-                </ul>
-                <Button
-                  variant="outline"
-                  disabled={busy || !token || !groupReason.trim()}
-                  onClick={() => restartGroup(group)}
-                >
-                  复核全部成员并退回原水位
-                </Button>
-              </article>
+              <Item variant="muted" key={group.group_sha256} asChild>
+                <article className="flex flex-col gap-y-3 p-4">
+                  <ItemContent className="min-w-0 gap-3">
+                    <p className="break-all">{group.query}</p>
+                    <p className="text-sm">积压状态：{group.state}</p>
+                    <ItemGroup className="flex flex-col gap-y-1 text-sm">
+                      {group.members.map((member) => (
+                        <Item
+                          role="listitem"
+                          variant="default"
+                          key={member.profile_id}
+                        >
+                          <ItemContent className="min-w-0 gap-3">
+                            {member.name} · 修订 {member.revision} · 配置{" "}
+                            {member.configuration_version}
+                          </ItemContent>
+                        </Item>
+                      ))}
+                    </ItemGroup>
+                    <Button
+                      variant="outline"
+                      disabled={busy || !token || !groupReason.trim()}
+                      onClick={() => restartGroup(group)}
+                    >
+                      复核全部成员并退回原水位
+                    </Button>
+                  </ItemContent>
+                </article>
+              </Item>
             ))}
           </section>
         )}
@@ -830,37 +858,38 @@ export function EditorialSourceManager() {
               </Button>
             )}
             {runs.map((run) => (
-              <article
-                key={run.run_id}
-                className="bg-muted/30 flex flex-col gap-y-3 rounded-xl p-4"
-              >
-                <p className="break-all">
-                  {run.status} · {run.reason ?? "无附加原因"} · 运行{" "}
-                  {run.run_id}
-                </p>
-                <p className="text-muted-foreground text-sm">
-                  发现 {run.found ?? 0}，新增 {run.created ?? 0}，修订{" "}
-                  {run.revised ?? 0}
-                </p>
-                {run.status === "unknown" && (
-                  <Button
-                    variant="outline"
-                    disabled={busy || !reviewReason.trim()}
-                    onClick={() => review(run, "acknowledge_unknown")}
-                  >
-                    核验未知请求
-                  </Button>
-                )}
-                {["failed", "blocked"].includes(run.status) && (
-                  <Button
-                    variant="outline"
-                    disabled={busy || !reviewReason.trim()}
-                    onClick={() => review(run, "retry_failed")}
-                  >
-                    允许再次采集
-                  </Button>
-                )}
-              </article>
+              <Item variant="muted" key={run.run_id} asChild>
+                <article className="flex flex-col gap-y-3 p-4">
+                  <ItemContent className="min-w-0 gap-3">
+                    <p className="break-all">
+                      {run.status} · {run.reason ?? "无附加原因"} · 运行{" "}
+                      {run.run_id}
+                    </p>
+                    <ItemDescription className="line-clamp-none">
+                      发现 {run.found ?? 0}，新增 {run.created ?? 0}，修订{" "}
+                      {run.revised ?? 0}
+                    </ItemDescription>
+                    {run.status === "unknown" && (
+                      <Button
+                        variant="outline"
+                        disabled={busy || !reviewReason.trim()}
+                        onClick={() => review(run, "acknowledge_unknown")}
+                      >
+                        核验未知请求
+                      </Button>
+                    )}
+                    {["failed", "blocked"].includes(run.status) && (
+                      <Button
+                        variant="outline"
+                        disabled={busy || !reviewReason.trim()}
+                        onClick={() => review(run, "retry_failed")}
+                      >
+                        允许再次采集
+                      </Button>
+                    )}
+                  </ItemContent>
+                </article>
+              </Item>
             ))}
             {selected.configuration.kind === "external" && (
               <EditorialExternalIngress
@@ -874,15 +903,17 @@ export function EditorialSourceManager() {
           </section>
         )}
         {job && (
-          <p role="status">
-            任务已受理：
-            <Link
-              className="underline underline-offset-4"
-              href={`/jobs/${job.id}`}
-            >
-              查看任务 {job.id}
-            </Link>
-          </p>
+          <Alert role="status">
+            <AlertDescription>
+              任务已受理：
+              <Link
+                className="underline underline-offset-4"
+                href={`/jobs/${job.id}`}
+              >
+                查看任务 {job.id}
+              </Link>
+            </AlertDescription>
+          </Alert>
         )}
       </div>
     </>

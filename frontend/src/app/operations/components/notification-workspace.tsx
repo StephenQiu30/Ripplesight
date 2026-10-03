@@ -1,4 +1,6 @@
 "use client";
+import { Item, ItemContent, ItemDescription } from "@/components/ui/item";
+import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import { toast } from "sonner";
 import { ChevronDownIcon } from "lucide-react";
 import {
@@ -135,132 +137,134 @@ function TargetEditor({
   }
   return (
     <form onSubmit={submit}>
-      <FieldGroup className="bg-muted/30 grid gap-3 rounded-lg p-4 sm:grid-cols-2">
-        <Field className="min-w-0">
-          <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-1`}>
-            目标名称
-          </FieldLabel>
-          <Input
-            required
-            maxLength={80}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            id={`${fieldId}-notification-workspace-field-1`}
-          />
-        </Field>
-        <Field className="min-w-0">
-          <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-2`}>
-            通知渠道
-          </FieldLabel>
-          <Select
-            value={channel}
-            onValueChange={(selectedValue) =>
-              setChannel(selectedValue as HotKeyAPI.NotificationChannel)
-            }
-          >
-            <SelectTrigger
-              id={`${fieldId}-notification-workspace-field-2`}
-              className="w-full min-w-0"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectGroup>
-                <SelectLabel className="sr-only">通知渠道</SelectLabel>
-                <SelectItem value="email" className="whitespace-normal">
-                  邮件 SMTP
-                </SelectItem>
-                <SelectItem value="feishu" className="whitespace-normal">
-                  飞书
-                </SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </Field>
-        {channel === "email" ? (
-          <Field className="min-w-0 sm:col-span-2">
-            <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-3`}>
-              收件人邮箱（逗号分隔，最多 20 个）
+      <Item variant="muted" asChild>
+        <FieldGroup className="grid gap-3 p-4 sm:grid-cols-2">
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-1`}>
+              目标名称
             </FieldLabel>
             <Input
               required
-              value={recipients}
-              onChange={(e) => setRecipients(e.target.value)}
-              id={`${fieldId}-notification-workspace-field-3`}
+              maxLength={80}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              id={`${fieldId}-notification-workspace-field-1`}
             />
           </Field>
-        ) : (
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-2`}>
+              通知渠道
+            </FieldLabel>
+            <Select
+              value={channel}
+              onValueChange={(selectedValue) =>
+                setChannel(selectedValue as HotKeyAPI.NotificationChannel)
+              }
+            >
+              <SelectTrigger
+                id={`${fieldId}-notification-workspace-field-2`}
+                className="w-full min-w-0"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectGroup>
+                  <SelectLabel className="sr-only">通知渠道</SelectLabel>
+                  <SelectItem value="email" className="whitespace-normal">
+                    邮件 SMTP
+                  </SelectItem>
+                  <SelectItem value="feishu" className="whitespace-normal">
+                    飞书
+                  </SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          {channel === "email" ? (
+            <Field className="min-w-0 sm:col-span-2">
+              <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-3`}>
+                收件人邮箱（逗号分隔，最多 20 个）
+              </FieldLabel>
+              <Input
+                required
+                value={recipients}
+                onChange={(e) => setRecipients(e.target.value)}
+                id={`${fieldId}-notification-workspace-field-3`}
+              />
+            </Field>
+          ) : (
+            <Field className="min-w-0 sm:col-span-2">
+              <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-4`}>
+                签名密钥环境变量名（可选，HOTKEY_ 前缀）
+              </FieldLabel>
+              <Input
+                maxLength={128}
+                value={secretRef}
+                onChange={(e) => setSecretRef(e.target.value)}
+                id={`${fieldId}-notification-workspace-field-4`}
+              />
+            </Field>
+          )}
+          <FieldSet className="grid gap-2 sm:col-span-2">
+            <FieldLegend className="mb-2">订阅类别</FieldLegend>
+            <div className="flex flex-wrap gap-4">
+              {(Object.keys(kinds) as Kind[]).map((kind) => (
+                <Field key={kind} orientation="horizontal" className="w-auto">
+                  <Checkbox
+                    checked={subscriptions.includes(kind)}
+                    onCheckedChange={(checked) =>
+                      setSubscriptions((old) =>
+                        checked === true
+                          ? [...old, kind]
+                          : old.filter((value) => value !== kind),
+                      )
+                    }
+                    id={`${fieldId}-notification-workspace-field-5-${kind}`}
+                  />
+                  <FieldLabel
+                    htmlFor={`${fieldId}-notification-workspace-field-5-${kind}`}
+                  >
+                    {kinds[kind]}
+                  </FieldLabel>
+                </Field>
+              ))}
+            </div>
+          </FieldSet>
           <Field className="min-w-0 sm:col-span-2">
-            <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-4`}>
-              签名密钥环境变量名（可选，HOTKEY_ 前缀）
+            <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-6`}>
+              通知配置原因
             </FieldLabel>
             <Input
-              maxLength={128}
-              value={secretRef}
-              onChange={(e) => setSecretRef(e.target.value)}
-              id={`${fieldId}-notification-workspace-field-4`}
+              required
+              maxLength={2000}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              id={`${fieldId}-notification-workspace-field-6`}
             />
           </Field>
-        )}
-        <FieldSet className="grid gap-2 sm:col-span-2">
-          <FieldLegend className="mb-2">订阅类别</FieldLegend>
-          <div className="flex flex-wrap gap-4">
-            {(Object.keys(kinds) as Kind[]).map((kind) => (
-              <Field key={kind} orientation="horizontal" className="w-auto">
-                <Checkbox
-                  checked={subscriptions.includes(kind)}
-                  onCheckedChange={(checked) =>
-                    setSubscriptions((old) =>
-                      checked === true
-                        ? [...old, kind]
-                        : old.filter((value) => value !== kind),
-                    )
-                  }
-                  id={`${fieldId}-notification-workspace-field-5-${kind}`}
-                />
-                <FieldLabel
-                  htmlFor={`${fieldId}-notification-workspace-field-5-${kind}`}
-                >
-                  {kinds[kind]}
-                </FieldLabel>
-              </Field>
-            ))}
-          </div>
-        </FieldSet>
-        <Field className="min-w-0 sm:col-span-2">
-          <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-6`}>
-            通知配置原因
-          </FieldLabel>
-          <Input
-            required
-            maxLength={2000}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            id={`${fieldId}-notification-workspace-field-6`}
-          />
-        </Field>
-        <Field orientation="horizontal" className="w-auto">
-          <Checkbox
-            checked={enabled}
-            onCheckedChange={(checked) => setEnabled(checked === true)}
-            id={`${fieldId}-notification-workspace-field-7`}
-          />
-          <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-7`}>
-            启用此目标
-          </FieldLabel>
-        </Field>
-        <Button disabled={busy} type="submit">
-          保存通知目标
-        </Button>
-        {row && (
-          <p className="text-muted-foreground text-sm sm:col-span-2">
-            修订 {row.revision} · 启用时间{" "}
-            {row.enabled_at
-              ? new Date(row.enabled_at).toLocaleString("zh-CN")
-              : "未启用"}
-          </p>
-        )}
-      </FieldGroup>
+          <Field orientation="horizontal" className="w-auto">
+            <Checkbox
+              checked={enabled}
+              onCheckedChange={(checked) => setEnabled(checked === true)}
+              id={`${fieldId}-notification-workspace-field-7`}
+            />
+            <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-7`}>
+              启用此目标
+            </FieldLabel>
+          </Field>
+          <Button disabled={busy} type="submit">
+            保存通知目标
+          </Button>
+          {row && (
+            <p className="text-muted-foreground text-sm sm:col-span-2">
+              修订 {row.revision} · 启用时间{" "}
+              {row.enabled_at
+                ? new Date(row.enabled_at).toLocaleString("zh-CN")
+                : "未启用"}
+            </p>
+          )}
+        </FieldGroup>
+      </Item>
     </form>
   );
 }
@@ -500,61 +504,68 @@ export function NotificationWorkspace({ token }: { token: string }) {
         options={options}
         saved={reload}
       />
-
       {deliveries.length === 0 && (
-        <p className="text-muted-foreground">暂无投递记录。</p>
+        <Empty>
+          <EmptyHeader>
+            <EmptyDescription>暂无投递记录。</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
       {deliveries.map((row) => (
-        <article
-          key={`${row.id}:${row.revision}`}
-          className="bg-muted/30 rounded-lg p-4"
-        >
-          <p className="break-all">
-            {kinds[row.subject_kind]} ·{" "}
-            {targets.find((value) => value.id === row.target_id)?.name ??
-              row.target_id}{" "}
-            · {row.status === "succeeded" ? "渠道受理 / 人工确认" : row.status}
-          </p>
-          <p className="text-muted-foreground mt-1 text-sm break-all">
-            主体 {row.subject_id} · 版本 {row.subject_revision} · 尝试{" "}
-            {row.attempt_count}/3 ·{" "}
-            {new Date(row.updated_at).toLocaleString("zh-CN")}
-          </p>
-          {row.last_error_code && (
-            <p className="mt-2 text-sm">{row.last_error_code}</p>
-          )}
-          {Object.keys(row.provider_receipt).length > 0 && (
-            <Collapsible className="mt-3">
-              <CollapsibleTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
-                >
-                  <span className="min-w-0 text-left">
-                    渠道实际回执（SMTP 受理不表示已到达收件箱）
-                  </span>
-                  <ChevronDownIcon
-                    aria-hidden="true"
-                    data-icon="inline-end"
-                    className="group-data-[state=open]:rotate-180"
-                  />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent
-                forceMount
-                className="data-[state=closed]:hidden"
-              >
-                <pre className="mt-2 overflow-auto text-xs">
-                  {JSON.stringify(row.provider_receipt, null, 2)}
-                </pre>
-              </CollapsibleContent>
-            </Collapsible>
-          )}
-          {row.status === "unknown" && (
-            <UnknownResolution row={row} options={options} saved={reload} />
-          )}
-        </article>
+        <Item variant="muted" key={`${row.id}:${row.revision}`} asChild>
+          <article className="p-4">
+            <ItemContent className="min-w-0 gap-3">
+              <p className="break-all">
+                {kinds[row.subject_kind]} ·{" "}
+                {targets.find((value) => value.id === row.target_id)?.name ??
+                  row.target_id}{" "}
+                ·{" "}
+                {row.status === "succeeded"
+                  ? "渠道受理 / 人工确认"
+                  : row.status}
+              </p>
+              <ItemDescription className="mt-1 line-clamp-none break-all">
+                主体 {row.subject_id} · 版本 {row.subject_revision} · 尝试{" "}
+                {row.attempt_count}/3 ·{" "}
+                {new Date(row.updated_at).toLocaleString("zh-CN")}
+              </ItemDescription>
+              {row.last_error_code && (
+                <p className="mt-2 text-sm">{row.last_error_code}</p>
+              )}
+              {Object.keys(row.provider_receipt).length > 0 && (
+                <Collapsible className="mt-3">
+                  <CollapsibleTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
+                    >
+                      <span className="min-w-0 text-left">
+                        渠道实际回执（SMTP 受理不表示已到达收件箱）
+                      </span>
+                      <ChevronDownIcon
+                        aria-hidden="true"
+                        data-icon="inline-end"
+                        className="group-data-[state=open]:rotate-180"
+                      />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent
+                    forceMount
+                    className="data-[state=closed]:hidden"
+                  >
+                    <pre className="mt-2 overflow-auto text-xs">
+                      {JSON.stringify(row.provider_receipt, null, 2)}
+                    </pre>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+              {row.status === "unknown" && (
+                <UnknownResolution row={row} options={options} saved={reload} />
+              )}
+            </ItemContent>
+          </article>
+        </Item>
       ))}
       {cursor && (
         <Button variant="secondary" disabled={busy} onClick={() => void more()}>

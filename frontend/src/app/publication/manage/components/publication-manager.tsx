@@ -1,4 +1,10 @@
 "use client";
+import {
+  Item,
+  ItemContent,
+  ItemGroup,
+  ItemDescription,
+} from "@/components/ui/item";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -132,29 +138,33 @@ export function PublicationManager() {
           </Button>
         </FieldGroup>
       </form>
-
       {policies.length ? (
         <section>
           <h2 className="text-lg font-medium">当前来源策略</h2>
-          <ul className="mt-4 flex flex-col gap-y-4">
+          <ItemGroup className="mt-4 flex flex-col gap-y-4">
             {policies.map((policy) => (
-              <li
+              <Item
+                role="listitem"
+                variant="muted"
                 key={policy.source_key}
-                className="bg-muted rounded-md p-4 text-sm leading-7"
+                className="p-4 leading-7"
               >
-                <strong>{policy.source_key}</strong> · 修订 {policy.revision} ·{" "}
-                {policy.participation_mode}
-                <p>
-                  站内全文 {policy.site_fulltext ? "允许" : "关闭"} · 再分发{" "}
-                  {policy.syndicate_fulltext ? "允许" : "关闭"} · 索引{" "}
-                  {policy.indexable ? "允许" : "关闭"}
-                </p>
-                <p className="text-muted-foreground">
-                  {policy.license_name} · 延迟 {policy.release_delay_seconds} 秒
-                </p>
-              </li>
+                <ItemContent className="min-w-0 gap-3">
+                  <strong>{policy.source_key}</strong> · 修订 {policy.revision}{" "}
+                  · {policy.participation_mode}
+                  <p>
+                    站内全文 {policy.site_fulltext ? "允许" : "关闭"} · 再分发{" "}
+                    {policy.syndicate_fulltext ? "允许" : "关闭"} · 索引{" "}
+                    {policy.indexable ? "允许" : "关闭"}
+                  </p>
+                  <ItemDescription className="line-clamp-none">
+                    {policy.license_name} · 延迟 {policy.release_delay_seconds}{" "}
+                    秒
+                  </ItemDescription>
+                </ItemContent>
+              </Item>
             ))}
-          </ul>
+          </ItemGroup>
         </section>
       ) : null}
       <section>

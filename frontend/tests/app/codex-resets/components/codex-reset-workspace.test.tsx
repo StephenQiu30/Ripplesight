@@ -190,7 +190,7 @@ describe("Codex reset reading", () => {
     );
     render(<CodexResetWorkspace />);
     await screen.findByText("Source 0");
-    fireEvent.click(screen.getByRole("button", { name: "全部帖子" }));
+    fireEvent.click(screen.getByRole("radio", { name: "全部帖子" }));
     expect(screen.getByText("Source 0")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "下一页帖子" }));
     await waitFor(() =>
@@ -199,7 +199,7 @@ describe("Codex reset reading", () => {
         expect.anything(),
       ),
     );
-    fireEvent.click(screen.getByRole("button", { name: "需复核" }));
+    fireEvent.click(screen.getByRole("radio", { name: "需复核" }));
     await waitFor(() =>
       expect(api.posts).toHaveBeenLastCalledWith(
         { page: 1, filter_key: "review" },

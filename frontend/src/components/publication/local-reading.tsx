@@ -1,4 +1,17 @@
 "use client";
+import {
+  NavigationMenu,
+  NavigationMenuList,
+  NavigationMenuItem,
+} from "@/components/ui/navigation-menu";
+
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Item,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+} from "@/components/ui/item";
 import { Input } from "@/components/ui/input";
 import {
   SelectLabel,
@@ -283,9 +296,14 @@ export function SavedItems({ full = false }: { full?: boolean }) {
         最多 500 篇收藏与 5000 个已读标记，仅保留编号，阅读时重新检查许可。
       </p>
       {busy ? (
-        <p role="status" className="mt-4 text-sm">
-          正在读取当前公开材料…
-        </p>
+        <Item role="status" className="mt-4">
+          <Spinner aria-hidden="true" />
+          <ItemContent>
+            <ItemDescription className="line-clamp-none">
+              正在读取当前公开材料…
+            </ItemDescription>
+          </ItemContent>
+        </Item>
       ) : storageUnavailable ? (
         <Alert className="mt-4">
           <AlertTitle>本机收藏暂不可读</AlertTitle>
@@ -294,36 +312,40 @@ export function SavedItems({ full = false }: { full?: boolean }) {
           </AlertDescription>
         </Alert>
       ) : items.length ? (
-        <ul className="mt-4 flex flex-col gap-y-4">
+        <ItemGroup className="mt-4 flex flex-col gap-y-4">
           {items.map((item) => (
-            <li
+            <Item
+              role="listitem"
+              variant="default"
               key={item.id}
               className="flex items-start justify-between gap-3"
             >
-              <Link href={item.reading_url} className="text-sm leading-6">
-                {item.title}
-                {read.includes(item.id) ? (
-                  <span className="text-muted-foreground ml-2 text-xs">
-                    已读
-                  </span>
+              <ItemContent className="min-w-0 gap-3">
+                <Link href={item.reading_url} className="text-sm leading-6">
+                  {item.title}
+                  {read.includes(item.id) ? (
+                    <span className="text-muted-foreground ml-2 text-xs">
+                      已读
+                    </span>
+                  ) : null}
+                </Link>
+                {full ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      void removeSaved(item.id).catch(() =>
+                        toast.error("存储不可用，未删除。"),
+                      )
+                    }
+                  >
+                    移除
+                  </Button>
                 ) : null}
-              </Link>
-              {full ? (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() =>
-                    void removeSaved(item.id).catch(() =>
-                      toast.error("存储不可用，未删除。"),
-                    )
-                  }
-                >
-                  移除
-                </Button>
-              ) : null}
-            </li>
+              </ItemContent>
+            </Item>
           ))}
-        </ul>
+        </ItemGroup>
       ) : (
         <p className="text-muted-foreground mt-4 text-sm">
           {ids.length
@@ -340,54 +362,72 @@ export function SavedItems({ full = false }: { full?: boolean }) {
       {full ? (
         <>
           {!busy ? (
-            <ul className="mt-4 flex flex-col gap-y-3">
+            <ItemGroup className="mt-4 flex flex-col gap-y-3">
               {ids
                 .slice((page - 1) * 20, page * 20)
                 .filter((id) => !items.some((item) => item.id === id))
                 .map((id) => (
-                  <li
+                  <Item
+                    role="listitem"
+                    variant="default"
                     key={id}
-                    className="flex items-start justify-between gap-3 text-xs"
+                    className="flex items-start justify-between gap-3"
                   >
-                    <span className="text-muted-foreground break-all">
-                      暂时不可读取 · {id}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() =>
-                        void removeSaved(id).catch(() =>
-                          toast.error("存储不可用，未删除。"),
-                        )
-                      }
-                    >
-                      移除
-                    </Button>
-                  </li>
+                    <ItemContent className="min-w-0 gap-3">
+                      <span className="text-muted-foreground break-all">
+                        暂时不可读取 · {id}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          void removeSaved(id).catch(() =>
+                            toast.error("存储不可用，未删除。"),
+                          )
+                        }
+                      >
+                        移除
+                      </Button>
+                    </ItemContent>
+                  </Item>
                 ))}
-            </ul>
+            </ItemGroup>
           ) : null}
-          <nav className="my-5 flex items-center gap-3" aria-label="收藏分页">
-            {page > 1 ? (
-              <Button variant="outline" onClick={() => setPage(page - 1)}>
-                上一页
-              </Button>
-            ) : null}
-            <span className="text-sm">
-              第 {page} / {Math.max(1, Math.ceil(ids.length / 20))} 页
-            </span>
-            {page * 20 < ids.length ? (
-              <Button variant="outline" onClick={() => setPage(page + 1)}>
-                下一页
-              </Button>
-            ) : null}
-            <Button
-              variant="outline"
-              onClick={() => setGeneration((old) => old + 1)}
-            >
-              重新读取
-            </Button>
-          </nav>
+          <NavigationMenu
+            viewport={false}
+            className="my-5 max-w-full justify-start"
+            aria-label="收藏分页"
+          >
+            <NavigationMenuList className="flex-wrap justify-start gap-2">
+              {page > 1 ? (
+                <NavigationMenuItem>
+                  <Button variant="outline" onClick={() => setPage(page - 1)}>
+                    上一页
+                  </Button>
+                </NavigationMenuItem>
+              ) : null}
+              <NavigationMenuItem>
+                <span className="text-sm">
+                  第 {page} / {Math.max(1, Math.ceil(ids.length / 20))} 页
+                </span>
+              </NavigationMenuItem>
+              {page * 20 < ids.length ? (
+                <NavigationMenuItem>
+                  <Button variant="outline" onClick={() => setPage(page + 1)}>
+                    下一页
+                  </Button>
+                </NavigationMenuItem>
+              ) : null}
+              <NavigationMenuItem>
+                <Button
+                  variant="outline"
+                  onClick={() => setGeneration((old) => old + 1)}
+                >
+                  重新读取
+                </Button>
+              </NavigationMenuItem>
+            </NavigationMenuList>
+          </NavigationMenu>
           <div className="flex flex-wrap gap-3">
             <Button
               variant="outline"

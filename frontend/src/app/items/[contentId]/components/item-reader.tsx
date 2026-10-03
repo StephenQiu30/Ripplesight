@@ -1,4 +1,17 @@
 "use client";
+import {
+  NavigationMenu,
+  NavigationMenuList,
+  NavigationMenuItem,
+  NavigationMenuLink,
+} from "@/components/ui/navigation-menu";
+import {
+  Item,
+  ItemContent,
+  ItemTitle,
+  ItemDescription,
+} from "@/components/ui/item";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
 import { FieldLabel } from "@/components/ui/field";
 
@@ -182,9 +195,11 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
           <div className="grid gap-10 lg:grid-cols-4">
             <article className="[&_pre]:bg-muted max-w-none text-sm leading-8 break-words lg:col-span-3 [&_a]:underline [&_a]:underline-offset-4 [&_blockquote]:my-4 [&_blockquote]:pl-5 [&_h2]:mt-10 [&_h2]:mb-4 [&_h2]:text-xl [&_h2]:font-medium [&_h3]:mt-7 [&_h3]:font-medium [&_img]:h-auto [&_img]:max-w-full [&_li]:ml-5 [&_p]:my-4 [&_pre]:my-5 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:p-4 [&_table]:my-5 [&_table]:block [&_table]:overflow-x-auto [&_td]:p-2 [&_th]:p-2 [&_video]:max-w-full">
               {mode === "translated" && !item.body.translation_complete ? (
-                <p role="status" className="bg-muted rounded-md p-4">
-                  这份译文尚未完整，原文仍可切换阅读。
-                </p>
+                <Alert role="status" className="p-4">
+                  <AlertDescription>
+                    这份译文尚未完整，原文仍可切换阅读。
+                  </AlertDescription>
+                </Alert>
               ) : null}
               {html ? (
                 <div dangerouslySetInnerHTML={{ __html: html }} />
@@ -194,16 +209,22 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
             </article>
             <aside className="flex flex-col gap-y-8">
               {item.body.outline?.length && mode === "original" ? (
-                <nav aria-label="文章目录">
-                  <h2 className="text-sm font-medium">目录</h2>
-                  <ul className="mt-3 flex flex-col gap-y-3 text-xs leading-5">
+                <NavigationMenu
+                  viewport={false}
+                  orientation="vertical"
+                  aria-label="文章目录"
+                  className="max-w-full items-start"
+                >
+                  <NavigationMenuList className="flex-col items-start gap-2">
                     {item.body.outline.map((entry) => (
-                      <li key={entry.id}>
-                        <a href={`#${entry.id}`}>{entry.title}</a>
-                      </li>
+                      <NavigationMenuItem key={entry.id}>
+                        <NavigationMenuLink asChild>
+                          <a href={`#${entry.id}`}>{entry.title}</a>
+                        </NavigationMenuLink>
+                      </NavigationMenuItem>
                     ))}
-                  </ul>
-                </nav>
+                  </NavigationMenuList>
+                </NavigationMenu>
               ) : null}
               {item.body.media?.length ? (
                 <MediaGallery media={item.body.media} />
@@ -212,50 +233,55 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
           </div>
         </>
       ) : (
-        <p className="bg-muted rounded-md p-5 text-sm leading-7">
-          当前以摘要阅读。全文可前往来源原文查看。
-        </p>
+        <Alert role="note" className="p-5 leading-7">
+          <AlertDescription>
+            当前以摘要阅读。全文可前往来源原文查看。
+          </AlertDescription>
+        </Alert>
       )}
       {item.quoted_post ? (
-        <section
-          aria-label="引用帖子"
-          className="mt-10 max-w-3xl rounded-lg border p-5"
-        >
-          <h2 className="text-sm font-medium">引用帖子</h2>
-          <p className="text-muted-foreground mt-2 text-xs">
-            {item.quoted_post.author ? `${item.quoted_post.author} · ` : ""}
-            {item.quoted_post.item.source.name}
-          </p>
-          <Link
-            href={item.quoted_post.item.reading_url}
-            className="mt-3 block font-medium underline underline-offset-4"
-          >
-            {item.quoted_post.item.title}
-          </Link>
-          {item.quoted_post.item.summary ? (
-            <p className="text-muted-foreground mt-3 text-sm leading-7">
-              {item.quoted_post.item.summary}
-            </p>
-          ) : null}
-          {item.quoted_post.body ? (
-            <div className="mt-4 text-sm leading-8 break-words [&_a]:underline [&_img]:h-auto [&_img]:max-w-full [&_p]:my-3 [&_pre]:overflow-x-auto">
-              {item.quoted_post.body.original_html ? (
-                <div
-                  dangerouslySetInnerHTML={{
-                    __html: item.quoted_post.body.original_html,
-                  }}
-                />
-              ) : (
-                <p className="whitespace-pre-wrap">
-                  {item.quoted_post.body.original}
-                </p>
-              )}
-              {item.quoted_post.body.media?.length ? (
-                <MediaGallery media={item.quoted_post.body.media} />
+        <Item variant="outline" asChild>
+          <section aria-label="引用帖子" className="mt-10 max-w-3xl p-5">
+            <ItemContent className="min-w-0 gap-3">
+              <ItemTitle className="line-clamp-none w-full">
+                <h2>引用帖子</h2>
+              </ItemTitle>
+              <ItemDescription className="mt-2 line-clamp-none">
+                {item.quoted_post.author ? `${item.quoted_post.author} · ` : ""}
+                {item.quoted_post.item.source.name}
+              </ItemDescription>
+              <Link
+                href={item.quoted_post.item.reading_url}
+                className="mt-3 block font-medium underline underline-offset-4"
+              >
+                {item.quoted_post.item.title}
+              </Link>
+              {item.quoted_post.item.summary ? (
+                <ItemDescription className="mt-3 line-clamp-none leading-7">
+                  {item.quoted_post.item.summary}
+                </ItemDescription>
               ) : null}
-            </div>
-          ) : null}
-        </section>
+              {item.quoted_post.body ? (
+                <div className="mt-4 text-sm leading-8 break-words [&_a]:underline [&_img]:h-auto [&_img]:max-w-full [&_p]:my-3 [&_pre]:overflow-x-auto">
+                  {item.quoted_post.body.original_html ? (
+                    <div
+                      dangerouslySetInnerHTML={{
+                        __html: item.quoted_post.body.original_html,
+                      }}
+                    />
+                  ) : (
+                    <p className="whitespace-pre-wrap">
+                      {item.quoted_post.body.original}
+                    </p>
+                  )}
+                  {item.quoted_post.body.media?.length ? (
+                    <MediaGallery media={item.quoted_post.body.media} />
+                  ) : null}
+                </div>
+              ) : null}
+            </ItemContent>
+          </section>
+        </Item>
       ) : null}
       {item.fact_id ? (
         <section
@@ -276,22 +302,26 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
         >
           <h2 className="text-lg font-medium">相关事件</h2>
           {item.related_stories.map((story) => (
-            <article key={story.id} className="rounded-lg border p-4">
-              <Link
-                href={story.reading_url}
-                className="font-medium underline underline-offset-4"
-              >
-                {story.title}
-              </Link>
-              {story.summary ? (
-                <p className="text-muted-foreground mt-2 text-sm leading-7">
-                  {story.summary}
-                </p>
-              ) : null}
-              <p className="text-muted-foreground mt-2 text-xs">
-                {story.supporting_reports} 篇独立报道支持关联
-              </p>
-            </article>
+            <Item variant="outline" key={story.id} asChild>
+              <article className="p-4">
+                <ItemContent className="min-w-0 gap-3">
+                  <Link
+                    href={story.reading_url}
+                    className="font-medium underline underline-offset-4"
+                  >
+                    {story.title}
+                  </Link>
+                  {story.summary ? (
+                    <ItemDescription className="mt-2 line-clamp-none leading-7">
+                      {story.summary}
+                    </ItemDescription>
+                  ) : null}
+                  <ItemDescription className="mt-2 line-clamp-none">
+                    {story.supporting_reports} 篇独立报道支持关联
+                  </ItemDescription>
+                </ItemContent>
+              </article>
+            </Item>
           ))}
         </section>
       ) : null}

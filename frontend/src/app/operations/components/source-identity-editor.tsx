@@ -1,4 +1,5 @@
 "use client";
+import { Item, ItemContent } from "@/components/ui/item";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -96,41 +97,43 @@ export function SourceIdentityEditor({ token }: { token: string }) {
       </p>
       <div className="grid gap-2">
         {rows.map((row) => (
-          <div
-            key={row.id}
-            className="bg-muted/40 flex flex-wrap items-center justify-between gap-2 rounded-lg p-3"
-          >
-            <span className="min-w-0 break-all">
-              {row.name} · {row.mode} · {row.selector_kind}:{row.selector_ref}
-              <span className="text-muted-foreground block text-xs">
-                版本 {row.revision} · 成功采集{" "}
-                {row.last_successful_fetch_at ?? "尚无成功记录"}
-              </span>
-            </span>
-            <Button
-              variant="ghost"
-              onClick={() =>
-                setDraft({
-                  source_key: row.source_key,
-                  selector_kind:
-                    row.selector_kind as HotKeyAPI.AttentionSourceInput["selector_kind"],
-                  selector_ref: row.selector_ref,
-                  name: row.name,
-                  mode: row.mode,
-                  group_key: row.group_key,
-                  owner_entity_key: row.owner_entity_key,
-                  tier: row.tier,
-                  first_party: row.first_party,
-                  scheduled: row.scheduled,
-                  enabled: row.enabled,
-                  interval_seconds: row.interval_seconds,
-                  expected_revision: row.revision,
-                })
-              }
-            >
-              编辑 {row.name}
-            </Button>
-          </div>
+          <Item variant="muted" key={row.id} asChild>
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3">
+              <ItemContent className="min-w-0 gap-3">
+                <span className="min-w-0 break-all">
+                  {row.name} · {row.mode} · {row.selector_kind}:
+                  {row.selector_ref}
+                  <span className="text-muted-foreground block text-xs">
+                    版本 {row.revision} · 成功采集{" "}
+                    {row.last_successful_fetch_at ?? "尚无成功记录"}
+                  </span>
+                </span>
+                <Button
+                  variant="ghost"
+                  onClick={() =>
+                    setDraft({
+                      source_key: row.source_key,
+                      selector_kind:
+                        row.selector_kind as HotKeyAPI.AttentionSourceInput["selector_kind"],
+                      selector_ref: row.selector_ref,
+                      name: row.name,
+                      mode: row.mode,
+                      group_key: row.group_key,
+                      owner_entity_key: row.owner_entity_key,
+                      tier: row.tier,
+                      first_party: row.first_party,
+                      scheduled: row.scheduled,
+                      enabled: row.enabled,
+                      interval_seconds: row.interval_seconds,
+                      expected_revision: row.revision,
+                    })
+                  }
+                >
+                  编辑 {row.name}
+                </Button>
+              </ItemContent>
+            </div>
+          </Item>
         ))}
       </div>
       <form onSubmit={save}>

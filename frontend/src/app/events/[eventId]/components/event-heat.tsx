@@ -1,4 +1,12 @@
 "use client";
+import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Item,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+} from "@/components/ui/item";
 import {
   TableHead,
   TableRow,
@@ -78,9 +86,14 @@ export function EventHeat({ eventId }: { eventId: string }) {
           </Button>
         </div>
       ) : !data ? (
-        <p className="text-muted-foreground mt-4" role="status">
-          正在读取独立来源热度…
-        </p>
+        <Item className="mt-4" role="status">
+          <Spinner aria-hidden="true" />
+          <ItemContent>
+            <ItemDescription className="line-clamp-none">
+              正在读取独立来源热度…
+            </ItemDescription>
+          </ItemContent>
+        </Item>
       ) : (
         <>
           <div className="mt-4 flex flex-wrap gap-3">
@@ -116,49 +129,57 @@ export function EventHeat({ eventId }: { eventId: string }) {
             {data.formula_version} · 24 小时半衰期 · 对比 6 小时前同一可比来源组
           </p>
           {data.roster.length ? (
-            <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+            <ItemGroup className="mt-4 grid gap-3 sm:grid-cols-2">
               {data.roster.map((source) => (
-                <li
-                  className="rounded-lg border p-4"
+                <Item
+                  role="listitem"
+                  variant="outline"
+                  className="p-4"
                   key={source.participant_key}
                 >
-                  <p className="font-medium">
-                    {source.source_name}{" "}
-                    {source.first_party ? "· 一手来源" : ""}
-                  </p>
-                  <p className="text-muted-foreground mt-1 text-sm">
-                    {source.mode === "editorial" ? "编辑报道" : "讨论信号"}
-                    {source.tier ? ` · ${source.tier}` : ""} ·{" "}
-                    {new Date(source.source_time).toLocaleString("zh-CN")}
-                  </p>
-                  <p className="mt-2 text-sm break-words">
-                    {source.title ?? "固定版本证据"}
-                  </p>
-                </li>
+                  <ItemContent className="min-w-0 gap-3">
+                    <p className="font-medium">
+                      {source.source_name}{" "}
+                      {source.first_party ? "· 一手来源" : ""}
+                    </p>
+                    <ItemDescription className="mt-1 line-clamp-none">
+                      {source.mode === "editorial" ? "编辑报道" : "讨论信号"}
+                      {source.tier ? ` · ${source.tier}` : ""} ·{" "}
+                      {new Date(source.source_time).toLocaleString("zh-CN")}
+                    </ItemDescription>
+                    <p className="mt-2 text-sm break-words">
+                      {source.title ?? "固定版本证据"}
+                    </p>
+                  </ItemContent>
+                </Item>
               ))}
-            </ul>
+            </ItemGroup>
           ) : (
             <p className="text-muted-foreground mt-4">
               尚未配置可参与计算的来源身份。
             </p>
           )}
           {data.interaction ? (
-            <div className="mt-6 rounded-lg border p-4">
-              <p className="font-medium">
-                互动热度{" "}
-                {data.interaction.score == null
-                  ? "待确定"
-                  : data.interaction.score.toFixed(2)}
-              </p>
-              <p className="text-muted-foreground mt-2 text-sm">
-                按赞、评、转、浏览计算独立指标，未知值保留。
-                {data.interaction.rising_state === "insufficient"
-                  ? "真实历史样本不足，暂不判断升温。"
-                  : data.interaction.rising_state === "rising"
-                    ? "近期互动增量达到基线三倍。"
-                    : "近期互动保持平稳。"}
-              </p>
-            </div>
+            <Item variant="outline" asChild>
+              <div className="mt-6 p-4">
+                <ItemContent className="min-w-0 gap-3">
+                  <p className="font-medium">
+                    互动热度{" "}
+                    {data.interaction.score == null
+                      ? "待确定"
+                      : data.interaction.score.toFixed(2)}
+                  </p>
+                  <ItemDescription className="mt-2 line-clamp-none">
+                    按赞、评、转、浏览计算独立指标，未知值保留。
+                    {data.interaction.rising_state === "insufficient"
+                      ? "真实历史样本不足，暂不判断升温。"
+                      : data.interaction.rising_state === "rising"
+                        ? "近期互动增量达到基线三倍。"
+                        : "近期互动保持平稳。"}
+                  </ItemDescription>
+                </ItemContent>
+              </div>
+            </Item>
           ) : null}
           <Collapsible className="mt-6">
             <CollapsibleTrigger asChild>
@@ -209,9 +230,13 @@ export function EventHeat({ eventId }: { eventId: string }) {
                   </Table>
                 </div>
               ) : (
-                <p className="text-muted-foreground mt-3 text-sm">
-                  尚无当前修订的实际小时快照。
-                </p>
+                <Empty className="mt-3">
+                  <EmptyHeader>
+                    <EmptyDescription>
+                      尚无当前修订的实际小时快照。
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               )}
             </CollapsibleContent>
           </Collapsible>

@@ -1,4 +1,11 @@
 "use client";
+import {
+  Item,
+  ItemContent,
+  ItemGroup,
+  ItemTitle,
+  ItemDescription,
+} from "@/components/ui/item";
 import { FieldLabel, Field } from "@/components/ui/field";
 
 import { useId, useEffect, useState } from "react";
@@ -93,52 +100,60 @@ export function EventFacts({
       ) : facts.length === 0 ? (
         <p className="text-muted-foreground mt-6">当前事件尚无细分事实关系。</p>
       ) : (
-        <ol className="mt-6 flex flex-col gap-y-7">
+        <ItemGroup className="mt-6 flex flex-col gap-y-7">
           {facts.map((fact) => (
-            <li key={fact.id} className="flex flex-col gap-y-3">
-              <div className="flex flex-wrap items-center gap-3">
-                {onToggleFact ? (
-                  <Field orientation="horizontal" className="w-auto">
-                    <Checkbox
-                      checked={selectedFactIds.includes(fact.id)}
-                      onCheckedChange={() => onToggleFact(fact.id)}
-                      id={`${fieldId}-event-facts-field-1`}
-                    />
-                    <FieldLabel htmlFor={`${fieldId}-event-facts-field-1`}>
-                      选择事实
-                    </FieldLabel>
-                  </Field>
+            <Item
+              role="listitem"
+              variant="default"
+              key={fact.id}
+              className="flex flex-col gap-y-3"
+            >
+              <ItemContent className="min-w-0 gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  {onToggleFact ? (
+                    <Field orientation="horizontal" className="w-auto">
+                      <Checkbox
+                        checked={selectedFactIds.includes(fact.id)}
+                        onCheckedChange={() => onToggleFact(fact.id)}
+                        id={`${fieldId}-event-facts-field-1`}
+                      />
+                      <FieldLabel htmlFor={`${fieldId}-event-facts-field-1`}>
+                        选择事实
+                      </FieldLabel>
+                    </Field>
+                  ) : null}
+                  <Badge variant="secondary">
+                    {relationLabels[fact.relation]}
+                  </Badge>
+                  <span className="text-muted-foreground text-sm">
+                    {fact.members.length} 份固定证据 · 事实修订 {fact.revision}
+                  </span>
+                </div>
+                <ItemTitle className="line-clamp-none w-full">
+                  <h3>{fact.title ?? "事实文本待复核或不可读"}</h3>
+                </ItemTitle>
+                {fact.summary ? (
+                  <ItemDescription className="line-clamp-none leading-7 whitespace-pre-wrap">
+                    {fact.summary}
+                  </ItemDescription>
                 ) : null}
-                <Badge variant="secondary">
-                  {relationLabels[fact.relation]}
-                </Badge>
-                <span className="text-muted-foreground text-sm">
-                  {fact.members.length} 份固定证据 · 事实修订 {fact.revision}
-                </span>
-              </div>
-              <h3 className="text-lg font-medium">
-                {fact.title ?? "事实文本待复核或不可读"}
-              </h3>
-              {fact.summary ? (
-                <p className="text-muted-foreground leading-7 whitespace-pre-wrap">
-                  {fact.summary}
-                </p>
-              ) : null}
-              {fact.root_fact_id ? (
-                <p className="text-muted-foreground text-sm">
-                  直接关联根事实：
-                  {facts.find((candidate) => candidate.id === fact.root_fact_id)
-                    ?.title ?? fact.root_fact_id}
-                </p>
-              ) : null}
-              {fact.evidence_state === "partial" ? (
-                <p className="text-muted-foreground text-sm">
-                  部分固定证据已不可读，派生事实文本隐藏。
-                </p>
-              ) : null}
-            </li>
+                {fact.root_fact_id ? (
+                  <ItemDescription className="line-clamp-none">
+                    直接关联根事实：
+                    {facts.find(
+                      (candidate) => candidate.id === fact.root_fact_id,
+                    )?.title ?? fact.root_fact_id}
+                  </ItemDescription>
+                ) : null}
+                {fact.evidence_state === "partial" ? (
+                  <ItemDescription className="line-clamp-none">
+                    部分固定证据已不可读，派生事实文本隐藏。
+                  </ItemDescription>
+                ) : null}
+              </ItemContent>
+            </Item>
           ))}
-        </ol>
+        </ItemGroup>
       )}
     </section>
   );

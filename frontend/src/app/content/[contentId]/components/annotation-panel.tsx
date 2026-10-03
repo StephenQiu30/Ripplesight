@@ -1,4 +1,6 @@
 "use client";
+import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import { useState } from "react";
 import { ChevronDownIcon } from "lucide-react";
@@ -95,8 +97,7 @@ export function AnnotationResult({
         </Badge>
         {historical ? <Badge variant="outline">历史结果</Badge> : null}
         <span className="text-muted-foreground text-xs">
-          主题规则 v{annotation.topic_rule_version} ·{" "}
-          {annotation.prompt_version}
+          主题规则 v{annotation.topic_rule_version} ·{annotation.prompt_version}
         </span>
       </div>
       {annotation.result_state === "valid" ? (
@@ -228,9 +229,11 @@ export function AnnotationPanel({
           {topic && versionId ? (
             <>
               {!isCurrentVersion ? (
-                <p role="status" className="text-muted-foreground mt-4 text-sm">
-                  当前查看历史正文版本，以下结果不能代表现行正文。
-                </p>
+                <Alert role="status" className="mt-4">
+                  <AlertDescription>
+                    当前查看历史正文版本，以下结果不能代表现行正文。
+                  </AlertDescription>
+                </Alert>
               ) : null}
               <AnnotationResult
                 annotation={selection?.current ?? null}
@@ -260,9 +263,11 @@ export function AnnotationPanel({
               ) : null}
             </>
           ) : (
-            <p className="text-muted-foreground mt-4 text-sm">
-              暂无可分析的正文版本。
-            </p>
+            <Empty className="mt-4">
+              <EmptyHeader>
+                <EmptyDescription>暂无可分析的正文版本。</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           )}
         </>
       )}

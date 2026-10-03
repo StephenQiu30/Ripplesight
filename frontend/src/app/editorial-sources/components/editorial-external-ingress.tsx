@@ -1,4 +1,7 @@
 "use client";
+import { Separator } from "@/components/ui/separator";
+
+import { Item, ItemContent } from "@/components/ui/item";
 import { toast } from "sonner";
 
 import Link from "next/link";
@@ -131,10 +134,8 @@ export function EditorialExternalIngress({
     );
   }
   return (
-    <section
-      className="flex flex-col gap-y-4 border-t pt-5"
-      aria-label="外部材料摄入"
-    >
+    <section className="flex flex-col gap-y-4 pt-5" aria-label="外部材料摄入">
+      <Separator />
       <h3 className="font-medium">外部材料摄入</h3>
       <p className="text-muted-foreground text-sm">
         单批 1—50 项、最多 4
@@ -169,7 +170,6 @@ export function EditorialExternalIngress({
       <Button disabled={busy || token.length < 32 || !enabled} onClick={submit}>
         受理材料摄入
       </Button>
-
       {receipt ? (
         <div className="flex flex-col gap-y-3 text-sm">
           <p>
@@ -195,33 +195,36 @@ export function EditorialExternalIngress({
             读取仅查看原批次回执，不重发材料、不启动新的摄入任务。
           </p>
           {receipt.items.map((item) => (
-            <article
-              key={item.index}
-              className="bg-muted/30 flex flex-col gap-y-2 rounded-md p-3"
-            >
-              <p>
-                第 {item.index + 1} 项 · {statuses[item.status]}
-                {item.change ? ` · ${item.change}` : ""}
-                {item.duplicate_of != null
-                  ? ` · 同批第 ${item.duplicate_of + 1} 项`
-                  : ""}
-                {item.reason ? ` · ${item.reason}` : ""}
-              </p>
-              {item.identity_key ? (
-                <p className="break-all">身份 {item.identity_key}</p>
-              ) : null}
-              {item.content_id ? (
-                <Link
-                  href={`/content/${item.content_id}`}
-                  className="break-all underline underline-offset-4"
-                >
-                  读取材料 {item.content_id}
-                </Link>
-              ) : null}
-              {item.content_version_id ? (
-                <p className="break-all">固定版本 {item.content_version_id}</p>
-              ) : null}
-            </article>
+            <Item variant="muted" key={item.index} asChild>
+              <article className="flex flex-col gap-y-2 p-3">
+                <ItemContent className="min-w-0 gap-3">
+                  <p>
+                    第 {item.index + 1} 项 · {statuses[item.status]}
+                    {item.change ? ` · ${item.change}` : ""}
+                    {item.duplicate_of != null
+                      ? ` · 同批第 ${item.duplicate_of + 1} 项`
+                      : ""}
+                    {item.reason ? ` · ${item.reason}` : ""}
+                  </p>
+                  {item.identity_key ? (
+                    <p className="break-all">身份 {item.identity_key}</p>
+                  ) : null}
+                  {item.content_id ? (
+                    <Link
+                      href={`/content/${item.content_id}`}
+                      className="break-all underline underline-offset-4"
+                    >
+                      读取材料 {item.content_id}
+                    </Link>
+                  ) : null}
+                  {item.content_version_id ? (
+                    <p className="break-all">
+                      固定版本 {item.content_version_id}
+                    </p>
+                  ) : null}
+                </ItemContent>
+              </article>
+            </Item>
           ))}
         </div>
       ) : null}

@@ -1,4 +1,6 @@
 "use client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
 
 import { toast } from "sonner";
 
@@ -100,33 +102,40 @@ export function TopicRunResult({
       <p className="text-sm font-medium">
         已按规则版本 v{result.topic_version} 处理
       </p>
-      <ul className="flex flex-col gap-4 text-sm">
+      <ItemGroup className="flex flex-col gap-4 text-sm">
         {result.sources.map((source) => (
-          <li key={source.source_key} className="py-3 first:pt-0 last:pb-0">
-            <span className="font-medium">
-              {sourceNames[source.source_key] ?? source.source_key}
-            </span>
-            {source.skip_reason ? (
-              <span className="text-muted-foreground ml-2">
-                {SKIP_LABELS[source.skip_reason]}
+          <Item
+            role="listitem"
+            variant="default"
+            key={source.source_key}
+            className="py-3 first:pt-0 last:pb-0"
+          >
+            <ItemContent className="min-w-0 gap-3">
+              <span className="font-medium">
+                {sourceNames[source.source_key] ?? source.source_key}
               </span>
-            ) : (
-              <span className="text-muted-foreground ml-2">
-                已受理 {source.job_ids.length} 个任务
-              </span>
-            )}
-            {source.job_ids.map((jobId) => (
-              <Link
-                key={jobId}
-                href={`/jobs/${jobId}`}
-                className="text-primary mt-2 block underline-offset-4 hover:underline"
-              >
-                查看任务 {jobId.slice(0, 8)}
-              </Link>
-            ))}
-          </li>
+              {source.skip_reason ? (
+                <span className="text-muted-foreground ml-2">
+                  {SKIP_LABELS[source.skip_reason]}
+                </span>
+              ) : (
+                <span className="text-muted-foreground ml-2">
+                  已受理 {source.job_ids.length} 个任务
+                </span>
+              )}
+              {source.job_ids.map((jobId) => (
+                <Link
+                  key={jobId}
+                  href={`/jobs/${jobId}`}
+                  className="text-primary mt-2 block underline-offset-4 hover:underline"
+                >
+                  查看任务 {jobId.slice(0, 8)}
+                </Link>
+              ))}
+            </ItemContent>
+          </Item>
         ))}
-      </ul>
+      </ItemGroup>
     </div>
   );
 }
@@ -215,15 +224,17 @@ export function TopicRunActions({
           按已保存的规则采集一次，查看每个来源的受理结果。
         </p>
         {topic.status !== "active" ? (
-          <p className="mt-4 text-sm" role="status">
-            {topic.status === "paused"
-              ? "主题已暂停，请先恢复。"
-              : "已归档主题无法采集。"}
-          </p>
+          <Alert className="mt-4" role="status">
+            <AlertDescription>
+              {topic.status === "paused"
+                ? "主题已暂停，请先恢复。"
+                : "已归档主题无法采集。"}
+            </AlertDescription>
+          </Alert>
         ) : topic.source_keys.length === 0 ? (
-          <p className="mt-4 text-sm" role="status">
-            请先选择并保存来源。
-          </p>
+          <Alert className="mt-4" role="status">
+            <AlertDescription>请先选择并保存来源。</AlertDescription>
+          </Alert>
         ) : (
           <>
             <FieldSet

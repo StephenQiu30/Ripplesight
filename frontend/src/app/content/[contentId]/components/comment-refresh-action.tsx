@@ -80,9 +80,11 @@ export function CommentRefreshControls({
         </Button>
       ) : null}
       {readiness.reason ? (
-        <p role="status" className="text-muted-foreground mt-2 text-sm">
-          {commentRefreshReason(readiness.reason)}
-        </p>
+        <Alert role="status" className="mt-2">
+          <AlertDescription>
+            {commentRefreshReason(readiness.reason)}
+          </AlertDescription>
+        </Alert>
       ) : null}
     </div>
   );
@@ -203,12 +205,14 @@ function CommentRefreshActionContent({ postId }: { postId: string }) {
   }
   if (state.status === "accepted") {
     return (
-      <p role="status" className="mt-4 text-sm">
-        评论更新已受理。
-        <Link className="underline" href={`/jobs/${state.jobId}`}>
-          查看采集任务
-        </Link>
-      </p>
+      <Alert role="status" className="mt-4">
+        <AlertDescription>
+          评论更新已受理。
+          <Link className="underline" href={`/jobs/${state.jobId}`}>
+            查看采集任务
+          </Link>
+        </AlertDescription>
+      </Alert>
     );
   }
   return (

@@ -1,3 +1,4 @@
+import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
 import Link from "next/link";
 import { ArrowRightIcon } from "lucide-react";
 
@@ -53,21 +54,28 @@ export function UsageGuide({
           </DialogDescription>
         </DialogHeader>
         {view === "guide" ? (
-          <ol className="my-4 flex flex-col gap-6">
+          <ItemGroup className="my-4 flex flex-col gap-6">
             {steps.map(([title, description], index) => (
-              <li key={title} className="flex gap-4">
-                <span className="text-muted-foreground font-mono text-xs">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <div>
-                  <h3 className="font-medium">{title}</h3>
-                  <p className="text-muted-foreground mt-2 leading-relaxed">
-                    {description}
-                  </p>
-                </div>
-              </li>
+              <Item
+                role="listitem"
+                variant="default"
+                key={title}
+                className="flex gap-4"
+              >
+                <ItemContent className="min-w-0 gap-3">
+                  <span className="text-muted-foreground font-mono text-xs">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <div>
+                    <h3 className="font-medium">{title}</h3>
+                    <p className="text-muted-foreground mt-2 leading-relaxed">
+                      {description}
+                    </p>
+                  </div>
+                </ItemContent>
+              </Item>
             ))}
-          </ol>
+          </ItemGroup>
         ) : (
           <div className="my-4 flex flex-col gap-6">
             <dl className="flex flex-col gap-4">

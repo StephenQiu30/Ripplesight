@@ -1,4 +1,10 @@
 "use client";
+import {
+  Item,
+  ItemContent,
+  ItemTitle,
+  ItemDescription,
+} from "@/components/ui/item";
 
 import Link from "next/link";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -292,45 +298,54 @@ function EventResults({
         </Empty>
       ) : (
         state.page.items.map((item) => (
-          <article key={item.id} className="bg-muted/30 rounded-xl p-6">
-            <div className="flex flex-wrap items-center gap-3">
-              <Badge variant="secondary">
-                {item.evidence_state === "partial" ? "部分证据可读" : "已确认"}
-              </Badge>
-              <span className="text-muted-foreground text-sm">
-                {item.readable_member_count} / {item.member_count} 条成员可读
-              </span>
-            </div>
-            <h2 className="mt-4 text-xl font-medium">
-              <Link
-                className="underline-offset-4 hover:underline"
-                href={`/events/${item.id}`}
-              >
-                {item.title ?? "证据暂不可读的事件"}
-              </Link>
-            </h2>
-            {item.summary ? (
-              <p className="text-muted-foreground mt-3 leading-7">
-                {item.summary}
-              </p>
-            ) : (
-              <p className="text-muted-foreground mt-3 text-sm">
-                派生标题和摘要暂不可读，可进入事件查看仍可读的成员。
-              </p>
-            )}
-            <p className="text-muted-foreground mt-5 text-sm">
-              {Object.entries(item.source_counts)
-                .map(
-                  ([source, count]) =>
-                    `${names.get(source) ?? source} ${count} 条`,
-                )
-                .join(" · ")}
-            </p>
-            <p className="text-muted-foreground mt-2 text-sm">
-              首次{item.first_seen_basis === "published" ? "发布" : "发现"}：
-              {new Date(item.first_seen_at).toLocaleString("zh-CN")}
-            </p>
-          </article>
+          <Item variant="muted" key={item.id} asChild>
+            <article className="p-6">
+              <ItemContent className="min-w-0 gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Badge variant="secondary">
+                    {item.evidence_state === "partial"
+                      ? "部分证据可读"
+                      : "已确认"}
+                  </Badge>
+                  <span className="text-muted-foreground text-sm">
+                    {item.readable_member_count} / {item.member_count}{" "}
+                    条成员可读
+                  </span>
+                </div>
+                <ItemTitle className="line-clamp-none w-full">
+                  <h2 className="mt-4">
+                    <Link
+                      className="underline-offset-4 hover:underline"
+                      href={`/events/${item.id}`}
+                    >
+                      {item.title ?? "证据暂不可读的事件"}
+                    </Link>
+                  </h2>
+                </ItemTitle>
+                {item.summary ? (
+                  <ItemDescription className="mt-3 line-clamp-none leading-7">
+                    {item.summary}
+                  </ItemDescription>
+                ) : (
+                  <ItemDescription className="mt-3 line-clamp-none">
+                    派生标题和摘要暂不可读，可进入事件查看仍可读的成员。
+                  </ItemDescription>
+                )}
+                <ItemDescription className="mt-5 line-clamp-none">
+                  {Object.entries(item.source_counts)
+                    .map(
+                      ([source, count]) =>
+                        `${names.get(source) ?? source} ${count} 条`,
+                    )
+                    .join(" · ")}
+                </ItemDescription>
+                <ItemDescription className="mt-2 line-clamp-none">
+                  首次{item.first_seen_basis === "published" ? "发布" : "发现"}
+                  ：{new Date(item.first_seen_at).toLocaleString("zh-CN")}
+                </ItemDescription>
+              </ItemContent>
+            </article>
+          </Item>
         ))
       )}
       {state.page.next_cursor ? (

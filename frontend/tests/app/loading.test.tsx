@@ -53,7 +53,13 @@ describe("route loading", () => {
         .getByRole("status", { name: "正在读取登录方式" })
         .parentElement?.getAttribute("aria-busy"),
     ).toBe("true");
-    expect(screen.queryByRole("textbox")).toBeNull();
-    expect(screen.queryByRole("button")).toBeNull();
+    const main = within(screen.getByRole("main"));
+    expect(main.queryByRole("textbox")).toBeNull();
+    expect(main.queryByRole("button")).toBeNull();
+    expect(
+      within(screen.getByRole("contentinfo")).getByRole("button", {
+        name: "使用指南",
+      }),
+    ).toBeTruthy();
   });
 });

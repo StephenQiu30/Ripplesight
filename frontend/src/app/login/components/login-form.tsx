@@ -1,4 +1,5 @@
 "use client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -384,12 +385,9 @@ export function LoginForm({
             </form>
           )}
           {method === "github" && (
-            <p
-              role="status"
-              className="text-muted-foreground text-sm leading-6"
-            >
-              请选择下方可用的登录方式。
-            </p>
+            <Alert role="status" className="leading-6">
+              <AlertDescription>请选择下方可用的登录方式。</AlertDescription>
+            </Alert>
           )}
           <div
             className="mt-7 flex flex-col gap-y-3"

@@ -1,4 +1,5 @@
 "use client";
+import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
 
 import { toast } from "sonner";
 
@@ -170,33 +171,37 @@ function ReportDetailContent({ reportId }: { reportId: string }) {
                   <h2 id="report-citations" className="font-medium">
                     原帖引用
                   </h2>
-                  <ul className="mt-4 flex flex-col gap-3">
+                  <ItemGroup className="mt-4 flex flex-col gap-3">
                     {report.citations.map((citation) => {
                       const url = safeHttpUrl(citation.url);
                       return (
-                        <li
+                        <Item
+                          role="listitem"
+                          variant="default"
                           key={citation.citation}
-                          className="text-sm break-words"
+                          className="break-words"
                         >
-                          <span className="text-muted-foreground mr-2">
-                            [{citation.citation}]
-                          </span>
-                          {url ? (
-                            <a
-                              href={url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="break-all underline underline-offset-4"
-                            >
-                              {citation.title}
-                            </a>
-                          ) : (
-                            citation.title
-                          )}
-                        </li>
+                          <ItemContent className="min-w-0 gap-3">
+                            <span className="text-muted-foreground mr-2">
+                              [{citation.citation}]
+                            </span>
+                            {url ? (
+                              <a
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="break-all underline underline-offset-4"
+                              >
+                                {citation.title}
+                              </a>
+                            ) : (
+                              citation.title
+                            )}
+                          </ItemContent>
+                        </Item>
                       );
                     })}
-                  </ul>
+                  </ItemGroup>
                 </section>
               ) : null}
             </CollapsibleContent>

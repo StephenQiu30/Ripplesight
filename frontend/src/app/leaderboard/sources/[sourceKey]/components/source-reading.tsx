@@ -1,3 +1,4 @@
+import { AlertDescription, Alert } from "@/components/ui/alert";
 import Link from "next/link";
 
 import {
@@ -91,17 +92,21 @@ export function SourceReading({ data }: { data: HotKeyAPI.SourceDetailView }) {
             </p>
           ) : null}
           {data.system_rows ? (
-            <p className="bg-muted rounded-lg p-4 text-sm leading-6">
-              这些行包含代理或系统配置，仅供参考，不能直接当作基础模型能力排名。
-            </p>
+            <Alert role="note" className="p-4 leading-6">
+              <AlertDescription>
+                这些行包含代理或系统配置，仅供参考，不能直接当作基础模型能力排名。
+              </AlertDescription>
+            </Alert>
           ) : null}
         </div>
         {data.rows.length === 0 ? (
-          <p className="bg-muted/40 rounded-xl p-6 text-sm leading-6">
-            {data.collected
-              ? "该来源不提供可公开展示的逐行明细。"
-              : "尚未采集该来源的合资格证据。注册表说明不代表数据已可用。"}
-          </p>
+          <Alert role="note" className="p-6 leading-6">
+            <AlertDescription>
+              {data.collected
+                ? "该来源不提供可公开展示的逐行明细。"
+                : "尚未采集该来源的合资格证据。注册表说明不代表数据已可用。"}
+            </AlertDescription>
+          </Alert>
         ) : (
           <Table>
             <TableCaption>

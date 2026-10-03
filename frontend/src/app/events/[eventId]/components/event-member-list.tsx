@@ -1,4 +1,10 @@
 "use client";
+import {
+  Item,
+  ItemContent,
+  ItemTitle,
+  ItemDescription,
+} from "@/components/ui/item";
 import { ChevronDownIcon } from "lucide-react";
 import {
   Collapsible,
@@ -173,9 +179,9 @@ export function EventMemberList({
         </Alert>
       ) : null}
       {state.page.evidence_state === "partial" ? (
-        <p role="status" className="text-muted-foreground text-sm">
-          此修订的部分成员证据已不可读。
-        </p>
+        <Alert role="status">
+          <AlertDescription>此修订的部分成员证据已不可读。</AlertDescription>
+        </Alert>
       ) : null}
       {state.page.items.map((member) => (
         <div key={member.id} className="flex flex-col gap-y-3">
@@ -211,12 +217,18 @@ function MemberReading({ member }: { member: HotKeyAPI.EventMemberReadView }) {
   const reading = member.content;
   if (!reading || member.availability === "unavailable")
     return (
-      <article className="bg-muted/30 rounded-xl p-6">
-        <h3 className="text-lg font-medium">该成员证据暂不可读</h3>
-        <p className="text-muted-foreground mt-3 leading-7">
-          固定版本的观察已失效或被移除，不以新版内容替代。
-        </p>
-      </article>
+      <Item variant="muted" asChild>
+        <article className="p-6">
+          <ItemContent className="min-w-0 gap-3">
+            <ItemTitle className="line-clamp-none w-full">
+              <h3>该成员证据暂不可读</h3>
+            </ItemTitle>
+            <ItemDescription className="mt-3 line-clamp-none leading-7">
+              固定版本的观察已失效或被移除，不以新版内容替代。
+            </ItemDescription>
+          </ItemContent>
+        </article>
+      </Item>
     );
   const observation = reading.observation;
   const version = observation.content_version;
@@ -233,143 +245,159 @@ function MemberReading({ member }: { member: HotKeyAPI.EventMemberReadView }) {
     ["弹幕", metrics.danmaku_count],
   ] as const;
   return (
-    <article className="bg-muted/30 rounded-xl p-6 sm:p-8">
-      <div className="flex flex-wrap gap-3">
-        <Badge variant="secondary">{reading.source_key}</Badge>
-        {version ? (
-          <Badge variant="secondary">{scopeLabels[version.text_scope]}</Badge>
-        ) : null}
-        <Badge variant="secondary">
-          {member.assignment_origin === "manual" ? "人工归入" : "模型归并"}
-        </Badge>
-      </div>
-      <h3 className="mt-5 text-xl font-medium">
-        {version?.title ?? "成员内容"}
-      </h3>
-      <p className="text-muted-foreground mt-3 text-sm">
-        {observation.author_external_id
-          ? `作者：${observation.author_external_id} · `
-          : ""}
-        观察于 {new Date(observation.observed_at).toLocaleString("zh-CN")}
-      </p>
-      {version?.text_scope === "summary" ||
-      version?.text_scope === "truncated" ? (
-        <p className="text-muted-foreground mt-4 text-sm">
-          此版本为{scopeLabels[version.text_scope]}，正文不代表完整原文。
-        </p>
-      ) : null}
-      {version?.body ? (
-        <p className="mt-5 leading-8 break-words whitespace-pre-wrap">
-          {version.body}
-        </p>
-      ) : (
-        <p className="text-muted-foreground mt-5">此版本没有可读正文。</p>
-      )}
-      {version?.text_origin === "machine_extracted" ? (
-        <p className="text-muted-foreground mt-4 text-sm">
-          正文由机器提取。依据：{version.text_origin_ref}
-        </p>
-      ) : null}
-      <div className="text-muted-foreground mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm">
-        {metricValues.map(([label, count]) => (
-          <span key={label}>
-            {label}：{count === null ? "未知" : count}
-          </span>
-        ))}
-      </div>
-      {reading.current_visibility ? (
-        <p className="text-muted-foreground mt-4 text-sm">
-          {visibilityLabels[reading.current_visibility.status]}，状态观察于{" "}
-          {new Date(reading.current_visibility.observed_at).toLocaleString(
-            "zh-CN",
-          )}
-        </p>
-      ) : null}
-      {version?.relations.length ? (
-        <div className="mt-6 flex flex-col gap-y-2">
-          {version.relations.map((relation, index) => (
-            <p
-              key={`${relation.relation_type}:${relation.target_external_id}:${index}`}
-              className="text-muted-foreground text-sm"
-            >
-              {relation.relation_type === "quote" ? "引用" : "转帖"}：
-              {relation.target_external_id}
-              {relation.target_content_id ? (
-                <Link
-                  href={`/content/${relation.target_content_id}`}
-                  className="ml-3 underline underline-offset-4"
-                >
-                  查看引用内容
-                </Link>
-              ) : (
-                "（本地引用证据不可读）"
-              )}
-            </p>
-          ))}
-        </div>
-      ) : null}
-      {comment ? (
-        <section
-          aria-label="代表评论"
-          className="bg-background/70 mt-6 rounded-lg p-5"
-        >
-          <h4 className="font-medium">代表评论的最新可读观察</h4>
-          <p className="text-muted-foreground mt-2 text-sm">
-            观察于{" "}
-            {new Date(comment.observation.observed_at).toLocaleString("zh-CN")}
-            ；评论未固定到事件成员版本。
-          </p>
-          <p className="mt-3 leading-7 break-words whitespace-pre-wrap">
-            {comment.observation.content_version?.body ??
-              comment.observation.content_version?.title ??
-              "无可读评论正文"}
-          </p>
-        </section>
-      ) : reading.representative_comment_state === "unavailable" ? (
-        <p className="text-muted-foreground mt-6 text-sm">
-          代表评论证据暂不可读。
-        </p>
-      ) : null}
-      <div className="mt-6 flex flex-wrap gap-3">
-        {originalUrl ? (
-          <Button asChild variant="outline">
-            <a href={originalUrl} target="_blank" rel="noopener noreferrer">
-              阅读原文
-            </a>
-          </Button>
-        ) : null}
-        <Button asChild variant="ghost">
-          <Link href={`/content/${reading.id}`}>查看当前内容记录</Link>
-        </Button>
-      </div>
-      <Collapsible className="text-muted-foreground mt-6 text-sm">
-        <CollapsibleTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
-          >
-            <span className="min-w-0 text-left">证据记录与归入修订</span>
-            <ChevronDownIcon
-              aria-hidden="true"
-              data-icon="inline-end"
-              className="group-data-[state=open]:rotate-180"
-            />
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent forceMount className="data-[state=closed]:hidden">
-          <div className="mt-3 flex flex-col gap-y-2 break-all">
-            <p>内容版本：{member.content_version_id}</p>
-            <p>观察：{observation.id}</p>
-            <p>
-              加入修订：{member.added_revision}
-              {member.removed_revision
-                ? `；移除修订：${member.removed_revision}`
-                : ""}
-            </p>
+    <Item variant="muted" asChild>
+      <article className="p-6 sm:p-8">
+        <ItemContent className="min-w-0 gap-3">
+          <div className="flex flex-wrap gap-3">
+            <Badge variant="secondary">{reading.source_key}</Badge>
+            {version ? (
+              <Badge variant="secondary">
+                {scopeLabels[version.text_scope]}
+              </Badge>
+            ) : null}
+            <Badge variant="secondary">
+              {member.assignment_origin === "manual" ? "人工归入" : "模型归并"}
+            </Badge>
           </div>
-        </CollapsibleContent>
-      </Collapsible>
-    </article>
+          <ItemTitle className="line-clamp-none w-full">
+            <h3 className="mt-5">{version?.title ?? "成员内容"}</h3>
+          </ItemTitle>
+          <ItemDescription className="mt-3 line-clamp-none">
+            {observation.author_external_id
+              ? `作者：${observation.author_external_id} · `
+              : ""}
+            观察于 {new Date(observation.observed_at).toLocaleString("zh-CN")}
+          </ItemDescription>
+          {version?.text_scope === "summary" ||
+          version?.text_scope === "truncated" ? (
+            <ItemDescription className="mt-4 line-clamp-none">
+              此版本为{scopeLabels[version.text_scope]}，正文不代表完整原文。
+            </ItemDescription>
+          ) : null}
+          {version?.body ? (
+            <p className="mt-5 leading-8 break-words whitespace-pre-wrap">
+              {version.body}
+            </p>
+          ) : (
+            <ItemDescription className="mt-5 line-clamp-none">
+              此版本没有可读正文。
+            </ItemDescription>
+          )}
+          {version?.text_origin === "machine_extracted" ? (
+            <ItemDescription className="mt-4 line-clamp-none">
+              正文由机器提取。依据：{version.text_origin_ref}
+            </ItemDescription>
+          ) : null}
+          <div className="text-muted-foreground mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+            {metricValues.map(([label, count]) => (
+              <span key={label}>
+                {label}：{count === null ? "未知" : count}
+              </span>
+            ))}
+          </div>
+          {reading.current_visibility ? (
+            <ItemDescription className="mt-4 line-clamp-none">
+              {visibilityLabels[reading.current_visibility.status]}，状态观察于{" "}
+              {new Date(reading.current_visibility.observed_at).toLocaleString(
+                "zh-CN",
+              )}
+            </ItemDescription>
+          ) : null}
+          {version?.relations.length ? (
+            <div className="mt-6 flex flex-col gap-y-2">
+              {version.relations.map((relation, index) => (
+                <p
+                  key={`${relation.relation_type}:${relation.target_external_id}:${index}`}
+                  className="text-muted-foreground text-sm"
+                >
+                  {relation.relation_type === "quote" ? "引用" : "转帖"}：
+                  {relation.target_external_id}
+                  {relation.target_content_id ? (
+                    <Link
+                      href={`/content/${relation.target_content_id}`}
+                      className="ml-3 underline underline-offset-4"
+                    >
+                      查看引用内容
+                    </Link>
+                  ) : (
+                    "（本地引用证据不可读）"
+                  )}
+                </p>
+              ))}
+            </div>
+          ) : null}
+          {comment ? (
+            <Item variant="muted" asChild>
+              <section aria-label="代表评论" className="mt-6 p-5">
+                <ItemContent className="min-w-0 gap-3">
+                  <ItemTitle className="line-clamp-none w-full">
+                    <h4>代表评论的最新可读观察</h4>
+                  </ItemTitle>
+                  <ItemDescription className="mt-2 line-clamp-none">
+                    观察于{" "}
+                    {new Date(comment.observation.observed_at).toLocaleString(
+                      "zh-CN",
+                    )}
+                    ；评论未固定到事件成员版本。
+                  </ItemDescription>
+                  <p className="mt-3 leading-7 break-words whitespace-pre-wrap">
+                    {comment.observation.content_version?.body ??
+                      comment.observation.content_version?.title ??
+                      "无可读评论正文"}
+                  </p>
+                </ItemContent>
+              </section>
+            </Item>
+          ) : reading.representative_comment_state === "unavailable" ? (
+            <ItemDescription className="mt-6 line-clamp-none">
+              代表评论证据暂不可读。
+            </ItemDescription>
+          ) : null}
+          <div className="mt-6 flex flex-wrap gap-3">
+            {originalUrl ? (
+              <Button asChild variant="outline">
+                <a href={originalUrl} target="_blank" rel="noopener noreferrer">
+                  阅读原文
+                </a>
+              </Button>
+            ) : null}
+            <Button asChild variant="ghost">
+              <Link href={`/content/${reading.id}`}>查看当前内容记录</Link>
+            </Button>
+          </div>
+          <Collapsible className="text-muted-foreground mt-6 text-sm">
+            <CollapsibleTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
+              >
+                <span className="min-w-0 text-left">证据记录与归入修订</span>
+                <ChevronDownIcon
+                  aria-hidden="true"
+                  data-icon="inline-end"
+                  className="group-data-[state=open]:rotate-180"
+                />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent
+              forceMount
+              className="data-[state=closed]:hidden"
+            >
+              <div className="mt-3 flex flex-col gap-y-2 break-all">
+                <p>内容版本：{member.content_version_id}</p>
+                <p>观察：{observation.id}</p>
+                <p>
+                  加入修订：{member.added_revision}
+                  {member.removed_revision
+                    ? `；移除修订：${member.removed_revision}`
+                    : ""}
+                </p>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        </ItemContent>
+      </article>
+    </Item>
   );
 }

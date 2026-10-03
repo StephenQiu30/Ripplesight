@@ -1,4 +1,11 @@
 "use client";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Item,
+  ItemContent,
+  ItemDescription,
+  ItemTitle,
+} from "@/components/ui/item";
 
 import { useState } from "react";
 import { toast } from "sonner";
@@ -119,49 +126,59 @@ export function GroupExpansion({
         ) : null}
       </div>
       {mode ? (
-        <section
-          aria-live="polite"
-          className="bg-muted/30 rounded-lg border p-4"
-        >
-          {busy ? <p role="status">正在读取当前许可…</p> : null}
-          {failed ? (
-            <Empty>
-              <EmptyHeader>
-                <EmptyTitle>展开内容暂不可读</EmptyTitle>
-              </EmptyHeader>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void load(mode)}
-              >
-                重新展开
-              </Button>
-            </Empty>
-          ) : null}
-          {!failed && mode === "reports" ? (
-            <PublicItemCards items={reports} />
-          ) : null}
-          {!failed && mode === "developments"
-            ? developments.map((entry) => (
-                <section key={entry.fact_id}>
-                  <p className="text-muted-foreground text-xs">
-                    {publicationTime(entry.anchor_at)} · {entry.report_count}{" "}
-                    篇公开报道
-                  </p>
-                  <PublicItemCards items={[entry.representative]} />
-                </section>
-              ))
-            : null}
-          {cursor && !busy && !failed ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void load(mode, true)}
-            >
-              加载更多
-            </Button>
-          ) : null}
-        </section>
+        <Item variant="muted" asChild>
+          <section aria-live="polite" className="p-4">
+            <ItemContent className="min-w-0 gap-3">
+              {busy ? (
+                <Item role="status">
+                  <Spinner aria-hidden="true" />
+                  <ItemContent>
+                    <ItemDescription className="line-clamp-none">
+                      正在读取当前许可…
+                    </ItemDescription>
+                  </ItemContent>
+                </Item>
+              ) : null}
+              {failed ? (
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyTitle>展开内容暂不可读</EmptyTitle>
+                  </EmptyHeader>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void load(mode)}
+                  >
+                    重新展开
+                  </Button>
+                </Empty>
+              ) : null}
+              {!failed && mode === "reports" ? (
+                <PublicItemCards items={reports} />
+              ) : null}
+              {!failed && mode === "developments"
+                ? developments.map((entry) => (
+                    <section key={entry.fact_id}>
+                      <p className="text-muted-foreground text-xs">
+                        {publicationTime(entry.anchor_at)} ·{" "}
+                        {entry.report_count} 篇公开报道
+                      </p>
+                      <PublicItemCards items={[entry.representative]} />
+                    </section>
+                  ))
+                : null}
+              {cursor && !busy && !failed ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void load(mode, true)}
+                >
+                  加载更多
+                </Button>
+              ) : null}
+            </ItemContent>
+          </section>
+        </Item>
       ) : null}
     </div>
   );
@@ -183,10 +200,14 @@ export function PublicTimelineCards({
         <section key={card.key}>
           {!index ||
           day(page.cards[index - 1].anchor_at) !== day(card.anchor_at) ? (
-            <h2 className="bg-muted/50 mt-5 rounded-md px-3 py-2 text-sm font-medium">
-              {day(card.anchor_at)} ·{" "}
-              {String(page.day_counts?.[day(card.anchor_at)] ?? "")} 条精选
-            </h2>
+            <Item variant="muted" className="mt-5">
+              <ItemTitle>
+                <h2>
+                  {day(card.anchor_at)} ·{" "}
+                  {String(page.day_counts?.[day(card.anchor_at)] ?? "")} 条精选
+                </h2>
+              </ItemTitle>
+            </Item>
           ) : null}
           <PublicItemCards items={[card.item]} />
           {card.group?.latest_development ? (

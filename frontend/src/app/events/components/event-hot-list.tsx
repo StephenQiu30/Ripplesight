@@ -1,4 +1,12 @@
 "use client";
+import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Item,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+} from "@/components/ui/item";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -42,9 +50,14 @@ export function EventHotList({ topicId }: { topicId?: string }) {
         同一机构或来源组计一次，至少两个参与者并含编辑报道。
       </p>
       {state === "loading" ? (
-        <p className="text-muted-foreground mt-4" role="status">
-          正在读取热榜…
-        </p>
+        <Item className="mt-4" role="status">
+          <Spinner aria-hidden="true" />
+          <ItemContent>
+            <ItemDescription className="line-clamp-none">
+              正在读取热榜…
+            </ItemDescription>
+          </ItemContent>
+        </Item>
       ) : state === "error" ? (
         <div className="mt-4">
           <Alert>
@@ -59,34 +72,45 @@ export function EventHotList({ topicId }: { topicId?: string }) {
           </Button>
         </div>
       ) : !items.length ? (
-        <p className="text-muted-foreground mt-4">
-          当前没有满足独立来源条件的事件。
-        </p>
+        <Empty className="mt-4">
+          <EmptyHeader>
+            <EmptyDescription>
+              当前没有满足独立来源条件的事件。
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
-        <ol className="mt-5 grid gap-3 sm:grid-cols-2">
+        <ItemGroup className="mt-5 grid gap-3 sm:grid-cols-2">
           {items.map((item, index) => (
-            <li key={item.event_id} className="rounded-lg border p-4">
-              <Link
-                className="font-medium underline-offset-4 hover:underline"
-                href={`/events/${item.event_id}`}
-              >
-                {index + 1}. {item.representative?.title ?? "查看事件证据"}
-              </Link>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Badge variant="secondary">热度 {item.heat.toFixed(1)}</Badge>
-                <Badge variant="secondary">
-                  {item.participant_count} 个参与者
-                </Badge>
-                {!item.complete ? (
-                  <Badge variant="outline">覆盖待补全</Badge>
-                ) : null}
-              </div>
-              <p className="text-muted-foreground mt-3 text-sm">
-                {item.source_names.join(" · ")}
-              </p>
-            </li>
+            <Item
+              role="listitem"
+              variant="outline"
+              key={item.event_id}
+              className="p-4"
+            >
+              <ItemContent className="min-w-0 gap-3">
+                <Link
+                  className="font-medium underline-offset-4 hover:underline"
+                  href={`/events/${item.event_id}`}
+                >
+                  {index + 1}. {item.representative?.title ?? "查看事件证据"}
+                </Link>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Badge variant="secondary">热度 {item.heat.toFixed(1)}</Badge>
+                  <Badge variant="secondary">
+                    {item.participant_count} 个参与者
+                  </Badge>
+                  {!item.complete ? (
+                    <Badge variant="outline">覆盖待补全</Badge>
+                  ) : null}
+                </div>
+                <ItemDescription className="mt-3 line-clamp-none">
+                  {item.source_names.join(" · ")}
+                </ItemDescription>
+              </ItemContent>
+            </Item>
           ))}
-        </ol>
+        </ItemGroup>
       )}
     </section>
   );

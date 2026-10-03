@@ -1,3 +1,16 @@
+import {
+  NavigationMenu,
+  NavigationMenuList,
+  NavigationMenuItem,
+  NavigationMenuLink,
+} from "@/components/ui/navigation-menu";
+import { AlertDescription, Alert } from "@/components/ui/alert";
+import {
+  Item,
+  ItemContent,
+  ItemGroup,
+  ItemDescription,
+} from "@/components/ui/item";
 import { useId } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FieldGroup, FieldLabel, Field } from "@/components/ui/field";
@@ -47,42 +60,51 @@ export function BoardReading({
         </p>
         <RunStamp run={data.run} />
       </header>
-      <nav aria-label="模型榜分类" className="flex flex-wrap gap-2">
-        {data.tabs.map((tab) => (
-          <Button
-            key={tab.key}
-            variant={data.board.key === tab.key ? "secondary" : "ghost"}
-            asChild
-          >
-            <Link
-              href={tab.href}
-              aria-current={data.board.key === tab.key ? "page" : undefined}
-            >
-              {tab.name}
-            </Link>
-          </Button>
-        ))}
-      </nav>
-      <section
-        className="bg-muted/40 flex flex-col gap-y-3 rounded-xl p-5 sm:p-6"
-        aria-label="榜单解读"
+      <NavigationMenu
+        viewport={false}
+        className="max-w-full justify-start"
+        aria-label="模型榜分类"
       >
-        <p className="leading-7">{data.board.how_to_read}</p>
-        <p className="text-muted-foreground text-sm leading-6">
-          排名由加权 Kemeny
-          共识决定，支持指数基于固定锚点。指数不是能力差距或获胜概率；缺失证据不补分、不重新分配预算。
-        </p>
-        <p className="text-muted-foreground text-sm">
-          本轮 {data.board.model_count} 个合资格模型，{data.board.source_count}{" "}
-          个来源、{data.board.operator_count} 个运营方。
-        </p>
-        <Link
-          className="text-sm underline underline-offset-4"
-          href="/leaderboard/rules"
+        <NavigationMenuList className="flex-wrap justify-start gap-2">
+          {data.tabs.map((tab) => (
+            <NavigationMenuItem key={tab.key}>
+              <NavigationMenuLink asChild active={data.board.key === tab.key}>
+                <Link
+                  href={tab.href}
+                  aria-current={data.board.key === tab.key ? "page" : undefined}
+                >
+                  {tab.name}
+                </Link>
+              </NavigationMenuLink>
+            </NavigationMenuItem>
+          ))}
+        </NavigationMenuList>
+      </NavigationMenu>
+      <Item variant="muted" asChild>
+        <section
+          className="flex flex-col gap-y-3 p-5 sm:p-6"
+          aria-label="榜单解读"
         >
-          阅读计算规则
-        </Link>
-      </section>
+          <ItemContent className="min-w-0 gap-3">
+            <p className="leading-7">{data.board.how_to_read}</p>
+            <ItemDescription className="line-clamp-none leading-6">
+              排名由加权 Kemeny
+              共识决定，支持指数基于固定锚点。指数不是能力差距或获胜概率；缺失证据不补分、不重新分配预算。
+            </ItemDescription>
+            <ItemDescription className="line-clamp-none">
+              本轮 {data.board.model_count} 个合资格模型，
+              {data.board.source_count}
+              个来源、{data.board.operator_count} 个运营方。
+            </ItemDescription>
+            <Link
+              className="text-sm underline underline-offset-4"
+              href="/leaderboard/rules"
+            >
+              阅读计算规则
+            </Link>
+          </ItemContent>
+        </section>
+      </Item>
       <section className="flex flex-col gap-y-5" aria-label="模型排名">
         <form action={href} method="get">
           <FieldGroup className="flex flex-row flex-wrap items-center gap-4">
@@ -126,9 +148,9 @@ export function BoardReading({
           token。
         </p>
         {data.entries.length === 0 ? (
-          <p className="bg-muted/40 rounded-xl p-8 text-center">
-            当前筛选没有符合条件的模型
-          </p>
+          <Alert role="note" className="p-8">
+            <AlertDescription>当前筛选没有符合条件的模型</AlertDescription>
+          </Alert>
         ) : (
           <Table>
             <TableCaption>原始发布排名与固定锚点支持指数</TableCaption>
@@ -220,22 +242,26 @@ export function BoardReading({
           <p className="text-muted-foreground text-sm">
             这些模型尚未满足当前分类的独立证据资格，不能把未上榜解释为能力较低。
           </p>
-          <ul className="flex flex-wrap gap-3">
+          <ItemGroup className="flex flex-wrap gap-3">
             {data.pending.map((item) => (
-              <li
+              <Item
+                role="listitem"
+                variant="muted"
                 key={item.model.slug}
-                className="bg-muted/40 rounded-md px-3 py-2 text-sm"
+                className="px-3 py-2"
               >
-                <Link href={`/leaderboard/models/${item.model.slug}`}>
-                  {item.model.name}
-                </Link>
-                <span className="text-muted-foreground">
-                  {" "}
-                  · {item.sources} 个来源
-                </span>
-              </li>
+                <ItemContent className="min-w-0 gap-3">
+                  <Link href={`/leaderboard/models/${item.model.slug}`}>
+                    {item.model.name}
+                  </Link>
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · {item.sources} 个来源
+                  </span>
+                </ItemContent>
+              </Item>
             ))}
-          </ul>
+          </ItemGroup>
         </section>
       ) : null}
     </div>

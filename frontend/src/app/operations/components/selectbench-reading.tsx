@@ -1,4 +1,10 @@
 "use client";
+import {
+  Item,
+  ItemContent,
+  ItemTitle,
+  ItemDescription,
+} from "@/components/ui/item";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -416,33 +422,39 @@ export function SelectBenchReading({ token }: { token: string }) {
           </form>
           <div className="grid gap-4">
             {cases.items.map((row) => (
-              <article
-                key={row.case_id}
-                className="bg-muted/40 min-w-0 rounded-lg p-4"
-              >
-                <h3 className="font-medium">{row.title}</h3>
-                <p className="text-muted-foreground text-sm">
-                  {row.case_id} · gold {row.gold} · {row.stratum ?? "未分层"}
-                </p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {Object.entries(row.by_model).map(([name, value]) => {
-                    const result = value as HotKeyAPI.SelectBenchCaseInput;
-                    return (
-                      <div key={name} className="min-w-0">
-                        <p className="break-all">
-                          {name} · {result.decision ?? "结果失败"} ·{" "}
-                          {result.score == null
-                            ? "分数未知"
-                            : `${result.score} 分`}
-                        </p>
-                        <p className="text-muted-foreground text-sm">
-                          {result.error_code ?? result.reason ?? "无理由说明"}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </article>
+              <Item variant="muted" key={row.case_id} asChild>
+                <article className="min-w-0 p-4">
+                  <ItemContent className="min-w-0 gap-3">
+                    <ItemTitle className="line-clamp-none w-full">
+                      <h3>{row.title}</h3>
+                    </ItemTitle>
+                    <ItemDescription className="line-clamp-none">
+                      {row.case_id} · gold {row.gold} ·{" "}
+                      {row.stratum ?? "未分层"}
+                    </ItemDescription>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      {Object.entries(row.by_model).map(([name, value]) => {
+                        const result = value as HotKeyAPI.SelectBenchCaseInput;
+                        return (
+                          <div key={name} className="min-w-0">
+                            <p className="break-all">
+                              {name} · {result.decision ?? "结果失败"} ·{" "}
+                              {result.score == null
+                                ? "分数未知"
+                                : `${result.score} 分`}
+                            </p>
+                            <p className="text-muted-foreground text-sm">
+                              {result.error_code ??
+                                result.reason ??
+                                "无理由说明"}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ItemContent>
+                </article>
+              </Item>
             ))}
           </div>
           {cases.next_cursor && (
