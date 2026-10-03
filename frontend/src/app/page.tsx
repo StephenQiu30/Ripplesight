@@ -14,7 +14,7 @@ export const metadata = {
   ...welcomeMetadata(
     "/",
     "知微见澜 Ripplesight",
-    "公开阅读最新资讯、事件脉络、行业专题与模型评测，登录后定制个人关注和周报。",
+    "公开阅读最新资讯、事件脉络、行业专题与模型评测，登录后配置个人关注、查看已有报告。",
   ),
   title: { absolute: "知微见澜 Ripplesight · 开放的信息平台" },
 };

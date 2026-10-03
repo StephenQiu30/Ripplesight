@@ -2,7 +2,7 @@
 
 技术栈：pnpm、Next.js App Router、React、TypeScript、shadcn/ui、Radix UI、Tailwind CSS、Axios、ESLint、Prettier。
 
-首页 实现在 `src/app/components/`，采用 Vercel 黑白留白风格，作为公开 SEO Welcome。主入口“开始使用”进入 `/login`，登录后默认进入 `/topics`；来源能力、主题配置及保存复用生成 API。指南和示例只提供简短说明。
+首页实现在 `src/app/components/`，沿用 [DESIGN](DESIGN.md) 的黑白留白、语义令牌和统一 BasicLayout，展示真实公开资讯、事件、专题和周刊。主入口“浏览资讯”进入 `/discover`，个人关注入口按真实会话进入 `/workspace` 或 `/login?returnTo=%2Fworkspace`；通用登录默认仍为 `/topics`。来源能力、主题配置及保存复用生成 API。
 
 业务页面按当前 Swagger 重建：关注的基础设置包含名称、关键词和来源，进阶规则与频率按需展开；来源页优先配置，覆盖信息放在二级页签。相关内容、热榜、采集记录及已有报告只呈现真实接口结果。共用外壳位于 `src/layout/`，固定头尾与正文滚动区，各页面共享宽度、边距、字体与语义颜色。
 
@@ -25,13 +25,15 @@ Next 配置与 OpenAPI 生成器从根 `.env` 仅加载 `HOTKEY_API_ORIGIN`、`H
 
 本机页面统一使用 `HOTKEY_WEB_ORIGIN` 指定的地址（默认 `http://127.0.0.1:8666`）。同协议、同端口的 `localhost` / `127.0.0.1` / `[::1]` 页面访问先跳转到该地址，避免登录 Origin、会话 Cookie 和 OAuth 回调使用不同主机；API 写入仍严格校验原 Origin，不重写来源或重放跨源提交。GitHub OAuth App 需配置 `HOTKEY_GITHUB_CLIENT_ID`、`HOTKEY_GITHUB_CLIENT_SECRET`，Callback URL 为 `${HOTKEY_WEB_ORIGIN}/api/identity/github/callback`，OAuth App 的授权仅请求 `user:email`；密钥只放本机未跟踪 `.env`。
 
-公开页面为首页、关于、隐私、条款、联系与变更说明，保留 SEO metadata、robots 和 sitemap。`/login` 提供账号密码、GitHub、邮箱验证码三种方式；第三方与邮件可用性读取实际服务配置。登录后才能访问原“更多”中的工作区页面，默认进入 `/topics` 或安全站内原目标。工作区始终 noindex，沿用原导航与统一 BasicLayout；账户菜单支持退出及 `/account` 凭据设置。来源授权与凭据仍独立处理。
+公开页面包含首页和说明、`/discover`及专题/故事、`/items/[contentId]`、公共日周月刊目录和合法刊期、已发布模型榜。资讯和刊物固定读取明确的公共发布分区并复核当前许可，未配置时显示未发布，各块读取失败独立保留恢复入口；不混用个人采集分区。`/login` 提供账号密码、GitHub、邮箱验证码，第三方与邮件可用性读取实际配置。
+
+个人主题、报告生成/发送、来源和管理工作区需要真实登录并始终 noindex，账户菜单支持退出及 `/account` 凭据设置；首页个人入口安全回跳 `/workspace`，通用登录默认 `/topics`。来源授权与凭据独立。公共刊物不代表个人主题周报执行已完成；个人周报和无模型基础公开阅读的实现缺口见 [BACKLOG](../BACKLOG.md)。个人入口文案引导配置关注和阅读已有报告，完整周期生成按对应验收成立后再承诺。
 
 账户会话由后端验证并通过 HttpOnly Cookie 保存；同源代理仅转发 HotKey 身份 Cookie 与对应 Set-Cookie，写入使用现行 CSRF 合同。登录服务故障显示可恢复状态，不将网络失败当成退出。所有登录、邮箱验证、OAuth 开始、退出和凭据设置调用 Umi 生成的 identity API，不手写请求。
 
 页面访问合同见 [Design001 §9.2](../docs/design/001-热点舆情监控平台总体设计.md#92-公开欢迎页登录与个人数据访问)，验证边界见 [共享验收](../docs/acceptance/001-共享运行门槛验收.md)。
 
-公开 metadata 的 origin 使用 `NEXT_PUBLIC_SITE_ORIGIN` 或服务端 `HOTKEY_WEB_ORIGIN`，本机默认为 `http://127.0.0.1:8666`；部署时设置实际站点地址。robots 与 sitemap 不列出登录或业务路由。交互 HTML 保持逐请求 CSP nonce。
+公开 metadata 的 origin 使用 `NEXT_PUBLIC_SITE_ORIGIN` 或服务端 `HOTKEY_WEB_ORIGIN`，本机默认为 `http://127.0.0.1:8666`；部署时设置实际站点地址。sitemap 列公开说明和阅读目录，排除 `/login` 与无列表语义的 `/items`；单篇/故事/刊期 metadata 按真实 DTO 的索引许可决定 noindex。robots 声明公开阅读入口，私人工作区保持认证与 noindex；robots 不是权限控制。交互 HTML 保持逐请求 CSP nonce。
 
 ## 目录
 

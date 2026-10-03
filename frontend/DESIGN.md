@@ -29,7 +29,7 @@
 
 ## 公开信息首页与个人工作台
 
-首页是公开阅读入口，保持黑白留白与现有 BasicLayout。正文优先展示最新资讯及分类、值得关注的事件、公开周报和专题/模型榜入口，主操作直接浏览资讯；登录只在定制个人关注、生成/发送周报及管理时需要。使用现有 Umi publication 与刊物目录函数并行读取，每块独立处理空/错误；未配置公开发布账号显示未发布，真实错误显示重载入口，无模拟资讯、指标或默认账户。
+首页是公开阅读入口，保持黑白留白与现有 BasicLayout。正文优先展示最新资讯及分类、值得关注的事件、公开周报和专题/模型榜入口，主操作直接浏览资讯；个人关注、已有报告与管理使用真实会话。首页个人CTA引导配置关注/查看已有报告，个人周报执行与独立调度按 Design005 完成相应验收后再承诺；公共周刊保持独立阅读入口。使用现有 Umi publication 与刊物目录函数并行读取，每块独立处理空/错误；未配置公开发布账号显示未发布，真实错误显示重载入口，无模拟资讯、指标或默认账户。
 
 | 组件                      | 领域与复用范围 | 目标路径                                                          | 数据与状态                                                                 |
 | ------------------------- | -------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------- |
@@ -74,7 +74,7 @@ GitHub 按钮使用官方 GitHub-Mark 栅格素材 `public/brand/github-mark.png
 
 - 公共协议遵循 PROJECT.md 与 AGENTS.md 的现行契约；运行 OpenAPI、类型化资源和 ErrorView 共同门禁已接入。本文件仅细化 Web 消费与展示，不另定义返回模型。
 - 资源、分页、受理 DTO 和 ErrorView 来自同提交运行时 OpenAPI；错误读取 details，请求 ID 支持响应头/body 回退。HTTP、网络、超时、取消和协议失败分开；204 与文件不解析为 JSON，失败任务查询与合法空结果保持正常读取语义。
-- 传输层不全局弹提示、不按 message 分支、不自动重试写操作。字段错误就地显示，页面失败保留恢复入口，操作结果使用适当短时反馈；旧数据刷新失败要标明过期。
+- 传输层不全局弹提示、不按 message 分支、不自动重试写操作。提交与字段校验错误由业务组件使用 Sonner，字段保留 `aria-invalid`/`data-invalid` 和纠错焦点；读取失败保留 Empty/Alert 的恢复入口，持久任务失败和权限/覆盖缺口仍作为内容。旧数据刷新失败要标明过期。
 - Umi OpenAPI 将端点和类型直接生成到 `src/api/`。
 - 所有生成请求统一使用 `src/request.ts`，页面不得手写端点或创建第二套 HTTP 客户端。
 - ESLint 拒绝业务源码直接导入传输函数/HTTP 客户端或调用网络原语；页面可使用生成函数、传输错误类和请求选项类型。透明同源代理只做通用转发，生成代码只由生成器更新。
@@ -129,7 +129,7 @@ GitHub 按钮使用官方 GitHub-Mark 栅格素材 `public/brand/github-mark.png
 
 ## 公开资讯与分发
 
-`/discover`组合PublicItemCards、筛选和selected同步；`/items/[contentId]`组合ItemReader、引用、原译文/目录/许可状态；`/agent`说明真实五工具与Markdown；`/feeds`选择已核许可的摘要/全文/分类/刊期RSS；`/publication/manage`组合PublicationManager管理版本化来源许可、纠错和本地重建。PublicItemCards、PublicationFailure、PosterDownload跨页面复用归components/publication，其余归路由专属components；唯一数据来源为运行OpenAPI生成gongkaifabu/gongkaifenfa/quanwenfanyi。原/与品牌不改；正文/媒体默认安全原站链接，镜像独立任务未完成时不可标已缓存。覆盖加载、空、失败重试、部分译文/unknown、权限403与版本409、重建进度；operator令牌只用户会话内存，不内嵌源码或localStorage。
+`/discover`组合PublicItemCards、筛选和selected同步；`/items/[contentId]`组合ItemReader、引用、原译文/目录/许可状态；`/agent`说明真实五工具与Markdown；`/feeds`选择已核许可的摘要/全文/分类/刊期RSS；`/publication/manage`组合PublicationManager管理版本化来源许可、纠错和本地重建。PublicItemCards与PublicationFailure在`src/components/publication/reading-parts.tsx`，PosterDownload在`src/components/publication/poster-download.tsx`，跨页面复用；其余归路由专属components。唯一数据来源为运行OpenAPI生成gongkaifabu/gongkaifenfa/quanwenfanyi。正文/媒体默认安全原站链接，镜像独立任务未完成时不可标已缓存。覆盖加载、空、失败重试、部分译文/unknown、权限403与版本409、重建进度；operator令牌只用户会话内存，不内嵌源码或localStorage。
 
 `/discover/stories/[eventId]`专属story-reader读取公开故事DTO及复用PublicItemCards，ALL成员撤回时整页隐藏，不用内部/events端点降级拼稿。`/editorial-sources`专属配置/运行组件读取bianjilaiyuan，按RSS、HTML、JSON、X、公众号和external区别显式字段、currentversion、reason/opid、运行unknown和人工动作；参与模式不自动扩大公开许可，令牌只在当前会话内存。
 
@@ -137,7 +137,7 @@ GitHub 按钮使用官方 GitHub-Mark 栅格素材 `public/brand/github-mark.png
 
 `/discover/starred`复用publication本机状态组件，500收藏/5000已读、ID导入导出、坏数据/存储失败与跨tab变更可见，不持久正文。`/about`、`/privacy`、`/terms`、`/changelog`是本地说明；`/contact`只读启用后的实际联系DTO；`/site/manage`专属配置组件以会话内运营令牌保存CAS/原因/图片，禁用后旧二维码不可读。所有业务数据仍经生成客户端，静态说明不显示伪统计。
 
-`/reports/[reportId]/[key]`（reportId严格为kind）为公开刊期只读阅读页，kind仅daily/weekly/monthly，专属PublicEditionReader消费getPublicEdition及复用publication稿件组件。与原监控主题报告及/editions修订操作分离，公开稿只读最新完整修订且ALL引用当前许可有效；404撤回整稿、错误可重试、无生成或编辑控件。公开故事/刊期/专题Metadata按实际DTO.indexable决定noindex；故事和刊期要求所有固定叙事成员的当前索引许可。IndexNow根验证文件经固定Next rewrite及代理白名单，不开放任意文本文件代理。
+`/reports/[reportId]/[key]`（reportId严格为kind）为公开刊期只读阅读页，kind仅daily/weekly/monthly；`/reports/{kind}/archive`为对应公开历史目录，守卫只放行这三个精确路径及合法刊期，不放行UUID报告或archive下任意路径。专属PublicEditionReader消费getPublicEdition，历史目录消费listPublicEditionCatalogue并复用publication稿件组件。与原监控主题报告及/editions修订操作分离，公开稿只读最新完整修订且ALL引用当前许可有效；404撤回整稿、错误可重试、无生成或编辑控件。公开故事/刊期/专题Metadata按实际DTO.indexable决定noindex；故事和刊期要求所有固定叙事成员的当前索引许可。IndexNow根验证文件经固定Next rewrite及代理白名单，不开放任意文本文件代理。
 
 账户设置在密码表单下展示“登录方式”：当前邮箱及绑定/更换按钮、GitHub连接状态及连接按钮。邮箱验证使用原生Dialog、FieldGroup和Input，验证码限时且发送有冷却；GitHub复用OAuth App回调，成功/失败用Sonner反馈。加载时按钮禁用，离页/关闭邮箱Dialog中止短请求并忽略失效响应，不追加HTTP取消按钮。页面随轮换后的会话更新，旧邮箱凭据表单不继续使用旧挑战。专属组件为 `src/app/account/components/identity-connections.tsx`，请求仅用同提交生成的getLoginOptions、sendEmailLinkCode、linkIdentityEmail、startGithubLink。
 

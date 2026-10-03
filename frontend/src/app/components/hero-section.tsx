@@ -19,7 +19,7 @@ export function HeroSection() {
           在这里，看见正在发生的变化。
         </h1>
         <p className="text-muted-foreground mt-5 max-w-xl text-base leading-7">
-          从最新资讯到事件脉络，沿着来源了解技术、产品与行业。公开内容随时阅读，登录后定制关注与周报。
+          从最新资讯到事件脉络，沿着来源了解技术、产品与行业。公开内容随时阅读，登录后配置个人关注、查看已有报告。
         </p>
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-3">
@@ -31,7 +31,7 @@ export function HeroSection() {
         </Button>
         <Button asChild variant="outline">
           <Link href={session ? "/workspace" : "/login?returnTo=%2Fworkspace"}>
-            {session ? "我的工作台" : "定制我的周报"}
+            {session ? "我的工作台" : "定制我的关注"}
           </Link>
         </Button>
       </div>
