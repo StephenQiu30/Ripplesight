@@ -33,6 +33,8 @@ class EditorialContentIngestService:
         if not self._session.in_transaction():
             raise RuntimeError("editorial content ingestion requires the caller's transaction")
         m = command.material
+        original_body = m.body_text if m.body_status == "ok" else m.excerpt
+        original_body = original_body if original_body and original_body.strip() else None
         payload: dict[str, object] = {
             "object_type": "post",
             "external_id": m.external_id or m.identity_key,
@@ -43,7 +45,7 @@ class EditorialContentIngestService:
             "text_scope": "full" if m.body_status == "ok" else "summary",
             "text_origin": "source",
             "title": m.title,
-            "body": m.body_text if m.body_status == "ok" else m.excerpt,
+            "body": original_body,
         }
         admission = SourceAccessPolicyService(
             self._session, clock=self._clock
@@ -72,6 +74,7 @@ class EditorialContentIngestService:
             data_class=DataClass.STRUCTURED,
             collected_at=command.observed_at,
             payload={
+                "canonical_url": m.url,
                 "body": m.body_html
                 if m.content_format == "html"
                 else m.body_markdown

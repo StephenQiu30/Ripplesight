@@ -220,7 +220,7 @@ class EditorialRunView(OutputModel):
 
 
 class EditorialPublicationInputView(OutputModel):
-    run: EditorialRunView
+    run: EditorialRunView | None
     source: EditorialSourceView
     material: EditorialMaterial
     timeline_at: datetime

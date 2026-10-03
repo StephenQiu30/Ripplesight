@@ -98,7 +98,7 @@ class PublicationOverrideInput(InputModel):
 class FrozenPublicationReference(OutputModel):
     content_id: UUID
     content_version_id: UUID
-    editorial_run_id: UUID
+    editorial_run_id: UUID | None
     manual_version: int
     source_profile_revision: int
     policy_revision: int
@@ -112,6 +112,8 @@ class FrozenPublicationReference(OutputModel):
 
 
 class ProjectionView(FrozenPublicationReference):
+    analysis_state: Literal["not_analyzed", "complete"] = "complete"
+    summary_origin: Literal["source", "model", "none"] = "model"
     source_key: str
     source_name: str
     source_kind: str
@@ -166,6 +168,9 @@ class PublicSourceView(OutputModel):
 
 
 class PublicItemView(OutputModel):
+    analysis_state: Literal["not_analyzed", "complete"] = "complete"
+    summary_origin: Literal["source", "model", "none"] = "model"
+    backfill: bool | None = None
     id: UUID
     revision: int
     title: str
@@ -229,7 +234,16 @@ class PublicRelatedStoryView(OutputModel):
     supporting_reports: int
 
 
+class PublicSourceStatusView(OutputModel):
+    source_key: str
+    name: str
+    enabled: bool
+    health: Literal["unknown", "ok", "degraded", "failing"]
+    last_success_at: datetime | None
+
+
 class PublicItemsPage(OutputModel):
+    source_status: list[PublicSourceStatusView] = Field(default_factory=list)
     items: list[PublicItemView]
     next_cursor: str | None
     snapshot_at: datetime

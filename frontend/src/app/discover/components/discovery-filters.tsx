@@ -22,6 +22,7 @@ export function DiscoveryFilters({
   by,
   params,
   categories,
+  sources = [],
 }: {
   mode: "selected" | "all";
   window: "24h" | "7d";
@@ -30,11 +31,13 @@ export function DiscoveryFilters({
   by: "timeline" | "published";
   params: Record<string, string | undefined>;
   categories: readonly (readonly [string, string])[];
+  sources?: readonly { key: string; name: string }[];
 }) {
   const fieldId = useId();
 
   const [selectedCategory, setSelectedCategory] = useState(category ?? "");
   const [selectedChannel, setSelectedChannel] = useState(channel ?? "");
+  const [selectedSource, setSelectedSource] = useState(params.source_key ?? "");
   return (
     <form method="get" className="my-7">
       <FieldGroup className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -174,13 +177,41 @@ export function DiscoveryFilters({
         </Field>
         <Field className="min-w-0">
           <FieldLabel htmlFor={`${fieldId}-page-field-6`}>来源</FieldLabel>
-          <Input
+          <Select
             name="source_key"
-            defaultValue={params.source_key}
-            maxLength={64}
-            placeholder="来源标识"
-            id={`${fieldId}-page-field-6`}
-          />
+            value={selectedSource}
+            onValueChange={(value) =>
+              setSelectedSource(value === "__none__" ? "" : value)
+            }
+          >
+            <SelectTrigger
+              id={`${fieldId}-page-field-6`}
+              className="w-full min-w-0"
+            >
+              <SelectValue placeholder="全部来源" />
+            </SelectTrigger>
+            <SelectContent position="popper">
+              <SelectGroup>
+                <SelectLabel className="sr-only">来源</SelectLabel>
+                <SelectItem value="__none__">全部来源</SelectItem>
+                {sources.map((source) => (
+                  <SelectItem
+                    key={source.key}
+                    value={source.key}
+                    className="whitespace-normal"
+                  >
+                    {source.name}
+                  </SelectItem>
+                ))}
+                {selectedSource &&
+                !sources.some((source) => source.key === selectedSource) ? (
+                  <SelectItem value={selectedSource}>
+                    指定来源（暂无可读资料）
+                  </SelectItem>
+                ) : null}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </Field>
         <Field className="min-w-0">
           <FieldLabel htmlFor={`${fieldId}-page-field-7`}>标签</FieldLabel>

@@ -194,5 +194,8 @@ def search_in_transaction(
         else None
     )
     return PublicItemsPage(
-        items=[item[3] for item in page], next_cursor=next_cursor, snapshot_at=as_of
+        items=[item[3] for item in page],
+        next_cursor=next_cursor,
+        snapshot_at=as_of,
+        source_status=reader.source_status_in_transaction(owner_id=owner_id),
     )

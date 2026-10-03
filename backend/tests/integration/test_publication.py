@@ -410,8 +410,16 @@ def test_republish_admission_outbox_restart_and_unpublished_completed_material(
         )
     calls = []
 
-    def interrupt(sequence, checkpoint):
+    def persist(sequence, checkpoint):
+        nonlocal lease
         calls.append((sequence, checkpoint))
+        with sessions() as session:
+            lease = JobExecutionService(
+                session, lease_seconds=30, clock=lambda: execution_at
+            ).save_checkpoint(lease, sequence=sequence, checkpoint=checkpoint)
+
+    def interrupt(sequence, checkpoint):
+        persist(sequence, checkpoint)
         raise RuntimeError("controlled restart after business page commit")
 
     executor = PublicationRepublishExecutor(sessions, clock=lambda: execution_at)
@@ -419,8 +427,11 @@ def test_republish_admission_outbox_restart_and_unpublished_completed_material(
         executor.execute(message, lease, checkpoint=interrupt)
     with sessions.begin() as session:
         assert session.execute(text("SELECT count(*) FROM publication_records")).scalar_one() == 100
-    result = executor.execute(message, lease)
+    assert lease.checkpoint_sequence == 1
+    result = executor.execute(message, lease, checkpoint=persist)
     assert result.status == JobStatus.SUCCEEDED
+    assert lease.checkpoint_sequence == 2
+    assert [sequence for sequence, _ in calls] == [1, 2]
     assert executor.execute(message, lease).status == JobStatus.SUCCEEDED
     with sessions.begin() as session:
         assert session.execute(

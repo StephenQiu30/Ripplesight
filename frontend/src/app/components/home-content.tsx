@@ -26,6 +26,7 @@ import {
 import {
   categories,
   PublicItemCards,
+  PublicSourceStatus,
 } from "@/components/publication/reading-parts";
 import { useIdentitySession } from "@/components/auth/session-context";
 import { HeroSection } from "./hero-section";
@@ -36,6 +37,7 @@ export type HomeReading = {
   topics: HotKeyAPI.PublicTopicSummaryView[];
   editions: HotKeyAPI.PublicEditionIndexView[];
   unavailable: string[];
+  sourceStatus?: HotKeyAPI.PublicSourceStatusView[];
 };
 
 const emptyReading: HomeReading = {
@@ -96,7 +98,7 @@ export function HomeContent({
               </h2>
             </div>
             <Button asChild variant="ghost" size="sm">
-              <Link href="/discover">
+              <Link href="/discover?mode=all">
                 全部资讯
                 <ArrowUpRightIcon data-icon="inline-end" />
               </Link>
@@ -119,6 +121,7 @@ export function HomeContent({
               ))}
             </NavigationMenuList>
           </NavigationMenu>
+          <PublicSourceStatus sources={reading.sourceStatus ?? []} />
           {reading.items.length ? (
             <PublicItemCards items={reading.items} />
           ) : (

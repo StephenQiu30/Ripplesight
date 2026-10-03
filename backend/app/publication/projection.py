@@ -42,15 +42,25 @@ def derive_projection(
     indexing_enabled: bool = False,
 ) -> ProjectionView:
     material, source, run = snapshot.material, snapshot.source, snapshot.run
-    result = run.result
-    if result is None or run.status != "complete":
+    result = run.result if run else None
+    if run is not None and (result is None or run.status != "complete"):
         raise ValueError("publication requires completed editorial evidence")
     manual = override or {}
-    writing = result.writing
+    writing = result.writing if result else None
     title = writing.title_zh.strip() if writing else material.title.strip()
-    summary = writing.summary_zh.strip() if writing and writing.summary_zh.strip() else None
-    eligible = is_pool_eligible(policy.participation_mode, result.relevance, title, summary)
-    selected = is_selectable(eligible, result.selected, source.tier)
+    summary = (
+        writing.summary_zh.strip()
+        if writing and writing.summary_zh.strip()
+        else material.excerpt.strip() or None
+        if result is None
+        else None
+    )
+    eligible = (
+        is_pool_eligible(policy.participation_mode, result.relevance, title, summary)
+        if result is not None
+        else policy.participation_mode == "editorial" and bool(title and material.url)
+    )
+    selected = is_selectable(eligible, result.selected if result else None, source.tier)
     visibility = cast(
         Visibility,
         "withdrawn"
@@ -73,16 +83,16 @@ def derive_projection(
     )
     tags = display_tags(
         result.tags_override
-        if result.tags_override is not None
+        if result and result.tags_override is not None
         else result.structure.tags
-        if result.structure
+        if result and result.structure
         else writing.tags or []
         if writing
         else []
     )
     digest = fingerprint(
         {
-            "run": run.model_dump(mode="json"),
+            "run": run.model_dump(mode="json") if run else None,
             "material": material.model_dump(mode="json"),
             "source": source.model_dump(mode="json"),
             "policy": policy.model_dump(mode="json"),
@@ -96,17 +106,19 @@ def derive_projection(
     return ProjectionView(
         content_id=material.content_id,
         content_version_id=material.content_version_id,
-        editorial_run_id=run.id,
-        manual_version=run.manual_version,
+        editorial_run_id=run.id if run else None,
+        manual_version=run.manual_version if run else 0,
+        analysis_state="complete" if result else "not_analyzed",
+        summary_origin="model" if writing and summary else "source" if summary else "none",
         source_profile_revision=source.revision,
         policy_revision=policy.revision,
         publication_revision=previous.publication_revision if previous else 1,
-        event_id=grouping.event_id if grouping else None,
-        event_revision=grouping.event_revision if grouping else None,
-        fact_id=grouping.fact_id if grouping else None,
-        root_fact_id=grouping.root_fact_id if grouping else None,
-        fact_revision=grouping.fact_revision if grouping else None,
-        topic_id=grouping.topic_id if grouping else None,
+        event_id=grouping.event_id if grouping and result else None,
+        event_revision=grouping.event_revision if grouping and result else None,
+        fact_id=grouping.fact_id if grouping and result else None,
+        root_fact_id=grouping.root_fact_id if grouping and result else None,
+        fact_revision=grouping.fact_revision if grouping and result else None,
+        topic_id=grouping.topic_id if grouping and result else None,
         source_key=material.source_key,
         source_name=source.name,
         source_kind=source.source_kind,
@@ -114,14 +126,14 @@ def derive_projection(
         visibility=visibility,
         eligible=eligible,
         selected=selected,
-        silent=result.silent,
+        silent=result.silent if result else False,
         title=title,
         original_title=material.title.strip() if material.title.strip() != title else None,
         summary=summary,
         reason=writing.reason_zh if selected and writing else None,
-        category=result.structure.category if result.structure else None,
+        category=result.structure.category if result and result.structure else None,
         tags=tags,
-        score=result.score,
+        score=result.score if result else None,
         channel="x" if source.source_kind == "x_search" else "news",
         url=material.url,
         published_at=material.published_at,

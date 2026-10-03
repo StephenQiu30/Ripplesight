@@ -37,3 +37,27 @@ it("submits the existing query fields and returns category/channel to empty valu
     expect(query.get("cursor")).toBeNull();
   });
 });
+
+it("shows readable source names while submitting stable keys and supports all sources", async () => {
+  render(
+    <DiscoveryFilters
+      mode="all"
+      window="7d"
+      by="timeline"
+      params={{ source_key: "ed_rss_example" }}
+      categories={[]}
+      sources={[
+        { key: "ed_rss_example", name: "arXiv 研究" },
+        { key: "ed_json_example", name: "Crossref 元数据" },
+      ]}
+    />,
+  );
+  const source = screen.getByLabelText("来源");
+  expect(source.textContent).toContain("arXiv 研究");
+  expect(source.textContent).not.toContain("ed_rss_example");
+  const form = screen.getByRole("button", { name: "查看" }).closest("form")!;
+  await selectOption(source, "Crossref 元数据");
+  expect(new FormData(form).get("source_key")).toBe("ed_json_example");
+  await selectOption(source, "全部来源");
+  expect(new FormData(form).get("source_key")).toBe("");
+});

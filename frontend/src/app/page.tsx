@@ -29,6 +29,10 @@ export default async function Home() {
   ]);
   const reading: HomeReading = {
     items: results[0].status === "fulfilled" ? results[0].value.items : [],
+    sourceStatus:
+      results[0].status === "fulfilled"
+        ? (results[0].value.source_status ?? [])
+        : [],
     stories: results[1].status === "fulfilled" ? results[1].value.stories : [],
     topics: results[2].status === "fulfilled" ? results[2].value.topics : [],
     editions: results[3].status === "fulfilled" ? results[3].value.entries : [],

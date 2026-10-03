@@ -66,6 +66,8 @@ def list_editorial_event_inputs_in_transaction(
             )
             for item in inputs.values():
                 run, material = item.run, item.material
+                if run is None:
+                    continue
                 row = session.get(EditorialRun, run.id)
                 if (
                     row is None

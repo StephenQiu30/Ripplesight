@@ -90,7 +90,12 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
       <MarkItemRead id={item.id} />
       <div className="text-muted-foreground mb-5 flex flex-wrap gap-4 text-xs">
         <span>{item.source.name}</span>
-        <span>{publicationTime(item.published_at ?? item.timeline_at)}</span>
+        <span>
+          {item.published_at ? "发布于 " : "发现于 "}
+          {publicationTime(item.published_at ?? item.timeline_at)}
+        </span>
+        {item.backfill ? <span>历史导入</span> : null}
+        {item.analysis_state === "not_analyzed" ? <span>未分析</span> : null}
         <span>公开修订 {item.revision}</span>
       </div>
       <h1 className="max-w-4xl text-3xl leading-tight font-medium tracking-tight sm:text-4xl">
@@ -103,7 +108,12 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
       ) : null}
       {item.summary ? (
         <p className="text-muted-foreground my-7 max-w-3xl text-base leading-8">
+          {item.summary_origin === "source" ? <span>来源摘要： </span> : null}
           {item.summary}
+        </p>
+      ) : item.analysis_state === "not_analyzed" ? (
+        <p className="text-muted-foreground my-7 text-sm">
+          来源未提供摘要，可前往原文阅读。
         </p>
       ) : null}
       <div className="my-7 flex flex-wrap items-start gap-3">

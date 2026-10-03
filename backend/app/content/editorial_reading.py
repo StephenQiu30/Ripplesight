@@ -21,6 +21,75 @@ from jobs.schemas import CollectionScanKind
 from jobs.services import load_content_job_context
 
 
+def scan_editorial_content_ids_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    limit: int,
+    after: UUID | None = None,
+    source_key: str | None = None,
+) -> tuple[UUID, ...]:
+    """Scan stored post identities; publication performs the live permission check."""
+    if not session.in_transaction() or not 1 <= limit <= 1001:
+        raise ValueError("content identity scan requires a bounded caller transaction")
+    query = select(ContentRecord.id).where(
+        ContentRecord.owner_id == owner_id, ContentRecord.object_type.in_(("post", "webpage"))
+    )
+    if source_key is not None:
+        query = query.where(ContentRecord.source_key == source_key)
+    if after is not None:
+        query = query.where(ContentRecord.id > after)
+    return tuple(session.scalars(query.order_by(ContentRecord.id).limit(limit)))
+
+
+def load_latest_editorial_content_in_transaction(
+    session: Session, *, owner_id: UUID, content_ids: tuple[UUID, ...], now: datetime
+) -> dict[UUID, EventContentReadView]:
+    """Read original fixed versions without creating an analysis run or a request."""
+    if not session.in_transaction() or len(content_ids) > 1000:
+        raise ValueError("raw content reads require a bounded caller transaction")
+    if not content_ids:
+        return {}
+    rows = session.execute(
+        select(ContentObservation.content_id, ContentObservation.content_version_id)
+        .where(
+            ContentObservation.owner_id == owner_id,
+            ContentObservation.content_id.in_(content_ids),
+            ContentObservation.content_version_id.is_not(None),
+            ContentObservation.id.in_(
+                readable_resource_ids_query(
+                    owner_id=owner_id, resource_type="content_observation", now=now
+                )
+            ),
+        )
+        .distinct(ContentObservation.content_id)
+        .order_by(
+            ContentObservation.content_id,
+            ContentObservation.observed_at.desc(),
+            ContentObservation.received_at.desc(),
+            ContentObservation.id.desc(),
+        )
+    ).all()
+    result = {}
+    for row in rows:
+        reference = EventContentReadReference(content_id=row[0], content_version_id=row[1])
+        item = frozen_editorial_content_in_transaction(
+            session, owner_id=owner_id, reference=reference, now=now
+        )
+        if item is None:
+            continue
+        try:
+            require_editorial_content_permission_in_transaction(
+                session, owner_id=owner_id, reference=reference, now=now, lock_policies=False
+            )
+        except ApplicationError as error:
+            if error.code != "editorial_material_unavailable":
+                raise
+            continue
+        result[row[0]] = item
+    return result
+
+
 def latest_editorial_references_in_transaction(
     session: Session,
     *,
