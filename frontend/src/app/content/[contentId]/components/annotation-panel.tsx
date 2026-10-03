@@ -13,6 +13,7 @@ import {
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
 import {
+  SelectLabel,
   Select,
   SelectContent,
   SelectGroup,
@@ -184,6 +185,7 @@ export function AnnotationPanel({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
+                    <SelectLabel className="sr-only">监控主题</SelectLabel>
                     {content.analysis_topics.map((item) => (
                       <SelectItem key={item.topic_id} value={item.topic_id}>
                         {item.topic_name} · 规则 v{item.current_rule_version}
@@ -205,6 +207,7 @@ export function AnnotationPanel({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
+                      <SelectLabel className="sr-only">正文版本</SelectLabel>
                       {content.version_history.map((item) => (
                         <SelectItem
                           key={item.content_version.id}

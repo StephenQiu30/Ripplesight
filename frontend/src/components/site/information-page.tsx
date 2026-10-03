@@ -10,7 +10,7 @@ export function InformationPage({
   return (
     <div>
       <h1 className="text-3xl font-medium">{title}</h1>
-      <div className="text-muted-foreground mt-8 space-y-6 text-sm leading-7">
+      <div className="text-muted-foreground mt-8 flex flex-col gap-y-6 text-sm leading-7">
         {children}
       </div>
       <nav aria-label="站点说明" className="mt-12 flex flex-wrap gap-5 text-sm">

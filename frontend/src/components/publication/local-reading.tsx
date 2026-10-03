@@ -1,7 +1,18 @@
 "use client";
+import { Input } from "@/components/ui/input";
+import {
+  SelectLabel,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+} from "@/components/ui/select";
+import { FieldLabel, Field } from "@/components/ui/field";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useId, useEffect, useState } from "react";
 
 import { getSitePublicationItem } from "@/api/gongkaifabu";
 import { Button } from "@/components/ui/button";
@@ -51,6 +62,8 @@ export function LocalThemeInitializer() {
 }
 
 export function LocalReadingPreferences() {
+  const fieldId = useId();
+
   const [theme, setTheme] = useState<"light" | "dark" | "auto">("auto");
   useEffect(() => {
     const update = () => {
@@ -75,13 +88,14 @@ export function LocalReadingPreferences() {
     };
   }, []);
   return (
-    <label className="text-muted-foreground text-xs">
-      阅读主题{" "}
-      <select
-        aria-label="阅读主题"
+    <Field orientation="horizontal" className="w-auto">
+      <FieldLabel htmlFor={`${fieldId}-local-reading-field-1`}>
+        阅读主题{" "}
+      </FieldLabel>
+      <Select
         value={theme}
-        onChange={(event) => {
-          const value = event.target.value as "light" | "dark" | "auto";
+        onValueChange={(selectedValue) => {
+          const value = selectedValue as "light" | "dark" | "auto";
           try {
             saveTheme(value);
             setTheme(value);
@@ -91,11 +105,29 @@ export function LocalReadingPreferences() {
           }
         }}
       >
-        <option value="auto">跟随系统</option>
-        <option value="light">浅色</option>
-        <option value="dark">深色</option>
-      </select>
-    </label>
+        <SelectTrigger
+          aria-label="阅读主题"
+          id={`${fieldId}-local-reading-field-1`}
+          className="w-36 min-w-0"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent position="popper">
+          <SelectGroup>
+            <SelectLabel className="sr-only">阅读主题 </SelectLabel>
+            <SelectItem value="auto" className="whitespace-normal">
+              跟随系统
+            </SelectItem>
+            <SelectItem value="light" className="whitespace-normal">
+              浅色
+            </SelectItem>
+            <SelectItem value="dark" className="whitespace-normal">
+              深色
+            </SelectItem>
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    </Field>
   );
 }
 
@@ -151,6 +183,8 @@ export function SaveItem({ id }: { id: string }) {
 }
 
 export function SavedItems({ full = false }: { full?: boolean }) {
+  const fieldId = useId();
+
   const [items, setItems] = useState<HotKeyAPI.PublicItemDetailView[]>([]);
   const [ids, setIds] = useState<string[]>([]);
   const [read, setRead] = useState<string[]>([]);
@@ -237,7 +271,7 @@ export function SavedItems({ full = false }: { full?: boolean }) {
           正在读取当前公开材料…
         </p>
       ) : items.length ? (
-        <ul className="mt-4 space-y-4">
+        <ul className="mt-4 flex flex-col gap-y-4">
           {items.map((item) => (
             <li
               key={item.id}
@@ -283,7 +317,7 @@ export function SavedItems({ full = false }: { full?: boolean }) {
       {full ? (
         <>
           {!busy ? (
-            <ul className="mt-4 space-y-3">
+            <ul className="mt-4 flex flex-col gap-y-3">
               {ids
                 .slice((page - 1) * 20, page * 20)
                 .filter((id) => !items.some((item) => item.id === id))
@@ -349,13 +383,14 @@ export function SavedItems({ full = false }: { full?: boolean }) {
             >
               导出收藏与已读
             </Button>
-            <label className="border-input flex cursor-pointer items-center rounded-md border px-4 py-2 text-sm">
-              合并导入
-              <input
+            <Field className="min-w-0 sm:max-w-sm">
+              <FieldLabel htmlFor={`${fieldId}-local-reading-field-2`}>
+                合并导入
+              </FieldLabel>
+              <Input
                 aria-label="导入收藏备份"
                 type="file"
                 accept="application/json,.json"
-                className="sr-only"
                 onChange={async (event) => {
                   const file = event.target.files?.[0];
                   event.target.value = "";
@@ -375,8 +410,9 @@ export function SavedItems({ full = false }: { full?: boolean }) {
                     );
                   }
                 }}
+                id={`${fieldId}-local-reading-field-2`}
               />
-            </label>
+            </Field>
             <Button
               variant="outline"
               onClick={() => {

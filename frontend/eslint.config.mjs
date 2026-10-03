@@ -84,6 +84,32 @@ const eslintConfig = defineConfig([
     },
   },
   {
+    files: ["src/**/*.tsx"],
+    ignores: ["src/components/ui/**"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...dynamicImportRestrictions(businessImports),
+        {
+          selector:
+            "MemberExpression[property.name='sendBeacon'], MemberExpression[property.value='sendBeacon']",
+          message: requestMessage,
+        },
+        {
+          selector:
+            "JSXOpeningElement[name.name=/^(button|input|select|option|textarea|details|summary|dialog|table|thead|tbody|tfoot|tr|th|td|caption|hr|progress|label|fieldset|legend)$/]",
+          message:
+            "页面控件必须组合 src/components/ui 中的官方 shadcn/ui + Radix 组件。",
+        },
+        {
+          selector:
+            "JSXOpeningElement[name.name=/^(div|span)$/] > JSXAttribute[name.name='role'][value.value=/^(button|checkbox|switch|tab|dialog)$/]",
+          message: "使用对应的 shadcn/Radix 交互组件，不手写交互角色。",
+        },
+      ],
+    },
+  },
+  {
     files: ["**/*.{test,spec}.{js,jsx,ts,tsx,mjs,mts,cjs,cts}"],
     ignores: ["tests/**"],
     rules: {

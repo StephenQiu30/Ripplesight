@@ -1,3 +1,4 @@
+import { selectOption } from "../../../../select";
 // @vitest-environment happy-dom
 import {
   cleanup,
@@ -157,9 +158,10 @@ it("captures version/reason/inherit-null and reuses the same operation after an 
     new ApiRequestError({ kind: "timeout", message: "timeout" }),
   );
   api.switchModel.mockResolvedValueOnce({ ...config, version: 4 });
-  fireEvent.change(screen.getByLabelText("score 目标模型"), {
-    target: { value: "" },
-  });
+  await selectOption(
+    screen.getByLabelText("score 目标模型"),
+    "继承环境或服务端默认（清除运营覆盖）",
+  );
   fireEvent.change(screen.getByLabelText("score 切换原因"), {
     target: { value: "恢复环境选择" },
   });

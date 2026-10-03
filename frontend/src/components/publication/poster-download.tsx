@@ -80,7 +80,7 @@ export function PosterDownload({ target }: { target: PosterTarget }) {
         </p>
       ) : null}
       {preview ? (
-        <div className="mt-4 space-y-3">
+        <div className="mt-4 flex flex-col gap-y-3">
           <NextImage
             src={preview}
             alt="资讯海报预览"

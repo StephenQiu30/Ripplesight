@@ -1,4 +1,5 @@
 "use client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -127,7 +128,10 @@ export function EditorialExternalIngress({
     );
   }
   return (
-    <section className="space-y-4 border-t pt-5" aria-label="外部材料摄入">
+    <section
+      className="flex flex-col gap-y-4 border-t pt-5"
+      aria-label="外部材料摄入"
+    >
       <h3 className="font-medium">外部材料摄入</h3>
       <p className="text-muted-foreground text-sm">
         单批 1—50 项、最多 4
@@ -163,12 +167,12 @@ export function EditorialExternalIngress({
         受理材料摄入
       </Button>
       {error ? (
-        <p role="alert" className="text-destructive break-words">
-          {error}
-        </p>
+        <Alert variant="destructive" className="break-words">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
       {receipt ? (
-        <div className="space-y-3 text-sm">
+        <div className="flex flex-col gap-y-3 text-sm">
           <p>
             本批收到 {receipt.received} 项 · 配置版本{" "}
             {receipt.configuration_version} · 任务 {receipt.job.status}
@@ -194,7 +198,7 @@ export function EditorialExternalIngress({
           {receipt.items.map((item) => (
             <article
               key={item.index}
-              className="bg-muted/30 space-y-2 rounded-md p-3"
+              className="bg-muted/30 flex flex-col gap-y-2 rounded-md p-3"
             >
               <p>
                 第 {item.index + 1} 项 · {statuses[item.status]}

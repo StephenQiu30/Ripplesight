@@ -1,7 +1,19 @@
 "use client";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  SelectLabel,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+} from "@/components/ui/select";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import {
   createEditorialSourceProfile,
   getEditorialSourceIcon,
@@ -61,14 +73,14 @@ const templates: Record<
   mp_account: { kind: "mp_account", wxid: "请填写公开账号标识" },
   external: { kind: "external" },
 };
-const selectClass =
-  "bg-background h-10 w-full rounded-md border border-input px-3 text-sm";
 const time = (value: string | null) =>
   value
     ? new Date(value).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })
     : "暂无";
 
 export function EditorialSourceManager() {
+  const fieldId = useId();
+
   const [token, setToken] = useState("");
   const [previewEpoch, setPreviewEpoch] = useState(0);
   const [profiles, setProfiles] = useState<
@@ -311,7 +323,7 @@ export function EditorialSourceManager() {
   }
   return (
     <>
-      <div className="space-y-8">
+      <div className="flex flex-col gap-y-8">
         <div>
           <h1 className="text-3xl font-medium">编辑来源配置</h1>
           <p className="text-muted-foreground mt-3">
@@ -319,7 +331,7 @@ export function EditorialSourceManager() {
           </p>
         </div>
         <section
-          className="bg-muted/40 space-y-4 rounded-xl p-5"
+          className="bg-muted/40 flex flex-col gap-y-4 rounded-xl p-5"
           aria-label="操作员权限"
         >
           <Label htmlFor="operator-token">操作员令牌</Label>
@@ -371,9 +383,9 @@ export function EditorialSourceManager() {
           </div>
         </section>
         {error && (
-          <p role="alert" className="text-destructive break-words">
-            {error}
-          </p>
+          <Alert variant="destructive" className="break-words">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
         {notice && <p role="status">{notice}</p>}
         {profiles?.length === 0 && (
@@ -387,7 +399,7 @@ export function EditorialSourceManager() {
             {profiles.map((p) => (
               <article
                 key={p.id}
-                className="bg-muted/30 space-y-3 rounded-xl p-5"
+                className="bg-muted/30 flex flex-col gap-y-3 rounded-xl p-5"
               >
                 <h2 className="font-medium">{p.name}</h2>
                 <p className="text-muted-foreground text-sm">
@@ -403,7 +415,7 @@ export function EditorialSourceManager() {
                       ? "存在扫描积压"
                       : "无已记录积压"}
                 </p>
-                <dl className="text-muted-foreground space-y-1 text-sm">
+                <dl className="text-muted-foreground flex flex-col gap-y-1 text-sm">
                   <div>最近完整抓取：{time(p.last_ok_at)}</div>
                   <div>最近尝试：{time(p.last_fetch_at)}</div>
                   <div>下次计划：{time(p.next_fetch_at)}</div>
@@ -425,7 +437,10 @@ export function EditorialSourceManager() {
           </section>
         )}
         {!!groups.length && (
-          <section className="space-y-5" aria-label="X 分组分页恢复">
+          <section
+            className="flex flex-col gap-y-5"
+            aria-label="X 分组分页恢复"
+          >
             <h2 className="text-xl font-medium">X 分组分页恢复</h2>
             <p className="text-muted-foreground text-sm">
               续页保留原查询和全部成员。配置变化后，需要人工按全部成员版本退回原水位；未知请求先在来源运行记录中核验。
@@ -442,11 +457,11 @@ export function EditorialSourceManager() {
             {groups.map((group) => (
               <article
                 key={group.group_sha256}
-                className="bg-muted/30 space-y-3 rounded-xl p-4"
+                className="bg-muted/30 flex flex-col gap-y-3 rounded-xl p-4"
               >
                 <p className="break-all">{group.query}</p>
                 <p className="text-sm">积压状态：{group.state}</p>
-                <ul className="space-y-1 text-sm">
+                <ul className="flex flex-col gap-y-1 text-sm">
                   {group.members.map((member) => (
                     <li key={member.profile_id}>
                       {member.name} · 修订 {member.revision} · 配置{" "}
@@ -466,7 +481,7 @@ export function EditorialSourceManager() {
           </section>
         )}
         {editing && (
-          <section className="space-y-5" aria-label="来源表单">
+          <section className="flex flex-col gap-y-5" aria-label="来源表单">
             <h2 className="text-xl font-medium">
               {selected ? "修改来源" : "新增关闭来源"}
             </h2>
@@ -476,66 +491,113 @@ export function EditorialSourceManager() {
               </p>
             )}
             <div className="grid gap-5 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="source-name">来源名称</Label>
+              <Field className="flex flex-col gap-y-2">
+                <FieldLabel htmlFor="source-name">来源名称</FieldLabel>
                 <Input
                   id="source-name"
                   value={name}
                   maxLength={128}
                   onChange={(e) => setName(e.target.value)}
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="source-kind">来源类型</Label>
-                <select
-                  id="source-kind"
-                  className={selectClass}
+              </Field>
+              <Field
+                className="flex flex-col gap-y-2"
+                data-disabled={!!selected}
+              >
+                <FieldLabel htmlFor="source-kind">来源类型</FieldLabel>
+                <Select
                   value={kind}
                   disabled={!!selected}
-                  onChange={(e) => {
-                    const next = e.target
-                      .value as HotKeyAPI.EditorialSourceKind;
+                  onValueChange={(selectedValue) => {
+                    const next = selectedValue as HotKeyAPI.EditorialSourceKind;
                     setKind(next);
                     setConfig(JSON.stringify(templates[next], null, 2));
                   }}
                 >
-                  {kinds.map(([key, label]) => (
-                    <option key={key} value={key}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="source-mode">参与模式</Label>
-                <select
-                  id="source-mode"
-                  className={selectClass}
+                  <SelectTrigger id="source-kind" className="w-full min-w-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper">
+                    <SelectGroup>
+                      <SelectLabel className="sr-only">来源类型</SelectLabel>
+                      {kinds.map(([key, label]) => (
+                        <SelectItem
+                          key={key}
+                          value={key}
+                          className="whitespace-normal"
+                        >
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field className="flex flex-col gap-y-2">
+                <FieldLabel htmlFor="source-mode">参与模式</FieldLabel>
+                <Select
                   value={mode}
-                  onChange={(e) =>
-                    setMode(e.target.value as HotKeyAPI.ParticipationMode)
+                  onValueChange={(selectedValue) =>
+                    setMode(selectedValue as HotKeyAPI.ParticipationMode)
                   }
                 >
-                  <option value="editorial">编辑分析</option>
-                  <option value="hot_signal">仅热度信号</option>
-                  <option value="isolated">隔离材料</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="source-tier">来源分级</Label>
-                <select
-                  id="source-tier"
-                  className={selectClass}
+                  <SelectTrigger id="source-mode" className="w-full min-w-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper">
+                    <SelectGroup>
+                      <SelectLabel className="sr-only">参与模式</SelectLabel>
+                      <SelectItem
+                        value="editorial"
+                        className="whitespace-normal"
+                      >
+                        编辑分析
+                      </SelectItem>
+                      <SelectItem
+                        value="hot_signal"
+                        className="whitespace-normal"
+                      >
+                        仅热度信号
+                      </SelectItem>
+                      <SelectItem
+                        value="isolated"
+                        className="whitespace-normal"
+                      >
+                        隔离材料
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field className="flex flex-col gap-y-2">
+                <FieldLabel htmlFor="source-tier">来源分级</FieldLabel>
+                <Select
                   value={tier}
-                  onChange={(e) => setTier(e.target.value as typeof tier)}
+                  onValueChange={(selectedValue) =>
+                    setTier(selectedValue as typeof tier)
+                  }
                 >
-                  {["T1", "T1_5", "T2", "T3"].map((t) => (
-                    <option key={t}>{t}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="source-policy">已批准许可版本</Label>
+                  <SelectTrigger id="source-tier" className="w-full min-w-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper">
+                    <SelectGroup>
+                      <SelectLabel className="sr-only">来源分级</SelectLabel>
+                      {["T1", "T1_5", "T2", "T3"].map((t) => (
+                        <SelectItem
+                          key={t}
+                          value={t}
+                          className="whitespace-normal"
+                        >
+                          {t}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field className="flex flex-col gap-y-2">
+                <FieldLabel htmlFor="source-policy">已批准许可版本</FieldLabel>
                 <Input
                   id="source-policy"
                   type="number"
@@ -543,9 +605,11 @@ export function EditorialSourceManager() {
                   value={policy}
                   onChange={(e) => setPolicy(Number(e.target.value))}
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="source-interval">采集间隔（分钟）</Label>
+              </Field>
+              <Field className="flex flex-col gap-y-2">
+                <FieldLabel htmlFor="source-interval">
+                  采集间隔（分钟）
+                </FieldLabel>
                 <Input
                   id="source-interval"
                   type="number"
@@ -554,9 +618,9 @@ export function EditorialSourceManager() {
                   value={interval}
                   onChange={(e) => setInterval(Number(e.target.value))}
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="source-connection">批准连接 ID</Label>
+              </Field>
+              <Field className="flex flex-col gap-y-2">
+                <FieldLabel htmlFor="source-connection">批准连接 ID</FieldLabel>
                 <Input
                   id="source-connection"
                   value={connection}
@@ -565,9 +629,11 @@ export function EditorialSourceManager() {
                 <p className="text-muted-foreground text-sm">
                   X 与公众号必须绑定当前批准连接；密钥在服务端保存。
                 </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="source-connection-version">批准连接版本</Label>
+              </Field>
+              <Field className="flex flex-col gap-y-2">
+                <FieldLabel htmlFor="source-connection-version">
+                  批准连接版本
+                </FieldLabel>
                 <Input
                   id="source-connection-version"
                   type="number"
@@ -575,28 +641,36 @@ export function EditorialSourceManager() {
                   value={connectionVersion}
                   onChange={(e) => setConnectionVersion(Number(e.target.value))}
                 />
-              </div>
+              </Field>
             </div>
-            <label className="flex items-center gap-3">
-              <input
-                type="checkbox"
+            <Field orientation="horizontal" className="w-auto">
+              <Checkbox
                 checked={firstParty}
-                onChange={(e) => setFirstParty(e.target.checked)}
+                onCheckedChange={(checked) => setFirstParty(checked === true)}
+                id={`${fieldId}-editorial-source-manager-field-1`}
               />
-              第一方来源
-            </label>
+              <FieldLabel
+                htmlFor={`${fieldId}-editorial-source-manager-field-1`}
+              >
+                第一方来源
+              </FieldLabel>
+            </Field>
             {selected && (
-              <label className="flex items-center gap-3">
-                <input
-                  type="checkbox"
+              <Field orientation="horizontal" className="w-auto">
+                <Checkbox
                   checked={enabled}
-                  onChange={(e) => setEnabled(e.target.checked)}
+                  onCheckedChange={(checked) => setEnabled(checked === true)}
+                  id={`${fieldId}-editorial-source-manager-field-2`}
                 />
-                启用来源（仍需批准、凭据与预算）
-              </label>
+                <FieldLabel
+                  htmlFor={`${fieldId}-editorial-source-manager-field-2`}
+                >
+                  启用来源（仍需批准、凭据与预算）
+                </FieldLabel>
+              </Field>
             )}
-            <div className="space-y-2">
-              <Label htmlFor="source-config">配置 JSON</Label>
+            <Field className="flex flex-col gap-y-2">
+              <FieldLabel htmlFor="source-config">配置 JSON</FieldLabel>
               <Textarea
                 id="source-config"
                 className="min-h-64 font-mono text-sm"
@@ -607,16 +681,16 @@ export function EditorialSourceManager() {
               <p className="text-muted-foreground text-sm">
                 可设置选择器、分页、时间解释、噪声过滤与官方搜索参数；配置不接受密钥或许可声明。
               </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="source-reason">操作原因</Label>
+            </Field>
+            <Field className="flex flex-col gap-y-2">
+              <FieldLabel htmlFor="source-reason">操作原因</FieldLabel>
               <Textarea
                 id="source-reason"
                 value={reason}
                 maxLength={1000}
                 onChange={(e) => setReason(e.target.value)}
               />
-            </div>
+            </Field>
             <Button
               disabled={busy || !token || !name.trim() || !reason.trim()}
               onClick={save}
@@ -643,7 +717,7 @@ export function EditorialSourceManager() {
           />
         )}
         {selected && (
-          <section className="space-y-4" aria-label="来源图标缓存">
+          <section className="flex flex-col gap-y-4" aria-label="来源图标缓存">
             <h2 className="text-xl font-medium">来源图标</h2>
             <p className="text-muted-foreground text-sm">
               仅读现有缓存，正文许可不会授权图标。预期来源修订 {formRevision}
@@ -700,7 +774,10 @@ export function EditorialSourceManager() {
           </section>
         )}
         {selected && (
-          <section className="space-y-5" aria-label="来源运行与恢复">
+          <section
+            className="flex flex-col gap-y-5"
+            aria-label="来源运行与恢复"
+          >
             <h2 className="text-xl font-medium">
               {selected.name} · 运行与恢复
             </h2>
@@ -720,15 +797,15 @@ export function EditorialSourceManager() {
             >
               读取运行记录
             </Button>
-            <div className="space-y-2">
-              <Label htmlFor="review-reason">采集或复核原因</Label>
+            <Field className="flex flex-col gap-y-2">
+              <FieldLabel htmlFor="review-reason">采集或复核原因</FieldLabel>
               <Textarea
                 id="review-reason"
                 value={reviewReason}
                 maxLength={1000}
                 onChange={(e) => setReviewReason(e.target.value)}
               />
-            </div>
+            </Field>
             {selected.configuration.kind !== "external" && (
               <Button
                 disabled={
@@ -745,7 +822,7 @@ export function EditorialSourceManager() {
             {runs.map((run) => (
               <article
                 key={run.run_id}
-                className="bg-muted/30 space-y-3 rounded-xl p-4"
+                className="bg-muted/30 flex flex-col gap-y-3 rounded-xl p-4"
               >
                 <p className="break-all">
                   {run.status} · {run.reason ?? "无附加原因"} · 运行{" "}

@@ -1,4 +1,5 @@
 "use client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -169,7 +170,7 @@ export function CredentialsForm({
   const expired = !!challenge && now >= Date.parse(challenge.expires_at);
   const emailVerification = (
     <FieldGroup>
-      <Field>
+      <Field data-disabled={!!busy || !challenge || expired}>
         <FieldLabel htmlFor="account-code">邮箱验证码</FieldLabel>
         <Input
           id="account-code"
@@ -212,9 +213,9 @@ export function CredentialsForm({
   return (
     <section
       aria-labelledby="account-title"
-      className="w-full max-w-xl space-y-8"
+      className="flex w-full max-w-xl flex-col gap-y-8"
     >
-      <header className="space-y-3">
+      <header className="flex flex-col gap-y-3">
         {!hasPassword && account.user.email && (
           <p className="text-muted-foreground text-sm">
             邮箱已验证 · 设置登录密码
@@ -237,7 +238,7 @@ export function CredentialsForm({
       <form onSubmit={submit} aria-label="设置登录凭据">
         <FieldGroup>
           {hasPassword && (
-            <Field>
+            <Field data-disabled={!!busy}>
               <FieldLabel htmlFor="account-username">用户名</FieldLabel>
               <Input
                 id="account-username"
@@ -257,7 +258,7 @@ export function CredentialsForm({
               </FieldDescription>
             </Field>
           )}
-          <Field>
+          <Field data-disabled={!!busy}>
             <FieldLabel htmlFor="account-password">新密码</FieldLabel>
             <Input
               id="account-password"
@@ -272,7 +273,7 @@ export function CredentialsForm({
             />
             <FieldDescription>使用 12–128 个字符。</FieldDescription>
           </Field>
-          <Field>
+          <Field data-disabled={!!busy}>
             <FieldLabel htmlFor="account-confirmation">确认新密码</FieldLabel>
             <Input
               id="account-confirmation"
@@ -305,7 +306,7 @@ export function CredentialsForm({
                 </TabsList>
               )}
               <TabsContent value="password">
-                <Field>
+                <Field data-disabled={!!busy}>
                   <FieldLabel htmlFor="account-current-password">
                     当前密码
                   </FieldLabel>
@@ -345,9 +346,9 @@ export function CredentialsForm({
             </Button>
           )}
           {error && (
-            <p role="alert" className="text-destructive text-sm leading-6">
-              {error}
-            </p>
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           )}
           {success && (
             <p role="status" className="text-sm leading-6">

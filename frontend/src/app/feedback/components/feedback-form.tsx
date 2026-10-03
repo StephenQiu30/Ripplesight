@@ -1,5 +1,6 @@
 "use client";
-import { useRef, useState } from "react";
+import { FieldGroup, FieldLabel, Field } from "@/components/ui/field";
+import { useId, useRef, useState } from "react";
 import { submitFeedback } from "@/api/fankui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,8 @@ function readImage(file: File): Promise<HotKeyAPI.ScreenshotInput> {
   });
 }
 export function FeedbackForm() {
+  const fieldId = useId();
+
   const [content, setContent] = useState("");
   const [email, setEmail] = useState("");
   const [pageUrl, setPageUrl] = useState("");
@@ -78,62 +81,76 @@ export function FeedbackForm() {
     }
   }
   return (
-    <form onSubmit={submit} className="mt-8 grid gap-5">
-      <label className="grid gap-2">
-        反馈内容
-        <Textarea
-          aria-label="反馈内容"
-          minLength={2}
-          maxLength={5000}
-          required
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          rows={7}
-        />
-      </label>
-      <label className="grid gap-2">
-        联系邮箱（可选）
-        <Input
-          type="email"
-          aria-label="联系邮箱"
-          maxLength={200}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-      </label>
-      <label className="grid gap-2">
-        相关页面（可选）
-        <Input
-          type="url"
-          aria-label="相关页面"
-          maxLength={500}
-          value={pageUrl}
-          onChange={(e) => setPageUrl(e.target.value)}
-          placeholder="https://"
-        />
-      </label>
-      <label className="grid min-w-0 gap-2">
-        截图（可选，最多 8 MiB）
-        <Input
-          type="file"
-          aria-label="反馈截图"
-          accept="image/png,image/jpeg,image/webp,image/gif"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-        />
-      </label>
-      {file && (
-        <Button type="button" variant="ghost" onClick={() => setFile(null)}>
-          移除截图 {file.name}
+    <form onSubmit={submit}>
+      <FieldGroup className="mt-8 grid gap-5">
+        <Field className="min-w-0">
+          <FieldLabel htmlFor={`${fieldId}-feedback-form-field-1`}>
+            反馈内容
+          </FieldLabel>
+          <Textarea
+            aria-label="反馈内容"
+            minLength={2}
+            maxLength={5000}
+            required
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            rows={7}
+            id={`${fieldId}-feedback-form-field-1`}
+          />
+        </Field>
+        <Field className="min-w-0">
+          <FieldLabel htmlFor={`${fieldId}-feedback-form-field-2`}>
+            联系邮箱（可选）
+          </FieldLabel>
+          <Input
+            type="email"
+            aria-label="联系邮箱"
+            maxLength={200}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            id={`${fieldId}-feedback-form-field-2`}
+          />
+        </Field>
+        <Field className="min-w-0">
+          <FieldLabel htmlFor={`${fieldId}-feedback-form-field-3`}>
+            相关页面（可选）
+          </FieldLabel>
+          <Input
+            type="url"
+            aria-label="相关页面"
+            maxLength={500}
+            value={pageUrl}
+            onChange={(e) => setPageUrl(e.target.value)}
+            placeholder="https://"
+            id={`${fieldId}-feedback-form-field-3`}
+          />
+        </Field>
+        <Field className="min-w-0">
+          <FieldLabel htmlFor={`${fieldId}-feedback-form-field-4`}>
+            截图（可选，最多 8 MiB）
+          </FieldLabel>
+          <Input
+            type="file"
+            aria-label="反馈截图"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            id={`${fieldId}-feedback-form-field-4`}
+          />
+        </Field>
+        {file && (
+          <Button type="button" variant="ghost" onClick={() => setFile(null)}>
+            移除截图 {file.name}
+          </Button>
+        )}
+        {message && (
+          <p role="status" className="text-sm break-words">
+            {message}
+          </p>
+        )}
+        <Button type="submit" disabled={pending} className="justify-self-start">
+          {pending ? "正在提交" : "提交反馈"}
         </Button>
-      )}
-      {message && (
-        <p role="status" className="text-sm break-words">
-          {message}
-        </p>
-      )}
-      <Button type="submit" disabled={pending} className="justify-self-start">
-        {pending ? "正在提交" : "提交反馈"}
-      </Button>
+      </FieldGroup>
     </form>
   );
 }

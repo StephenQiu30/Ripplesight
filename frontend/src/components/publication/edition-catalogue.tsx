@@ -1,7 +1,9 @@
 "use client";
+import { Input } from "@/components/ui/input";
+import { FieldLabel, Field } from "@/components/ui/field";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
   getPublicDailyCalendar,
   listPublicEditionCatalogue,
@@ -17,6 +19,8 @@ export function PublicEditionCatalogue({
   initial: HotKeyAPI.PublicEditionCatalogueView;
   initialCalendar?: HotKeyAPI.PublicDailyCalendarView;
 }) {
+  const fieldId = useId();
+
   const [entries, setEntries] = useState(initial.entries);
   const [next, setNext] = useState(initial.next_before_key);
   const [calendar, setCalendar] = useState(initialCalendar);
@@ -59,7 +63,7 @@ export function PublicEditionCatalogue({
     }
   }
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col gap-y-8">
       <h1 className="text-3xl font-medium">{labels[initial.kind]}历史</h1>
       <nav aria-label="公开刊物" className="flex flex-wrap gap-5 text-sm">
         {(["daily", "weekly", "monthly"] as const).map((kind) => (
@@ -78,20 +82,23 @@ export function PublicEditionCatalogue({
       {initial.kind === "daily" ? (
         <section
           aria-label="日报月份日历"
-          className="space-y-4 rounded-lg border p-5"
+          className="flex flex-col gap-y-4 rounded-lg border p-5"
         >
           <h2 className="font-medium">月份日历</h2>
           <div className="flex flex-wrap items-end gap-3">
-            <label className="space-y-2 text-sm">
-              月份
-              <input
+            <Field className="w-full min-w-0 sm:w-auto">
+              <FieldLabel htmlFor={`${fieldId}-edition-catalogue-field-1`}>
+                月份
+              </FieldLabel>
+              <Input
                 aria-label="日报月份"
                 type="month"
                 value={month}
                 onChange={(event) => setMonth(event.target.value)}
-                className="bg-background block rounded-md border p-2"
+                className="block p-2"
+                id={`${fieldId}-edition-catalogue-field-1`}
               />
-            </label>
+            </Field>
             <Button
               variant="outline"
               disabled={busy || !/^\d{4}-\d{2}$/.test(month)}

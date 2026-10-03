@@ -30,7 +30,7 @@ export default async function FeedsPage() {
           复制链接到 RSS
           阅读器。全文订阅只包含有明确再分发许可的正文，其余条目保留摘要和站内阅读入口。
         </p>
-        <ul className="mt-8 space-y-5">
+        <ul className="mt-8 flex flex-col gap-y-5">
           {feeds.map(([href, label]) => (
             <li key={href} className="flex flex-wrap gap-3">
               <span className="w-24 text-sm">{label}</span>
@@ -41,7 +41,7 @@ export default async function FeedsPage() {
           ))}
         </ul>
         <h2 className="mt-12 text-lg font-medium">分类精选</h2>
-        <ul className="mt-5 space-y-4">
+        <ul className="mt-5 flex flex-col gap-y-4">
           {categories.map(([key, label]) => (
             <li key={key} className="flex flex-wrap gap-4 text-sm">
               <span className="w-16">{label}</span>

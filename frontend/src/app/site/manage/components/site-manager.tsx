@@ -1,4 +1,7 @@
 "use client";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Field, FieldLabel, FieldGroup } from "@/components/ui/field";
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -162,8 +165,8 @@ export function SiteManager() {
         <p className="text-muted-foreground mt-4 text-sm leading-7">
           运营令牌仅保存在当前页面内存。启用、更换和关闭均保存修订与原因；关闭后旧二维码链接不可读取。
         </p>
-        <div className="mt-8 space-y-3">
-          <Label htmlFor="site-token">运营令牌</Label>
+        <Field className="mt-8 flex flex-col gap-y-3">
+          <FieldLabel htmlFor="site-token">运营令牌</FieldLabel>
           <Input
             id="site-token"
             type="password"
@@ -182,11 +185,11 @@ export function SiteManager() {
           <Button variant="outline" onClick={load} disabled={busy || !token}>
             读取配置
           </Button>
-        </div>
+        </Field>
         {error && (
-          <p role="alert" className="text-destructive mt-5">
-            {error}
-          </p>
+          <Alert variant="destructive" className="mt-5">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
         {notice && (
           <p role="status" className="mt-5">
@@ -194,128 +197,133 @@ export function SiteManager() {
           </p>
         )}
         {view && (
-          <form className="mt-8 space-y-6" onSubmit={save}>
-            <p className="text-muted-foreground text-sm">
-              当前修订 {view.revision}
-            </p>
-            <Label className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                checked={enabled}
-                onChange={(event) => setEnabled(event.target.checked)}
-              />
-              启用公开联系资料
-            </Label>
-            <div className="space-y-2">
-              <Label htmlFor="contact-title">标题</Label>
-              <Input
-                id="contact-title"
-                required
-                maxLength={100}
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="contact-text">联系说明</Label>
-              <Textarea
-                id="contact-text"
-                maxLength={4000}
-                value={text}
-                onChange={(event) => setText(event.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="contact-url">HTTP(S) 联系入口</Label>
-              <Input
-                id="contact-url"
-                type="url"
-                value={url}
-                maxLength={1000}
-                onChange={(event) => setUrl(event.target.value)}
-              />
-            </div>
-            <div className="space-y-3">
-              <Label htmlFor="contact-image">微信二维码（最多 2 MiB）</Label>
-              <Input
-                id="contact-image"
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                onChange={(event) =>
-                  void choose(event.target.files?.[0], "wechat")
-                }
-              />
+          <form onSubmit={save}>
+            <FieldGroup className="mt-8 flex flex-col gap-y-6">
               <p className="text-muted-foreground text-sm">
-                {qrAction === "replace"
-                  ? "保存时替换为已选图片"
-                  : qrAction === "clear"
-                    ? "保存时删除当前图片"
-                    : view.wechat_qr_url
-                      ? "保留现有图片"
-                      : "尚无图片"}
+                当前修订 {view.revision}
               </p>
+              <Label className="flex items-center gap-3">
+                <Checkbox
+                  checked={enabled}
+                  onCheckedChange={(checked) => setEnabled(checked === true)}
+                />
+                启用公开联系资料
+              </Label>
+              <Field className="flex flex-col gap-y-2">
+                <FieldLabel htmlFor="contact-title">标题</FieldLabel>
+                <Input
+                  id="contact-title"
+                  required
+                  maxLength={100}
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                />
+              </Field>
+              <Field className="flex flex-col gap-y-2">
+                <FieldLabel htmlFor="contact-text">联系说明</FieldLabel>
+                <Textarea
+                  id="contact-text"
+                  maxLength={4000}
+                  value={text}
+                  onChange={(event) => setText(event.target.value)}
+                />
+              </Field>
+              <Field className="flex flex-col gap-y-2">
+                <FieldLabel htmlFor="contact-url">HTTP(S) 联系入口</FieldLabel>
+                <Input
+                  id="contact-url"
+                  type="url"
+                  value={url}
+                  maxLength={1000}
+                  onChange={(event) => setUrl(event.target.value)}
+                />
+              </Field>
+              <Field className="flex flex-col gap-y-3">
+                <FieldLabel htmlFor="contact-image">
+                  微信二维码（最多 2 MiB）
+                </FieldLabel>
+                <Input
+                  id="contact-image"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  onChange={(event) =>
+                    void choose(event.target.files?.[0], "wechat")
+                  }
+                />
+                <p className="text-muted-foreground text-sm">
+                  {qrAction === "replace"
+                    ? "保存时替换为已选图片"
+                    : qrAction === "clear"
+                      ? "保存时删除当前图片"
+                      : view.wechat_qr_url
+                        ? "保留现有图片"
+                        : "尚无图片"}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setQrAction("clear");
+                    setImage(null);
+                  }}
+                >
+                  移除微信图片
+                </Button>
+              </Field>
+              <Field className="flex flex-col gap-y-3">
+                <FieldLabel htmlFor="feishu-image">
+                  飞书二维码（最多 2 MiB）
+                </FieldLabel>
+                <Input
+                  id="feishu-image"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  onChange={(event) =>
+                    void choose(event.target.files?.[0], "feishu")
+                  }
+                />
+                <p className="text-muted-foreground text-sm">
+                  {feishuAction === "replace"
+                    ? "保存时替换为已选飞书图片"
+                    : feishuAction === "clear"
+                      ? "保存时删除当前飞书图片"
+                      : view.feishu_qr_url
+                        ? "保留现有飞书图片"
+                        : "尚无飞书图片"}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setFeishuAction("clear");
+                    setFeishuImage(null);
+                  }}
+                >
+                  移除飞书图片
+                </Button>
+              </Field>
+              <Field className="flex flex-col gap-y-2">
+                <FieldLabel htmlFor="site-reason">修改原因</FieldLabel>
+                <Textarea
+                  id="site-reason"
+                  required
+                  maxLength={2000}
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                />
+              </Field>
               <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setQrAction("clear");
-                  setImage(null);
-                }}
-              >
-                移除微信图片
-              </Button>
-            </div>
-            <div className="space-y-3">
-              <Label htmlFor="feishu-image">飞书二维码（最多 2 MiB）</Label>
-              <Input
-                id="feishu-image"
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                onChange={(event) =>
-                  void choose(event.target.files?.[0], "feishu")
+                type="submit"
+                disabled={
+                  busy ||
+                  !reason.trim() ||
+                  (qrAction === "replace" && !image) ||
+                  (feishuAction === "replace" && !feishuImage)
                 }
-              />
-              <p className="text-muted-foreground text-sm">
-                {feishuAction === "replace"
-                  ? "保存时替换为已选飞书图片"
-                  : feishuAction === "clear"
-                    ? "保存时删除当前飞书图片"
-                    : view.feishu_qr_url
-                      ? "保留现有飞书图片"
-                      : "尚无飞书图片"}
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setFeishuAction("clear");
-                  setFeishuImage(null);
-                }}
               >
-                移除飞书图片
+                保存配置
               </Button>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="site-reason">修改原因</Label>
-              <Textarea
-                id="site-reason"
-                required
-                maxLength={2000}
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-              />
-            </div>
-            <Button
-              type="submit"
-              disabled={
-                busy ||
-                !reason.trim() ||
-                (qrAction === "replace" && !image) ||
-                (feishuAction === "replace" && !feishuImage)
-              }
-            >
-              保存配置
-            </Button>
+            </FieldGroup>
           </form>
         )}
         <p className="mt-10 text-sm">

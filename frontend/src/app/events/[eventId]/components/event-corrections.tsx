@@ -1,11 +1,20 @@
 "use client";
+import {
+  SelectLabel,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+} from "@/components/ui/select";
 
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { correctEvent, listEvents } from "@/api/shijian";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { FieldGroup, Field, FieldLabel } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiRequestError } from "@/request";
 
@@ -166,94 +175,143 @@ export function EventCorrections({
         已选择 {selectedContentIds.length} 个成员、{selectedFactIds.length}{" "}
         个事实。修订保留历史证据，摘要会重新生成。
       </p>
-      <form
-        className="mt-6 grid max-w-2xl gap-5"
-        onSubmit={(form) => void submit(form)}
-      >
-        <Field>
-          <FieldLabel htmlFor="event-correction-kind">修订操作</FieldLabel>
-          <select
-            id="event-correction-kind"
-            className="bg-background rounded-md border px-3 py-2 text-sm"
-            value={kind}
-            onChange={(input) =>
-              setKind(
-                input.target.value as HotKeyAPI.EventCorrectionInput["kind"],
-              )
-            }
-          >
-            {Object.entries(actionLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </Field>
-        {kind === "merge" || kind === "move" ? (
+      <form onSubmit={(form) => void submit(form)}>
+        <FieldGroup className="mt-6 grid max-w-2xl gap-5">
           <Field>
-            <FieldLabel htmlFor="event-correction-target">目标事件</FieldLabel>
-            <select
-              id="event-correction-target"
-              className="bg-background rounded-md border px-3 py-2 text-sm"
-              value={targetId}
-              onChange={(input) => setTargetId(input.target.value)}
+            <FieldLabel htmlFor="event-correction-kind">修订操作</FieldLabel>
+            <Select
+              value={kind}
+              onValueChange={(selectedValue) =>
+                setKind(selectedValue as HotKeyAPI.EventCorrectionInput["kind"])
+              }
             >
-              <option value="">选择同一关注主题中的事件</option>
-              {targets.map((target) => (
-                <option key={target.id} value={target.id}>
-                  {target.title ?? `事件 ${target.id}`} · 修订 {target.revision}
-                </option>
-              ))}
-            </select>
-            {cursor ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void moreTargets()}
+              <SelectTrigger
+                id="event-correction-kind"
+                className="w-full min-w-0"
               >
-                读取更多目标事件
-              </Button>
-            ) : null}
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectGroup>
+                  <SelectLabel className="sr-only">修订操作</SelectLabel>
+                  {Object.entries(actionLabels).map(([value, label]) => (
+                    <SelectItem
+                      key={value}
+                      value={value}
+                      className="whitespace-normal"
+                    >
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
           </Field>
-        ) : null}
-        {kind === "merge_facts" ? (
+          {kind === "merge" || kind === "move" ? (
+            <Field>
+              <FieldLabel htmlFor="event-correction-target">
+                目标事件
+              </FieldLabel>
+              <Select
+                value={targetId}
+                onValueChange={(selectedValue) =>
+                  setTargetId(selectedValue === "__none__" ? "" : selectedValue)
+                }
+              >
+                <SelectTrigger
+                  id="event-correction-target"
+                  className="w-full min-w-0"
+                >
+                  <SelectValue placeholder="选择同一关注主题中的事件" />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectGroup>
+                    <SelectLabel className="sr-only">目标事件</SelectLabel>
+                    <SelectItem value="__none__" className="whitespace-normal">
+                      选择同一关注主题中的事件
+                    </SelectItem>
+                    {targets.map((target) => (
+                      <SelectItem
+                        key={target.id}
+                        value={target.id}
+                        className="whitespace-normal"
+                      >
+                        {target.title ?? `事件 ${target.id}`} · 修订{" "}
+                        {target.revision}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              {cursor ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void moreTargets()}
+                >
+                  读取更多目标事件
+                </Button>
+              ) : null}
+            </Field>
+          ) : null}
+          {kind === "merge_facts" ? (
+            <Field>
+              <FieldLabel htmlFor="event-correction-fact">规范事实</FieldLabel>
+              <Select
+                value={targetFactId}
+                onValueChange={(selectedValue) =>
+                  setTargetFactId(
+                    selectedValue === "__none__" ? "" : selectedValue,
+                  )
+                }
+              >
+                <SelectTrigger
+                  id="event-correction-fact"
+                  className="w-full min-w-0"
+                >
+                  <SelectValue placeholder="从所选事实中选择" />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectGroup>
+                    <SelectLabel className="sr-only">规范事实</SelectLabel>
+                    <SelectItem value="__none__" className="whitespace-normal">
+                      从所选事实中选择
+                    </SelectItem>
+                    {facts
+                      .filter((fact) => selectedFactIds.includes(fact.id))
+                      .map((fact) => (
+                        <SelectItem
+                          key={fact.id}
+                          value={fact.id}
+                          className="whitespace-normal"
+                        >
+                          {fact.title ?? fact.id}
+                        </SelectItem>
+                      ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+          ) : null}
           <Field>
-            <FieldLabel htmlFor="event-correction-fact">规范事实</FieldLabel>
-            <select
-              id="event-correction-fact"
-              className="bg-background rounded-md border px-3 py-2 text-sm"
-              value={targetFactId}
-              onChange={(input) => setTargetFactId(input.target.value)}
-            >
-              <option value="">从所选事实中选择</option>
-              {facts
-                .filter((fact) => selectedFactIds.includes(fact.id))
-                .map((fact) => (
-                  <option key={fact.id} value={fact.id}>
-                    {fact.title ?? fact.id}
-                  </option>
-                ))}
-            </select>
+            <FieldLabel htmlFor="event-correction-reason">修订原因</FieldLabel>
+            <Textarea
+              id="event-correction-reason"
+              maxLength={2000}
+              value={reason}
+              onChange={(input) => setReason(input.target.value)}
+            />
           </Field>
-        ) : null}
-        <Field>
-          <FieldLabel htmlFor="event-correction-reason">修订原因</FieldLabel>
-          <Textarea
-            id="event-correction-reason"
-            maxLength={2000}
-            value={reason}
-            onChange={(input) => setReason(input.target.value)}
-          />
-        </Field>
-        {error ? (
-          <Alert variant="destructive">
-            <AlertTitle>修订未完成</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        ) : null}
-        <Button type="submit" disabled={submitting}>
-          {submitting ? "正在提交修订…" : "提交人工修订"}
-        </Button>
+          {error ? (
+            <Alert variant="destructive">
+              <AlertTitle>修订未完成</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
+          <Button type="submit" disabled={submitting}>
+            {submitting ? "正在提交修订…" : "提交人工修订"}
+          </Button>
+        </FieldGroup>
       </form>
     </section>
   );

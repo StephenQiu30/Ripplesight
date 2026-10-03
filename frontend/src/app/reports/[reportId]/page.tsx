@@ -86,7 +86,7 @@ export default async function ReportDetailPage({ params }: Parameters) {
     return (
       <>
         <PublicationNavigation />
-        <div className="space-y-5">
+        <div className="flex flex-col gap-y-5">
           <h1 className="text-3xl font-medium">最新{labels[kind]}</h1>
           <p>当前还没有可公开的{labels[kind]}。</p>
           <Link href={`/reports/${kind}/archive`} className="underline">

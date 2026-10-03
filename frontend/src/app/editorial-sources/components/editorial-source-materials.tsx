@@ -1,4 +1,5 @@
 "use client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -82,7 +83,7 @@ export function EditorialSourceMaterials({ token, sourceKey, name }: Props) {
     }
   }
   return (
-    <section className="space-y-4" aria-label="来源最近材料">
+    <section className="flex flex-col gap-y-4" aria-label="来源最近材料">
       <h2 className="text-xl font-medium">{name} · 原材料</h2>
       <p className="text-muted-foreground text-sm leading-7">
         仅读取当前许可的原材料，不按公开精选状态筛选。分析状态表示原监控标注；编辑精选和发布状态请在对应管理页核验。读取不采集、不调用模型。
@@ -96,10 +97,12 @@ export function EditorialSourceMaterials({ token, sourceKey, name }: Props) {
       </Button>
       {busy ? <p role="status">正在读取来源材料…</p> : null}
       {error ? (
-        <p role="alert" className="text-destructive text-sm">
-          {error}
-          {rows?.length ? " 已加载材料保留；当前页尚未读完。" : ""}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>
+            {error}
+            {rows?.length ? " 已加载材料保留；当前页尚未读完。" : ""}
+          </AlertDescription>
+        </Alert>
       ) : null}
       {rows?.length === 0 ? (
         <p>此来源暂无当前可读材料；不代表来源历史为空。</p>
@@ -113,7 +116,7 @@ export function EditorialSourceMaterials({ token, sourceKey, name }: Props) {
           {rows.map((item) => (
             <article
               key={item.id}
-              className="bg-muted/30 space-y-3 rounded-xl p-4"
+              className="bg-muted/30 flex flex-col gap-y-3 rounded-xl p-4"
             >
               <p className="font-medium break-words">
                 {item.latest_observation.content_version?.title ||

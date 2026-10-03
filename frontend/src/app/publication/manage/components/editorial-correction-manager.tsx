@@ -1,7 +1,18 @@
 "use client";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  SelectLabel,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+} from "@/components/ui/select";
+import { FieldGroup, FieldLabel, Field } from "@/components/ui/field";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import {
   correctEditorialRun,
   getCurrentEditorialRun,
@@ -36,6 +47,8 @@ export function EditorialCorrectionManager({
 }: {
   initialContentId?: string;
 }) {
+  const fieldId = useId();
+
   const [token, setToken] = useState("");
   const [contentId, setContentId] = useState(initialContentId);
   const [run, setRun] = useState<HotKeyAPI.EditorialRunView | null>(null);
@@ -154,13 +167,12 @@ export function EditorialCorrectionManager({
     );
   }
   return (
-    <section className="mt-12 space-y-5">
+    <section className="mt-12 flex flex-col gap-y-5">
       <h2 className="text-lg font-medium">精选与中文文案纠正</h2>
       <p className="text-muted-foreground text-sm leading-7">
         按当前人工版本修改或清除字段。静默仅停止新的精选通知；恢复自动结果复用原模型结果。
       </p>
       <form
-        className="grid gap-4 sm:grid-cols-2"
         onSubmit={(event) => {
           event.preventDefault();
           void action(
@@ -170,41 +182,53 @@ export function EditorialCorrectionManager({
           );
         }}
       >
-        <label className="space-y-2 text-sm">
-          操作员令牌
-          <Input
-            type="password"
-            autoComplete="off"
-            value={token}
-            onChange={(event) => changed(() => setToken(event.target.value))}
-            required
-          />
-        </label>
-        <label className="space-y-2 text-sm">
-          作品编号
-          <Input
-            value={contentId}
-            onChange={(event) =>
-              changed(() => setContentId(event.target.value))
-            }
-            required
-          />
-        </label>
-        <div className="flex gap-3 sm:col-span-2">
-          <Button disabled={busy || !token}>读取当前分析</Button>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() =>
-              changed(() => {
-                setToken("");
-                operations.current.clear();
-              })
-            }
-          >
-            清除令牌
-          </Button>
-        </div>
+        <FieldGroup className="grid gap-4 sm:grid-cols-2">
+          <Field className="min-w-0">
+            <FieldLabel
+              htmlFor={`${fieldId}-editorial-correction-manager-field-1`}
+            >
+              操作员令牌
+            </FieldLabel>
+            <Input
+              type="password"
+              autoComplete="off"
+              value={token}
+              onChange={(event) => changed(() => setToken(event.target.value))}
+              required
+              id={`${fieldId}-editorial-correction-manager-field-1`}
+            />
+          </Field>
+          <Field className="min-w-0">
+            <FieldLabel
+              htmlFor={`${fieldId}-editorial-correction-manager-field-2`}
+            >
+              作品编号
+            </FieldLabel>
+            <Input
+              value={contentId}
+              onChange={(event) =>
+                changed(() => setContentId(event.target.value))
+              }
+              required
+              id={`${fieldId}-editorial-correction-manager-field-2`}
+            />
+          </Field>
+          <div className="flex gap-3 sm:col-span-2">
+            <Button disabled={busy || !token}>读取当前分析</Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() =>
+                changed(() => {
+                  setToken("");
+                  operations.current.clear();
+                })
+              }
+            >
+              清除令牌
+            </Button>
+          </div>
+        </FieldGroup>
       </form>
       {message ? (
         <p role="status" className="bg-muted rounded-md p-4 text-sm leading-7">
@@ -214,134 +238,207 @@ export function EditorialCorrectionManager({
       {run ? (
         <form
           key={`${run.id}:${run.manual_version}`}
-          className="space-y-4"
           onSubmit={(event) => {
             event.preventDefault();
             save(new FormData(event.currentTarget), false);
           }}
         >
-          <p className="text-sm">
-            人工版本 {run.manual_version} ·{" "}
-            {run.result?.manual ? "人工覆盖" : "自动结果"} · {run.status}
-          </p>
-          {run.job_id ? (
-            <Link
-              href={`/jobs/${run.job_id}`}
-              className="text-sm underline underline-offset-4"
-            >
-              查看分析任务
-            </Link>
-          ) : null}
-          {FIELDS.map((field) => (
-            <div
-              key={field}
-              className="grid gap-3 sm:grid-cols-[8rem_10rem_1fr]"
-            >
-              <label htmlFor={`correction-${field}`} className="text-sm">
-                {LABELS[field]}
-              </label>
-              <select
-                name={`${field}_mode`}
-                aria-label={`${LABELS[field]}操作`}
-                defaultValue="keep"
-                className="border-input min-w-0 rounded-md border p-2 text-sm"
+          <FieldGroup className="flex flex-col gap-y-4">
+            <p className="text-sm">
+              人工版本 {run.manual_version} ·{" "}
+              {run.result?.manual ? "人工覆盖" : "自动结果"} · {run.status}
+            </p>
+            {run.job_id ? (
+              <Link
+                href={`/jobs/${run.job_id}`}
+                className="text-sm underline underline-offset-4"
               >
-                <option value="keep">保持当前</option>
-                <option value="replace">人工覆盖</option>
-                <option value="clear">恢复自动</option>
-              </select>
-              {field === "selected" || field === "silent" ? (
-                <select
-                  id={`correction-${field}`}
-                  name={field}
-                  defaultValue={String(run.result?.[field] ?? false)}
-                  className="border-input min-w-0 rounded-md border p-2 text-sm"
-                >
-                  <option value="true">开启</option>
-                  <option value="false">关闭</option>
-                </select>
-              ) : field === "category" ? (
-                <select
-                  id={`correction-${field}`}
-                  name={field}
-                  defaultValue={run.result?.structure?.category ?? "ai-models"}
-                  className="border-input min-w-0 rounded-md border p-2 text-sm"
-                >
-                  <option value="ai-models">AI 模型</option>
-                  <option value="ai-products">AI 产品</option>
-                  <option value="industry">行业</option>
-                  <option value="paper">论文</option>
-                  <option value="tip">技巧</option>
-                  <option value="opinion">观点</option>
-                </select>
-              ) : field === "summary_zh" || field === "reason_zh" ? (
-                <textarea
-                  id={`correction-${field}`}
-                  name={field}
-                  defaultValue={run.result?.writing?.[field] ?? ""}
-                  maxLength={field === "summary_zh" ? 4000 : 400}
-                  className="border-input min-w-0 rounded-md border p-2 text-sm"
-                  rows={4}
-                />
-              ) : (
-                <Input
-                  id={`correction-${field}`}
-                  name={field}
-                  defaultValue={
-                    field === "title_zh"
-                      ? (run.result?.writing?.title_zh ?? "")
-                      : (
-                          run.result?.tags_override ??
-                          run.result?.structure?.tags ??
-                          []
-                        ).join("、")
-                  }
-                  maxLength={field === "title_zh" ? 200 : 1600}
-                />
-              )}
+                查看分析任务
+              </Link>
+            ) : null}
+            {FIELDS.map((field) => (
+              <div key={field} className="grid min-w-0 gap-3 sm:grid-cols-3">
+                <FieldLabel htmlFor={`correction-${field}`}>
+                  {LABELS[field]}
+                </FieldLabel>
+                <Select name={`${field}_mode`} defaultValue="keep">
+                  <SelectTrigger
+                    aria-label={`${LABELS[field]}操作`}
+                    className="w-full min-w-0"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper">
+                    <SelectGroup>
+                      <SelectLabel className="sr-only">
+                        {LABELS[field]}
+                      </SelectLabel>
+                      <SelectItem value="keep" className="whitespace-normal">
+                        保持当前
+                      </SelectItem>
+                      <SelectItem value="replace" className="whitespace-normal">
+                        人工覆盖
+                      </SelectItem>
+                      <SelectItem value="clear" className="whitespace-normal">
+                        恢复自动
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                {field === "selected" || field === "silent" ? (
+                  <Select
+                    name={field}
+                    defaultValue={String(run.result?.[field] ?? false)}
+                  >
+                    <SelectTrigger
+                      id={`correction-${field}`}
+                      className="w-full min-w-0"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      <SelectGroup>
+                        <SelectLabel className="sr-only">
+                          {LABELS[field]}
+                        </SelectLabel>
+                        <SelectItem value="true" className="whitespace-normal">
+                          开启
+                        </SelectItem>
+                        <SelectItem value="false" className="whitespace-normal">
+                          关闭
+                        </SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                ) : field === "category" ? (
+                  <Select
+                    name={field}
+                    defaultValue={
+                      run.result?.structure?.category ?? "ai-models"
+                    }
+                  >
+                    <SelectTrigger
+                      id={`correction-${field}`}
+                      className="w-full min-w-0"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      <SelectGroup>
+                        <SelectLabel className="sr-only">
+                          {LABELS[field]}
+                        </SelectLabel>
+                        <SelectItem
+                          value="ai-models"
+                          className="whitespace-normal"
+                        >
+                          AI 模型
+                        </SelectItem>
+                        <SelectItem
+                          value="ai-products"
+                          className="whitespace-normal"
+                        >
+                          AI 产品
+                        </SelectItem>
+                        <SelectItem
+                          value="industry"
+                          className="whitespace-normal"
+                        >
+                          行业
+                        </SelectItem>
+                        <SelectItem value="paper" className="whitespace-normal">
+                          论文
+                        </SelectItem>
+                        <SelectItem value="tip" className="whitespace-normal">
+                          技巧
+                        </SelectItem>
+                        <SelectItem
+                          value="opinion"
+                          className="whitespace-normal"
+                        >
+                          观点
+                        </SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                ) : field === "summary_zh" || field === "reason_zh" ? (
+                  <Textarea
+                    id={`correction-${field}`}
+                    name={field}
+                    defaultValue={run.result?.writing?.[field] ?? ""}
+                    maxLength={field === "summary_zh" ? 4000 : 400}
+                    className="min-w-0 p-2"
+                    rows={4}
+                  />
+                ) : (
+                  <Input
+                    id={`correction-${field}`}
+                    name={field}
+                    defaultValue={
+                      field === "title_zh"
+                        ? (run.result?.writing?.title_zh ?? "")
+                        : (
+                            run.result?.tags_override ??
+                            run.result?.structure?.tags ??
+                            []
+                          ).join("、")
+                    }
+                    maxLength={field === "title_zh" ? 200 : 1600}
+                  />
+                )}
+              </div>
+            ))}
+            <Field className="min-w-0">
+              <FieldLabel
+                htmlFor={`${fieldId}-editorial-correction-manager-field-3`}
+              >
+                纠正原因
+              </FieldLabel>
+              <Input
+                name="reason"
+                required
+                maxLength={1000}
+                id={`${fieldId}-editorial-correction-manager-field-3`}
+              />
+            </Field>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                disabled={
+                  busy ||
+                  !token ||
+                  run.status === "queued" ||
+                  run.status === "running"
+                }
+              >
+                保存字段
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={
+                  busy ||
+                  !token ||
+                  run.status === "queued" ||
+                  run.status === "running" ||
+                  run.status === "unknown"
+                }
+                onClick={rerun}
+              >
+                重新分析全部阶段
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy || !token || !run.result?.manual}
+                onClick={(event) => {
+                  const form = event.currentTarget.form;
+                  if (form) save(new FormData(form), true);
+                }}
+              >
+                全部恢复自动结果
+              </Button>
             </div>
-          ))}
-          <label className="block space-y-2 text-sm">
-            纠正原因
-            <Input name="reason" required maxLength={1000} />
-          </label>
-          <div className="flex flex-wrap gap-3">
-            <Button
-              disabled={
-                busy ||
-                !token ||
-                run.status === "queued" ||
-                run.status === "running"
-              }
-            >
-              保存字段
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={
-                busy ||
-                !token ||
-                run.status === "queued" ||
-                run.status === "running" ||
-                run.status === "unknown"
-              }
-              onClick={rerun}
-            >
-              重新分析全部阶段
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy || !token || !run.result?.manual}
-              onClick={(event) => {
-                const form = event.currentTarget.form;
-                if (form) save(new FormData(form), true);
-              }}
-            >
-              全部恢复自动结果
-            </Button>
-          </div>
+          </FieldGroup>
         </form>
       ) : null}
     </section>

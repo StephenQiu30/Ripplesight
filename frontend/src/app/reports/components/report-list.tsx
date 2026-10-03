@@ -30,6 +30,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import {
+  SelectLabel,
   Select,
   SelectContent,
   SelectGroup,
@@ -140,6 +141,7 @@ export function ReportList() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
+                    <SelectLabel className="sr-only">关注主题</SelectLabel>
                     <SelectItem value="all">全部主题</SelectItem>
                     {topics.map((topic) => (
                       <SelectItem key={topic.id} value={topic.id}>

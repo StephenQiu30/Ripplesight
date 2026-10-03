@@ -1,3 +1,10 @@
+import { ChevronDownIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
 import Link from "next/link";
 
 import { EditionPrint } from "@/components/publication/edition-print";
@@ -19,7 +26,7 @@ export function PublicEditionReader({
   const references = (ids: string[]) =>
     edition.entries.filter((entry) => ids.includes(entry.id));
   return (
-    <div className="space-y-9">
+    <div className="flex flex-col gap-y-9">
       <div className="text-muted-foreground flex flex-wrap gap-4 text-sm">
         <span>
           {labels[edition.kind]} · {edition.key}
@@ -55,7 +62,7 @@ export function PublicEditionReader({
         </section>
       ) : null}
       {edition.themes.map((theme) => (
-        <section key={theme.heading} className="space-y-4">
+        <section key={theme.heading} className="flex flex-col gap-y-4">
           <h2 className="text-xl font-medium">{theme.heading}</h2>
           <p className="text-muted-foreground leading-7 whitespace-pre-wrap">
             {theme.summary}
@@ -75,12 +82,27 @@ export function PublicEditionReader({
           <PublicItemCards items={references(edition.flashes)} />
         </section>
       ) : null}
-      <details className="space-y-4">
-        <summary className="cursor-pointer text-sm">
-          全部 {edition.entries.length} 条固定引用
-        </summary>
-        <PublicItemCards items={edition.entries} />
-      </details>
+      <Collapsible className="flex flex-col gap-4">
+        <CollapsibleTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
+          >
+            <span className="min-w-0 text-left">
+              全部 {edition.entries.length} 条固定引用
+            </span>
+            <ChevronDownIcon
+              aria-hidden="true"
+              data-icon="inline-end"
+              className="group-data-[state=open]:rotate-180"
+            />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent forceMount className="data-[state=closed]:hidden">
+          <PublicItemCards items={edition.entries} />
+        </CollapsibleContent>
+      </Collapsible>
       <nav
         aria-label="刊期导航"
         className="flex flex-wrap gap-5 text-sm print:hidden"

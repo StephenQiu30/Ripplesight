@@ -38,7 +38,7 @@ export function ResetTimeline({
   outage: HotKeyAPI.OutageView | null;
 }) {
   return (
-    <section aria-label="公告进展" className="space-y-8">
+    <section aria-label="公告进展" className="flex flex-col gap-y-8">
       {outage && (
         <article className="bg-secondary rounded-xl p-5">
           <h3 className="font-medium">
@@ -58,7 +58,7 @@ export function ResetTimeline({
         <p className="text-muted-foreground py-8">当前范围没有公告记录。</p>
       )}
       {events.map((event) => (
-        <article key={event.id} className="space-y-4">
+        <article key={event.id} className="flex flex-col gap-y-4">
           <div className="flex flex-wrap gap-2">
             <Badge variant="secondary">
               {event.kind === "reset_credit" ? "重置额度" : "直接重置"}
@@ -93,7 +93,7 @@ export function ResetTimeline({
             <p className="text-sm">原话时间：{event.schedule.label}</p>
           )}
           {event.estimate && (
-            <div className="text-muted-foreground space-y-1 text-sm">
+            <div className="text-muted-foreground flex flex-col gap-y-1 text-sm">
               <p>{event.estimate.label}</p>
               <p>
                 {basis[event.estimate.basis]}：{event.estimate.reason}
@@ -108,7 +108,7 @@ export function ResetTimeline({
               。此时间不是账户精确到账时间。
             </p>
           )}
-          <ol className="space-y-3">
+          <ol className="flex flex-col gap-y-3">
             {(event.posts ?? []).map((post) => (
               <li key={`${post.post_id}-${post.action}`} className="text-sm">
                 <p className="text-muted-foreground">

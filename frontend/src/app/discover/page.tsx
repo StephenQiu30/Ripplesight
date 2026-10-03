@@ -1,3 +1,4 @@
+import { DiscoveryFilters } from "./components/discovery-filters";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
@@ -16,7 +17,6 @@ import {
 import { PublicTimelineCards } from "@/components/publication/reading-groups";
 import { SavedItems } from "@/components/publication/local-reading";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { publicSiteMetadata } from "@/components/publication/site-metadata";
 
 export async function generateMetadata({
@@ -125,119 +125,16 @@ export default async function DiscoverPage({
       <PublicationNavigation />
       <div>
         <h1 className="text-3xl font-medium tracking-tight">值得关注的资讯</h1>
-        <form method="get" className="my-7 flex flex-wrap items-end gap-3">
-          <label className="space-y-2 text-xs">
-            范围
-            <select
-              name="mode"
-              defaultValue={mode}
-              className="bg-muted block rounded-md p-2 text-sm"
-            >
-              <option value="selected">精选</option>
-              <option value="all">全部</option>
-            </select>
-          </label>
-          <label className="space-y-2 text-xs">
-            时间
-            <select
-              name="window"
-              defaultValue={window}
-              className="bg-muted block rounded-md p-2 text-sm"
-            >
-              <option value="24h">24 小时</option>
-              <option value="7d">7 天</option>
-            </select>
-          </label>
-          <label className="space-y-2 text-xs">
-            分类
-            <select
-              name="category"
-              defaultValue={category ?? ""}
-              className="bg-muted block rounded-md p-2 text-sm"
-            >
-              <option value="">全部分类</option>
-              {categories.map(([key, label]) => (
-                <option value={key} key={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="space-y-2 text-xs">
-            频道
-            <select
-              name="channel"
-              defaultValue={channel ?? ""}
-              className="bg-muted block rounded-md p-2 text-sm"
-            >
-              <option value="">全部频道</option>
-              <option value="news">资讯</option>
-              <option value="x">X</option>
-              <option value="firstParty">第一方</option>
-            </select>
-          </label>
-          <label className="space-y-2 text-xs">
-            排列
-            <select
-              name="by"
-              defaultValue={by}
-              className="bg-muted block rounded-md p-2 text-sm"
-            >
-              <option value="timeline">发现时间线</option>
-              <option value="published">来源发布时间</option>
-            </select>
-          </label>
-          <label className="space-y-2 text-xs">
-            来源
-            <Input
-              name="source_key"
-              defaultValue={params.source_key}
-              maxLength={64}
-              placeholder="来源标识"
-            />
-          </label>
-          <label className="min-w-40 flex-1 space-y-2 text-xs">
-            标签
-            <Input
-              name="tag"
-              defaultValue={params.tag}
-              maxLength={128}
-              placeholder="正式标签"
-            />
-          </label>
-          <label className="min-w-40 flex-1 space-y-2 text-xs">
-            专题
-            <Input
-              name="topic"
-              defaultValue={params.topic}
-              maxLength={64}
-              placeholder="专题标识，如 openai"
-            />
-          </label>
-          <label className="space-y-2 text-xs">
-            搜索排序
-            <select
-              name="search_order"
-              defaultValue={
-                params.search_order === "time" ? "time" : "relevance"
-              }
-              className="bg-muted block rounded-md p-2 text-sm"
-            >
-              <option value="relevance">相关性</option>
-              <option value="time">最新时间</option>
-            </select>
-          </label>
-          <label className="min-w-40 flex-1 space-y-2 text-xs">
-            检索
-            <Input
-              name="q"
-              defaultValue={params.q}
-              maxLength={200}
-              placeholder="所有词项均匹配"
-            />
-          </label>
-          <Button type="submit">查看</Button>
-        </form>
+        <DiscoveryFilters
+          key={JSON.stringify(params)}
+          mode={mode}
+          window={window}
+          category={category}
+          channel={channel}
+          by={by}
+          params={params}
+          categories={categories}
+        />
         <div className="grid gap-12 lg:grid-cols-3">
           <section className="lg:col-span-2">
             {timeline ? (
@@ -251,11 +148,11 @@ export default async function DiscoverPage({
               </Button>
             ) : null}
           </section>
-          <aside className="space-y-10">
+          <aside className="flex flex-col gap-y-10">
             <section>
               <h2 className="font-medium">事件热度</h2>
               {hot?.stories.length ? (
-                <ul className="mt-4 space-y-5">
+                <ul className="mt-4 flex flex-col gap-y-5">
                   {hot.stories.map((story) => (
                     <li key={story.id}>
                       <Link

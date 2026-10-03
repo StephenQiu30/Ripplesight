@@ -1,3 +1,10 @@
+import { ChevronDownIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
 import type { Metadata } from "next";
 import { connection } from "next/server";
 
@@ -43,7 +50,7 @@ export default async function AgentPage() {
           读取相同发布投影。读取不会抓取外站、调用模型或执行写入。
         </p>
         <h2 className="mt-10 text-lg font-medium">五个只读工具</h2>
-        <dl className="mt-5 space-y-5">
+        <dl className="mt-5 flex flex-col gap-y-5">
           {tools.map(([name, description]) => (
             <div key={name}>
               <dt className="font-mono text-sm break-all">{name}</dt>
@@ -67,14 +74,27 @@ export default async function AgentPage() {
           </a>
           <SelectedSnapshotDownload />
         </p>
-        <details className="mt-10">
-          <summary className="cursor-pointer text-sm font-medium">
-            查看当前服务说明
-          </summary>
-          <pre className="bg-muted mt-4 overflow-x-auto rounded-md p-5 text-xs leading-6 break-words whitespace-pre-wrap">
-            {instructions}
-          </pre>
-        </details>
+        <Collapsible className="mt-10">
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
+            >
+              <span className="min-w-0 text-left">查看当前服务说明</span>
+              <ChevronDownIcon
+                aria-hidden="true"
+                data-icon="inline-end"
+                className="group-data-[state=open]:rotate-180"
+              />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent forceMount className="data-[state=closed]:hidden">
+            <pre className="bg-muted mt-4 overflow-x-auto rounded-md p-5 text-xs leading-6 break-words whitespace-pre-wrap">
+              {instructions}
+            </pre>
+          </CollapsibleContent>
+        </Collapsible>
       </div>
     </>
   );

@@ -30,7 +30,7 @@ export function PublicationNavigation() {
     <>
       <nav
         aria-label="资讯阅读入口"
-        className="mb-8 flex flex-wrap gap-5 text-sm"
+        className="mb-8 flex flex-wrap items-center gap-5 text-sm"
       >
         <Link href="/discover">资讯</Link>
         <Link href="/discover/topics">行业专题</Link>
@@ -92,7 +92,7 @@ export function PublicItemCards({
   return (
     <div className="divide-muted divide-y">
       {items.map((item) => (
-        <article key={item.id} className="space-y-3 py-7">
+        <article key={item.id} className="flex flex-col gap-y-3 py-7">
           <div className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs">
             <span>
               {item.source.icon_url &&

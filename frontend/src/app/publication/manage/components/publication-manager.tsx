@@ -1,7 +1,18 @@
 "use client";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  SelectLabel,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+} from "@/components/ui/select";
+import { FieldGroup, FieldLabel, Field } from "@/components/ui/field";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import {
   getPublicationRepublishRun,
@@ -29,6 +40,8 @@ export function publicationError(error: unknown) {
 }
 
 export function PublicationManager() {
+  const fieldId = useId();
+
   const [token, setToken] = useState("");
   const [policies, setPolicies] = useState<HotKeyAPI.SourcePolicyView[]>([]);
   const [busy, setBusy] = useState(false);
@@ -59,9 +72,8 @@ export function PublicationManager() {
     }
   }
   return (
-    <div className="mt-8 space-y-12">
+    <div className="mt-8 flex flex-col gap-y-12">
       <form
-        className="flex flex-wrap items-end gap-3"
         onSubmit={(event) => {
           event.preventDefault();
           void action(async () => {
@@ -70,30 +82,35 @@ export function PublicationManager() {
           });
         }}
       >
-        <label className="max-w-md flex-1 space-y-2 text-sm">
-          操作员令牌
-          <Input
-            autoComplete="off"
-            type="password"
-            value={token}
-            onChange={(event) => setToken(event.target.value)}
-            required
-          />
-        </label>
-        <Button disabled={busy || !token}>读取策略</Button>
-        <Button
-          variant="ghost"
-          type="button"
-          onClick={() => {
-            setToken("");
-            setPolicies([]);
-            setRun(null);
-            setMediaRun(null);
-            setMessage("已清除内存令牌。");
-          }}
-        >
-          清除令牌
-        </Button>
+        <FieldGroup className="flex flex-row flex-wrap items-end gap-3">
+          <Field className="max-w-md min-w-0 flex-1">
+            <FieldLabel htmlFor={`${fieldId}-publication-manager-field-1`}>
+              操作员令牌
+            </FieldLabel>
+            <Input
+              autoComplete="off"
+              type="password"
+              value={token}
+              onChange={(event) => setToken(event.target.value)}
+              required
+              id={`${fieldId}-publication-manager-field-1`}
+            />
+          </Field>
+          <Button disabled={busy || !token}>读取策略</Button>
+          <Button
+            variant="ghost"
+            type="button"
+            onClick={() => {
+              setToken("");
+              setPolicies([]);
+              setRun(null);
+              setMediaRun(null);
+              setMessage("已清除内存令牌。");
+            }}
+          >
+            清除令牌
+          </Button>
+        </FieldGroup>
       </form>
       {message ? (
         <p role="status" className="bg-muted rounded-md p-4 text-sm leading-6">
@@ -103,7 +120,7 @@ export function PublicationManager() {
       {policies.length ? (
         <section>
           <h2 className="text-lg font-medium">当前来源策略</h2>
-          <ul className="mt-4 space-y-4">
+          <ul className="mt-4 flex flex-col gap-y-4">
             {policies.map((policy) => (
               <li
                 key={policy.source_key}
@@ -130,7 +147,6 @@ export function PublicationManager() {
           正文格式由固定材料记录决定，许可策略只控制公开范围与再分发授权。
         </p>
         <form
-          className="mt-5 grid gap-4 sm:grid-cols-2"
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
@@ -163,75 +179,145 @@ export function PublicationManager() {
             });
           }}
         >
-          <label className="space-y-2 text-sm">
-            来源标识
-            <Input name="source" required maxLength={64} />
-          </label>
-          <label className="space-y-2 text-sm">
-            预期修订（新来源为 0）
-            <Input
-              name="revision"
-              type="number"
-              min={0}
-              required
-              defaultValue={0}
-            />
-          </label>
-          <label className="space-y-2 text-sm">
-            参与模式
-            <select
-              name="participation"
-              defaultValue="isolated"
-              className="bg-muted block w-full rounded-md p-3"
-            >
-              <option value="isolated">隔离</option>
-              <option value="editorial">编辑来源</option>
-              <option value="hot_signal">热度信号</option>
-            </select>
-          </label>
-          <label className="space-y-2 text-sm">
-            许可名称
-            <Input name="license" required maxLength={1000} />
-          </label>
-          <label className="space-y-2 text-sm">
-            许可说明 URL
-            <Input name="license_url" type="url" />
-          </label>
-          <label className="space-y-2 text-sm">
-            公开延迟（秒）
-            <Input
-              name="delay"
-              type="number"
-              min={0}
-              max={3600}
-              defaultValue={180}
-              required
-            />
-          </label>
-          <label className="space-y-2 text-sm">
-            修订原因
-            <Input name="reason" required maxLength={1000} />
-          </label>
-          <div className="flex flex-wrap gap-5 text-sm sm:col-span-2">
-            <label>
-              <input type="checkbox" name="site" /> 允许站内全文
-            </label>
-            <label>
-              <input type="checkbox" name="syndicate" /> 允许全文再分发
-            </label>
-            <label>
-              <input type="checkbox" name="index" /> 允许索引
-            </label>
-          </div>
-          <Button disabled={busy || !token} className="justify-self-start">
-            保存策略修订
-          </Button>
+          <FieldGroup className="mt-5 grid gap-4 sm:grid-cols-2">
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-publication-manager-field-2`}>
+                来源标识
+              </FieldLabel>
+              <Input
+                name="source"
+                required
+                maxLength={64}
+                id={`${fieldId}-publication-manager-field-2`}
+              />
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-publication-manager-field-3`}>
+                预期修订（新来源为 0）
+              </FieldLabel>
+              <Input
+                name="revision"
+                type="number"
+                min={0}
+                required
+                defaultValue={0}
+                id={`${fieldId}-publication-manager-field-3`}
+              />
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-publication-manager-field-4`}>
+                参与模式
+              </FieldLabel>
+              <Select name="participation" defaultValue="isolated">
+                <SelectTrigger
+                  id={`${fieldId}-publication-manager-field-4`}
+                  className="w-full min-w-0"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectGroup>
+                    <SelectLabel className="sr-only">参与模式</SelectLabel>
+                    <SelectItem value="isolated" className="whitespace-normal">
+                      隔离
+                    </SelectItem>
+                    <SelectItem value="editorial" className="whitespace-normal">
+                      编辑来源
+                    </SelectItem>
+                    <SelectItem
+                      value="hot_signal"
+                      className="whitespace-normal"
+                    >
+                      热度信号
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-publication-manager-field-5`}>
+                许可名称
+              </FieldLabel>
+              <Input
+                name="license"
+                required
+                maxLength={1000}
+                id={`${fieldId}-publication-manager-field-5`}
+              />
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-publication-manager-field-6`}>
+                许可说明 URL
+              </FieldLabel>
+              <Input
+                name="license_url"
+                type="url"
+                id={`${fieldId}-publication-manager-field-6`}
+              />
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-publication-manager-field-7`}>
+                公开延迟（秒）
+              </FieldLabel>
+              <Input
+                name="delay"
+                type="number"
+                min={0}
+                max={3600}
+                defaultValue={180}
+                required
+                id={`${fieldId}-publication-manager-field-7`}
+              />
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-publication-manager-field-8`}>
+                修订原因
+              </FieldLabel>
+              <Input
+                name="reason"
+                required
+                maxLength={1000}
+                id={`${fieldId}-publication-manager-field-8`}
+              />
+            </Field>
+            <div className="flex flex-wrap gap-5 text-sm sm:col-span-2">
+              <Field orientation="horizontal" className="w-auto">
+                <Checkbox
+                  name="site"
+                  id={`${fieldId}-publication-manager-field-9`}
+                />
+                <FieldLabel htmlFor={`${fieldId}-publication-manager-field-9`}>
+                  允许站内全文
+                </FieldLabel>
+              </Field>
+              <Field orientation="horizontal" className="w-auto">
+                <Checkbox
+                  name="syndicate"
+                  id={`${fieldId}-publication-manager-field-10`}
+                />
+                <FieldLabel htmlFor={`${fieldId}-publication-manager-field-10`}>
+                  允许全文再分发
+                </FieldLabel>
+              </Field>
+              <Field orientation="horizontal" className="w-auto">
+                <Checkbox
+                  name="index"
+                  id={`${fieldId}-publication-manager-field-11`}
+                />
+                <FieldLabel htmlFor={`${fieldId}-publication-manager-field-11`}>
+                  允许索引
+                </FieldLabel>
+              </Field>
+            </div>
+            <Button disabled={busy || !token} className="justify-self-start">
+              保存策略修订
+            </Button>
+          </FieldGroup>
         </form>
       </section>
       <section>
         <h2 className="text-lg font-medium">重建来源公开投影</h2>
         <form
-          className="mt-5 flex flex-wrap items-end gap-3"
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
@@ -250,18 +336,34 @@ export function PublicationManager() {
             });
           }}
         >
-          <label className="space-y-2 text-sm">
-            来源
-            <Input name="source" required />
-          </label>
-          <label className="space-y-2 text-sm">
-            策略修订
-            <Input name="revision" type="number" min={1} required />
-          </label>
-          <Button disabled={busy || !token}>受理重建</Button>
+          <FieldGroup className="mt-5 flex flex-row flex-wrap items-end gap-3">
+            <Field className="min-w-0 flex-1 basis-full sm:basis-48">
+              <FieldLabel htmlFor={`${fieldId}-publication-manager-field-12`}>
+                来源
+              </FieldLabel>
+              <Input
+                name="source"
+                required
+                id={`${fieldId}-publication-manager-field-12`}
+              />
+            </Field>
+            <Field className="min-w-0 flex-1 basis-full sm:basis-48">
+              <FieldLabel htmlFor={`${fieldId}-publication-manager-field-13`}>
+                策略修订
+              </FieldLabel>
+              <Input
+                name="revision"
+                type="number"
+                min={1}
+                required
+                id={`${fieldId}-publication-manager-field-13`}
+              />
+            </Field>
+            <Button disabled={busy || !token}>受理重建</Button>
+          </FieldGroup>
         </form>
         {run ? (
-          <div className="mt-5 space-y-3 text-sm">
+          <div className="mt-5 flex flex-col gap-y-3 text-sm">
             <p>
               状态 {run.status} · 已处理 {run.processed_count} 条
               {run.failure_code ? ` · ${run.failure_code}` : ""}
@@ -292,7 +394,6 @@ export function PublicationManager() {
       <section>
         <h2 className="text-lg font-medium">调整单篇公开范围</h2>
         <form
-          className="mt-5 grid gap-4 sm:grid-cols-2"
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
@@ -317,40 +418,94 @@ export function PublicationManager() {
             });
           }}
         >
-          <label className="space-y-2 text-sm">
-            条目编号
-            <Input name="content" required />
-          </label>
-          <label className="space-y-2 text-sm">
-            预期公开修订
-            <Input name="revision" type="number" min={1} required />
-          </label>
-          <label className="space-y-2 text-sm">
-            范围
-            <select
-              name="visibility"
-              className="bg-muted block w-full rounded-md p-3"
-            >
-              <option value="public">公开</option>
-              <option value="summary-only">摘要</option>
-              <option value="withdrawn">撤回</option>
-            </select>
-          </label>
-          <label className="space-y-2 text-sm">
-            原因
-            <Input name="reason" required maxLength={1000} />
-          </label>
-          <div className="flex flex-wrap gap-5 text-sm sm:col-span-2">
-            <label>
-              <input type="checkbox" name="indexed" /> 允许索引
-            </label>
-            <label>
-              <input type="checkbox" name="excluded" /> 从索引排除
-            </label>
-          </div>
-          <Button disabled={busy || !token} className="justify-self-start">
-            保存范围修订
-          </Button>
+          <FieldGroup className="mt-5 grid gap-4 sm:grid-cols-2">
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-publication-manager-field-14`}>
+                条目编号
+              </FieldLabel>
+              <Input
+                name="content"
+                required
+                id={`${fieldId}-publication-manager-field-14`}
+              />
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-publication-manager-field-15`}>
+                预期公开修订
+              </FieldLabel>
+              <Input
+                name="revision"
+                type="number"
+                min={1}
+                required
+                id={`${fieldId}-publication-manager-field-15`}
+              />
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-publication-manager-field-16`}>
+                范围
+              </FieldLabel>
+              <Select name="visibility" defaultValue="public">
+                <SelectTrigger
+                  id={`${fieldId}-publication-manager-field-16`}
+                  className="w-full min-w-0"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectGroup>
+                    <SelectLabel className="sr-only">范围</SelectLabel>
+                    <SelectItem value="public" className="whitespace-normal">
+                      公开
+                    </SelectItem>
+                    <SelectItem
+                      value="summary-only"
+                      className="whitespace-normal"
+                    >
+                      摘要
+                    </SelectItem>
+                    <SelectItem value="withdrawn" className="whitespace-normal">
+                      撤回
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-publication-manager-field-17`}>
+                原因
+              </FieldLabel>
+              <Input
+                name="reason"
+                required
+                maxLength={1000}
+                id={`${fieldId}-publication-manager-field-17`}
+              />
+            </Field>
+            <div className="flex flex-wrap gap-5 text-sm sm:col-span-2">
+              <Field orientation="horizontal" className="w-auto">
+                <Checkbox
+                  name="indexed"
+                  id={`${fieldId}-publication-manager-field-18`}
+                />
+                <FieldLabel htmlFor={`${fieldId}-publication-manager-field-18`}>
+                  允许索引
+                </FieldLabel>
+              </Field>
+              <Field orientation="horizontal" className="w-auto">
+                <Checkbox
+                  name="excluded"
+                  id={`${fieldId}-publication-manager-field-19`}
+                />
+                <FieldLabel htmlFor={`${fieldId}-publication-manager-field-19`}>
+                  从索引排除
+                </FieldLabel>
+              </Field>
+            </div>
+            <Button disabled={busy || !token} className="justify-self-start">
+              保存范围修订
+            </Button>
+          </FieldGroup>
         </form>
       </section>
       <section>
@@ -359,7 +514,6 @@ export function PublicationManager() {
           只保存当前固定正文中的正式图片或视频。同版本和许可修订复用已有任务；不确定、失败或取消的任务需人工核查，不能重复下载。
         </p>
         <form
-          className="mt-5 grid gap-4 sm:grid-cols-2"
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
@@ -381,27 +535,48 @@ export function PublicationManager() {
             });
           }}
         >
-          <label className="space-y-2 text-sm">
-            条目编号
-            <Input name="content" required />
-          </label>
-          <label className="space-y-2 text-sm">
-            固定正文版本编号
-            <Input name="version" required />
-          </label>
-          <label className="space-y-2 text-sm">
-            当前许可策略修订
-            <Input name="revision" type="number" min={1} required />
-          </label>
-          <Button
-            disabled={busy || !token}
-            className="self-end justify-self-start"
-          >
-            受理媒体任务
-          </Button>
+          <FieldGroup className="mt-5 grid gap-4 sm:grid-cols-2">
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-publication-manager-field-20`}>
+                条目编号
+              </FieldLabel>
+              <Input
+                name="content"
+                required
+                id={`${fieldId}-publication-manager-field-20`}
+              />
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-publication-manager-field-21`}>
+                固定正文版本编号
+              </FieldLabel>
+              <Input
+                name="version"
+                required
+                id={`${fieldId}-publication-manager-field-21`}
+              />
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-publication-manager-field-22`}>
+                当前许可策略修订
+              </FieldLabel>
+              <Input
+                name="revision"
+                type="number"
+                min={1}
+                required
+                id={`${fieldId}-publication-manager-field-22`}
+              />
+            </Field>
+            <Button
+              disabled={busy || !token}
+              className="self-end justify-self-start"
+            >
+              受理媒体任务
+            </Button>
+          </FieldGroup>
         </form>
         <form
-          className="mt-5 flex flex-wrap items-end gap-3"
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
@@ -415,16 +590,24 @@ export function PublicationManager() {
             );
           }}
         >
-          <label className="space-y-2 text-sm">
-            媒体任务回执编号
-            <Input name="run" required />
-          </label>
-          <Button disabled={busy || !token} variant="outline">
-            读取媒体回执
-          </Button>
+          <FieldGroup className="mt-5 flex flex-row flex-wrap items-end gap-3">
+            <Field className="min-w-0 flex-1 basis-full sm:basis-48">
+              <FieldLabel htmlFor={`${fieldId}-publication-manager-field-23`}>
+                媒体任务回执编号
+              </FieldLabel>
+              <Input
+                name="run"
+                required
+                id={`${fieldId}-publication-manager-field-23`}
+              />
+            </Field>
+            <Button disabled={busy || !token} variant="outline">
+              读取媒体回执
+            </Button>
+          </FieldGroup>
         </form>
         {mediaRun ? (
-          <div className="mt-5 space-y-3 text-sm">
+          <div className="mt-5 flex flex-col gap-y-3 text-sm">
             <p>
               状态 {mediaRun.status} · 可用 {mediaRun.available_count}/
               {mediaRun.candidate_count}

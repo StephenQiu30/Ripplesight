@@ -1,7 +1,8 @@
 "use client";
+import { FieldGroup, FieldLabel, Field } from "@/components/ui/field";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useId, useEffect, useRef, useState, type FormEvent } from "react";
 import { listReportEditions, requestReportEdition } from "@/api/rizhouyuekan";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -11,6 +12,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EditionCard, editionError, editionKinds } from "./edition-parts";
 
 export function EditionList() {
+  const fieldId = useId();
+
   const [kind, setKind] =
     useState<HotKeyAPI.EditionRequestInput["kind"]>("daily");
   const [rows, setRows] = useState<HotKeyAPI.EditionSummaryView[]>([]);
@@ -160,33 +163,45 @@ export function EditionList() {
           </section>
           <aside>
             <h2 className="font-medium">编选{editionKinds[kind]}</h2>
-            <form onSubmit={generate} className="mt-5 space-y-5">
-              <label className="block space-y-2 text-sm">
-                刊期
-                <Input
-                  name="key"
-                  required
-                  minLength={7}
-                  maxLength={10}
-                  placeholder={
-                    kind === "daily"
-                      ? "2026-10-01"
-                      : kind === "weekly"
-                        ? "2026-W39"
-                        : "2026-09"
-                  }
-                />
-              </label>
-              <label className="block space-y-2 text-sm">
-                编选原因
-                <Input name="reason" required maxLength={1000} />
-              </label>
-              <p className="text-muted-foreground text-xs leading-6">
-                请选择已结束的刊期。有新材料或需要重新编选时会保留此前修订。
-              </p>
-              <Button type="submit" disabled={saving}>
-                {saving ? "正在受理…" : "提交编选"}
-              </Button>
+            <form onSubmit={generate}>
+              <FieldGroup className="mt-5 flex flex-col gap-y-5">
+                <Field className="min-w-0">
+                  <FieldLabel htmlFor={`${fieldId}-edition-list-field-1`}>
+                    刊期
+                  </FieldLabel>
+                  <Input
+                    name="key"
+                    required
+                    minLength={7}
+                    maxLength={10}
+                    placeholder={
+                      kind === "daily"
+                        ? "2026-10-01"
+                        : kind === "weekly"
+                          ? "2026-W39"
+                          : "2026-09"
+                    }
+                    id={`${fieldId}-edition-list-field-1`}
+                  />
+                </Field>
+                <Field className="min-w-0">
+                  <FieldLabel htmlFor={`${fieldId}-edition-list-field-2`}>
+                    编选原因
+                  </FieldLabel>
+                  <Input
+                    name="reason"
+                    required
+                    maxLength={1000}
+                    id={`${fieldId}-edition-list-field-2`}
+                  />
+                </Field>
+                <p className="text-muted-foreground text-xs leading-6">
+                  请选择已结束的刊期。有新材料或需要重新编选时会保留此前修订。
+                </p>
+                <Button type="submit" disabled={saving}>
+                  {saving ? "正在受理…" : "提交编选"}
+                </Button>
+              </FieldGroup>
             </form>
             {accepted ? (
               <p role="status" className="mt-5 text-sm">

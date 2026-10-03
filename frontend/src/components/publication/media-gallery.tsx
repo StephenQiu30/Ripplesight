@@ -57,7 +57,7 @@ export function MediaGallery({
     );
   }
   return (
-    <section aria-label="媒体阅读" className="space-y-4">
+    <section aria-label="媒体阅读" className="flex flex-col gap-y-4">
       <h2 className="text-sm font-medium">媒体</h2>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
         {media.map((entry) => {
@@ -67,16 +67,17 @@ export function MediaGallery({
               : null;
           if (url && entry.kind === "image")
             return (
-              <button
+              <Button
                 key={entry.key}
                 type="button"
-                className="bg-muted/30 overflow-hidden rounded-md border text-left"
                 aria-label={`放大 ${entry.alt || "图片"}`}
                 onClick={() =>
                   setCurrent(
                     images.findIndex((image) => image.key === entry.key),
                   )
                 }
+                variant="ghost"
+                className="h-auto w-full overflow-hidden p-0"
               >
                 <Image
                   src={thumbnail(entry) ?? url}
@@ -87,7 +88,7 @@ export function MediaGallery({
                   className="h-auto max-h-56 w-full object-contain"
                   onError={() => unavailable(entry.key)}
                 />
-              </button>
+              </Button>
             );
           if (url && entry.kind === "video")
             return (

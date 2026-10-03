@@ -1,3 +1,6 @@
+import { useId } from "react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { FieldGroup, FieldLabel, Field } from "@/components/ui/field";
 import Link from "next/link";
 
 import {
@@ -26,13 +29,15 @@ export function BoardReading({
   domestic: boolean;
   openWeights: boolean;
 }) {
+  const fieldId = useId();
+
   const href =
     data.board.key === "overall"
       ? "/leaderboard"
       : `/leaderboard/category/${data.board.key}`;
   return (
-    <div className="space-y-10">
-      <header className="max-w-3xl space-y-4">
+    <div className="flex flex-col gap-y-10">
+      <header className="flex max-w-3xl flex-col gap-y-4">
         <p className="text-muted-foreground text-sm">公开评测共识</p>
         <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
           {data.board.name}
@@ -59,7 +64,7 @@ export function BoardReading({
         ))}
       </nav>
       <section
-        className="bg-muted/40 space-y-3 rounded-xl p-5 sm:p-6"
+        className="bg-muted/40 flex flex-col gap-y-3 rounded-xl p-5 sm:p-6"
         aria-label="榜单解读"
       >
         <p className="leading-7">{data.board.how_to_read}</p>
@@ -78,43 +83,43 @@ export function BoardReading({
           阅读计算规则
         </Link>
       </section>
-      <section className="space-y-5" aria-label="模型排名">
-        <form
-          action={href}
-          method="get"
-          className="flex flex-wrap items-center gap-4"
-        >
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              name="domestic"
-              value="true"
-              defaultChecked={domestic}
-              className="accent-foreground size-4"
-            />
-            国内模型
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              name="open_weights"
-              value="true"
-              defaultChecked={openWeights}
-              className="accent-foreground size-4"
-            />
-            开放权重
-          </label>
-          <Button type="submit" variant="secondary" size="sm">
-            应用筛选
-          </Button>
-          {domestic || openWeights ? (
-            <Link
-              className="text-muted-foreground text-sm underline underline-offset-4"
-              href={href}
-            >
-              清除筛选
-            </Link>
-          ) : null}
+      <section className="flex flex-col gap-y-5" aria-label="模型排名">
+        <form action={href} method="get">
+          <FieldGroup className="flex flex-row flex-wrap items-center gap-4">
+            <Field orientation="horizontal" className="w-auto">
+              <Checkbox
+                name="domestic"
+                value="true"
+                defaultChecked={domestic}
+                id={`${fieldId}-board-reading-field-1`}
+              />
+              <FieldLabel htmlFor={`${fieldId}-board-reading-field-1`}>
+                国内模型
+              </FieldLabel>
+            </Field>
+            <Field orientation="horizontal" className="w-auto">
+              <Checkbox
+                name="open_weights"
+                value="true"
+                defaultChecked={openWeights}
+                id={`${fieldId}-board-reading-field-2`}
+              />
+              <FieldLabel htmlFor={`${fieldId}-board-reading-field-2`}>
+                开放权重
+              </FieldLabel>
+            </Field>
+            <Button type="submit" variant="secondary" size="sm">
+              应用筛选
+            </Button>
+            {domestic || openWeights ? (
+              <Link
+                className="text-muted-foreground text-sm underline underline-offset-4"
+                href={href}
+              >
+                清除筛选
+              </Link>
+            ) : null}
+          </FieldGroup>
         </form>
         <p className="text-muted-foreground text-sm">
           筛选保留原排名，最多展示 30 个模型；输入 / 输出价格单位为每百万
@@ -144,7 +149,7 @@ export function BoardReading({
                   <TableCell>
                     <div className="flex min-w-44 items-center gap-3">
                       <ModelMark model={entry.model} />
-                      <div className="space-y-1">
+                      <div className="flex flex-col gap-y-1">
                         <Link
                           className="font-medium hover:underline"
                           href={`/leaderboard/models/${entry.model.slug}`}
@@ -210,7 +215,7 @@ export function BoardReading({
         )}
       </section>
       {data.pending.length > 0 ? (
-        <section className="space-y-3">
+        <section className="flex flex-col gap-y-3">
           <h2 className="text-xl font-medium">综合榜模型的分类证据缺口</h2>
           <p className="text-muted-foreground text-sm">
             这些模型尚未满足当前分类的独立证据资格，不能把未上榜解释为能力较低。

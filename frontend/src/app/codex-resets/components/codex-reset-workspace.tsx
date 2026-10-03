@@ -1,6 +1,8 @@
 "use client";
+import { FieldLabel, Field } from "@/components/ui/field";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
-import { useEffect, useState } from "react";
+import { useId, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   getCodexResetConfiguration,
@@ -41,6 +43,8 @@ function errorMessage(error: unknown) {
 }
 
 export function CodexResetWorkspace() {
+  const fieldId = useId();
+
   const [state, setState] = useState<State>({ status: "loading" });
   const [refresh, setRefresh] = useState(0);
   const [range, setRange] = useState<"all" | "recent">("all");
@@ -197,16 +201,19 @@ export function CodexResetWorkspace() {
         </Button>
       </div>
       {state.warning && (
-        <p role="alert" className="text-destructive mt-6 text-sm leading-6">
-          {state.warning}
-        </p>
+        <Alert variant="destructive" className="mt-6">
+          <AlertDescription>{state.warning}</AlertDescription>
+        </Alert>
       )}
       {!configuration.enabled && (
         <p role="status" className="bg-secondary mt-6 rounded-xl p-4 text-sm">
           监控已关闭。下方保留已有记录，暂无新扫描或识别。
         </p>
       )}
-      <section aria-label="公告监控健康" className="mt-10 space-y-5">
+      <section
+        aria-label="公告监控健康"
+        className="mt-10 flex flex-col gap-y-5"
+      >
         <div className="flex flex-wrap gap-2">
           <Badge variant="secondary">
             {configuration.enabled ? healthLabel[health.status] : "监控已关闭"}
@@ -274,14 +281,21 @@ export function CodexResetWorkspace() {
             >
               最近七日
             </Button>
-            <label className="text-muted-foreground flex items-center gap-2 text-sm">
+            <Field
+              orientation="horizontal"
+              className="w-auto"
+              data-disabled={range === "recent"}
+            >
               <Checkbox
                 checked={includeWithdrawn}
                 disabled={range === "recent"}
                 onCheckedChange={(value) => setIncludeWithdrawn(value === true)}
+                id={`${fieldId}-codex-reset-workspace-field-1`}
               />
-              包含已撤回
-            </label>
+              <FieldLabel htmlFor={`${fieldId}-codex-reset-workspace-field-1`}>
+                包含已撤回
+              </FieldLabel>
+            </Field>
           </div>
           {selectedDate && (
             <p className="text-muted-foreground mb-5 text-sm">

@@ -1,3 +1,4 @@
+import { selectOption } from "../../../../select";
 // @vitest-environment happy-dom
 import {
   cleanup,
@@ -89,9 +90,7 @@ describe("announcement operational UI", () => {
       event_ids: ["target-event"],
     });
     await openRelink();
-    fireEvent.change(screen.getByLabelText("目标公告"), {
-      target: { value: "target-event" },
-    });
+    await selectOption(screen.getByLabelText("目标公告"), "目标公告 · 修订 8");
     fireEvent.click(screen.getByRole("button", { name: "保存帖子归属" }));
     await waitFor(() =>
       expect(api.relinkCodexResetPost).toHaveBeenCalledTimes(1),
@@ -143,9 +142,7 @@ describe("announcement operational UI", () => {
       event_ids: ["target-event"],
     });
     await openRelink();
-    fireEvent.change(screen.getByLabelText("目标公告"), {
-      target: { value: "target-event" },
-    });
+    await selectOption(screen.getByLabelText("目标公告"), "目标公告 · 修订 8");
     fireEvent.click(screen.getByRole("button", { name: "保存帖子归属" }));
     await screen.findByRole("alert");
     expect(screen.getByRole("alert").textContent).toContain("操作结果尚未确认");

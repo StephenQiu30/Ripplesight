@@ -68,7 +68,7 @@ export default async function PublicStoryPage({
   return (
     <>
       <PublicationNavigation />
-      <div className="space-y-8">
+      <div className="flex flex-col gap-y-8">
         <div className="text-muted-foreground flex flex-wrap gap-4 text-sm">
           <time dateTime={story.first_seen_at}>
             {publicationTime(story.first_seen_at)}
@@ -88,7 +88,7 @@ export default async function PublicStoryPage({
         <h1 className="text-3xl leading-tight font-medium">{story.title}</h1>
         <p className="text-muted-foreground leading-8">{story.summary}</p>
         {story.latest_progress ? (
-          <section className="space-y-3">
+          <section className="flex flex-col gap-y-3">
             <h2 className="text-lg font-medium">最新进展</h2>
             <p className="leading-7">{story.latest_progress}</p>
           </section>

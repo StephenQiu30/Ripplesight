@@ -1,7 +1,24 @@
 "use client";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ChevronDownIcon } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
+import {
+  SelectLabel,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+} from "@/components/ui/select";
+import { FieldGroup, FieldLabel, Field } from "@/components/ui/field";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useId, useEffect, useRef, useState } from "react";
 import {
   getOperatorRelationBench,
   importOperatorRelationBench,
@@ -121,6 +138,8 @@ export function normalizeRelationPredictions(
 }
 
 export function RelationBench({ token }: { token: string }) {
+  const fieldId = useId();
+
   const [runs, setRuns] = useState<HotKeyAPI.SelectBenchRunView[]>([]);
   const [mode, setMode] = useState<"run" | "import">("run");
   const [file, setFile] = useState<File | null>(null);
@@ -251,96 +270,138 @@ export function RelationBench({ token }: { token: string }) {
       <p className="text-muted-foreground text-sm">
         固定报道对区分同一事实、后续进展、无关与综述。失败结果单独保留；导入只复算指标。排队使用生产提示词和当前预算,供应商开关默认关闭。
       </p>
-      <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
-        <label className="grid gap-1">
-          方式
-          <select
-            value={mode}
-            onChange={(e) => setMode(e.target.value as "run" | "import")}
-            className="bg-muted rounded-md p-2"
-          >
-            <option value="run">排队固定报道对</option>
-            <option value="import">导入逐条预测</option>
-          </select>
-        </label>
-        <label className="grid gap-1">
-          关系评测名称
-          <Input
-            required
-            aria-label="关系评测名称"
-            maxLength={200}
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-          />
-        </label>
-        <label className="grid gap-1 sm:col-span-2">
-          关系评测原因
-          <Input
-            required
-            aria-label="关系评测原因"
-            maxLength={2000}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
-        </label>
-        {mode === "run" ? (
-          <label className="grid gap-1 sm:col-span-2">
-            关系评测模型
+      <form onSubmit={submit}>
+        <FieldGroup className="grid gap-3 sm:grid-cols-2">
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${fieldId}-relation-bench-field-1`}>
+              方式
+            </FieldLabel>
+            <Select
+              value={mode}
+              onValueChange={(selectedValue) =>
+                setMode(selectedValue as "run" | "import")
+              }
+            >
+              <SelectTrigger
+                id={`${fieldId}-relation-bench-field-1`}
+                className="w-full min-w-0"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectGroup>
+                  <SelectLabel className="sr-only">方式</SelectLabel>
+                  <SelectItem value="run" className="whitespace-normal">
+                    排队固定报道对
+                  </SelectItem>
+                  <SelectItem value="import" className="whitespace-normal">
+                    导入逐条预测
+                  </SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${fieldId}-relation-bench-field-2`}>
+              关系评测名称
+            </FieldLabel>
             <Input
               required
-              aria-label="关系评测模型"
-              value={models}
-              placeholder="当前已配置模型,逗号分隔,最多 5 个"
-              onChange={(e) => setModels(e.target.value)}
+              aria-label="关系评测名称"
+              maxLength={200}
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              id={`${fieldId}-relation-bench-field-2`}
             />
-          </label>
-        ) : null}
-        <label className="grid gap-1">
-          分组
-          <Input
-            maxLength={64}
-            value={split}
-            onChange={(e) => setSplit(e.target.value)}
-          />
-        </label>
-        <label className="grid gap-1">
-          随机种子
-          <Input
-            required
-            type="number"
-            step={1}
-            value={seed}
-            onChange={(e) => setSeed(e.target.value)}
-          />
-        </label>
-        <label className="grid gap-1">
-          排队样本量
-          <Input
-            required
-            type="number"
-            min={1}
-            max={100}
-            value={sample}
-            onChange={(e) => setSample(e.target.value)}
-          />
-        </label>
-        <label className="grid min-w-0 gap-1 sm:col-span-2">
-          关系样本 JSON / JSONL（最多 20 MiB）
-          <Input
-            required
-            type="file"
-            accept=".json,.jsonl,application/json"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          />
-        </label>
-        <p className="text-muted-foreground text-xs sm:col-span-2">
-          样本格式: cases 中每条含 case_id、a / b（title、source、可选 summary /
-          frame）和 gold_relation。导入还需要 predictions: 模型名→逐条
-          case_id、relation、confidence；失败项用 relation: null 和 error_code。
-        </p>
-        <Button type="submit" disabled={busy} className="justify-self-start">
-          {mode === "run" ? "排队关系评测" : "导入并复算关系评测"}
-        </Button>
+          </Field>
+          <Field className="min-w-0 sm:col-span-2">
+            <FieldLabel htmlFor={`${fieldId}-relation-bench-field-3`}>
+              关系评测原因
+            </FieldLabel>
+            <Input
+              required
+              aria-label="关系评测原因"
+              maxLength={2000}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              id={`${fieldId}-relation-bench-field-3`}
+            />
+          </Field>
+          {mode === "run" ? (
+            <Field className="min-w-0 sm:col-span-2">
+              <FieldLabel htmlFor={`${fieldId}-relation-bench-field-4`}>
+                关系评测模型
+              </FieldLabel>
+              <Input
+                required
+                aria-label="关系评测模型"
+                value={models}
+                placeholder="当前已配置模型,逗号分隔,最多 5 个"
+                onChange={(e) => setModels(e.target.value)}
+                id={`${fieldId}-relation-bench-field-4`}
+              />
+            </Field>
+          ) : null}
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${fieldId}-relation-bench-field-5`}>
+              分组
+            </FieldLabel>
+            <Input
+              maxLength={64}
+              value={split}
+              onChange={(e) => setSplit(e.target.value)}
+              id={`${fieldId}-relation-bench-field-5`}
+            />
+          </Field>
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${fieldId}-relation-bench-field-6`}>
+              随机种子
+            </FieldLabel>
+            <Input
+              required
+              type="number"
+              step={1}
+              value={seed}
+              onChange={(e) => setSeed(e.target.value)}
+              id={`${fieldId}-relation-bench-field-6`}
+            />
+          </Field>
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`${fieldId}-relation-bench-field-7`}>
+              排队样本量
+            </FieldLabel>
+            <Input
+              required
+              type="number"
+              min={1}
+              max={100}
+              value={sample}
+              onChange={(e) => setSample(e.target.value)}
+              id={`${fieldId}-relation-bench-field-7`}
+            />
+          </Field>
+          <Field className="min-w-0 sm:col-span-2">
+            <FieldLabel htmlFor={`${fieldId}-relation-bench-field-8`}>
+              关系样本 JSON / JSONL（最多 20 MiB）
+            </FieldLabel>
+            <Input
+              required
+              type="file"
+              accept=".json,.jsonl,application/json"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              id={`${fieldId}-relation-bench-field-8`}
+            />
+          </Field>
+          <p className="text-muted-foreground text-xs sm:col-span-2">
+            样本格式: cases 中每条含 case_id、a / b（title、source、可选 summary
+            / frame）和 gold_relation。导入还需要 predictions: 模型名→逐条
+            case_id、relation、confidence；失败项用 relation: null 和
+            error_code。
+          </p>
+          <Button type="submit" disabled={busy} className="justify-self-start">
+            {mode === "run" ? "排队关系评测" : "导入并复算关系评测"}
+          </Button>
+        </FieldGroup>
       </form>
       {jobs.length ? (
         <div className="flex flex-wrap gap-3">
@@ -352,22 +413,27 @@ export function RelationBench({ token }: { token: string }) {
         </div>
       ) : null}
       <form
-        className="flex flex-wrap gap-3"
         onSubmit={(e) => {
           e.preventDefault();
           void load();
         }}
       >
-        <Input
-          aria-label="关系评测运行编号"
-          placeholder="运行编号,可读取历史评测"
-          value={selected}
-          onChange={(e) => setSelected(e.target.value)}
-          className="min-w-48 flex-1"
-        />
-        <Button disabled={busy || !selected} type="submit" variant="secondary">
-          读取 / 刷新关系评测
-        </Button>
+        <FieldGroup className="flex flex-row flex-wrap gap-3">
+          <Input
+            aria-label="关系评测运行编号"
+            placeholder="运行编号,可读取历史评测"
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
+            className="min-w-0 flex-1 basis-full sm:basis-48"
+          />
+          <Button
+            disabled={busy || !selected}
+            type="submit"
+            variant="secondary"
+          >
+            读取 / 刷新关系评测
+          </Button>
+        </FieldGroup>
       </form>
       <div className="flex flex-wrap gap-2">
         {runs.map((run) => (
@@ -387,40 +453,63 @@ export function RelationBench({ token }: { token: string }) {
             黄金集 {page.run.gold_fingerprint} · {page.run.prompt_version} ·{" "}
             {page.run.split ?? "无分组"} · seed {page.run.seed ?? "未知"}
           </p>
-          <details>
-            <summary className="cursor-pointer">
-              指标、混淆矩阵与错误覆盖
-            </summary>
-            <pre className="bg-muted/40 mt-3 max-h-96 overflow-auto rounded-lg p-4 text-xs">
-              {JSON.stringify(page.run.summary, null, 2)}
-            </pre>
-          </details>
+          <Collapsible>
+            <CollapsibleTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
+              >
+                <span className="min-w-0 text-left">
+                  指标、混淆矩阵与错误覆盖
+                </span>
+                <ChevronDownIcon
+                  aria-hidden="true"
+                  data-icon="inline-end"
+                  className="group-data-[state=open]:rotate-180"
+                />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent
+              forceMount
+              className="data-[state=closed]:hidden"
+            >
+              <pre className="bg-muted/40 mt-3 max-h-96 overflow-auto rounded-lg p-4 text-xs">
+                {JSON.stringify(page.run.summary, null, 2)}
+              </pre>
+            </CollapsibleContent>
+          </Collapsible>
           <form
             onSubmit={(e) => {
               e.preventDefault();
               void load();
             }}
-            className="flex flex-wrap items-center gap-4"
           >
-            <label className="flex gap-2">
-              <input
-                type="checkbox"
-                checked={disagree}
-                onChange={(e) => setDisagree(e.target.checked)}
-              />
-              仅模型分歧
-            </label>
-            <label className="flex gap-2">
-              <input
-                type="checkbox"
-                checked={errors}
-                onChange={(e) => setErrors(e.target.checked)}
-              />
-              仅错误 / 未知
-            </label>
-            <Button disabled={busy} variant="outline" type="submit">
-              应用关系筛选
-            </Button>
+            <FieldGroup className="flex flex-row flex-wrap items-center gap-4">
+              <Field orientation="horizontal" className="w-auto">
+                <Checkbox
+                  checked={disagree}
+                  onCheckedChange={(checked) => setDisagree(checked === true)}
+                  id={`${fieldId}-relation-bench-field-9`}
+                />
+                <FieldLabel htmlFor={`${fieldId}-relation-bench-field-9`}>
+                  仅模型分歧
+                </FieldLabel>
+              </Field>
+              <Field orientation="horizontal" className="w-auto">
+                <Checkbox
+                  checked={errors}
+                  onCheckedChange={(checked) => setErrors(checked === true)}
+                  id={`${fieldId}-relation-bench-field-10`}
+                />
+                <FieldLabel htmlFor={`${fieldId}-relation-bench-field-10`}>
+                  仅错误 / 未知
+                </FieldLabel>
+              </Field>
+              <Button disabled={busy} variant="outline" type="submit">
+                应用关系筛选
+              </Button>
+            </FieldGroup>
           </form>
           <div className="grid gap-4">
             {page.items.map((row) => (

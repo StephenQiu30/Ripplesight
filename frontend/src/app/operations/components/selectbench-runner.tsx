@@ -1,5 +1,12 @@
 "use client";
-import { useRef, useState } from "react";
+import { FieldGroup, FieldLabel, Field } from "@/components/ui/field";
+import { ChevronDownIcon } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
+import { useId, useRef, useState } from "react";
 import Link from "next/link";
 import { runOperatorSelectBench } from "@/api/yunyingweihu";
 import { Button } from "@/components/ui/button";
@@ -79,6 +86,8 @@ export function SelectBenchRunner({
   token: string;
   accepted: (run: HotKeyAPI.SelectBenchRunView) => void;
 }) {
+  const fieldId = useId();
+
   const [file, setFile] = useState<File | null>(null);
   const [label, setLabel] = useState("");
   const [models, setModels] = useState("");
@@ -132,92 +141,131 @@ export function SelectBenchRunner({
     }
   }
   return (
-    <details className="bg-muted/30 rounded-lg p-4">
-      <summary className="cursor-pointer font-medium">
-        运行生产筛选链路评测
-      </summary>
-      <p className="text-muted-foreground my-3 text-sm">
-        使用当前预筛选与两次独立评分，按固定 seed
-        分层抽样；会使用配置模型额度。运行开关默认关闭，失败或未知结果保留，未知付费阶段须人工复核。
-      </p>
-      <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
-        <label className="grid gap-1">
-          运行评测名称
-          <Input
-            required
-            maxLength={200}
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
+    <Collapsible className="bg-muted/30 rounded-lg p-4">
+      <CollapsibleTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
+        >
+          <span className="min-w-0 text-left">运行生产筛选链路评测</span>
+          <ChevronDownIcon
+            aria-hidden="true"
+            data-icon="inline-end"
+            className="group-data-[state=open]:rotate-180"
           />
-        </label>
-        <label className="grid gap-1">
-          模型名称（逗号分隔，最多 5 个）
-          <Input
-            required
-            value={models}
-            onChange={(e) => setModels(e.target.value)}
-          />
-        </label>
-        <label className="grid gap-1">
-          抽样上限（1–100）
-          <Input
-            required
-            type="number"
-            min={1}
-            max={100}
-            value={sample}
-            onChange={(e) => setSample(e.target.value)}
-          />
-        </label>
-        <label className="grid gap-1">
-          固定 seed
-          <Input
-            required
-            type="number"
-            value={seed}
-            onChange={(e) => setSeed(e.target.value)}
-          />
-        </label>
-        <label className="grid gap-1">
-          split（可选）
-          <Input value={split} onChange={(e) => setSplit(e.target.value)} />
-        </label>
-        <label className="grid gap-1">
-          运行原因
-          <Input
-            required
-            maxLength={2000}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
-        </label>
-        <label className="grid gap-1 sm:col-span-2">
-          黄金集 JSON / AIHOT JSONL（最多 20 MiB）
-          <Input
-            required
-            type="file"
-            accept="application/json,.json,.jsonl"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          />
-        </label>
-        <Button type="submit" disabled={busy}>
-          受理模型评测任务
         </Button>
-      </form>
-      {message && (
-        <p role="status" className="mt-3 text-sm">
-          {message}
+      </CollapsibleTrigger>
+      <CollapsibleContent forceMount className="data-[state=closed]:hidden">
+        <p className="text-muted-foreground my-3 text-sm">
+          使用当前预筛选与两次独立评分，按固定 seed
+          分层抽样；会使用配置模型额度。运行开关默认关闭，失败或未知结果保留，未知付费阶段须人工复核。
         </p>
-      )}
-      {jobIds.length > 0 && (
-        <div className="mt-3 flex max-h-32 flex-wrap gap-2 overflow-auto text-xs">
-          {jobIds.map((id) => (
-            <Link key={id} href={`/jobs/${id}`} className="underline">
-              任务 {id.slice(0, 8)}
-            </Link>
-          ))}
-        </div>
-      )}
-    </details>
+        <form onSubmit={submit}>
+          <FieldGroup className="grid gap-3 sm:grid-cols-2">
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-selectbench-runner-field-1`}>
+                运行评测名称
+              </FieldLabel>
+              <Input
+                required
+                maxLength={200}
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                id={`${fieldId}-selectbench-runner-field-1`}
+              />
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-selectbench-runner-field-2`}>
+                模型名称（逗号分隔，最多 5 个）
+              </FieldLabel>
+              <Input
+                required
+                value={models}
+                onChange={(e) => setModels(e.target.value)}
+                id={`${fieldId}-selectbench-runner-field-2`}
+              />
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-selectbench-runner-field-3`}>
+                抽样上限（1–100）
+              </FieldLabel>
+              <Input
+                required
+                type="number"
+                min={1}
+                max={100}
+                value={sample}
+                onChange={(e) => setSample(e.target.value)}
+                id={`${fieldId}-selectbench-runner-field-3`}
+              />
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-selectbench-runner-field-4`}>
+                固定 seed
+              </FieldLabel>
+              <Input
+                required
+                type="number"
+                value={seed}
+                onChange={(e) => setSeed(e.target.value)}
+                id={`${fieldId}-selectbench-runner-field-4`}
+              />
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-selectbench-runner-field-5`}>
+                split（可选）
+              </FieldLabel>
+              <Input
+                value={split}
+                onChange={(e) => setSplit(e.target.value)}
+                id={`${fieldId}-selectbench-runner-field-5`}
+              />
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-selectbench-runner-field-6`}>
+                运行原因
+              </FieldLabel>
+              <Input
+                required
+                maxLength={2000}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                id={`${fieldId}-selectbench-runner-field-6`}
+              />
+            </Field>
+            <Field className="min-w-0 sm:col-span-2">
+              <FieldLabel htmlFor={`${fieldId}-selectbench-runner-field-7`}>
+                黄金集 JSON / AIHOT JSONL（最多 20 MiB）
+              </FieldLabel>
+              <Input
+                required
+                type="file"
+                accept="application/json,.json,.jsonl"
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                id={`${fieldId}-selectbench-runner-field-7`}
+              />
+            </Field>
+            <Button type="submit" disabled={busy}>
+              受理模型评测任务
+            </Button>
+          </FieldGroup>
+        </form>
+        {message && (
+          <p role="status" className="mt-3 text-sm">
+            {message}
+          </p>
+        )}
+        {jobIds.length > 0 && (
+          <div className="mt-3 flex max-h-32 flex-wrap gap-2 overflow-auto text-xs">
+            {jobIds.map((id) => (
+              <Link key={id} href={`/jobs/${id}`} className="underline">
+                任务 {id.slice(0, 8)}
+              </Link>
+            ))}
+          </div>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

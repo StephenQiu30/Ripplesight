@@ -1,4 +1,5 @@
 "use client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -144,9 +145,9 @@ export function JobHistoryContent({
         </div>
       ) : null}
       {loadMoreError ? (
-        <p role="alert" className="text-destructive mt-3 text-center text-sm">
-          {loadMoreError}
-        </p>
+        <Alert variant="destructive" className="mt-3">
+          <AlertDescription>{loadMoreError}</AlertDescription>
+        </Alert>
       ) : null}
     </>
   );

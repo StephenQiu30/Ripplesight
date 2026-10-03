@@ -29,6 +29,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import {
+  SelectLabel,
   Select,
   SelectContent,
   SelectGroup,
@@ -664,6 +665,7 @@ export function SourceCoveragePanel() {
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
+                  <SelectLabel className="sr-only">来源</SelectLabel>
                   <SelectItem value="all">全部来源</SelectItem>
                   {sourceOptions.map((source) => (
                     <SelectItem key={source.key} value={source.key}>
@@ -692,6 +694,7 @@ export function SourceCoveragePanel() {
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
+                  <SelectLabel className="sr-only">能力</SelectLabel>
                   <SelectItem value="all">全部能力</SelectItem>
                   {CAPABILITIES.map((capability) => (
                     <SelectItem key={capability} value={capability}>

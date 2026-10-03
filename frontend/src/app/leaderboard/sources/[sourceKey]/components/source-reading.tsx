@@ -18,8 +18,8 @@ import {
 
 export function SourceReading({ data }: { data: HotKeyAPI.SourceDetailView }) {
   return (
-    <div className="space-y-10">
-      <header className="max-w-3xl space-y-4">
+    <div className="flex flex-col gap-y-10">
+      <header className="flex max-w-3xl flex-col gap-y-4">
         <Link
           className="text-muted-foreground text-sm hover:underline"
           href="/leaderboard/sources"
@@ -59,13 +59,13 @@ export function SourceReading({ data }: { data: HotKeyAPI.SourceDetailView }) {
         className="grid gap-8 md:grid-cols-2"
         aria-label="来源用途与限制"
       >
-        <div className="space-y-3">
+        <div className="flex flex-col gap-y-3">
           <h2 className="text-xl font-medium">测量什么</h2>
           <p className="text-muted-foreground leading-7">{data.what}</p>
           <h2 className="pt-2 text-xl font-medium">如何使用</h2>
           <p className="text-muted-foreground leading-7">{data.usage}</p>
         </div>
-        <div className="space-y-3">
+        <div className="flex flex-col gap-y-3">
           <h2 className="text-xl font-medium">限制与许可</h2>
           <p className="text-muted-foreground leading-7">{data.limits}</p>
           <p className="text-sm leading-6">数据许可：{data.license}</p>
@@ -76,8 +76,8 @@ export function SourceReading({ data }: { data: HotKeyAPI.SourceDetailView }) {
           ) : null}
         </div>
       </section>
-      <section className="space-y-5" aria-label="来源原始成绩">
-        <div className="space-y-2">
+      <section className="flex flex-col gap-y-5" aria-label="来源原始成绩">
+        <div className="flex flex-col gap-y-2">
           <h2 className="text-xl font-medium">
             {data.system_rows ? "系统与代理配置成绩" : "来源原始成绩"}
           </h2>

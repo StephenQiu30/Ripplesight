@@ -1,6 +1,7 @@
 "use client";
+import { FieldLabel, Field } from "@/components/ui/field";
 
-import { useEffect, useState } from "react";
+import { useId, useEffect, useState } from "react";
 import { listEventFacts } from "@/api/shijian";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,8 @@ export function EventFacts({
   onToggleFact?: (factId: string) => void;
   onFactsLoaded: (facts: HotKeyAPI.EventFactView[]) => void;
 }) {
+  const fieldId = useId();
+
   const [facts, setFacts] = useState<HotKeyAPI.EventFactView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
@@ -84,18 +87,21 @@ export function EventFacts({
       ) : facts.length === 0 ? (
         <p className="text-muted-foreground mt-6">当前事件尚无细分事实关系。</p>
       ) : (
-        <ol className="mt-6 space-y-7">
+        <ol className="mt-6 flex flex-col gap-y-7">
           {facts.map((fact) => (
-            <li key={fact.id} className="space-y-3">
+            <li key={fact.id} className="flex flex-col gap-y-3">
               <div className="flex flex-wrap items-center gap-3">
                 {onToggleFact ? (
-                  <label className="flex items-center gap-2 text-sm">
+                  <Field orientation="horizontal" className="w-auto">
                     <Checkbox
                       checked={selectedFactIds.includes(fact.id)}
                       onCheckedChange={() => onToggleFact(fact.id)}
+                      id={`${fieldId}-event-facts-field-1`}
                     />
-                    选择事实
-                  </label>
+                    <FieldLabel htmlFor={`${fieldId}-event-facts-field-1`}>
+                      选择事实
+                    </FieldLabel>
+                  </Field>
                 ) : null}
                 <Badge variant="secondary">
                   {relationLabels[fact.relation]}

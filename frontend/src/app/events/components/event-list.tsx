@@ -15,7 +15,7 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { FieldGroup, Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -115,53 +115,52 @@ export function EventList() {
           刷新事件
         </Button>
       </div>
-      <form
-        onSubmit={applyFilters}
-        className="mt-8 grid items-end gap-5 sm:grid-cols-2 lg:grid-cols-4"
-      >
-        <Field>
-          <FieldLabel htmlFor="event-query">搜索事件</FieldLabel>
-          <Input
-            id="event-query"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            maxLength={200}
-            placeholder="标题或证据正文"
-          />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="event-topic">关注主题</FieldLabel>
-          <Select value={topicId} onValueChange={setTopicId}>
-            <SelectTrigger id="event-topic" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部关注</SelectItem>
-              {topics.map((topic) => (
-                <SelectItem key={topic.id} value={topic.id}>
-                  {topic.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="event-source">证据来源</FieldLabel>
-          <Select value={sourceKey} onValueChange={setSourceKey}>
-            <SelectTrigger id="event-source" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部来源</SelectItem>
-              {sources.map((source) => (
-                <SelectItem key={source.source_key} value={source.source_key}>
-                  {source.display_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Button type="submit">应用筛选</Button>
+      <form onSubmit={applyFilters}>
+        <FieldGroup className="mt-8 grid items-end gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <Field>
+            <FieldLabel htmlFor="event-query">搜索事件</FieldLabel>
+            <Input
+              id="event-query"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              maxLength={200}
+              placeholder="标题或证据正文"
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="event-topic">关注主题</FieldLabel>
+            <Select value={topicId} onValueChange={setTopicId}>
+              <SelectTrigger id="event-topic" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部关注</SelectItem>
+                {topics.map((topic) => (
+                  <SelectItem key={topic.id} value={topic.id}>
+                    {topic.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="event-source">证据来源</FieldLabel>
+            <Select value={sourceKey} onValueChange={setSourceKey}>
+              <SelectTrigger id="event-source" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部来源</SelectItem>
+                {sources.map((source) => (
+                  <SelectItem key={source.source_key} value={source.source_key}>
+                    {source.display_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Button type="submit">应用筛选</Button>
+        </FieldGroup>
       </form>
       <EventHotList topicId={params.topic_id ?? undefined} />
       {optionsError ? (
@@ -241,7 +240,7 @@ function EventResults({
 
   if (state.status === "loading")
     return (
-      <div aria-label="正在读取事件" className="mt-10 space-y-5">
+      <div aria-label="正在读取事件" className="mt-10 flex flex-col gap-y-5">
         {[1, 2, 3].map((id) => (
           <Skeleton key={id} className="h-28 w-full" />
         ))}
@@ -270,7 +269,10 @@ function EventResults({
     sources.map((source) => [source.source_key, source.display_name]),
   );
   return (
-    <section aria-label="已确认事件列表" className="mt-10 space-y-8">
+    <section
+      aria-label="已确认事件列表"
+      className="mt-10 flex flex-col gap-y-8"
+    >
       {!state.page.items.length ? (
         <Empty className="py-12">
           <EmptyHeader>
@@ -327,9 +329,9 @@ function EventResults({
         ))
       )}
       {pageError ? (
-        <p role="alert" className="text-destructive">
-          {pageError}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{pageError}</AlertDescription>
+        </Alert>
       ) : null}
       {state.page.next_cursor ? (
         <Button

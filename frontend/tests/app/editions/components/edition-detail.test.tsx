@@ -110,3 +110,20 @@ describe("Edition reading", () => {
     expect(screen.getByText("正文暂不可读")).toBeTruthy();
   });
 });
+
+it("retains an unfinished revision when its disclosure closes and reopens", async () => {
+  mocks.read.mockResolvedValue(edition());
+  render(<EditionDetail editionId="edition-1" />);
+  const trigger = await screen.findByRole("button", { name: "修订本刊" });
+  fireEvent.click(trigger);
+  const title = screen.getByLabelText("标题") as HTMLInputElement;
+  fireEvent.change(title, { target: { value: "保留草稿标题" } });
+  fireEvent.click(trigger);
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(trigger);
+  expect(trigger.getAttribute("aria-expanded")).toBe("true");
+  expect((screen.getByLabelText("标题") as HTMLInputElement).value).toBe(
+    "保留草稿标题",
+  );
+  expect(mocks.correct).not.toHaveBeenCalled();
+});

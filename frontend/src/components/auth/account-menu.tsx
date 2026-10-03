@@ -1,4 +1,5 @@
 "use client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -69,9 +70,9 @@ export function AccountMenu() {
           </DropdownMenuItem>
         </DropdownMenuGroup>
         {error && (
-          <p role="alert" className="text-destructive px-2 py-2 text-xs">
-            {error}
-          </p>
+          <Alert variant="destructive" className="px-2 py-2">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
       </DropdownMenuContent>
     </DropdownMenu>

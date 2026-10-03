@@ -1,4 +1,5 @@
 "use client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -194,7 +195,7 @@ export function EditorialSourcePreview({
   return (
     <section
       aria-label="配置试抓"
-      className="bg-muted/30 space-y-4 rounded-xl p-5"
+      className="bg-muted/30 flex flex-col gap-y-4 rounded-xl p-5"
     >
       <h3 className="text-lg font-medium">配置试抓</h3>
       <p className="text-muted-foreground text-sm leading-7">
@@ -238,7 +239,7 @@ export function EditorialSourcePreview({
               X 本地样本解析未提供；保存并批准官方连接后可受理单页远程试抓。
             </p>
           )}
-          <div className="space-y-3 border-t pt-4">
+          <div className="flex flex-col gap-y-3 border-t pt-4">
             <p className="text-sm">
               {profileId
                 ? `远程试抓预期来源修订 ${expectedRevision}。未保存的表单改动不会参与远程试抓。`
@@ -269,12 +270,12 @@ export function EditorialSourcePreview({
         </>
       )}
       {message ? (
-        <p role="alert" className="text-destructive text-sm break-words">
-          {message}
-        </p>
+        <Alert variant="destructive" className="break-words">
+          <AlertDescription>{message}</AlertDescription>
+        </Alert>
       ) : null}
       {job ? (
-        <div className="space-y-3 text-sm">
+        <div className="flex flex-col gap-y-3 text-sm">
           <p>
             试抓任务 {jobStatus?.status ?? job.status} ·{" "}
             <Link
@@ -295,7 +296,7 @@ export function EditorialSourcePreview({
         </div>
       ) : null}
       {preview ? (
-        <div className="space-y-3 text-sm">
+        <div className="flex flex-col gap-y-3 text-sm">
           <p role="status">
             {statuses[preview.status]} ·{" "}
             {preview.mode === "sample" ? "本地样本" : "远程列表"} · 本次候选{" "}
@@ -306,7 +307,7 @@ export function EditorialSourcePreview({
             <p className="break-words">{preview.reason}</p>
           ) : null}
           {preview.status === "unknown" ? (
-            <div className="space-y-3">
+            <div className="flex flex-col gap-y-3">
               <p>
                 请先在任务回执核验未知结果，不会自动重试或额外发送收费请求。人工核对保留原未知结果与保守预算回执。
               </p>
@@ -331,7 +332,7 @@ export function EditorialSourcePreview({
           {preview.items.map((item, index) => (
             <article
               key={`${item.url}:${index}`}
-              className="bg-background space-y-2 rounded-md p-3"
+              className="bg-background flex flex-col gap-y-2 rounded-md p-3"
             >
               <p className="font-medium">{item.title}</p>
               <p className="text-muted-foreground">
