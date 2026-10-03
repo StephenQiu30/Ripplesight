@@ -86,6 +86,8 @@ GitHub 按钮使用官方 GitHub-Mark 栅格素材 `public/brand/github-mark.png
 
 ## 可访问性与运行
 
+- 本机 loopback 页面别名在读取会话前按 `HOTKEY_WEB_ORIGIN` 规范化，仅同协议同端口的 GET/HEAD 跳转并保留原路径和查询。API Origin/CSRF 校验保持严格；缺少会话的孤立 CSRF Cookie 在页面入口清除，有效账户的凭据验证码仍使用绑定 CSRF。OAuth 回调、Cookie 和本机页面使用同一主机。
+
 - 交互支持键盘焦点，装饰图形使用 `aria-hidden`，状态区域提供语义名称。
 - 动效遵循 `prefers-reduced-motion`。
 - 页面必须完成桌面和窄屏浏览器检查。

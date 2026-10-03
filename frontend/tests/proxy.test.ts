@@ -28,7 +28,102 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllEnvs());
 
+function pageRequest(url: string, method = "GET") {
+  return new NextRequest(url, { method, headers: { Host: new URL(url).host } });
+}
+
 describe("authenticated navigation and CSP", () => {
+  it.each(["GET", "HEAD"])(
+    "canonicalizes a loopback alias before authentication for %s",
+    async (method) => {
+      vi.stubEnv("HOTKEY_WEB_ORIGIN", "http://127.0.0.1:8666");
+      const response = await proxy(
+        pageRequest(
+          "http://localhost:8666/login?returnTo=%2Fjobs%3Fstate%3Dfailed",
+          method,
+        ),
+      );
+      expect(response.status).toBe(307);
+      expect(response.headers.get("location")).toBe(
+        "http://127.0.0.1:8666/login?returnTo=%2Fjobs%3Fstate%3Dfailed",
+      );
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+      expect(getIdentitySession).not.toHaveBeenCalled();
+    },
+  );
+
+  it("uses the configured loopback hostname rather than a fixed redirect target", async () => {
+    vi.stubEnv("HOTKEY_WEB_ORIGIN", "http://localhost:8666");
+    const response = await proxy(pageRequest("http://127.0.0.1:8666/login"));
+    expect(response.headers.get("location")).toBe(
+      "http://localhost:8666/login",
+    );
+  });
+
+  it("keeps a protocol-relative path on the fixed canonical host", async () => {
+    vi.stubEnv("HOTKEY_WEB_ORIGIN", "http://127.0.0.1:8666");
+    const response = await proxy(
+      pageRequest(
+        "http://localhost:8666//attacker.invalid/login?returnTo=%2Ftopics",
+      ),
+    );
+    expect(response.headers.get("location")).toBe(
+      "http://127.0.0.1:8666//attacker.invalid/login?returnTo=%2Ftopics",
+    );
+  });
+
+  it("does not trust a forwarded hostname when deciding whether to redirect", async () => {
+    vi.stubEnv("HOTKEY_WEB_ORIGIN", "http://127.0.0.1:8666");
+    const response = await proxy(
+      new NextRequest("http://127.0.0.1:8666/login", {
+        headers: {
+          Host: "127.0.0.1:8666",
+          "x-forwarded-host": "localhost:8666",
+        },
+      }),
+    );
+    expect(response.status).toBe(200);
+  });
+
+  it.each([
+    "http://127.0.0.1:8666/login",
+    "http://localhost:9999/login",
+    "https://localhost:8666/login",
+    "http://127.0.0.1.attacker.example:8666/login",
+    "https://hotkey.test/login",
+  ])(
+    "does not canonicalize a different origin or the canonical URL: %s",
+    async (url) => {
+      vi.stubEnv("HOTKEY_WEB_ORIGIN", "http://127.0.0.1:8666");
+      expect((await proxy(pageRequest(url))).status).toBe(200);
+    },
+  );
+
+  it("does not replay a mutation across loopback origins", async () => {
+    vi.stubEnv("HOTKEY_WEB_ORIGIN", "http://127.0.0.1:8666");
+    expect(
+      (await proxy(pageRequest("http://localhost:8666/login", "POST"))).status,
+    ).toBe(200);
+  });
+
+  it("does not apply local alias redirects to a deployed Web origin", async () => {
+    vi.stubEnv("HOTKEY_WEB_ORIGIN", "https://hotkey.test");
+    expect(
+      (await proxy(pageRequest("http://localhost:8666/login"))).status,
+    ).toBe(200);
+  });
+
+  it("clears an orphaned CSRF cookie before public email login", async () => {
+    const response = await proxy(
+      new NextRequest("https://hotkey.test/login", {
+        headers: { Cookie: "hotkey_csrf=orphaned-token" },
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(response.cookies.get("hotkey_csrf")?.expires).toEqual(new Date(0));
+    expect(getIdentitySession).not.toHaveBeenCalled();
+  });
+
   it("allows exactly the installed Sonner stylesheet in production without allowing arbitrary inline styles", async () => {
     vi.stubEnv("NODE_ENV", "production");
     const require = createRequire(import.meta.url);

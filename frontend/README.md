@@ -20,6 +20,8 @@ pnpm dev
 
 ## 公开页面与登录工作区
 
+本机页面统一使用 `HOTKEY_WEB_ORIGIN` 指定的地址（默认 `http://127.0.0.1:8666`）。同协议、同端口的 `localhost` / `127.0.0.1` / `[::1]` 页面访问先跳转到该地址，避免登录 Origin、会话 Cookie 和 OAuth 回调使用不同主机；API 写入仍严格校验原 Origin，不重写来源或重放跨源提交。GitHub App 需配置 `HOTKEY_GITHUB_CLIENT_ID`、`HOTKEY_GITHUB_CLIENT_SECRET`，Callback URL 为 `${HOTKEY_WEB_ORIGIN}/api/identity/github/callback`，账户权限仅启用邮箱读取；密钥只放本机未跟踪 `.env`。
+
 公开页面为首页、关于、隐私、条款、联系与变更说明，保留 SEO metadata、robots 和 sitemap。`/login` 提供账号密码、GitHub、邮箱验证码三种方式；第三方与邮件可用性读取实际服务配置。登录后才能访问原“更多”中的工作区页面，默认进入 `/topics` 或安全站内原目标。工作区始终 noindex，沿用原导航与统一 BasicLayout；账户菜单支持退出及 `/account` 凭据设置。来源授权与凭据仍独立处理。
 
 账户会话由后端验证并通过 HttpOnly Cookie 保存；同源代理仅转发 HotKey 身份 Cookie 与对应 Set-Cookie，写入使用现行 CSRF 合同。登录服务故障显示可恢复状态，不将网络失败当成退出。所有登录、邮箱验证、OAuth 开始、退出和凭据设置调用 Umi 生成的 identity API，不手写请求。
