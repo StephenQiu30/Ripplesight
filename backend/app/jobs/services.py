@@ -710,7 +710,11 @@ def load_content_job_context(
     job_id: UUID,
 ) -> ContentJobContext | None:
     """Read the source job context without owning the caller's transaction."""
-    job = session.scalar(select(Job).where(Job.owner_id == owner_id, Job.id == job_id))
+    job = session.scalar(
+        select(Job)
+        .where(Job.owner_id == owner_id, Job.id == job_id)
+        .execution_options(populate_existing=True)
+    )
     if job is None or job.source_key is None or job.source_capability is None:
         return None
     return ContentJobContext(
@@ -732,7 +736,11 @@ def load_content_job_contexts(
     """Batch-read source job context for content projections."""
     if not job_ids:
         return {}
-    jobs = session.scalars(select(Job).where(Job.owner_id == owner_id, Job.id.in_(job_ids))).all()
+    jobs = session.scalars(
+        select(Job)
+        .where(Job.owner_id == owner_id, Job.id.in_(job_ids))
+        .execution_options(populate_existing=True)
+    ).all()
     return {
         job.id: ContentJobContext(
             job_id=job.id,

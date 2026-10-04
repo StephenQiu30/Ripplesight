@@ -16,6 +16,7 @@ from sources.adapters.rsshub_endpoint import RSSHUB_HOSTS
 from sources.adapters.web_targets import normalize_public_article_url, normalize_web_host
 from sources.editorial_base import EditorialContract as EditorialContract
 from sources.editorial_body_review import EditorialBodyReview
+from sources.editorial_identity import EditorialNativeIdentityProof
 from sources.editorial_rsshub import EditorialRsshubConfiguration
 
 type EditorialSourceKind = Literal[
@@ -49,6 +50,8 @@ _MATERIAL_META_RESERVED = frozenset(
         "allowsitefulltext",
         "allowsyndication",
         "allowpublic",
+        "nativeidentity",
+        "identityproof",
     }
 )
 
@@ -374,6 +377,7 @@ class EditorialMaterial(EditorialContract):
     author: str | None = Field(default=None, max_length=256)
     language: str | None = Field(default=None, max_length=32)
     external_id: str | None = Field(default=None, max_length=512)
+    native_identity: EditorialNativeIdentityProof | None = None
     published_at: datetime | None = None
     source_updated_at: datetime | None = None
     excerpt: str | None = Field(default=None, max_length=4000)

@@ -17,7 +17,12 @@ from sqlalchemy.orm import Session, sessionmaker
 from tests.conftest import create_test_account
 
 from analysis.prompts import ANALYSIS_PROMPT_VERSION
-from analysis.schemas import AnnotationResultState, AnnotationStatus, AnnotationWrite
+from analysis.schemas import (
+    AnalysisJobScope,
+    AnnotationResultState,
+    AnnotationStatus,
+    AnnotationWrite,
+)
 from analysis.services import (
     AnalysisAnnotateExecutor,
     AnalysisService,
@@ -334,9 +339,8 @@ def test_queued_analysis_rechecks_frozen_evidence(
     )
     with pytest.raises(JobExecutionFailure) as failure:
         executor._load_execution(message)
-    assert failure.value.error_code == (
-        "analysis_content_missing" if target == "post" else "analysis_comment_missing"
-    )
+    # ALL frozen prompt inputs are checked before loading an individual post/comment.
+    assert failure.value.error_code == "analysis_input_changed"
     with case.sessions() as session:
         assert (
             session.scalar(
@@ -631,7 +635,9 @@ def test_old_backlog_concurrent_scans_freeze_comments_and_accept_once(
         )
     with pytest.raises(JobExecutionFailure) as legacy_failure:
         executor._load_execution(message)
-    assert legacy_failure.value.error_code == "analysis_frozen_input_missing"
+    # A modern observation manifest with deleted comment references is malformed,
+    # rather than a valid old scope that can select another observation.
+    assert legacy_failure.value.error_code == "analysis_scope_invalid"
     with case.sessions() as session, session.begin():
         session.execute(text("UPDATE jobs SET status='failed' WHERE id=:id"), {"id": rows[0].id})
     assert len(_scan(case)) == 1
@@ -650,7 +656,7 @@ def test_invalid_annotation_gets_one_retry_then_queryable_failure(
             text("UPDATE jobs SET status = 'partially_succeeded' WHERE id = :job"),
             {"job": initial[0]},
         )
-        post = _post(case)
+        post = _observed_post(case)
         AnalysisService(session).persist_results_in_transaction(
             owner_id=case.owner_id,
             topic_id=case.topic_id,
@@ -667,6 +673,7 @@ def test_invalid_annotation_gets_one_retry_then_queryable_failure(
                 ),
             ),
             created_at=case.now,
+            input_manifest=_input_manifest(session, initial[0]),
         )
     retry = _scan(case)
     assert len(retry) == 1 and retry != initial
@@ -686,9 +693,10 @@ def test_invalid_annotation_gets_one_retry_then_queryable_failure(
             topic_id=case.topic_id,
             topic_rule_version=1,
             prompt_version=ANALYSIS_PROMPT_VERSION,
-            posts={case.version_id: _post(case)},
+            posts={case.version_id: _observed_post(case)},
             results=(result,),
             created_at=case.now + timedelta(seconds=1),
+            input_manifest=_input_manifest(session, retry[0]),
         )
     with case.sessions() as session, session.begin():
         state, error = session.execute(
@@ -850,7 +858,27 @@ def test_analysis_outbox_crosses_kafka_and_worker_fails_closed_without_model(
         admin.delete_topics([topic], operation_timeout=10)[topic].result(10)
 
 
+def _input_manifest(session: Session, job_id: UUID):
+    scope = session.scalar(text("SELECT scope FROM jobs WHERE id=:id"), {"id": job_id})
+    return AnalysisJobScope.from_job_scope(scope).input_manifest
+
+
+def _observed_post(case: AnalysisCase):
+    from content.services import load_post_versions_for_analysis
+
+    with case.sessions() as session, session.begin():
+        posts = load_post_versions_for_analysis(
+            session,
+            owner_id=case.owner_id,
+            content_version_ids={case.version_id},
+            readable_at=case.now,
+        )
+        assert len(posts) == 1
+        return posts[0]
+
+
 def _post(case: AnalysisCase):
+    # A historical controlled result used by audit tests, not a live readable input.
     from content.schemas import AnalysisPostContentView
 
     return AnalysisPostContentView(

@@ -220,6 +220,8 @@ class EditorialRunView(OutputModel):
 
 
 class EditorialPublicationInputView(OutputModel):
+    observation_id: UUID | None = None
+    input_observation_ids: tuple[UUID, ...] = ()
     run: EditorialRunView | None
     source: EditorialSourceView
     material: EditorialMaterial

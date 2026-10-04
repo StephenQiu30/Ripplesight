@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -10,9 +9,13 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
+from tests.conftest import create_test_account
+from tests.integration.test_analysis_annotations import _seed_legacy_analysis_job
+from tests.integration.test_analysis_pipeline import _track_analysis_observations
 
 from analysis.services import AnalysisService
 from connections.schemas import SourceExecutionPolicy, SourceQuietWindow
+from content.schemas import AnalysisPostContentView
 from content.services import ContentService
 from jobs.coverage import CollectionDueWindowService
 from jobs.schemas import (
@@ -551,6 +554,23 @@ def test_annotation_projection_separates_pending_failed_and_abnormal(
     versions = tuple(uuid4() for _ in range(4))
     contents = tuple(uuid4() for _ in range(4))
     with sessions() as session, session.begin():
+        create_test_account(session, owner_id=owner_id)
+        source_job_id = uuid4()
+        session.execute(
+            text(
+                "INSERT INTO jobs (id,owner_id,operation_id,kind,configuration_ref,"
+                "configuration_version,source_key,source_capability,scope,request_fingerprint,"
+                "created_at,updated_at) VALUES (:id,:owner,:operation,'keyword.search',"
+                "'topic:seed',1,'hackernews','search','{}'::jsonb,:fingerprint,:now,:now)"
+            ),
+            {
+                "id": source_job_id,
+                "owner": owner_id,
+                "operation": uuid4(),
+                "fingerprint": source_job_id.bytes * 2,
+                "now": now,
+            },
+        )
         session.execute(
             text(
                 "INSERT INTO monitor_topics "
@@ -575,7 +595,7 @@ def test_annotation_projection_separates_pending_failed_and_abnormal(
                 text(
                     "INSERT INTO content_records "
                     "(id, owner_id, source_key, object_type, external_id, created_at) "
-                    "VALUES (:id, :owner_id, 'bilibili', 'post', :external_id, :now)"
+                    "VALUES (:id, :owner_id, 'hackernews', 'post', :external_id, :now)"
                 ),
                 {"id": content_id, "owner_id": owner_id, "external_id": str(index), "now": now},
             )
@@ -595,17 +615,56 @@ def test_annotation_projection_separates_pending_failed_and_abnormal(
                     "now": now,
                 },
             )
+            session.execute(
+                text(
+                    "INSERT INTO content_observations (id,owner_id,content_id,content_version_id,"
+                    "job_id,source_operation_id,observed_at,received_at) "
+                    "VALUES (:id,:owner,:content,:version,:job,:operation,:now,:now)"
+                ),
+                {
+                    "id": uuid4(),
+                    "owner": owner_id,
+                    "content": content_id,
+                    "version": version_id,
+                    "job": source_job_id,
+                    "operation": uuid4(),
+                    "now": now,
+                },
+            )
+        _track_analysis_observations(session, owner_id)
+        posts = tuple(
+            AnalysisPostContentView(
+                content_id=content_id,
+                content_version_id=version_id,
+                title="coverage title",
+                body=None,
+            )
+            for content_id, version_id in zip(contents, versions, strict=True)
+        )
+        original_job_id = _seed_legacy_analysis_job(
+            session,
+            owner_id=owner_id,
+            topic_id=topic_id,
+            posts=posts[:2],
+            now=now,
+        )
         call_id = uuid4()
         session.execute(
             text(
                 "INSERT INTO ai_calls "
-                "(id, owner_id, purpose, provider, model, prompt_version, "
+                "(id, owner_id, job_id, purpose, provider, model, prompt_version, "
                 "input_fingerprint, status, input_tokens, cached_input_tokens, "
                 "output_tokens, reasoning_output_tokens, duration_ms, created_at) VALUES "
-                "(:id, :owner_id, 'analysis.annotate', 'test', 'test-model', 'v1', "
+                "(:id, :owner_id, :job_id, 'analysis.annotate', 'test', 'test-model', 'v1', "
                 ":fingerprint, 'succeeded', 0, 0, 0, 0, 0, :now)"
             ),
-            {"id": call_id, "owner_id": owner_id, "fingerprint": b"a" * 32, "now": now},
+            {
+                "id": call_id,
+                "owner_id": owner_id,
+                "job_id": original_job_id,
+                "fingerprint": b"a" * 32,
+                "now": now,
+            },
         )
         for index, status in ((0, "annotated"), (1, "unanalyzed")):
             session.execute(
@@ -636,32 +695,13 @@ def test_annotation_projection_separates_pending_failed_and_abnormal(
                     "now": now,
                 },
             )
-        session.execute(
-            text(
-                "INSERT INTO jobs (id, owner_id, operation_id, kind, configuration_ref, "
-                "configuration_version, scope, request_fingerprint, status, "
-                "last_error_code, last_error_category, last_error_at, next_action, "
-                "created_at, updated_at) VALUES "
-                "(:id, :owner_id, :operation_id, 'analysis.annotate', :ref, 1, "
-                "CAST(:scope AS jsonb), :fingerprint, 'failed', 'model_unavailable', "
-                "'transient', :now, 'retry later', :now, :now)"
-            ),
-            {
-                "id": uuid4(),
-                "owner_id": owner_id,
-                "operation_id": uuid4(),
-                "ref": f"topic:{topic_id}",
-                "scope": json.dumps(
-                    {
-                        "topic_id": str(topic_id),
-                        "topic_rule_version": 1,
-                        "prompt_version": "v1",
-                        "content_version_ids": json.dumps([str(versions[2])]),
-                    }
-                ),
-                "fingerprint": b"a" * 32,
-                "now": now,
-            },
+        _seed_legacy_analysis_job(
+            session,
+            owner_id=owner_id,
+            topic_id=topic_id,
+            posts=(posts[2],),
+            now=now,
+            failed=True,
         )
     with sessions() as session, session.begin():
         counts = AnalysisService(session).window_annotation_counts_in_transaction(

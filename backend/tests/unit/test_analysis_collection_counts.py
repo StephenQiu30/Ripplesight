@@ -20,9 +20,35 @@ class AnnotationSession:
     def in_transaction(self) -> bool:
         return True
 
-    def execute(self, query: object) -> SimpleNamespace:
+    def scalars(self, query: object) -> SimpleNamespace:
         self.queries.append(query)
-        return SimpleNamespace(all=lambda: self.rows)
+        return SimpleNamespace(
+            all=lambda: [
+                SimpleNamespace(
+                    id=uuid4(),
+                    topic_id=topic,
+                    topic_rule_version=rule,
+                    content_version_id=version,
+                    prompt_version=prompt,
+                    result_state=state,
+                )
+                for topic, rule, version, prompt, state in self.rows
+            ]
+        )
+
+
+@pytest.fixture(autouse=True)
+def readable_input_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+    # These tests isolate count priority and bounded SQL; actual policy/ALL graphs
+    # are exercised against PostgreSQL by test_analysis_observation_inputs.
+    monkeypatch.setattr(
+        "analysis.services.readable_annotation_ids_in_transaction",
+        lambda _session, *, annotations, **_kwargs: {row.id for row in annotations},
+    )
+    monkeypatch.setattr(
+        "analysis.services.analysis_scope_inputs_readable_in_transaction",
+        lambda *_args, **_kwargs: True,
+    )
 
 
 def _job(

@@ -12,6 +12,8 @@ from tests.conftest import authenticate_test_client
 from tests.integration.test_content_records import _command, _seed_context, _user_scope
 
 from content.event_reading import load_event_member_content_in_transaction
+from content.observation_context import load_observation_context_in_transaction
+from content.observation_inputs import freeze_observation_inputs_in_transaction
 from content.schemas import ContentRecordSummaryView, EventContentReadReference
 from content.services import ContentService
 from core.config import Settings
@@ -19,6 +21,28 @@ from core.errors import ApplicationError
 from events.models import Event, EventMember
 from events.reads import EventReadService
 from main import create_app
+
+
+def _fixed_member_fields(session, owner, content):
+    """Fixture output pins its actual observation just like the production writer."""
+    observation = content.latest_observation
+    actual = load_observation_context_in_transaction(
+        session, owner_id=owner, observation_id=observation.id
+    )
+    assert actual is not None
+    shadow = actual.source_key if actual.input_basis is not None else None
+    closure = freeze_observation_inputs_in_transaction(
+        session, owner_id=owner, observation_ids=(observation.id,), now=datetime.now(UTC)
+    )
+    return {
+        "observation_id": observation.id,
+        "observation_source_key": shadow,
+        "input_manifest": {
+            "basis": "observations_v1",
+            "observation_source_key": shadow,
+            "input_observation_ids": [str(value) for value in closure],
+        },
+    }
 
 
 @pytest.fixture
@@ -125,6 +149,7 @@ def _seed_reading(
                 event_id=event_id,
                 content_id=fixed.id,
                 content_version_id=fixed.latest_observation.content_version.id,
+                **_fixed_member_fields(session, owner, fixed),
                 source_key="x",
                 representative_comment_id=None,
                 added_revision=1,

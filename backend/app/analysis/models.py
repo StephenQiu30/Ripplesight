@@ -10,6 +10,7 @@ from sqlalchemy import (
     Index,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -63,6 +64,7 @@ class ContentAnnotation(Base):
             "topic_id",
             "topic_rule_version",
             "prompt_version",
+            "input_signature",
             name="content_annotations_owner_version_topic_rule_prompt_key",
         ),
         ForeignKeyConstraint(
@@ -90,6 +92,13 @@ class ContentAnnotation(Base):
         ),
         CheckConstraint("topic_rule_version >= 1", name="content_annotations_rule_version_check"),
         CheckConstraint("prompt_version <> ''", name="content_annotations_prompt_version_check"),
+        CheckConstraint(
+            "(input_manifest IS NULL AND input_signature = 'legacy') OR "
+            "(input_manifest IS NOT NULL AND jsonb_typeof(input_manifest) = 'object' "
+            "AND octet_length(input_manifest::text) <= 262144 "
+            "AND input_signature ~ '^[0-9a-f]{64}$')",
+            name="content_annotations_input_manifest_check",
+        ),
         CheckConstraint(
             "sentiment IS NULL OR sentiment IN ('positive', 'neutral', 'negative')",
             name="content_annotations_sentiment_check",
@@ -149,16 +158,20 @@ class ContentAnnotation(Base):
     topic_id: Mapped[UUID]
     topic_rule_version: Mapped[int]
     prompt_version: Mapped[str] = mapped_column(String(128))
+    input_manifest: Mapped[dict[str, object] | None] = mapped_column(JSONB(none_as_null=True))
+    input_signature: Mapped[str] = mapped_column(String(64), server_default=text("'legacy'"))
     relevant: Mapped[bool | None] = mapped_column(Boolean)
     relevance_reason: Mapped[str | None] = mapped_column(String(500))
     sentiment: Mapped[str | None] = mapped_column(String(16))
     summary: Mapped[str | None] = mapped_column(String(60))
-    viewpoints: Mapped[list[str]] = mapped_column(JSONB)
+    viewpoints: Mapped[list[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     ai_call_id: Mapped[UUID | None]
     status: Mapped[str] = mapped_column(String(16))
     result_state: Mapped[str] = mapped_column(String(16))
     error_code: Mapped[str | None] = mapped_column(String(64))
-    diagnostic_history: Mapped[list[dict[str, str | None]]] = mapped_column(JSONB)
+    diagnostic_history: Mapped[list[dict[str, str | None]]] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb")
+    )
     first_valid_at: Mapped[datetime | None]
     created_at: Mapped[datetime]
     updated_at: Mapped[datetime]

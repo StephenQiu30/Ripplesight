@@ -36,6 +36,7 @@ from publication.media_mirror_services import (
     RESOURCE_TYPE,
     media_admission_in_transaction,
     require_media_grant_in_transaction,
+    require_media_run_source_in_transaction,
     source_material_in_transaction,
 )
 from publication.schemas import FrozenPublicationReference
@@ -93,6 +94,7 @@ class PublicationMediaExecutor:
 
     def _guard(self, session: Session, *, owner: UUID, run_id: UUID) -> PublicationMediaRun:
         run = self._run(session, owner, run_id)
+        require_media_run_source_in_transaction(session, run, now=self.clock())
         reference, candidates, _ = require_media_grant_in_transaction(
             session,
             owner_id=owner,

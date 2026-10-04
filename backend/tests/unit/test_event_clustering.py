@@ -190,6 +190,7 @@ def test_preflight_input_failure_marks_candidate_after_rollback(monkeypatch) -> 
         job_id=job_id,
         status="pending",
         member_version_ids=versions,
+        input_manifest=None,
         window_start=now,
         expected_event_revisions={},
         topic_id=uuid4(),

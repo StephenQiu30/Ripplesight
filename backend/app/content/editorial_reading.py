@@ -3,11 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from content.event_reading import load_event_member_content_in_transaction
 from content.models import ContentObservation, ContentRecord, ContentVersion
+from content.observation_context import load_observation_context_in_transaction
 from content.schemas import EditorialDiscoveryView, EventContentReadReference, EventContentReadView
 from content.version_inputs import version_inputs_readable_in_transaction
 from core.errors import ApplicationError
@@ -37,7 +38,19 @@ def scan_editorial_content_ids_in_transaction(
         ContentRecord.owner_id == owner_id, ContentRecord.object_type.in_(("post", "webpage"))
     )
     if source_key is not None:
-        query = query.where(ContentRecord.source_key == source_key)
+        query = query.where(
+            select(ContentObservation.id)
+            .where(
+                ContentObservation.owner_id == ContentRecord.owner_id,
+                ContentObservation.content_id == ContentRecord.id,
+                (ContentObservation.source_key == source_key)
+                | (
+                    ContentObservation.source_key.is_(None)
+                    & (ContentRecord.source_key == source_key)
+                ),
+            )
+            .exists()
+        )
     if after is not None:
         query = query.where(ContentRecord.id > after)
     return tuple(session.scalars(query.order_by(ContentRecord.id).limit(limit)))
@@ -51,29 +64,57 @@ def load_latest_editorial_content_in_transaction(
         raise ValueError("raw content reads require a bounded caller transaction")
     if not content_ids:
         return {}
-    rows = session.execute(
-        select(ContentObservation.content_id, ContentObservation.content_version_id)
+    # Discovery is a fresh choice, not the replay of a published/frozen output.
+    # Revalidate at most 32 source observations per identity, before choosing one.
+    candidates = (
+        select(
+            ContentObservation.content_id,
+            ContentObservation.content_version_id,
+            ContentObservation.id,
+            func.row_number()
+            .over(
+                partition_by=ContentObservation.content_id,
+                order_by=(
+                    ContentObservation.observed_at.desc(),
+                    ContentObservation.received_at.desc(),
+                    ContentObservation.id.desc(),
+                ),
+            )
+            .label("candidate_rank"),
+        )
         .where(
             ContentObservation.owner_id == owner_id,
             ContentObservation.content_id.in_(content_ids),
             ContentObservation.content_version_id.is_not(None),
             ContentObservation.id.in_(
                 readable_resource_ids_query(
-                    owner_id=owner_id, resource_type="content_observation", now=now
+                    owner_id=owner_id,
+                    resource_type="content_observation",
+                    now=now,
                 )
             ),
         )
-        .distinct(ContentObservation.content_id)
+        .subquery()
+    )
+    rows = session.execute(
+        select(
+            candidates.c.content_id,
+            candidates.c.content_version_id,
+            candidates.c.id,
+        )
+        .where(candidates.c.candidate_rank <= 32)
         .order_by(
-            ContentObservation.content_id,
-            ContentObservation.observed_at.desc(),
-            ContentObservation.received_at.desc(),
-            ContentObservation.id.desc(),
+            candidates.c.content_id,
+            candidates.c.candidate_rank,
         )
     ).all()
     result = {}
     for row in rows:
-        reference = EventContentReadReference(content_id=row[0], content_version_id=row[1])
+        if row[0] in result:
+            continue
+        reference = EventContentReadReference(
+            content_id=row[0], content_version_id=row[1], observation_id=row[2]
+        )
         item = frozen_editorial_content_in_transaction(
             session, owner_id=owner_id, reference=reference, now=now
         )
@@ -107,7 +148,11 @@ def latest_editorial_references_in_transaction(
         owner_id=owner_id, resource_type="content_observation", now=now
     )
     latest = (
-        select(ContentObservation.content_id, ContentObservation.content_version_id)
+        select(
+            ContentObservation.content_id,
+            ContentObservation.content_version_id,
+            ContentObservation.id,
+        )
         .join(
             ContentRecord,
             (ContentRecord.owner_id == ContentObservation.owner_id)
@@ -115,7 +160,10 @@ def latest_editorial_references_in_transaction(
         )
         .where(
             ContentObservation.owner_id == owner_id,
-            ContentRecord.source_key == source_key,
+            (ContentObservation.source_key == source_key)
+            | (
+                (ContentObservation.source_key.is_(None)) & (ContentRecord.source_key == source_key)
+            ),
             ContentRecord.object_type.in_(("post", "webpage")),
             ContentObservation.id.in_(readable),
         )
@@ -128,14 +176,17 @@ def latest_editorial_references_in_transaction(
         )
         .subquery()
     )
-    statement = select(latest.c.content_id, latest.c.content_version_id).where(
+    statement = select(latest.c.content_id, latest.c.content_version_id, latest.c.id).where(
         latest.c.content_version_id.is_not(None)
     )
     if after is not None:
         statement = statement.where(latest.c.content_id > after)
     rows = session.execute(statement.order_by(latest.c.content_id).limit(limit))
     return tuple(
-        EventContentReadReference(content_id=row[0], content_version_id=row[1]) for row in rows
+        EventContentReadReference(
+            content_id=row[0], content_version_id=row[1], observation_id=row[2]
+        )
+        for row in rows
     )
 
 
@@ -158,7 +209,11 @@ def latest_quoted_reference_in_transaction(
         owner_id=owner_id, resource_type="content_observation", now=now
     )
     row = session.execute(
-        select(ContentObservation.content_id, ContentObservation.content_version_id)
+        select(
+            ContentObservation.content_id,
+            ContentObservation.content_version_id,
+            ContentObservation.id,
+        )
         .where(
             ContentObservation.owner_id == owner_id,
             ContentObservation.content_id == targets[0],
@@ -175,7 +230,9 @@ def latest_quoted_reference_in_transaction(
     return (
         None
         if row is None
-        else EventContentReadReference(content_id=row[0], content_version_id=row[1])
+        else EventContentReadReference(
+            content_id=row[0], content_version_id=row[1], observation_id=row[2]
+        )
     )
 
 
@@ -197,13 +254,6 @@ def editorial_first_received_at_in_transaction(
 def frozen_editorial_content_in_transaction(
     session: Session, *, owner_id: UUID, reference: EventContentReadReference, now: datetime
 ) -> EventContentReadView | None:
-    if not version_inputs_readable_in_transaction(
-        session,
-        owner_id=owner_id,
-        content_version_ids=(reference.content_version_id,),
-        now=now,
-    ):
-        return None
     item = load_event_member_content_in_transaction(
         session, owner_id=owner_id, references=(reference,), now=now
     ).get(reference)
@@ -235,12 +285,10 @@ def require_editorial_content_permission_in_transaction(
     )
     if item is None or item.observation.content_version is None:
         raise ApplicationError("editorial_material_unavailable")
-    observation = session.get(ContentObservation, item.observation.id)
-    context = (
-        load_content_job_context(session, owner_id=owner_id, job_id=observation.job_id)
-        if observation is not None
-        else None
+    actual = load_observation_context_in_transaction(
+        session, owner_id=owner_id, observation_id=item.observation.id
     )
+    context = actual.job if actual else None
     if context is None or context.source_key != item.source_key:
         raise ApplicationError("editorial_material_unavailable")
     version = item.observation.content_version
@@ -381,3 +429,48 @@ def editorial_discovery_in_transaction(
         first_received_at=first.received_at,
         backfill=None if kind is None else kind is CollectionScanKind.BACKFILL,
     )
+
+
+def select_editorial_observation_reference_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    content_id: UUID,
+    content_version_id: UUID,
+    source_key: str,
+    now: datetime,
+) -> EventContentReadReference | None:
+    rows = session.scalars(
+        select(ContentObservation)
+        .join(
+            ContentRecord,
+            (ContentRecord.owner_id == ContentObservation.owner_id)
+            & (ContentRecord.id == ContentObservation.content_id),
+        )
+        .where(
+            ContentObservation.owner_id == owner_id,
+            ContentObservation.content_id == content_id,
+            ContentObservation.content_version_id == content_version_id,
+            (ContentObservation.source_key == source_key)
+            | (
+                (ContentObservation.source_key.is_(None)) & (ContentRecord.source_key == source_key)
+            ),
+        )
+        .order_by(
+            ContentObservation.observed_at.desc(),
+            ContentObservation.received_at.desc(),
+            ContentObservation.id.desc(),
+        )
+    )
+    for observation in rows:
+        reference = EventContentReadReference(
+            content_id, content_version_id, observation_id=observation.id
+        )
+        if (
+            frozen_editorial_content_in_transaction(
+                session, owner_id=owner_id, reference=reference, now=now
+            )
+            is not None
+        ):
+            return reference
+    return None

@@ -16,7 +16,9 @@ from content.event_reading import (
     load_event_content_original_times_in_transaction,
     load_event_member_content_in_transaction,
 )
+from content.observation_inputs import freeze_observation_inputs_in_transaction
 from content.schemas import EventContentReadReference, EventContentReadView
+from content.version_inputs import observations_readable_in_transaction
 from core.config import Settings
 from core.errors import ApplicationError
 from events.attention import compute_attention
@@ -35,6 +37,7 @@ from events.heat_schemas import (
 )
 from events.interaction import compare_interaction_growth, compute_interaction
 from events.models import Event, EventMember
+from events.observation_inputs import event_content_reference
 from events.schemas import EventInput
 from jobs.execution import JobCompletion, JobExecutionFailure
 from jobs.models import Job
@@ -184,12 +187,7 @@ def _live_inputs(
                 .order_by(EventMember.id)
             )
         )
-        references = tuple(
-            EventContentReadReference(
-                row.content_id, row.content_version_id, row.representative_comment_id
-            )
-            for row in members
-        )
+        references = tuple(event_content_reference(row) for row in members)
     sources = list(
         session.scalars(
             select(EventAttentionSource).where(EventAttentionSource.owner_id == event.owner_id)
@@ -248,9 +246,40 @@ def _live_inputs(
                 "source_time": original.source_time.isoformat(),
                 "time_basis": original.basis,
                 "source": _source_view(source).model_dump(mode="json"),
+                "observation_id": str(reading.observation.id),
+                "representative_comment_observation_id": (
+                    str(reading.representative_comment.observation.id)
+                    if reading.representative_comment
+                    else None
+                ),
             }
         )
+    observation_ids = tuple(
+        dict.fromkeys(
+            (
+                *(
+                    UUID(str(identity))
+                    for row in manifest_rows
+                    for identity in (
+                        row["observation_id"],
+                        row["representative_comment_observation_id"],
+                    )
+                    if identity is not None
+                ),
+                *(value for ref in references for value in ref.input_observation_ids),
+            )
+        )
+    )
+    closure = (
+        freeze_observation_inputs_in_transaction(
+            session, owner_id=event.owner_id, observation_ids=observation_ids, now=now
+        )
+        if observation_ids
+        else ()
+    )
     return tuple(evidence), {
+        "input_basis": "observations_v1",
+        "observation_ids": [str(identity) for identity in closure],
         "event_id": str(event.id),
         "event_revision": event.revision,
         "formula_version": ATTENTION_FORMULA_VERSION,
@@ -275,22 +304,13 @@ def _live_interaction(
     readings = load_event_member_content_in_transaction(
         session,
         owner_id=event.owner_id,
-        references=tuple(
-            EventContentReadReference(
-                row.content_id, row.content_version_id, row.representative_comment_id
-            )
-            for row in members
-        ),
+        references=tuple(event_content_reference(row) for row in members),
         now=now,
     )
     metrics = {}
     observations = {}
     for member in members:
-        reading = readings.get(
-            EventContentReadReference(
-                member.content_id, member.content_version_id, member.representative_comment_id
-            )
-        )
+        reading = readings.get(event_content_reference(member))
         if reading is None:
             continue
         values = reading.observation.metrics
@@ -309,6 +329,26 @@ def _live_interaction(
         "unknown_masks": result.unknown_masks,
     }
     manifest: dict[str, object] = {"lineage": lineage, "observations": observations}
+    roots = tuple(
+        dict.fromkeys(
+            (
+                *(UUID(str(value["id"])) for value in observations.values()),
+                *(
+                    value
+                    for member in members
+                    for value in event_content_reference(member).input_observation_ids
+                ),
+            )
+        )
+    )
+    if roots:
+        manifest["input_basis"] = "observations_v1"
+        manifest["observation_ids"] = [
+            str(value)
+            for value in freeze_observation_inputs_in_transaction(
+                session, owner_id=event.owner_id, observation_ids=roots, now=now
+            )
+        ]
     history = []
     for snapshot in session.scalars(
         select(EventAttentionSnapshot)
@@ -322,6 +362,30 @@ def _live_interaction(
         )
         .order_by(EventAttentionSnapshot.window_end.desc())
     ):
+        historical_observations = []
+        try:
+            if snapshot.input_manifest.get("input_basis") == "observations_v1":
+                historical_observations = [
+                    UUID(str(value))
+                    for value in cast(list[object], snapshot.input_manifest["observation_ids"])
+                ]
+            else:
+                historical_observations = [
+                    UUID(str(value["id"]))
+                    for value in cast(
+                        dict[str, dict[str, object]],
+                        snapshot.input_manifest.get("observations", {}),
+                    ).values()
+                ]
+        except (ValueError, KeyError, TypeError):
+            continue
+        if not historical_observations or not observations_readable_in_transaction(
+            session,
+            owner_id=event.owner_id,
+            observation_ids=tuple(historical_observations),
+            now=now,
+        ):
+            continue
         score = snapshot.result.get("score")
         if snapshot.input_manifest.get("lineage") == lineage and isinstance(score, (float, int)):
             history.append((snapshot.window_end, float(score)))
@@ -436,12 +500,7 @@ class EventHeatService:
             readings = load_event_member_content_in_transaction(
                 self._session,
                 owner_id=owner_id,
-                references=tuple(
-                    EventContentReadReference(
-                        row.content_id, row.content_version_id, row.representative_comment_id
-                    )
-                    for row in members
-                ),
+                references=tuple(event_content_reference(row) for row in members),
                 now=self._clock(),
             )
             if not readings:
@@ -504,6 +563,24 @@ class EventHeatService:
                 if snapshot.window_end in seen:
                     continue
                 seen.add(snapshot.window_end)
+                observation_ids: tuple[UUID, ...] = ()
+                if snapshot.input_manifest.get("input_basis") == "observations_v1":
+                    try:
+                        observation_ids = tuple(
+                            UUID(str(identity))
+                            for identity in cast(
+                                list[object], snapshot.input_manifest["observation_ids"]
+                            )
+                        )
+                        if not observations_readable_in_transaction(
+                            self._session,
+                            owner_id=owner_id,
+                            observation_ids=observation_ids,
+                            now=now,
+                        ):
+                            continue
+                    except (ValueError, KeyError, TypeError):
+                        continue
                 references = tuple(
                     EventContentReadReference(
                         UUID(str(row["content_id"])),
@@ -511,6 +588,12 @@ class EventHeatService:
                         UUID(str(row["representative_comment_id"]))
                         if row.get("representative_comment_id")
                         else None,
+                        UUID(str(row["observation_id"])) if row.get("observation_id") else None,
+                        UUID(str(row["representative_comment_observation_id"]))
+                        if row.get("representative_comment_observation_id")
+                        else None,
+                        observation_ids,
+                        legacy_strict=not bool(row.get("observation_id")),
                     )
                     for row in cast(list[dict[str, object]], snapshot.input_manifest["inputs"])
                 )
@@ -553,13 +636,16 @@ class EventHeatService:
         )
         assert event is not None
         evidence, manifest = _live_inputs(self._session, event=event, now=self._clock())
-        live_versions = {row.content_version_id for row in evidence}
+        live_inputs = {
+            (UUID(str(row["version_id"])), UUID(str(row["observation_id"])))
+            for row in cast(list[dict[str, object]], manifest["inputs"])
+        }
         for signal in self._session.scalars(
             select(EventAttentionSignal).where(
                 EventAttentionSignal.owner_id == owner_id, EventAttentionSignal.event_id == event.id
             )
         ):
-            if signal.content_version_id not in live_versions:
+            if (signal.content_version_id, signal.observation_id) not in live_inputs:
                 signal.status, signal.updated_at = "withdrawn", self._clock()
         for row in evidence:
             original = next(
@@ -578,6 +664,7 @@ class EventHeatService:
                     source_id=row.source.id,
                     content_id=row.content_id,
                     content_version_id=row.content_version_id,
+                    observation_id=UUID(str(original["observation_id"])),
                     kind=row.kind,
                     source_time=row.source_time,
                     time_basis=original["time_basis"],
@@ -804,17 +891,12 @@ def load_event_input_source_modes_in_transaction(
     readings = load_event_member_content_in_transaction(
         session,
         owner_id=owner_id,
-        references=tuple(
-            EventContentReadReference(item.content_id, item.content_version_id, None)
-            for item in inputs
-        ),
+        references=tuple(event_content_reference(item, include_comment=False) for item in inputs),
         now=now,
     )
     result = {}
     for item in inputs:
-        reading = readings.get(
-            EventContentReadReference(item.content_id, item.content_version_id, None)
-        )
+        reading = readings.get(event_content_reference(item, include_comment=False))
         if reading is not None:
             matched = [row for row in sources if _matches_source(row, reading)]
             priority = {"source": 0, "canonical_host": 1, "native_scope": 2, "author": 3}

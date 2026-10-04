@@ -15,13 +15,16 @@ from connections.editorial_models import EditorialSourceMaterialReceipt, Editori
 from connections.editorial_services import EditorialSourceService
 from content.models import (
     ContentObservation,
+    ContentObservationInput,
     ContentRecord,
     ContentTopicMatch,
     ContentVersion,
-    ContentVersionInput,
 )
 from content.services import ContentService
-from content.version_inputs import version_inputs_readable_in_transaction
+from content.version_inputs import (
+    observations_readable_in_transaction,
+    version_inputs_readable_in_transaction,
+)
 from core.errors import ApplicationError
 from sources.contracts import SourceDocument, WebPageResult
 from sources.editorial_body import LocalEditorialBodyFetcher
@@ -166,11 +169,11 @@ def test_body_feed_checkpoint_same_identity_new_observation_all_inputs_and_remat
             )
             assert set(
                 session.scalars(
-                    select(ContentVersionInput.observation_id).where(
-                        ContentVersionInput.content_version_id == version.id
+                    select(ContentObservationInput.input_observation_id).where(
+                        ContentObservationInput.output_observation_id == body.id
                     )
                 )
-            ) == {target.feed_observation_id, body.id}
+            ) == {target.feed_observation_id}
             match = session.scalar(
                 select(ContentTopicMatch).where(ContentTopicMatch.topic_id == topic.id)
             )
@@ -185,7 +188,7 @@ def test_body_feed_checkpoint_same_identity_new_observation_all_inputs_and_remat
         _, _, _, replay = feed(session, service, owner, profile)
         assert replay.status == "succeeded" and replay.created == replay.revised == 0
         with session.begin():
-            assert session.scalar(select(ContentVersionInput.content_version_id)) == version.id
+            assert session.scalar(select(ContentObservationInput.output_observation_id)) == body.id
             assert len(session.scalars(select(ContentObservation)).all()) == 2
             session.execute(
                 text(
@@ -195,10 +198,10 @@ def test_body_feed_checkpoint_same_identity_new_observation_all_inputs_and_remat
                 {"owner": owner, "observation": target.feed_observation_id, "now": NOW},
             )
         with session.begin():
-            assert not version_inputs_readable_in_transaction(
+            assert not observations_readable_in_transaction(
                 session,
                 owner_id=owner,
-                content_version_ids=(version.id,),
+                observation_ids=(body.id,),
                 now=NOW + timedelta(seconds=1),
             )
         with pytest.raises(ApplicationError, match="resource_not_found"):
@@ -249,12 +252,13 @@ def test_unapproved_body_is_zero_http_partial_and_does_not_advance_feed_coverage
             clock=lambda: NOW,
         )
 
-    result = EditorialSourceExecutor(
+    executor = EditorialSourceExecutor(
         sessions,
         collector_factory=lambda _: Collector(),
         body_fetcher_factory=body_factory,
         clock=lambda: NOW,
-    ).execute(
+    )
+    result = executor.execute(
         owner_id=owner,
         profile_id=profile.id,
         configuration_version=profile.configuration_version,
@@ -273,6 +277,38 @@ def test_unapproved_body_is_zero_http_partial_and_does_not_advance_feed_coverage
             .last_ok_at
             is None
         )
+        content_id, version_id, observation_id = (
+            receipt.content_id,
+            receipt.content_version_id,
+            receipt.observation_id,
+        )
+    # A fresh poll of the unchanged excerpt is a feed duplicate. It must not
+    # borrow the old Job's observation to start another body request.
+    with sessions() as session:
+        repeated, repeated_operation = job(session, owner, profile)
+    duplicate = executor.execute(
+        owner_id=owner,
+        profile_id=profile.id,
+        configuration_version=profile.configuration_version,
+        revision=profile.revision,
+        job_id=repeated.id,
+        operation_id=repeated_operation,
+    )
+    assert duplicate.status == "succeeded"
+    assert duplicate.found == 1 and duplicate.created == duplicate.revised == 0 and calls == []
+    with sessions() as session, session.begin():
+        assert session.get(EditorialSourceRun, duplicate.run_id).prepared_page is None
+        assert session.get(EditorialSourceRun, result.run_id).status == "partial"
+        assert len(session.scalars(select(ContentObservation)).all()) == 1
+        assert len(session.scalars(select(ContentVersion)).all()) == 1
+        assert session.get(ContentObservation, observation_id).job_id == accepted.id
+        assert session.scalar(text("SELECT count(*) FROM jobs")) == 2
+    with sessions() as session:
+        read = ContentService(session, clock=lambda: NOW).get_content(
+            owner_id=owner, content_id=content_id
+        )
+        assert read.latest_observation.content_version.id == version_id
+        assert read.latest_observation.content_version.body == "Source teaser"
 
 
 def test_abandoned_body_boundary_is_unknown_without_another_request_or_feed_apply(engine):

@@ -15,7 +15,10 @@ from tests.integration.test_event_consolidation import (
     _pair,
 )
 from tests.integration.test_event_embeddings import _embedding_budget
-from tests.integration.test_event_reading import event_read_client  # noqa: F401
+from tests.integration.test_event_reading import (  # noqa: F401
+    _fixed_member_fields,
+    event_read_client,
+)
 
 from ai.adapters.embeddings import EmbeddingClient
 from ai.embedding_contract import FrozenEmbeddingConfiguration
@@ -138,6 +141,7 @@ def test_native_waiting_quote_joins_after_original_arrives_without_paid_analysis
             event_id=first,
             content_id=late.id,
             content_version_id=late.latest_observation.content_version.id,
+            **_fixed_member_fields(session, owner, late),
             source_key="x",
             assignment_origin="model",
             added_revision=event.revision,

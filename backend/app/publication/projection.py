@@ -101,11 +101,23 @@ def derive_projection(
             "timeline": snapshot.timeline_at,
             "backfill": snapshot.backfill,
             "indexing_enabled": indexing_enabled,
+            **(
+                {
+                    "observation_id": str(snapshot.observation_id),
+                    "input_observation_ids": [
+                        str(value) for value in snapshot.input_observation_ids
+                    ],
+                }
+                if snapshot.observation_id is not None
+                else {}
+            ),
         }
     )
     return ProjectionView(
         content_id=material.content_id,
         content_version_id=material.content_version_id,
+        observation_id=snapshot.observation_id,
+        input_observation_ids=snapshot.input_observation_ids,
         editorial_run_id=run.id if run else None,
         manual_version=run.manual_version if run else 0,
         analysis_state="complete" if result else "not_analyzed",

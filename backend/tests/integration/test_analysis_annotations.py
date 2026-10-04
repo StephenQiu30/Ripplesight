@@ -13,11 +13,136 @@ import pytest
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
+from tests.conftest import create_test_account
+from tests.integration.test_analysis_pipeline import _track_analysis_observations
 
 from analysis.models import ContentAnnotation
-from analysis.schemas import AnnotationResultState, AnnotationStatus, AnnotationWrite
-from analysis.services import AnalysisService
+from analysis.reads import load_content_annotations_in_transaction
+from analysis.schemas import (
+    AnalysisJobScope,
+    AnalysisPromptItem,
+    AnnotationResultState,
+    AnnotationStatus,
+    AnnotationWrite,
+)
+from analysis.services import AnalysisService, analysis_operation_id
 from content.schemas import AnalysisPostContentView
+from jobs.schemas import JobAcceptanceInput, JobObservationContext
+from jobs.services import JobService, load_job_execution_configuration
+
+
+def _seed_legacy_analysis_job(
+    session: Session,
+    *,
+    owner_id: UUID,
+    topic_id: UUID,
+    posts: tuple[AnalysisPostContentView, ...],
+    now: datetime,
+    rule_version: int = 1,
+    prompt_version: str = "v1",
+    failed: bool = False,
+) -> UUID:
+    """Persist an original complete historical Job, without invoking a provider."""
+    scope = AnalysisJobScope(
+        topic_id=topic_id,
+        topic_rule_version=rule_version,
+        prompt_version=prompt_version,
+        content_version_ids=tuple(post.content_version_id for post in posts),
+        prompt_items=tuple(
+            AnalysisPromptItem(
+                content_id=post.content_id,
+                content_version_id=post.content_version_id,
+                title=post.title,
+                body=post.body,
+                comments=(),
+                comment_version_ids=(),
+            )
+            for post in posts
+        ),
+        retry_index=int(failed),
+    )
+    accepted = JobService(session, clock=lambda: now).accept_in_transaction(
+        owner_id=owner_id,
+        command=JobAcceptanceInput(
+            operation_id=analysis_operation_id(
+                topic_id=topic_id,
+                topic_rule_version=rule_version,
+                content_version_ids=scope.content_version_ids,
+                prompt_version=prompt_version,
+                retry_index=scope.retry_index,
+            ),
+            kind="analysis.annotate",
+            observation=JobObservationContext(
+                configuration_ref=f"topic:{topic_id}",
+                configuration_version=rule_version,
+            ),
+            scope=scope.to_job_scope(),
+        ),
+    )
+    if failed:
+        # A controlled recorded failure, not a successful AI call or readable summary.
+        session.execute(
+            text(
+                "UPDATE jobs SET status='failed', last_error_code='analysis_timeout', "
+                "last_error_category='transient', last_error_at=:now, "
+                "next_action='retry later', updated_at=:now WHERE id=:id AND owner_id=:owner"
+            ),
+            {"id": accepted.id, "owner": owner_id, "now": now},
+        )
+    return accepted.id
+
+
+def _bind_original_call(
+    session: Session,
+    *,
+    owner_id: UUID,
+    topic_id: UUID,
+    post: AnalysisPostContentView,
+    result: AnnotationWrite,
+    rule_version: int,
+    now: datetime,
+) -> AnnotationWrite:
+    call = session.execute(
+        text("SELECT job_id, status FROM ai_calls WHERE owner_id=:owner AND id=:id"),
+        {"owner": owner_id, "id": result.ai_call_id},
+    ).one_or_none()
+    if call is None:
+        return result  # Existing storage test deliberately records an unavailable diagnostic call.
+    if call.job_id is not None:
+        configuration = load_job_execution_configuration(session, job_id=call.job_id)
+        assert configuration is not None
+        original = AnalysisJobScope.from_job_scope(configuration.scope)
+        if original.topic_rule_version == rule_version:
+            return result
+        # Another rule is another controlled model invocation; preserve the old call's Job.
+        replacement = uuid4()
+        session.execute(
+            text(
+                "INSERT INTO ai_calls (id, owner_id, purpose, provider, model, prompt_version, "
+                "input_fingerprint, status, input_tokens, cached_input_tokens, output_tokens, "
+                "reasoning_output_tokens, duration_ms, created_at) "
+                "SELECT :replacement, owner_id, purpose, provider, model, prompt_version, "
+                "input_fingerprint, status, input_tokens, cached_input_tokens, output_tokens, "
+                "reasoning_output_tokens, duration_ms, :now FROM ai_calls "
+                "WHERE owner_id=:owner AND id=:id"
+            ),
+            {"replacement": replacement, "now": now, "owner": owner_id, "id": result.ai_call_id},
+        )
+        result = result.model_copy(update={"ai_call_id": replacement})
+    job_id = _seed_legacy_analysis_job(
+        session,
+        owner_id=owner_id,
+        topic_id=topic_id,
+        posts=(post,),
+        rule_version=rule_version,
+        now=now,
+        failed=call.status == "failed",
+    )
+    session.execute(
+        text("UPDATE ai_calls SET job_id=:job WHERE owner_id=:owner AND id=:id"),
+        {"job": job_id, "owner": owner_id, "id": result.ai_call_id},
+    )
+    return result
 
 
 @pytest.fixture
@@ -29,10 +154,13 @@ def annotation_context() -> Iterator[
         pytest.skip("HOTKEY_TEST_DATABASE_URL is required for PostgreSQL integration tests")
     engine = create_engine(database_url)
     sessions = sessionmaker(engine, expire_on_commit=False)
-    owner_id, topic_id, content_id, version_id = (uuid4() for _ in range(4))
+    owner_id, topic_id, content_id, version_id, source_job_id, observation_id = (
+        uuid4() for _ in range(6)
+    )
     invalid_call_id, valid_call_id = uuid4(), uuid4()
     now = datetime(2026, 9, 27, 0, 0, tzinfo=UTC)
-    with engine.begin() as connection:
+    with sessions() as connection, connection.begin():
+        create_test_account(connection, owner_id=owner_id)
         connection.execute(
             text(
                 "INSERT INTO monitor_topics "
@@ -48,7 +176,7 @@ def annotation_context() -> Iterator[
                 text(
                     "INSERT INTO monitor_topic_versions "
                     "(topic_id, version, created_by, match_any, match_all, exclude, created_at) "
-                    "VALUES (:topic_id, :version, :owner_id, '[]'::jsonb, '[]'::jsonb, "
+                    "VALUES (:topic_id, :version, :owner_id, '[\"title\"]'::jsonb, '[]'::jsonb, "
                     "'[]'::jsonb, :now)"
                 ),
                 {
@@ -62,7 +190,7 @@ def annotation_context() -> Iterator[
             text(
                 "INSERT INTO content_records "
                 "(id, owner_id, source_key, object_type, external_id, created_at) "
-                "VALUES (:id, :owner_id, 'bilibili', 'post', :external_id, :now)"
+                "VALUES (:id, :owner_id, 'hackernews', 'post', :external_id, :now)"
             ),
             {
                 "id": content_id,
@@ -86,6 +214,38 @@ def annotation_context() -> Iterator[
                 "now": now,
             },
         )
+        connection.execute(
+            text(
+                "INSERT INTO jobs (id,owner_id,operation_id,kind,configuration_ref,"
+                "configuration_version,source_key,source_capability,scope,request_fingerprint,"
+                "created_at,updated_at) VALUES (:id,:owner,:operation,'keyword.search',"
+                "'topic:seed',1,'hackernews','search','{}'::jsonb,:fingerprint,:now,:now)"
+            ),
+            {
+                "id": source_job_id,
+                "owner": owner_id,
+                "operation": uuid4(),
+                "fingerprint": source_job_id.bytes * 2,
+                "now": now,
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO content_observations (id,owner_id,content_id,content_version_id,"
+                "job_id,source_operation_id,observed_at,received_at) "
+                "VALUES (:id,:owner,:content,:version,:job,:operation,:now,:now)"
+            ),
+            {
+                "id": observation_id,
+                "owner": owner_id,
+                "content": content_id,
+                "version": version_id,
+                "job": source_job_id,
+                "operation": uuid4(),
+                "now": now,
+            },
+        )
+        _track_analysis_observations(connection, owner_id)
         for call_id in (invalid_call_id, valid_call_id):
             connection.execute(
                 text(
@@ -99,7 +259,11 @@ def annotation_context() -> Iterator[
                 {"id": call_id, "owner_id": owner_id, "fingerprint": b"a" * 32, "now": now},
             )
     post = AnalysisPostContentView(
-        content_id=content_id, content_version_id=version_id, title="title", body=None
+        content_id=content_id,
+        content_version_id=version_id,
+        observation_id=observation_id,
+        title="title",
+        body=None,
     )
     try:
         yield sessions, owner_id, topic_id, post, invalid_call_id, valid_call_id, now
@@ -118,6 +282,15 @@ def _persist(
 ) -> None:
     sessions, owner_id, topic_id, post, _, _, now = context
     with sessions() as session, session.begin():
+        result = _bind_original_call(
+            session,
+            owner_id=owner_id,
+            topic_id=topic_id,
+            post=post,
+            result=result,
+            rule_version=rule_version,
+            now=at or now,
+        )
         AnalysisService(session).persist_results_in_transaction(
             owner_id=owner_id,
             topic_id=topic_id,
@@ -579,3 +752,59 @@ def test_late_arriving_valid_result_upgrades_newer_invalid_result(
     assert row.result_state == "valid"
     assert row.updated_at == now + timedelta(minutes=2)
     assert row.diagnostic_history[0]["result_state"] == "invalid"
+
+
+@pytest.mark.parametrize("missing_proof", ("original_job", "leaf_permission"))
+def test_unproven_legacy_result_stays_pending_and_unreadable(
+    annotation_context: tuple[
+        sessionmaker[Session], UUID, UUID, AnalysisPostContentView, UUID, UUID, datetime
+    ],
+    missing_proof: str,
+) -> None:
+    sessions, owner_id, topic_id, post, _, valid_call_id, now = annotation_context
+    _persist(
+        annotation_context,
+        AnnotationWrite(
+            content_version_id=post.content_version_id,
+            ai_call_id=valid_call_id,
+            status=AnnotationStatus.ANNOTATED,
+            result_state=AnnotationResultState.VALID,
+            relevant=False,
+            relevance_reason="受控无关结果",
+            summary="存在存储行不能证明结果仍可读",
+        ),
+    )
+    with sessions() as session, session.begin():
+        if missing_proof == "original_job":
+            session.execute(
+                text("UPDATE ai_calls SET job_id=NULL WHERE id=:id AND owner_id=:owner"),
+                {"id": valid_call_id, "owner": owner_id},
+            )
+        else:
+            session.execute(
+                text(
+                    "UPDATE evidence_resources SET expires_at=:expires WHERE owner_id=:owner "
+                    "AND resource_type='content_observation' AND resource_id=:observation"
+                ),
+                {
+                    "expires": now + timedelta(seconds=1),
+                    "owner": owner_id,
+                    "observation": post.observation_id,
+                },
+            )
+        counts = AnalysisService(session).window_annotation_counts_in_transaction(
+            owner_id=owner_id,
+            topic_id=topic_id,
+            topic_rule_version=1,
+            prompt_version="v1",
+            content_version_ids=(post.content_version_id,),
+        )
+        visible = load_content_annotations_in_transaction(
+            session,
+            owner_id=owner_id,
+            content_id=post.content_id,
+            readable_version_ids={post.content_version_id},
+            now=now + timedelta(hours=1),
+        )
+    assert (counts.annotated_count, counts.pending_count) == (0, 1)
+    assert visible == []

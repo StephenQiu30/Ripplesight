@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 from tests.integration.test_editorial_execution import NOW
+from tests.integration.test_event_reading import _fixed_member_fields
 from tests.integration.test_publication import _manual_posts
 from tests.integration.test_publication import editorial_client as editorial_client
 
@@ -94,6 +95,7 @@ def test_group_reading_real_fixed_facts_revision_cursors_and_live_permission_cha
                     event_id=event,
                     content_id=post.id,
                     content_version_id=version,
+                    **_fixed_member_fields(session, owner, post),
                     source_key="x",
                     representative_comment_id=None,
                     added_revision=1,

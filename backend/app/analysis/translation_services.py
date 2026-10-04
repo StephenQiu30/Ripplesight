@@ -105,6 +105,19 @@ def _fingerprint(grant: FullTextGrantView, plan: TranslationPlan) -> str:
     )
 
 
+def _content_reference(record: ContentTranslationRun) -> EventContentReadReference:
+    observation_id = record.reference.get("observation_id")
+    return EventContentReadReference(
+        content_id=record.content_id,
+        content_version_id=record.content_version_id,
+        observation_id=UUID(observation_id) if observation_id else None,
+        input_observation_ids=tuple(
+            UUID(i) for i in record.reference.get("input_observation_ids", [])
+        ),
+        legacy_strict=observation_id is None,
+    )
+
+
 def _valid(
     session: Session,
     record: ContentTranslationRun,
@@ -116,9 +129,7 @@ def _valid(
         require_editorial_content_permission_in_transaction(
             session,
             owner_id=record.owner_id,
-            reference=EventContentReadReference(
-                content_id=record.content_id, content_version_id=record.content_version_id
-            ),
+            reference=_content_reference(record),
             now=now,
             lock_policies=lock_permissions,
         )
@@ -404,9 +415,7 @@ class ContentTranslationExecutor:
             require_editorial_content_permission_in_transaction(
                 session,
                 owner_id=message.owner_id,
-                reference=EventContentReadReference(
-                    content_id=record.content_id, content_version_id=record.content_version_id
-                ),
+                reference=_content_reference(record),
                 now=self.clock(),
             )
         except ApplicationError as error:

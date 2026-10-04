@@ -28,6 +28,8 @@ class EventContentInputView:
     first_seen_at: datetime
     first_seen_basis: Literal["published", "discovered"]
     representative_comment_id: UUID | None
+    observation_id: UUID | None = None
+    representative_comment_observation_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +37,14 @@ class EventContentReadReference:
     content_id: UUID
     content_version_id: UUID
     representative_comment_id: UUID | None = None
+    observation_id: UUID | None = None
+    representative_comment_observation_id: UUID | None = None
+
+    input_observation_ids: tuple[UUID, ...] = ()
+
+    legacy_strict: bool = False
+    expected_source_key: str | None = None
+    observation_source_key: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -527,7 +537,24 @@ class ContentAnalysisTopicView(OutputModel):
     current_rule_version: int = Field(ge=1)
 
 
+class ContentSourceObservationView(OutputModel):
+    source_key: str
+    source_name: str | None = None
+    observation_id: UUID
+    observed_at: datetime
+    received_at: datetime
+    published_at: datetime | None
+    version_id: UUID
+    text_scope: ContentTextScope
+    text_origin: ContentTextOrigin
+
+
 class ContentRecordDetailView(ContentRecordSummaryView):
+    readable_sources: list[ContentSourceObservationView] = Field(
+        default_factory=list, max_length=32
+    )
+    readable_sources_total: int = Field(default=0, ge=0)
+    readable_sources_truncated: bool = False
     discoveries: list[ContentDiscoveryView]
     version_history: list[ContentVersionHistoryView]
     visibility_history: list[ContentVisibilityView]
@@ -548,6 +575,8 @@ class ContentCommentView(OutputModel):
 
 
 class AnalysisPostContentView(OutputModel):
+    observation_id: UUID | None = None
+    input_observation_ids: tuple[UUID, ...] = ()
     """Owner-scoped immutable post text exposed to the analysis domain."""
 
     content_id: UUID
@@ -567,6 +596,8 @@ class AnalysisPostAvailabilityView(OutputModel):
 
 
 class AnalysisCommentContentView(OutputModel):
+    observation_id: UUID | None = None
+    input_observation_ids: tuple[UUID, ...] = ()
     """Latest immutable text for one comment attached to a post."""
 
     post_content_id: UUID

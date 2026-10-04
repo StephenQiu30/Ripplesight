@@ -109,6 +109,19 @@ class FrozenPublicationReference(OutputModel):
     root_fact_id: UUID | None = None
     fact_revision: int | None = None
     topic_id: UUID | None = None
+    observation_id: UUID | None = None
+    input_observation_ids: tuple[UUID, ...] = Field(default=(), max_length=2000)
+
+    @model_validator(mode="after")
+    def fixed_observation_closure(self) -> FrozenPublicationReference:
+        if self.observation_id is None:
+            if self.input_observation_ids:
+                raise ValueError("legacy publication cannot claim a new observation closure")
+        elif self.observation_id not in self.input_observation_ids or len(
+            set(self.input_observation_ids)
+        ) != len(self.input_observation_ids):
+            raise ValueError("publication must include its exact observation once")
+        return self
 
 
 class ProjectionView(FrozenPublicationReference):

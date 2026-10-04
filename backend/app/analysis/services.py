@@ -25,6 +25,11 @@ from analysis.prompts import (
     build_analysis_prompt,
     serialize_analysis_data,
 )
+from analysis.reads import (
+    analysis_scope_inputs_readable_in_transaction,
+    load_current_annotation_states_in_transaction,
+    readable_annotation_ids_in_transaction,
+)
 from analysis.runtime import PromptRuntimeWindow, project_prompt_runtime_origin
 from analysis.schemas import (
     AnalysisJobScope,
@@ -38,6 +43,11 @@ from analysis.schemas import (
     AnnotationWrite,
     EventAnnotationRef,
     WindowAnnotationCountView,
+)
+from content.analysis_inputs import (
+    AnalysisObservationManifest,
+    freeze_analysis_observation_inputs_in_transaction,
+    require_analysis_observation_inputs_in_transaction,
 )
 from content.editorial_reading import require_analysis_content_permissions_in_transaction
 from content.schemas import AnalysisPostContentView
@@ -175,7 +185,11 @@ def build_analysis_need_ledger_in_transaction(
     end: datetime,
     cutoff_at: datetime,
 ) -> AnalysisNeedLedgerView:
-    """Enumerate observed exact-version candidates, including ones never queued."""
+    """Audit candidates and recorded completion times; never expose an old summary.
+
+    Current material readers separately enforce ALL inputs. Revocation does not
+    rewrite immutable historical completion timestamps or certify availability.
+    """
     if not session.in_transaction():
         raise RuntimeError("analysis ledger requires the caller's transaction")
     if (
@@ -212,11 +226,17 @@ def build_analysis_need_ledger_in_transaction(
         annotations = {
             (item.prompt_version, item.content_version_id): item
             for item in session.scalars(
-                select(ContentAnnotation).where(
+                select(ContentAnnotation)
+                .where(
                     ContentAnnotation.owner_id == owner_id,
                     ContentAnnotation.topic_id == rule.topic_id,
                     ContentAnnotation.topic_rule_version == rule.topic_rule_version,
                     ContentAnnotation.created_at <= cutoff_at,
+                )
+                .order_by(
+                    (ContentAnnotation.result_state == AnnotationResultState.VALID.value),
+                    ContentAnnotation.created_at,
+                    ContentAnnotation.id,
                 )
             )
         }
@@ -396,6 +416,7 @@ def analysis_operation_id(
     content_version_ids: Sequence[UUID],
     prompt_version: str,
     retry_index: int = 0,
+    input_signature: str | None = None,
 ) -> UUID:
     if (
         topic_rule_version < 1
@@ -410,6 +431,12 @@ def analysis_operation_id(
     name = "\0".join((str(topic_id), str(topic_rule_version), prompt_version, *ordered_ids))
     if retry_index:
         name = f"{name}\0retry:{retry_index}"
+    if input_signature is not None:
+        if len(input_signature) != 64 or any(
+            char not in "0123456789abcdef" for char in input_signature
+        ):
+            raise ValueError("analysis input signature must be SHA256")
+        name = f"{name}\0observations:{input_signature}"
     return uuid5(_ANALYSIS_OPERATION_NAMESPACE, name)
 
 
@@ -795,6 +822,7 @@ class AnalysisService:
             return result
 
         prompt_by_target: dict[tuple[UUID, int, UUID], set[str]] = {}
+        readable_targets: set[tuple[UUID, int, UUID]] = set()
         annotation_states: dict[tuple[UUID, int, str, UUID], str] = {}
         all_versions = sorted(
             {version for versions in targets_by_scope.values() for version in versions},
@@ -804,27 +832,41 @@ class AnalysisService:
         rule_versions = {rule_version for _, rule_version in targets_by_scope}
         for start in range(0, len(all_versions), _ANNOTATION_READ_BATCH_SIZE):
             batch = all_versions[start : start + _ANNOTATION_READ_BATCH_SIZE]
-            rows = self._session.execute(
-                select(
-                    ContentAnnotation.topic_id,
-                    ContentAnnotation.topic_rule_version,
-                    ContentAnnotation.content_version_id,
-                    ContentAnnotation.prompt_version,
-                    ContentAnnotation.result_state,
-                ).where(
+            rows = self._session.scalars(
+                select(ContentAnnotation)
+                .where(
                     ContentAnnotation.owner_id == owner_id,
                     ContentAnnotation.topic_id.in_(topic_ids),
                     ContentAnnotation.topic_rule_version.in_(rule_versions),
                     ContentAnnotation.content_version_id.in_(batch),
                 )
+                .order_by(
+                    (ContentAnnotation.result_state == AnnotationResultState.VALID.value).desc(),
+                    ContentAnnotation.created_at.desc(),
+                    ContentAnnotation.id.desc(),
+                )
             ).all()
-            for topic_id, rule_version, version_id, prompt_version, state in rows:
+            readable = readable_annotation_ids_in_transaction(
+                self._session, annotations=tuple(rows), now=datetime.now(UTC)
+            )
+            for row in rows:
+                topic_id, rule_version, version_id, prompt_version = (
+                    row.topic_id,
+                    row.topic_rule_version,
+                    row.content_version_id,
+                    row.prompt_version,
+                )
                 if version_id not in targets_by_scope.get((topic_id, rule_version), ()):
                     continue
                 prompt_by_target.setdefault((topic_id, rule_version, version_id), set()).add(
                     prompt_version
                 )
-                annotation_states[(topic_id, rule_version, prompt_version, version_id)] = state
+                if row.id not in readable:
+                    continue
+                readable_targets.add((topic_id, rule_version, version_id))
+                annotation_states.setdefault(
+                    (topic_id, rule_version, prompt_version, version_id), row.result_state
+                )
 
         failed_targets: set[tuple[UUID, int, str, UUID]] = set()
         invalid_scopes: set[tuple[UUID, int]] = set()
@@ -854,6 +896,12 @@ class AnalysisService:
                 prompt_by_target.setdefault((*scope_key, version_id), set()).add(
                     scope.prompt_version
                 )
+            if not analysis_scope_inputs_readable_in_transaction(
+                self._session, owner_id=owner_id, scope=scope, now=datetime.now(UTC)
+            ):
+                continue
+            for version_id in matched:
+                readable_targets.add((*scope_key, version_id))
                 if job.status in {
                     JobStatus.FAILED,
                     JobStatus.PARTIALLY_SUCCEEDED,
@@ -864,6 +912,8 @@ class AnalysisService:
         for job_id, (topic_id, rule_version, versions) in known.items():
             scope_key = (topic_id, rule_version)
             if scope_key in invalid_scopes:
+                continue
+            if any((*scope_key, version_id) not in readable_targets for version_id in versions):
                 continue
             prompts = {
                 prompt
@@ -917,34 +967,25 @@ class AnalysisService:
                 failed_count=0,
                 abnormal_count=0,
             )
-        annotations = self._session.scalars(
-            select(ContentAnnotation).where(
-                ContentAnnotation.owner_id == owner_id,
-                ContentAnnotation.topic_id == topic_id,
-                ContentAnnotation.topic_rule_version == topic_rule_version,
-                ContentAnnotation.prompt_version == prompt_version,
-                ContentAnnotation.content_version_id.in_(content_version_ids),
-            )
-        ).all()
+        states = load_current_annotation_states_in_transaction(
+            self._session,
+            owner_id=owner_id,
+            topic_id=topic_id,
+            topic_rule_version=topic_rule_version,
+            prompt_version=prompt_version,
+            content_version_ids=set(content_version_ids),
+        )
         annotated = {
-            row.content_version_id
-            for row in annotations
-            if row.result_state == AnnotationResultState.VALID.value
+            key for key, (state, _) in states.items() if state is AnnotationResultState.VALID
         }
         abnormal = {
-            row.content_version_id
-            for row in annotations
-            if row.result_state == AnnotationResultState.INVALID.value
+            key for key, (state, _) in states.items() if state is AnnotationResultState.INVALID
         }
         row_failed = {
-            row.content_version_id
-            for row in annotations
-            if row.result_state == AnnotationResultState.FAILED.value
+            key for key, (state, _) in states.items() if state is AnnotationResultState.FAILED
         }
         row_pending = {
-            row.content_version_id
-            for row in annotations
-            if row.result_state == AnnotationResultState.PENDING.value
+            key for key, (state, _) in states.items() if state is AnnotationResultState.PENDING
         }
         failed: set[UUID] = set()
         for job in CollectionDueWindowService(self._session).list_analysis_jobs_in_transaction(
@@ -957,6 +998,10 @@ class AnalysisService:
             }:
                 continue
             scope = AnalysisJobScope.from_job_scope(job.scope)
+            if not analysis_scope_inputs_readable_in_transaction(
+                self._session, owner_id=owner_id, scope=scope, now=datetime.now(UTC)
+            ):
+                continue
             if (
                 scope.topic_id == topic_id
                 and scope.topic_rule_version == topic_rule_version
@@ -1004,36 +1049,51 @@ class AnalysisService:
             return ()
         annotations: dict[UUID, str] = {}
         for start in range(0, len(matched), _ANNOTATION_READ_BATCH_SIZE):
-            version_ids = tuple(
+            version_ids = {
                 item.content_version_id
                 for item in matched[start : start + _ANNOTATION_READ_BATCH_SIZE]
-            )
+            }
             annotations.update(
                 {
-                    row.content_version_id: row.result_state
-                    for row in self._session.scalars(
-                        select(ContentAnnotation).where(
-                            ContentAnnotation.owner_id == owner_id,
-                            ContentAnnotation.topic_id == topic_id,
-                            ContentAnnotation.topic_rule_version == rule_version,
-                            ContentAnnotation.prompt_version == ANALYSIS_PROMPT_VERSION,
-                            ContentAnnotation.content_version_id.in_(version_ids),
-                        )
-                    )
+                    version_id: state.value
+                    for version_id, (state, _) in load_current_annotation_states_in_transaction(
+                        self._session,
+                        owner_id=owner_id,
+                        topic_id=topic_id,
+                        topic_rule_version=rule_version,
+                        prompt_version=ANALYSIS_PROMPT_VERSION,
+                        content_version_ids=version_ids,
+                        now=now,
+                    ).items()
                 }
             )
         jobs_by_version: dict[UUID, list[tuple[JobStatus, int, bool]]] = {}
         for job in CollectionDueWindowService(self._session).list_analysis_jobs_in_transaction(
             owner_id=owner_id, topic_ids={topic_id}
         ):
+            malformed = False
             try:
                 scope = AnalysisJobScope.from_job_scope(job.scope)
             except (TypeError, ValueError, ValidationError):
-                continue
+                # Recover only bounded identity metadata to decide whether an old
+                # terminal attempt needs its one distinct replacement. Its input
+                # material remains unusable and is never recovered from latest.
+                identity = dict(job.scope)
+                identity.pop("prompt_items", None)
+                identity.pop("input_manifest", None)
+                try:
+                    scope = AnalysisJobScope.from_job_scope(identity)
+                except (TypeError, ValueError, ValidationError):
+                    continue
+                malformed = True
             if (
                 scope.topic_id != topic_id
                 or scope.topic_rule_version != rule_version
                 or scope.prompt_version != ANALYSIS_PROMPT_VERSION
+            ):
+                continue
+            if not malformed and not analysis_scope_inputs_readable_in_transaction(
+                self._session, owner_id=owner_id, scope=scope, now=now
             ):
                 continue
             for version_id in scope.content_version_ids:
@@ -1041,7 +1101,8 @@ class AnalysisService:
                     (
                         job.status,
                         scope.retry_index,
-                        scope.prompt_items is not None
+                        not malformed
+                        and scope.prompt_items is not None
                         and all(
                             not item.comments or item.comment_version_ids is not None
                             for item in scope.prompt_items
@@ -1117,12 +1178,44 @@ class AnalysisService:
             content_version_ids = tuple(
                 sorted((item.content_version_id for item in batch), key=str)
             )
+            post_views = {item.content_version_id: item for item in due}
+            comment_views = {
+                comment.comment_version_id: comment
+                for values in comments.values()
+                for comment in values
+            }
+            post_observations = {
+                identifier: post_views[identifier].observation_id
+                for identifier in content_version_ids
+            }
+            comment_observations = {
+                identifier: comment_views[identifier].observation_id
+                for item in batch
+                for identifier in (item.comment_version_ids or ())
+            }
+            if any(
+                value is None
+                for value in (*post_observations.values(), *comment_observations.values())
+            ):
+                raise ApplicationError("editorial_material_unavailable")
+            manifest = freeze_analysis_observation_inputs_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                post_observations={
+                    key: value for key, value in post_observations.items() if value is not None
+                },
+                comment_observations={
+                    key: value for key, value in comment_observations.items() if value is not None
+                },
+                now=now,
+            )
             operation_id = analysis_operation_id(
                 topic_id=topic_id,
                 topic_rule_version=rule_version,
                 content_version_ids=content_version_ids,
                 prompt_version=ANALYSIS_PROMPT_VERSION,
                 retry_index=retry_index,
+                input_signature=manifest.signature,
             )
             if job_service.operation_exists_in_transaction(
                 owner_id=owner_id, kind="analysis.annotate", operation_id=operation_id
@@ -1146,6 +1239,7 @@ class AnalysisService:
                                 content_version_ids=content_version_ids,
                                 prompt_items=batch,
                                 retry_index=retry_index,
+                                input_manifest=manifest,
                             ).to_job_scope(),
                             **freeze_ai_job_scope_in_transaction(
                                 self._session, owner_id=owner_id, settings=self.settings
@@ -1164,6 +1258,7 @@ class AnalysisService:
         topic_rule_version: int,
         prompt_version: str,
         content_version_ids: Sequence[UUID],
+        input_signature: str | None = None,
     ) -> tuple[UUID, ...]:
         if not self._session.in_transaction():
             raise RuntimeError("analysis reads require the caller's transaction")
@@ -1176,6 +1271,9 @@ class AnalysisService:
                     ContentAnnotation.prompt_version == prompt_version,
                     ContentAnnotation.content_version_id.in_(content_version_ids),
                     ContentAnnotation.result_state == AnnotationResultState.VALID.value,
+                    ContentAnnotation.input_signature == input_signature
+                    if input_signature is not None
+                    else ContentAnnotation.input_signature == "legacy",
                 )
             )
         )
@@ -1191,15 +1289,26 @@ class AnalysisService:
         posts: Mapping[UUID, AnalysisPostContentView],
         results: Sequence[AnnotationWrite],
         created_at: datetime,
+        input_manifest: AnalysisObservationManifest | None = None,
     ) -> None:
         if not self._session.in_transaction():
             raise RuntimeError("analysis writes require the caller's transaction")
         if created_at.tzinfo is None:
             raise ValueError("analysis creation time must be timezone-aware")
+        if input_manifest is not None:
+            require_analysis_observation_inputs_in_transaction(
+                self._session, owner_id=owner_id, manifest=input_manifest, now=created_at
+            )
+        signature = input_manifest.signature if input_manifest is not None else "legacy"
         for result in results:
             post = posts.get(result.content_version_id)
             if post is None:
                 raise ValueError("analysis result references an unfrozen content version")
+            if input_manifest is not None and (
+                input_manifest.post_observations.get(result.content_version_id)
+                != post.observation_id
+            ):
+                raise ApplicationError("editorial_material_unavailable")
             self._session.execute(
                 insert(ContentAnnotation)
                 .values(
@@ -1210,6 +1319,10 @@ class AnalysisService:
                     topic_id=topic_id,
                     topic_rule_version=topic_rule_version,
                     prompt_version=prompt_version,
+                    input_manifest=input_manifest.model_dump(mode="json")
+                    if input_manifest
+                    else None,
+                    input_signature=signature,
                     relevant=result.relevant,
                     relevance_reason=result.relevance_reason,
                     sentiment=result.sentiment.value if result.sentiment is not None else None,
@@ -1238,6 +1351,7 @@ class AnalysisService:
                     ContentAnnotation.topic_id == topic_id,
                     ContentAnnotation.topic_rule_version == topic_rule_version,
                     ContentAnnotation.prompt_version == prompt_version,
+                    ContentAnnotation.input_signature == signature,
                 )
                 .with_for_update()
             )
@@ -1544,6 +1658,7 @@ class AnalysisAnnotateExecutor:
                 posts=posts,
                 results=results,
                 created_at=self._clock(),
+                input_manifest=scope.input_manifest,
             )
 
     def _load_execution(
@@ -1583,6 +1698,7 @@ class AnalysisAnnotateExecutor:
             content_version_ids=scope.content_version_ids,
             prompt_version=scope.prompt_version,
             retry_index=scope.retry_index,
+            input_signature=scope.input_manifest.signature if scope.input_manifest else None,
         )
         if (
             configuration.owner_id != message.owner_id
@@ -1598,6 +1714,10 @@ class AnalysisAnnotateExecutor:
             raise self._configuration_failure("analysis_scope_mismatch")
         if scope.prompt_items is None:
             raise self._configuration_failure("analysis_frozen_input_missing")
+        if not analysis_scope_inputs_readable_in_transaction(
+            session, owner_id=message.owner_id, scope=scope, now=self._clock()
+        ):
+            raise self._configuration_failure("analysis_input_changed")
         rules = MonitorTopicService(session).get_topic_rules_in_transaction(
             owner_id=message.owner_id,
             topic_id=scope.topic_id,
@@ -1609,12 +1729,16 @@ class AnalysisAnnotateExecutor:
             topic_rule_version=scope.topic_rule_version,
             prompt_version=scope.prompt_version,
             content_version_ids=scope.content_version_ids,
+            input_signature=scope.input_manifest.signature if scope.input_manifest else None,
         )
         loaded_posts = load_post_versions_for_analysis(
             session,
             owner_id=message.owner_id,
             content_version_ids=set(missing_ids),
             readable_at=self._clock(),
+            selected_observations=scope.input_manifest.post_observations
+            if scope.input_manifest
+            else None,
         )
         posts = {item.content_version_id: item for item in loaded_posts}
         if len(posts) != len(missing_ids):
@@ -1630,6 +1754,9 @@ class AnalysisAnnotateExecutor:
                 version_id for item in items for version_id in (item.comment_version_ids or ())
             },
             now=self._clock(),
+            selected_observations=scope.input_manifest.comment_observations
+            if scope.input_manifest
+            else None,
         )
         for item in items:
             for index, (version_id, text) in enumerate(
@@ -1704,6 +1831,7 @@ def list_relevant_event_annotation_refs_in_transaction(
     version_ids: Sequence[UUID] | None = None,
     after: tuple[datetime, UUID] | None = None,
     limit: int = 2000,
+    now: datetime | None = None,
 ) -> EventAnnotationPage:
     """Page latest valid identities newest first; after excludes newer/equal cursor keys."""
     if not session.in_transaction() or since.tzinfo is None:
@@ -1720,12 +1848,16 @@ def list_relevant_event_annotation_refs_in_transaction(
             ContentAnnotation.created_at >= since,
         )
         .distinct(
-            ContentAnnotation.owner_id, ContentAnnotation.topic_id, ContentAnnotation.content_id
+            ContentAnnotation.owner_id,
+            ContentAnnotation.topic_id,
+            ContentAnnotation.content_id,
+            ContentAnnotation.input_signature,
         )
         .order_by(
             ContentAnnotation.owner_id,
             ContentAnnotation.topic_id,
             ContentAnnotation.content_id,
+            ContentAnnotation.input_signature,
             ContentAnnotation.created_at.desc(),
             ContentAnnotation.id.desc(),
         )
@@ -1742,16 +1874,34 @@ def list_relevant_event_annotation_refs_in_transaction(
             limit
         )
     ).all()
-    return EventAnnotationPage(
-        items=tuple(
+    references: dict[tuple[UUID, UUID, UUID], EventAnnotationRef] = {}
+    readable = readable_annotation_ids_in_transaction(
+        session, annotations=tuple(rows), now=now or datetime.now(UTC)
+    )
+    for row in rows:
+        if row.id not in readable:
+            continue
+        manifest = (
+            AnalysisObservationManifest.model_validate(row.input_manifest)
+            if row.input_manifest is not None
+            else None
+        )
+        references.setdefault(
+            (row.owner_id, row.topic_id, row.content_id),
             EventAnnotationRef(
                 owner_id=row.owner_id,
                 topic_id=row.topic_id,
                 topic_rule_version=row.topic_rule_version,
                 content_id=row.content_id,
                 content_version_id=row.content_version_id,
-            )
-            for row in rows
-        ),
+                observation_id=manifest.post_observations[row.content_version_id]
+                if manifest
+                else None,
+                input_observation_ids=manifest.input_observation_ids if manifest else (),
+                annotation_id=row.id,
+            ),
+        )
+    return EventAnnotationPage(
+        items=tuple(references.values()),
         next_after=(rows[-1].created_at, rows[-1].id) if len(rows) == limit else None,
     )

@@ -27,6 +27,11 @@ class EventInput:
     native_target_content_ids: frozenset[UUID] = frozenset()
     editorial_frame: dict[str, str | None] | None = None
     provenance_fingerprint: str | None = None
+    observation_id: UUID | None = None
+    observation_source_key: str | None = None
+    representative_comment_observation_id: UUID | None = None
+    input_observation_ids: tuple[UUID, ...] = ()
+    annotation_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)

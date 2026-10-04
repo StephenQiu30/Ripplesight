@@ -8,6 +8,9 @@ from uuid import UUID, uuid5
 
 from sqlalchemy.orm import Session
 
+from connections.editorial_identity import (
+    require_editorial_native_identity_authority_in_transaction,
+)
 from connections.schemas import SourceEntryPoint
 from content.editorial_rendered import (
     prepare_editorial_rendered,
@@ -19,7 +22,8 @@ from content.services import ContentService
 from content.topic_matches import match_editorial_content_in_transaction
 from core.errors import ApplicationError
 from evidence.schemas import DataClass
-from evidence.services import SourceAccessPolicyService
+from evidence.services import SourceAccessPolicyService, load_source_access_policy_in_transaction
+from sources.editorial_identity import NATIVE_IDENTITY_PURPOSE
 
 
 class EditorialContentIngestService:
@@ -48,6 +52,8 @@ class EditorialContentIngestService:
             "title": m.title,
             "body": original_body,
         }
+        if command.identity_proof is not None:
+            payload["native_identity"] = command.identity_proof.model_dump_json()
         admission = SourceAccessPolicyService(
             self._session, clock=self._clock
         ).admit_payload_in_transaction(
@@ -60,6 +66,29 @@ class EditorialContentIngestService:
         )
         if admission.policy_version != command.policy_version:
             raise ApplicationError("editorial_version_conflict")
+        proof = None
+        if command.identity_proof is not None and "native_identity" in admission.fields:
+            policy = load_source_access_policy_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                source_key=command.source_key,
+                capability=command.capability,
+            )
+            if (
+                policy is not None
+                and policy.field_purposes.get("native_identity") == NATIVE_IDENTITY_PURPOSE
+            ):
+                require_editorial_native_identity_authority_in_transaction(
+                    self._session,
+                    owner_id=owner_id,
+                    profile_id=command.profile_id,
+                    configuration_version=command.configuration_version,
+                    job_id=command.job_id,
+                    material=m,
+                    proof=command.identity_proof,
+                    now=self._clock(),
+                )
+                proof = command.identity_proof
         # A minimized permission cannot silently promote a teaser to a complete body.
         required = {"external_id", "canonical_url", "title", "text_scope", "text_origin"}
         if not required.issubset(admission.fields) or (
@@ -119,6 +148,8 @@ class EditorialContentIngestService:
             ),
             representation_fingerprint=bytes.fromhex(representation.sha256),
             member_profile_id=command.profile_id if command.grouped_job else None,
+            editorial_profile_id=command.profile_id,
+            identity_proof=proof,
         )
         version = result.latest_observation.content_version
         if version is None:

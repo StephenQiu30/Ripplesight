@@ -11,7 +11,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from content.event_reading import load_event_member_content_in_transaction
-from content.schemas import EventContentReadReference
 from core.errors import ApplicationError
 from events.fact_models import (
     EventFact,
@@ -23,6 +22,7 @@ from events.fact_models import (
 from events.fact_schemas import EventCorrectionInput, EventCorrectionView
 from events.facts import ensure_legacy_facts_in_transaction, invalidate_event_derived_in_transaction
 from events.models import Event, EventMember
+from events.observation_inputs import event_content_reference
 from monitors.services import MonitorTopicService
 
 
@@ -213,14 +213,7 @@ class EventCorrectionService:
             raise ApplicationError("invalid_event_correction")
         if not selected:
             raise ApplicationError("invalid_event_correction")
-        references = tuple(
-            EventContentReadReference(
-                by_content[identity].content_id,
-                by_content[identity].content_version_id,
-                by_content[identity].representative_comment_id,
-            )
-            for identity in selected
-        )
+        references = tuple(event_content_reference(by_content[identity]) for identity in selected)
         readable = load_event_member_content_in_transaction(
             self._session, owner_id=owner_id, references=references, now=now
         )
@@ -383,8 +376,14 @@ class EventCorrectionService:
                 event_id=event_id,
                 content_id=identity,
                 content_version_id=old_member.content_version_id,
+                observation_id=old_member.observation_id,
+                observation_source_key=old_member.observation_source_key,
                 source_key=old_member.source_key,
                 representative_comment_id=old_member.representative_comment_id,
+                representative_comment_observation_id=(
+                    old_member.representative_comment_observation_id
+                ),
+                input_manifest=old_member.input_manifest,
                 added_revision=events[event_id].revision,
                 removed_revision=None,
                 assignment_origin="manual"
@@ -519,6 +518,11 @@ class EventCorrectionService:
                     "event_id": str(member.event_id),
                     "content_id": str(member.content_id),
                     "version_id": str(member.content_version_id),
+                    "observation_id": str(member.observation_id) if member.observation_id else None,
+                    "input_observation_ids": [
+                        str(value)
+                        for value in event_content_reference(member).input_observation_ids
+                    ],
                 }
                 for member in members
             ],

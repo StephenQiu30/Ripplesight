@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Literal, Self
 from uuid import UUID
 
-from pydantic import Field, JsonValue, model_validator
+from pydantic import Field, JsonValue, field_validator, model_validator
 
 from jobs.schemas import JobView
 from sources.editorial_rsshub import EditorialRsshubReview
@@ -98,9 +98,24 @@ class ExternalEditorialInput(EditorialContract):
         min_length=1, max_length=50
     )
 
+    @field_validator("materials", mode="before")
+    @classmethod
+    def bounded_identity_input(cls, values: object) -> object:
+        if isinstance(values, (list, tuple)):
+            if len(values) > 50:
+                raise ValueError("external ingestion exceeds its item bound")
+            for value in values:
+                if external_native_identity_claim(value):
+                    raise ValueError(
+                        "external ingestion cannot declare server-native identity proof"
+                    )
+        return values
+
     @model_validator(mode="after")
     def bounded_body(self) -> Self:
         for material in self.materials:
+            if external_native_identity_claim(material):
+                raise ValueError("external ingestion cannot declare server-native identity proof")
             non_secret_json(
                 material.model_dump(mode="json")
                 if isinstance(material, EditorialMaterial)
@@ -109,6 +124,34 @@ class ExternalEditorialInput(EditorialContract):
         if len(self.model_dump_json().encode()) > 4 * 1024 * 1024:
             raise ValueError("external ingestion exceeds bounded source payload")
         return self
+
+
+def external_native_identity_claim(value: object) -> bool:
+    """Bounded inspection before serializing untrusted dicts or metadata."""
+    if isinstance(value, EditorialMaterial):
+        if value.native_identity is not None:
+            return True
+        value = value.metadata
+    pending = [(value, 0)]
+    visited = 0
+    while pending:
+        node, depth = pending.pop()
+        visited += 1
+        if depth > 12 or visited > 10_000:
+            raise ValueError("external material structure exceeds its inspection bound")
+        if isinstance(node, dict):
+            if len(node) + len(pending) + visited > 10_000:
+                raise ValueError("external material structure exceeds its inspection bound")
+            for key, child in node.items():
+                normalized = "".join(char for char in str(key).casefold() if char.isalnum())
+                if normalized in {"nativeidentity", "identityproof"} and child is not None:
+                    return True
+                pending.append((child, depth + 1))
+        elif isinstance(node, (tuple, list)):
+            if len(node) > 1000 or len(node) + len(pending) + visited > 10_000:
+                raise ValueError("external material structure exceeds its inspection bound")
+            pending.extend((child, depth + 1) for child in node)
+    return False
 
 
 class ExternalIngressItem(EditorialContract):

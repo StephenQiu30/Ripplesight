@@ -11,6 +11,8 @@ from pathlib import Path
 
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
+from playwright.sync_api import Error as PlaywrightError
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 from reports.export_schemas import EXPORT_MAX_BYTES, ExportDocument, ExportFormat
@@ -148,18 +150,25 @@ def render_export(
         )
         with sync_playwright() as playwright:
             # Freeze the bundled revision; never download or use a signed-in browser.
-            if "chromium-1243/" not in playwright.chromium.executable_path:
+            executable_path = Path(playwright.chromium.executable_path)
+            if "chromium-1243/" not in str(executable_path) or not executable_path.is_file():
                 raise ExportRenderError("export_renderer_unavailable")
-            browser = playwright.chromium.launch(
-                timeout=max(1, int((deadline - time.monotonic()) * 1000)),
-                args=[
-                    "--disable-background-networking",
-                    "--disable-component-update",
-                    "--disable-sync",
-                    "--no-first-run",
-                    "--host-resolver-rules=MAP * ~NOTFOUND",
-                ],
-            )
+            try:
+                browser = playwright.chromium.launch(
+                    executable_path=str(executable_path),
+                    timeout=max(1, int((deadline - time.monotonic()) * 1000)),
+                    args=[
+                        "--disable-background-networking",
+                        "--disable-component-update",
+                        "--disable-sync",
+                        "--no-first-run",
+                        "--host-resolver-rules=MAP * ~NOTFOUND",
+                    ],
+                )
+            except PlaywrightTimeoutError as error:
+                raise ExportRenderError("export_timeout") from error
+            except PlaywrightError as error:
+                raise ExportRenderError("export_renderer_unavailable") from error
             try:
                 context = browser.new_context(
                     java_script_enabled=False, service_workers="block", offline=True
@@ -173,6 +182,10 @@ def render_export(
                     print_background=True,
                 )
                 result = ExportArtifact(body, "application/pdf", "pdf")
+            except PlaywrightTimeoutError as error:
+                raise ExportRenderError("export_timeout") from error
+            except PlaywrightError as error:
+                raise ExportRenderError("export_renderer_unavailable") from error
             finally:
                 browser.close()
     if time.monotonic() >= deadline:

@@ -89,6 +89,7 @@ ERROR_CATEGORIES: Mapping[str, ErrorCategory] = MappingProxyType(
         "edition_revision_conflict": ErrorCategory.CONFLICT,
         "edition_input_unavailable": ErrorCategory.CONFLICT,
         "editorial_version_conflict": ErrorCategory.CONFLICT,
+        "editorial_target_conflict": ErrorCategory.CONFLICT,
         "editorial_source_disabled": ErrorCategory.CONFLICT,
         "editorial_source_unavailable": ErrorCategory.CONFLICT,
         "editorial_material_unavailable": ErrorCategory.NOT_FOUND,

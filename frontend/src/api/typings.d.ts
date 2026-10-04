@@ -1050,6 +1050,12 @@ declare namespace HotKeyAPI {
       "missing" | "pending" | "failed" | "invalid" | "valid" | null;
     /** Analysis Relevant */
     analysis_relevant?: boolean | null;
+    /** Readable Sources */
+    readable_sources?: ContentSourceObservationView[];
+    /** Readable Sources Total */
+    readable_sources_total?: number;
+    /** Readable Sources Truncated */
+    readable_sources_truncated?: boolean;
     /** Discoveries */
     discoveries: ContentDiscoveryView[];
     /** Version History */
@@ -1158,6 +1164,25 @@ declare namespace HotKeyAPI {
     external_requests: number;
     /** Model Requests */
     model_requests: number;
+  };
+
+  type ContentSourceObservationView = {
+    /** Source Key */
+    source_key: string;
+    /** Source Name */
+    source_name?: string | null;
+    /** Observation Id */
+    observation_id: string;
+    /** Observed At */
+    observed_at: string;
+    /** Received At */
+    received_at: string;
+    /** Published At */
+    published_at: string | null;
+    /** Version Id */
+    version_id: string;
+    text_scope: ContentTextScope;
+    text_origin: ContentTextOrigin;
   };
 
   type ContentTextOrigin = "source" | "machine_extracted";
@@ -1663,6 +1688,7 @@ declare namespace HotKeyAPI {
     language?: string | null;
     /** External Id */
     external_id?: string | null;
+    native_identity?: EditorialNativeIdentityProof | null;
     /** Published At */
     published_at?: string | null;
     /** Source Updated At */
@@ -1687,6 +1713,33 @@ declare namespace HotKeyAPI {
     categories?: string[];
     /** Metadata */
     metadata?: Record<string, any>;
+  };
+
+  type EditorialNativeIdentityProof = {
+    /** Schema Version */
+    schema_version?: string;
+    /** Platform */
+    platform?: string;
+    /** Object Type */
+    object_type?: string;
+    /** Namespace */
+    namespace?: string;
+    /** Native Id */
+    native_id: string;
+    /** Proof Kind */
+    proof_kind?: string;
+    /** Canonical Object Url */
+    canonical_object_url: string;
+    /** Collector Revision */
+    collector_revision: string;
+    /** Route Key */
+    route_key: string;
+    /** Query Mode */
+    query_mode: "author_stream" | "tag_feed" | "platform_keyword";
+    /** Configuration Sha256 */
+    configuration_sha256: string;
+    /** Evidence Field */
+    evidence_field?: string;
   };
 
   type EditorialOverrideInput = {
@@ -5583,6 +5636,10 @@ declare namespace HotKeyAPI {
     fact_revision?: number | null;
     /** Topic Id */
     topic_id?: string | null;
+    /** Observation Id */
+    observation_id?: string | null;
+    /** Input Observation Ids */
+    input_observation_ids?: string[];
     /** Title Zh */
     title_zh: string;
     /** Summary Zh */

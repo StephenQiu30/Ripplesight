@@ -17,7 +17,11 @@ def load_editorial_group_manifest_in_transaction(
 ) -> EditorialGroupManifest | None:
     if not session.in_transaction():
         raise RuntimeError("group context reads require caller transaction")
-    job = session.scalar(select(Job).where(Job.owner_id == owner_id, Job.id == job_id))
+    job = session.scalar(
+        select(Job)
+        .where(Job.owner_id == owner_id, Job.id == job_id)
+        .execution_options(populate_existing=True)
+    )
     if (
         job is None
         or job.kind != "source.editorial.x_group"

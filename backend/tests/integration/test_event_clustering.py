@@ -262,6 +262,32 @@ def _seed_reading_evidence(session, owner, topic, version_ids, now):
             ),
             values,
         )
+        # Controlled analysis inputs are explicit; legacy NULL annotations without
+        # their original analysis Job must remain unavailable.
+        from content.analysis_inputs import AnalysisObservationManifest
+
+        for value in values:
+            # These controlled original source leaves have no dependency edges.
+            # The real scanner still rechecks every fixed manifest and its ALL
+            # permissions; fixture construction does not perform 2000 producer reads.
+            manifest = AnalysisObservationManifest(
+                post_observations={value["version"]: value["id"]},
+                comment_observations={},
+                input_observation_ids=(value["id"],),
+            )
+            session.execute(
+                text(
+                    "UPDATE content_annotations SET input_manifest=CAST(:manifest AS jsonb), "
+                    "input_signature=:signature WHERE owner_id=:owner "
+                    "AND content_version_id=:version"
+                ),
+                {
+                    "owner": owner,
+                    "version": value["version"],
+                    "manifest": manifest.model_dump_json(),
+                    "signature": manifest.signature,
+                },
+            )
 
 
 def _decision(version_ids: tuple[UUID, ...]) -> EventDecision:
@@ -621,6 +647,8 @@ def test_database_rejects_member_with_wrong_source(
                 content_id=source.content_id,
                 content_version_id=source.content_version_id,
                 source_key="wrong_source",
+                observation_source_key="wrong_source",
+                observation_id=source.observation_id,
                 representative_comment_id=None,
                 added_revision=1,
                 removed_revision=None,
@@ -874,11 +902,13 @@ def test_review_scan_pages_deduplicates_and_drains_next_slot(event_context, monk
                 "INSERT INTO content_annotations "
                 "(id, owner_id, content_id, content_version_id, topic_id, topic_rule_version, "
                 "prompt_version, relevant, relevance_reason, sentiment, summary, viewpoints, "
-                "ai_call_id, status, result_state, first_valid_at, created_at, updated_at) "
+                "ai_call_id, status, result_state, first_valid_at, created_at, updated_at, "
+                "input_manifest, input_signature) "
                 "SELECT :id, owner_id, content_id, content_version_id, "
                 "topic_id, 2, prompt_version, "
                 "true, relevance_reason, sentiment, summary, viewpoints, ai_call_id, status, "
-                "result_state, first_valid_at, created_at - interval '1 minute', updated_at "
+                "result_state, first_valid_at, created_at - interval '1 minute', updated_at, "
+                "input_manifest, input_signature "
                 "FROM content_annotations WHERE content_version_id=:version"
             ),
             {"id": uuid4(), "version": extra[0]},

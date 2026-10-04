@@ -14,9 +14,10 @@ from sqlalchemy.orm import Session, sessionmaker
 from ai.schemas import AiCallError, AiFailureCode
 from ai.services import AiService, create_ai_client
 from content.event_reading import load_event_member_content_in_transaction
+from content.observation_inputs import freeze_observation_inputs_in_transaction
 from content.report_reading import report_inputs_readable_in_transaction
-from content.schemas import EventContentReadReference
 from core.config import Settings
+from core.errors import ApplicationError
 from events.ai_execution import (
     create_event_stage_client,
     freeze_event_ai_scope_in_transaction,
@@ -24,6 +25,7 @@ from events.ai_execution import (
 )
 from events.fact_models import EventDerivedContent, EventFact, EventFactAssignment
 from events.models import Event, EventMember
+from events.observation_inputs import event_content_reference
 from jobs.execution import ExecutionLease, JobCompletion, JobExecutionFailure, JobExecutionService
 from jobs.schemas import (
     JobAcceptanceInput,
@@ -50,6 +52,7 @@ class EventDigestNarrative(BaseModel):
 class EventDigestInput:
     fingerprint: bytes
     prompt: str
+    input_manifest: dict[str, object]
 
 
 def load_event_digest_input_in_transaction(
@@ -74,19 +77,17 @@ def load_event_digest_input_in_transaction(
     readings = load_event_member_content_in_transaction(
         session,
         owner_id=event.owner_id,
-        references=tuple(
-            EventContentReadReference(
-                member.content_id, member.content_version_id, member.representative_comment_id
-            )
-            for member in members
-        ),
+        references=tuple(event_content_reference(member) for member in members),
         now=now,
     )
     if len(readings) != len(members) or any(
         reading.representative_comment_state == "unavailable" for reading in readings.values()
     ):
         return None
-    versions, observations = set(), set()
+    versions: set[UUID] = set()
+    observations: set[UUID] = set()
+    for member in members:
+        observations.update(event_content_reference(member).input_observation_ids)
     for reading in readings.values():
         version = reading.observation.content_version
         if version is None:
@@ -108,14 +109,21 @@ def load_event_digest_input_in_transaction(
     ):
         return None
     content_payload: list[dict[str, object]] = []
+    try:
+        closure = freeze_observation_inputs_in_transaction(
+            session,
+            owner_id=event.owner_id,
+            observation_ids=tuple(sorted(observations, key=str)),
+            now=now,
+        )
+    except (ApplicationError, ValueError):
+        return None
     for member in members:
-        reading = readings[
-            EventContentReadReference(
-                member.content_id, member.content_version_id, member.representative_comment_id
-            )
-        ]
+        reading = readings[event_content_reference(member)]
         version = reading.observation.content_version
         assert version is not None
+        if reading.source_key != member.source_key:
+            return None
         representative = reading.representative_comment
         comment_version = representative.observation.content_version if representative else None
         content_payload.append(
@@ -133,6 +141,19 @@ def load_event_digest_input_in_transaction(
                 if comment_version
                 else None,
                 "representative_comment": comment_version.body if comment_version else None,
+                **(
+                    {
+                        "observation_id": str(member.observation_id),
+                        "representative_comment_observation_id": (
+                            str(member.representative_comment_observation_id)
+                            if member.representative_comment_observation_id
+                            else None
+                        ),
+                        "input_observation_ids": [str(identity) for identity in closure],
+                    }
+                    if member.observation_id is not None
+                    else {}
+                ),
             }
         )
     facts_payload: list[dict[str, object]] = []
@@ -189,7 +210,23 @@ def load_event_digest_input_in_transaction(
     )
     if len(prompt) > 64_000:
         return None
-    return EventDigestInput(hashlib.sha256(encoded.encode()).digest(), prompt)
+    return EventDigestInput(
+        hashlib.sha256(encoded.encode()).digest(),
+        prompt,
+        {
+            "input_basis": "observations_v1",
+            "event_revision": event.revision,
+            "observation_ids": [str(identity) for identity in closure],
+            "members": [
+                {
+                    "content_id": str(member.content_id),
+                    "content_version_id": str(member.content_version_id),
+                    "observation_id": str(readings[event_content_reference(member)].observation.id),
+                }
+                for member in members
+            ],
+        },
+    )
 
 
 class EventDigestService:
@@ -241,6 +278,7 @@ class EventDigestService:
                         "event_id": str(event.id),
                         "event_revision": event.revision,
                         "input_fingerprint": inputs.fingerprint.hex(),
+                        "input_manifest": json.dumps(inputs.input_manifest, sort_keys=True),
                         **(
                             freeze_event_ai_scope_in_transaction(
                                 self._session, owner_id=event.owner_id, settings=self._settings

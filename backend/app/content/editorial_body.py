@@ -15,19 +15,19 @@ from content.editorial_rendered import (
 )
 from content.editorial_schemas import EditorialContentResult
 from content.models import ContentObservation, ContentRecord, ContentVersion
+from content.observation_context import load_observation_context_in_transaction
 from content.schemas import PersistContentPostInput
 from content.services import ContentService
 from content.topic_matches import match_editorial_content_in_transaction
 from content.version_inputs import (
     observations_readable_in_transaction,
-    save_version_inputs_in_transaction,
-    version_inputs_readable_in_transaction,
 )
 from core.errors import ApplicationError
 from evidence.schemas import DataClass
-from evidence.services import SourceAccessPolicyService
+from evidence.services import SourceAccessPolicyService, load_source_access_policy_in_transaction
 from sources.contracts import SourceCapability, SourceDocument
-from sources.editorial_schemas import EditorialBodyTarget, EditorialMaterial, fingerprint
+from sources.editorial_identity import NATIVE_IDENTITY_PURPOSE, EditorialNativeIdentityProof
+from sources.editorial_schemas import EditorialBodyTarget, EditorialMaterial
 
 
 def load_editorial_body_target_in_transaction(
@@ -55,8 +55,6 @@ def load_editorial_body_target_in_transaction(
         or record.owner_id != owner_id
         or version.owner_id != owner_id
         or version.content_id != content_id
-        or record.native_scope != f"editorial-profile:{profile_id}"
-        or record.external_id != (material.external_id or material.identity_key)
     ):
         raise ApplicationError("editorial_material_unavailable")
     if version.text_scope == "full":
@@ -67,6 +65,8 @@ def load_editorial_body_target_in_transaction(
             ContentObservation.owner_id == owner_id,
             ContentObservation.content_id == content_id,
             ContentObservation.content_version_id == content_version_id,
+            ContentObservation.job_id == job_id,
+            ContentObservation.source_operation_id == uuid5(operation_id, material.identity_key),
         )
         .order_by(ContentObservation.received_at.desc(), ContentObservation.id.desc())
         .limit(1)
@@ -117,20 +117,33 @@ def require_editorial_body_input_in_transaction(
         .with_for_update()
     )
     feed = session.get(ContentObservation, target.feed_observation_id)
+    actual = load_observation_context_in_transaction(
+        session, owner_id=target.owner_id, observation_id=target.feed_observation_id
+    )
     latest = session.scalar(
         select(ContentObservation)
         .where(
             ContentObservation.owner_id == target.owner_id,
             ContentObservation.content_id == target.content_id,
             ContentObservation.content_version_id.is_not(None),
+            (
+                (ContentObservation.editorial_profile_id == target.profile_id)
+                | (
+                    (ContentObservation.editorial_profile_id.is_(None))
+                    & (ContentObservation.job_id == target.job_id)
+                )
+            ),
         )
         .order_by(ContentObservation.received_at.desc(), ContentObservation.id.desc())
         .limit(1)
     )
     if (
         record is None
-        or record.native_scope != f"editorial-profile:{target.profile_id}"
-        or record.external_id != (target.material.external_id or target.material.identity_key)
+        or actual is None
+        or actual.editorial_profile_id != target.profile_id
+        or actual.external_id != (target.material.external_id or target.material.identity_key)
+        or actual.job.job_id != target.job_id
+        or actual.job.configuration_version != target.configuration_version
         or feed is None
         or feed.owner_id != target.owner_id
         or feed.content_id != target.content_id
@@ -141,12 +154,6 @@ def require_editorial_body_input_in_transaction(
             session,
             owner_id=target.owner_id,
             observation_ids=(target.feed_observation_id,),
-            now=now,
-        )
-        or not version_inputs_readable_in_transaction(
-            session,
-            owner_id=target.owner_id,
-            content_version_ids=(target.expected_content_version_id,),
             now=now,
         )
     ):
@@ -183,6 +190,36 @@ def complete_editorial_body_in_transaction(
         "body": document.text,
         "truncation_reason": "collector_limit" if document.text_scope == "truncated" else None,
     }
+    feed = session.get(ContentObservation, target.feed_observation_id)
+    proof = (
+        EditorialNativeIdentityProof.model_validate(feed.native_identity_proof)
+        if feed is not None and feed.native_identity_proof
+        else None
+    )
+    if proof is not None:
+        from connections.editorial_identity import (
+            load_editorial_native_identity_source_material_in_transaction,
+        )
+
+        load_editorial_native_identity_source_material_in_transaction(
+            session,
+            owner_id=target.owner_id,
+            profile_id=target.profile_id,
+            configuration_version=target.configuration_version,
+            job_id=target.job_id,
+            material=target.material,
+            proof=proof,
+            now=now,
+        )
+        payload["native_identity"] = proof.model_dump_json()
+        policy = load_source_access_policy_in_transaction(
+            session, owner_id=target.owner_id, source_key=source_key, capability=capability
+        )
+        if (
+            policy is None
+            or policy.field_purposes.get("native_identity") != NATIVE_IDENTITY_PURPOSE
+        ):
+            raise ApplicationError("editorial_material_unavailable")
     admission = SourceAccessPolicyService(session, clock=lambda: now).admit_payload_in_transaction(
         owner_id=target.owner_id,
         source_key=source_key,
@@ -236,20 +273,15 @@ def complete_editorial_body_in_transaction(
             native_scope=f"editorial-profile:{target.profile_id}",
             admission=admission,
         ),
-        representation_fingerprint=fingerprint(
-            {
-                "representation": representation.sha256,
-                "feed_observation_id": str(target.feed_observation_id),
-            }
-        ),
+        representation_fingerprint=bytes.fromhex(representation.sha256),
+        editorial_profile_id=target.profile_id,
+        identity_proof=proof,
+        input_observation_ids=(target.feed_observation_id,),
     )
     version = result.latest_observation.content_version
     if result.id != target.content_id or version is None:
         raise ApplicationError("editorial_material_unavailable")
     inputs = (target.feed_observation_id, result.latest_observation.id)
-    save_version_inputs_in_transaction(
-        session, owner_id=target.owner_id, content_version_id=version.id, observation_ids=inputs
-    )
     save_editorial_rendered_in_transaction(
         session,
         owner_id=target.owner_id,

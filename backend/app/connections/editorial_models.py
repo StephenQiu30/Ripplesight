@@ -221,6 +221,12 @@ class EditorialSourceMaterialReceipt(Base):
             ["editorial_source_runs.owner_id", "editorial_source_runs.id"],
             name="editorial_materials_run_fkey",
         ),
+        ForeignKeyConstraint(
+            ["owner_id", "observation_id"],
+            ["content_observations.owner_id", "content_observations.id"],
+            name="editorial_materials_observation_fkey",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "octet_length(material_hash) = 32 AND body_retry_count BETWEEN 0 AND 3",
             name="editorial_materials_numbers_check",
@@ -238,6 +244,7 @@ class EditorialSourceMaterialReceipt(Base):
     material_hash: Mapped[bytes] = mapped_column(LargeBinary)
     content_id: Mapped[UUID]
     content_version_id: Mapped[UUID]
+    observation_id: Mapped[UUID | None]
     run_id: Mapped[UUID]
     body_status: Mapped[str] = mapped_column(String(16))
     body_retry_count: Mapped[int] = mapped_column(Integer)

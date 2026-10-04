@@ -15,8 +15,9 @@ from tests.integration.test_editorial_topic_matches import engine as engine
 from tests.integration.test_notifications_pipeline import _lease
 
 from analysis.models import ContentAnnotation
+from content.analysis_inputs import freeze_analysis_observation_inputs_in_transaction
 from content.models import ContentObservation, ContentVersion
-from content.version_inputs import save_version_inputs_in_transaction
+from content.observation_inputs import save_observation_inputs_in_transaction
 from core.config import Settings
 from core.errors import ApplicationError
 from events.alert_reading import load_heat_alert_facts_in_transaction
@@ -34,6 +35,29 @@ from notifications.models import NotificationDelivery
 from notifications.scan import NotificationScanExecutor
 from notifications.schemas import TargetInput
 from notifications.services import NotificationService, NotificationTargetService
+
+
+def _analysis_inputs(session, owner, version):
+    observation = session.scalar(
+        select(ContentObservation)
+        .where(
+            ContentObservation.owner_id == owner,
+            ContentObservation.content_version_id == version.id,
+        )
+        .order_by(ContentObservation.received_at.desc(), ContentObservation.id.desc())
+    )
+    assert observation is not None
+    manifest = freeze_analysis_observation_inputs_in_transaction(
+        session,
+        owner_id=owner,
+        post_observations={version.id: observation.id},
+        comment_observations={},
+        now=NOW,
+    )
+    return {
+        "input_manifest": manifest.model_dump(mode="json"),
+        "input_signature": manifest.signature,
+    }
 
 
 def _seed(session, *, sentiment=True, proof=True, cooldown=3600):
@@ -61,6 +85,7 @@ def _seed(session, *, sentiment=True, proof=True, cooldown=3600):
                     topic_id=topic.id,
                     topic_rule_version=1,
                     prompt_version="alert-controlled",
+                    **_analysis_inputs(session, owner, version),
                     relevant=True,
                     relevance_reason="controlled",
                     sentiment="negative",
@@ -362,14 +387,24 @@ def test_one_hour_m3_baseline_requires_same_formula_and_live_exact_inputs(engine
                 )
             )
             session.flush()
+            observation = session.scalar(
+                select(ContentObservation).where(
+                    ContentObservation.owner_id == owner,
+                    ContentObservation.content_version_id == version.id,
+                )
+            )
+            assert observation is not None
             manifest = {
+                "input_basis": "observations_v1",
+                "observation_ids": [str(observation.id)],
                 "inputs": [
                     {
                         "source_id": str(source_id),
                         "source_revision": 1,
                         "version_id": str(version.id),
+                        "observation_id": str(observation.id),
                     }
-                ]
+                ],
             }
             for when, heat in ((end - timedelta(hours=1), 10), (end, 20)):
                 session.add(
@@ -426,12 +461,23 @@ def test_all_upstream_profile_permission_is_required_before_alert_delivery(engin
                     ContentObservation.content_version_id != version.id
                 )
             )
-            save_version_inputs_in_transaction(
+            own.input_basis = "observations_v1"
+            save_observation_inputs_in_transaction(
                 session,
                 owner_id=owner,
-                content_version_id=version.id,
-                observation_ids=(own.id, other.id),
+                output_observation_id=own.id,
+                input_observation_ids=(other.id,),
             )
+            # The controlled derived prompt is admitted after its input graph exists.
+            annotation = session.scalar(
+                select(ContentAnnotation).where(
+                    ContentAnnotation.owner_id == owner,
+                    ContentAnnotation.content_version_id == version.id,
+                )
+            )
+            assert annotation is not None
+            for key, value in _analysis_inputs(session, owner, version).items():
+                setattr(annotation, key, value)
         _enable(session, owner, settings, command, rule)
         _evaluate(session, owner, target, 10)
         with session.begin():
@@ -525,6 +571,7 @@ def test_negative_count_uses_one_latest_fixed_version_per_original_identity(engi
                     topic_id=topic.id,
                     topic_rule_version=1,
                     prompt_version="alert-controlled",
+                    **_analysis_inputs(session, owner, latest),
                     relevant=True,
                     relevance_reason="controlled revision",
                     sentiment="negative",

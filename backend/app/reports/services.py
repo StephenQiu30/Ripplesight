@@ -15,9 +15,12 @@ from sqlalchemy.orm import Session, aliased, sessionmaker
 from ai.capability_services import freeze_ai_job_scope_in_transaction
 from ai.schemas import AiCallError, AiCompletion
 from ai.services import AiService, create_ai_client
-from analysis.reads import report_annotations_readable_in_transaction
+from analysis.reads import (
+    load_report_annotation_observation_ids_in_transaction,
+    report_annotations_readable_in_transaction,
+)
 from connections.services import load_applied_source_presets_in_transaction
-from content.editorial_reading import require_analysis_content_permissions_in_transaction
+from content.observation_inputs import freeze_observation_inputs_in_transaction
 from content.report_reading import report_inputs_readable_in_transaction
 from core.config import Settings, get_settings
 from core.errors import ApplicationError
@@ -177,7 +180,8 @@ def _manifest(dataset: ReportBuildDataset) -> ReportInputManifest:
                 key=str,
             )
         ),
-        observation_ids=tuple(
+        observation_ids=dataset.input_observation_ids
+        or tuple(
             sorted(
                 [post.observation_id for post in dataset.posts]
                 + [comment.observation_id for comment in dataset.comments],
@@ -1058,6 +1062,32 @@ class ReportService:
                 now=cutoff_at,
             )
         )
+        # Frozen model output retains its full original prompt batch, even if only
+        # this post is displayed in the report. Unreadable model output becomes missing.
+        posts = tuple(
+            post
+            if post.annotation_id is None
+            or report_annotations_readable_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                topic_id=topic_id,
+                annotation_ids=(post.annotation_id,),
+                content_version_ids=(post.content_version_id,),
+                now=self._clock(),
+            )
+            else post.model_copy(
+                update={
+                    "annotation_id": None,
+                    "annotation_state": AnnotationState.MISSING,
+                    "relevant": None,
+                    "sentiment": None,
+                    "summary": None,
+                    "relevance_reason": None,
+                    "viewpoints": (),
+                }
+            )
+            for post in posts
+        )
         relevant_post_ids = {post.content_id for post in posts if post.relevant is not False}
         candidates_comments = self._load_comments(
             owner_id=owner_id,
@@ -1077,7 +1107,40 @@ class ReportService:
                 now=cutoff_at,
             )
         )
+        roots = tuple(
+            sorted(
+                {
+                    *(post.observation_id for post in posts),
+                    *(comment.observation_id for comment in comments),
+                },
+                key=str,
+            )
+        )
+        all_inputs: set[UUID] = set()
+        for offset in range(0, len(roots), 500):
+            all_inputs.update(
+                freeze_observation_inputs_in_transaction(
+                    self._session,
+                    owner_id=owner_id,
+                    observation_ids=roots[offset : offset + 500],
+                    now=self._clock(),
+                )
+            )
+        annotation_ids = tuple(
+            post.annotation_id for post in posts if post.annotation_id is not None
+        )
+        if annotation_ids:
+            all_inputs.update(
+                load_report_annotation_observation_ids_in_transaction(
+                    self._session,
+                    owner_id=owner_id,
+                    topic_id=topic_id,
+                    annotation_ids=annotation_ids,
+                    now=self._clock(),
+                )
+            )
         return ReportBuildDataset(
+            input_observation_ids=tuple(sorted(all_inputs, key=str)),
             posts=posts,
             comments=comments,
             comment_scopes=self._comment_scopes(
@@ -1264,7 +1327,7 @@ class ReportService:
                 )
                 SELECT
                     record.id AS content_id,
-                    record.source_key,
+                    coalesce(observation.source_key, record.source_key) AS source_key,
                     version.id AS content_version_id,
                     version.title,
                     version.body,
@@ -1279,13 +1342,13 @@ class ReportService:
                     observation.view_count,
                     observation.play_count,
                     observation.danmaku_count,
-                    annotation.id AS annotation_id,
-                    annotation.status AS annotation_status,
-                    annotation.relevant,
-                    annotation.sentiment,
-                    annotation.summary,
-                    annotation.relevance_reason,
-                    annotation.viewpoints
+                    NULL::uuid AS annotation_id,
+                    NULL::varchar AS annotation_status,
+                    NULL::boolean AS relevant,
+                    NULL::varchar AS sentiment,
+                    NULL::varchar AS summary,
+                    NULL::varchar AS relevance_reason,
+                    NULL::jsonb AS viewpoints
                 FROM topic_discoveries AS discovery
                 JOIN content_records AS record
                   ON record.owner_id = :owner_id
@@ -1293,25 +1356,15 @@ class ReportService:
                  AND record.object_type = 'post'
                 JOIN observations AS observation
                   ON observation.content_id = record.id
-                 AND observation.position = 1
+                 AND observation.position <= 32
                 JOIN content_versions AS version
                   ON version.owner_id = observation.owner_id
                  AND version.id = observation.content_version_id
-                LEFT JOIN LATERAL (
-                    SELECT item.*
-                    FROM content_annotations AS item
-                    WHERE item.owner_id = :owner_id
-                      AND item.topic_id = :topic_id
-                      AND item.content_version_id = version.id
-                      AND item.created_at <= :cutoff_at
-                    ORDER BY item.created_at DESC, item.id DESC
-                    LIMIT 1
-                ) AS annotation ON true
                 WHERE coalesce(observation.published_at, discovery.first_observed_at)
                       >= :previous_start
                   AND coalesce(observation.published_at, discovery.first_observed_at)
                       < :window_end
-                ORDER BY occurred_at, record.id
+                ORDER BY occurred_at, record.id, observation.position
                 """
             ),
             {
@@ -1325,7 +1378,66 @@ class ReportService:
                 "cutoff_at": cutoff_at,
             },
         ).mappings()
-        return tuple(self._post_from_row(row, window_start=window_start) for row in rows)
+        selected: dict[UUID, ReportPostInput] = {}
+        for candidate in rows:
+            content_id = _uuid(candidate, "content_id")
+            if content_id in selected or not report_inputs_readable_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                content_version_ids=(_uuid(candidate, "content_version_id"),),
+                observation_ids=(_uuid(candidate, "observation_id"),),
+                now=self._clock(),
+            ):
+                continue
+            row: dict[str, Any] = dict(candidate)
+            for field in (
+                "annotation_id",
+                "annotation_status",
+                "relevant",
+                "sentiment",
+                "summary",
+                "relevance_reason",
+                "viewpoints",
+            ):
+                row[field] = None
+            annotations = self._session.execute(
+                text(
+                    "SELECT id AS annotation_id, status AS annotation_status, relevant, sentiment, "
+                    "summary, relevance_reason, viewpoints, input_manifest "
+                    "FROM content_annotations "
+                    "WHERE owner_id=:owner AND topic_id=:topic AND content_version_id=:version "
+                    "AND created_at<=:cutoff ORDER BY created_at DESC, id DESC LIMIT 32"
+                ),
+                {
+                    "owner": owner_id,
+                    "topic": topic_id,
+                    "version": row["content_version_id"],
+                    "cutoff": cutoff_at,
+                },
+            ).mappings()
+            for annotation in annotations:
+                manifest = annotation["input_manifest"]
+                if manifest is not None:
+                    posts = manifest.get("post_observations")
+                    if not isinstance(posts, dict) or posts.get(
+                        str(row["content_version_id"])
+                    ) != str(row["observation_id"]):
+                        continue
+                if not report_annotations_readable_in_transaction(
+                    self._session,
+                    owner_id=owner_id,
+                    topic_id=topic_id,
+                    annotation_ids=(_uuid(annotation, "annotation_id"),),
+                    content_version_ids=(_uuid(row, "content_version_id"),),
+                    now=self._clock(),
+                ):
+                    continue
+                row.update(
+                    {key: value for key, value in annotation.items() if key != "input_manifest"}
+                )
+                break
+            selected[content_id] = self._post_from_row(row, window_start=window_start)
+        return tuple(selected.values())
 
     def _post_from_row(
         self,
@@ -1403,7 +1515,8 @@ class ReportService:
                 thread.post_content_id,
                 thread.root_content_id, thread.parent_content_id,
                 thread.reply_target_content_id, thread.parent_relation_status,
-                record.source_key, record.external_id AS native_id,
+                coalesce(observation.source_key, record.source_key) AS source_key,
+                coalesce(observation.source_external_id, record.external_id) AS native_id,
                 coalesce(observation.canonical_url, observation.final_url) AS url,
                 observation.observed_at AS collected_at, observation.job_id,
                 receipt.scope AS collection_scope,
@@ -1426,7 +1539,7 @@ class ReportService:
             JOIN first_discovery AS discovery ON discovery.content_id = record.id
             JOIN observations AS observation
               ON observation.content_id = record.id
-             AND observation.position = 1
+             AND observation.position <= 32
             JOIN content_versions AS version
               ON version.owner_id = observation.owner_id
              AND version.id = observation.content_version_id
@@ -1439,7 +1552,7 @@ class ReportService:
               AND coalesce(observation.published_at, discovery.first_observed_at)
                   < :window_end
               AND coalesce(version.body, version.title) IS NOT NULL
-            ORDER BY occurred_at, record.id
+            ORDER BY occurred_at, record.id, observation.position
             """
         ).bindparams(bindparam("post_ids", expanding=True))
         rows = self._session.execute(
@@ -1453,7 +1566,18 @@ class ReportService:
             },
         ).mappings()
         comments: list[ReportCommentInput] = []
+        chosen: set[UUID] = set()
         for row in rows:
+            identifier = _uuid(row, "content_id")
+            if identifier in chosen or not report_inputs_readable_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                content_version_ids=(_uuid(row, "content_version_id"),),
+                observation_ids=(_uuid(row, "observation_id"),),
+                now=self._clock(),
+            ):
+                continue
+            chosen.add(identifier)
             occurred_at = _datetime(row, "occurred_at")
             comments.append(
                 ReportCommentInput(
@@ -1638,22 +1762,19 @@ class DailyReportExecutor:
         )
         manifest = prepared.input_manifest
         versions = (*manifest.content_version_ids, *manifest.comment_content_version_ids)
-        if versions:
-            try:
-                for offset in range(0, len(versions), 2000):
-                    require_analysis_content_permissions_in_transaction(
-                        session,
-                        owner_id=message.owner_id,
-                        content_version_ids=versions[offset : offset + 2000],
-                        now=self._clock(),
-                    )
-            except ApplicationError as error:
-                raise JobExecutionFailure(
-                    error_code="report_input_changed",
-                    category=JobFailureCategory.CONFIGURATION_UNAVAILABLE,
-                    occurred_at=self._clock(),
-                    next_action="核对全部固定材料和当前来源许可后重新受理日报。",
-                ) from error
+        if versions and not report_inputs_readable_in_transaction(
+            session,
+            owner_id=message.owner_id,
+            content_version_ids=versions,
+            observation_ids=manifest.observation_ids,
+            now=self._clock(),
+        ):
+            raise JobExecutionFailure(
+                error_code="report_input_changed",
+                category=JobFailureCategory.CONFIGURATION_UNAVAILABLE,
+                occurred_at=self._clock(),
+                next_action="核对全部固定材料和当前来源许可后重新受理日报。",
+            )
         from reports.notification_reading import report_daily_references_readable_in_transaction
 
         active = (
@@ -1672,6 +1793,7 @@ class DailyReportExecutor:
                 topic_id=prepared.topic_id,
                 annotation_ids=manifest.annotation_ids,
                 content_version_ids=manifest.content_version_ids,
+                now=self._clock(),
             )
             or not report_daily_references_readable_in_transaction(
                 session,

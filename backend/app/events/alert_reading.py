@@ -10,8 +10,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from content.alert_reading import freeze_alert_content_inputs_in_transaction
+from content.observation_context import load_observation_context_in_transaction
+from content.observation_inputs import freeze_observation_inputs_in_transaction
 from content.report_reading import report_inputs_readable_in_transaction
 from content.version_inputs import observations_readable_in_transaction
+from core.errors import ApplicationError
 from events.heat_models import EventAttentionSnapshot, EventAttentionSource
 from events.heat_schemas import ATTENTION_FORMULA_VERSION
 from events.models import Event
@@ -55,6 +58,8 @@ def _readable(
     ):
         return False
     versions = []
+    selected: dict[UUID, UUID] = {}
+    modern = snapshot.input_manifest.get("input_basis") == "observations_v1"
     try:
         for item in raw:
             if not isinstance(item, dict):
@@ -73,9 +78,39 @@ def _readable(
             ):
                 return False
             versions.append(UUID(str(item["version_id"])))
-            if item.get("representative_comment_id"):
+            if modern:
+                observation_id = UUID(str(item["observation_id"]))
+                context = load_observation_context_in_transaction(
+                    session, owner_id=owner_id, observation_id=observation_id
+                )
+                if (
+                    context is None
+                    or context.source_key != source.source_key
+                    or context.content_version_id != versions[-1]
+                    or (
+                        item.get("content_id") is not None
+                        and str(context.content_id) != str(item["content_id"])
+                    )
+                ):
+                    return False
+                selected[versions[-1]] = observation_id
+            if item.get("representative_comment_id") and not (
+                modern and item.get("representative_comment_observation_id")
+            ):
                 # Old heat manifests freeze only comment identity, not its version.
                 # Such a sample cannot prove an immutable ALL alert input.
+                return False
+        closure: tuple[UUID, ...] = ()
+        if modern:
+            values = snapshot.input_manifest.get("observation_ids")
+            if not isinstance(values, list):
+                return False
+            closure = tuple(UUID(str(value)) for value in values)
+            if not set(selected.values()).issubset(
+                closure
+            ) or freeze_observation_inputs_in_transaction(
+                session, owner_id=owner_id, observation_ids=closure, now=now
+            ) != tuple(sorted(closure, key=str)):
                 return False
         original_inputs = freeze_alert_content_inputs_in_transaction(
             session,
@@ -83,17 +118,22 @@ def _readable(
             version_ids=tuple(set(versions)),
             as_of=snapshot.window_end,
             now=now,
+            selected_observations=selected if modern else None,
         )
         if set(original_inputs) != set(versions):
+            return False
+        if modern and any(
+            not set(item.observation_ids).issubset(closure) for item in original_inputs.values()
+        ):
             return False
         return report_inputs_readable_in_transaction(
             session,
             owner_id=owner_id,
             content_version_ids=tuple(versions),
-            observation_ids=(),
+            observation_ids=closure,
             now=now,
         )
-    except (KeyError, ValueError, TypeError):
+    except (KeyError, ValueError, TypeError, ApplicationError):
         return False
 
 
@@ -181,12 +221,26 @@ def load_heat_alert_facts_in_transaction(
             for item in cast(list[dict[str, object]], row.input_manifest["inputs"])
         }
     )
-    originals = freeze_alert_content_inputs_in_transaction(
-        session, owner_id=owner_id, version_ids=version_ids, as_of=end, now=now
-    )
-    if set(originals) != set(version_ids):
-        return HeatAlertFacts(None, "alert_input_unavailable", {})
-    observation_ids = tuple({obs for item in originals.values() for obs in item.observation_ids})
+    observation_ids: tuple[UUID, ...]
+    selected_ids: set[UUID] = set()
+    for snapshot in (baseline, current):
+        if snapshot.input_manifest.get("input_basis") == "observations_v1":
+            selected_ids.update(
+                UUID(str(value))
+                for value in cast(list[object], snapshot.input_manifest["observation_ids"])
+            )
+        else:
+            originals = freeze_alert_content_inputs_in_transaction(
+                session,
+                owner_id=owner_id,
+                version_ids=version_ids,
+                as_of=snapshot.window_end,
+                now=now,
+            )
+            if set(originals) != set(version_ids):
+                return HeatAlertFacts(None, "alert_input_unavailable", {})
+            selected_ids.update(obs for item in originals.values() for obs in item.observation_ids)
+    observation_ids = tuple(sorted(selected_ids, key=str))
     manifest: dict[str, object] = {
         "metric": "heat_increment",
         "event_id": str(event_id),

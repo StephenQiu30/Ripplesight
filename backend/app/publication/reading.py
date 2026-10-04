@@ -11,9 +11,13 @@ from uuid import UUID
 from sqlalchemy import DateTime, and_, func, or_, select
 from sqlalchemy.orm import Session
 
-from analysis.editorial_reading import load_editorial_publication_inputs_in_transaction
+from analysis.editorial_reading import (
+    load_editorial_publication_inputs_in_transaction,
+    load_frozen_editorial_publication_input_in_transaction,
+)
 from analysis.editorial_schemas import EditorialPublicationInputView
 from content.editorial_rendered import read_editorial_rendered_in_transaction
+from content.version_inputs import observations_readable_in_transaction
 from core.errors import ApplicationError
 from events.facts import load_publication_groupings_in_transaction
 from publication.cursors import decode_cursor, encode_cursor
@@ -117,6 +121,7 @@ def _fixed_body_in_transaction(
         owner_id=owner_id,
         content_id=snapshot.material.content_id,
         content_version_id=snapshot.material.content_version_id,
+        observation_id=snapshot.observation_id,
         now=now,
     )
     if rendered is not None:
@@ -200,13 +205,35 @@ class PublicationReadingService:
         inputs = load_editorial_publication_inputs_in_transaction(
             self.session,
             owner_id=owner_id,
-            content_ids=tuple(row.content_id for row in rows),
+            content_ids=tuple(row.content_id for row in rows if not row.data.get("observation_id")),
             now=now,
         )
         accepted = {}
         for row in rows:
-            item = inputs.get(row.content_id)
+            stored = ProjectionView.model_validate(row.data)
+            if stored.observation_id is not None:
+                if not observations_readable_in_transaction(
+                    self.session,
+                    owner_id=owner_id,
+                    observation_ids=stored.input_observation_ids,
+                    now=now,
+                ):
+                    continue
+                item = load_frozen_editorial_publication_input_in_transaction(
+                    self.session,
+                    owner_id=owner_id,
+                    content_id=row.content_id,
+                    content_version_id=row.content_version_id,
+                    observation_id=stored.observation_id,
+                    now=now,
+                )
+                if item is None or item.input_observation_ids != stored.input_observation_ids:
+                    continue
+            else:
+                item = inputs.get(row.content_id)
             if item is None or row.content_version_id != item.material.content_version_id:
+                continue
+            if row.source_key != item.material.source_key:
                 continue
             run = item.run
             if row.data.get("editorial_run_id") != (str(run.id) if run else None):
@@ -221,6 +248,9 @@ class PublicationReadingService:
                 identity: item.material.content_version_id for identity, item in accepted.items()
             },
             now=now,
+            selected_observations={
+                identity: item.observation_id for identity, item in accepted.items()
+            },
         )
         policies = {
             row.source_key: row
@@ -306,6 +336,7 @@ class PublicationReadingService:
                 content_id=content_id,
                 content_version_id=projection.content_version_id,
                 policy_revision=projection.policy_revision,
+                observation_id=projection.observation_id,
                 now=now,
                 redistribute=redistribute,
             )
@@ -437,6 +468,7 @@ class PublicationReadingService:
         if (
             projection is None
             or projection.content_version_id != reference.content_version_id
+            or projection.observation_id != reference.observation_id
             or projection.visibility not in {"public", "summary-only"}
             or (
                 projection.selected

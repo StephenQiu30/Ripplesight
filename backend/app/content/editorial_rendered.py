@@ -171,11 +171,12 @@ def read_editorial_rendered_in_transaction(
     content_id: UUID,
     content_version_id: UUID,
     now: datetime,
+    observation_id: UUID | None = None,
 ) -> EditorialRenderedView | None:
     if not session.in_transaction():
         raise RuntimeError("rendered reads require the caller's transaction")
     reference = EventContentReadReference(
-        content_id=content_id, content_version_id=content_version_id
+        content_id=content_id, content_version_id=content_version_id, observation_id=observation_id
     )
     readable = load_event_member_content_in_transaction(
         session, owner_id=owner_id, references=(reference,), now=now

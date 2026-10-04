@@ -200,6 +200,9 @@ APPLICATION_ERRORS: Mapping[str, PublicError] = {
     "editorial_version_conflict": PublicError(
         409, "editorial_version_conflict", "分析或人工修订版本已更新, 请重新读取"
     ),
+    "editorial_target_conflict": PublicError(
+        409, "editorial_target_conflict", "相同平台入口与目标已有来源,请修改现有来源配置"
+    ),
     "editorial_source_disabled": PublicError(
         409, "editorial_source_disabled", "编辑分析来源尚未启用"
     ),

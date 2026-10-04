@@ -20,6 +20,8 @@ class EditorialEventInput:
     selected: bool
     fact_frame: dict[str, str | None] | None
     provenance_fingerprint: str
+    observation_id: UUID | None = None
+    input_observation_ids: tuple[UUID, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

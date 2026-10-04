@@ -9,6 +9,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from content.analysis_inputs import AnalysisObservationManifest
 from core.schemas import OutputModel
 
 
@@ -19,6 +20,9 @@ class EventAnnotationRef:
     topic_rule_version: int
     content_id: UUID
     content_version_id: UUID
+    observation_id: UUID | None = None
+    input_observation_ids: tuple[UUID, ...] = ()
+    annotation_id: UUID | None = None
 
 
 class Sentiment(StrEnum):
@@ -133,6 +137,7 @@ class AnalysisJobScope(BaseModel):
     prompt_version: str = Field(min_length=1, max_length=128)
     content_version_ids: tuple[UUID, ...] = Field(min_length=1, max_length=30)
     prompt_items: tuple[AnalysisPromptItem, ...] | None = Field(default=None, max_length=30)
+    input_manifest: AnalysisObservationManifest | None = None
     retry_index: int = Field(default=0, ge=0, le=1)
 
     @field_validator("content_version_ids")
@@ -150,12 +155,24 @@ class AnalysisJobScope(BaseModel):
             or any(len(item.comments) > 50 for item in self.prompt_items)
         ):
             raise ValueError("frozen analysis items must match the content version scope")
+        if self.input_manifest is not None and (
+            set(self.input_manifest.post_observations) != set(self.content_version_ids)
+            or self.prompt_items is None
+            or any(item.comments and item.comment_version_ids is None for item in self.prompt_items)
+            or set(self.input_manifest.comment_observations)
+            != {
+                identifier
+                for item in self.prompt_items
+                for identifier in (item.comment_version_ids or ())
+            }
+        ):
+            raise ValueError("analysis observation manifest must match the actual prompt batch")
         return self
 
     def to_job_scope(self) -> dict[str, str | int]:
         if self.prompt_items is None:
             raise ValueError("new analysis jobs require frozen prompt items")
-        return {
+        result: dict[str, str | int] = {
             "topic_id": str(self.topic_id),
             "topic_rule_version": self.topic_rule_version,
             "prompt_version": self.prompt_version,
@@ -169,6 +186,9 @@ class AnalysisJobScope(BaseModel):
             ),
             "retry_index": self.retry_index,
         }
+        if self.input_manifest is not None:
+            result["input_manifest"] = self.input_manifest.model_dump_json()
+        return result
 
     @classmethod
     def from_job_scope(cls, scope: dict[str, str | int | bool | None]) -> AnalysisJobScope:
@@ -186,6 +206,13 @@ class AnalysisJobScope(BaseModel):
             prompt_items = json.loads(encoded_items) if encoded_items is not None else None
         except json.JSONDecodeError as error:
             raise ValueError("analysis scope prompt_items must be JSON") from error
+        encoded_manifest = scope.get("input_manifest")
+        if encoded_manifest is not None and not isinstance(encoded_manifest, str):
+            raise ValueError("analysis scope input_manifest must be JSON")
+        try:
+            manifest = json.loads(encoded_manifest) if encoded_manifest is not None else None
+        except json.JSONDecodeError as error:
+            raise ValueError("analysis scope input_manifest must be JSON") from error
         return cls.model_validate(
             {
                 "topic_id": scope.get("topic_id"),
@@ -193,6 +220,7 @@ class AnalysisJobScope(BaseModel):
                 "prompt_version": scope.get("prompt_version"),
                 "content_version_ids": content_version_ids,
                 "prompt_items": prompt_items,
+                "input_manifest": manifest,
                 "retry_index": scope.get("retry_index", 0),
             }
         )

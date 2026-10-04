@@ -15,6 +15,7 @@ import {
 import { getContentRecord } from "@/api/zuopinziliao";
 import { AnnotationPanel } from "@/app/content/[contentId]/components/annotation-panel";
 import { CommentThreadList } from "@/app/content/[contentId]/components/comment-thread-list";
+import { ContentSources } from "@/app/content/[contentId]/components/content-sources";
 import {
   contentOriginLabel,
   contentScopeLabel,
@@ -492,7 +493,13 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
               作品身份
             </h2>
             <dl className="mt-6 grid gap-6 sm:grid-cols-2">
-              <DetailItem label="来源" value={content.source_key} />
+              <DetailItem
+                label="当前读取来源"
+                value={contentSourceLabel(
+                  content.source_key,
+                  content.source_name,
+                )}
+              />
               <DetailItem label="对象类型" value={content.object_type} />
               <DetailItem
                 label="原生作用域"
@@ -512,6 +519,7 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
               />
             </dl>
           </section>
+          <ContentSources content={content} />
           <VersionHistory history={content.version_history} />
           <VisibilityHistory history={content.visibility_history} />
           <section aria-labelledby="metrics-heading" className="mt-10">

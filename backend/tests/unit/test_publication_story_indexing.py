@@ -11,9 +11,11 @@ def test_story_index_requires_every_fixed_member_even_outside_report_subset(monk
     now = datetime(2026, 10, 2, tzinfo=UTC)
     event_id, fact_id = uuid4(), uuid4()
     displayed = member(at=now, event=event_id, fact=fact_id).projection.model_copy(
-        update={"indexable": True}
+        update={"indexable": True, "observation_id": uuid4()}
     )
-    undisplayed = member(at=now).projection.model_copy(update={"indexable": False})
+    undisplayed = member(at=now).projection.model_copy(
+        update={"indexable": False, "observation_id": uuid4()}
+    )
     story = SimpleNamespace(
         event_id=event_id,
         revision=1,
@@ -24,15 +26,36 @@ def test_story_index_requires_every_fixed_member_even_outside_report_subset(monk
         first_seen_at=now,
         heat=None,
         attention=None,
+        narrative_input_observation_ids=(displayed.observation_id, undisplayed.observation_id),
         members=tuple(
-            SimpleNamespace(content_id=p.content_id, content_version_id=p.content_version_id)
+            SimpleNamespace(
+                content_id=p.content_id,
+                content_version_id=p.content_version_id,
+                observation_id=p.observation_id,
+                source_key=p.source_key,
+                input_observation_ids=(p.observation_id,),
+            )
             for p in (displayed, undisplayed)
         ),
     )
     monkeypatch.setattr(
         module, "load_publication_stories_in_transaction", lambda *a, **k: {event_id: story}
     )
-    reader = PublicationReadingService(SimpleNamespace(scalars=lambda _: []), indexing_enabled=True)
+    source_by_observation = {p.observation_id: p.source_key for p in (displayed, undisplayed)}
+    monkeypatch.setattr(
+        module,
+        "load_observation_context_in_transaction",
+        lambda *a, observation_id, **k: SimpleNamespace(
+            source_key=source_by_observation[observation_id]
+        ),
+    )
+    reader = PublicationReadingService(
+        SimpleNamespace(
+            scalars=lambda _: [],
+            get=lambda *a: SimpleNamespace(configuration={"participation_mode": "editorial"}),
+        ),
+        indexing_enabled=True,
+    )
     values = {p.content_id: (p, None) for p in (displayed, undisplayed)}
     monkeypatch.setattr(reader, "_live", lambda **_: values)
     result = module.public_stories_in_transaction(
