@@ -107,6 +107,7 @@ class PublicationApplicationService:
         topic: str | None = None,
         q: str | None = None,
         search_order: Literal["relevance", "time"] = "relevance",
+        redistribute: bool = False,
         limit: int = 50,
         cursor: str | None = None,
         now: datetime | None = None,
@@ -120,6 +121,7 @@ class PublicationApplicationService:
                     owner_id=owner_id,
                     query=q,
                     search_order=search_order,
+                    redistribute=redistribute,
                     now=at,
                     window=window,
                     selected=mode == "selected",
@@ -394,6 +396,7 @@ class PublicationApplicationService:
         kind: Literal["selected", "selected-full", "all"] = "selected",
         category: Category | None = None,
         now: datetime | None = None,
+        self_path: str | None = None,
     ) -> str:
         at = now or datetime.now(UTC)
         with self._read() as reader:
@@ -432,7 +435,7 @@ class PublicationApplicationService:
             return render_rss(
                 details,
                 origin=self.origin,
-                self_path=path,
+                self_path=self_path or path,
                 title="HotKey精选" if kind != "all" else "HotKey全部资讯",
                 now=at,
                 include_content=kind == "selected-full",
@@ -623,8 +626,8 @@ class PublicationApplicationService:
                 items.extend(public_item(value[0]) for value in live.values() if value[0].indexable)
             return render_sitemap(items, origin=self.origin)
 
-    def instructions(self) -> str:
-        return agent_instructions(origin=self.origin)
+    def instructions(self, *, public_distribution: bool = False) -> str:
+        return agent_instructions(origin=self.origin, public_distribution=public_distribution)
 
     def policies(self, *, owner_id: UUID) -> list[SourcePolicyView]:
         with self._read():
@@ -723,6 +726,7 @@ class PublicationApplicationService:
         kind: Literal["daily", "weekly", "monthly"] = "daily",
         key: str | None = None,
         now: datetime | None = None,
+        redistribute: bool = False,
     ) -> PublicEditionView:
         from reports.edition_reading import load_current_edition_in_transaction
         from reports.edition_rules import period_window
@@ -751,6 +755,14 @@ class PublicationApplicationService:
                     owner_id=owner_id, content_id=entry.content_id, now=at
                 )
                 if projection is None:
+                    raise ApplicationError("resource_not_found")
+                if (
+                    redistribute
+                    and reader.detail_in_transaction(
+                        owner_id=owner_id, content_id=entry.content_id, now=at, redistribute=True
+                    )
+                    is None
+                ):
                     raise ApplicationError("resource_not_found")
                 entries.append(reader.item(projection))
             return PublicEditionView(
@@ -789,8 +801,11 @@ class PublicationApplicationService:
         kind: Literal["daily", "weekly", "monthly"] = "daily",
         key: str | None = None,
         now: datetime | None = None,
+        redistribute: bool = False,
     ) -> str:
-        edition = self.edition(owner_id=owner_id, kind=kind, key=key, now=now)
+        edition = self.edition(
+            owner_id=owner_id, kind=kind, key=key, now=now, redistribute=redistribute
+        )
         return (
             edition.body_markdown + f"\n\n阅读与归因: {self.origin}/reports/{kind}/{edition.key}\n"
         )
@@ -801,6 +816,7 @@ class PublicationApplicationService:
         owner_id: UUID,
         kind: Literal["daily", "weekly", "monthly"] = "daily",
         now: datetime | None = None,
+        redistribute: bool = False,
     ) -> str:
         from reports.edition_reading import list_current_editions_in_transaction
 
@@ -813,7 +829,13 @@ class PublicationApplicationService:
             for edition in editions:
                 try:
                     values.append(
-                        self.edition(owner_id=owner_id, kind=kind, key=edition.key, now=at)
+                        self.edition(
+                            owner_id=owner_id,
+                            kind=kind,
+                            key=edition.key,
+                            now=at,
+                            redistribute=redistribute,
+                        )
                     )
                 except ApplicationError as error:
                     if error.code != "resource_not_found":

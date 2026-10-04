@@ -8,7 +8,7 @@ import {
 import type { Metadata } from "next";
 import { connection } from "next/server";
 
-import { getPublicAgentMarkdown } from "@/api/gongkaifenfa";
+import { getPublisherAgentInstructions } from "@/api/gongkaifenfa";
 import { SelectedSnapshotDownload } from "@/app/agent/components/selected-snapshot-download";
 import {
   PublicationNavigation,
@@ -24,7 +24,7 @@ export default async function AgentPage() {
   await connection();
   let instructions: string;
   try {
-    instructions = await getPublicAgentMarkdown();
+    instructions = await getPublisherAgentInstructions({});
   } catch (error) {
     return (
       <>
@@ -46,8 +46,9 @@ export default async function AgentPage() {
       <div>
         <h1 className="text-3xl font-medium">让 Agent 读取资讯</h1>
         <p className="text-muted-foreground mt-5 text-sm leading-7">
-          MCP 使用同站 /mcp 的 HTTP POST 接入；API、RSS 与 Markdown
-          读取相同发布投影。读取不会抓取外站、调用模型或执行写入。
+          匿名 MCP 使用同站 /public/mcp 的 HTTP POST
+          接入；/public/api/items、RSS 与 Markdown
+          读取同一明确发布账号的公开投影，Cookie不会改变该账号。未配置发布账号时保持未发布。读取不会抓取外站、调用模型或执行写入。
         </p>
         <h2 className="mt-10 text-lg font-medium">五个只读工具</h2>
         <dl className="mt-5 flex flex-col gap-y-5">
@@ -61,16 +62,15 @@ export default async function AgentPage() {
           ))}
         </dl>
         <p className="text-muted-foreground mt-8 text-sm leading-7">
-          常规查询只有 24 小时和 7 天窗口。完整精选同步另用 snapshot + epoch +
-          changes
-          接口；模型榜通过网页查看。单篇正文是否可以再分发由该来源的许可决定。
+          常规查询只有 24 小时和 7
+          天窗口，API每页最多100项，搜索每页最多40项；latest和search支持游标。公开接口共享每60秒120次的访问额度，超限后按Retry-After等待。单篇正文是否可以再分发由该来源的许可决定。原根路径及完整精选同步保留当前登录账号范围；模型榜通过网页查看。
         </p>
         <p className="mt-6 flex flex-wrap gap-5 text-sm">
-          <a className="underline" href="/llms.txt">
-            llms.txt
+          <a className="underline" href="/public/agent.md">
+            公开接入说明
           </a>
           <a className="underline" href="/agent.md">
-            完整 Markdown 说明
+            当前账号 Markdown 说明
           </a>
           <SelectedSnapshotDownload />
         </p>

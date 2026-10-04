@@ -40,6 +40,7 @@ class LatestArguments(InputModel):
     window: Literal["24h", "7d"] = "24h"
     selected: bool = True
     limit: int = Field(default=20, ge=1, le=100)
+    cursor: str | None = Field(default=None, max_length=4096)
 
 
 class SearchArguments(InputModel):
@@ -47,6 +48,7 @@ class SearchArguments(InputModel):
     window: Literal["24h", "7d"] = "7d"
     selected: bool = False
     limit: int = Field(default=20, ge=1, le=100)
+    cursor: str | None = Field(default=None, max_length=4096)
 
 
 class HotArguments(InputModel):

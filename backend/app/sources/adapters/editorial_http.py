@@ -6,6 +6,7 @@ import socket
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from ipaddress import ip_address
 from typing import Literal
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
@@ -13,6 +14,11 @@ from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 import httpx
 from pydantic import SecretStr
 
+from sources.editorial_rsshub import (
+    EditorialRsshubAdmission,
+    EditorialRsshubConfiguration,
+    rsshub_route_blocker,
+)
 from sources.editorial_schemas import EditorialAuthorization, public_url
 
 type RequestOutcome = Literal["succeeded", "failed", "unknown"]
@@ -49,16 +55,30 @@ class EditorialHttpClient:
         max_seconds: float = 90,
         transport: httpx.BaseTransport | None = None,
         allow_network: bool = False,
+        rsshub: EditorialRsshubConfiguration | None = None,
+        rsshub_configuration_sha256: str | None = None,
+        rsshub_admission: Callable[[], EditorialRsshubAdmission] | None = None,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         if not 1 <= max_requests <= 100 or not 0 < max_seconds <= 300:
             raise ValueError("invalid source HTTP limits")
         self._hosts = allowed_hosts
+        self._rsshub, self._rsshub_hash, self._rsshub_admission, self._clock = (
+            rsshub,
+            rsshub_configuration_sha256,
+            rsshub_admission,
+            clock,
+        )
         self._authorization = authorization or EditorialAuthorization()
         self._before = before_request
         self._settle = settle_request
         self._cancelled = cancelled
-        self._maximum = max_requests
-        self._deadline = time.monotonic() + max_seconds
+        self._maximum = min(max_requests, rsshub.max_local_requests) if rsshub else max_requests
+        self._deadline = (
+            time.monotonic() + min(max_seconds, rsshub.max_seconds)
+            if rsshub
+            else time.monotonic() + max_seconds
+        )
         self._mock = isinstance(transport, httpx.MockTransport)
         self._allow_network = allow_network
         self._client = httpx.Client(
@@ -72,6 +92,12 @@ class EditorialHttpClient:
         self._client.close()
 
     def _check_url(self, value: str) -> str:
+        if self._rsshub is not None:
+            if len(self._hosts) != 1 or value != self._rsshub.endpoint(next(iter(self._hosts))):
+                raise EditorialSourceError("unapproved_rsshub_target", blocked=True)
+            if not self._mock and not self._allow_network:
+                raise EditorialSourceError("real_network_disabled", blocked=True)
+            return value
         url = public_url(value)
         host = urlsplit(url).hostname
         if host not in self._hosts:
@@ -106,6 +132,19 @@ class EditorialHttpClient:
     ) -> EditorialHttpResponse:
         if not self._authorization.allowed or self._settle is None:
             raise EditorialSourceError("source_authorization_required", blocked=True)
+        if self._rsshub is not None:
+            if method != "GET" or body is not None or credential_query:
+                raise EditorialSourceError("rsshub_request_contract_mismatch", blocked=True)
+            if any(
+                key.casefold() not in {"accept", "if-none-match", "if-modified-since"}
+                or len(value) > 512
+                or any(ord(char) < 32 for char in value)
+                for key, value in (headers or {}).items()
+            ):
+                raise EditorialSourceError("rsshub_request_contract_mismatch", blocked=True)
+            blocker = rsshub_route_blocker(self._rsshub)
+            if blocker:
+                raise EditorialSourceError(blocker, blocked=True)
         current = self._check_url(url)
         origin = urlsplit(current)
         if credential_query:
@@ -119,6 +158,20 @@ class EditorialHttpClient:
             if time.monotonic() >= self._deadline or self.request_count >= self._maximum:
                 raise EditorialSourceError("budget_exhausted", blocked=True)
             attempt = self.request_count + 1
+            if self._rsshub is not None:
+                if self._rsshub_admission is None:
+                    raise EditorialSourceError("rsshub_route_review_required", blocked=True)
+                proof = self._rsshub_admission()
+                now = self._clock()
+                if (
+                    proof.configuration_sha256 != self._rsshub_hash
+                    or proof.revision != self._rsshub.revision
+                    or proof.supplier_fee_cny_micros != 0
+                    or proof.max_downstream_requests != self._rsshub.max_downstream_requests
+                    or now.utcoffset() is None
+                    or not proof.reviewed_at <= now < proof.expires_at
+                ):
+                    raise EditorialSourceError("rsshub_admission_changed", blocked=True)
             if not self._before(attempt):
                 raise EditorialSourceError("budget_exhausted", blocked=True)
             self.request_count = attempt
@@ -156,6 +209,9 @@ class EditorialHttpClient:
                         else "failed"
                     )
                     if response.status_code in {301, 302, 303, 307, 308}:
+                        if self._rsshub is not None:
+                            outcome = "failed"
+                            raise EditorialSourceError("rsshub_redirect_forbidden", blocked=True)
                         location = response.headers.get("location")
                         if not location or redirect >= 3:
                             raise EditorialSourceError("redirect_protocol_error")
@@ -197,7 +253,10 @@ class EditorialHttpClient:
                             outcome = "unknown"
                             raise EditorialSourceError("interrupted_response", unknown=True)
                         data.extend(chunk)
-                        if len(data) > 4 * 1024 * 1024:
+                        if len(data) > (
+                            self._rsshub.max_response_bytes if self._rsshub else 4 * 1024 * 1024
+                        ):
+                            outcome = "failed"
                             raise EditorialSourceError("response_too_large")
                     return EditorialHttpResponse(
                         current, response.status_code, dict(response.headers), bytes(data)

@@ -190,9 +190,123 @@ declare namespace HotKeyAPI {
     cost_cap_micros: number | null;
   };
 
+  type AlertEvaluationView = {
+    /** Id */
+    id: string;
+    /** Rule Id */
+    rule_id: string;
+    /** Rule Version */
+    rule_version: number;
+    /** Window Start */
+    window_start: string;
+    /** Window End */
+    window_end: string;
+    /** Status */
+    status:
+      | "blocked"
+      | "unknown"
+      | "below_threshold"
+      | "cooldown"
+      | "triggered"
+      | "withdrawn";
+    /** Reason */
+    reason: string | null;
+    /** Value */
+    value: number | null;
+    /** Cooldown Until */
+    cooldown_until: string | null;
+    /** Created At */
+    created_at: string;
+  };
+
+  type AlertRuleInput = {
+    /** Operation Id */
+    operation_id: string;
+    /** Expected Revision */
+    expected_revision: number;
+    /** Name */
+    name: string;
+    /** Topic Id */
+    topic_id: string;
+    /** Topic Rule Version */
+    topic_rule_version: number;
+    /** Event Id */
+    event_id?: string | null;
+    /** Metric */
+    metric: "negative_count" | "heat_increment";
+    /** Threshold */
+    threshold: number;
+    /** Cooldown Seconds */
+    cooldown_seconds: number;
+    /** Target Id */
+    target_id: string;
+    /** Target Revision */
+    target_revision: number;
+    /** Enabled */
+    enabled?: boolean;
+  };
+
+  type AlertRuleView = {
+    /** Id */
+    id: string;
+    /** Name */
+    name: string;
+    /** Revision */
+    revision: number;
+    /** Enabled */
+    enabled: boolean;
+    /** Topic Id */
+    topic_id: string;
+    /** Topic Rule Version */
+    topic_rule_version: number;
+    /** Event Id */
+    event_id: string | null;
+    /** Metric */
+    metric: "negative_count" | "heat_increment";
+    /** Threshold */
+    threshold: number;
+    /** Cooldown Seconds */
+    cooldown_seconds: number;
+    /** Target Id */
+    target_id: string;
+    /** Target Revision */
+    target_revision: number;
+    /** Readiness */
+    readiness: "ready" | "blocked";
+    /** Reason */
+    reason: string | null;
+    /** Last Trigger At */
+    last_trigger_at: string | null;
+    /** Created At */
+    created_at: string;
+    /** Updated At */
+    updated_at: string;
+  };
+
+  type AlertTargetView = {
+    /** Id */
+    id: string;
+    /** Name */
+    name: string;
+    /** Revision */
+    revision: number;
+    /** Eligible */
+    eligible: boolean;
+    /** Reason */
+    reason: string | null;
+  };
+
   type AnnotationResultState = "pending" | "failed" | "invalid" | "valid";
 
   type AnnotationStatus = "annotated" | "unanalyzed";
+
+  type approveEditorialBodyExtractionParams = {
+    profile_id: string;
+  };
+
+  type approveEditorialRsshubSourceParams = {
+    profile_id: string;
+  };
 
   type archiveMonitorTopicParams = {
     topic_id: string;
@@ -864,6 +978,14 @@ declare namespace HotKeyAPI {
     scan_kind: CollectionScanKind | null;
   };
 
+  type ContentExportInput = {
+    /** Operation Id */
+    operation_id: string;
+    /** Content Version Ids */
+    content_version_ids: string[];
+    format: ExportFormat;
+  };
+
   type ContentMetricView = {
     /** Like Count */
     like_count: number | null;
@@ -905,6 +1027,8 @@ declare namespace HotKeyAPI {
     id: string;
     /** Source Key */
     source_key: string;
+    /** Source Name */
+    source_name?: string | null;
     /** Object Type */
     object_type: "post" | "comment" | "webpage";
     /** Native Scope */
@@ -945,6 +1069,8 @@ declare namespace HotKeyAPI {
     id: string;
     /** Source Key */
     source_key: string;
+    /** Source Name */
+    source_name?: string | null;
     /** Object Type */
     object_type: "post" | "comment" | "webpage";
     /** Native Scope */
@@ -1150,6 +1276,10 @@ declare namespace HotKeyAPI {
     page_count: number;
   };
 
+  type createReportExportParams = {
+    report_id: string;
+  };
+
   type DeliveryResolutionInput = {
     /** Operation Id */
     operation_id: string;
@@ -1211,6 +1341,14 @@ declare namespace HotKeyAPI {
     content: Record<string, any>;
     /** Created At */
     created_at: string;
+  };
+
+  type downloadContentExportParams = {
+    export_id: string;
+  };
+
+  type downloadReportExportParams = {
+    export_id: string;
   };
 
   type DueAdmissionState = "pending" | "accepted" | "skipped" | "missed";
@@ -1370,6 +1508,80 @@ declare namespace HotKeyAPI {
     summary: string;
     /** Content Ids */
     content_ids: string[];
+  };
+
+  type EditorialBodyApprovalInput = {
+    /** Operation Id */
+    operation_id: string;
+    /** Expected Revision */
+    expected_revision: number;
+    /** Configuration Version */
+    configuration_version: number;
+    /** Configuration Sha256 */
+    configuration_sha256: string;
+    /** Reason */
+    reason: string;
+    review: EditorialBodyReview;
+  };
+
+  type EditorialBodyApprovalView = {
+    /** Profile Id */
+    profile_id: string;
+    /** Revision */
+    revision: number;
+    /** Configuration Version */
+    configuration_version: number;
+    /** Configuration Sha256 */
+    configuration_sha256: string;
+    /** Policy Version */
+    policy_version: number;
+    /** Reviewed At */
+    reviewed_at: string;
+    /** Expires At */
+    expires_at: string;
+    /** Enabled */
+    enabled: boolean;
+  };
+
+  type EditorialBodyConfiguration = {
+    /** Enabled */
+    enabled?: boolean;
+    /** Required */
+    required?: boolean;
+    /** Max Fetches */
+    max_fetches?: number;
+    /** Max Target Requests */
+    max_target_requests?: number;
+    /** Timeout Seconds */
+    timeout_seconds?: number;
+    /** Max Response Bytes */
+    max_response_bytes?: number;
+    /** Max Content Characters */
+    max_content_characters?: number;
+    /** Allowed Hosts */
+    allowed_hosts: string[];
+    review?: EditorialBodyReview | null;
+  };
+
+  type EditorialBodyReview = {
+    /** Read Reference */
+    read_reference: string;
+    /** Save Reference */
+    save_reference: string;
+    /** Fee Reference */
+    fee_reference: string;
+    /** Egress Reference */
+    egress_reference: string;
+    /** Request Bound Reference */
+    request_bound_reference: string;
+    /** Deployment Reference */
+    deployment_reference: string;
+    /** Component Revision */
+    component_revision?: string;
+    /** Reviewed At */
+    reviewed_at: string;
+    /** Expires At */
+    expires_at: string;
   };
 
   type EditorialEntityGuardView = {
@@ -1612,6 +1824,8 @@ declare namespace HotKeyAPI {
     revision: number;
     /** Configuration Version */
     configuration_version: number;
+    /** Configuration Sha256 */
+    configuration_sha256?: string | null;
     configuration: EditorialSourceConfiguration;
     participation_mode: ParticipationMode;
     /** Tier */
@@ -1675,6 +1889,102 @@ declare namespace HotKeyAPI {
     silent?: boolean;
     /** Manual Overrides */
     manual_overrides?: Record<string, any>;
+  };
+
+  type EditorialRsshubApprovalInput = {
+    /** Operation Id */
+    operation_id: string;
+    /** Expected Revision */
+    expected_revision: number;
+    /** Configuration Version */
+    configuration_version: number;
+    /** Configuration Sha256 */
+    configuration_sha256: string;
+    /** Reason */
+    reason: string;
+    review: EditorialRsshubReview;
+  };
+
+  type EditorialRsshubApprovalView = {
+    /** Profile Id */
+    profile_id: string;
+    /** Revision */
+    revision: number;
+    /** Configuration Version */
+    configuration_version: number;
+    /** Configuration Sha256 */
+    configuration_sha256: string;
+    /** Policy Version */
+    policy_version: number;
+    /** Reviewed At */
+    reviewed_at: string;
+    /** Expires At */
+    expires_at: string;
+    /** Enabled */
+    enabled: boolean;
+  };
+
+  type EditorialRsshubConfiguration = {
+    /** Platform */
+    platform: string;
+    /** Query Mode */
+    query_mode: string;
+    /** Target */
+    target: string;
+    /** Route */
+    route: string;
+    /** Query Parameters */
+    query_parameters?: Record<string, any>;
+    /** Revision */
+    revision: string;
+    /** Item Hosts */
+    item_hosts: string[];
+    /** Downstream Hosts */
+    downstream_hosts: string[];
+    /** Text Scope */
+    text_scope: string;
+    /** Credential Mode */
+    credential_mode?: string;
+    /** Supplier Fee Cny Micros */
+    supplier_fee_cny_micros?: number;
+    /** Fallback */
+    fallback?: string;
+    /** Browser */
+    browser?: string;
+    /** Max Local Requests */
+    max_local_requests?: number;
+    /** Max Downstream Requests */
+    max_downstream_requests: number;
+    /** Max Items */
+    max_items?: number;
+    /** Max Response Bytes */
+    max_response_bytes?: number;
+    /** Max Seconds */
+    max_seconds?: number;
+    /** Cache Ttl Seconds */
+    cache_ttl_seconds: number;
+    /** Min Interval Minutes */
+    min_interval_minutes?: number;
+    review: EditorialRsshubReview;
+  };
+
+  type EditorialRsshubReview = {
+    /** Purpose Reference */
+    purpose_reference: string;
+    /** Downstream Reference */
+    downstream_reference: string;
+    /** Cache Reference */
+    cache_reference: string;
+    /** Fee Reference */
+    fee_reference: string;
+    /** Stop Reference */
+    stop_reference: string;
+    /** Deployment Reference */
+    deployment_reference: string;
+    /** Reviewed At */
+    reviewed_at: string;
+    /** Expires At */
+    expires_at: string;
   };
 
   type EditorialRunInput = {
@@ -1785,12 +2095,14 @@ declare namespace HotKeyAPI {
     detail?: DetailConfiguration | null;
     /** Fetch Public Content */
     fetch_public_content?: boolean;
+    body_extraction?: EditorialBodyConfiguration | null;
     /** Initial Backfill Limit */
     initial_backfill_limit?: number;
     /** Initial Backfill Months */
     initial_backfill_months?: number;
     /** Feed Url */
     feed_url?: string | null;
+    rsshub?: EditorialRsshubConfiguration | null;
     /** Summary Is Body */
     summary_is_body?: boolean;
     /** Preserve Url Fragment */
@@ -1954,6 +2266,31 @@ declare namespace HotKeyAPI {
     tags: string[];
     /** Enabled */
     enabled: boolean;
+  };
+
+  type EditorialTopicSourceView = {
+    /** Profile Id */
+    profile_id: string;
+    /** Source Key */
+    source_key: string;
+    /** Name */
+    name: string;
+    /** Configuration Version */
+    configuration_version: number;
+    /** Enabled */
+    enabled: boolean;
+    /** Query Mode */
+    query_mode: string;
+    /** Text Scope */
+    text_scope: string;
+    /** Selectable */
+    selectable: boolean;
+    /** Reason */
+    reason: string | null;
+    /** Last Ok At */
+    last_ok_at: string | null;
+    /** Interval Minutes */
+    interval_minutes: number;
   };
 
   type EditorialWritingView = {
@@ -2371,6 +2708,41 @@ declare namespace HotKeyAPI {
     components: Record<string, any>;
   };
 
+  type ExportFormat = "markdown" | "pdf" | "csv" | "json";
+
+  type ExportKind = "report" | "content";
+
+  type ExportStatus =
+    "pending" | "running" | "succeeded" | "failed" | "blocked" | "cancelled";
+
+  type ExportView = {
+    /** Id */
+    id: string;
+    kind: ExportKind;
+    /** Job Id */
+    job_id: string;
+    format: ExportFormat;
+    /** Renderer Version */
+    renderer_version: string;
+    /** Schema Version */
+    schema_version: string;
+    status: ExportStatus;
+    /** Content Count */
+    content_count: number;
+    /** Input Sha256 */
+    input_sha256: string;
+    /** Artifact Sha256 */
+    artifact_sha256?: string | null;
+    /** Artifact Size */
+    artifact_size?: number | null;
+    /** Failure Code */
+    failure_code?: string | null;
+    /** Created At */
+    created_at: string;
+    /** Updated At */
+    updated_at: string;
+  };
+
   type ExternalEditorialInput = {
     /** Operation Id */
     operation_id: string;
@@ -2577,6 +2949,10 @@ declare namespace HotKeyAPI {
 
   type getContentCommentRunReadinessParams = {
     content_id: string;
+  };
+
+  type getContentExportParams = {
+    export_id: string;
   };
 
   type getContentRecordParams = {
@@ -2900,8 +3276,52 @@ declare namespace HotKeyAPI {
     page?: number;
   };
 
+  type getPublisherCategoryFullRssParams = {
+    category:
+      "ai-models" | "ai-products" | "industry" | "paper" | "tip" | "opinion";
+  };
+
+  type getPublisherCategoryRssParams = {
+    category:
+      "ai-models" | "ai-products" | "industry" | "paper" | "tip" | "opinion";
+  };
+
+  type getPublisherEditionMarkdownParams = {
+    kind: "daily" | "weekly" | "monthly";
+    key: string;
+  };
+
+  type getPublisherEditionParams = {
+    kind: "daily" | "weekly" | "monthly";
+    key: string;
+  };
+
+  type getPublisherEditionRssParams = {
+    kind: "daily" | "weekly" | "monthly";
+  };
+
+  type getPublisherHotStoriesParams = {
+    limit?: number;
+  };
+
+  type getPublisherItemMarkdownParams = {
+    content_id: string;
+  };
+
+  type getPublisherItemParams = {
+    content_id: string;
+  };
+
+  type getPublisherStoryParams = {
+    event_id: string;
+  };
+
   type getReportEditionParams = {
     edition_id: string;
+  };
+
+  type getReportExportParams = {
+    export_id: string;
   };
 
   type getReportParams = {
@@ -3305,6 +3725,11 @@ declare namespace HotKeyAPI {
 
   type KeywordInput = string;
 
+  type listAlertHistoryParams = {
+    rule_id: string;
+    limit?: number;
+  };
+
   type listCodexResetPostsParams = {
     page?: number;
     filter_key?: "all" | "relevant" | "pending" | "review";
@@ -3441,6 +3866,22 @@ declare namespace HotKeyAPI {
     topic?: string | null;
     q?: string | null;
     search_order?: "relevance" | "time";
+    limit?: number;
+    cursor?: string | null;
+  };
+
+  type listPublisherItemsParams = {
+    window?: "24h" | "7d";
+    mode?: "selected" | "all";
+    category?:
+      | "ai-models"
+      | "ai-products"
+      | "industry"
+      | "paper"
+      | "tip"
+      | "opinion"
+      | null;
+    q?: string | null;
     limit?: number;
     cursor?: string | null;
   };
@@ -3726,6 +4167,8 @@ declare namespace HotKeyAPI {
     name: string;
     /** Source Keys */
     source_keys?: SourceKeyInput[];
+    /** Editorial Profile Ids */
+    editorial_profile_ids?: string[];
     /** Collection Interval Seconds */
     collection_interval_seconds?: number;
     /** Report Time */
@@ -3798,6 +4241,8 @@ declare namespace HotKeyAPI {
     name: string;
     /** Source Keys */
     source_keys?: SourceKeyInput[];
+    /** Editorial Profile Ids */
+    editorial_profile_ids?: string[];
     /** Collection Interval Seconds */
     collection_interval_seconds?: number;
     /** Report Time */
@@ -3822,6 +4267,8 @@ declare namespace HotKeyAPI {
     rules: MonitorRuleSetView;
     /** Source Keys */
     source_keys: string[];
+    /** Editorial Profile Ids */
+    editorial_profile_ids?: string[];
     /** Collection Interval Seconds */
     collection_interval_seconds: number;
     /** Report Time */
@@ -3891,7 +4338,7 @@ declare namespace HotKeyAPI {
   };
 
   type NotificationSubjectKind =
-    "report" | "edition" | "selected" | "codex_reset";
+    "report" | "edition" | "selected" | "codex_reset" | "alert";
 
   type NotificationTargetNameInput = string;
 
@@ -4046,6 +4493,13 @@ declare namespace HotKeyAPI {
   type PageViewOperatorAuditView_ = {
     /** Items */
     items: OperatorAuditView[];
+    /** Next Cursor */
+    next_cursor: string | null;
+  };
+
+  type PageViewPublicPlatformCatalogView_ = {
+    /** Items */
+    items: PublicPlatformCatalogView[];
     /** Next Cursor */
     next_cursor: string | null;
   };
@@ -4554,6 +5008,104 @@ declare namespace HotKeyAPI {
     level: number;
   };
 
+  type PublicPlatformCapability =
+    | "keyword_search"
+    | "author_posts"
+    | "incremental"
+    | "text"
+    | "engagement_counts"
+    | "comments"
+    | "replies"
+    | "hotlist"
+    | "history";
+
+  type PublicPlatformCapabilityView = {
+    capability: PublicPlatformCapability;
+    /** Display Name */
+    display_name: string;
+    /** Documented Support */
+    documented_support: "route_code" | "unknown" | "excluded";
+    /** Execution Admitted */
+    execution_admitted?: boolean;
+    /** Trial Verified */
+    trial_verified?: boolean;
+    /** Product Available */
+    product_available?: boolean;
+  };
+
+  type PublicPlatformCatalogView = {
+    /** Platform Key */
+    platform_key:
+      | "x"
+      | "instagram"
+      | "facebook"
+      | "threads"
+      | "douyin"
+      | "bilibili"
+      | "weibo";
+    /** Display Name */
+    display_name: string;
+    /** Scope Description */
+    scope_description: string;
+    /** Inspected Component */
+    inspected_component?: string;
+    /** Inspected Revision */
+    inspected_revision: string;
+    /** Inspected At */
+    inspected_at: string;
+    /** Entries */
+    entries: PublicPlatformEntryView[];
+  };
+
+  type PublicPlatformEntryView = {
+    /** Entry Key */
+    entry_key: string;
+    /** Display Name */
+    display_name: string;
+    /** Status */
+    status: "candidate" | "blocked" | "excluded" | "missing";
+    /** Query Mode */
+    query_mode:
+      | "author_feed"
+      | "keyword_feed"
+      | "tag_feed"
+      | "hotlist"
+      | "comments_feed"
+      | "unknown";
+    /** Object Scope */
+    object_scope: string;
+    /** Time Range */
+    time_range: string;
+    /** Sort Order */
+    sort_order: string;
+    /** Pagination */
+    pagination: string;
+    /** Limitations */
+    limitations: string[];
+    /** Admission Requirements */
+    admission_requirements: string[];
+    /** Block Reason */
+    block_reason: string;
+    /** Supplier Fee Cap Micros */
+    supplier_fee_cap_micros?: number;
+    /** Fee Status */
+    fee_status?: "unverified" | "disallowed";
+    /** Execution Admitted */
+    execution_admitted?: boolean;
+    /** Trial Verified */
+    trial_verified?: boolean;
+    /** Product Available */
+    product_available?: boolean;
+    /** Last Persisted Success At */
+    last_persisted_success_at?: string | null;
+    /** Route Template */
+    route_template: string | null;
+    /** Evidence Urls */
+    evidence_urls: string[];
+    /** Capabilities */
+    capabilities: PublicPlatformCapabilityView[];
+  };
+
   type PublicQuotedPostView = {
     item: PublicItemView;
     /** Author */
@@ -4990,6 +5542,14 @@ declare namespace HotKeyAPI {
     delivery_available: boolean;
     /** Email Matches Target */
     email_matches_target: boolean;
+  };
+
+  type ReportExportInput = {
+    /** Operation Id */
+    operation_id: string;
+    /** Report Version */
+    report_version: number;
+    format: ExportFormat;
   };
 
   type ReportGenerator = "template" | "model";
@@ -6142,6 +6702,10 @@ declare namespace HotKeyAPI {
     job_id: string;
     /** Created At */
     created_at: string;
+  };
+
+  type updateAlertParams = {
+    rule_id: string;
   };
 
   type updateEditorialSourceProfileParams = {

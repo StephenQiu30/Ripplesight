@@ -2,7 +2,7 @@
 
 HotKey 是 ToC 信息监控产品，覆盖主题与来源配置、信息获取与阅读、分析、事件、报告、分发、模型榜、公告和运营维护。本仓库维护 Python 后端与 Next.js Web；同级 `hotkey-app` 是尚未初始化的 Flutter 客户端。
 
-产品要求见 [PRD001](docs/prd/001-热点舆情监控平台需求.md) 及 [完整业务需求](docs/prd/046-完整业务需求.md)；领域合同见 [Design001](docs/design/001-热点舆情监控平台总体设计.md) 及 [完整业务设计](docs/design/048-完整业务设计.md)。本文维护技术、目录、API 和数据库边界，[AGENTS](AGENTS.md) 维护工程检查，[BACKLOG](BACKLOG.md) 是唯一进度入口，[Acceptance](docs/README.md) 记录证据。
+产品要求见 [PRD001](docs/prd/001-热点舆情监控平台需求.md) 及 [完整业务需求](docs/prd/046-完整业务需求.md)；领域合同见 [Design001](docs/design/001-热点舆情监控平台总体设计.md) 及 [完整业务设计](docs/design/048-完整业务设计.md)。本文维护技术、目录、API 和数据库边界，[AGENTS](AGENTS.md) 维护工程检查，[BACKLOG](BACKLOG.md) 是总体进度入口，[PLAN007](docs/plan/007-公开信息免费采集执行计划.md) 维护本轮详细工作包和checklist，[Acceptance](docs/README.md) 记录证据。
 
 ## 技术与运行
 
@@ -42,7 +42,7 @@ hotkey-server/
 │   ├── src/request.ts           # 唯一 Axios 传输层
 │   ├── src/proxy.ts             # 会话门禁与 CSP
 │   └── tests/                   # 独立前端测试
-└── docs/                        # 现行 PRD、Design 和 Acceptance
+└── docs/                        # 现行 PRD、Design、PLAN007 和 Acceptance
 ```
 
 领域按实际使用创建，不预建空包。领域持久化使用 `models.py`，契约使用 `schemas.py`，业务用例使用服务函数或类；复杂、复用查询才拆 Repository，外部系统差异才定义 Adapter/Protocol。禁止通用 BaseService/BaseRepository、全局 models/utils、无职责包装层或第二套后端/队列。
@@ -107,12 +107,14 @@ CSP nonce 由 proxy 每请求生成，交互 HTML 按请求渲染，创建页使
 
 RSSHub/SearXNG 主机只选 `127.0.0.1`（宿主）或 `host.docker.internal`（Compose），固定1200/8888、路由与引擎，冻结到连接版本；更改主机须重新应用预设。M1/M2 单宿主机 Worker，调度独立扫表；通用 Browser 固定 Playwright Python/Server1.63.0 原生 WS、私有令牌及独立 Squid 出口，初始仅 example.com 探针，真实平台业务仍未准入。
 
+七平台扩围选择零供应商费用的本机路线，合同见 [Design007 §11](docs/design/007-扩展能力设计.md#11-免费本机采集顶层设计)。复用editorial来源、原Job及本机RSSHub1200/Firecrawl3002/SearXNG8888；目录、精确路由与服务端审批、主题持久匹配、同原身份正文阶段和ALL派生清理已进入实现/隔离验收。`content_topic_matches`、`content_version_inputs`由content持有，content/analysis/reports共用固定输入；正文响应不进入SourceRun缓存。导出复用原Job/MinIO/Evidence；告警复用notification.scan；`/public/`只读分发固定服务器发布者和原Redis计数，Cookie不改变归属。新增结构只应用新空测试库，业务库升级未执行。跨profile可靠身份收敛、稳定作者扫描及七平台真实准入/窗口仍未完成。固定feed本地过滤不等于原生搜索；不启动第二AIHOT实例、正文库或队列。付费出口、通用Browser和MediaCrawler现有边界继续有效。
+
 MediaCrawler 仅本人 B站、个人非商业研究，固定宿主子进程、上游/补丁/适配器三版本与独立 CDP；资料权限700、文件600，拒绝符号链接/宽权限/超限，子进程仅最小环境。每帖同轮一级评论≤20，缺缓存不补网络；验证、登录失效或频繁访问立即停用，本人核查后人工恢复。具体版本/资料见 Design003。
 
 真实 Codex/付费模型继续暂停；X 凭据/月度上限未确认前零真实请求。Reddit 仅考虑当前显式获批的官方 API 路径及 OAuth，商业用途另须书面批准；公共 Data API 迁移/退役及现行合同按 PRD007 官方依据重新核对，OAuth 不证明准入。来源预设、软件许可、平台/数据授权、能力、频次与预算分别核对，配置/probe 不算 persisted read 成功。报告SMTP默认关闭、飞书暂缓；知识库单向写 `HOTKEY_OBSIDIAN_VAULT_PATH` 的 HotKey 管理区，保留用户区块。不引入独立向量库或搜索引擎；向量仍在 PostgreSQL，由原 Job/AiCall/预算恢复。
 
 ## 文档维护
 
-README 写使用方式，PROJECT 写技术边界，AGENTS 写检查，PRD 写需求/AC，Design 写现行合同，BACKLOG 写状态和必要执行顺序，Acceptance 写证据及未通过条件。完成步骤、临时运行快照、视觉研究和版本迁移过程不保留为另一套现行文档。文档/需求/证据编号不重用；清理文件不取消需求或改变验收结论。许可证、上游固定版本和资产归属保留于 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md) 及源码许可。
+README 写使用方式，PROJECT 写技术边界，AGENTS 写检查，PRD 写需求/AC，Design 写现行合同，BACKLOG 写总体状态及未迁入PLAN的执行顺序，Acceptance 写实际证据及未通过条件。用户明确要求的 [PLAN007](docs/plan/007-公开信息免费采集执行计划.md) 唯一维护本轮详细工作包状态、依赖、验收步骤和checklist，BACKLOG只索引与汇总，不重复维护。完成步骤、临时运行快照、视觉研究和版本迁移过程不保留为另一套现行文档。文档/需求/证据编号不重用；清理文件不取消需求或改变验收结论。许可证、上游固定版本和资产归属保留于 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md) 及源码许可。
 
 定时任务采用APScheduler 3.x内存进程时钟（30秒、单实例、合并错过tick），业务到期、幂等、重试、租约和投递仍由PostgreSQL/原Job/Outbox持久化，不使用数据库JobStore。根Compose worker profile配套Worker/Scheduler，API不运行计时器。用户经账户验证邮箱后自行订阅，普通会话/CSRF/CAS隔离，无需运营令牌；发送前复验当前邮箱与主题订阅。平台SMTP凭据保留根环境配置。

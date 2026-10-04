@@ -1,23 +1,35 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, Header, Path, Response
+from fastapi import APIRouter, Body, Depends, Header, Path, Query, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from api.dependencies import (
     PublicationMcpServiceDependency,
     PublicationServiceDependency,
+    PublicDistributionScopeDependency,
     PublicPublicationScopeDependency,
     SiteConfigurationServiceDependency,
     UserScopeDependency,
     require_identity_session,
+    require_public_distribution_limit,
 )
 from core.schemas import ErrorView
+from publication.mcp import PublicationMcpService
 from publication.mcp_schemas import McpResponse
-from publication.schemas import Category, SharePage
+from publication.schemas import (
+    Category,
+    PublicEditionView,
+    PublicItemDetailView,
+    PublicItemsPage,
+    PublicStoriesPage,
+    PublicStoryView,
+    SharePage,
+)
 
 router = APIRouter(
     dependencies=[Depends(require_identity_session)],
@@ -584,6 +596,26 @@ def mcp(
     accept: Annotated[str, Header()] = "",
     protocol: Annotated[str | None, Header(alias="MCP-Protocol-Version")] = None,
 ) -> Response:
+    return _mcp(
+        payload=payload,
+        service=service,
+        owner_id=owner_id,
+        origin=origin,
+        accept=accept,
+        protocol=protocol,
+    )
+
+
+def _mcp(
+    *,
+    payload: dict[str, Any],
+    service: PublicationMcpService,
+    owner_id: UUID,
+    origin: str | None,
+    accept: str,
+    protocol: str | None,
+    redistribute: bool = False,
+) -> Response:
     if not service.transport_allowed(origin=origin, accept=accept, protocol_version=protocol):
         return JSONResponse(
             {
@@ -596,7 +628,7 @@ def mcp(
             else 400,
             headers={"cache-control": "no-store"},
         )
-    result = service.handle(owner_id=owner_id, payload=payload)
+    result = service.handle(owner_id=owner_id, payload=payload, redistribute=redistribute)
     if result is None:
         return Response(status_code=202, headers={"cache-control": "no-store"})
     return JSONResponse(
@@ -684,3 +716,437 @@ def edition_poster(
     return _xml(
         service.edition_poster(owner_id=owner_id, kind=kind, key=key), media_type="image/svg+xml"
     )
+
+
+# Compatibility: root protocol endpoints retain the current user's publication scope.
+# Anonymous distribution has an explicit path and a fixed server-configured publisher.
+_DISTRIBUTION_DEPENDENCIES = [Depends(require_public_distribution_limit)]
+_PUBLIC_ERRORS = {
+    **_DETAIL_ERRORS,
+    429: {"model": ErrorView, "description": "同一发布账号/可信TCP地址每60秒最多120次"},
+}
+_PUBLIC_EXPORT_ERRORS = {
+    **_PUBLIC_ERRORS,
+    304: {"description": "逐项重新复验许可后内容未变"},
+}
+_PUBLIC_RSS_RESPONSES = {
+    200: {"content": {"application/rss+xml": {"schema": {"type": "string"}}}},
+    **_PUBLIC_EXPORT_ERRORS,
+}
+_PUBLIC_MARKDOWN_RESPONSES = {
+    200: {"content": {"text/markdown": {"schema": {"type": "string"}}}},
+    **_PUBLIC_EXPORT_ERRORS,
+}
+
+
+def _distributed(body: str, *, media_type: str, etag: str | None) -> Response:
+    current = '"' + hashlib.sha256(body.encode()).hexdigest() + '"'
+    return Response(
+        content=body if etag != current else None,
+        status_code=200 if etag != current else 304,
+        media_type=media_type if etag != current else None,
+        headers={
+            "cache-control": "no-store",
+            "etag": current,
+            "x-content-type-options": "nosniff",
+            "x-robots-tag": "noindex, nofollow",
+        },
+    )
+
+
+def _distributed_json(value: Any, etag: str | None) -> Response:
+    return _distributed(
+        json.dumps(value.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":")),
+        media_type="application/json",
+        etag=etag,
+    )
+
+
+@public_router.get(
+    "/public/feed.xml",
+    operation_id="getPublisherSelectedRss",
+    response_model=None,
+    status_code=200,
+    response_class=Response,
+    summary="发布账号精选摘要RSS",
+    responses=_PUBLIC_RSS_RESPONSES,
+    dependencies=_DISTRIBUTION_DEPENDENCIES,
+)
+def publisher_selected_feed(
+    service: PublicationServiceDependency,
+    owner_id: PublicDistributionScopeDependency,
+    if_none_match: ImageEtag = None,
+) -> Response:
+    return _distributed(
+        service.feed(owner_id=owner_id, self_path="/public/feed.xml"),
+        media_type="application/rss+xml",
+        etag=if_none_match,
+    )
+
+
+@public_router.get(
+    "/public/feed/full.xml",
+    operation_id="getPublisherFullRss",
+    response_model=None,
+    status_code=200,
+    response_class=Response,
+    summary="发布账号获准再分发全文RSS",
+    responses=_PUBLIC_RSS_RESPONSES,
+    dependencies=_DISTRIBUTION_DEPENDENCIES,
+)
+def publisher_full_feed(
+    service: PublicationServiceDependency,
+    owner_id: PublicDistributionScopeDependency,
+    if_none_match: ImageEtag = None,
+) -> Response:
+    return _distributed(
+        service.feed(owner_id=owner_id, kind="selected-full", self_path="/public/feed/full.xml"),
+        media_type="application/rss+xml",
+        etag=if_none_match,
+    )
+
+
+@public_router.get(
+    "/public/feed/all.xml",
+    operation_id="getPublisherAllRss",
+    response_model=None,
+    status_code=200,
+    response_class=Response,
+    summary="发布账号全部公开摘要RSS",
+    responses=_PUBLIC_RSS_RESPONSES,
+    dependencies=_DISTRIBUTION_DEPENDENCIES,
+)
+def publisher_all_feed(
+    service: PublicationServiceDependency,
+    owner_id: PublicDistributionScopeDependency,
+    if_none_match: ImageEtag = None,
+) -> Response:
+    return _distributed(
+        service.feed(owner_id=owner_id, kind="all", self_path="/public/feed/all.xml"),
+        media_type="application/rss+xml",
+        etag=if_none_match,
+    )
+
+
+@public_router.get(
+    "/public/feed/category/{category}.xml",
+    operation_id="getPublisherCategoryRss",
+    response_model=None,
+    status_code=200,
+    response_class=Response,
+    summary="发布账号分类摘要RSS",
+    responses=_PUBLIC_RSS_RESPONSES,
+    dependencies=_DISTRIBUTION_DEPENDENCIES,
+)
+def publisher_category_feed(
+    category: Category,
+    service: PublicationServiceDependency,
+    owner_id: PublicDistributionScopeDependency,
+    if_none_match: ImageEtag = None,
+) -> Response:
+    return _distributed(
+        service.feed(
+            owner_id=owner_id, category=category, self_path=f"/public/feed/category/{category}.xml"
+        ),
+        media_type="application/rss+xml",
+        etag=if_none_match,
+    )
+
+
+@public_router.get(
+    "/public/feed/full/category/{category}.xml",
+    operation_id="getPublisherCategoryFullRss",
+    response_model=None,
+    status_code=200,
+    response_class=Response,
+    summary="发布账号分类获准全文RSS",
+    responses=_PUBLIC_RSS_RESPONSES,
+    dependencies=_DISTRIBUTION_DEPENDENCIES,
+)
+def publisher_category_full_feed(
+    category: Category,
+    service: PublicationServiceDependency,
+    owner_id: PublicDistributionScopeDependency,
+    if_none_match: ImageEtag = None,
+) -> Response:
+    return _distributed(
+        service.feed(
+            owner_id=owner_id,
+            category=category,
+            kind="selected-full",
+            self_path=f"/public/feed/full/category/{category}.xml",
+        ),
+        media_type="application/rss+xml",
+        etag=if_none_match,
+    )
+
+
+@public_router.get(
+    "/public/feed/{kind}.xml",
+    operation_id="getPublisherEditionRss",
+    response_model=None,
+    status_code=200,
+    response_class=Response,
+    summary="发布账号当前ALL许可日周月刊RSS",
+    responses=_PUBLIC_RSS_RESPONSES,
+    dependencies=_DISTRIBUTION_DEPENDENCIES,
+)
+def publisher_edition_feed(
+    kind: Literal["daily", "weekly", "monthly"],
+    service: PublicationServiceDependency,
+    owner_id: PublicDistributionScopeDependency,
+    if_none_match: ImageEtag = None,
+) -> Response:
+    return _distributed(
+        service.edition_feed(owner_id=owner_id, kind=kind, redistribute=True),
+        media_type="application/rss+xml",
+        etag=if_none_match,
+    )
+
+
+@public_router.get(
+    "/public/items/{content_id}.md",
+    operation_id="getPublisherItemMarkdown",
+    response_model=None,
+    status_code=200,
+    response_class=Response,
+    summary="发布账号获准再分发单篇Markdown",
+    responses=_PUBLIC_MARKDOWN_RESPONSES,
+    dependencies=_DISTRIBUTION_DEPENDENCIES,
+)
+def publisher_item_markdown(
+    content_id: UUID,
+    service: PublicationServiceDependency,
+    owner_id: PublicDistributionScopeDependency,
+    if_none_match: ImageEtag = None,
+) -> Response:
+    return _distributed(
+        service.markdown(owner_id=owner_id, content_id=content_id, redistribute=True),
+        media_type="text/markdown",
+        etag=if_none_match,
+    )
+
+
+@public_router.get(
+    "/public/selected.md",
+    operation_id="getPublisherSelectedMarkdown",
+    response_model=None,
+    status_code=200,
+    response_class=Response,
+    summary="发布账号精选摘要Markdown",
+    responses=_PUBLIC_MARKDOWN_RESPONSES,
+    dependencies=_DISTRIBUTION_DEPENDENCIES,
+)
+def publisher_selected_markdown(
+    service: PublicationServiceDependency,
+    owner_id: PublicDistributionScopeDependency,
+    if_none_match: ImageEtag = None,
+) -> Response:
+    return _distributed(
+        service.latest_markdown(owner_id=owner_id), media_type="text/markdown", etag=if_none_match
+    )
+
+
+@public_router.get(
+    "/public/reports/{kind}/{key}.md",
+    operation_id="getPublisherEditionMarkdown",
+    response_model=None,
+    status_code=200,
+    response_class=Response,
+    summary="发布账号当前ALL许可刊期Markdown",
+    responses=_PUBLIC_MARKDOWN_RESPONSES,
+    dependencies=_DISTRIBUTION_DEPENDENCIES,
+)
+def publisher_edition_markdown(
+    kind: Literal["daily", "weekly", "monthly"],
+    key: Annotated[str, Path(max_length=10)],
+    service: PublicationServiceDependency,
+    owner_id: PublicDistributionScopeDependency,
+    if_none_match: ImageEtag = None,
+) -> Response:
+    return _distributed(
+        service.edition_markdown(owner_id=owner_id, kind=kind, key=key, redistribute=True),
+        media_type="text/markdown",
+        etag=if_none_match,
+    )
+
+
+@public_router.get(
+    "/public/agent.md",
+    operation_id="getPublisherAgentInstructions",
+    response_model=None,
+    status_code=200,
+    response_class=Response,
+    summary="匿名公开分发协议与范围说明",
+    responses=_PUBLIC_MARKDOWN_RESPONSES,
+    dependencies=_DISTRIBUTION_DEPENDENCIES,
+)
+def publisher_agent_instructions(
+    service: PublicationServiceDependency,
+    owner_id: PublicDistributionScopeDependency,
+    if_none_match: ImageEtag = None,
+) -> Response:
+    return _distributed(
+        service.instructions(public_distribution=True),
+        media_type="text/markdown",
+        etag=if_none_match,
+    )
+
+
+@public_router.get(
+    "/public/api/items",
+    operation_id="listPublisherItems",
+    response_model=PublicItemsPage,
+    status_code=200,
+    summary="发布账号有界公开摘要与来源分页",
+    responses=_PUBLIC_EXPORT_ERRORS,
+    dependencies=_DISTRIBUTION_DEPENDENCIES,
+)
+def publisher_items(
+    service: PublicationServiceDependency,
+    owner_id: PublicDistributionScopeDependency,
+    window: Literal["24h", "7d"] = "24h",
+    mode: Literal["selected", "all"] = "selected",
+    category: Category | None = None,
+    q: Annotated[str | None, Query(min_length=1, max_length=200)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: Annotated[str | None, Query(max_length=4096)] = None,
+    if_none_match: ImageEtag = None,
+) -> Response:
+    return _distributed_json(
+        service.items(
+            owner_id=owner_id,
+            window=window,
+            mode=mode,
+            category=category,
+            q=q,
+            redistribute=True,
+            limit=limit,
+            cursor=cursor,
+        ),
+        if_none_match,
+    )
+
+
+@public_router.get(
+    "/public/api/items/{content_id}",
+    operation_id="getPublisherItem",
+    response_model=PublicItemDetailView,
+    status_code=200,
+    summary="发布账号当前再分发范围单篇JSON",
+    responses=_PUBLIC_EXPORT_ERRORS,
+    dependencies=_DISTRIBUTION_DEPENDENCIES,
+)
+def publisher_item(
+    content_id: UUID,
+    service: PublicationServiceDependency,
+    owner_id: PublicDistributionScopeDependency,
+    if_none_match: ImageEtag = None,
+) -> Response:
+    return _distributed_json(
+        service.detail(owner_id=owner_id, content_id=content_id, redistribute=True), if_none_match
+    )
+
+
+@public_router.get(
+    "/public/api/hot",
+    operation_id="getPublisherHotStories",
+    response_model=PublicStoriesPage,
+    status_code=200,
+    summary="发布账号当前ALL许可事件热度",
+    responses=_PUBLIC_EXPORT_ERRORS,
+    dependencies=_DISTRIBUTION_DEPENDENCIES,
+)
+def publisher_hot(
+    service: PublicationServiceDependency,
+    owner_id: PublicDistributionScopeDependency,
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
+    if_none_match: ImageEtag = None,
+) -> Response:
+    return _distributed_json(service.hot(owner_id=owner_id, limit=limit), if_none_match)
+
+
+@public_router.get(
+    "/public/api/stories/{event_id}",
+    operation_id="getPublisherStory",
+    response_model=PublicStoryView,
+    status_code=200,
+    summary="发布账号当前ALL许可故事及出处",
+    responses=_PUBLIC_EXPORT_ERRORS,
+    dependencies=_DISTRIBUTION_DEPENDENCIES,
+)
+def publisher_story(
+    event_id: UUID,
+    service: PublicationServiceDependency,
+    owner_id: PublicDistributionScopeDependency,
+    if_none_match: ImageEtag = None,
+) -> Response:
+    return _distributed_json(service.story(owner_id=owner_id, event_id=event_id), if_none_match)
+
+
+@public_router.get(
+    "/public/api/reports/{kind}/{key}",
+    operation_id="getPublisherEdition",
+    response_model=PublicEditionView,
+    status_code=200,
+    summary="发布账号当前ALL许可刊期JSON",
+    responses=_PUBLIC_EXPORT_ERRORS,
+    dependencies=_DISTRIBUTION_DEPENDENCIES,
+)
+def publisher_edition(
+    kind: Literal["daily", "weekly", "monthly"],
+    key: Annotated[str, Path(max_length=10)],
+    service: PublicationServiceDependency,
+    owner_id: PublicDistributionScopeDependency,
+    if_none_match: ImageEtag = None,
+) -> Response:
+    return _distributed_json(
+        service.edition(owner_id=owner_id, kind=kind, key=key, redistribute=True), if_none_match
+    )
+
+
+@public_router.post(
+    "/public/mcp",
+    operation_id="callPublisherMcp",
+    response_model=McpResponse,
+    status_code=200,
+    summary="匿名发布账号五个有界只读MCP工具",
+    dependencies=_DISTRIBUTION_DEPENDENCIES,
+    responses={
+        **_PUBLIC_ERRORS,
+        202: {"description": "已接受只读通知"},
+        400: {"model": McpResponse, "description": "JSON-RPC或Origin/协议输入无效"},
+        406: {"model": McpResponse, "description": "Accept须声明JSON及SSE"},
+    },
+)
+def publisher_mcp(
+    payload: Annotated[dict[str, Any], Body()],
+    service: PublicationMcpServiceDependency,
+    owner_id: PublicDistributionScopeDependency,
+    origin: Annotated[str | None, Header()] = None,
+    accept: Annotated[str, Header()] = "",
+    protocol: Annotated[str | None, Header(alias="MCP-Protocol-Version")] = None,
+) -> Response:
+    return _mcp(
+        payload=payload,
+        service=service,
+        owner_id=owner_id,
+        origin=origin,
+        accept=accept,
+        protocol=protocol,
+        redistribute=True,
+    )
+
+
+@public_router.get(
+    "/public/mcp",
+    operation_id="getPublisherMcpStream",
+    response_class=Response,
+    response_model=None,
+    status_code=405,
+    summary="匿名MCP只接受POST不提供独立监听流",
+    dependencies=_DISTRIBUTION_DEPENDENCIES,
+    responses={**_PUBLIC_ERRORS, 405: {"description": "支持POST"}},
+)
+def publisher_mcp_stream() -> Response:
+    return mcp_stream()

@@ -6,6 +6,7 @@ services and DTOs in the same outer transaction; no foreign business ORM is impo
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -21,11 +22,21 @@ from sqlalchemy.orm import Session
 
 from analysis.editorial_schemas import EditorialSourceInput, SourceKind, Tier
 from analysis.editorial_services import EditorialService
+from connections.editorial_body_admission import (
+    approve_editorial_body_profile_in_transaction,
+    require_editorial_body_execution_in_transaction,
+)
+from connections.editorial_body_schemas import EditorialBodyApprovalInput, EditorialBodyApprovalView
 from connections.editorial_models import (
     EditorialSourceMaterialReceipt,
     EditorialSourceProfile,
     EditorialSourceRun,
     EditorialSourceVersion,
+)
+from connections.editorial_rsshub import (
+    approve_editorial_rsshub_profile_in_transaction,
+    require_editorial_rsshub_execution_in_transaction,
+    rsshub_execution_policy,
 )
 from connections.editorial_schemas import (
     EditorialGroupBacklogReviewInput,
@@ -33,6 +44,8 @@ from connections.editorial_schemas import (
     EditorialGroupBacklogView,
     EditorialPollInput,
     EditorialProfileInput,
+    EditorialRsshubApprovalInput,
+    EditorialRsshubApprovalView,
     EditorialRunReviewInput,
     EditorialSourceOperationalHealth,
     ExternalEditorialInput,
@@ -40,6 +53,11 @@ from connections.editorial_schemas import (
     ExternalIngressReceipt,
 )
 from connections.models import SourceConnection, SourceConnectionVersion
+from content.editorial_body import (
+    complete_editorial_body_in_transaction,
+    load_editorial_body_target_in_transaction,
+    require_editorial_body_input_in_transaction,
+)
 from content.editorial_ingest import EditorialContentIngestService
 from content.editorial_schemas import EditorialContentInput, EditorialContentResult
 from core.errors import ApplicationError
@@ -58,16 +76,23 @@ from jobs.external_ingress import (
     load_external_ingress_job_in_transaction,
     require_external_ingress_rate_in_transaction,
 )
-from jobs.schemas import JobAcceptanceInput, JobObservationContext, JobView
-from jobs.services import JobService, load_content_job_context, load_job_execution_configuration
+from jobs.schemas import JobAcceptanceInput, JobObservationContext, JobStatus, JobView
+from jobs.services import (
+    JobService,
+    load_content_job_context,
+    load_job_cancellation_state_in_transaction,
+    load_job_execution_configuration,
+)
 from operations.services import (
     accept_audit_in_transaction,
     complete_audit_in_transaction,
     load_completed_audit_in_transaction,
 )
-from sources.contracts import SourceCapability
+from sources.contracts import SourceCapability, WebPageResult
 from sources.editorial_registry import EditorialKnownMaterial
 from sources.editorial_schemas import (
+    EditorialBodyCheckpoint,
+    EditorialBodyTarget,
     EditorialCursor,
     EditorialDue,
     EditorialMaterial,
@@ -355,6 +380,32 @@ class EditorialSourceService:
                 owner_id=owner_id, command=command, profile_id=profile_id
             )
 
+    def approve_rsshub(
+        self, *, owner_id: UUID, profile_id: UUID, command: EditorialRsshubApprovalInput
+    ) -> EditorialRsshubApprovalView:
+        self._session.rollback()
+        with self._session.begin():
+            return approve_editorial_rsshub_profile_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                profile_id=profile_id,
+                command=command,
+                now=self._clock(),
+            )
+
+    def approve_body(
+        self, *, owner_id: UUID, profile_id: UUID, command: EditorialBodyApprovalInput
+    ) -> EditorialBodyApprovalView:
+        self._session.rollback()
+        with self._session.begin():
+            return approve_editorial_body_profile_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                profile_id=profile_id,
+                command=command,
+                now=self._clock(),
+            )
+
     def save_profile_in_transaction(
         self, *, owner_id: UUID, command: EditorialProfileInput, profile_id: UUID | None = None
     ) -> EditorialProfileView:
@@ -568,7 +619,11 @@ class EditorialSourceService:
                 auth_kind="none",
                 secret_ref=None,
                 config={"allowed_hosts": list(command.configuration.allowed_hosts)},
-                execution_policy=None,
+                execution_policy=(
+                    rsshub_execution_policy(command.configuration).model_dump(mode="json")
+                    if command.configuration.rsshub
+                    else None
+                ),
                 created_by=p.owner_id,
                 created_at=now,
             )
@@ -883,7 +938,7 @@ class EditorialSourceService:
                     {
                         key: value
                         for key, value in run.prepared_page.items()
-                        if key != "external_items"
+                        if key not in {"external_items", "_body_phase"}
                     }
                 )
                 if run.status == "staged" and run.prepared_page
@@ -959,7 +1014,9 @@ class EditorialSourceService:
             run, p, v = self._current_run(owner_id, run_id, guard)
             if run.status != "running":
                 raise ApplicationError("editorial_version_conflict")
-            if len(page.model_dump_json().encode()) > 8 * 1024 * 1024:
+            body = self._view(p).configuration.body_extraction
+            page_limit = (6 if body is not None and body.enabled else 8) * 1024 * 1024
+            if len(page.model_dump_json().encode()) > page_limit:
                 raise ApplicationError("invalid_editorial_input")
             if page.status in {"unknown", "blocked"}:
                 run.status = page.status
@@ -990,7 +1047,11 @@ class EditorialSourceService:
             if run.status != "staged" or run.prepared_page is None:
                 return self._result(run)
             page = EditorialPage.model_validate(
-                {key: value for key, value in run.prepared_page.items() if key != "external_items"}
+                {
+                    key: value
+                    for key, value in run.prepared_page.items()
+                    if key not in {"external_items", "_body_phase"}
+                }
             )
             self._require_ready(p, v, self._clock())
             if v.kind == "external":
@@ -999,42 +1060,277 @@ class EditorialSourceService:
                 return apply_external_page_in_transaction(
                     self, run=run, profile=p, version=v, page=page, guard=guard, sink=sink
                 )
+            if "_body_phase" in run.prepared_page:
+                return self._result(run)
             first = EditorialCursor.model_validate(p.cursor).initialized_at is None
+            body = self._view(p).configuration.body_extraction
+            targets: list[EditorialBodyTarget] = []
+            overflow = False
             seen: set[str] = set()
             for material in page.materials:
                 if material.identity_key in seen:
                     continue
                 seen.add(material.identity_key)
-                self._apply_material_in_transaction(
+                applied = self._apply_material_in_transaction(
                     p=p, v=v, run=run, page=page, first=first, material=material, sink=sink
                 )
-            # Failed coverage never becomes an advanced cursor; known content remains useful.
-            now = self._clock()
-            if page.status in {"complete", "unchanged"}:
-                p.cursor = page.cursor.model_dump(mode="json")
-                p.last_ok_at, p.health, p.failure_count, p.last_failure_code = now, "ok", 0, None
-                run.status = "succeeded"
-                record_source_fetch_success_in_transaction(
+                if body is not None and body.enabled and material.body_status != "ok":
+                    target = load_editorial_body_target_in_transaction(
+                        self._session,
+                        owner_id=owner_id,
+                        run_id=run.id,
+                        profile_id=p.id,
+                        configuration_version=v.version,
+                        profile_revision=p.revision,
+                        job_id=run.job_id,
+                        operation_id=run.operation_id,
+                        content_id=applied.content_id,
+                        content_version_id=applied.content_version_id,
+                        material=material,
+                        now=self._clock(),
+                    )
+                    if target is not None:
+                        if len(targets) < body.max_fetches:
+                            targets.append(target)
+                        else:
+                            overflow = True
+            if targets or overflow:
+                phase = EditorialBodyCheckpoint(
+                    targets=tuple(targets), failure_codes=("body_target_limit",) if overflow else ()
+                )
+                self._save_body_checkpoint(run, phase)
+                return self._result(run)
+            return self._complete_page_in_transaction(run=run, p=p, v=v, page=page)
+
+    def _complete_page_in_transaction(
+        self,
+        *,
+        run: EditorialSourceRun,
+        p: EditorialSourceProfile,
+        v: EditorialSourceVersion,
+        page: EditorialPage,
+    ) -> EditorialRunResult:
+        # Failed coverage never becomes an advanced cursor; known content remains useful.
+        now = self._clock()
+        if page.status in {"complete", "unchanged"}:
+            p.cursor = page.cursor.model_dump(mode="json")
+            p.last_ok_at, p.health, p.failure_count, p.last_failure_code = now, "ok", 0, None
+            run.status = "succeeded"
+            record_source_fetch_success_in_transaction(
+                self._session,
+                owner_id=run.owner_id,
+                source_key=p.source_key,
+                selector_kind="source",
+                selector_ref=p.source_key,
+                completed_at=now,
+            )
+            p.next_fetch_at = now + timedelta(minutes=v.interval_minutes)
+        else:
+            run.status, run.failure_code = "partial", page.reason
+            if v.kind in {"x_search", "mp_account"}:
+                # Preserve exact unfinished query/token lineage while keeping coverage old.
+                old_cursor = EditorialCursor.model_validate(p.cursor)
+                p.cursor = page.cursor.model_copy(
+                    update={"last_ok_at": old_cursor.last_ok_at}
+                ).model_dump(mode="json")
+            self._failure_health(p, v, page.reason, now, unknown=False)
+        p.updated_at, run.updated_at = now, now
+        phase_data = (run.prepared_page or {}).get("_body_phase")
+        if phase_data is not None:
+            phase = EditorialBodyCheckpoint.model_validate_json(json.dumps(phase_data))
+            # Terminal facts retain references/counters only, never a second body cache.
+            run.prepared_page = {
+                "_body_receipt": {
+                    "feed_observation_ids": [str(t.feed_observation_id) for t in phase.targets],
+                    "body_observation_ids": [str(item) for item in phase.completed_observation_ids],
+                    "local_collector_calls": phase.local_collector_calls,
+                    "target_request_count": phase.target_request_count,
+                    "failure_codes": list(phase.failure_codes),
+                }
+            }
+        else:
+            run.prepared_page = None
+        return self._result(run)
+
+    def body_checkpoint(
+        self, *, owner_id: UUID, run_id: UUID, guard: Guard | None = None
+    ) -> EditorialBodyCheckpoint | None:
+        self._session.rollback()
+        with self._session.begin():
+            run, _, _ = self._current_run(owner_id, run_id, guard)
+            if (
+                run.status != "staged"
+                or not run.prepared_page
+                or "_body_phase" not in run.prepared_page
+            ):
+                return None
+            return EditorialBodyCheckpoint.model_validate_json(
+                json.dumps(run.prepared_page["_body_phase"])
+            )
+
+    def begin_body_request(
+        self, *, owner_id: UUID, run_id: UUID, guard: Guard | None = None
+    ) -> EditorialBodyTarget:
+        self._session.rollback()
+        with self._session.begin():
+            run, p, v, phase = self._current_body(owner_id, run_id, guard)
+            if phase.request_pending or phase.next_index >= len(phase.targets):
+                raise ApplicationError("editorial_version_conflict")
+            target = phase.targets[phase.next_index]
+            self._require_ready(p, v, self._clock())
+            require_editorial_body_input_in_transaction(
+                self._session, target=target, now=self._clock()
+            )
+            self._save_body_checkpoint(run, phase.model_copy(update={"request_pending": True}))
+            return target
+
+    def apply_body_response(
+        self, *, owner_id: UUID, run_id: UUID, response: WebPageResult, guard: Guard | None = None
+    ) -> None:
+        self._session.rollback()
+        with self._session.begin():
+            run, p, v, phase = self._current_body(owner_id, run_id, guard)
+            if not phase.request_pending or phase.next_index >= len(phase.targets):
+                raise ApplicationError("editorial_version_conflict")
+            target = phase.targets[phase.next_index]
+            self._require_ready(p, v, self._clock())
+            completed, failures = phase.completed_observation_ids, phase.failure_codes
+            if response.document is not None:
+                require_editorial_body_execution_in_transaction(
                     self._session,
                     owner_id=owner_id,
-                    source_key=p.source_key,
-                    selector_kind="source",
-                    selector_ref=p.source_key,
-                    completed_at=now,
+                    profile_id=p.id,
+                    configuration_version=v.version,
+                    revision=p.revision,
+                    now=self._clock(),
                 )
-                p.next_fetch_at = now + timedelta(minutes=v.interval_minutes)
+                if v.connection_id is None or v.connection_version is None:
+                    raise ApplicationError("connection_disabled")
+                saved = self._session.scalar(
+                    select(EditorialSourceMaterialReceipt)
+                    .where(
+                        EditorialSourceMaterialReceipt.owner_id == owner_id,
+                        EditorialSourceMaterialReceipt.profile_id == p.id,
+                        EditorialSourceMaterialReceipt.identity_key == target.material.identity_key,
+                    )
+                    .with_for_update()
+                )
+                if (
+                    saved is None
+                    or saved.content_id != target.content_id
+                    or saved.content_version_id != target.expected_content_version_id
+                ):
+                    raise ApplicationError("editorial_version_conflict")
+                result = complete_editorial_body_in_transaction(
+                    self._session,
+                    target=target,
+                    document=response.document,
+                    source_key=p.source_key,
+                    capability=capability_for(v.kind),
+                    policy_version=v.policy_version,
+                    connection_id=v.connection_id,
+                    connection_version=v.connection_version,
+                    now=self._clock(),
+                )
+                saved.content_version_id = result.content_version_id
+                saved.body_status, saved.updated_at = (
+                    ("ok" if response.document.text_scope == "full" else "pending"),
+                    self._clock(),
+                )
+                saved.run_id = run.id
+                # Keep the feed hash: identical feed replay must not replace a completed body.
+                completed += (result.observation_id,)
+                run.revised += 1
             else:
-                run.status, run.failure_code = "partial", page.reason
-                if v.kind in {"x_search", "mp_account"}:
-                    # Preserve exact unfinished query/token lineage while keeping coverage old.
-                    old_cursor = EditorialCursor.model_validate(p.cursor)
-                    p.cursor = page.cursor.model_copy(
-                        update={"last_ok_at": old_cursor.last_ok_at}
-                    ).model_dump(mode="json")
-                self._failure_health(p, v, page.reason, now, unknown=False)
-            p.updated_at, run.updated_at = now, now
-            run.prepared_page = None
-            return self._result(run)
+                reason = (
+                    response.stop_reason.value if response.stop_reason is not None else "unknown"
+                )
+                failures += (f"body_{reason}"[:64],)
+            self._save_body_checkpoint(
+                run,
+                phase.model_copy(
+                    update={
+                        "next_index": phase.next_index + 1,
+                        "request_pending": False,
+                        "completed_observation_ids": completed,
+                        "failure_codes": failures,
+                        "local_collector_calls": phase.local_collector_calls
+                        + response.collector_call_count,
+                    }
+                ),
+            )
+
+    def finish_body_phase(
+        self, *, owner_id: UUID, run_id: UUID, guard: Guard | None = None
+    ) -> EditorialRunResult:
+        self._session.rollback()
+        with self._session.begin():
+            run, p, v, phase = self._current_body(owner_id, run_id, guard)
+            if phase.request_pending:
+                # No result after a durable request boundary: do not repeat an unknown request.
+                run.status, run.failure_code, run.updated_at = (
+                    "unknown",
+                    "abandoned_body_request",
+                    self._clock(),
+                )
+                self._failure_health(p, v, run.failure_code, self._clock(), unknown=True)
+                return self._result(run)
+            if phase.request_pending or phase.next_index < len(phase.targets):
+                raise ApplicationError("editorial_version_conflict")
+            assert run.prepared_page is not None
+            page = EditorialPage.model_validate(
+                {
+                    k: value
+                    for k, value in run.prepared_page.items()
+                    if k not in {"external_items", "_body_phase"}
+                }
+            )
+            body = self._view(p).configuration.body_extraction
+            if phase.failure_codes and body is not None and body.required:
+                page = page.model_copy(
+                    update={"status": "partial", "reason": phase.failure_codes[0]}
+                )
+            return self._complete_page_in_transaction(run=run, p=p, v=v, page=page)
+
+    def _current_body(
+        self,
+        owner_id: UUID,
+        run_id: UUID,
+        guard: Guard | None,
+    ) -> tuple[
+        EditorialSourceRun, EditorialSourceProfile, EditorialSourceVersion, EditorialBodyCheckpoint
+    ]:
+        run, p, v = self._current_run(owner_id, run_id, guard)
+        state = load_job_cancellation_state_in_transaction(
+            self._session, owner_id=owner_id, job_id=run.job_id
+        )
+        if (
+            run.status != "staged"
+            or not run.prepared_page
+            or "_body_phase" not in run.prepared_page
+            or state is None
+            or state.status not in {JobStatus.QUEUED, JobStatus.RUNNING}
+            or state.requested_at is not None
+        ):
+            raise ApplicationError("editorial_version_conflict")
+        return (
+            run,
+            p,
+            v,
+            EditorialBodyCheckpoint.model_validate_json(
+                json.dumps(run.prepared_page["_body_phase"])
+            ),
+        )
+
+    def _save_body_checkpoint(
+        self, run: EditorialSourceRun, phase: EditorialBodyCheckpoint
+    ) -> None:
+        assert run.prepared_page is not None
+        value = {**run.prepared_page, "_body_phase": phase.model_dump(mode="json")}
+        if len(json.dumps(value).encode()) > 8 * 1024 * 1024:
+            raise ApplicationError("invalid_editorial_input")
+        run.prepared_page = value
+        run.updated_at = self._clock()
 
     def _apply_material_in_transaction(
         self,
@@ -1285,6 +1581,15 @@ class EditorialSourceService:
         )
         if admission.policy_version != v.policy_version:
             raise ApplicationError("editorial_version_conflict")
+        if v.configuration.get("rsshub") is not None:
+            require_editorial_rsshub_execution_in_transaction(
+                self._session,
+                owner_id=p.owner_id,
+                profile_id=p.id,
+                configuration_version=v.version,
+                revision=p.revision,
+                now=now,
+            )
 
     def require_run_admission(
         self, *, owner_id: UUID, run_id: UUID, guard: Guard | None = None
@@ -1357,6 +1662,7 @@ class EditorialSourceService:
             enabled=p.enabled,
             revision=p.revision,
             configuration_version=v.version,
+            configuration_sha256=fingerprint(v.configuration).hex(),
             configuration=v.configuration,
             participation_mode=v.participation_mode,
             tier=v.tier,

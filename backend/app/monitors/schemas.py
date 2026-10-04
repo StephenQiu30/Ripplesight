@@ -41,6 +41,7 @@ class MonitorRuleSetInput(InputModel):
 class MonitorTopicCreateInput(MonitorRuleSetInput):
     name: str = Field(min_length=1, max_length=80)
     source_keys: list[SourceKeyInput] = Field(default_factory=list, max_length=32)
+    editorial_profile_ids: list[UUID] = Field(default_factory=list, max_length=32)
     collection_interval_seconds: int = Field(default=3600, ge=600, le=86400)
     report_time: time = _DEFAULT_REPORT_TIME
     weekly_report_enabled: bool = True
@@ -131,6 +132,7 @@ class MonitorTopicView(OutputModel):
     current_version: int = Field(ge=1)
     rules: MonitorRuleSetView
     source_keys: list[str]
+    editorial_profile_ids: list[UUID] = Field(default_factory=list, max_length=32)
     collection_interval_seconds: int = Field(ge=600, le=86400)
     report_time: time
     report_timezone: Literal["Asia/Shanghai"]
@@ -138,6 +140,20 @@ class MonitorTopicView(OutputModel):
     notification_target_names: list[str]
     created_at: datetime
     updated_at: datetime
+
+
+class EditorialTopicSourceView(OutputModel):
+    profile_id: UUID
+    source_key: str
+    name: str
+    configuration_version: int
+    enabled: bool
+    query_mode: str
+    text_scope: str
+    selectable: bool
+    reason: str | None
+    last_ok_at: datetime | None
+    interval_minutes: int
 
 
 class MonitorTopicRunInput(InputModel):

@@ -43,8 +43,21 @@ HTTP_ERRORS: Mapping[int, PublicError] = {
     504: PublicError(504, "upstream_timeout", "上游服务响应超时"),
 }
 APPLICATION_ERRORS: Mapping[str, PublicError] = {
+    "invalid_alert_input": PublicError(422, "invalid_alert_input", "告警参数不符合要求"),
+    "alert_configuration_conflict": PublicError(
+        409, "alert_configuration_conflict", "主题或告警目标版本已变化,请重新读取"
+    ),
+    "alert_prerequisite_unavailable": PublicError(
+        409, "alert_prerequisite_unavailable", "有效输入或已成功投递的当前目标尚未就绪"
+    ),
     "publication_not_configured": PublicError(
         503, "publication_not_configured", "公开资讯尚未发布"
+    ),
+    "publication_rate_limited": PublicError(
+        429, "publication_rate_limited", "公开分发请求过于频繁,请稍后重试"
+    ),
+    "publication_distribution_unavailable": PublicError(
+        503, "publication_distribution_unavailable", "公开分发暂不可用"
     ),
     "invalid_credentials": PublicError(401, "invalid_credentials", "账号或密码错误"),
     "invalid_session": PublicError(401, "invalid_session", "请登录后继续"),
@@ -163,6 +176,17 @@ APPLICATION_ERRORS: Mapping[str, PublicError] = {
     "operator_authentication_required": PublicError(
         401, "operator_authentication_required", "需要维护授权"
     ),
+    "invalid_export_input": PublicError(422, "invalid_export_input", "导出输入或规模不符合约束"),
+    "export_input_unavailable": PublicError(
+        404, "export_input_unavailable", "固定导出输入不可访问"
+    ),
+    "export_version_conflict": PublicError(
+        409, "export_version_conflict", "导出版本冲突或相同版本已有导出任务"
+    ),
+    "export_not_ready": PublicError(409, "export_not_ready", "导出文件尚未生成成功"),
+    "export_storage_unavailable": PublicError(
+        503, "export_storage_unavailable", "私有导出对象存储不可用"
+    ),
     "invalid_edition_input": PublicError(422, "invalid_edition_input", "刊期或修订输入无效"),
     "edition_revision_conflict": PublicError(
         409, "edition_revision_conflict", "刊期修订已更新, 请重新读取"
@@ -184,6 +208,9 @@ APPLICATION_ERRORS: Mapping[str, PublicError] = {
     ),
     "editorial_material_unavailable": PublicError(
         404, "editorial_material_unavailable", "当前版本的分析材料不可读"
+    ),
+    "editorial_export_not_authorized": PublicError(
+        403, "editorial_export_not_authorized", "原始材料尚未获准用于个人文件导出"
     ),
     "invalid_publication_input": PublicError(
         422, "invalid_publication_input", "公开阅读配置或材料输入无效"
@@ -410,7 +437,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             seconds = error.context.get("retry_after_seconds")
             if isinstance(seconds, int) and not isinstance(seconds, bool) and 0 <= seconds <= 60:
                 headers = {"retry-after": str(seconds)}
-        if error.code == "auth_rate_limited":
+        if error.code in {"auth_rate_limited", "publication_rate_limited"}:
             seconds = error.context.get("retry_after_seconds")
             if isinstance(seconds, int) and not isinstance(seconds, bool) and 1 <= seconds <= 3600:
                 headers = {"retry-after": str(seconds)}

@@ -67,3 +67,78 @@ def test_canonical_schema_matches_all_runtime_tables(schema_engine: Engine) -> N
         assert database_primary_keys[("public", table_name)]["constrained_columns"] == [
             column.name for column in table.primary_key.columns
         ], f"{table_name}: primary key differs from its runtime mapping"
+
+
+def test_editorial_topic_matches_have_frozen_owner_scoped_structure(schema_engine: Engine) -> None:
+    inspector = inspect(schema_engine)
+    assert "editorial_profile_ids" in {
+        column["name"] for column in inspector.get_columns("monitor_topic_versions")
+    }
+    assert "content_topic_matches" in inspector.get_table_names(schema="public")
+    columns = {column["name"] for column in inspector.get_columns("content_topic_matches")}
+    assert {
+        "owner_id",
+        "topic_id",
+        "topic_rule_version",
+        "content_id",
+        "content_version_id",
+        "profile_id",
+        "profile_configuration_version",
+        "observation_id",
+        "job_id",
+        "connection_id",
+        "connection_version",
+        "policy_version",
+        "matched_at",
+    }.issubset(columns)
+    foreign_keys = inspector.get_foreign_keys("content_topic_matches")
+    assert any(
+        item["constrained_columns"] == ["owner_id", "content_id", "content_version_id"]
+        for item in foreign_keys
+    )
+    assert any(item["constrained_columns"] == ["owner_id", "topic_id"] for item in foreign_keys)
+    assert inspector.get_pk_constraint("content_version_inputs")["constrained_columns"] == [
+        "owner_id",
+        "content_version_id",
+        "observation_id",
+    ]
+    dependencies = inspector.get_foreign_keys("content_version_inputs")
+    assert any(
+        item["constrained_columns"] == ["owner_id", "observation_id"]
+        and item["options"].get("ondelete") == "RESTRICT"
+        for item in dependencies
+    )
+
+
+def test_export_cancellation_preserves_owner_fkeys_and_partial_result_dedup(schema_engine):
+    inspector = inspect(schema_engine)
+    for table, index_name, columns in (
+        (
+            "report_exports",
+            "report_exports_result_key",
+            ["owner_id", "report_id", "report_version", "format", "renderer_version"],
+        ),
+        (
+            "content_export_requests",
+            "content_exports_result_key",
+            ["owner_id", "input_hash", "format", "renderer_version", "schema_version"],
+        ),
+    ):
+        reflected = next(
+            index for index in inspector.get_indexes(table) if index["name"] == index_name
+        )
+        assert reflected["unique"] is True and reflected["column_names"] == columns
+        assert "cancelled" in str(reflected.get("dialect_options", {}).get("postgresql_where", ""))
+        assert not reflected.get("duplicates_constraint")
+        assert any(
+            "cancelled" in check["sqltext"] for check in inspector.get_check_constraints(table)
+        )
+        assert any(
+            fk["constrained_columns"] == ["owner_id", "job_id"] and fk["referred_table"] == "jobs"
+            for fk in inspector.get_foreign_keys(table)
+        )
+    assert any(
+        fk["constrained_columns"] == ["owner_id", "report_id"]
+        and fk["referred_columns"] == ["owner_id", "id"]
+        for fk in inspector.get_foreign_keys("report_exports")
+    )

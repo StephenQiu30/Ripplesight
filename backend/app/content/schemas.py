@@ -507,6 +507,7 @@ class ContentDiscoveryView(OutputModel):
 class ContentRecordSummaryView(OutputModel):
     id: UUID
     source_key: str
+    source_name: str | None = None
     object_type: Literal["post", "comment", "webpage"]
     native_scope: str | None
     external_id: str
@@ -562,6 +563,7 @@ class AnalysisPostAvailabilityView(OutputModel):
     source_key: str
     first_received_at: datetime
     first_hotlist_match_received_at: datetime | None
+    first_editorial_match_received_at: datetime | None = None
 
 
 class AnalysisCommentContentView(OutputModel):

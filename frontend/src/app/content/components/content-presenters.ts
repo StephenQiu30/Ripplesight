@@ -3,6 +3,13 @@ const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
   timeStyle: "short",
 });
 
+export function contentSourceLabel(
+  sourceKey: string,
+  sourceName?: string | null,
+): string {
+  return sourceName || (sourceKey.startsWith("ed_") ? "订阅来源" : sourceKey);
+}
+
 export const METRIC_LABELS: ReadonlyArray<
   readonly [keyof HotKeyAPI.ContentMetricView, string]
 > = [
@@ -76,13 +83,21 @@ const CONTENT_SCOPE_NOTICES: Partial<
   media_only: "来源仅表明含媒体，未保存或理解媒体内容。",
 };
 
-export function contentScopeLabel(scope: HotKeyAPI.ContentTextScope): string {
+export function contentScopeLabel(
+  scope: HotKeyAPI.ContentTextScope,
+  origin?: HotKeyAPI.ContentTextOrigin,
+): string {
+  if (scope === "full" && origin === "machine_extracted") return "页面文本";
   return CONTENT_SCOPE_LABELS[scope];
 }
 
 export function contentScopeNotice(
   scope: HotKeyAPI.ContentTextScope,
+  origin?: HotKeyAPI.ContentTextOrigin,
 ): string | null {
+  if (scope === "full" && origin === "machine_extracted") {
+    return "本次取得的页面文本；原帖或视频的完整覆盖尚未验证。";
+  }
   return CONTENT_SCOPE_NOTICES[scope] ?? null;
 }
 

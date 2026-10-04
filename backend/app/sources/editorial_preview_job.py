@@ -12,6 +12,7 @@ from connections.editorial_preview import (
     load_editorial_preview_profile_in_transaction,
     preview_profile_hash,
 )
+from connections.editorial_rsshub import require_editorial_rsshub_execution_in_transaction
 from connections.editorial_services import PreparedEditorialRun
 from core.config import Settings
 from core.errors import ApplicationError
@@ -31,6 +32,7 @@ from operations.services import (
 from sources.editorial_factory import ConfiguredEditorialCollectorFactory
 from sources.editorial_preview_rules import preview_items
 from sources.editorial_preview_schemas import EditorialSourcePreviewView
+from sources.editorial_rsshub import EditorialRsshubAdmission
 from sources.editorial_schemas import EditorialCursor, EditorialProfileView, EditorialRunResult
 
 
@@ -210,6 +212,19 @@ class EditorialSourcePreviewExecutor:
             prepared_page=None,
             should_collect=True,
         )
+
+        def rsshub_admission(
+            session: Session, run: PreparedEditorialRun
+        ) -> EditorialRsshubAdmission:
+            return require_editorial_rsshub_execution_in_transaction(
+                session,
+                owner_id=message.owner_id,
+                profile_id=run.profile.id,
+                configuration_version=run.profile.configuration_version,
+                revision=run.profile.revision,
+                now=self.clock(),
+            )
+
         registry = ConfiguredEditorialCollectorFactory(
             self.sessions,
             owner_id=message.owner_id,
@@ -217,6 +232,8 @@ class EditorialSourcePreviewExecutor:
             operation_id=message.operation_id,
             admission=admission,
             begin_request=begin_request,
+            zero_supplier_fee_only=True,
+            rsshub_admission=rsshub_admission,
             preview=True,
             public_enabled=settings.editorial_public_requests_enabled,
             x_authorized=settings.editorial_x_authorized,

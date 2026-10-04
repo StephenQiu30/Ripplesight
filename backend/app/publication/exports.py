@@ -238,12 +238,20 @@ def render_sitemap_index(
     )
 
 
-def agent_instructions(*, origin: str) -> str:
+def agent_instructions(*, origin: str, public_distribution: bool = False) -> str:
     base = public_origin(origin)
+    api = "/public/api/items" if public_distribution else "/api/publication/items"
+    mcp = "/public/mcp" if public_distribution else "/mcp"
     return (
         f"# HotKey public reading\n\n"
-        f"Use the read-only JSON API at {base}/api/publication/items and MCP at {base}/mcp.\n"
-        "Native item windows are 24h and 7d. Older history is not promised.\n"
+        f"Use the read-only JSON API at {base}{api} and MCP at {base}{mcp}.\n"
+        + (
+            "Anonymous distribution reads only the configured publisher. "
+            "All protocols share 120 requests per trusted TCP peer per 60 seconds.\n"
+            if public_distribution
+            else "The root RSS, Markdown and MCP endpoints require an authenticated session.\n"
+        )
+        + "Native item windows are 24h and 7d. Older history is not promised.\n"
         "Tools: hotkey_get_latest, hotkey_search, hotkey_get_hot_topics, "
         "hotkey_get_story, hotkey_get_daily.\n"
         "Full text stays in site reading unless redistribution permission is granted.\n"

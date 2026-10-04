@@ -22,7 +22,7 @@ from jobs.editorial_budgets import (
     reserve_editorial_group_budgets_in_transaction,
 )
 from jobs.editorial_member import load_editorial_group_manifest_in_transaction
-from jobs.execution import JobExecutionService, MessageReference
+from jobs.execution import JobExecutionFailure, JobExecutionService, MessageReference
 from jobs.schemas import (
     BudgetContext,
     BudgetMetric,
@@ -36,6 +36,27 @@ from jobs.services import ResourceBudgetService
 from sources.editorial_group_job import EditorialXGroupJobExecutor
 from sources.editorial_schedule import enqueue_due_editorial_sources_in_transaction
 from sources.editorial_schemas import EditorialCursor, EditorialSourceConfiguration
+
+
+def test_group_zero_supplier_fee_gate_stops_before_outbound_request(engine):
+    sessions, _owner, _profiles, now = group_setup(engine)
+    message, lease = admitted_group(sessions, now)
+    calls = []
+    executor = EditorialXGroupJobExecutor(
+        sessions,
+        controlled_settings(engine),
+        clock=lambda: now,
+        transport=httpx.MockTransport(
+            lambda request: calls.append(request) or httpx.Response(200, json={})
+        ),
+    )
+    with pytest.raises(JobExecutionFailure) as caught:
+        executor.execute(message, lease)
+    assert caught.value.error_code == "free_only_paid_source"
+    assert calls == []
+    with sessions() as session, session.begin():
+        assert session.scalar(text("SELECT count(*) FROM content_records")) == 0
+        assert session.scalar(text("SELECT count(*) FROM editorial_source_runs")) == 0
 
 
 def group_setup(engine):
@@ -187,7 +208,11 @@ def test_actual_scheduler_group_job_official_one_http_two_source_facts_and_exact
         editorial_x_post_unit_usd_micros=10,
     )
     result = EditorialXGroupJobExecutor(
-        sessions, settings, clock=lambda: now, transport=httpx.MockTransport(handler)
+        sessions,
+        settings,
+        zero_supplier_fee_only=False,
+        clock=lambda: now,
+        transport=httpx.MockTransport(handler),
     ).execute(message, lease)
     assert result.status == "succeeded" and len(calls) == 1
     with sessions() as s, s.begin():
@@ -312,6 +337,7 @@ def test_group_partial_gap_resumes_original_frozen_query_after_restart_and_has_o
     result = EditorialXGroupJobExecutor(
         sessions,
         controlled_settings(engine),
+        zero_supplier_fee_only=False,
         clock=lambda: now,
         transport=httpx.MockTransport(first_handler),
     ).execute(message, lease)
@@ -336,6 +362,7 @@ def test_group_partial_gap_resumes_original_frozen_query_after_restart_and_has_o
     completion = EditorialXGroupJobExecutor(
         sessions,
         controlled_settings(engine),
+        zero_supplier_fee_only=False,
         clock=lambda: later,
         transport=httpx.MockTransport(
             lambda request: requests.append(request) or httpx.Response(200, json={"data": []})
@@ -372,6 +399,7 @@ def test_group_member_revoke_between_http_pages_stops_every_member_commit(engine
     result = EditorialXGroupJobExecutor(
         sessions,
         controlled_settings(engine),
+        zero_supplier_fee_only=False,
         clock=lambda: now,
         transport=httpx.MockTransport(handler),
     ).execute(message, lease)
@@ -449,6 +477,7 @@ def test_group_running_request_recovery_settles_original_caps_and_never_reissues
     executor = EditorialXGroupJobExecutor(
         sessions,
         controlled_settings(engine, price=20),
+        zero_supplier_fee_only=False,
         clock=lambda: later,
         transport=httpx.MockTransport(
             lambda request: requests.append(request) or httpx.Response(200, json={"data": []})
@@ -498,6 +527,7 @@ def test_group_blocked_window_has_new_job_next_due_without_reusing_old_manifest(
     executor = EditorialXGroupJobExecutor(
         sessions,
         controlled_settings(engine, authorized=False),
+        zero_supplier_fee_only=False,
         clock=lambda: now,
         transport=httpx.MockTransport(
             lambda request: requests.append(request) or httpx.Response(200, json={"data": []})
@@ -524,6 +554,7 @@ def test_group_unknown_http_has_durable_receipts_and_no_replay_or_watermark(engi
     executor = EditorialXGroupJobExecutor(
         sessions,
         controlled_settings(engine),
+        zero_supplier_fee_only=False,
         clock=lambda: now,
         transport=httpx.MockTransport(unknown),
     )
@@ -558,6 +589,7 @@ def test_group_missing_member_spend_policy_is_zero_http_atomic_budget_block(engi
     result = EditorialXGroupJobExecutor(
         sessions,
         controlled_settings(engine),
+        zero_supplier_fee_only=False,
         clock=lambda: now,
         transport=httpx.MockTransport(
             lambda request: requests.append(request) or httpx.Response(200, json={"data": []})
@@ -597,6 +629,7 @@ def test_group_changed_configuration_before_execution_rejects_every_member_and_r
     result = EditorialXGroupJobExecutor(
         sessions,
         controlled_settings(engine),
+        zero_supplier_fee_only=False,
         clock=lambda: now,
         transport=httpx.MockTransport(
             lambda request: requests.append(request) or httpx.Response(200, json={"data": []})
@@ -616,6 +649,7 @@ def test_group_configured_gap_requires_all_member_cas_and_operator_restart_keeps
     result = EditorialXGroupJobExecutor(
         sessions,
         controlled_settings(engine),
+        zero_supplier_fee_only=False,
         clock=lambda: now,
         transport=httpx.MockTransport(
             lambda request: (

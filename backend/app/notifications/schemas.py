@@ -26,7 +26,7 @@ class ReportEmailSubscriptionView(OutputModel):
     email_matches_target: bool
 
 
-type NotificationSubjectKind = Literal["report", "edition", "selected", "codex_reset"]
+type NotificationSubjectKind = Literal["report", "edition", "selected", "codex_reset", "alert"]
 
 
 class NotificationChannel(StrEnum):
@@ -50,7 +50,7 @@ class TargetInput(BaseModel):
     recipients: tuple[str, ...] = Field(default=(), max_length=20)
     secret_env: str | None = Field(default=None, max_length=128)
     enabled: bool = False
-    subscriptions: tuple[NotificationSubjectKind, ...] = Field(default=("report",), max_length=4)
+    subscriptions: tuple[NotificationSubjectKind, ...] = Field(default=("report",), max_length=5)
 
     @field_validator("secret_env")
     @classmethod

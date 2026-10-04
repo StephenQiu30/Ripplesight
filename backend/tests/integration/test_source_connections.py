@@ -91,6 +91,34 @@ def _user_scope(client: TestClient) -> UUID:
         return authenticated_owner_id(session)
 
 
+def test_public_platform_catalog_requires_session_and_does_not_create_work(
+    source_connection_client: TestClient,
+) -> None:
+    factory = source_connection_client.app.state.session_factory
+    statement = text(
+        "SELECT (SELECT count(*) FROM jobs), (SELECT count(*) FROM outbox_messages), "
+        "(SELECT count(*) FROM source_connections), "
+        "(SELECT count(*) FROM resource_usage_attempts)"
+    )
+    with factory() as session:
+        before = session.execute(statement).one()
+    response = source_connection_client.get("/api/source-capabilities/public-platforms")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "private, no-store"
+    assert len(response.json()["items"]) == 7
+    assert all(
+        not entry["execution_admitted"] and entry["last_persisted_success_at"] is None
+        for platform in response.json()["items"]
+        for entry in platform["entries"]
+    )
+    with factory() as session:
+        assert session.execute(statement).one() == before
+    source_connection_client.cookies.clear()
+    denied = source_connection_client.get("/api/source-capabilities/public-platforms")
+    assert denied.status_code == 401
+    assert denied.json()["code"] == "invalid_session"
+
+
 def test_preset_versions_snapshot_policy_and_rolls_back_partial_apply(
     source_connection_client: TestClient,
     monkeypatch: pytest.MonkeyPatch,

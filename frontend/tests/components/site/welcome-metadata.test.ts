@@ -28,6 +28,8 @@ it("includes the public information and explanation pages in the native sitemap"
     "/terms",
     "/contact",
     "/changelog",
+    "/feeds",
+    "/agent",
     "/discover",
     "/leaderboard",
     "/reports/daily",

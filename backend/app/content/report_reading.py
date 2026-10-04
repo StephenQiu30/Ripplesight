@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from content.event_reading import load_event_member_content_in_transaction
 from content.models import ContentObservation, ContentVersion
 from content.schemas import EventContentReadReference
+from content.version_inputs import version_inputs_readable_in_transaction
 from evidence.schemas import DataClass
 from evidence.services import (
     RetentionPolicyUnavailableError,
@@ -32,6 +33,13 @@ def report_inputs_readable_in_transaction(
         raise ValueError("report inputs require an aware caller transaction")
     versions = sorted(set(content_version_ids), key=str)
     observation_set = set(observation_ids)
+    if not version_inputs_readable_in_transaction(
+        session,
+        owner_id=owner_id,
+        content_version_ids=tuple(versions),
+        now=now,
+    ):
+        return False
     readable = readable_resource_ids_query(
         owner_id=owner_id, resource_type="content_observation", now=now
     )

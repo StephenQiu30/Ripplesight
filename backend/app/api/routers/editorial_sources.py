@@ -17,12 +17,15 @@ from api.dependencies import (
     UserScopeDependency,
     UserWriteScopeDependency,
 )
+from connections.editorial_body_schemas import EditorialBodyApprovalInput, EditorialBodyApprovalView
 from connections.editorial_schemas import (
     EditorialGroupBacklogReviewInput,
     EditorialGroupBacklogReviewResult,
     EditorialGroupBacklogView,
     EditorialPollInput,
     EditorialProfileInput,
+    EditorialRsshubApprovalInput,
+    EditorialRsshubApprovalView,
     EditorialRunReviewInput,
     ExternalEditorialInput,
     ExternalIngressReceipt,
@@ -50,6 +53,26 @@ _READ: dict[int | str, dict[str, Any]] = {
     500: {"model": ErrorView, "description": "内部错误"},
 }
 _WRITE = {**_READ, 409: {"model": ErrorView, "description": "来源配置版本、操作幂等或准入发生冲突"}}
+
+
+@router.post(
+    "/{profile_id}/body-approval",
+    operation_id="approveEditorialBodyExtraction",
+    response_model=EditorialBodyApprovalView,
+    status_code=status.HTTP_200_OK,
+    summary="批准固定来源的本机正文补全声明",
+    description="审批绑定配置版本、原帖读取保存用途、零费用和固定出口证据; 不启用来源或发起请求。",
+    responses=_WRITE,
+)
+def approve_body_extraction(
+    profile_id: UUID,
+    command: EditorialBodyApprovalInput,
+    response: Response,
+    service: EditorialSourceServiceDependency,
+    owner: OperatorWriteScopeDependency,
+) -> EditorialBodyApprovalView:
+    response.headers["cache-control"] = "no-store"
+    return service.approve_body(owner_id=owner, profile_id=profile_id, command=command)
 
 
 @router.post(
@@ -251,6 +274,30 @@ def update_profile(
 ) -> EditorialProfileView:
     response.headers["cache-control"] = "no-store"
     return service.save_profile(owner_id=owner, profile_id=profile_id, command=command)
+
+
+@router.post(
+    "/{profile_id}/rsshub-approval",
+    operation_id="approveEditorialRsshubSource",
+    status_code=status.HTTP_200_OK,
+    response_model=EditorialRsshubApprovalView,
+    summary="按固定配置和证据审批本机RSSHub入口",
+    description=(
+        "运营CSRF写权限、独立操作ID和当前修订/配置SHA核验。"
+        "将用途、下游出口、缓存、费用和风控停止证据绑定原组件政策; "
+        "不启用来源、不批准数据许可、不发HTTP。"
+    ),
+    responses=_WRITE,
+)
+def approve_rsshub_source(
+    profile_id: UUID,
+    command: EditorialRsshubApprovalInput,
+    response: Response,
+    service: EditorialSourceServiceDependency,
+    owner: OperatorWriteScopeDependency,
+) -> EditorialRsshubApprovalView:
+    response.headers["cache-control"] = "no-store"
+    return service.approve_rsshub(owner_id=owner, profile_id=profile_id, command=command)
 
 
 @router.get(

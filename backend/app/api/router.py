@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from api.routers.ai_models import router as ai_models_router
+from api.routers.alerts import router as alerts_router
 from api.routers.codex_resets import router as codex_resets_router
 from api.routers.collection_coverage import router as collection_coverage_router
 from api.routers.collection_jobs import router as collection_jobs_router
@@ -17,6 +18,7 @@ from api.routers.monitor_topics import router as monitor_topics_router
 from api.routers.notifications import router as notifications_router
 from api.routers.operations import feedback_router
 from api.routers.operations import router as operations_router
+from api.routers.private_exports import router as private_exports_router
 from api.routers.publication import router as publication_router
 from api.routers.publication_editions import router as publication_editions_router
 from api.routers.publication_media import router as publication_media_router
@@ -29,6 +31,7 @@ from api.routers.translations import router as translations_router
 from core.schemas import ErrorView
 
 api_router = APIRouter(prefix="/api")
+api_router.include_router(alerts_router)
 api_router.include_router(notifications_router)
 api_router.include_router(identity_router)
 api_router.include_router(identity_profile_router)
@@ -48,6 +51,7 @@ api_router.include_router(monitor_topics_router, responses={401: {"model": Error
 api_router.include_router(operations_router, responses={401: {"model": ErrorView}})
 api_router.include_router(feedback_router, responses={401: {"model": ErrorView}})
 api_router.include_router(reports_router, responses={401: {"model": ErrorView}})
+api_router.include_router(private_exports_router, responses={401: {"model": ErrorView}})
 api_router.include_router(report_editions_router, responses={401: {"model": ErrorView}})
 api_router.include_router(publication_router)
 api_router.include_router(publication_editions_router)

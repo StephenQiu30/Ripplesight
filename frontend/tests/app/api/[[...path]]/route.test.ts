@@ -34,6 +34,96 @@ async function close(server: Server): Promise<void> {
 }
 
 describe("API route proxy", () => {
+  it.each([
+    ["public", "feed.xml"],
+    ["public", "feed", "full", "category", "ai-models.xml"],
+    ["public", "items", "b765dc61-effa-4d55-a44a-f2e41bf8c146.md"],
+    ["public", "selected.md"],
+    ["public", "reports", "daily", "2026-10-04.md"],
+    ["public", "agent.md"],
+    ["public", "api", "items"],
+    ["public", "api", "stories", "b765dc61-effa-4d55-a44a-f2e41bf8c146"],
+    ["public", "api", "reports", "daily", "2026-10-04"],
+    ["public", "mcp"],
+  ])(
+    "forwards the fixed-publisher distribution path and conditional headers: %s",
+    async (...path) => {
+      process.env.HOTKEY_API_ORIGIN = "http://127.0.0.1:8000";
+      const upstream = vi.fn().mockResolvedValue(
+        new Response(null, {
+          status: 304,
+          headers: { ETag: '"current"', "Cache-Control": "no-store" },
+        }),
+      );
+      vi.stubGlobal("fetch", upstream);
+      const response = await route.GET(
+        new Request(`http://web.test/${path.join("/")}?limit=40`, {
+          headers: {
+            "If-None-Match": '"current"',
+            "X-Forwarded-For": "attacker",
+          },
+        }),
+        { params: Promise.resolve({ path: ["__exports", ...path] }) },
+      );
+      expect(upstream.mock.calls[0][0].toString()).toBe(
+        `http://127.0.0.1:8000/${path.join("/")}?limit=40`,
+      );
+      expect(upstream.mock.calls[0][1].headers.get("if-none-match")).toBe(
+        '"current"',
+      );
+      expect(
+        upstream.mock.calls[0][1].headers.get("x-forwarded-for"),
+      ).toBeNull();
+      expect(response.status).toBe(304);
+      expect(response.headers.get("etag")).toBe('"current"');
+      expect(await response.text()).toBe("");
+    },
+  );
+
+  it.each([
+    ["public", "api", "operations"],
+    ["public", "api", "contents"],
+    ["public", "items", "private.jsonld"],
+    ["public", "feed", "..", "health"],
+  ])(
+    "rejects an unpublished or private public-prefixed path without HTTP: %s",
+    async (...path) => {
+      const upstream = vi.fn();
+      vi.stubGlobal("fetch", upstream);
+      const response = await route.GET(
+        new Request("http://web.test/public/private"),
+        { params: Promise.resolve({ path: ["__exports", ...path] }) },
+      );
+      expect(response.status).toBe(404);
+      expect(upstream).not.toHaveBeenCalled();
+    },
+  );
+
+  it("preserves the anonymous Redis window error and retry delay", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ code: "publication_rate_limited" }), {
+          status: 429,
+          headers: {
+            "Retry-After": "59",
+            "Content-Type": "application/json",
+            "Cache-Control": "no-store",
+          },
+        }),
+      ),
+    );
+    const response = await route.GET(
+      new Request("http://web.test/public/feed.xml"),
+      {
+        params: Promise.resolve({ path: ["__exports", "public", "feed.xml"] }),
+      },
+    );
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("59");
+    expect((await response.json()).code).toBe("publication_rate_limited");
+  });
+
   it("maps allowed public exports to root resources and preserves MCP headers", async () => {
     process.env.HOTKEY_API_ORIGIN = "http://127.0.0.1:8000";
     const upstream = vi.fn().mockResolvedValue(

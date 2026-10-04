@@ -36,12 +36,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiRequestError, type RequestOptions } from "@/request";
 
-type Kind = "report" | "edition" | "selected" | "codex_reset";
+type Kind = HotKeyAPI.NotificationSubjectKind;
 const kinds: Record<Kind, string> = {
   report: "主题报告",
   edition: "日报 / 周刊 / 月刊",
   selected: "精选内容",
   codex_reset: "Codex 额度公告",
+  alert: "突发告警",
 };
 function explain(error: unknown) {
   return error instanceof ApiRequestError

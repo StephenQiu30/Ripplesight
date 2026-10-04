@@ -23,12 +23,14 @@ import knowledge.models as _knowledge_models  # noqa: F401
 import leaderboard.models as _leaderboard_models  # noqa: F401
 import monitors.codex_models as _monitors_codex_models  # noqa: F401
 import monitors.models as _monitors_models  # noqa: F401
+import notifications.alert_models as _notifications_alert_models  # noqa: F401
 import notifications.models as _notifications_models  # noqa: F401
 import operations.models as _operations_models  # noqa: F401
 import operations.site_models as _operations_site_models  # noqa: F401
 import publication.media_mirror_models as _publication_media_mirror_models  # noqa: F401
 import publication.publication_models as _publication_publication_models  # noqa: F401
 import reports.edition_models as _reports_edition_models  # noqa: F401
+import reports.export_models as _reports_export_models  # noqa: F401
 import reports.models as _reports_models  # noqa: F401
 from db.base import Base as Base
 

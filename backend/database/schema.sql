@@ -101,6 +101,11 @@ CREATE TABLE monitor_topic_versions (
     match_all JSONB NOT NULL CHECK (jsonb_typeof(match_all) = 'array'),
     exclude JSONB NOT NULL CHECK (jsonb_typeof(exclude) = 'array'),
     source_keys JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(source_keys) = 'array'),
+    editorial_profile_ids JSONB NOT NULL DEFAULT '[]'::jsonb
+        CONSTRAINT monitor_topic_versions_editorial_profiles_check CHECK (
+            jsonb_typeof(editorial_profile_ids) = 'array'
+            AND jsonb_array_length(editorial_profile_ids) <= 32
+        ),
     collection_interval_seconds INTEGER NOT NULL DEFAULT 3600 CHECK (
         collection_interval_seconds BETWEEN 600 AND 86400
     ),
@@ -1721,6 +1726,9 @@ CREATE TABLE content_observations (
     danmaku_count BIGINT CHECK (danmaku_count IS NULL OR danmaku_count >= 0),
     CONSTRAINT content_observations_owner_content_operation_key
         UNIQUE (owner_id, content_id, source_operation_id),
+    CONSTRAINT content_observations_owner_id_key UNIQUE (owner_id, id),
+    CONSTRAINT content_observations_owner_identity_version_key
+        UNIQUE (owner_id, id, content_id, content_version_id),
     CONSTRAINT content_observations_owner_content_fkey
         FOREIGN KEY (owner_id, content_id)
         REFERENCES content_records (owner_id, id) ON DELETE CASCADE,
@@ -1747,6 +1755,57 @@ CREATE INDEX content_observations_latest_idx
         received_at,
         id
     );
+
+CREATE TABLE content_version_inputs (
+    owner_id UUID NOT NULL,
+    content_version_id UUID NOT NULL,
+    observation_id UUID NOT NULL,
+    PRIMARY KEY (owner_id, content_version_id, observation_id),
+    CONSTRAINT content_version_inputs_version_fkey FOREIGN KEY (owner_id, content_version_id)
+        REFERENCES content_versions (owner_id, id) ON DELETE CASCADE,
+    CONSTRAINT content_version_inputs_observation_fkey FOREIGN KEY (owner_id, observation_id)
+        REFERENCES content_observations (owner_id, id) ON DELETE RESTRICT
+);
+
+CREATE TABLE content_topic_matches (
+    id UUID PRIMARY KEY,
+    owner_id UUID NOT NULL,
+    topic_id UUID NOT NULL,
+    topic_rule_version INTEGER NOT NULL,
+    content_id UUID NOT NULL,
+    content_version_id UUID NOT NULL,
+    profile_id UUID NOT NULL,
+    profile_configuration_version INTEGER NOT NULL,
+    observation_id UUID NOT NULL,
+    job_id UUID NOT NULL,
+    connection_id UUID NOT NULL,
+    connection_version INTEGER NOT NULL,
+    policy_version INTEGER NOT NULL,
+    input_observation_ids JSONB NOT NULL,
+    matched_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT content_topic_matches_frozen_key UNIQUE
+        (owner_id, topic_id, topic_rule_version, content_version_id, profile_id, profile_configuration_version),
+    CONSTRAINT content_topic_matches_owner_topic_fkey FOREIGN KEY (owner_id, topic_id)
+        REFERENCES monitor_topics (owner_id, id) ON DELETE CASCADE,
+    CONSTRAINT content_topic_matches_topic_rule_fkey FOREIGN KEY (topic_id, topic_rule_version)
+        REFERENCES monitor_topic_versions (topic_id, version) ON DELETE CASCADE,
+    CONSTRAINT content_topic_matches_content_version_fkey FOREIGN KEY (owner_id, content_id, content_version_id)
+        REFERENCES content_versions (owner_id, content_id, id) ON DELETE CASCADE,
+    CONSTRAINT content_topic_matches_observation_fkey FOREIGN KEY (owner_id, observation_id, content_id, content_version_id)
+        REFERENCES content_observations (owner_id, id, content_id, content_version_id) ON DELETE CASCADE,
+    CONSTRAINT content_topic_matches_profile_version_fkey FOREIGN KEY (owner_id, profile_id, profile_configuration_version)
+        REFERENCES editorial_source_profile_versions (owner_id, profile_id, version),
+    CONSTRAINT content_topic_matches_job_fkey FOREIGN KEY (owner_id, job_id)
+        REFERENCES jobs (owner_id, id),
+    CONSTRAINT content_topic_matches_connection_fkey FOREIGN KEY (owner_id, connection_id, connection_version)
+        REFERENCES source_connection_versions (owner_id, connection_id, version),
+    CONSTRAINT content_topic_matches_versions_check CHECK
+        (topic_rule_version >= 1 AND profile_configuration_version >= 1 AND connection_version >= 1 AND policy_version >= 1),
+    CONSTRAINT content_topic_matches_inputs_check CHECK
+        (jsonb_typeof(input_observation_ids) = 'array' AND jsonb_array_length(input_observation_ids) BETWEEN 1 AND 32)
+);
+
+CREATE INDEX content_topic_matches_topic_idx ON content_topic_matches (owner_id, topic_id, matched_at);
 
 CREATE TABLE content_threads (
     owner_id UUID NOT NULL,
@@ -2634,6 +2693,7 @@ CREATE TABLE reports (
     data JSONB NOT NULL CHECK (jsonb_typeof(data) = 'object'),
     body_markdown TEXT NOT NULL CHECK (body_markdown <> ''),
     created_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT reports_owner_id_key UNIQUE (owner_id, id),
     CONSTRAINT reports_owner_topic_kind_window_version_key
         UNIQUE (owner_id, topic_id, kind, window_start, version),
     CONSTRAINT reports_owner_topic_fkey
@@ -2741,7 +2801,7 @@ CREATE TABLE notification_targets (
     CONSTRAINT notification_targets_secret_env_check CHECK (secret_env IS NULL OR secret_env ~ '^HOTKEY_[A-Z][A-Z0-9_]*$'),
     CONSTRAINT notification_targets_updated_at_check CHECK (updated_at >= created_at),
     CONSTRAINT notification_targets_revision_check CHECK (revision >= 1),
-    CONSTRAINT notification_targets_subscriptions_check CHECK (jsonb_typeof(subscriptions)='array' AND jsonb_array_length(subscriptions)<=4 AND subscriptions <@ '["report","edition","selected","codex_reset"]'::jsonb),
+    CONSTRAINT notification_targets_subscriptions_check CHECK (jsonb_typeof(subscriptions)='array' AND jsonb_array_length(subscriptions)<=5 AND subscriptions <@ '["report","edition","selected","codex_reset","alert"]'::jsonb),
     CONSTRAINT notification_targets_enabled_at_check CHECK (enabled_at IS NULL OR enabled_at >= created_at)
 );
 
@@ -2770,7 +2830,7 @@ CREATE TABLE notification_deliveries (
     CONSTRAINT notification_deliveries_owner_target_fkey FOREIGN KEY(owner_id, target_id) REFERENCES notification_targets (owner_id, id) ON DELETE CASCADE,
     CONSTRAINT notification_deliveries_report_version_target_key UNIQUE (report_id, report_version, target_id),
     CONSTRAINT notification_deliveries_subject_target_key UNIQUE (owner_id, target_id, subject_kind, dedupe_key),
-    CONSTRAINT notification_deliveries_subject_check CHECK (subject_kind IN ('report','edition','selected','codex_reset') AND ((subject_kind='report' AND report_id IS NOT NULL AND subject_id IS NULL) OR (subject_kind<>'report' AND report_id IS NULL AND subject_id IS NOT NULL))),
+    CONSTRAINT notification_deliveries_subject_check CHECK (subject_kind IN ('report','edition','selected','codex_reset','alert') AND ((subject_kind='report' AND report_id IS NOT NULL AND subject_id IS NULL) OR (subject_kind<>'report' AND report_id IS NULL AND subject_id IS NOT NULL))),
     CONSTRAINT notification_deliveries_snapshot_check CHECK (revision>=1 AND target_revision>=1 AND (input_fingerprint IS NULL OR octet_length(input_fingerprint)=32) AND (subject_kind='report' OR (input_fingerprint IS NOT NULL AND dedupe_key IS NOT NULL)) AND (dedupe_key IS NULL OR length(dedupe_key) BETWEEN 1 AND 256) AND jsonb_typeof(frozen_payload)='object' AND jsonb_typeof(provider_receipt)='object'),
     CONSTRAINT notification_deliveries_version_check CHECK (report_version >= 1),
     CONSTRAINT notification_deliveries_status_check CHECK (status IN ('pending', 'sending', 'succeeded', 'failed', 'unknown')),
@@ -3263,6 +3323,145 @@ CREATE TABLE operations_site_configurations (
             AND octet_length(feishu_qr_data) BETWEEN 1 AND 2097152
             AND octet_length(feishu_qr_sha256) = 32)
     )
+);
+
+CREATE TABLE report_exports (
+	report_id UUID NOT NULL,
+	report_version INTEGER NOT NULL,
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	operation_id UUID NOT NULL,
+	job_id UUID NOT NULL,
+	format VARCHAR(16) NOT NULL,
+	renderer_version VARCHAR(64) NOT NULL,
+	schema_version VARCHAR(32) NOT NULL,
+	input_manifest JSONB NOT NULL,
+	input_hash BYTEA NOT NULL,
+	request_hash BYTEA NOT NULL,
+	status VARCHAR(16) NOT NULL,
+	object_name VARCHAR(512),
+	object_sha256 BYTEA,
+	object_size BIGINT,
+	mime_type VARCHAR(128),
+	failure_code VARCHAR(64),
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT report_exports_owner_id_key UNIQUE (owner_id, id),
+	CONSTRAINT report_exports_operation_key UNIQUE (owner_id, operation_id),
+	CONSTRAINT report_exports_job_fkey FOREIGN KEY(owner_id, job_id) REFERENCES jobs (owner_id, id),
+	CONSTRAINT report_exports_format_check CHECK (format IN ('markdown','pdf','csv','json')),
+	CONSTRAINT report_exports_status_check CHECK (status IN ('pending','running','succeeded','failed','blocked','cancelled')),
+	CONSTRAINT report_exports_input_check CHECK (jsonb_typeof(input_manifest)='object' AND octet_length(input_hash)=32 AND octet_length(request_hash)=32),
+	CONSTRAINT report_exports_size_check CHECK (object_size IS NULL OR object_size BETWEEN 1 AND 5242880),
+	CONSTRAINT report_exports_hash_check CHECK (object_sha256 IS NULL OR octet_length(object_sha256)=32),
+	CONSTRAINT report_exports_artifact_check CHECK ((status='succeeded' AND object_name IS NOT NULL AND object_sha256 IS NOT NULL AND object_size IS NOT NULL AND mime_type IS NOT NULL) OR (status<>'succeeded' AND object_name IS NULL AND object_sha256 IS NULL AND object_size IS NULL AND mime_type IS NULL)),
+	CONSTRAINT report_exports_version_check CHECK (report_version>=1),
+	CONSTRAINT report_exports_report_fkey FOREIGN KEY(owner_id, report_id) REFERENCES reports (owner_id, id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX report_exports_result_key ON report_exports (owner_id, report_id, report_version, format, renderer_version) WHERE status <> 'cancelled';
+
+CREATE TABLE content_export_requests (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	operation_id UUID NOT NULL,
+	job_id UUID NOT NULL,
+	format VARCHAR(16) NOT NULL,
+	renderer_version VARCHAR(64) NOT NULL,
+	schema_version VARCHAR(32) NOT NULL,
+	input_manifest JSONB NOT NULL,
+	input_hash BYTEA NOT NULL,
+	request_hash BYTEA NOT NULL,
+	status VARCHAR(16) NOT NULL,
+	object_name VARCHAR(512),
+	object_sha256 BYTEA,
+	object_size BIGINT,
+	mime_type VARCHAR(128),
+	failure_code VARCHAR(64),
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT content_export_requests_owner_id_key UNIQUE (owner_id, id),
+	CONSTRAINT content_export_requests_operation_key UNIQUE (owner_id, operation_id),
+	CONSTRAINT content_export_requests_job_fkey FOREIGN KEY(owner_id, job_id) REFERENCES jobs (owner_id, id),
+	CONSTRAINT content_export_requests_format_check CHECK (format IN ('markdown','pdf','csv','json')),
+	CONSTRAINT content_export_requests_status_check CHECK (status IN ('pending','running','succeeded','failed','blocked','cancelled')),
+	CONSTRAINT content_export_requests_input_check CHECK (jsonb_typeof(input_manifest)='object' AND octet_length(input_hash)=32 AND octet_length(request_hash)=32),
+	CONSTRAINT content_export_requests_size_check CHECK (object_size IS NULL OR object_size BETWEEN 1 AND 5242880),
+	CONSTRAINT content_export_requests_hash_check CHECK (object_sha256 IS NULL OR octet_length(object_sha256)=32),
+	CONSTRAINT content_export_requests_artifact_check CHECK ((status='succeeded' AND object_name IS NOT NULL AND object_sha256 IS NOT NULL AND object_size IS NOT NULL AND mime_type IS NOT NULL) OR (status<>'succeeded' AND object_name IS NULL AND object_sha256 IS NULL AND object_size IS NULL AND mime_type IS NULL))
+);
+
+CREATE UNIQUE INDEX content_exports_result_key ON content_export_requests (owner_id, input_hash, format, renderer_version, schema_version) WHERE status <> 'cancelled';
+
+-- Notifications own immutable alert rules and five-minute evaluation ledger.
+CREATE TABLE alert_rules (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	name VARCHAR(80) NOT NULL,
+	revision INTEGER NOT NULL,
+	enabled BOOLEAN DEFAULT false NOT NULL,
+	last_trigger_at TIMESTAMP WITH TIME ZONE,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT alert_rules_owner_id_key UNIQUE (owner_id, id),
+	CONSTRAINT alert_rules_revision_check CHECK (revision>=1),
+	CONSTRAINT alert_rules_time_check CHECK (updated_at>=created_at)
+);
+
+CREATE TABLE alert_rule_versions (
+	rule_id UUID NOT NULL,
+	version INTEGER NOT NULL,
+	owner_id UUID NOT NULL,
+	operation_id UUID NOT NULL,
+	request_hash BYTEA NOT NULL,
+	name VARCHAR(80) NOT NULL,
+	topic_id UUID NOT NULL,
+	topic_rule_version INTEGER NOT NULL,
+	event_id UUID,
+	metric VARCHAR(32) NOT NULL,
+	threshold FLOAT NOT NULL,
+	cooldown_seconds INTEGER NOT NULL,
+	target_id UUID NOT NULL,
+	target_revision INTEGER NOT NULL,
+	enabled BOOLEAN NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (rule_id, version),
+	CONSTRAINT alert_rule_versions_owner_rule_fkey FOREIGN KEY(owner_id, rule_id) REFERENCES alert_rules (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT alert_rule_versions_owner_topic_fkey FOREIGN KEY(owner_id, topic_id) REFERENCES monitor_topics (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT alert_rule_versions_topic_version_fkey FOREIGN KEY(topic_id, topic_rule_version) REFERENCES monitor_topic_versions (topic_id, version) ON DELETE CASCADE,
+	CONSTRAINT alert_rule_versions_owner_target_fkey FOREIGN KEY(owner_id, target_id) REFERENCES notification_targets (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT alert_rule_versions_operation_key UNIQUE (owner_id, operation_id),
+	CONSTRAINT alert_rule_versions_owner_version_key UNIQUE (owner_id, rule_id, version),
+	CONSTRAINT alert_rule_versions_revision_check CHECK (version>=1 AND topic_rule_version>=1 AND target_revision>=1),
+	CONSTRAINT alert_rule_versions_metric_check CHECK (metric IN ('negative_count','heat_increment') AND ((metric='negative_count' AND event_id IS NULL AND threshold>=1 AND threshold=trunc(threshold::numeric)) OR (metric='heat_increment' AND event_id IS NOT NULL AND threshold>0)) AND threshold<=1000000000),
+	CONSTRAINT alert_rule_versions_config_check CHECK (cooldown_seconds BETWEEN 300 AND 86400 AND octet_length(request_hash)=32)
+);
+
+CREATE TABLE alert_evaluations (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	rule_id UUID NOT NULL,
+	rule_version INTEGER NOT NULL,
+	window_start TIMESTAMP WITH TIME ZONE NOT NULL,
+	window_end TIMESTAMP WITH TIME ZONE NOT NULL,
+	status VARCHAR(32) NOT NULL,
+	reason VARCHAR(64),
+	value FLOAT,
+	input_manifest JSONB NOT NULL,
+	input_hash BYTEA NOT NULL,
+	cooldown_until TIMESTAMP WITH TIME ZONE,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT alert_evaluations_owner_id_key UNIQUE (owner_id, id),
+	CONSTRAINT alert_evaluations_window_key UNIQUE (owner_id, rule_id, rule_version, window_end),
+	CONSTRAINT alert_evaluations_rule_version_fkey FOREIGN KEY(owner_id, rule_id, rule_version) REFERENCES alert_rule_versions (owner_id, rule_id, version) ON DELETE CASCADE,
+	CONSTRAINT alert_evaluations_status_check CHECK (status IN ('blocked','unknown','below_threshold','cooldown','triggered','withdrawn')),
+	CONSTRAINT alert_evaluations_window_check CHECK (window_end=window_start+interval '1 hour' AND mod(date_part('epoch',window_end)::bigint,300)=0),
+	CONSTRAINT alert_evaluations_input_check CHECK (jsonb_typeof(input_manifest)='object' AND octet_length(input_hash)=32),
+	CONSTRAINT alert_evaluations_cooldown_check CHECK (cooldown_until IS NULL OR cooldown_until>window_end)
 );
 
 -- Cyclic current-version foreign keys (part of the initial schema).

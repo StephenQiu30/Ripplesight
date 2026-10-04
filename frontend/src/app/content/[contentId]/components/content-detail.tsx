@@ -19,6 +19,7 @@ import {
   contentOriginLabel,
   contentScopeLabel,
   contentScopeNotice,
+  contentSourceLabel,
   formatMetric,
   formatTime,
   hasUnknownMetrics,
@@ -41,6 +42,7 @@ import { PageState } from "@/components/system/page-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/request";
+import { PrivateExport } from "@/components/reports/private-export";
 
 type ContentDetailProps = { contentId: string };
 
@@ -84,7 +86,7 @@ function ContentVersionSection({
     );
   }
 
-  const notice = contentScopeNotice(version.text_scope);
+  const notice = contentScopeNotice(version.text_scope, version.text_origin);
   return (
     <section aria-labelledby="content-heading" className="mt-10">
       <h2 id="content-heading" className="text-xl font-medium">
@@ -93,7 +95,7 @@ function ContentVersionSection({
       <div className="mt-6">
         <div className="flex flex-wrap gap-2">
           <Badge variant="secondary">
-            {contentScopeLabel(version.text_scope)}
+            {contentScopeLabel(version.text_scope, version.text_origin)}
           </Badge>
           <Badge variant="outline">
             {contentOriginLabel(version.text_origin)}
@@ -238,7 +240,10 @@ function VersionHistory({
           <article key={entry.content_version.id} className="py-4">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary">
-                {contentScopeLabel(entry.content_version.text_scope)}
+                {contentScopeLabel(
+                  entry.content_version.text_scope,
+                  entry.content_version.text_origin,
+                )}
               </Badge>
               <Badge variant="outline">
                 {contentOriginLabel(entry.content_version.text_origin)}
@@ -418,7 +423,9 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
         {title}
       </h1>
       <div className="text-muted-foreground mt-4 flex flex-wrap items-center gap-3 text-sm">
-        <span>{content.source_key}</span>
+        <span>
+          {contentSourceLabel(content.source_key, content.source_name)}
+        </span>
         <span>
           {formatTime(observation.published_at ?? observation.observed_at)}
         </span>
@@ -436,6 +443,20 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
           <span>原文链接未知</span>
         )}
       </div>
+      <section className="mt-6 space-y-3" aria-label="私人内容导出">
+        <h2 className="text-lg font-medium">导出这版材料</h2>
+        <p className="text-muted-foreground text-sm">
+          保留当前版本、来源与实际文本范围；下载需有效的文件导出许可。
+        </p>
+        <PrivateExport
+          target={{
+            kind: "content",
+            contentVersionIds: observation.content_version
+              ? [observation.content_version.id]
+              : [],
+          }}
+        />
+      </section>
       <Tabs defaultValue="body" className="mt-10 min-w-0">
         <TabsList className="max-w-full">
           <TabsTrigger value="body">正文</TabsTrigger>

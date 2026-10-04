@@ -9,6 +9,7 @@ import { ArrowRightIcon, RotateCcwIcon } from "lucide-react";
 
 import { createMonitorTopic } from "@/api/jiankongzhuti";
 import { listSourceCapabilities } from "@/api/laiyuannengli";
+import { EditorialTopicSources } from "@/components/monitors/editorial-topic-sources";
 import {
   KeywordGroupField,
   parseKeywordLines,
@@ -94,6 +95,7 @@ export function TopicForm() {
   const [matchAll, setMatchAll] = useState("");
   const [exclude, setExclude] = useState("");
   const [sourceKeys, setSourceKeys] = useState<string[]>([]);
+  const [editorialProfileIds, setEditorialProfileIds] = useState<string[]>([]);
   const [collectionIntervalSeconds, setCollectionIntervalSeconds] =
     useState(3600);
   const [reportTime, setReportTime] = useState("08:00:00");
@@ -193,6 +195,7 @@ export function TopicForm() {
         match_all: all,
         exclude: parseKeywordLines(exclude),
         source_keys: sourceKeys,
+        editorial_profile_ids: editorialProfileIds,
         collection_interval_seconds: collectionIntervalSeconds,
         report_time: reportTime,
         weekly_report_enabled: weeklyReportEnabled,
@@ -311,6 +314,11 @@ export function TopicForm() {
                 </Button>
               </Alert>
             )}
+            <EditorialTopicSources
+              selectedProfileIds={editorialProfileIds}
+              onChange={setEditorialProfileIds}
+              disabled={isSubmitting}
+            />
             <TopicAdvancedFields
               matchAll={matchAll}
               onMatchAllChange={setMatchAll}

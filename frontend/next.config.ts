@@ -13,6 +13,18 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   async rewrites() {
     const exports = [
+      "/public/feed.xml",
+      "/public/feed/full.xml",
+      "/public/feed/all.xml",
+      "/public/feed/:kind.xml",
+      "/public/feed/category/:category.xml",
+      "/public/feed/full/category/:category.xml",
+      "/public/items/:id.md",
+      "/public/selected.md",
+      "/public/reports/:kind/:key.md",
+      "/public/agent.md",
+      "/public/api/:path*",
+      "/public/mcp",
       "/feed.xml",
       "/feed/full.xml",
       "/feed/all.xml",

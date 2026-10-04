@@ -142,6 +142,19 @@ export async function runMonitorTopic(
   });
 }
 
+/** 列出当前账户可选的主题订阅流 只读本账户编辑来源及当前准入, 返回名称、文本范围、更新节奏与选择限制。不返回运营配置或凭据, 不调用采集服务, 不创建来源、任务或主题关联。 GET /api/topics/editorial-sources */
+export async function listMonitorEditorialSources(
+  options?: import("@/request").RequestOptions,
+) {
+  return request<HotKeyAPI.EditorialTopicSourceView[]>(
+    "/api/topics/editorial-sources",
+    {
+      method: "GET",
+      ...(options || {}),
+    },
+  );
+}
+
 /** 预览监控主题规则 只在本地规范化规则并检查标题样本; 不保存主题、不创建任务、不调用来源。 POST /api/topics/preview */
 export async function previewMonitorTopic(
   body: HotKeyAPI.MonitorTopicPreviewInput,

@@ -37,7 +37,7 @@ from reports.notification_reading import (
 )
 
 _NAMESPACE = UUID("0401bf9f-8e09-4b35-a975-14f6c16a19ed")
-_SECTIONS: tuple[NotificationSubjectKind, ...] = ("report", "edition", "selected")
+_SECTIONS: tuple[NotificationSubjectKind, ...] = ("report", "edition", "selected", "alert")
 
 
 def enqueue_notification_scans_in_transaction(
@@ -145,12 +145,15 @@ class NotificationScanExecutor:
                     or (target.enabled_at or target.created_at) != enabled_at
                 ):
                     raise self._failure("notification_target_stale")
+                # Existing targets keep their three-section checkpoint contract.
+                # The frozen target revision admits the alert section explicitly.
+                sections = _SECTIONS if "alert" in target.subscriptions else _SECTIONS[:3]
                 section = int(str(current.checkpoint.get("notification.section", scope["section"])))
                 cursor_text = current.checkpoint.get("notification.cursor", scope.get("cursor"))
                 cursor = UUID(str(cursor_text)) if cursor_text else None
-                if section >= len(_SECTIONS):
+                if section >= len(sections):
                     return JobCompletion(status=JobStatus.SUCCEEDED)
-                kind = _SECTIONS[section]
+                kind = sections[section]
                 next_cursor = None
                 if kind in target.subscriptions:
                     next_cursor = self._page(
@@ -167,7 +170,7 @@ class NotificationScanExecutor:
                         "notification.cursor": str(next_cursor) if next_cursor else None,
                     },
                 )
-                if next_section >= len(_SECTIONS):
+                if next_section >= len(sections):
                     return JobCompletion(status=JobStatus.SUCCEEDED)
         # Each continuation advances a real typed page. It cannot loop on an empty cursor.
         with self._sessions() as session, session.begin():
@@ -205,6 +208,18 @@ class NotificationScanExecutor:
         scan_at: datetime,
     ) -> UUID | None:
         now = self._clock()
+        if kind == "alert":
+            from notifications.alert_services import evaluate_alert_rules_in_transaction
+
+            return evaluate_alert_rules_in_transaction(
+                session,
+                owner_id=owner,
+                target_id=target.id,
+                target_revision=target.revision,
+                scan_at=scan_at,
+                now=now,
+                after=cursor,
+            )
         references: list[tuple[UUID, int]] = []
         if kind == "report":
             page = list_first_final_notification_reports_in_transaction(

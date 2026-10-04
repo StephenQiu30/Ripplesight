@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiRequestError } from "@/request";
+import { PrivateExport } from "@/components/reports/private-export";
 import { ReportMarkdown } from "./report-markdown";
 import { safeHttpUrl } from "./report-links";
 
@@ -143,6 +144,19 @@ function ReportDetailContent({ reportId }: { reportId: string }) {
             {reportTime(report.window_start)} 至 {reportTime(report.window_end)}
           </p>
           <ReportMarkdown report={report} />
+          <section className="mt-8 space-y-3" aria-label="私人报告导出">
+            <h2 className="text-lg font-medium">导出这版报告</h2>
+            <p className="text-muted-foreground text-sm">
+              文件保留固定版本与引用；生成和下载均需当前有效的导出许可。
+            </p>
+            <PrivateExport
+              target={{
+                kind: "report",
+                reportId: report.id,
+                reportVersion: report.version,
+              }}
+            />
+          </section>
           <Collapsible className="mt-12">
             <CollapsibleTrigger asChild>
               <Button variant="ghost">

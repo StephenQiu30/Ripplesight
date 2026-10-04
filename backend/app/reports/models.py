@@ -22,6 +22,7 @@ from db.base import Base
 class Report(Base):
     __tablename__ = "reports"
     __table_args__ = (
+        UniqueConstraint("owner_id", "id", name="reports_owner_id_key"),
         ForeignKeyConstraint(
             ["owner_id", "topic_id"],
             ["monitor_topics.owner_id", "monitor_topics.id"],

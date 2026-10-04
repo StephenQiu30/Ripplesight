@@ -188,6 +188,11 @@ class MonitorTopicVersion(Base):
             name="monitor_topic_versions_source_keys_check",
         ),
         CheckConstraint(
+            "jsonb_typeof(editorial_profile_ids) = 'array' AND "
+            "jsonb_array_length(editorial_profile_ids) <= 32",
+            name="monitor_topic_versions_editorial_profiles_check",
+        ),
+        CheckConstraint(
             "collection_interval_seconds BETWEEN 600 AND 86400",
             name="monitor_topic_versions_collection_interval_check",
         ),
@@ -204,6 +209,9 @@ class MonitorTopicVersion(Base):
     match_all: Mapped[list[str]] = mapped_column(JSONB)
     exclude: Mapped[list[str]] = mapped_column(JSONB)
     source_keys: Mapped[list[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    editorial_profile_ids: Mapped[list[str]] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb")
+    )
     collection_interval_seconds: Mapped[int] = mapped_column(Integer, server_default=text("3600"))
     created_at: Mapped[datetime]
 

@@ -573,7 +573,7 @@ def test_terminal_interrupted_preview_is_read_as_unknown_and_manual_review_settl
         )
 
 
-def test_official_x_preview_reads_one_page_meters_original_cost_and_preserves_all_source_watermarks(
+def test_official_x_preview_zero_supplier_fee_gate_preserves_all_source_watermarks(
     engine,
 ):
     from datetime import timedelta
@@ -646,8 +646,11 @@ def test_official_x_preview_reads_one_page_meters_original_cost_and_preserves_al
             .read(owner_id=owner, job_id=message.job_id)
             .preview
         )
-        assert result.count == 4 and result.requests == 1 and len(calls) == 1
-        assert result.status == "partial" and result.reason == "x_gap_pending"
+        # Even complete credential/quote/permission fixtures cannot bypass the
+        # production preview's zero supplier fee gate. The transport must stay unused.
+        assert result.count == 0 and result.requests == 0 and calls == []
+        assert result.status == "blocked" and result.reason == "free_only_paid_source"
+        assert result.items == ()
         with session.begin():
             assert (
                 session.scalar(
@@ -659,12 +662,12 @@ def test_official_x_preview_reads_one_page_meters_original_cost_and_preserves_al
             assert (
                 session.scalar(
                     text(
-                        "SELECT sum(actual_units) FROM resource_budget_reservations "
+                        "SELECT COALESCE(sum(actual_units),0) FROM resource_budget_reservations "
                         "WHERE operation_id=:op AND metric='x_api_usd_micros'"
                     ),
                     {"op": message.operation_id},
                 )
-                == 80
+                == 0
             )
             assert session.scalar(text("SELECT count(*) FROM content_records")) == 0
             assert session.scalar(text("SELECT count(*) FROM editorial_source_runs")) == 0
@@ -676,5 +679,6 @@ def test_official_x_preview_reads_one_page_meters_original_cost_and_preserves_al
                     ),
                     {"op": message.operation_id},
                 )
-                == 1
+                == 0
             )
+            assert session.scalar(select(Job).where(Job.id == message.job_id)).requests_sent == 0

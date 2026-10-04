@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from content.event_reading import load_event_member_content_in_transaction
 from content.models import ContentObservation, ContentRecord, ContentVersion
 from content.schemas import EditorialDiscoveryView, EventContentReadReference, EventContentReadView
+from content.version_inputs import version_inputs_readable_in_transaction
 from core.errors import ApplicationError
 from evidence.schemas import DataClass
 from evidence.services import (
@@ -196,6 +197,13 @@ def editorial_first_received_at_in_transaction(
 def frozen_editorial_content_in_transaction(
     session: Session, *, owner_id: UUID, reference: EventContentReadReference, now: datetime
 ) -> EventContentReadView | None:
+    if not version_inputs_readable_in_transaction(
+        session,
+        owner_id=owner_id,
+        content_version_ids=(reference.content_version_id,),
+        now=now,
+    ):
+        return None
     item = load_event_member_content_in_transaction(
         session, owner_id=owner_id, references=(reference,), now=now
     ).get(reference)
@@ -281,6 +289,13 @@ def require_analysis_content_permissions_in_transaction(
     """Check frozen post/comment text without adding an editorial-only visibility contract."""
     if not session.in_transaction() or not 1 <= len(content_version_ids) <= 2000:
         raise ValueError("analysis permission checks require bounded caller transaction")
+    if not version_inputs_readable_in_transaction(
+        session,
+        owner_id=owner_id,
+        content_version_ids=content_version_ids,
+        now=now,
+    ):
+        raise ApplicationError("editorial_material_unavailable")
     rows = session.execute(
         select(ContentVersion.id, ContentVersion.content_id).where(
             ContentVersion.owner_id == owner_id,

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import { getIdentitySession } from "@/api/identity";
 import { isPublicPagePath, safeReturnTo } from "@/components/auth/access";
+import { isPublicDistributionPath } from "@/components/auth/public-distribution-path";
 import { ApiRequestError } from "@/request";
 
 function createContentSecurityPolicy(nonce: string): string {
@@ -75,8 +76,14 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   requestHeaders.set("Content-Security-Policy", contentSecurityPolicy);
 
   const publicPage = isPublicPagePath(request.nextUrl.pathname);
-  const sessionCookie = request.cookies.get("hotkey_session")?.value;
-  const csrfCookie = request.cookies.get("hotkey_csrf")?.value;
+  const publicDistribution = isPublicDistributionPath(request.nextUrl.pathname);
+  // Publisher protocols have a fixed server scope and never depend on a login session.
+  const sessionCookie = publicDistribution
+    ? undefined
+    : request.cookies.get("hotkey_session")?.value;
+  const csrfCookie = publicDistribution
+    ? undefined
+    : request.cookies.get("hotkey_csrf")?.value;
   let authenticated = false;
   let hasPassword = false;
   let invalidSession = !sessionCookie && !!csrfCookie;

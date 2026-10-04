@@ -138,6 +138,12 @@ def prepared(request, monkeypatch):
         ai_enabled=False,
         media_mirror_allow_external_requests=False,
     )
+    # This fixture runs on the host; the shared Compose endpoint uses its
+    # container-only host alias. Keep the configured local port and credentials.
+    if private.minio_endpoint and private.minio_endpoint.startswith("host.docker.internal:"):
+        private.minio_endpoint = private.minio_endpoint.replace(
+            "host.docker.internal:", "127.0.0.1:", 1
+        )
     with TestClient(
         create_app(
             Settings(

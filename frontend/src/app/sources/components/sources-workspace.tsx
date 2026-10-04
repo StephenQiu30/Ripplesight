@@ -3,7 +3,9 @@
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
 
+import { PublicPlatformCatalog } from "./public-platform-catalog";
 import { SourceCoveragePanel } from "./source-coverage-panel";
 import { SourceSettings } from "./source-settings";
 
@@ -34,7 +36,9 @@ export function SourcesWorkspace() {
         <TabsTrigger value="settings">连接设置</TabsTrigger>
         <TabsTrigger value="coverage">采集覆盖</TabsTrigger>
       </TabsList>
-      <TabsContent value="settings">
+      <TabsContent value="settings" className="flex flex-col gap-10">
+        <PublicPlatformCatalog />
+        <Separator />
         <SourceSettings />
       </TabsContent>
       <TabsContent value="coverage">

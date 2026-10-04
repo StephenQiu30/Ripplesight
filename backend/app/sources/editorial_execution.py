@@ -11,10 +11,13 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from connections.editorial_services import EditorialSourceService, Guard, PreparedEditorialRun, Sink
 from core.errors import ApplicationError
+from sources.contracts import SourceStopReason, WebPageResult
+from sources.editorial_body import LocalEditorialBodyFetcher
 from sources.editorial_registry import EditorialCollector, EditorialSourceRegistry
 from sources.editorial_schemas import EditorialRunResult
 
 type CollectorFactory = Callable[[PreparedEditorialRun], EditorialCollector]
+type BodyFetcherFactory = Callable[[PreparedEditorialRun], LocalEditorialBodyFetcher]
 
 
 class EditorialSourceExecutor:
@@ -23,6 +26,7 @@ class EditorialSourceExecutor:
         session_factory: sessionmaker[Session],
         *,
         collector_factory: CollectorFactory | None = None,
+        body_fetcher_factory: BodyFetcherFactory | None = None,
         sink: Sink | None = None,
         execution_guard: Guard | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
@@ -34,6 +38,7 @@ class EditorialSourceExecutor:
             execution_guard,
         )
         self._clock = clock
+        self._body_factory = body_fetcher_factory
 
     def execute(
         self,
@@ -82,12 +87,52 @@ class EditorialSourceExecutor:
                         )
                         if result.status != "running":
                             return result
-                    return service.apply_page(
+                    result = service.apply_page(
                         owner_id=owner_id,
                         run_id=prepared.result.run_id,
                         guard=self._guard,
                         sink=self._sink,
                     )
+                    if result.status != "running":
+                        return result
+                    configuration = prepared.profile.configuration.body_extraction
+                    if configuration is None or not configuration.enabled:
+                        return result
+                    fetcher = self._body_factory(prepared) if self._body_factory else None
+                    while True:
+                        checkpoint = service.body_checkpoint(
+                            owner_id=owner_id, run_id=prepared.result.run_id, guard=self._guard
+                        )
+                        if checkpoint is None:
+                            return result
+                        if (checkpoint.request_pending) or checkpoint.next_index >= len(
+                            checkpoint.targets
+                        ):
+                            return service.finish_body_phase(
+                                owner_id=owner_id, run_id=prepared.result.run_id, guard=self._guard
+                            )
+                        target = service.begin_body_request(
+                            owner_id=owner_id, run_id=prepared.result.run_id, guard=self._guard
+                        )
+                        response = (
+                            fetcher.fetch(target, configuration)
+                            if fetcher
+                            else WebPageResult(
+                                document=None,
+                                stop_reason=SourceStopReason.ACCESS_DENIED,
+                                target_status_code=None,
+                                collector_call_count=0,
+                                target_request_count=None,
+                            )
+                        )
+                        # Atomically store the original version/ALL inputs and its result reference.
+                        # A lost uncommitted response remains unknown, never a second body cache.
+                        service.apply_body_response(
+                            owner_id=owner_id,
+                            run_id=prepared.result.run_id,
+                            response=response,
+                            guard=self._guard,
+                        )
             finally:
                 lock_session.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": key})
                 lock_session.commit()
