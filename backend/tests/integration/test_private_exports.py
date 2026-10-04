@@ -3,6 +3,7 @@
 import csv
 import io
 import json
+import os
 from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -49,7 +50,29 @@ def editorial_client() -> Iterator[TestClient]:
 
 @pytest.fixture
 def storage():
-    settings = Settings(_env_file=Path(__file__).resolve().parents[3] / ".env")
+    test_minio = {
+        name: os.getenv(f"HOTKEY_TEST_MINIO_{name}")
+        for name in ("ENDPOINT", "ACCESS_KEY", "SECRET_KEY", "BUCKET", "SECURE")
+    }
+    if any(value is not None for value in test_minio.values()):
+        assert all(test_minio.values()), (
+            "test MinIO namespace must be complete, without .env mixing"
+        )
+        assert test_minio["SECURE"] in {"true", "false"}, "test MinIO SECURE must be explicit"
+        database_url = os.getenv("HOTKEY_TEST_DATABASE_URL")
+        assert database_url is not None, "an isolated PostgreSQL test database is required"
+        settings = Settings(
+            _env_file=None,
+            environment="test",
+            database_url=database_url,
+            minio_endpoint=test_minio["ENDPOINT"],
+            minio_access_key=test_minio["ACCESS_KEY"],
+            minio_secret_key=test_minio["SECRET_KEY"],
+            minio_bucket=test_minio["BUCKET"],
+            minio_secure=test_minio["SECURE"] == "true",
+        )
+    else:
+        settings = Settings(_env_file=Path(__file__).resolve().parents[3] / ".env")
     if settings.minio_endpoint and settings.minio_endpoint.startswith("host.docker.internal:"):
         settings.minio_endpoint = settings.minio_endpoint.replace(
             "host.docker.internal:", "127.0.0.1:", 1
@@ -132,8 +155,8 @@ def execution(sessions, view, now):
     "kind,format",
     [("report", "markdown"), ("report", "pdf"), ("content", "csv"), ("content", "json")],
 )
-def test_actual_four_artifacts_original_jobs_hashes_permissions_and_minio(
-    editorial_client, storage, kind, format, tmp_path
+def test_actual_artifacts_or_pdf_unavailable_original_jobs_hashes_permissions_and_minio(
+    editorial_client, storage, kind, format, tmp_path, record_property
 ):
     store, _delegate, names = storage
     editorial_client.app.state.media_storage = store
@@ -158,7 +181,25 @@ def test_actual_four_artifacts_original_jobs_hashes_permissions_and_minio(
             assert service.accept_content(owner_id=owner, command=command) == view
     message, lease = execution(sessions, view, now)
     executor = PrivateExportExecutor(sessions, store, clock=lambda: now)
-    completion = executor.execute(message, lease)
+    try:
+        completion = executor.execute(message, lease)
+    except JobExecutionFailure as error:
+        if format != "pdf" or error.error_code != "export_renderer_unavailable":
+            raise
+        record_property("pdf_result", "renderer_unavailable_no_artifact")
+        assert not names and not list(tmp_path.iterdir())
+        with sessions() as session:
+            service = PrivateExportService(session, store, clock=lambda: now)
+            failed = service.get(owner_id=owner, export_id=view.id, kind=kind)
+            assert (
+                failed.status == "failed" and failed.failure_code == "export_renderer_unavailable"
+            )
+            assert failed.artifact_sha256 is None and failed.artifact_size is None
+            with pytest.raises(ApplicationError, match="export_not_ready"):
+                service.download(owner_id=owner, export_id=view.id, kind=kind)
+        return
+    if format == "pdf":
+        record_property("pdf_result", "actual_local_locked_renderer_file")
     assert completion is not None
     assert executor.execute(message, lease) == completion
     assert len(names) == 1
@@ -287,6 +328,36 @@ def test_purpose_not_read_and_pre_generation_withdrawal_no_artifact(editorial_cl
             owner_id=owner, export_id=view.id, kind="content"
         )
         assert result.status == "blocked" and result.artifact_size is None
+
+
+def test_missing_locked_pdf_renderer_fails_original_job_without_minio_artifact(
+    editorial_client, storage, monkeypatch
+):
+    import reports.export_rendering as rendering
+
+    store, _, names = storage
+    owner, report, _, now = seed(editorial_client)
+    sessions = editorial_client.app.state.session_factory
+    monkeypatch.setattr(rendering, "_FONT_PATHS", ())
+    with sessions() as session:
+        view = PrivateExportService(session, store, clock=lambda: now).accept_report(
+            owner_id=owner,
+            report_id=report.id,
+            command=ReportExportInput(
+                operation_id=uuid4(), report_version=report.version, format="pdf"
+            ),
+        )
+    message, lease = execution(sessions, view, now)
+    with pytest.raises(JobExecutionFailure) as unavailable:
+        PrivateExportExecutor(sessions, store, clock=lambda: now).execute(message, lease)
+    assert unavailable.value.error_code == "export_renderer_unavailable" and not names
+    with sessions() as session:
+        service = PrivateExportService(session, store, clock=lambda: now)
+        failed = service.get(owner_id=owner, export_id=view.id, kind="report")
+        assert failed.status == "failed" and failed.failure_code == "export_renderer_unavailable"
+        assert failed.artifact_sha256 is None and failed.artifact_size is None
+        with pytest.raises(ApplicationError, match="export_not_ready"):
+            service.download(owner_id=owner, export_id=view.id, kind="report")
 
 
 def test_failure_bounds_original_unchanged_stale_lease_and_csrf(editorial_client, storage):
