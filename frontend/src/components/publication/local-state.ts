@@ -10,7 +10,7 @@ export const READ_LIMIT = 5000;
 export const IMPORT_MAX_CHARS = 2_000_000;
 const UUID_PATTERN =
   /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-type Theme = "light" | "dark" | "auto";
+export type Theme = "light" | "dark" | "auto";
 export type LocalBundle = {
   version: 1;
   starred: { id: string; savedAt: string }[];

@@ -8,7 +8,6 @@ import {
   NavigationMenuItem,
   NavigationMenuLink,
 } from "@/components/ui/navigation-menu";
-import { LocalReadingPreferences } from "@/components/publication/local-reading";
 
 const entries = [
   ["/discover", "资讯"],
@@ -41,9 +40,6 @@ export function PublicationNavigation() {
             </NavigationMenuLink>
           </NavigationMenuItem>
         ))}
-        <NavigationMenuItem>
-          <LocalReadingPreferences />
-        </NavigationMenuItem>
       </NavigationMenuList>
     </NavigationMenu>
   );
