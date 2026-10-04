@@ -13,15 +13,6 @@ import {
   ItemGroup,
 } from "@/components/ui/item";
 import { Input } from "@/components/ui/input";
-import {
-  SelectLabel,
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-} from "@/components/ui/select";
 import { FieldLabel, Field } from "@/components/ui/field";
 
 import Link from "next/link";
@@ -45,107 +36,9 @@ import {
   exportLocalBundle,
   importLocalBundle,
   clearLocalReading,
-  themePreference,
-  saveTheme,
-  applyTheme,
   localReadingIssue,
 } from "./local-state";
 export { savedIds } from "./local-state";
-
-export function LocalThemeInitializer() {
-  useEffect(() => {
-    const update = () => {
-      try {
-        applyTheme(themePreference(localStorage));
-      } catch {
-        applyTheme("auto");
-      }
-    };
-    const frame = requestAnimationFrame(update);
-    window.addEventListener("storage", update);
-    window.addEventListener(LOCAL_CHANGE, update);
-    const media = matchMedia("(prefers-color-scheme: dark)");
-    media.addEventListener("change", update);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("storage", update);
-      window.removeEventListener(LOCAL_CHANGE, update);
-      media.removeEventListener("change", update);
-    };
-  }, []);
-  return null;
-}
-
-export function LocalReadingPreferences() {
-  const fieldId = useId();
-
-  const [theme, setTheme] = useState<"light" | "dark" | "auto">("auto");
-  useEffect(() => {
-    const update = () => {
-      try {
-        const value = themePreference(localStorage);
-        applyTheme(value);
-        setTheme(value);
-      } catch {
-        /* Optional state. */
-      }
-    };
-    const frame = requestAnimationFrame(update);
-    window.addEventListener("storage", update);
-    window.addEventListener(LOCAL_CHANGE, update);
-    const media = matchMedia("(prefers-color-scheme: dark)");
-    media.addEventListener("change", update);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("storage", update);
-      window.removeEventListener(LOCAL_CHANGE, update);
-      media.removeEventListener("change", update);
-    };
-  }, []);
-  return (
-    <Field orientation="horizontal" className="w-auto">
-      <FieldLabel htmlFor={`${fieldId}-local-reading-field-1`}>
-        阅读主题{" "}
-      </FieldLabel>
-      <Select
-        value={theme}
-        onValueChange={(selectedValue) => {
-          const value = selectedValue as "light" | "dark" | "auto";
-          try {
-            saveTheme(value);
-            setTheme(value);
-          } catch {
-            applyTheme(value);
-            setTheme(value);
-            toast.error("阅读主题已应用，但本机存储不可用，未保存偏好。");
-          }
-        }}
-      >
-        <SelectTrigger
-          aria-label="阅读主题"
-          id={`${fieldId}-local-reading-field-1`}
-          className="w-36 min-w-0"
-        >
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent position="popper">
-          <SelectGroup>
-            <SelectLabel className="sr-only">阅读主题 </SelectLabel>
-            <SelectItem value="auto" className="whitespace-normal">
-              跟随系统
-            </SelectItem>
-            <SelectItem value="light" className="whitespace-normal">
-              浅色
-            </SelectItem>
-            <SelectItem value="dark" className="whitespace-normal">
-              深色
-            </SelectItem>
-          </SelectGroup>
-        </SelectContent>
-      </Select>
-    </Field>
-  );
-}
 
 export function MarkItemRead({ id }: { id: string }) {
   useEffect(() => {

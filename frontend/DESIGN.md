@@ -21,6 +21,7 @@
 - 全站外壳统一在独立 `src/layout/`：BasicLayout 在根 App Router layout 装配，BasicHeader、BasicFooter 和共用 UsageGuide 在同目录。外壳使用 `h-dvh` 的 flex 布局，头尾不收缩，正文 main 独立滚动；所有页面的头尾及正文统一 `max-w-7xl`、`px-5 sm:px-8`，正文 `py-10 sm:py-12`。仅保留一个 main，页面组件不再设置全屏高度、页面级最大宽度和外侧内边距；内部表单、文章、表格按内容保留合理尺度。路由切换重置正文滚动，提供跳到正文的键盘入口；打印恢复正常流并隐藏头尾。
 - `/login` 在 BasicLayout 内省略顶部 Header，加载、错误恢复和正常表单保持相同外壳；正文、页脚和 Sonner 沿用全局实现。短请求的登录、发送验证码、保存等操作只显示主按钮忙碌并禁用重复提交，不额外追加请求取消按钮；保留离页自动中止以及真正的任务取消、编辑退出和对话框取消。
 - LayoutContainer 是头尾和正文的唯一宽度定义；三处 region 同时预留对称的稳定滚动条槽，长页/短页切换不会产生容器宽度偏移。阅读进度通过布局提供的滚动节点保存与恢复，保留本机数据格式。
+- 主题切换统一放在 BasicHeader 的登录/账户入口旁，使用官方 Button 与 DropdownMenu/RadioGroup，提供浅色、深色和跟随系统及当前选中状态。BasicLayout 的 ThemeProvider 在所有页面（含无 Header 的登录页）应用同一本机偏好，沿用既有存储键和导入导出格式；同步系统变化、跨标签与导入更新，存储失败仍应用当前选择并由 Sonner 提示。阅读子导航不重复显示主题控件。
 - 不创建 `features`、`common`、`patterns` 或 `shared` 目录。
 - `page.tsx` 只处理页面入口、数据边界和组件组合。
 - 组件至少被两个页面稳定复用后才能迁入 `src/components/<feature>/`。
@@ -31,13 +32,14 @@
 
 首页是公开阅读入口，保持黑白留白与现有 BasicLayout。正文优先展示最新资讯及分类、值得关注的事件、公开周报和专题/模型榜入口，主操作直接浏览资讯；个人关注、已有报告与管理使用真实会话。首页个人CTA引导配置关注/查看已有报告，个人周报执行与独立调度按 Design005 完成相应验收后再承诺；公共周刊保持独立阅读入口。使用现有 Umi publication 与刊物目录函数并行读取，每块独立处理空/错误；未配置公开发布账号显示未发布，真实错误显示重载入口，无模拟资讯、指标或默认账户。
 
-| 组件                      | 领域与复用范围 | 目标路径                                                          | 数据与状态                                                                 |
-| ------------------------- | -------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Home / HomeContent        | 首页专属       | src/app/page.tsx；src/app/components/home-content.tsx             | 生成的公开资讯、事件、专题、周刊目录；SSR并行读取、真实空态、局部错误      |
-| HeroSection               | 首页专属       | src/app/components/hero-section.tsx                               | 浏览资讯与安全登录回跳到工作台；真实会话                                   |
-| BasicHeader / AccountMenu | 全站导航       | src/layout/basic-header.tsx；src/components/auth/account-menu.tsx | 桌面资讯/专题/模型榜，已登录增加工作台与账户；窄屏阅读菜单，键盘与焦点恢复 |
-| WorkspacePage             | 个人工作台     | src/app/workspace/page.tsx                                        | 私有路由；按关注报告、资料采集、发布管理展示现有入口                       |
-| PublicationNavigation     | 阅读路由复用   | src/components/publication/reading-navigation.tsx                 | 阅读入口与本机偏好；管理和认证出口移入工作台                               |
+| 组件                        | 领域与复用范围 | 目标路径                                                          | 数据与状态                                                                  |
+| --------------------------- | -------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Home / HomeContent          | 首页专属       | src/app/page.tsx；src/app/components/home-content.tsx             | 生成的公开资讯、事件、专题、周刊目录；SSR并行读取、真实空态、局部错误       |
+| HeroSection                 | 首页专属       | src/app/components/hero-section.tsx                               | 浏览资讯与安全登录回跳到工作台；真实会话                                    |
+| BasicHeader / AccountMenu   | 全站导航       | src/layout/basic-header.tsx；src/components/auth/account-menu.tsx | 桌面资讯/专题/模型榜，已登录增加工作台与账户；窄屏阅读菜单，键盘与焦点恢复  |
+| WorkspacePage               | 个人工作台     | src/app/workspace/page.tsx                                        | 私有路由；按关注报告、资料采集、发布管理展示现有入口                        |
+| PublicationNavigation       | 阅读路由复用   | src/components/publication/reading-navigation.tsx                 | 阅读入口；管理和认证出口移入工作台                                          |
+| ThemeProvider / ThemeToggle | 全站外壳       | src/layout/theme-toggle.tsx                                       | 本机主题偏好；默认跟随系统、保存/存储失败、跨标签与导入更新、键盘与焦点恢复 |
 
 Header不再常驻事件、内容、热榜、来源、运营、帮助等业务菜单；工作台集中这些入口，账户菜单只提供工作台、关注、报告、账户设置与退出。使用指南、关于、隐私、条款和联系仍在Footer。公开内容与个人操作分开，已登录首页仍提供同样的公开阅读导航和真实账户菜单。
 

@@ -17,15 +17,17 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { BasicLayout } from "@/layout/basic-layout";
+import { saveTheme } from "@/components/publication/local-state";
 
 afterEach(() => {
   toast.dismiss();
   cleanup();
+  localStorage.clear();
   document.documentElement.classList.remove("dark");
 });
 
-it("uses the app's explicit theme and follows root theme changes", async () => {
-  document.documentElement.classList.add("dark");
+it("uses the app's explicit preference and follows global theme changes", async () => {
+  saveTheme("dark");
   render(
     <BasicLayout>
       <h1>阅读页面</h1>
@@ -40,7 +42,7 @@ it("uses the app's explicit theme and follows root theme changes", async () => {
     expect(toaster.getAttribute("data-sonner-theme")).toBe("dark"),
   );
   act(() => {
-    document.documentElement.classList.remove("dark");
+    saveTheme("light");
   });
   await waitFor(() =>
     expect(toaster.getAttribute("data-sonner-theme")).toBe("light"),

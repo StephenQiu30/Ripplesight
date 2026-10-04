@@ -23,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LayoutContainer } from "./layout-container";
+import { ThemeToggle } from "./theme-toggle";
 
 const readingDestinations = [
   { href: "/discover", label: "资讯" },
@@ -110,6 +111,9 @@ export function BasicHeader() {
                   </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
+            </NavigationMenuItem>
+            <NavigationMenuItem>
+              <ThemeToggle />
             </NavigationMenuItem>
             <NavigationMenuItem>
               {session ? (

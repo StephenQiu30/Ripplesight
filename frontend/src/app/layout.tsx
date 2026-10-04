@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
-import { LocalThemeInitializer } from "@/components/publication/local-reading";
 import { BasicLayout } from "@/layout/basic-layout";
 import { layoutFontClassName } from "@/layout/layout-fonts";
 import { readLayoutSession } from "@/components/auth/layout-session";
@@ -32,7 +31,6 @@ export default async function RootLayout({
       className={layoutFontClassName}
     >
       <body className="overflow-hidden print:overflow-visible">
-        <LocalThemeInitializer />
         <BasicLayout session={session}>{children}</BasicLayout>
       </body>
     </html>
