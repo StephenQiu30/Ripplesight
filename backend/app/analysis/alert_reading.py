@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from analysis.models import ContentAnnotation
 from analysis.reads import annotation_inputs_readable_in_transaction
 from content.alert_reading import freeze_alert_content_inputs_in_transaction
-from content.analysis_inputs import AnalysisObservationManifest
+from content.analysis_schemas import AnalysisObservationManifest
 from content.report_reading import report_inputs_readable_in_transaction
 from content.version_inputs import observations_readable_in_transaction
 

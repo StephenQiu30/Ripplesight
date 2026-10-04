@@ -9,7 +9,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from content.analysis_inputs import AnalysisObservationManifest
+from content.analysis_schemas import AnalysisObservationManifest
 from core.schemas import OutputModel
 
 

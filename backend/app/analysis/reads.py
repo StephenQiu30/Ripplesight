@@ -11,10 +11,10 @@ from ai.analysis_reading import load_legacy_analysis_call_job_in_transaction
 from analysis.models import ContentAnnotation
 from analysis.schemas import AnalysisJobScope, AnnotationResultState, ContentAnnotationReadView
 from content.analysis_inputs import (
-    AnalysisObservationManifest,
     analysis_observation_manifests_readable_in_transaction,
     require_analysis_observation_inputs_in_transaction,
 )
+from content.analysis_schemas import AnalysisObservationManifest
 from content.version_inputs import legacy_content_versions_readable_in_transaction
 from core.errors import ApplicationError
 from jobs.services import load_job_execution_configuration

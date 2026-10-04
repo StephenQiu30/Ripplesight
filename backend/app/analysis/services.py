@@ -45,10 +45,10 @@ from analysis.schemas import (
     WindowAnnotationCountView,
 )
 from content.analysis_inputs import (
-    AnalysisObservationManifest,
     freeze_analysis_observation_inputs_in_transaction,
     require_analysis_observation_inputs_in_transaction,
 )
+from content.analysis_schemas import AnalysisObservationManifest
 from content.editorial_reading import require_analysis_content_permissions_in_transaction
 from content.schemas import AnalysisPostContentView
 from content.services import (

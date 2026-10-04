@@ -264,7 +264,7 @@ def _seed_reading_evidence(session, owner, topic, version_ids, now):
         )
         # Controlled analysis inputs are explicit; legacy NULL annotations without
         # their original analysis Job must remain unavailable.
-        from content.analysis_inputs import AnalysisObservationManifest
+        from content.analysis_schemas import AnalysisObservationManifest
 
         for value in values:
             # These controlled original source leaves have no dependency edges.
