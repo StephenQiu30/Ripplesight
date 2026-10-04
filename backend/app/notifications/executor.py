@@ -32,6 +32,7 @@ from monitors.notification_preferences import load_topic_notification_target_nam
 from notifications.admission import subject_delivery_operation_id
 from notifications.card import notification_card
 from notifications.codex_recipients import codex_recipient_eligible_in_transaction
+from notifications.email_subscription import email_target_eligible_in_transaction
 from notifications.feishu import FeishuDeliveryError, FeishuWebhook
 from notifications.materials import load_notification_material_in_transaction
 from notifications.models import NotificationDelivery, NotificationTarget
@@ -187,6 +188,10 @@ class NotificationExecutor:
             ):
                 raise self._failure("notification_target_stale", manual=False)
             assert material is not None
+            if not email_target_eligible_in_transaction(
+                session, owner_id=message.owner_id, target=target
+            ):
+                raise self._failure("notification_target_stale", manual=False)
             if not codex_recipient_eligible_in_transaction(
                 session, owner_id=message.owner_id, target_id=target.id, material=material
             ):

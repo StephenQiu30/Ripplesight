@@ -31,8 +31,10 @@ from worker.scheduler import (
 )
 
 
+@pytest.mark.parametrize("failed_tick", [1, 2])
 def test_prompt_runtime_heartbeat_failure_stops_scheduler_without_closing_gap(
     monkeypatch: pytest.MonkeyPatch,
+    failed_tick: int,
 ) -> None:
     events: list[str] = []
     engine = SimpleNamespace(dispose=lambda: events.append("dispose"))
@@ -57,9 +59,12 @@ def test_prompt_runtime_heartbeat_failure_stops_scheduler_without_closing_gap(
         lambda *_args, **_kwargs: events.append("round") or {},
     )
 
+    monkeypatch.setattr(scheduler, "SCHEDULER_POLL_SECONDS", 0.01)
+
     def fail_heartbeat(*_args: object, **_kwargs: object) -> None:
         events.append("heartbeat")
-        raise RuntimeError("database unavailable")
+        if events.count("heartbeat") == failed_tick:
+            raise RuntimeError("database unavailable")
 
     monkeypatch.setattr(scheduler, "heartbeat_analysis_prompt_runtime", fail_heartbeat)
     monkeypatch.setattr(
@@ -70,7 +75,7 @@ def test_prompt_runtime_heartbeat_failure_stops_scheduler_without_closing_gap(
 
     with pytest.raises(RuntimeError, match="database unavailable"):
         scheduler.run_scheduler()
-    assert events == ["start", "round", "heartbeat", "dispose"]
+    assert events == ["start", *(["round", "heartbeat"] * failed_tick), "dispose"]
 
 
 def _schedule() -> DueCollectionSchedule:

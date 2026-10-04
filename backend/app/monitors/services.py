@@ -3,7 +3,7 @@ from __future__ import annotations
 import unicodedata
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from uuid import UUID, uuid4
 
@@ -1092,12 +1092,12 @@ class MonitorTopicService:
                 topic.weekly_report_enabled = command.weekly_report_enabled
                 topic.notification_target_names = list(notification_target_names)
                 topic.updated_at = now
-                self._sync_search_schedules(
-                    topic=topic,
-                    source_keys=source_keys,
-                    source_intervals=source_intervals,
-                    now=now,
-                )
+            self._sync_search_schedules(
+                topic=topic,
+                source_keys=source_keys,
+                source_intervals=source_intervals,
+                now=now,
+            )
             view = self._view(topic, current, source_keys=source_keys)
         return view
 
@@ -1303,10 +1303,17 @@ class MonitorTopicService:
                 continue
             interval_seconds = max(topic.collection_interval_seconds, source_intervals[source_key])
             enabled = topic.status == MonitorTopicStatus.ACTIVE.value
+            # A shortened cadence must not retain yesterday's longer future deadline.
+            # Keep overdue work due, and never bypass the source's minimum interval.
+            next_run_at = min(
+                existing_schedule.next_run_at, now + timedelta(seconds=interval_seconds)
+            )
             if (
                 existing_schedule.interval_seconds != interval_seconds
                 or existing_schedule.enabled != enabled
+                or existing_schedule.next_run_at != next_run_at
             ):
+                existing_schedule.next_run_at = next_run_at
                 existing_schedule.interval_seconds = interval_seconds
                 existing_schedule.enabled = enabled
                 existing_schedule.updated_at = now

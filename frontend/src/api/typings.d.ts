@@ -4968,6 +4968,30 @@ declare namespace HotKeyAPI {
     citations: ReportCitationView[];
   };
 
+  type ReportEmailSubscriptionInput = {
+    /** Operation Id */
+    operation_id: string;
+    /** Expected Revision */
+    expected_revision: number;
+    /** Enabled */
+    enabled: boolean;
+  };
+
+  type ReportEmailSubscriptionView = {
+    /** Email */
+    email: string | null;
+    /** Enabled */
+    enabled: boolean;
+    /** Revision */
+    revision: number;
+    /** Target Name */
+    target_name: string;
+    /** Delivery Available */
+    delivery_available: boolean;
+    /** Email Matches Target */
+    email_matches_target: boolean;
+  };
+
   type ReportGenerator = "template" | "model";
 
   type ReportKind = "daily" | "weekly";

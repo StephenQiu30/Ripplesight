@@ -86,3 +86,5 @@ pnpm build
 只维护现行PRD/Design、唯一BACKLOG与Acceptance；必要执行顺序归BACKLOG，证据实际产生后写Acceptance，临时实施/调研/改号过程从Git查阅。普通整理不新建计划、审计流水或验收文件，不以删除文档关闭需求。文档/FR/NFR/AC/证据编号不复用、不重编号；许可证与署名完整保留。
 
 未经用户明确授权，不提交、推送、创建/合并PR或删除远端引用。授权后检查差异、秘密和远端状态；标题唯一格式 `type(scope):中文动宾描述`，冒号后无空格，≤72字符。type限feat/fix/test/refactor/docs/chore/perf/build/ci/revert，scope用稳定小写英文。正文/脚注中文，说明变更、原因、实际验证；不兼容用!及BREAKING CHANGE中文说明，一个提交一个可独立验收目的，生成物与源同提交。
+
+定时任务采用APScheduler 3.x内存进程时钟（30秒、单实例、合并错过tick），业务到期、幂等、重试、租约和投递仍由PostgreSQL/原Job/Outbox持久化，不使用数据库JobStore。根Compose worker profile配套Worker/Scheduler，API不运行计时器。用户经账户验证邮箱后自行订阅，普通会话/CSRF/CAS隔离，无需运营令牌；发送前复验当前邮箱与主题订阅。平台SMTP凭据保留根环境配置。

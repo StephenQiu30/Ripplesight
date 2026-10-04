@@ -135,9 +135,12 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
   const [sourceOptions, setSourceOptions] = useState<TopicSourceOption[]>([]);
   const [sourceKeys, setSourceKeys] = useState<string[]>([]);
   const [collectionIntervalSeconds, setCollectionIntervalSeconds] =
-    useState(1800);
-  const [reportTime, setReportTime] = useState("09:00:00");
-  const [weeklyReportEnabled, setWeeklyReportEnabled] = useState(false);
+    useState(3600);
+  const [reportTime, setReportTime] = useState("08:00:00");
+  const [weeklyReportEnabled, setWeeklyReportEnabled] = useState(true);
+  const [notificationTargetNames, setNotificationTargetNames] = useState<
+    string[]
+  >([]);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(
     null,
   );
@@ -159,6 +162,7 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
     setCollectionIntervalSeconds(value.collection_interval_seconds);
     setReportTime(value.report_time);
     setWeeklyReportEnabled(value.weekly_report_enabled);
+    setNotificationTargetNames(value.notification_target_names);
   }, []);
 
   const loadTopic = useCallback(async () => {
@@ -303,7 +307,7 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
         collection_interval_seconds: collectionIntervalSeconds,
         report_time: reportTime,
         weekly_report_enabled: weeklyReportEnabled,
-        notification_target_names: state.topic.notification_target_names,
+        notification_target_names: notificationTargetNames,
       };
       const topic = await updateMonitorTopic({ topic_id: topicId }, payload);
       if (!mounted.current) return;
@@ -574,6 +578,8 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
               onReportTimeChange={setReportTime}
               weeklyReportEnabled={weeklyReportEnabled}
               onWeeklyReportEnabledChange={setWeeklyReportEnabled}
+              notificationTargetNames={notificationTargetNames}
+              onNotificationTargetNamesChange={setNotificationTargetNames}
               disabled={formDisabled}
               error={fieldErrors.report_time}
             />

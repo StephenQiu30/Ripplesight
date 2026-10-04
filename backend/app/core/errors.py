@@ -27,6 +27,7 @@ ERROR_CATEGORIES: Mapping[str, ErrorCategory] = MappingProxyType(
         "credentials_verification_required": ErrorCategory.AUTHORIZATION,
         "identity_link_conflict": ErrorCategory.CONFLICT,
         "username_unavailable": ErrorCategory.CONFLICT,
+        "notification_email_not_bound": ErrorCategory.INVALID_INPUT,
         "invalid_avatar": ErrorCategory.INVALID_INPUT,
         "auth_rate_limited": ErrorCategory.RATE_LIMITED,
         "auth_dependency_unavailable": ErrorCategory.DEPENDENCY_UNAVAILABLE,

@@ -8,14 +8,14 @@ HotKey 面向关注 AI 等专业方向的用户，是 ToC 信息监控产品；�
 
 - Web 首页提供公开资讯、事件、专题和公共刊物入口；登录后进入个人关注、来源、内容、任务、报告及管理工作台。
 - 使用 PostgreSQL 保存内容、任务与运行状态；Kafka Worker 执行持久任务，Web 展示主题、来源、内容、任务和报告页面。
-- 有 Hacker News、RSS、网页搜索和编辑来源执行基础，以及分析、事件、个人日报、公共编选日周月刊、公开分发和通知任务；实际来源、模型和渠道需要单独配置和验证。个人主题周报的执行与独立调度仍待补齐。
+- 有 Hacker News、RSS、网页搜索和编辑来源执行基础，以及分析、事件、个人日周报、公共编选日周月刊、公开分发和通知任务；实际来源、模型和渠道需要单独配置和验证。APScheduler 驱动到期扫描，用户自行选择已验证邮箱与需要发送的关注主题。
 - 提供 FastAPI 自动生成的 OpenAPI、Swagger UI 与 Scalar 文档。
 
 **当前边界：**真实来源、模型质量、事件归并、报告、渠道、保留库恢复及连续运行验收仍有缺口。功能代码、单元测试或服务健康检查不代表真实业务通过，最新状态见 [BACKLOG](BACKLOG.md)。
 
 ## 公开阅读与个人工作台
 
-首页 `/` 是公开信息入口，关于、隐私、条款、联系和变更说明保持公开。`/discover` 及专题/故事、`/items/[contentId]`、`/reports/daily`、`/reports/weekly`、`/reports/monthly` 与合法刊期、已发布模型榜均可公开阅读；资讯与刊物只读取显式配置的 `HOTKEY_PUBLIC_PUBLICATION_OWNER_ID` 分区及当前有效许可，未配置时保持未发布。当前基础公开投影仍依赖完成编选，模型关闭时原始资讯公开路径待实现。
+首页 `/` 是公开信息入口，关于、隐私、条款、联系和变更说明保持公开。`/discover` 及专题/故事、`/items/[contentId]`、`/reports/daily`、`/reports/weekly`、`/reports/monthly` 与合法刊期、已发布模型榜均可公开阅读；资讯与刊物只读取显式配置的 `HOTKEY_PUBLIC_PUBLICATION_OWNER_ID` 分区及当前有效许可，未配置时保持未发布。获准原始资讯可在模型关闭时公开阅读，精选、事件与公共刊物分别遵守编选合同。
 
 个人关注、报告生成/发送、来源与管理页面验证真实会话并保持 noindex。`/login` 提供账号密码、GitHub OAuth App 和邮箱验证码；通用登录默认进入 `/topics`，首页个人关注入口显式回跳 `/workspace`，安全站内原目标可恢复。公共周刊与个人主题周报分别验收。访问、会话、数据隔离和历史分区合同见 [Design001 §9.2](docs/design/001-热点舆情监控平台总体设计.md#92-公开欢迎页登录与个人数据访问)。
 
@@ -27,7 +27,7 @@ HotKey 面向关注 AI 等专业方向的用户，是 ToC 信息监控产品；�
 
 | 文件 | 职责 |
 | --- | --- |
-| `docker-compose.yml` | 启动 API/Web；Worker、Browser/出口代理、CLI 保留按需 profile |
+| `docker-compose.yml` | 启动 API/Web；Worker/Scheduler、Browser/出口代理、CLI 保留按需 profile |
 | `docker-compose-env.yml` | 单独启动 PostgreSQL/Redis/Kafka，本地开发默认不启动 |
 | `docker-compose-prod.yml` | 通过 include 复用全部应用定义，以独立密钥启动生产服务 |
 
@@ -65,9 +65,9 @@ docker compose --env-file .env -f docker-compose-env.yml up --detach --wait
 docker compose --env-file .env -f docker-compose.yml -f docker-compose-env.yml up --detach --build --wait
 ```
 
-Worker 保留按需 profile；M1/M2 仍使用宿主机 Worker，避免并行消费者争抢消息。需要容器 Worker 的受控环境可执行 `docker compose --env-file .env --profile worker up --detach worker`；生产命令同样加上 `--env-file .env.prod -f docker-compose-prod.yml`。CLI 使用 `docker compose --env-file .env run --rm cli`，Browser 使用 `--profile browser`，其授权与出口门槛保持有效。
+Worker 保留按需 profile；M1/M2 仍使用宿主机 Worker，避免并行消费者争抢消息。Kafka对容器提供可达advertised listener时，可执行 `docker compose --env-file .env --profile worker up --detach worker scheduler`；生产命令同样加上 `--env-file .env.prod -f docker-compose-prod.yml`。CLI 使用 `docker compose --env-file .env run --rm cli`，Browser 使用 `--profile browser`，其授权与出口门槛保持有效。
 
-RSSHub/SearXNG、Firecrawl、MinIO 和 MediaCrawler 继续使用既有独立环境；RSSHub/SearXNG 的 Compose 主机默认 `host.docker.internal`，固定端口为 1200/8888。现有 Compose 没有独立调度服务。上述启动与健康检查只验证运行底座，真实来源、模型与产品闭环仍需单独验收。不要对已有业务库执行 `backend/database/schema.sql`。停止时使用与启动相同的文件、环境和项目参数执行 `down`，不要添加 `--volumes` 或 `--remove-orphans`；分开启动的应用与环境共用默认网络时，全部停止后再移除网络。详细说明见 [后端 README](backend/README.md) 和 [Web README](frontend/README.md)。
+RSSHub/SearXNG、Firecrawl、MinIO 和 MediaCrawler 继续使用既有独立环境；RSSHub/SearXNG 的 Compose 主机默认 `host.docker.internal`，固定端口为 1200/8888。独立Scheduler已纳入根Compose并使用APScheduler时钟，启动为 `docker compose --env-file .env --profile worker up --detach scheduler`；本机Kafka若仍advertise localhost，保留宿主Worker，不并行启动容器消费者。Scheduler/Worker都复用原Job/Outbox，重启立即补扫。上述启动与健康检查只验证运行底座，真实来源、模型与产品闭环仍需单独验收。不要对已有业务库执行 `backend/database/schema.sql`。停止时使用与启动相同的文件、环境和项目参数执行 `down`，不要添加 `--volumes` 或 `--remove-orphans`；分开启动的应用与环境共用默认网络时，全部停止后再移除网络。详细说明见 [后端 README](backend/README.md) 和 [Web README](frontend/README.md)。
 
 ## 技术与文档
 
@@ -88,3 +88,5 @@ RSSHub/SearXNG、Firecrawl、MinIO 和 MediaCrawler 继续使用既有独立环�
 欢迎提交问题、文档修正与聚焦的 Pull Request。开始前请阅读 [贡献指南](CONTRIBUTING.md) 和 [进度看板](BACKLOG.md)；涉及来源接入时请说明真实可用的能力、失败状态和验证范围。安全漏洞请按 [安全策略](SECURITY.md) 私密报告。
 
 本项目采用 [MIT 许可证](LICENSE)。
+
+用户在账户设置中验证绑定邮箱、开启“报告通知”，再在主题“报告设置”选择邮件发送。新主题默认每小时采集、08:00日报及周一08:00周报；收件邮箱保存在本人账户，不通过环境文件配置。平台管理员配置认证邮件和报告SMTP发信服务；缺服务时页面显示未就绪，保存偏好不表示已投递。

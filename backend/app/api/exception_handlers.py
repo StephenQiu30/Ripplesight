@@ -68,6 +68,9 @@ APPLICATION_ERRORS: Mapping[str, PublicError] = {
         503, "auth_dependency_unavailable", "登录服务暂时不可用"
     ),
     "github_login_unavailable": PublicError(503, "github_login_unavailable", "GitHub登录尚未配置"),
+    "notification_email_not_bound": PublicError(
+        422, "notification_email_not_bound", "请先绑定并验证账户邮箱"
+    ),
     "email_login_unavailable": PublicError(503, "email_login_unavailable", "邮箱登录尚未配置"),
     "email_delivery_unavailable": PublicError(
         503, "email_delivery_unavailable", "验证码邮件暂时无法发送"

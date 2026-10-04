@@ -27,6 +27,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiRequestError } from "@/request";
 import { CredentialsForm } from "./credentials-form";
+import { ReportEmailSubscription } from "./report-email-subscription";
 import { IdentityConnections } from "./identity-connections";
 
 function readImage(file: File, signal: AbortSignal): Promise<string> {
@@ -273,7 +274,17 @@ export function AccountSettings({
             >
               登录安全
             </TabsTrigger>
+            <TabsTrigger
+              value="notifications"
+              className="flex-none px-0 text-base"
+              disabled={disabled}
+            >
+              报告通知
+            </TabsTrigger>
           </TabsList>
+          <TabsContent value="notifications">
+            <ReportEmailSubscription />
+          </TabsContent>
           <TabsContent
             value="profile"
             forceMount

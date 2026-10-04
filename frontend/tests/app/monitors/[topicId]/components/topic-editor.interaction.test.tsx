@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
   get: vi.fn(),
   update: vi.fn(),
   sources: vi.fn(),
+  email: vi.fn(),
   push: vi.fn(),
 }));
 vi.mock("@/api/jiankongzhuti", () => ({
@@ -26,6 +27,9 @@ vi.mock("@/api/jiankongzhuti", () => ({
   cloneMonitorTopic: vi.fn(),
   pauseMonitorTopic: vi.fn(),
   resumeMonitorTopic: vi.fn(),
+}));
+vi.mock("@/api/gerenbaogaotongzhi", () => ({
+  getReportEmailSubscription: api.email,
 }));
 vi.mock("@/api/laiyuannengli", () => ({ listSourceCapabilities: api.sources }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: api.push }) }));
@@ -57,6 +61,14 @@ const topic: HotKeyAPI.MonitorTopicView = {
 };
 
 beforeEach(() => {
+  api.email.mockResolvedValue({
+    target_name: "我的报告邮箱",
+    email: "reader@example.com",
+    enabled: true,
+    delivery_available: true,
+    revision: 1,
+    email_matches_target: true,
+  });
   api.get.mockResolvedValue(topic);
   api.sources.mockResolvedValue({ items: [], next_cursor: null });
 });
@@ -175,6 +187,10 @@ describe("Demo topic editing", () => {
   });
 
   it("opens advanced settings for a 422 field error and blocks duplicate writes", async () => {
+    api.get.mockResolvedValueOnce({
+      ...topic,
+      collection_interval_seconds: 3600,
+    });
     let reject!: (error: unknown) => void;
     api.update.mockImplementationOnce(
       () =>
@@ -213,5 +229,31 @@ describe("Demo topic editing", () => {
       "true",
     );
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+  it("binds the personal email target while preserving other delivery preferences", async () => {
+    api.get.mockResolvedValueOnce({
+      ...topic,
+      notification_target_names: ["已有日报邮箱"],
+    });
+    api.update.mockResolvedValueOnce({
+      ...topic,
+      notification_target_names: ["已有日报邮箱", "我的报告邮箱"],
+    });
+    render(<TopicEditor topicId={topic.id} />);
+    await screen.findByLabelText("主题名称");
+    fireEvent.click(screen.getByRole("button", { name: "报告设置" }));
+    await screen.findByText(/发送到 reader@example.com/);
+    fireEvent.click(screen.getByRole("switch", { name: "邮件发送日报和周报" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith(
+        { topic_id: topic.id },
+        expect.objectContaining({
+          notification_target_names: ["已有日报邮箱", "我的报告邮箱"],
+          collection_interval_seconds: 1800,
+          report_time: "09:00:00",
+        }),
+      ),
+    );
   });
 });

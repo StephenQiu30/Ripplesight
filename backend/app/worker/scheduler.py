@@ -11,6 +11,8 @@ from uuid import UUID, uuid4, uuid5
 from zoneinfo import ZoneInfo
 
 import structlog
+from apscheduler.executors.pool import ThreadPoolExecutor
+from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -1024,6 +1026,25 @@ def run_scheduler() -> None:
     scans = _registered_scheduler_scans()
     run_id: UUID | None = None
     normal_shutdown = False
+    timer = BackgroundScheduler(
+        timezone=UTC,
+        executors={"default": ThreadPoolExecutor(1)},
+        job_defaults={"coalesce": True, "max_instances": 1, "misfire_grace_time": 60},
+    )
+    failures: list[Exception] = []
+
+    def tick() -> None:
+        try:
+            assert run_id is not None
+            results = run_scheduler_round(sessions, scans, now=datetime.now(UTC))
+            heartbeat_analysis_prompt_runtime(
+                sessions, run_id=run_id, observed_at=datetime.now(UTC)
+            )
+            logger.info("scheduler_round_completed", scan_counts=results)
+        except Exception as error:
+            failures.append(error)
+            stopping.set()
+
     try:
         heartbeat.start()
         run_id = start_analysis_prompt_runtime_at_startup(
@@ -1031,16 +1052,20 @@ def run_scheduler() -> None:
             ai_enabled=settings.ai_enabled,
             started_at=datetime.now(UTC),
         )
-        while not stopping.is_set():
-            started_at = datetime.now(UTC)
-            results = run_scheduler_round(sessions, scans, now=started_at)
-            heartbeat_analysis_prompt_runtime(
-                sessions, run_id=run_id, observed_at=datetime.now(UTC)
-            )
-            logger.info("scheduler_round_completed", scan_counts=results)
-            stopping.wait(SCHEDULER_POLL_SECONDS)
+        # PostgreSQL remains the durable clock: the first tick recovers due work.
+        tick()
+        if failures:
+            raise failures[0]
+        timer.add_job(tick, "interval", seconds=SCHEDULER_POLL_SECONDS, id="due-scans")
+        timer.start()
+        stopping.wait()
+        timer.shutdown(wait=True)
+        if failures:
+            raise failures[0]
         normal_shutdown = True
     finally:
+        if timer.running:
+            timer.shutdown(wait=True)
         try:
             if normal_shutdown and run_id is not None:
                 stop_analysis_prompt_runtime(sessions, run_id=run_id, stopped_at=datetime.now(UTC))
