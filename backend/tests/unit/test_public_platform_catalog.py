@@ -66,6 +66,8 @@ def test_query_scope_keeps_hotlist_tags_authors_and_unknown_separate() -> None:
     )
     assert keyword.documented_support == "unknown"
     assert entries["instagram.tags"].status == "excluded"
+    assert entries["instagram.author"].status == "blocked"
+    assert "共享 Cookie 缓存" in entries["instagram.author"].block_reason
     assert entries["instagram.private_api"].status == "excluded"
     assert entries["facebook.free_entry"].status == "missing"
     assert entries["facebook.free_entry"].route_template is None

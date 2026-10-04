@@ -177,7 +177,10 @@ def rsshub_route_blocker(config: EditorialRsshubConfiguration) -> str | None:
             "www.instagram.com"
         }:
             return "rsshub_downstream_unapproved"
-        return None
+        # This pinned route reads a shared instagram:cookieJar before selecting
+        # its guest branch. A profile's anonymous declaration cannot establish
+        # isolation from a previous authenticated request in the RSSHub instance.
+        return "rsshub_anonymous_cache_isolation_unverified"
     # Cookie lifecycle, browser fallback or secrets/fees cannot be disabled by
     # a caller's metadata. Those installed candidates have no executable contract.
     return {
