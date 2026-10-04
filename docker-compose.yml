@@ -176,6 +176,17 @@ services:
           cpus: "0.50"
           memory: 512M
 
+  scheduler:
+    <<: *backend-service
+    command: ["/srv/backend/.venv/bin/python", "-m", "worker.scheduler"]
+    restart: unless-stopped
+    profiles: ["worker"]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+
   browser:
     build:
       context: ./backend

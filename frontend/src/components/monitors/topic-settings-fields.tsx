@@ -1,9 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDownIcon } from "lucide-react";
 
+import { getReportEmailSubscription } from "@/api/gerenbaogaotongzhi";
+import { toast } from "sonner";
+import { Item } from "@/components/ui/item";
+import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -187,7 +191,7 @@ export function TopicAdvancedFields({
   fieldErrors = {},
 }: TopicAdvancedFieldsProps) {
   const [open, setOpen] = useState(
-    Boolean(matchAll || exclude || collectionIntervalSeconds !== 1800),
+    Boolean(matchAll || exclude || collectionIntervalSeconds !== 3600),
   );
   const [customInterval, setCustomInterval] = useState(
     !INTERVALS.some((item) => item.value === collectionIntervalSeconds),
@@ -316,6 +320,8 @@ export function TopicReportFields({
   onReportTimeChange,
   weeklyReportEnabled,
   onWeeklyReportEnabledChange,
+  notificationTargetNames,
+  onNotificationTargetNamesChange,
   disabled,
   error,
 }: {
@@ -323,10 +329,36 @@ export function TopicReportFields({
   onReportTimeChange: (value: string) => void;
   weeklyReportEnabled: boolean;
   onWeeklyReportEnabledChange: (value: boolean) => void;
+  notificationTargetNames: string[];
+  onNotificationTargetNamesChange: (value: string[]) => void;
   disabled: boolean;
   error?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [subscription, setSubscription] =
+    useState<HotKeyAPI.ReportEmailSubscriptionView | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    void getReportEmailSubscription({ signal: controller.signal })
+      .then((value) => {
+        if (!controller.signal.aborted) {
+          setSubscription(value);
+          setFailed(false);
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setFailed(true);
+          toast.error("邮件订阅读取失败，请重试。");
+        }
+      });
+    return () => controller.abort();
+  }, [open, reload]);
+  const targetName = subscription?.target_name ?? "我的报告邮箱";
+  const selected = notificationTargetNames.includes(targetName);
   return (
     <Collapsible open={open || Boolean(error)} onOpenChange={setOpen}>
       <CollapsibleTrigger asChild>
@@ -363,7 +395,7 @@ export function TopicReportFields({
             <FieldContent>
               <FieldLabel htmlFor="weekly-report">生成周报</FieldLabel>
               <FieldDescription>
-                每周一北京时间 09:00，汇总上一周的已获取材料。
+                每周一北京时间 08:00，汇总上一周的已获取材料。
               </FieldDescription>
             </FieldContent>
             <Switch
@@ -373,8 +405,55 @@ export function TopicReportFields({
               disabled={disabled}
             />
           </Field>
+          <Field orientation="horizontal">
+            <FieldContent>
+              <FieldLabel htmlFor="topic-email-reports">
+                邮件发送日报和周报
+              </FieldLabel>
+              <FieldDescription>
+                {subscription?.enabled
+                  ? `发送到 ${subscription.email}。`
+                  : "先在账户设置中绑定邮箱并开启报告订阅。"}
+                {subscription?.enabled && !subscription.delivery_available
+                  ? "平台发信服务尚未就绪，偏好仍可保存。"
+                  : ""}
+              </FieldDescription>
+            </FieldContent>
+            <Switch
+              id="topic-email-reports"
+              checked={selected}
+              disabled={disabled || (!selected && !subscription?.enabled)}
+              onCheckedChange={(value) =>
+                onNotificationTargetNamesChange(
+                  value
+                    ? [...new Set([...notificationTargetNames, targetName])]
+                    : notificationTargetNames.filter(
+                        (name) => name !== targetName,
+                      ),
+                )
+              }
+            />
+          </Field>
+          {failed ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={disabled}
+              onClick={() => setReload((value) => value + 1)}
+            >
+              重试读取邮件订阅
+            </Button>
+          ) : !subscription && open ? (
+            <Item role="status">
+              <Spinner />
+              正在读取邮件订阅…
+            </Item>
+          ) : null}
+          <Button asChild variant="link" className="self-start">
+            <Link href="/account">管理账户邮件订阅</Link>
+          </Button>
           <FieldDescription>
-            报告保留资料缺口；这些设置只生成个人报告。投递渠道在运营与通知中单独配置。
+            报告保留资料缺口。到期开始生成，完成后投递；个人资料仅本人可读。
           </FieldDescription>
         </FieldGroup>
       </CollapsibleContent>

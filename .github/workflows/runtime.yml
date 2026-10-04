@@ -84,7 +84,7 @@ jobs:
               local = config("docker-compose.yml", development)
               prod = config("docker-compose-prod.yml", production)
               infra = config("docker-compose-env.yml", development)
-              assert set(local["services"]) == {"backend", "frontend", "worker", "browser", "browser-egress", "cli"}
+              assert set(local["services"]) == {"backend", "frontend", "worker", "scheduler", "browser", "browser-egress", "cli"}
               assert set(infra["services"]) == {"postgres", "redis", "kafka"}
               assert "volumes" not in local
               for name, host_port in (("backend", 8667), ("frontend", 8666)):
@@ -96,7 +96,7 @@ jobs:
                   assert local["services"][name]["environment"]["HOTKEY_WEB_ORIGIN"] == "http://127.0.0.1:8666"
               assert local["services"]["backend"]["environment"]["HOTKEY_WEB_BASE_URL"] == "http://127.0.0.1:8666"
               assert local["services"]["frontend"]["environment"]["HOTKEY_API_ORIGIN"] == "http://backend:8080"
-              for name in ("backend", "worker", "cli"):
+              for name in ("backend", "worker", "scheduler", "cli"):
                   local_url = local["services"][name]["environment"]["HOTKEY_DATABASE_URL"]
                   prod_url = prod["services"][name]["environment"]["HOTKEY_DATABASE_URL"]
                   assert local_url != prod_url

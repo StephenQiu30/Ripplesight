@@ -14,6 +14,7 @@ from api.routers.identity import router as identity_router
 from api.routers.identity_profile import router as identity_profile_router
 from api.routers.leaderboard import router as leaderboard_router
 from api.routers.monitor_topics import router as monitor_topics_router
+from api.routers.notifications import router as notifications_router
 from api.routers.operations import feedback_router
 from api.routers.operations import router as operations_router
 from api.routers.publication import router as publication_router
@@ -28,6 +29,7 @@ from api.routers.translations import router as translations_router
 from core.schemas import ErrorView
 
 api_router = APIRouter(prefix="/api")
+api_router.include_router(notifications_router)
 api_router.include_router(identity_router)
 api_router.include_router(identity_profile_router)
 api_router.include_router(ai_models_router, responses={401: {"model": ErrorView}})

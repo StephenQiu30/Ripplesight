@@ -9,6 +9,7 @@ from jobs.schemas import JobAcceptanceInput, JobObservationContext
 from jobs.services import JobService
 from monitors.codex_schemas import NotificationIntent
 from notifications.codex_recipients import codex_recipient_eligible_in_transaction
+from notifications.email_subscription import email_target_eligible_in_transaction
 from notifications.materials import load_notification_material_in_transaction
 from notifications.models import NotificationDelivery, NotificationTarget
 from notifications.schemas import NotificationSubjectMaterial
@@ -52,6 +53,8 @@ def enqueue_subject_in_transaction(
         if material.kind not in target.subscriptions or material.occurred_at < (
             target.enabled_at or target.created_at
         ):
+            continue
+        if not email_target_eligible_in_transaction(session, owner_id=owner_id, target=target):
             continue
         if not codex_recipient_eligible_in_transaction(
             session, owner_id=owner_id, target_id=target.id, material=material

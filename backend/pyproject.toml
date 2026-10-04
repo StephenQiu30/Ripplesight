@@ -24,6 +24,7 @@ dependencies = [
     "sqlalchemy>=2.0,<3",
     "structlog>=25.4,<26",
     "typer>=0.16,<1",
+    "apscheduler>=3.11,<4",
 ]
 
 [dependency-groups]
@@ -64,4 +65,8 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["feedparser.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["apscheduler.*"]
 ignore_missing_imports = true

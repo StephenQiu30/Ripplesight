@@ -75,14 +75,14 @@ CREATE TABLE monitor_topics (
             )
     ),
     current_version INTEGER NOT NULL DEFAULT 1 CHECK (current_version >= 1),
-    collection_interval_seconds INTEGER NOT NULL DEFAULT 1800 CHECK (
+    collection_interval_seconds INTEGER NOT NULL DEFAULT 3600 CHECK (
         collection_interval_seconds BETWEEN 600 AND 86400
     ),
-    report_time TIME WITHOUT TIME ZONE NOT NULL DEFAULT '09:00:00',
+    report_time TIME WITHOUT TIME ZONE NOT NULL DEFAULT '08:00:00',
     report_timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Shanghai' CHECK (
         report_timezone = 'Asia/Shanghai'
     ),
-    weekly_report_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    weekly_report_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     notification_target_names JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (
         jsonb_typeof(notification_target_names) = 'array'
     ),
@@ -101,7 +101,7 @@ CREATE TABLE monitor_topic_versions (
     match_all JSONB NOT NULL CHECK (jsonb_typeof(match_all) = 'array'),
     exclude JSONB NOT NULL CHECK (jsonb_typeof(exclude) = 'array'),
     source_keys JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(source_keys) = 'array'),
-    collection_interval_seconds INTEGER NOT NULL DEFAULT 1800 CHECK (
+    collection_interval_seconds INTEGER NOT NULL DEFAULT 3600 CHECK (
         collection_interval_seconds BETWEEN 600 AND 86400
     ),
     created_at TIMESTAMPTZ NOT NULL,

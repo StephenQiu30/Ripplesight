@@ -634,7 +634,7 @@ class ReportService:
             windows = [(ReportKind.DAILY, daily_due, *daily_window)]
             if row["weekly_report_enabled"]:
                 weekly_window = previous_weekly_window(now)
-                weekly_due = weekly_window[1].astimezone(REPORT_TIMEZONE) + timedelta(hours=9)
+                weekly_due = weekly_window[1].astimezone(REPORT_TIMEZONE) + timedelta(hours=8)
                 windows.append((ReportKind.WEEKLY, weekly_due, *weekly_window))
             for kind, due, window_start, window_end in windows:
                 if local_now < due or self._has_final_report(
@@ -653,7 +653,11 @@ class ReportService:
                     and post.annotation_state is not AnnotationState.ANNOTATED
                     for post in dataset.posts
                 )
-                if should_wait_for_report_watermark(now=now, due_at=due, unanalyzed_count=pending):
+                if (
+                    self.settings or get_settings()
+                ).ai_enabled and should_wait_for_report_watermark(
+                    now=now, due_at=due, unanalyzed_count=pending
+                ):
                     continue
                 # An existing draft is the original admission snapshot, including its daily refs.
                 draft = self._session.scalar(

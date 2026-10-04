@@ -145,11 +145,11 @@ class MonitorTopic(Base):
     current_version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
     collection_interval_seconds: Mapped[int] = mapped_column(
         Integer,
-        server_default=text("1800"),
+        server_default=text("3600"),
     )
     report_time: Mapped[time] = mapped_column(
         Time(timezone=False),
-        server_default=text("'09:00:00'"),
+        server_default=text("'08:00:00'"),
     )
     report_timezone: Mapped[str] = mapped_column(
         String(64),
@@ -157,7 +157,7 @@ class MonitorTopic(Base):
     )
     weekly_report_enabled: Mapped[bool] = mapped_column(
         Boolean,
-        server_default=text("false"),
+        server_default=text("true"),
     )
     notification_target_names: Mapped[list[str]] = mapped_column(
         JSONB,
@@ -204,7 +204,7 @@ class MonitorTopicVersion(Base):
     match_all: Mapped[list[str]] = mapped_column(JSONB)
     exclude: Mapped[list[str]] = mapped_column(JSONB)
     source_keys: Mapped[list[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
-    collection_interval_seconds: Mapped[int] = mapped_column(Integer, server_default=text("1800"))
+    collection_interval_seconds: Mapped[int] = mapped_column(Integer, server_default=text("3600"))
     created_at: Mapped[datetime]
 
 

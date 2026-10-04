@@ -17,7 +17,7 @@ type SourceKeyInput = Annotated[
 ]
 type NotificationTargetNameInput = Annotated[str, Field(min_length=1, max_length=128)]
 
-_DEFAULT_REPORT_TIME = time(hour=9)
+_DEFAULT_REPORT_TIME = time(hour=8)
 
 
 class MonitorTopicStatus(StrEnum):
@@ -41,9 +41,9 @@ class MonitorRuleSetInput(InputModel):
 class MonitorTopicCreateInput(MonitorRuleSetInput):
     name: str = Field(min_length=1, max_length=80)
     source_keys: list[SourceKeyInput] = Field(default_factory=list, max_length=32)
-    collection_interval_seconds: int = Field(default=1800, ge=600, le=86400)
+    collection_interval_seconds: int = Field(default=3600, ge=600, le=86400)
     report_time: time = _DEFAULT_REPORT_TIME
-    weekly_report_enabled: bool = False
+    weekly_report_enabled: bool = True
     notification_target_names: list[NotificationTargetNameInput] = Field(
         default_factory=list,
         max_length=20,

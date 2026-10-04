@@ -212,7 +212,7 @@ def test_source_and_interval_changes_create_immutable_topic_snapshots(
             ),
             {"id": created.json()["id"]},
         ).all()
-    assert versions == [(1, [], 1800), (2, ["hackernews"], 600)]
+    assert versions == [(1, [], 3600), (2, ["hackernews"], 600)]
     stale = monitor_topic_client.patch(
         location,
         headers=_csrf_headers(monitor_topic_client),
@@ -822,4 +822,85 @@ def test_bilibili_pause_is_not_cleared_by_preset_reapply(
                 {"id": applied.connection_id},
             ).scalar_one()
             == applied.connection_version
+        )
+
+
+def test_shorter_cadence_bounds_existing_future_deadline_without_delaying_due_work(
+    monitor_topic_client: TestClient,
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    _user_scope(monitor_topic_client)
+    factory = monitor_topic_client.app.state.session_factory
+    with factory.begin() as session:
+        owner = authenticated_owner_id(session)
+        SourcePresetService(session).apply_in_transaction(
+            owner_id=owner, preset=SOURCE_PRESETS["hackernews"]
+        )
+    payload = {
+        **_topic_payload(),
+        "source_keys": ["hackernews"],
+        "collection_interval_seconds": 86400,
+    }
+    created = monitor_topic_client.post(
+        "/api/topics", headers=_csrf_headers(monitor_topic_client), json=payload
+    )
+    assert created.status_code == 201, created.text
+    topic = created.json()["id"]
+    old_deadline = datetime.now(UTC) + timedelta(days=1)
+    with factory.begin() as session:
+        session.execute(
+            text("UPDATE monitor_schedules SET next_run_at=:due WHERE topic_id=:topic"),
+            {"due": old_deadline, "topic": topic},
+        )
+    updated = monitor_topic_client.patch(
+        created.headers["location"],
+        headers=_csrf_headers(monitor_topic_client),
+        json={**payload, "expected_version": 1, "collection_interval_seconds": 3600},
+    )
+    assert updated.status_code == 200, updated.text
+    with factory() as session:
+        row = session.execute(
+            text("SELECT next_run_at,updated_at FROM monitor_schedules WHERE topic_id=:topic"),
+            {"topic": topic},
+        ).one()
+        assert row.next_run_at < old_deadline
+        assert row.next_run_at == row.updated_at + timedelta(hours=1)
+    # Repairing a stale future projection needs no extra topic-rule revision.
+    with factory.begin() as session:
+        session.execute(
+            text("UPDATE monitor_schedules SET next_run_at=:due WHERE topic_id=:topic"),
+            {"due": old_deadline, "topic": topic},
+        )
+    repaired = monitor_topic_client.patch(
+        created.headers["location"],
+        headers=_csrf_headers(monitor_topic_client),
+        json={**payload, "expected_version": 2, "collection_interval_seconds": 3600},
+    )
+    assert repaired.status_code == 200 and repaired.json()["current_version"] == 2
+    with factory() as session:
+        next_due = session.execute(
+            text("SELECT next_run_at FROM monitor_schedules WHERE topic_id=:topic"),
+            {"topic": topic},
+        ).scalar_one()
+        assert next_due < old_deadline
+    with factory.begin() as session:
+        overdue = datetime.now(UTC) - timedelta(minutes=1)
+        session.execute(
+            text("UPDATE monitor_schedules SET next_run_at=:due WHERE topic_id=:topic"),
+            {"due": overdue, "topic": topic},
+        )
+    unchanged = monitor_topic_client.patch(
+        created.headers["location"],
+        headers=_csrf_headers(monitor_topic_client),
+        json={**payload, "expected_version": 2, "collection_interval_seconds": 3600},
+    )
+    assert unchanged.status_code == 200
+    with factory() as session:
+        assert (
+            session.execute(
+                text("SELECT next_run_at FROM monitor_schedules WHERE topic_id=:topic"),
+                {"topic": topic},
+            ).scalar_one()
+            == overdue
         )

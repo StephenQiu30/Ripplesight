@@ -8,6 +8,24 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from core.schemas import InputModel, OutputModel
+
+
+class ReportEmailSubscriptionInput(InputModel):
+    operation_id: UUID
+    expected_revision: int = Field(ge=0)
+    enabled: bool
+
+
+class ReportEmailSubscriptionView(OutputModel):
+    email: str | None
+    enabled: bool
+    revision: int
+    target_name: str
+    delivery_available: bool
+    email_matches_target: bool
+
+
 type NotificationSubjectKind = Literal["report", "edition", "selected", "codex_reset"]
 
 

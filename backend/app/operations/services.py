@@ -71,6 +71,7 @@ def accept_audit_in_transaction(
     payload: dict[str, object],
     now: datetime,
     before_state: dict[str, object] | None = None,
+    actor: str = "operator",
 ) -> tuple[OperatorAuditOperation, bool]:
     if not session.in_transaction():
         raise RuntimeError("operator audit requires caller transaction")
@@ -99,7 +100,7 @@ def accept_audit_in_transaction(
         input_fingerprint=fingerprint,
         action=action,
         target_ref=target_ref,
-        actor="operator",
+        actor=actor,
         reason=reason.strip(),
         status="accepted",
         before_state=before_state or {},

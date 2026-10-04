@@ -46,7 +46,7 @@ def test_due_reports_freeze_before_execution_without_readiness_or_daily_success(
     sessions = editorial_client.app.state.session_factory
     now = datetime.now(UTC)
     monday = now.date() + timedelta(days=(7 - now.weekday()) % 7 or 7)
-    due = datetime.combine(monday, datetime.min.time(), UTC) + timedelta(hours=1)
+    due = datetime.combine(monday, datetime.min.time(), UTC) + timedelta(hours=0)
     start, _ = previous_weekly_window(due)
     with sessions.begin() as session:
         session.execute(
@@ -73,10 +73,8 @@ def test_due_reports_freeze_before_execution_without_readiness_or_daily_success(
         assert not ReportService(session, clock=lambda: due).enqueue_due_in_transaction(
             now=due - timedelta(seconds=1)
         )
-        assert not ReportService(session, clock=lambda: due).enqueue_due_in_transaction(
-            now=due + timedelta(minutes=5)
-        )
-    cutoff = due + timedelta(minutes=10)
+    # With models disabled, 08:00 local admits immediately without an analysis wait.
+    cutoff = due
     with sessions.begin() as session:
         jobs = ReportService(session, clock=lambda: cutoff).enqueue_due_in_transaction(now=cutoff)
         assert {job.kind for job in jobs} == {"report.daily", "report.weekly"}

@@ -95,9 +95,12 @@ export function TopicForm() {
   const [exclude, setExclude] = useState("");
   const [sourceKeys, setSourceKeys] = useState<string[]>([]);
   const [collectionIntervalSeconds, setCollectionIntervalSeconds] =
-    useState(1800);
-  const [reportTime, setReportTime] = useState("09:00:00");
-  const [weeklyReportEnabled, setWeeklyReportEnabled] = useState(false);
+    useState(3600);
+  const [reportTime, setReportTime] = useState("08:00:00");
+  const [weeklyReportEnabled, setWeeklyReportEnabled] = useState(true);
+  const [notificationTargetNames, setNotificationTargetNames] = useState<
+    string[]
+  >([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const [fieldErrors, setFieldErrors] = useState<TopicFieldErrors>({});
@@ -193,6 +196,7 @@ export function TopicForm() {
         collection_interval_seconds: collectionIntervalSeconds,
         report_time: reportTime,
         weekly_report_enabled: weeklyReportEnabled,
+        notification_target_names: notificationTargetNames,
       };
       const topic = await createMonitorTopic(payload);
       if (!mounted.current) return;
@@ -322,6 +326,8 @@ export function TopicForm() {
               onReportTimeChange={setReportTime}
               weeklyReportEnabled={weeklyReportEnabled}
               onWeeklyReportEnabledChange={setWeeklyReportEnabled}
+              notificationTargetNames={notificationTargetNames}
+              onNotificationTargetNamesChange={setNotificationTargetNames}
               disabled={isSubmitting}
               error={fieldErrors.report_time}
             />

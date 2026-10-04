@@ -121,7 +121,7 @@ GitHub 按钮使用官方 GitHub-Mark 栅格素材 `public/brand/github-mark.png
 | ReportList / ReportResults / ReportDetail / ReportDetailContent / ReportMarkdown | 已有报告读取专属，非核心二级入口 | src/app/reports/components/；src/app/reports/[reportId]/components/      | list/getReport；只读分页、空、错误和实际状态，无新生成/投递配置                                                                          |
 | Collapsible / Empty / Item / Spinner                                             | 多页官方基础组件                 | src/components/ui/                                                       | 官方Radix折叠、空态、列表和加载组件；不承载业务状态                                                                                      |
 
-配置第一层只呈现名称、关键词与来源，进阶规则/频率按需展开。编辑隐藏的既有报告偏好按原值传回，避免覆盖数据。来源主入口是配置，覆盖/技术字段二级展示。所有页面沿用语义颜色、命名尺度、官方表单/浮层/菜单；不新增数据状态框架。业务入口继续动态渲染、`noindex`，取消请求不显示为业务失败。
+配置第一层只呈现名称、关键词与来源，进阶规则/频率及报告设置按需展开。报告设置提供日报时间、周报与个人邮件发送，未修改的既有偏好及其他目标按原值传回，避免覆盖数据。来源主入口是配置，覆盖/技术字段二级展示。所有页面沿用语义颜色、命名尺度、官方表单/浮层/菜单；不新增数据状态框架。业务入口继续动态渲染、`noindex`，取消请求不显示为业务失败。
 
 主导航归 `src/layout/basic-header.tsx`；任务路由内的 `job-presenters.ts` 复用时间/状态/能力展示，报告详情路由内的 `report-links.ts` 复用安全 HTTP URL 规则；两者均无请求与状态所有权。
 
@@ -146,3 +146,5 @@ GitHub 按钮使用官方 GitHub-Mark 栅格素材 `public/brand/github-mark.png
 ## 账户设置
 
 `AccountSettings`（src/app/account/components/account-settings.tsx）复现选定方案3：左侧浅灰资料摘要展示头像、用户名、绑定邮箱和验证状态，右侧使用官方line Tabs切换基本资料与登录安全；lg以上1:2双列，窄屏顺序堆叠。用户名独立保存不要求填密码，头像上传独立于密码操作；两者通过生成的updateIdentityProfile/uploadIdentityAvatar返回真实会话后刷新导航。文件类型/2 MiB在客户端预检，服务端重新解码校验并规范化；上传中禁重复，失败保留旧头像，成功统一Sonner。未上传使用用户图标，读取失败允许在资料栏重试；无伪造人像或默认账户。`UserAvatar`跨页复用在components/auth，经getIdentityAvatar读Blob，只显示当前哈希，离页/换图中止读取并释放object URL。密码表单复用CredentialsForm嵌入模式，保留当前密码/绑定邮箱验证码、首次设置和安全回跳合同。分类切换保留输入草稿，短提交期间限制其他账户修改。并行已有IdentityConnections继续在右侧登录安全下展示真实绑定能力。
+
+ReportEmailSubscription为账户页专属组件（app/account/components/report-email-subscription.tsx），使用生成的个人邮件订阅GET/PUT，展示本人已验证邮箱、订阅及平台SMTP就绪；缺绑定引导登录安全，未配置发信保留偏好并说明暂不能发送。TopicReportFields创建/编辑复用，新增个人订阅读取与主题发送开关，保留其他目标偏好。正常、未绑定、未订阅、未就绪、加载失败重试、冲突与取消依真实响应和Sonner/Empty呈现。新主题默认每小时、08:00日报及周一08:00周报，既有自定义值保持。

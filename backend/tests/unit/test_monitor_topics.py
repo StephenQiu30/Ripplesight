@@ -18,7 +18,7 @@ from monitors.services import (
 )
 
 
-def test_topic_settings_default_to_half_hour_shanghai_daily_report() -> None:
+def test_topic_settings_default_to_hourly_shanghai_daily_and_weekly_report() -> None:
     command = MonitorTopicCreateInput(
         name="品牌动态",
         match_any=["品牌"],
@@ -27,9 +27,9 @@ def test_topic_settings_default_to_half_hour_shanghai_daily_report() -> None:
     )
 
     assert command.source_keys == []
-    assert command.collection_interval_seconds == 1800
-    assert command.report_time == time(hour=9)
-    assert command.weekly_report_enabled is False
+    assert command.collection_interval_seconds == 3600
+    assert command.report_time == time(hour=8)
+    assert command.weekly_report_enabled is True
     assert command.notification_target_names == []
 
 

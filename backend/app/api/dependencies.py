@@ -36,6 +36,7 @@ from leaderboard.reads import LeaderboardReadService
 from monitors.codex_services import CodexResetService
 from monitors.runs import MonitorTopicRunService
 from monitors.services import MonitorTopicService
+from notifications.email_subscription import ReportEmailSubscriptionService
 from notifications.operator import NotificationOperatorService
 from notifications.services import NotificationTargetService
 from operations.services import OperationsService
@@ -141,6 +142,17 @@ def get_operations_service(request: Request, session: SessionDependency) -> Oper
 
 
 OperationsServiceDependency = Annotated[OperationsService, Depends(get_operations_service)]
+
+
+def get_report_email_subscription_service(
+    request: Request, session: SessionDependency
+) -> ReportEmailSubscriptionService:
+    return ReportEmailSubscriptionService(session, request.app.state.settings)
+
+
+ReportEmailSubscriptionServiceDependency = Annotated[
+    ReportEmailSubscriptionService, Depends(get_report_email_subscription_service)
+]
 
 
 def get_notification_target_service(session: SessionDependency) -> NotificationTargetService:
