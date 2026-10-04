@@ -52,11 +52,11 @@ from analysis.services import (
 )
 from connections.editorial_services import EditorialSourceService
 from content.analysis_inputs import (
-    AnalysisObservationManifest,
     analysis_observation_manifests_readable_in_transaction,
     freeze_analysis_observation_inputs_in_transaction,
     require_analysis_observation_inputs_in_transaction,
 )
+from content.analysis_schemas import AnalysisObservationManifest
 from content.lifecycle import purge_observation_dependants_in_transaction
 from content.models import ContentObservation, ContentVersion
 from content.report_reading import report_inputs_readable_in_transaction
