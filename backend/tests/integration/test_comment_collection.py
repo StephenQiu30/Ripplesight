@@ -217,6 +217,7 @@ def test_manual_comments_kafka_redelivery_keeps_threads_budget_and_offset(
             ).all() == [
                 ("global.plan038.comments.daily", 1),
                 ("source.hackernews.network.daily", 1),
+                ("test.network.daily", 1),
             ]
     finally:
         for consumer in consumers:
