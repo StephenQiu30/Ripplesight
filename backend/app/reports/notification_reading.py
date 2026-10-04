@@ -33,6 +33,42 @@ def _fingerprint(value: object) -> str:
     ).hexdigest()
 
 
+def report_daily_references_readable_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    topic_id: UUID,
+    manifest: ReportInputManifest,
+    now: datetime,
+) -> bool:
+    """Weekly reports pin exact daily versions, with no fallback or substitution."""
+    for reference in manifest.daily_reports:
+        daily = session.scalar(
+            select(Report).where(
+                Report.owner_id == owner_id,
+                Report.topic_id == topic_id,
+                Report.id == reference.report_id,
+                Report.version == reference.version,
+                Report.kind == "daily",
+                Report.status == "final",
+            )
+        )
+        if daily is None or ReportInputManifest.model_validate(daily.input_manifest).daily_reports:
+            return False
+        if (
+            load_notification_report_in_transaction(
+                session,
+                owner_id=owner_id,
+                report_id=reference.report_id,
+                version=reference.version,
+                now=now,
+            )
+            is None
+        ):
+            return False
+    return True
+
+
 def load_notification_report_in_transaction(
     session: Session,
     *,
@@ -65,6 +101,14 @@ def load_notification_report_in_transaction(
         topic_id=record.topic_id,
         annotation_ids=manifest.annotation_ids,
         content_version_ids=manifest.content_version_ids,
+    ):
+        return None
+    if not report_daily_references_readable_in_transaction(
+        session,
+        owner_id=owner_id,
+        topic_id=record.topic_id,
+        manifest=manifest,
+        now=now,
     ):
         return None
     data = DailyReportData.model_validate(record.data)

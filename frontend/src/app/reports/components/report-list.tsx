@@ -40,6 +40,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiRequestError } from "@/request";
 
@@ -70,6 +71,7 @@ function reportDate(value: string) {
 export function ReportList() {
   const [topics, setTopics] = useState<HotKeyAPI.MonitorTopicView[]>([]);
   const [topicOptionsError, setTopicOptionsError] = useState(false);
+  const [kind, setKind] = useState<"daily" | "weekly">("daily");
   const [topicId, setTopicId] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -120,7 +122,7 @@ export function ReportList() {
             已有报告
           </h1>
           <p className="text-muted-foreground mt-4 leading-7">
-            按主题和日期，阅读已经定稿的日报。
+            按主题和日期，阅读已经定稿的日报和周报。
           </p>
         </div>
         <Button
@@ -131,7 +133,20 @@ export function ReportList() {
           刷新
         </Button>
       </div>
-      <Collapsible className="mt-8">
+      <ToggleGroup
+        type="single"
+        value={kind}
+        onValueChange={(value) => {
+          if (value === "daily" || value === "weekly") setKind(value);
+        }}
+        aria-label="报告周期"
+        variant="outline"
+        className="mt-8"
+      >
+        <ToggleGroupItem value="daily">日报</ToggleGroupItem>
+        <ToggleGroupItem value="weekly">周报</ToggleGroupItem>
+      </ToggleGroup>
+      <Collapsible className="mt-5">
         <CollapsibleTrigger asChild>
           <Button variant="ghost">
             筛选报告
@@ -200,7 +215,8 @@ export function ReportList() {
         </CollapsibleContent>
       </Collapsible>
       <ReportResults
-        key={`${topicId}|${dateFrom}|${dateTo}|${reloadToken}`}
+        key={`${kind}|${topicId}|${dateFrom}|${dateTo}|${reloadToken}`}
+        kind={kind}
         topicId={topicId}
         dateFrom={dateFrom}
         dateTo={dateTo}
@@ -211,11 +227,13 @@ export function ReportList() {
 }
 
 function ReportResults({
+  kind,
   topicId,
   dateFrom,
   dateTo,
   onRetry,
 }: {
+  kind: "daily" | "weekly";
   topicId: string;
   dateFrom: string;
   dateTo: string;
@@ -231,7 +249,7 @@ function ReportResults({
     controller.current = current;
     void listReports(
       {
-        kind: "daily",
+        kind,
         topic_id: topicId === "all" ? undefined : topicId,
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
@@ -256,7 +274,7 @@ function ReportResults({
         }
       });
     return () => current.abort();
-  }, [topicId, dateFrom, dateTo]);
+  }, [kind, topicId, dateFrom, dateTo]);
 
   async function loadMore() {
     const current = controller.current;
@@ -273,7 +291,7 @@ function ReportResults({
     try {
       const page = await listReports(
         {
-          kind: "daily",
+          kind,
           topic_id: topicId === "all" ? undefined : topicId,
           date_from: dateFrom || undefined,
           date_to: dateTo || undefined,
@@ -326,7 +344,7 @@ function ReportResults({
               <EmptyHeader>
                 <EmptyTitle>暂无已定稿报告</EmptyTitle>
                 <EmptyDescription>
-                  已有日报会显示在这里，也可以调整筛选条件。
+                  已有日报和周报会显示在这里，也可以调整筛选条件。
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
