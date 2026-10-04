@@ -12,7 +12,9 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from content.event_reading import load_event_member_content_in_transaction
+from content.observation_context import load_observation_context_in_transaction
 from content.schemas import EventContentReadReference
+from content.version_inputs import legacy_content_versions_readable_in_transaction
 from core.errors import ApplicationError
 from evidence.schemas import AdmittedSourcePayload, DataClass
 from evidence.services import (
@@ -64,7 +66,11 @@ def source_material_in_transaction(
     session: Session, *, owner_id: UUID, reference: FrozenPublicationReference, now: datetime
 ) -> tuple[str, UUID]:
     ref = EventContentReadReference(
-        content_id=reference.content_id, content_version_id=reference.content_version_id
+        content_id=reference.content_id,
+        content_version_id=reference.content_version_id,
+        observation_id=reference.observation_id,
+        input_observation_ids=reference.input_observation_ids,
+        legacy_strict=reference.observation_id is None,
     )
     snapshot = load_event_member_content_in_transaction(
         session, owner_id=owner_id, references=(ref,), now=now
@@ -72,6 +78,48 @@ def source_material_in_transaction(
     if snapshot is None:
         raise ApplicationError("publication_revision_conflict")
     return snapshot.source_key, snapshot.observation.id
+
+
+def require_media_run_source_in_transaction(
+    session: Session, run: PublicationMediaRun, *, now: datetime
+) -> None:
+    """A nullable legacy source marker must never bypass a modern observation's source FK."""
+    fixed = FrozenPublicationReference.model_validate(run.fixed_reference)
+    if (
+        fixed.observation_id != run.observation_id
+        or fixed.content_id != run.content_id
+        or fixed.content_version_id != run.content_version_id
+    ):
+        raise ApplicationError("publication_revision_conflict")
+    if run.observation_id is None:
+        if (
+            run.observation_source_key is not None
+            or not legacy_content_versions_readable_in_transaction(
+                session,
+                owner_id=run.owner_id,
+                content_version_ids=(run.content_version_id,),
+                now=now,
+            )
+        ):
+            raise ApplicationError("publication_revision_conflict")
+        source, _ = source_material_in_transaction(
+            session, owner_id=run.owner_id, reference=fixed, now=now
+        )
+        if source != run.source_key:
+            raise ApplicationError("publication_revision_conflict")
+        return
+    actual = load_observation_context_in_transaction(
+        session, owner_id=run.owner_id, observation_id=run.observation_id
+    )
+    if (
+        actual is None
+        or actual.content_id != run.content_id
+        or actual.content_version_id != run.content_version_id
+        or actual.source_key != run.source_key
+        or run.observation_source_key
+        != (actual.source_key if actual.input_basis is not None else None)
+    ):
+        raise ApplicationError("publication_revision_conflict")
 
 
 def require_media_grant_in_transaction(
@@ -103,6 +151,8 @@ def require_media_grant_in_transaction(
                 grant.reference.content_id != fixed.content_id
                 or grant.reference.content_version_id != fixed.content_version_id
                 or grant.reference.policy_revision != fixed.policy_revision
+                or grant.reference.observation_id != fixed.observation_id
+                or grant.reference.input_observation_ids != fixed.input_observation_ids
             )
         )
         or not grant.body_sha256
@@ -201,6 +251,7 @@ class PublicationMediaService:
         if op:
             if op.input_fingerprint != fingerprint:
                 raise ApplicationError("publication_revision_conflict")
+            require_media_run_source_in_transaction(self.session, op, now=at)
             return run_view(self.session, op, replayed=True)
         reference, candidates, body_sha256 = require_media_grant_in_transaction(
             self.session,
@@ -218,13 +269,20 @@ class PublicationMediaService:
                 PublicationMediaRun.content_id == content_id,
                 PublicationMediaRun.content_version_id == command.content_version_id,
                 PublicationMediaRun.policy_revision == command.policy_revision,
+                PublicationMediaRun.observation_id == reference.observation_id,
             )
         )
         if existing:
+            require_media_run_source_in_transaction(self.session, existing, now=at)
             return run_view(self.session, existing, replayed=True)
-        source_key, _ = source_material_in_transaction(
+        source_key, actual_id = source_material_in_transaction(
             self.session, owner_id=owner_id, reference=reference, now=at
         )
+        actual = load_observation_context_in_transaction(
+            self.session, owner_id=owner_id, observation_id=actual_id
+        )
+        if actual is None or actual.source_key != source_key:
+            raise ApplicationError("publication_revision_conflict")
         for candidate in candidates:
             media_admission_in_transaction(
                 self.session,
@@ -258,6 +316,8 @@ class PublicationMediaService:
             job_id=job.id,
             content_id=content_id,
             content_version_id=command.content_version_id,
+            observation_id=reference.observation_id,
+            observation_source_key=actual.source_key if actual.input_basis is not None else None,
             policy_revision=command.policy_revision,
             source_key=source_key,
             fixed_reference={
@@ -303,6 +363,7 @@ class PublicationMediaService:
             run = self.session.get(PublicationMediaRun, (owner_id, run_id))
             if run is None:
                 return None
+            require_media_run_source_in_transaction(self.session, run, now=now or datetime.now(UTC))
             require_media_grant_in_transaction(
                 self.session,
                 owner_id=owner_id,

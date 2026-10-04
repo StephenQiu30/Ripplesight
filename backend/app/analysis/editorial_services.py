@@ -43,8 +43,10 @@ from content.editorial_reading import (
     latest_editorial_references_in_transaction,
     latest_quoted_reference_in_transaction,
     require_editorial_content_permission_in_transaction,
+    select_editorial_observation_reference_in_transaction,
 )
 from content.editorial_vision import read_editorial_vision_grant_in_transaction
+from content.observation_inputs import freeze_observation_inputs_in_transaction
 from content.schemas import EventContentReadReference
 from core.config import Settings
 from core.errors import ApplicationError
@@ -227,9 +229,27 @@ class EditorialService:
 
     def _load_material(self, run: EditorialRun) -> EditorialMaterial:
         reference = EventContentReadReference(
-            content_id=run.content_id, content_version_id=run.content_version_id
+            content_id=run.content_id,
+            content_version_id=run.content_version_id,
+            observation_id=UUID(run.input_manifest["main"]["observation_id"])
+            if run.input_manifest.get("main")
+            else None,
+            legacy_strict=not bool(run.input_manifest.get("main")),
         )
         now = self.clock()
+        for name in ("main", "quote"):
+            fixed = run.input_manifest.get(name)
+            if fixed and fixed.get("observation_id"):
+                actual = freeze_observation_inputs_in_transaction(
+                    self.session,
+                    owner_id=run.owner_id,
+                    observation_ids=(UUID(fixed["observation_id"]),),
+                    now=now,
+                )
+                if actual != tuple(
+                    sorted((UUID(i) for i in fixed.get("input_observation_ids", [])), key=str)
+                ):
+                    raise ApplicationError("editorial_material_unavailable")
         item = frozen_editorial_content_in_transaction(
             self.session, owner_id=run.owner_id, reference=reference, now=now
         )
@@ -250,6 +270,10 @@ class EditorialService:
             quote_ref = EventContentReadReference(
                 content_id=UUID(quote["content_id"]),
                 content_version_id=UUID(quote["content_version_id"]),
+                observation_id=UUID(quote["observation_id"])
+                if quote.get("observation_id")
+                else None,
+                legacy_strict=not bool(quote.get("observation_id")),
             )
             quoted = frozen_editorial_content_in_transaction(
                 self.session, owner_id=run.owner_id, reference=quote_ref, now=now
@@ -347,25 +371,52 @@ class EditorialService:
             created_at=now,
             updated_at=now,
         )
-        main = frozen_editorial_content_in_transaction(
+        reference = select_editorial_observation_reference_in_transaction(
             self.session,
             owner_id=owner_id,
-            reference=EventContentReadReference(
-                content_id=content_id, content_version_id=command.content_version_id
-            ),
+            content_id=content_id,
+            content_version_id=command.content_version_id,
+            source_key=source_key,
             now=now,
+        )
+        main = (
+            frozen_editorial_content_in_transaction(
+                self.session, owner_id=owner_id, reference=reference, now=now
+            )
+            if reference is not None
+            else None
         )
         if main is None or main.source_key != source_key:
             raise ApplicationError("editorial_material_unavailable")
         quote = latest_quoted_reference_in_transaction(
             self.session, owner_id=owner_id, main=main, now=now
         )
+        main_inputs = freeze_observation_inputs_in_transaction(
+            self.session, owner_id=owner_id, observation_ids=(main.observation.id,), now=now
+        )
+        run.input_manifest = {
+            "main": {
+                "observation_id": str(main.observation.id),
+                "input_observation_ids": [str(i) for i in main_inputs],
+            }
+        }
         if quote is not None:
+            quoted = frozen_editorial_content_in_transaction(
+                self.session, owner_id=owner_id, reference=quote, now=now
+            )
+            if quoted is None:
+                raise ApplicationError("editorial_material_unavailable")
+            quote_inputs = freeze_observation_inputs_in_transaction(
+                self.session, owner_id=owner_id, observation_ids=(quoted.observation.id,), now=now
+            )
             run.input_manifest = {
+                **run.input_manifest,
                 "quote": {
                     "content_id": str(quote.content_id),
                     "content_version_id": str(quote.content_version_id),
-                }
+                    "observation_id": str(quoted.observation.id),
+                    "input_observation_ids": [str(i) for i in quote_inputs],
+                },
             }
         run.input_fingerprint = _fingerprint(self._load_material(run).model_dump(mode="json"))
         self.session.add(run)
@@ -662,7 +713,11 @@ class EditorialExecutor:
                 session,
                 owner_id=message.owner_id,
                 reference=EventContentReadReference(
-                    content_id=run.content_id, content_version_id=run.content_version_id
+                    content_id=run.content_id,
+                    content_version_id=run.content_version_id,
+                    observation_id=UUID(run.input_manifest["main"]["observation_id"])
+                    if run.input_manifest.get("main")
+                    else None,
                 ),
                 now=self.clock(),
             )
@@ -708,7 +763,11 @@ class EditorialExecutor:
             raise self._failure("editorial_stale_input")
         references = [
             EventContentReadReference(
-                content_id=run.content_id, content_version_id=run.content_version_id
+                content_id=run.content_id,
+                content_version_id=run.content_version_id,
+                observation_id=UUID(run.input_manifest["main"]["observation_id"])
+                if run.input_manifest.get("main")
+                else None,
             )
         ]
         quote = run.input_manifest.get("quote")
@@ -717,6 +776,9 @@ class EditorialExecutor:
                 EventContentReadReference(
                     content_id=UUID(quote["content_id"]),
                     content_version_id=UUID(quote["content_version_id"]),
+                    observation_id=UUID(quote["observation_id"])
+                    if quote.get("observation_id")
+                    else None,
                 )
             )
         try:
@@ -827,6 +889,14 @@ class EditorialExecutor:
                     run.status, run.execution_token, run.updated_at = "running", token, self.clock()
                     stage_unknown = False
                 captured_manual_version = run.manual_version
+                vision_reference = EventContentReadReference(
+                    content_id=run.content_id,
+                    content_version_id=run.content_version_id,
+                    observation_id=UUID(run.input_manifest["main"]["observation_id"])
+                    if run.input_manifest.get("main")
+                    else None,
+                    legacy_strict=not bool(run.input_manifest.get("main")),
+                )
             if stage_unknown:
                 raise self._failure("editorial_result_unknown")
             assert isinstance(plan, EditorialStep)
@@ -843,10 +913,7 @@ class EditorialExecutor:
                         settings=self.settings,
                         message=message,
                         lease=lease,
-                        reference=EventContentReadReference(
-                            content_id=material.content_id,
-                            content_version_id=material.content_version_id,
-                        ),
+                        reference=vision_reference,
                         stage_id=stage_id,
                         guard=partial(
                             self._ai_guard,

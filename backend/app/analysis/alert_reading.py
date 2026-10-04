@@ -8,7 +8,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from analysis.models import ContentAnnotation
+from analysis.reads import annotation_inputs_readable_in_transaction
 from content.alert_reading import freeze_alert_content_inputs_in_transaction
+from content.analysis_inputs import AnalysisObservationManifest
 from content.report_reading import report_inputs_readable_in_transaction
 from content.version_inputs import observations_readable_in_transaction
 
@@ -50,18 +52,27 @@ def load_negative_alert_facts_in_transaction(
         return NegativeAlertFacts(None, "alert_input_limit", {})
     unique: dict[UUID, ContentAnnotation] = {}
     for row in rows:
-        unique.setdefault(row.content_id, row)
-    inputs = freeze_alert_content_inputs_in_transaction(
-        session,
-        owner_id=owner_id,
-        version_ids=tuple(row.content_version_id for row in unique.values()),
-        as_of=end,
-        now=now,
-    )
+        if annotation_inputs_readable_in_transaction(session, annotation=row, now=now):
+            unique.setdefault(row.content_id, row)
     selected = []
+    all_inputs: set[UUID] = set()
     for row in unique.values():
         version_id = row.content_version_id
-        original = inputs.get(version_id)
+        analysis_manifest = (
+            AnalysisObservationManifest.model_validate(row.input_manifest)
+            if row.input_manifest is not None
+            else None
+        )
+        original = freeze_alert_content_inputs_in_transaction(
+            session,
+            owner_id=owner_id,
+            version_ids=(version_id,),
+            as_of=end,
+            now=now,
+            selected_observations=analysis_manifest.post_observations
+            if analysis_manifest
+            else None,
+        ).get(version_id)
         if original is None:
             return NegativeAlertFacts(None, "alert_input_unavailable", {})
         if not start <= original.first_received_at < end:
@@ -73,11 +84,17 @@ def load_negative_alert_facts_in_transaction(
             or (row.relevant and row.sentiment not in ("positive", "neutral", "negative"))
         ):
             return NegativeAlertFacts(None, "alert_sentiment_invalid", {})
+        analysis_inputs = analysis_manifest.input_observation_ids if analysis_manifest else ()
+        all_inputs.update((*original.observation_ids, *analysis_inputs))
+        if len(all_inputs) > 2000:
+            return NegativeAlertFacts(None, "alert_input_limit", {})
         selected.append(
             {
                 "annotation_id": str(row.id),
                 "version_id": str(version_id),
                 "observation_ids": [str(i) for i in original.observation_ids],
+                "analysis_input_signature": row.input_signature,
+                "analysis_observation_ids": [str(i) for i in analysis_inputs],
                 "prompt_version": row.prompt_version,
                 "relevant": row.relevant,
                 "sentiment": row.sentiment,
@@ -126,6 +143,7 @@ def negative_alert_inputs_readable_in_transaction(
             )
             if (
                 row is None
+                or not annotation_inputs_readable_in_transaction(session, annotation=row, now=now)
                 or row.status != "annotated"
                 or row.result_state != "valid"
                 or str(row.content_version_id) != item["version_id"]
@@ -138,8 +156,24 @@ def negative_alert_inputs_readable_in_transaction(
                 != item["first_valid_at"]
             ):
                 return False
+            if row.input_manifest is not None:
+                analysis_inputs = AnalysisObservationManifest.model_validate(row.input_manifest)
+                if (
+                    item.get("analysis_input_signature") != row.input_signature
+                    or item.get("analysis_observation_ids")
+                    != [str(value) for value in analysis_inputs.input_observation_ids]
+                    or str(analysis_inputs.post_observations[row.content_version_id])
+                    not in item["observation_ids"]
+                ):
+                    return False
+                observations.extend(analysis_inputs.input_observation_ids)
+            elif item.get("analysis_input_signature", "legacy") != "legacy" or item.get(
+                "analysis_observation_ids", []
+            ):
+                return False
             versions.append(row.content_version_id)
             observations.extend(UUID(str(value)) for value in item["observation_ids"])
+        observations = sorted(set(observations), key=str)
         return observations_readable_in_transaction(
             session, owner_id=owner_id, observation_ids=tuple(observations), now=now
         ) and report_inputs_readable_in_transaction(

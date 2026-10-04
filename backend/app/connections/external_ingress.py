@@ -12,7 +12,7 @@ from connections.editorial_models import (
     EditorialSourceRun,
     EditorialSourceVersion,
 )
-from connections.editorial_schemas import ExternalIngressItem
+from connections.editorial_schemas import ExternalIngressItem, external_native_identity_claim
 from core.errors import ApplicationError
 from events.heat import record_source_fetch_success_in_transaction
 from sources.editorial_schemas import (
@@ -34,8 +34,10 @@ def prepare_external_materials(
     seen: dict[str, int] = {}
     for index, value in enumerate(values):
         try:
+            if external_native_identity_claim(value):
+                raise ValueError("external material cannot declare native identity")
             material = EditorialMaterial.model_validate(value)
-        except ValidationError:
+        except (ValidationError, ValueError):
             items.append(
                 ExternalIngressItem(index=index, status="rejected", reason="invalid_material")
             )

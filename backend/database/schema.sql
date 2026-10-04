@@ -1505,6 +1505,22 @@ CREATE TABLE content_records (
 
 CREATE INDEX content_records_owner_id_idx ON content_records (owner_id, id);
 
+CREATE TABLE content_native_identities (
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	content_id UUID NOT NULL,
+	platform VARCHAR(32) NOT NULL,
+	object_type VARCHAR(16) NOT NULL,
+	namespace VARCHAR(64) NOT NULL,
+	native_id VARCHAR(128) NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT content_native_identities_native_key UNIQUE (owner_id, platform, object_type, namespace, native_id),
+	CONSTRAINT content_native_identities_content_fkey FOREIGN KEY(owner_id, content_id) REFERENCES content_records (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT content_native_identities_namespace_check CHECK (platform = 'threads' AND object_type = 'post' AND namespace = 'threads_shortcode'),
+	CONSTRAINT content_native_identities_id_check CHECK (native_id ~ '^[A-Za-z0-9_-]{1,128}$')
+);
+
 CREATE TABLE content_discoveries (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL,
@@ -1631,32 +1647,6 @@ CREATE INDEX content_versions_content_idx
 
 -- Connections
 
-CREATE TABLE editorial_source_material_receipts (
-    owner_id UUID NOT NULL,
-    profile_id UUID NOT NULL,
-    identity_key VARCHAR(512) NOT NULL,
-    material_hash BYTEA NOT NULL,
-    content_id UUID NOT NULL,
-    content_version_id UUID NOT NULL,
-    run_id UUID NOT NULL,
-    body_status VARCHAR(16) NOT NULL,
-    body_retry_count INTEGER NOT NULL,
-    first_import BOOLEAN NOT NULL,
-    detail_title VARCHAR(2000),
-    published_at TIMESTAMPTZ,
-    source_updated_at TIMESTAMPTZ,
-    next_body_retry_at TIMESTAMPTZ,
-    metadata JSONB NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
-    PRIMARY KEY (owner_id, profile_id, identity_key),
-    CONSTRAINT editorial_materials_profile_fkey FOREIGN KEY(owner_id, profile_id) REFERENCES editorial_source_profiles (owner_id, id) ON DELETE CASCADE,
-    CONSTRAINT editorial_materials_content_fkey FOREIGN KEY(owner_id, content_id, content_version_id) REFERENCES content_versions (owner_id, content_id, id),
-    CONSTRAINT editorial_materials_run_fkey FOREIGN KEY(owner_id, run_id) REFERENCES editorial_source_runs (owner_id, id),
-    CONSTRAINT editorial_materials_numbers_check CHECK (octet_length(material_hash) = 32 AND body_retry_count BETWEEN 0 AND 3),
-    CONSTRAINT editorial_materials_body_check CHECK (body_status IN ('ok','pending','none')),
-    CONSTRAINT editorial_materials_metadata_check CHECK (jsonb_typeof(metadata) = 'object')
-);
 
 -- Content
 
@@ -1698,63 +1688,92 @@ CREATE INDEX content_version_relations_version_idx
     );
 
 CREATE TABLE content_observations (
-    id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL,
-    content_id UUID NOT NULL,
-    job_id UUID NOT NULL,
-    source_operation_id UUID NOT NULL,
-    content_version_id UUID,
-    observed_at TIMESTAMPTZ NOT NULL,
-    received_at TIMESTAMPTZ NOT NULL CHECK (received_at >= observed_at),
-    published_at TIMESTAMPTZ,
-    published_at_fractional_digits SMALLINT,
-    canonical_url VARCHAR(2048) CHECK (
-        canonical_url IS NULL OR canonical_url ~ '^https?://'
-    ),
-    final_url VARCHAR(2048) CHECK (
-        final_url IS NULL OR final_url ~ '^https?://'
-    ),
-    author_external_id VARCHAR(512) CHECK (
-        author_external_id IS NULL OR author_external_id <> ''
-    ),
-    author_name VARCHAR(256) CHECK (author_name IS NULL OR author_name <> ''),
-    like_count BIGINT CHECK (like_count IS NULL OR like_count >= 0),
-    comment_count BIGINT CHECK (comment_count IS NULL OR comment_count >= 0),
-    repost_count BIGINT CHECK (repost_count IS NULL OR repost_count >= 0),
-    view_count BIGINT CHECK (view_count IS NULL OR view_count >= 0),
-    play_count BIGINT CHECK (play_count IS NULL OR play_count >= 0),
-    danmaku_count BIGINT CHECK (danmaku_count IS NULL OR danmaku_count >= 0),
-    CONSTRAINT content_observations_owner_content_operation_key
-        UNIQUE (owner_id, content_id, source_operation_id),
-    CONSTRAINT content_observations_owner_id_key UNIQUE (owner_id, id),
-    CONSTRAINT content_observations_owner_identity_version_key
-        UNIQUE (owner_id, id, content_id, content_version_id),
-    CONSTRAINT content_observations_owner_content_fkey
-        FOREIGN KEY (owner_id, content_id)
-        REFERENCES content_records (owner_id, id) ON DELETE CASCADE,
-    CONSTRAINT content_observations_owner_job_fkey
-        FOREIGN KEY (owner_id, job_id)
-        REFERENCES jobs (owner_id, id) ON DELETE RESTRICT,
-    CONSTRAINT content_observations_owner_content_version_fkey
-        FOREIGN KEY (owner_id, content_id, content_version_id)
-        REFERENCES content_versions (owner_id, content_id, id) ON DELETE RESTRICT,
-    CONSTRAINT content_observations_published_precision_check CHECK (
-        (published_at IS NULL AND published_at_fractional_digits IS NULL)
-        OR (
-            published_at IS NOT NULL
-            AND published_at_fractional_digits BETWEEN 0 AND 6
-        )
-    )
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	content_id UUID NOT NULL,
+	job_id UUID NOT NULL,
+	source_operation_id UUID NOT NULL,
+	source_key VARCHAR(64),
+	source_native_scope VARCHAR(512),
+	source_external_id VARCHAR(512),
+	source_identity_basis VARCHAR(16),
+	editorial_profile_id UUID,
+	native_identity_proof JSONB,
+	input_basis VARCHAR(32),
+	content_version_id UUID,
+	observed_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	received_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	published_at TIMESTAMP WITH TIME ZONE,
+	published_at_fractional_digits SMALLINT,
+	canonical_url VARCHAR(2048),
+	final_url VARCHAR(2048),
+	author_external_id VARCHAR(512),
+	author_name VARCHAR(256),
+	like_count BIGINT,
+	comment_count BIGINT,
+	repost_count BIGINT,
+	view_count BIGINT,
+	play_count BIGINT,
+	danmaku_count BIGINT,
+	PRIMARY KEY (id),
+	CONSTRAINT content_observations_owner_id_key UNIQUE (owner_id, id),
+	CONSTRAINT content_observations_owner_identity_version_key UNIQUE (owner_id, id, content_id, content_version_id),
+	CONSTRAINT content_observations_source_context_key UNIQUE (owner_id, id, content_id, content_version_id, source_key),
+	CONSTRAINT content_observations_input_basis_check CHECK (input_basis IS NULL OR input_basis IN ('source_v1', 'observations_v1')),
+	CONSTRAINT content_observations_provenance_check CHECK ((input_basis IS NULL AND source_key IS NULL AND source_native_scope IS NULL AND source_external_id IS NULL AND source_identity_basis IS NULL AND editorial_profile_id IS NULL AND native_identity_proof IS NULL) OR (input_basis IS NOT NULL AND source_key IS NOT NULL AND source_external_id IS NOT NULL AND source_identity_basis IS NOT NULL AND source_key ~ '^[a-z][a-z0-9_-]{0,63}$' AND source_external_id <> '' AND source_identity_basis IN ('guid', 'url_fallback'))),
+	CONSTRAINT content_observations_proof_check CHECK (native_identity_proof IS NULL OR (jsonb_typeof(native_identity_proof) = 'object' AND octet_length(native_identity_proof::text) <= 8192)),
+	CONSTRAINT content_observations_owner_content_fkey FOREIGN KEY(owner_id, content_id) REFERENCES content_records (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT content_observations_owner_job_fkey FOREIGN KEY(owner_id, job_id) REFERENCES jobs (owner_id, id) ON DELETE RESTRICT,
+	CONSTRAINT content_observations_owner_content_version_fkey FOREIGN KEY(owner_id, content_id, content_version_id) REFERENCES content_versions (owner_id, content_id, id) ON DELETE RESTRICT,
+	CONSTRAINT content_observations_owner_content_operation_key UNIQUE (owner_id, content_id, source_operation_id),
+	CONSTRAINT content_observations_received_at_check CHECK (received_at >= observed_at),
+	CONSTRAINT content_observations_canonical_url_check CHECK (canonical_url IS NULL OR canonical_url ~ '^https?://'),
+	CONSTRAINT content_observations_final_url_check CHECK (final_url IS NULL OR final_url ~ '^https?://'),
+	CONSTRAINT content_observations_author_check CHECK (author_external_id IS NULL OR author_external_id <> ''),
+	CONSTRAINT content_observations_author_name_check CHECK (author_name IS NULL OR author_name <> ''),
+	CONSTRAINT content_observations_published_precision_check CHECK ((published_at IS NULL AND published_at_fractional_digits IS NULL) OR (published_at IS NOT NULL AND published_at_fractional_digits BETWEEN 0 AND 6)),
+	CONSTRAINT content_observations_metrics_check CHECK ((like_count IS NULL OR like_count >= 0) AND (comment_count IS NULL OR comment_count >= 0) AND (repost_count IS NULL OR repost_count >= 0) AND (view_count IS NULL OR view_count >= 0) AND (play_count IS NULL OR play_count >= 0) AND (danmaku_count IS NULL OR danmaku_count >= 0))
+);
+CREATE INDEX content_observations_latest_idx ON content_observations (owner_id, content_id, observed_at, received_at, id);
+
+CREATE TABLE editorial_source_material_receipts (
+	owner_id UUID NOT NULL,
+	profile_id UUID NOT NULL,
+	identity_key VARCHAR(512) NOT NULL,
+	material_hash BYTEA NOT NULL,
+	content_id UUID NOT NULL,
+	content_version_id UUID NOT NULL,
+	observation_id UUID,
+	run_id UUID NOT NULL,
+	body_status VARCHAR(16) NOT NULL,
+	body_retry_count INTEGER NOT NULL,
+	first_import BOOLEAN NOT NULL,
+	detail_title VARCHAR(2000),
+	published_at TIMESTAMP WITH TIME ZONE,
+	source_updated_at TIMESTAMP WITH TIME ZONE,
+	next_body_retry_at TIMESTAMP WITH TIME ZONE,
+	metadata JSONB NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (owner_id, profile_id, identity_key),
+	CONSTRAINT editorial_materials_profile_fkey FOREIGN KEY(owner_id, profile_id) REFERENCES editorial_source_profiles (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT editorial_materials_content_fkey FOREIGN KEY(owner_id, content_id, content_version_id) REFERENCES content_versions (owner_id, content_id, id),
+	CONSTRAINT editorial_materials_run_fkey FOREIGN KEY(owner_id, run_id) REFERENCES editorial_source_runs (owner_id, id),
+	CONSTRAINT editorial_materials_observation_fkey FOREIGN KEY(owner_id, observation_id) REFERENCES content_observations (owner_id, id) ON DELETE RESTRICT,
+	CONSTRAINT editorial_materials_numbers_check CHECK (octet_length(material_hash) = 32 AND body_retry_count BETWEEN 0 AND 3),
+	CONSTRAINT editorial_materials_body_check CHECK (body_status IN ('ok','pending','none')),
+	CONSTRAINT editorial_materials_metadata_check CHECK (jsonb_typeof(metadata) = 'object')
 );
 
-CREATE INDEX content_observations_latest_idx
-    ON content_observations (
-        owner_id,
-        content_id,
-        observed_at,
-        received_at,
-        id
-    );
+CREATE TABLE content_observation_inputs (
+	owner_id UUID NOT NULL,
+	output_observation_id UUID NOT NULL,
+	input_observation_id UUID NOT NULL,
+	PRIMARY KEY (owner_id, output_observation_id, input_observation_id),
+	CONSTRAINT content_observation_inputs_output_fkey FOREIGN KEY(owner_id, output_observation_id) REFERENCES content_observations (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT content_observation_inputs_input_fkey FOREIGN KEY(owner_id, input_observation_id) REFERENCES content_observations (owner_id, id) ON DELETE RESTRICT,
+	CONSTRAINT content_observation_inputs_not_self_check CHECK (output_observation_id <> input_observation_id)
+);
 
 CREATE TABLE content_version_inputs (
     owner_id UUID NOT NULL,
@@ -1943,103 +1962,48 @@ CREATE INDEX analysis_prompt_runtime_sessions_version_started_idx
     ON analysis_prompt_runtime_sessions (prompt_version, started_at);
 
 CREATE TABLE content_annotations (
-    id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL,
-    content_id UUID NOT NULL,
-    content_version_id UUID NOT NULL,
-    topic_id UUID NOT NULL,
-    topic_rule_version INTEGER NOT NULL CHECK (topic_rule_version >= 1),
-    prompt_version VARCHAR(128) NOT NULL CHECK (prompt_version <> ''),
-    relevant BOOLEAN,
-    relevance_reason VARCHAR(500),
-    sentiment VARCHAR(16) CHECK (
-        sentiment IS NULL OR sentiment IN ('positive', 'neutral', 'negative')
-    ),
-    summary VARCHAR(60),
-    viewpoints JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (
-        jsonb_typeof(viewpoints) = 'array'
-        AND jsonb_array_length(viewpoints) <= 5
-    ),
-    ai_call_id UUID,
-    status VARCHAR(16) NOT NULL CHECK (
-        status IN ('annotated', 'unanalyzed')
-    ),
-    result_state VARCHAR(16) NOT NULL CHECK (
-        result_state IN ('pending', 'failed', 'invalid', 'valid')
-    ),
-    error_code VARCHAR(64),
-    diagnostic_history JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (
-        jsonb_typeof(diagnostic_history) = 'array'
-    ),
-    first_valid_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL CHECK (created_at <= updated_at),
-    CONSTRAINT content_annotations_owner_id_key UNIQUE (owner_id, id),
-    CONSTRAINT content_annotations_owner_version_topic_rule_prompt_key
-        UNIQUE (
-            owner_id,
-            content_version_id,
-            topic_id,
-            topic_rule_version,
-            prompt_version
-        ),
-    CONSTRAINT content_annotations_owner_content_version_fkey
-        FOREIGN KEY (owner_id, content_id, content_version_id)
-        REFERENCES content_versions (owner_id, content_id, id) ON DELETE CASCADE,
-    CONSTRAINT content_annotations_owner_topic_fkey
-        FOREIGN KEY (owner_id, topic_id)
-        REFERENCES monitor_topics (owner_id, id) ON DELETE CASCADE,
-    CONSTRAINT content_annotations_topic_rule_version_fkey
-        FOREIGN KEY (topic_id, topic_rule_version)
-        REFERENCES monitor_topic_versions (topic_id, version) ON DELETE CASCADE,
-    CONSTRAINT content_annotations_owner_ai_call_fkey
-        FOREIGN KEY (owner_id, ai_call_id)
-        REFERENCES ai_calls (owner_id, id),
-    CONSTRAINT content_annotations_output_status_check CHECK (
-        (
-            status = 'annotated'
-            AND result_state = 'valid'
-            AND relevant IS NOT NULL
-            AND relevance_reason IS NOT NULL
-            AND btrim(relevance_reason) <> ''
-            AND summary IS NOT NULL
-            AND btrim(summary) <> ''
-            AND ai_call_id IS NOT NULL
-            AND error_code IS NULL
-            AND (
-                (relevant AND sentiment IS NOT NULL)
-                OR (NOT relevant AND sentiment IS NULL)
-            )
-        )
-        OR (
-            status = 'unanalyzed'
-            AND result_state IN ('pending', 'failed', 'invalid')
-            AND relevant IS NULL
-            AND relevance_reason IS NULL
-            AND sentiment IS NULL
-            AND summary IS NULL
-            AND viewpoints = '[]'::jsonb
-            AND (
-                (result_state = 'pending' AND ai_call_id IS NULL AND error_code IS NULL)
-                OR (
-                    result_state IN ('failed', 'invalid')
-                    AND ai_call_id IS NOT NULL
-                    AND error_code IS NOT NULL
-                    AND btrim(error_code) <> ''
-                )
-            )
-        )
-    ),
-    CONSTRAINT content_annotations_first_valid_at_check CHECK (
-        (result_state = 'valid') = (first_valid_at IS NOT NULL)
-    )
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	content_id UUID NOT NULL,
+	content_version_id UUID NOT NULL,
+	topic_id UUID NOT NULL,
+	topic_rule_version INTEGER NOT NULL,
+	prompt_version VARCHAR(128) NOT NULL,
+	input_manifest JSONB,
+	input_signature VARCHAR(64) DEFAULT 'legacy' NOT NULL,
+	relevant BOOLEAN,
+	relevance_reason VARCHAR(500),
+	sentiment VARCHAR(16),
+	summary VARCHAR(60),
+	viewpoints JSONB DEFAULT '[]'::jsonb NOT NULL,
+	ai_call_id UUID,
+	status VARCHAR(16) NOT NULL,
+	result_state VARCHAR(16) NOT NULL,
+	error_code VARCHAR(64),
+	diagnostic_history JSONB DEFAULT '[]'::jsonb NOT NULL,
+	first_valid_at TIMESTAMP WITH TIME ZONE,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT content_annotations_owner_id_key UNIQUE (owner_id, id),
+	CONSTRAINT content_annotations_owner_version_topic_rule_prompt_key UNIQUE (owner_id, content_version_id, topic_id, topic_rule_version, prompt_version, input_signature),
+	CONSTRAINT content_annotations_owner_content_version_fkey FOREIGN KEY(owner_id, content_id, content_version_id) REFERENCES content_versions (owner_id, content_id, id) ON DELETE CASCADE,
+	CONSTRAINT content_annotations_owner_topic_fkey FOREIGN KEY(owner_id, topic_id) REFERENCES monitor_topics (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT content_annotations_topic_rule_version_fkey FOREIGN KEY(topic_id, topic_rule_version) REFERENCES monitor_topic_versions (topic_id, version) ON DELETE CASCADE,
+	CONSTRAINT content_annotations_owner_ai_call_fkey FOREIGN KEY(owner_id, ai_call_id) REFERENCES ai_calls (owner_id, id),
+	CONSTRAINT content_annotations_rule_version_check CHECK (topic_rule_version >= 1),
+	CONSTRAINT content_annotations_prompt_version_check CHECK (prompt_version <> ''),
+	CONSTRAINT content_annotations_input_manifest_check CHECK ((input_manifest IS NULL AND input_signature = 'legacy') OR (input_manifest IS NOT NULL AND jsonb_typeof(input_manifest) = 'object' AND octet_length(input_manifest::text) <= 262144 AND input_signature ~ '^[0-9a-f]{64}$')),
+	CONSTRAINT content_annotations_sentiment_check CHECK (sentiment IS NULL OR sentiment IN ('positive', 'neutral', 'negative')),
+	CONSTRAINT content_annotations_viewpoints_check CHECK (jsonb_typeof(viewpoints) = 'array' AND jsonb_array_length(viewpoints) <= 5),
+	CONSTRAINT content_annotations_diagnostic_history_check CHECK (jsonb_typeof(diagnostic_history) = 'array'),
+	CONSTRAINT content_annotations_status_check CHECK (status IN ('annotated', 'unanalyzed')),
+	CONSTRAINT content_annotations_output_status_check CHECK ((status = 'annotated' AND result_state = 'valid' AND relevant IS NOT NULL AND relevance_reason IS NOT NULL AND btrim(relevance_reason) <> '' AND summary IS NOT NULL AND btrim(summary) <> '' AND ai_call_id IS NOT NULL AND error_code IS NULL AND ((relevant AND sentiment IS NOT NULL) OR (NOT relevant AND sentiment IS NULL))) OR (status = 'unanalyzed' AND result_state IN ('pending', 'failed', 'invalid') AND relevant IS NULL AND relevance_reason IS NULL AND sentiment IS NULL AND summary IS NULL AND viewpoints = '[]'::jsonb AND ((result_state = 'pending' AND ai_call_id IS NULL AND error_code IS NULL) OR (result_state IN ('failed', 'invalid') AND ai_call_id IS NOT NULL AND error_code IS NOT NULL AND btrim(error_code) <> '')))),
+	CONSTRAINT content_annotations_updated_at_check CHECK (created_at <= updated_at),
+	CONSTRAINT content_annotations_first_valid_at_check CHECK ((result_state = 'valid') = (first_valid_at IS NOT NULL))
 );
-
-CREATE INDEX content_annotations_topic_created_idx
-    ON content_annotations (owner_id, topic_id, created_at);
-
-CREATE INDEX content_annotations_content_idx
-    ON content_annotations (owner_id, content_id, created_at);
+CREATE INDEX content_annotations_content_idx ON content_annotations (owner_id, content_id, created_at);
+CREATE INDEX content_annotations_topic_created_idx ON content_annotations (owner_id, topic_id, created_at);
 
 CREATE TABLE editorial_sources (
     owner_id UUID NOT NULL,
@@ -2300,77 +2264,77 @@ CREATE TABLE events (
 CREATE INDEX events_owner_topic_seen_idx ON events (owner_id, topic_id, first_seen_at DESC, id);
 
 CREATE TABLE event_members (
-    id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL,
-    topic_id UUID NOT NULL,
-    event_id UUID NOT NULL,
-    content_id UUID NOT NULL,
-    content_version_id UUID NOT NULL,
-    source_key VARCHAR(64) NOT NULL CHECK (source_key ~ '^[a-z][a-z0-9_-]{0,63}$'),
-    representative_comment_id UUID,
-    added_revision INTEGER NOT NULL CHECK (added_revision >= 1),
-    removed_revision INTEGER CHECK (removed_revision IS NULL OR removed_revision > added_revision),
-    assignment_origin VARCHAR(16) NOT NULL CHECK (assignment_origin IN ('model', 'manual')),
-    created_at TIMESTAMPTZ NOT NULL,
-    CONSTRAINT event_members_event_fkey FOREIGN KEY (owner_id, topic_id, event_id)
-        REFERENCES events (owner_id, topic_id, id) ON DELETE CASCADE,
-    CONSTRAINT event_members_content_version_fkey FOREIGN KEY (owner_id, content_id, content_version_id)
-        REFERENCES content_versions (owner_id, content_id, id) ON DELETE RESTRICT,
-    CONSTRAINT event_members_content_source_fkey FOREIGN KEY (owner_id, content_id, source_key)
-        REFERENCES content_records (owner_id, id, source_key) ON DELETE RESTRICT,
-    CONSTRAINT event_members_comment_fkey FOREIGN KEY (owner_id, representative_comment_id)
-        REFERENCES content_records (owner_id, id) ON DELETE RESTRICT,
-    CONSTRAINT event_members_revision_key UNIQUE
-        (owner_id, topic_id, event_id, content_id, added_revision),
-    CONSTRAINT event_members_scope_id_key UNIQUE (owner_id, topic_id, event_id, id)
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	topic_id UUID NOT NULL,
+	event_id UUID NOT NULL,
+	content_id UUID NOT NULL,
+	content_version_id UUID NOT NULL,
+	observation_id UUID,
+	observation_source_key VARCHAR(64),
+	input_manifest JSONB,
+	source_key VARCHAR(64) NOT NULL,
+	representative_comment_id UUID,
+	representative_comment_observation_id UUID,
+	added_revision INTEGER NOT NULL,
+	removed_revision INTEGER,
+	assignment_origin VARCHAR(16) NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT event_members_input_manifest_check CHECK (input_manifest IS NULL OR jsonb_typeof(input_manifest)='object'),
+	CONSTRAINT event_members_event_fkey FOREIGN KEY(owner_id, topic_id, event_id) REFERENCES events (owner_id, topic_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_members_content_version_fkey FOREIGN KEY(owner_id, content_id, content_version_id) REFERENCES content_versions (owner_id, content_id, id) ON DELETE RESTRICT,
+	CONSTRAINT event_members_observation_identity_fkey FOREIGN KEY(owner_id, observation_id, content_id, content_version_id) REFERENCES content_observations (owner_id, id, content_id, content_version_id) ON DELETE RESTRICT,
+	CONSTRAINT event_members_observation_source_check CHECK (observation_source_key IS NULL OR observation_source_key=source_key),
+	CONSTRAINT event_members_observation_source_fkey FOREIGN KEY(owner_id, observation_id, content_id, content_version_id, observation_source_key) REFERENCES content_observations (owner_id, id, content_id, content_version_id, source_key) ON DELETE RESTRICT,
+	CONSTRAINT event_members_comment_fkey FOREIGN KEY(owner_id, representative_comment_id) REFERENCES content_records (owner_id, id) ON DELETE RESTRICT,
+	CONSTRAINT event_members_comment_observation_fkey FOREIGN KEY(owner_id, representative_comment_observation_id) REFERENCES content_observations (owner_id, id) ON DELETE RESTRICT,
+	CONSTRAINT event_members_revision_key UNIQUE (owner_id, topic_id, event_id, content_id, added_revision),
+	CONSTRAINT event_members_scope_id_key UNIQUE (owner_id, topic_id, event_id, id),
+	CONSTRAINT event_members_added_revision_check CHECK (added_revision >= 1),
+	CONSTRAINT event_members_removed_revision_check CHECK (removed_revision IS NULL OR removed_revision > added_revision),
+	CONSTRAINT event_members_origin_check CHECK (assignment_origin IN ('model', 'manual')),
+	CONSTRAINT event_members_source_key_check CHECK (source_key ~ '^[a-z][a-z0-9_-]{0,63}$')
 );
+CREATE INDEX event_members_event_current_idx ON event_members (owner_id, event_id) WHERE removed_revision IS NULL;
+CREATE UNIQUE INDEX event_members_one_current_assignment_idx ON event_members (owner_id, topic_id, content_id) WHERE removed_revision IS NULL;
 
-CREATE UNIQUE INDEX event_members_one_current_assignment_idx
-    ON event_members (owner_id, topic_id, content_id) WHERE removed_revision IS NULL;
-
-CREATE INDEX event_members_event_current_idx
-    ON event_members (owner_id, event_id) WHERE removed_revision IS NULL;
 
 CREATE TABLE event_candidates (
-    id UUID PRIMARY KEY,
-    owner_id UUID NOT NULL,
-    topic_id UUID NOT NULL,
-    input_fingerprint BYTEA NOT NULL CHECK (octet_length(input_fingerprint) = 32),
-    member_version_ids JSONB NOT NULL CHECK (
-        jsonb_typeof(member_version_ids) = 'array'
-        AND jsonb_array_length(member_version_ids) BETWEEN 1 AND 20
-    ),
-    expected_event_revisions JSONB NOT NULL DEFAULT '{}'::jsonb
-        CHECK (jsonb_typeof(expected_event_revisions) = 'object'),
-    window_start TIMESTAMPTZ NOT NULL,
-    window_end TIMESTAMPTZ NOT NULL CHECK (window_end > window_start),
-    prompt_version VARCHAR(128) NOT NULL CHECK (prompt_version <> ''),
-    status VARCHAR(16) NOT NULL DEFAULT 'pending'
-        CHECK (status IN ('pending', 'confirmed', 'rejected', 'failed')),
-    ai_call_id UUID,
-    job_id UUID,
-    event_id UUID,
-    error_code VARCHAR(64),
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL CHECK (updated_at >= created_at),
-    CONSTRAINT event_candidates_fingerprint_key UNIQUE (owner_id, topic_id, input_fingerprint),
-    CONSTRAINT event_candidates_owner_id_key UNIQUE (owner_id, id),
-    CONSTRAINT event_candidates_owner_topic_fkey FOREIGN KEY (owner_id, topic_id)
-        REFERENCES monitor_topics (owner_id, id) ON DELETE CASCADE,
-    CONSTRAINT event_candidates_ai_call_fkey FOREIGN KEY (owner_id, ai_call_id)
-        REFERENCES ai_calls (owner_id, id),
-    CONSTRAINT event_candidates_job_fkey FOREIGN KEY (owner_id, job_id)
-        REFERENCES jobs (owner_id, id),
-    CONSTRAINT event_candidates_event_fkey FOREIGN KEY (owner_id, topic_id, event_id)
-        REFERENCES events (owner_id, topic_id, id),
-    CONSTRAINT event_candidates_result_check CHECK (
-        (status = 'pending' AND event_id IS NULL)
-        OR (status = 'confirmed' AND event_id IS NOT NULL AND ai_call_id IS NOT NULL AND error_code IS NULL)
-        OR (status = 'rejected' AND event_id IS NULL AND ai_call_id IS NOT NULL AND error_code IS NULL)
-        OR (status = 'failed' AND event_id IS NULL AND error_code IS NOT NULL)
-    )
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	topic_id UUID NOT NULL,
+	input_fingerprint BYTEA NOT NULL,
+	member_version_ids JSONB NOT NULL,
+	input_manifest JSONB,
+	expected_event_revisions JSONB DEFAULT '{}'::jsonb NOT NULL,
+	window_start TIMESTAMP WITH TIME ZONE NOT NULL,
+	window_end TIMESTAMP WITH TIME ZONE NOT NULL,
+	prompt_version VARCHAR(128) NOT NULL,
+	status VARCHAR(16) DEFAULT 'pending' NOT NULL,
+	ai_call_id UUID,
+	job_id UUID,
+	event_id UUID,
+	error_code VARCHAR(64),
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT event_candidates_fingerprint_key UNIQUE (owner_id, topic_id, input_fingerprint),
+	CONSTRAINT event_candidates_owner_id_key UNIQUE (owner_id, id),
+	CONSTRAINT event_candidates_owner_topic_fkey FOREIGN KEY(owner_id, topic_id) REFERENCES monitor_topics (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_candidates_ai_call_fkey FOREIGN KEY(owner_id, ai_call_id) REFERENCES ai_calls (owner_id, id),
+	CONSTRAINT event_candidates_job_fkey FOREIGN KEY(owner_id, job_id) REFERENCES jobs (owner_id, id),
+	CONSTRAINT event_candidates_event_fkey FOREIGN KEY(owner_id, topic_id, event_id) REFERENCES events (owner_id, topic_id, id),
+	CONSTRAINT event_candidates_fingerprint_length_check CHECK (octet_length(input_fingerprint) = 32),
+	CONSTRAINT event_candidates_members_check CHECK (jsonb_typeof(member_version_ids) = 'array' AND jsonb_array_length(member_version_ids) BETWEEN 1 AND 20),
+	CONSTRAINT event_candidates_revisions_check CHECK (jsonb_typeof(expected_event_revisions) = 'object'),
+	CONSTRAINT event_candidates_input_manifest_check CHECK (input_manifest IS NULL OR jsonb_typeof(input_manifest) = 'object'),
+	CONSTRAINT event_candidates_window_check CHECK (window_end > window_start),
+	CONSTRAINT event_candidates_prompt_check CHECK (prompt_version <> ''),
+	CONSTRAINT event_candidates_status_check CHECK (status IN ('pending', 'confirmed', 'rejected', 'failed')),
+	CONSTRAINT event_candidates_updated_at_check CHECK (updated_at >= created_at),
+	CONSTRAINT event_candidates_result_check CHECK ((status = 'pending' AND event_id IS NULL) OR (status = 'confirmed' AND event_id IS NOT NULL AND ai_call_id IS NOT NULL AND error_code IS NULL) OR (status = 'rejected' AND event_id IS NULL AND ai_call_id IS NOT NULL AND error_code IS NULL) OR (status = 'failed' AND event_id IS NULL AND error_code IS NOT NULL))
 );
-
 CREATE INDEX event_candidates_pending_idx ON event_candidates (status, owner_id, topic_id, created_at);
 
 CREATE TABLE event_facts (
@@ -2580,31 +2544,32 @@ CREATE TABLE event_attention_sources (
 );
 
 CREATE TABLE event_attention_signals (
-    id UUID NOT NULL,
-    owner_id UUID NOT NULL,
-    topic_id UUID NOT NULL,
-    event_id UUID NOT NULL,
-    fact_id UUID,
-    source_id UUID NOT NULL,
-    content_id UUID NOT NULL,
-    content_version_id UUID NOT NULL,
-    kind VARCHAR(16) NOT NULL,
-    source_time TIMESTAMPTZ NOT NULL,
-    time_basis VARCHAR(16) NOT NULL,
-    status VARCHAR(16) NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
-    PRIMARY KEY (id),
-    CONSTRAINT event_attention_signals_event_fkey FOREIGN KEY(owner_id, topic_id, event_id) REFERENCES events (owner_id, topic_id, id) ON DELETE CASCADE,
-    CONSTRAINT event_attention_signals_source_fkey FOREIGN KEY(owner_id, source_id) REFERENCES event_attention_sources (owner_id, id) ON DELETE CASCADE,
-    CONSTRAINT event_attention_signals_fact_fkey FOREIGN KEY(owner_id, topic_id, fact_id) REFERENCES event_facts (owner_id, topic_id, id),
-    CONSTRAINT event_attention_signals_content_fkey FOREIGN KEY(owner_id, content_id, content_version_id) REFERENCES content_versions (owner_id, content_id, id) ON DELETE RESTRICT,
-    CONSTRAINT event_attention_signals_input_key UNIQUE (owner_id, topic_id, event_id, content_id, content_version_id),
-    CONSTRAINT event_attention_signals_kind_check CHECK (kind IN ('editorial','discussion','native')),
-    CONSTRAINT event_attention_signals_time_check CHECK (time_basis IN ('published','discovered')),
-    CONSTRAINT event_attention_signals_status_check CHECK (status IN ('active','withdrawn'))
+	id UUID NOT NULL,
+	owner_id UUID NOT NULL,
+	topic_id UUID NOT NULL,
+	event_id UUID NOT NULL,
+	fact_id UUID,
+	source_id UUID NOT NULL,
+	content_id UUID NOT NULL,
+	content_version_id UUID NOT NULL,
+	observation_id UUID,
+	kind VARCHAR(16) NOT NULL,
+	source_time TIMESTAMP WITH TIME ZONE NOT NULL,
+	time_basis VARCHAR(16) NOT NULL,
+	status VARCHAR(16) NOT NULL,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT event_attention_signals_event_fkey FOREIGN KEY(owner_id, topic_id, event_id) REFERENCES events (owner_id, topic_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_attention_signals_source_fkey FOREIGN KEY(owner_id, source_id) REFERENCES event_attention_sources (owner_id, id) ON DELETE CASCADE,
+	CONSTRAINT event_attention_signals_fact_fkey FOREIGN KEY(owner_id, topic_id, fact_id) REFERENCES event_facts (owner_id, topic_id, id),
+	CONSTRAINT event_attention_signals_content_fkey FOREIGN KEY(owner_id, content_id, content_version_id) REFERENCES content_versions (owner_id, content_id, id) ON DELETE RESTRICT,
+	CONSTRAINT event_attention_signals_observation_fkey FOREIGN KEY(owner_id, observation_id) REFERENCES content_observations (owner_id, id) ON DELETE RESTRICT,
+	CONSTRAINT event_attention_signals_input_key UNIQUE (owner_id, topic_id, event_id, content_id, content_version_id, observation_id),
+	CONSTRAINT event_attention_signals_kind_check CHECK (kind IN ('editorial','discussion','native')),
+	CONSTRAINT event_attention_signals_time_check CHECK (time_basis IN ('published','discovered')),
+	CONSTRAINT event_attention_signals_status_check CHECK (status IN ('active','withdrawn'))
 );
-
 CREATE INDEX event_attention_signals_window_idx ON event_attention_signals (owner_id, event_id, source_time);
 
 CREATE TABLE event_attention_snapshots (
@@ -2960,30 +2925,34 @@ CREATE TABLE publication_republish_runs (
 );
 
 CREATE TABLE publication_media_runs (
-    owner_id UUID NOT NULL,
-    id UUID NOT NULL,
-    operation_id UUID NOT NULL,
-    job_id UUID NOT NULL,
-    content_id UUID NOT NULL,
-    content_version_id UUID NOT NULL,
-    policy_revision INTEGER NOT NULL,
-    source_key VARCHAR(64) NOT NULL,
-    fixed_reference JSONB NOT NULL,
-    input_fingerprint VARCHAR(64) NOT NULL,
-    status VARCHAR(16) NOT NULL,
-    reason TEXT,
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
-    PRIMARY KEY (owner_id, id),
-    CONSTRAINT publication_media_runs_job_fk FOREIGN KEY (owner_id,job_id) REFERENCES jobs(owner_id,id),
-    CONSTRAINT publication_media_runs_content_fk FOREIGN KEY (owner_id,content_id,content_version_id) REFERENCES content_versions(owner_id,content_id,id),
-    CONSTRAINT publication_media_runs_operation_key UNIQUE (owner_id,operation_id),
-    CONSTRAINT publication_media_runs_identity_key UNIQUE (owner_id,content_id,content_version_id,policy_revision),
-    CONSTRAINT publication_media_runs_policy_check CHECK (policy_revision >= 1),
-    CONSTRAINT publication_media_runs_status_check CHECK (status IN ('queued','running','complete','partial','unknown','failed','stale','cancelled'))
+	owner_id UUID NOT NULL,
+	id UUID NOT NULL,
+	operation_id UUID NOT NULL,
+	job_id UUID NOT NULL,
+	content_id UUID NOT NULL,
+	content_version_id UUID NOT NULL,
+	observation_id UUID,
+	observation_source_key VARCHAR(64),
+	policy_revision INTEGER NOT NULL,
+	source_key VARCHAR(64) NOT NULL,
+	fixed_reference JSONB NOT NULL,
+	input_fingerprint VARCHAR(64) NOT NULL,
+	status VARCHAR(16) NOT NULL,
+	reason TEXT,
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+	PRIMARY KEY (owner_id, id),
+	CONSTRAINT publication_media_runs_job_fk FOREIGN KEY(owner_id, job_id) REFERENCES jobs (owner_id, id),
+	CONSTRAINT publication_media_runs_content_fk FOREIGN KEY(owner_id, content_id, content_version_id) REFERENCES content_versions (owner_id, content_id, id),
+	CONSTRAINT publication_media_runs_observation_identity_fk FOREIGN KEY(owner_id, observation_id, content_id, content_version_id) REFERENCES content_observations (owner_id, id, content_id, content_version_id) ON DELETE RESTRICT,
+	CONSTRAINT publication_media_runs_observation_source_check CHECK (observation_source_key IS NULL OR observation_source_key=source_key),
+	CONSTRAINT publication_media_runs_observation_source_fk FOREIGN KEY(owner_id, observation_id, content_id, content_version_id, observation_source_key) REFERENCES content_observations (owner_id, id, content_id, content_version_id, source_key) ON DELETE RESTRICT,
+	CONSTRAINT publication_media_runs_operation_key UNIQUE (owner_id, operation_id),
+	CONSTRAINT publication_media_runs_identity_key UNIQUE (owner_id, content_id, content_version_id, policy_revision, observation_id),
+	CONSTRAINT publication_media_runs_status_check CHECK (status IN ('queued','running','complete','partial','unknown','failed','stale','cancelled')),
+	CONSTRAINT publication_media_runs_policy_check CHECK (policy_revision >= 1)
 );
-
-CREATE INDEX publication_media_runs_job_idx ON publication_media_runs(owner_id,job_id);
+CREATE INDEX publication_media_runs_job_idx ON publication_media_runs (owner_id, job_id);
 
 CREATE TABLE publication_media_files (
     owner_id UUID NOT NULL,

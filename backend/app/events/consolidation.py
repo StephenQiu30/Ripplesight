@@ -15,7 +15,7 @@ from ai.capability_schemas import FrozenAiRouting
 from ai.schemas import AiCallError, AiCompletion, AiFailureCode
 from ai.services import AiService, create_ai_client
 from content.event_reading import load_event_member_content_in_transaction
-from content.schemas import EventContentReadReference
+from content.observation_inputs import freeze_observation_inputs_in_transaction
 from core.config import Settings
 from core.errors import ApplicationError
 from events.ai_execution import (
@@ -36,6 +36,10 @@ from events.fact_schemas import EventCorrectionInput
 from events.heat import resolve_attention_source
 from events.heat_models import EventAttentionSource
 from events.models import Event, EventMember
+from events.observation_inputs import (
+    event_content_reference,
+    load_fact_observation_inputs_in_transaction,
+)
 from events.relations import RelationPairOutput, RelationReportInput, relation_pair_request
 from events.story_models import EventStoryLink
 from jobs.execution import ExecutionLease, JobCompletion, JobExecutionFailure, JobExecutionService
@@ -67,6 +71,8 @@ class StoryReport(BaseModel):
     participant_key: str
     source_revision: int
     input: RelationReportInput
+    observation_id: UUID | None = None
+    input_observation_ids: tuple[UUID, ...] = ()
 
 
 class StoryRoot(BaseModel):
@@ -143,25 +149,46 @@ def load_story_roots_in_transaction(
                 .limit(20)
             )
         )
+        event_members = {
+            member.id: member
+            for member in session.scalars(
+                select(EventMember).where(
+                    EventMember.owner_id == owner_id,
+                    EventMember.id.in_({row.event_member_id for row in members}),
+                    EventMember.removed_revision.is_(None),
+                )
+            )
+        }
         readings = load_event_member_content_in_transaction(
             session,
             owner_id=owner_id,
             references=tuple(
-                EventContentReadReference(row.content_id, row.content_version_id) for row in members
+                event_content_reference(event_members[row.event_member_id])
+                for row in members
+                if row.event_member_id in event_members
             ),
             now=now,
         )
         reports = []
+        fact_inputs = load_fact_observation_inputs_in_transaction(
+            session, owner_id=owner_id, fact_ids=tuple({row.fact_id for row in members}), now=now
+        )
         for member in members:
-            member_fact = session.get(EventFact, member.fact_id)
-            if member_fact is None or member_fact.status != "confirmed":
+            event_member = event_members.get(member.event_member_id)
+            if event_member is None:
                 continue
-            reading = readings.get(
-                EventContentReadReference(member.content_id, member.content_version_id)
-            )
+            member_fact = session.get(EventFact, member.fact_id)
+            if (
+                member_fact is None
+                or member_fact.status != "confirmed"
+                or member.fact_id not in fact_inputs
+            ):
+                continue
+            reading = readings.get(event_content_reference(event_member))
             source = resolve_attention_source(sources, reading) if reading else None
             if (
                 reading is None
+                or reading.source_key != event_member.source_key
                 or source is None
                 or source.mode != "editorial"
                 or reading.current_visibility is None
@@ -195,6 +222,21 @@ def load_story_roots_in_transaction(
                         published_at=reading.observation.published_at,
                         summary=(version.body or "")[:4000] or None,
                         frame=cast(dict[str, str | None] | None, member_fact.frame),
+                    ),
+                    observation_id=reading.observation.id,
+                    input_observation_ids=freeze_observation_inputs_in_transaction(
+                        session,
+                        owner_id=owner_id,
+                        observation_ids=tuple(
+                            dict.fromkeys(
+                                (
+                                    reading.observation.id,
+                                    *event_content_reference(event_member).input_observation_ids,
+                                    *fact_inputs[member.fact_id],
+                                )
+                            )
+                        ),
+                        now=now,
                     ),
                 )
             )

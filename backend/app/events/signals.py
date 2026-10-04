@@ -23,8 +23,9 @@ from content.event_reading import (
     load_event_member_content_in_transaction,
     load_native_event_targets_in_transaction,
 )
+from content.observation_context import load_observation_context_in_transaction
+from content.observation_inputs import freeze_observation_inputs_in_transaction
 from content.report_reading import report_inputs_readable_in_transaction
-from content.schemas import EventContentReadReference
 from core.config import Settings
 from events.ai_execution import (
     create_event_stage_client,
@@ -44,6 +45,10 @@ from events.facts import invalidate_event_derived_in_transaction
 from events.heat import resolve_attention_source
 from events.heat_models import EventAttentionSource
 from events.models import Event, EventMember
+from events.observation_inputs import (
+    event_content_reference,
+    load_fact_observation_inputs_in_transaction,
+)
 from events.relations import RelationPairOutput, RelationReportInput, relation_pair_request
 from events.schemas import EventInput
 from jobs.execution import ExecutionLease, JobCompletion, JobExecutionFailure, JobExecutionService
@@ -80,6 +85,8 @@ class SignalInput(BaseModel):
     input: RelationReportInput
     native_targets: tuple[UUID, ...]
     regroup_requests: dict[str, str]
+    observation_id: UUID | None = None
+    input_observation_ids: tuple[UUID, ...] = ()
 
 
 class SignalFact(BaseModel):
@@ -99,6 +106,8 @@ class SignalFact(BaseModel):
     source_revision: int
     input: RelationReportInput
     recall_score: float = 0
+    observation_id: UUID | None = None
+    input_observation_ids: tuple[UUID, ...] = ()
 
 
 def _hash(value: object) -> str:
@@ -125,6 +134,8 @@ def _as_event_input(item: SignalInput | SignalFact) -> EventInput:
         else item.input.published_at or datetime.now(UTC),
         first_seen_basis="published",
         matched_keywords=frozenset(),
+        observation_id=item.observation_id,
+        input_observation_ids=item.input_observation_ids,
     )
 
 
@@ -211,6 +222,13 @@ def load_waiting_signal_inputs_in_transaction(
                             for row in overrides
                             if row.mode == "regroup_pending"
                         },
+                        observation_id=item.reading.observation.id,
+                        input_observation_ids=freeze_observation_inputs_in_transaction(
+                            session,
+                            owner_id=owner,
+                            observation_ids=(item.reading.observation.id,),
+                            now=now,
+                        ),
                     )
                 )
             if page.next_after_content_id is None or len(result) >= 4000:
@@ -267,12 +285,7 @@ def _fact_reports(session: Session, *, owner_id: UUID, now: datetime) -> tuple[S
         )
         .limit(2000)
     ).all()
-    references = tuple(
-        EventContentReadReference(
-            member.content_id, member.content_version_id, event_member.representative_comment_id
-        )
-        for member, _, _, event_member in rows
-    )
+    references = tuple(event_content_reference(event_member) for member, _, _, event_member in rows)
     readings = load_event_member_content_in_transaction(
         session, owner_id=owner_id, references=references, now=now
     )
@@ -290,11 +303,15 @@ def _fact_reports(session: Session, *, owner_id: UUID, now: datetime) -> tuple[S
         )
     )
     result = []
+    fact_inputs = load_fact_observation_inputs_in_transaction(
+        session, owner_id=owner_id, fact_ids=tuple({fact.id for _, fact, _, _ in rows}), now=now
+    )
     for (member, fact, event, event_member), reference in zip(rows, references, strict=True):
         reading = readings.get(reference)
         source = resolve_attention_source(sources, reading) if reading else None
         if (
             member.content_id in protected
+            or fact.id not in fact_inputs
             or reading is None
             or source is None
             or source.mode != "editorial"
@@ -311,6 +328,7 @@ def _fact_reports(session: Session, *, owner_id: UUID, now: datetime) -> tuple[S
             owner_id=owner_id,
             content_version_ids=(reference.content_version_id,),
             observation_ids=(reading.observation.id,),
+            # Every fact input selected by the original member remains required.
             now=now,
         ):
             continue
@@ -336,6 +354,21 @@ def _fact_reports(session: Session, *, owner_id: UUID, now: datetime) -> tuple[S
                     published_at=fact.first_seen_at,
                     summary=(version.body or "")[:300] or None,
                     frame=fact.frame,
+                ),
+                observation_id=reading.observation.id,
+                input_observation_ids=freeze_observation_inputs_in_transaction(
+                    session,
+                    owner_id=owner_id,
+                    observation_ids=tuple(
+                        dict.fromkeys(
+                            (
+                                reading.observation.id,
+                                *reference.input_observation_ids,
+                                *fact_inputs[fact.id],
+                            )
+                        )
+                    ),
+                    now=now,
                 ),
             )
         )
@@ -647,6 +680,19 @@ class EventSignalExecutor:
         event.updated_at = now
         fact.revision += 1
         fact.updated_at = now
+        observation_source_key = None
+        if signal.observation_id is not None:
+            actual = load_observation_context_in_transaction(
+                session, owner_id=signal.owner_id, observation_id=signal.observation_id
+            )
+            if (
+                actual is None
+                or actual.content_id != signal.content_id
+                or actual.content_version_id != signal.content_version_id
+                or actual.source_key != signal.source_key
+            ):
+                raise self._failure("event_signal_input_changed")
+            observation_source_key = actual.source_key if actual.input_basis is not None else None
         member = EventMember(
             id=uuid4(),
             owner_id=signal.owner_id,
@@ -656,6 +702,16 @@ class EventSignalExecutor:
             content_version_id=signal.content_version_id,
             source_key=signal.source_key,
             representative_comment_id=None,
+            observation_id=signal.observation_id,
+            observation_source_key=observation_source_key,
+            input_manifest={
+                "basis": "observations_v1",
+                "observation_source_key": observation_source_key,
+                "input_observation_ids": [str(value) for value in signal.input_observation_ids],
+            }
+            if signal.observation_id is not None
+            else None,
+            representative_comment_observation_id=None,
             added_revision=event.revision,
             removed_revision=None,
             assignment_origin="model",

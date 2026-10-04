@@ -13,8 +13,12 @@ from content.models import (
     ContentThread,
     ContentVersion,
     ContentVersionRelation,
-    ContentVisibilityObservation,
 )
+from content.observation_context import (
+    load_observation_contexts_in_transaction,
+    load_observation_visibilities_in_transaction,
+)
+from content.observation_reading import readable_observation_groups_in_transaction
 from content.schemas import (
     ContentMetricView,
     ContentObservationView,
@@ -32,7 +36,6 @@ from content.schemas import (
     EventSignalContentInput,
     EventSignalContentPage,
 )
-from content.version_inputs import version_inputs_readable_in_transaction
 from evidence.services import readable_resource_ids_query
 from jobs.source_scopes import load_collection_source_scopes_in_transaction
 
@@ -49,18 +52,57 @@ def load_event_member_content_in_transaction(
         raise RuntimeError("event content reads require the caller's transaction")
     if not references:
         return {}
-    if len(references) > 500:
-        batched: dict[EventContentReadReference, EventContentReadView] = {}
-        for offset in range(0, len(references), 500):
-            batched.update(
+    if len(references) > 2000:
+        raise ValueError("event reading allows at most 2000 fixed references")
+    if len(references) > 1 and (
+        len({(ref.content_id, ref.content_version_id) for ref in references}) != len(references)
+        or any(ref.legacy_strict for ref in references)
+    ):
+        combined: dict[EventContentReadReference, EventContentReadView] = {}
+        for reference in references:
+            combined.update(
                 load_event_member_content_in_transaction(
-                    session,
-                    owner_id=owner_id,
-                    references=references[offset : offset + 500],
-                    now=now,
+                    session, owner_id=owner_id, references=(reference,), now=now
                 )
             )
-        return batched
+        return combined
+    requested_reference = references[0]
+    if requested_reference.legacy_strict:
+        from content.version_inputs import legacy_content_versions_readable_in_transaction
+
+        if not legacy_content_versions_readable_in_transaction(
+            session,
+            owner_id=owner_id,
+            content_version_ids=(requested_reference.content_version_id,),
+            now=now,
+        ):
+            return {}
+    reference_keys = {ref: str(index) for index, ref in enumerate(references)}
+    supplied_groups = {
+        reference_keys[ref]: ref.input_observation_ids
+        for ref in references
+        if ref.input_observation_ids
+    }
+    supplied_closures = (
+        readable_observation_groups_in_transaction(
+            session, owner_id=owner_id, observation_groups=supplied_groups, now=now
+        )
+        if supplied_groups
+        else {}
+    )
+    references = tuple(
+        ref
+        for ref in references
+        if not ref.input_observation_ids
+        or (
+            supplied_closures.get(reference_keys[ref])
+            == tuple(sorted(ref.input_observation_ids, key=str))
+            and (ref.observation_id is None or ref.observation_id in ref.input_observation_ids)
+        )
+    )
+    if not references:
+        return {}
+    by_pair = {(ref.content_id, ref.content_version_id): ref for ref in references}
     readable = readable_resource_ids_query(
         owner_id=owner_id, resource_type="content_observation", now=now
     )
@@ -83,25 +125,46 @@ def load_event_member_content_in_transaction(
         (record.id, version.id): (record, version)
         for record, version in versions_and_records
         if (record.id, version.id) in requested
-        and version_inputs_readable_in_transaction(
-            session, owner_id=owner_id, content_version_ids=(version.id,), now=now
-        )
     }
     if not fixed:
         return {}
+    statement = select(ContentObservation)
+    if all(ref.observation_id is not None for ref in references):
+        statement = statement.where(
+            ContentObservation.id.in_({ref.observation_id for ref in references})
+        )
     observations = session.scalars(
-        select(ContentObservation)
-        .where(
+        statement.where(
             ContentObservation.owner_id == owner_id,
             ContentObservation.content_version_id.in_({version_id for _, version_id in fixed}),
             ContentObservation.id.in_(readable),
-        )
-        .order_by(
+        ).order_by(
             ContentObservation.observed_at.desc(),
             ContentObservation.received_at.desc(),
             ContentObservation.id.desc(),
         )
+    ).all()
+    contexts = load_observation_contexts_in_transaction(
+        session, owner_id=owner_id, observation_ids={obs.id for obs in observations}
     )
+    roots_without_proof = {
+        str(obs.id): (obs.id,)
+        for obs in observations
+        if obs.content_version_id is not None
+        and (obs.content_id, obs.content_version_id) in by_pair
+        if not by_pair[(obs.content_id, obs.content_version_id)].input_observation_ids
+    }
+    root_permissions = {}
+    items = tuple(roots_without_proof.items())
+    for offset in range(0, len(items), 2000):
+        root_permissions.update(
+            readable_observation_groups_in_transaction(
+                session,
+                owner_id=owner_id,
+                observation_groups=dict(items[offset : offset + 2000]),
+                now=now,
+            )
+        )
     selected: dict[tuple[UUID, UUID], tuple[ContentRecord, ContentVersion, ContentObservation]] = {}
     for observation in observations:
         if observation.content_version_id is None:
@@ -111,6 +174,27 @@ def load_event_member_content_in_transaction(
         if material is None:
             continue
         record, version = material
+        requested_reference = by_pair[pair]
+        if (
+            requested_reference.observation_id is not None
+            and observation.id != requested_reference.observation_id
+        ):
+            continue
+        if requested_reference.expected_source_key is not None:
+            actual = contexts.get(observation.id)
+            if (
+                actual is None
+                or actual.source_key != requested_reference.expected_source_key
+                or (
+                    requested_reference.observation_source_key
+                    != (actual.source_key if actual.input_basis is not None else None)
+                )
+            ):
+                continue
+        if not requested_reference.input_observation_ids and not root_permissions.get(
+            str(observation.id)
+        ):
+            continue
         selected.setdefault(pair, (record, version, observation))
     if not selected:
         return {}
@@ -131,6 +215,11 @@ def load_event_member_content_in_transaction(
     }
     comments: dict[tuple[UUID, UUID], tuple[ContentThread, ContentVersion, ContentObservation]] = {}
     if comment_pairs:
+        by_comment = {
+            (ref.content_id, ref.representative_comment_id): ref
+            for ref in references
+            if ref.representative_comment_id is not None
+        }
         comment_rows = session.execute(
             select(ContentThread, ContentVersion, ContentObservation)
             .join(
@@ -167,10 +256,31 @@ def load_event_member_content_in_transaction(
                 ContentObservation.id.desc(),
             )
         ).all()
+        comment_permissions = {}
+        for offset in range(0, len(comment_rows), 2000):
+            comment_permissions.update(
+                readable_observation_groups_in_transaction(
+                    session,
+                    owner_id=owner_id,
+                    observation_groups={
+                        str(obs.id): (obs.id,) for _, _, obs in comment_rows[offset : offset + 2000]
+                    },
+                    now=now,
+                )
+            )
         for thread, version, observation in comment_rows:
-            if not version_inputs_readable_in_transaction(
-                session, owner_id=owner_id, content_version_ids=(version.id,), now=now
+            requested_reference = by_comment[(thread.post_content_id, thread.content_id)]
+            if (
+                requested_reference.representative_comment_observation_id is not None
+                and observation.id != requested_reference.representative_comment_observation_id
             ):
+                continue
+            if (
+                requested_reference.input_observation_ids
+                and observation.id not in requested_reference.input_observation_ids
+            ):
+                continue
+            if not comment_permissions.get(str(observation.id)):
                 continue
             comments.setdefault(
                 (thread.post_content_id, thread.content_id), (thread, version, observation)
@@ -179,26 +289,22 @@ def load_event_member_content_in_transaction(
     versions = {version.id: version for _, version, _ in selected.values()}
     versions.update({version.id: version for _, version, _ in comments.values()})
     version_views = _version_views(session, owner_id=owner_id, versions=versions, readable=readable)
-    visibility: dict[UUID, ContentVisibilityView] = {}
-    for row in session.scalars(
-        select(ContentVisibilityObservation)
-        .where(
-            ContentVisibilityObservation.owner_id == owner_id,
-            ContentVisibilityObservation.content_id.in_({key[0] for key in selected}),
-        )
-        .order_by(
-            ContentVisibilityObservation.observed_at.desc(),
-            ContentVisibilityObservation.received_at.desc(),
-            ContentVisibilityObservation.id.desc(),
-        )
-    ):
-        visibility.setdefault(row.content_id, ContentVisibilityView.model_validate(row))
+    visibilities = load_observation_visibilities_in_transaction(
+        session,
+        owner_id=owner_id,
+        contexts={
+            obs.id: contexts[obs.id] for _, _, obs in selected.values() if obs.id in contexts
+        },
+    )
     result: dict[EventContentReadReference, EventContentReadView] = {}
     for reference in references:
         selection = selected.get((reference.content_id, reference.content_version_id))
         if selection is None:
             continue
         record, version, observation = selection
+        actual = contexts.get(observation.id)
+        if actual is None:
+            continue
         comment_id = reference.representative_comment_id
         comment = comments.get((record.id, comment_id)) if comment_id else None
         comment_view = None
@@ -218,19 +324,21 @@ def load_event_member_content_in_transaction(
             )
         result[reference] = EventContentReadView(
             id=record.id,
-            source_key=record.source_key,
+            source_key=actual.source_key,
             object_type=cast(Literal["post", "comment", "webpage"], record.object_type),
-            native_scope=record.native_scope,
+            native_scope=actual.native_scope,
             collection_scope=(
                 collection_scopes[observation.job_id].selector_ref
                 if observation.job_id in collection_scopes
-                and collection_scopes[observation.job_id].source_key == record.source_key
+                and collection_scopes[observation.job_id].source_key == actual.source_key
                 else None
             ),
-            external_id=record.external_id,
-            identity_basis=cast(Literal["guid", "url_fallback"] | None, record.identity_basis),
+            external_id=actual.external_id,
+            identity_basis=cast(Literal["guid", "url_fallback"] | None, actual.identity_basis),
             observation=_observation_view(observation, version_views[version.id]),
-            current_visibility=visibility.get(record.id),
+            current_visibility=ContentVisibilityView.model_validate(selected_visibility)
+            if (selected_visibility := visibilities.get(observation.id))
+            else None,
             representative_comment=comment_view,
             representative_comment_state=(
                 "readable" if comment_view else "unavailable" if comment_id else "none"

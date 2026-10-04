@@ -301,6 +301,7 @@ class PublicationService:
                 self.session,
                 owner_id=owner_id,
                 content_versions={content_id: snapshot.material.content_version_id},
+                selected_observations={content_id: snapshot.observation_id},
                 now=at,
             ).get(content_id)
             projected = derive_projection(
@@ -413,6 +414,7 @@ class PublicationService:
                 self.session,
                 owner_id=owner_id,
                 content_versions={content_id: snapshot.material.content_version_id},
+                selected_observations={content_id: snapshot.observation_id},
                 now=at,
             ).get(content_id)
             projected = derive_projection(

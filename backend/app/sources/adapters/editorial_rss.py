@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 
 from sources.adapters.editorial_http import EditorialSourceError
 from sources.adapters.editorial_parsing import collapse, material, plain, sanitize_html
+from sources.editorial_identity import rsshub_native_identity_proofs
 from sources.editorial_schemas import EditorialMaterial, EditorialSourceConfiguration, public_url
 
 _TEASER = re.compile(
@@ -57,7 +58,15 @@ def parse_feed(
     if rsshub and len(doc.entries) > rsshub.max_items:
         raise EditorialSourceError("rsshub_item_bound_exceeded")
     out = []
-    for entry in doc.entries[:1000]:
+    native_proofs = rsshub_native_identity_proofs(
+        text,
+        configuration=config,
+        parsed_links=tuple(
+            entry.get("link") if isinstance(entry.get("link"), str) else None
+            for entry in doc.entries[:1000]
+        ),
+    )
+    for index, entry in enumerate(doc.entries[:1000]):
         url = entry.get("link")
         title = entry.get("title")
         if not isinstance(url, str) or not isinstance(title, str) or not title.strip():
@@ -113,6 +122,7 @@ def parse_feed(
                     title,
                     preserve_fragment=config.preserve_url_fragment,
                     external_id=None if rsshub else str(entry.get("id", ""))[:512] or None,
+                    native_identity=native_proofs[index],
                     author=entry.get("author", None),
                     published_at=date("published")
                     if rsshub

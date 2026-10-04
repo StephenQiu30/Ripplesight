@@ -6,9 +6,10 @@ from uuid import UUID, uuid4
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 from tests.integration.test_content_records import _command, _comment_command, _seed_comment_context
-from tests.integration.test_event_reading import _seed_reading
+from tests.integration.test_event_reading import _fixed_member_fields, _seed_reading
 from tests.integration.test_event_reading import event_read_client as event_read_client
 
+from content.observation_inputs import freeze_observation_inputs_in_transaction
 from content.schemas import ContentRecordSummaryView
 from content.services import ContentService
 from events.models import Event, EventMember
@@ -63,6 +64,7 @@ def _attach_member(
                 event_id=event_id,
                 content_id=content.id,
                 content_version_id=content.latest_observation.content_version.id,
+                **_fixed_member_fields(session, owner, content),
                 source_key=content.source_key,
                 representative_comment_id=None,
                 added_revision=revision,
@@ -227,6 +229,17 @@ def test_representative_comment_must_belong_to_post_and_remain_readable(
         member = session.scalar(select(EventMember).where(EventMember.event_id == event_id))
         assert member is not None
         member.representative_comment_id = comment.id
+        member.representative_comment_observation_id = comment.latest_observation.id
+        closure = freeze_observation_inputs_in_transaction(
+            session,
+            owner_id=owner,
+            observation_ids=(member.observation_id, comment.latest_observation.id),
+            now=datetime.now(UTC),
+        )
+        member.input_manifest = {
+            **member.input_manifest,
+            "input_observation_ids": [str(value) for value in closure],
+        }
     reading = event_read_client.get(f"/api/events/{event_id}/members").json()["items"][0]["content"]
     assert reading["representative_comment_state"] == "readable"
     comment_version = reading["representative_comment"]["observation"]["content_version"]
@@ -239,12 +252,10 @@ def test_representative_comment_must_belong_to_post_and_remain_readable(
             resource_id=comment.latest_observation.id,
             reason=DeletionReason.USER_REQUEST,
         )
-    reading = event_read_client.get(f"/api/events/{event_id}/members").json()["items"][0]["content"]
-    assert reading["representative_comment_state"] == "unavailable"
-    assert reading["representative_comment"] is None
-    assert (
-        event_read_client.get(f"/api/events/{event_id}").json()["derived_text_available"] is False
-    )
+    # The comment participated in this fixed derived member; ALL invalidates the
+    # member rather than silently projecting only its surviving post input.
+    assert event_read_client.get(f"/api/events/{event_id}/members").status_code == 404
+    assert event_read_client.get(f"/api/events/{event_id}").status_code == 404
 
 
 def test_event_list_paginates_after_filtering_more_than_one_batch_of_unreadable_events(

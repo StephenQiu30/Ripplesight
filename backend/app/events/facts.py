@@ -10,7 +10,6 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from content.event_reading import load_event_member_content_in_transaction
-from content.schemas import EventContentReadReference
 from core.errors import ApplicationError
 from events.fact_models import EventDerivedContent, EventFact, EventFactAssignment, EventFactMember
 from events.fact_schemas import (
@@ -21,6 +20,10 @@ from events.fact_schemas import (
     FactRelation,
 )
 from events.models import Event, EventMember
+from events.observation_inputs import (
+    event_content_reference,
+    load_fact_observation_inputs_in_transaction,
+)
 
 
 def load_publication_groupings_in_transaction(
@@ -29,6 +32,7 @@ def load_publication_groupings_in_transaction(
     owner_id: UUID,
     content_versions: dict[UUID, UUID],
     now: datetime,
+    selected_observations: dict[UUID, UUID | None] | None = None,
     topic_id: UUID | None = None,
 ) -> dict[UUID, EventPublicationGrouping]:
     if not session.in_transaction() or now.tzinfo is None:
@@ -67,21 +71,22 @@ def load_publication_groupings_in_transaction(
     readings = load_event_member_content_in_transaction(
         session,
         owner_id=owner_id,
-        references=tuple(
-            EventContentReadReference(
-                member.content_id, member.content_version_id, member.representative_comment_id
-            )
-            for member, *_ in rows
-        ),
+        references=tuple(event_content_reference(member) for member, *_ in rows),
         now=now,
     )
     by_content: dict[UUID, list[EventPublicationGrouping]] = {}
+    fact_inputs = load_fact_observation_inputs_in_transaction(
+        session, owner_id=owner_id, fact_ids=tuple({row[3].id for row in rows}), now=now
+    )
     for member, fact_member, assignment, fact, event in rows:
-        reference = EventContentReadReference(
-            member.content_id, member.content_version_id, member.representative_comment_id
-        )
+        reference = event_content_reference(member)
         if (
             reference not in readings
+            or fact.id not in fact_inputs
+            or (
+                selected_observations is not None
+                and member.observation_id != selected_observations.get(member.content_id)
+            )
             or readings[reference].representative_comment_state == "unavailable"
         ):
             continue
@@ -308,12 +313,7 @@ class EventFactReadService:
                     )
                 )
             )
-            references = tuple(
-                EventContentReadReference(
-                    member.content_id, member.content_version_id, member.representative_comment_id
-                )
-                for _, member in member_rows
-            )
+            references = tuple(event_content_reference(member) for _, member in member_rows)
             readings = load_event_member_content_in_transaction(
                 self._session, owner_id=owner_id, references=references, now=now
             )
@@ -325,14 +325,7 @@ class EventFactReadService:
                 if fact is None:
                     raise RuntimeError("scoped fact foreign key missing")
                 rows = [(fm, member) for fm, member in member_rows if fm.fact_id == fact.id]
-                fact_references = [
-                    EventContentReadReference(
-                        member.content_id,
-                        member.content_version_id,
-                        member.representative_comment_id,
-                    )
-                    for _, member in rows
-                ]
+                fact_references = [event_content_reference(member) for _, member in rows]
                 complete = all(
                     reference in readings
                     and readings[reference].representative_comment_state != "unavailable"
@@ -358,12 +351,7 @@ class EventFactReadService:
                                 role=cast("object", fm.role),
                                 assignment_origin=cast("object", fm.assignment_origin),
                                 availability="readable"
-                                if EventContentReadReference(
-                                    member.content_id,
-                                    member.content_version_id,
-                                    member.representative_comment_id,
-                                )
-                                in readings
+                                if event_content_reference(member) in readings
                                 else "unavailable",
                             )
                             for fm, member in rows

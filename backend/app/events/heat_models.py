@@ -98,12 +98,19 @@ class EventAttentionSignal(Base):
             ondelete="RESTRICT",
             name="event_attention_signals_content_fkey",
         ),
+        ForeignKeyConstraint(
+            ["owner_id", "observation_id"],
+            ["content_observations.owner_id", "content_observations.id"],
+            ondelete="RESTRICT",
+            name="event_attention_signals_observation_fkey",
+        ),
         UniqueConstraint(
             "owner_id",
             "topic_id",
             "event_id",
             "content_id",
             "content_version_id",
+            "observation_id",
             name="event_attention_signals_input_key",
         ),
         CheckConstraint(
@@ -125,6 +132,7 @@ class EventAttentionSignal(Base):
     source_id: Mapped[UUID]
     content_id: Mapped[UUID]
     content_version_id: Mapped[UUID]
+    observation_id: Mapped[UUID | None]
     kind: Mapped[str] = mapped_column(String(16))
     source_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     time_basis: Mapped[str] = mapped_column(String(16))

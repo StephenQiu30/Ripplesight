@@ -26,6 +26,7 @@ def freeze_alert_content_inputs_in_transaction(
     version_ids: tuple[UUID, ...],
     as_of: datetime,
     now: datetime,
+    selected_observations: dict[UUID, UUID] | None = None,
 ) -> dict[UUID, AlertContentInput]:
     if (
         not session.in_transaction()
@@ -51,7 +52,22 @@ def freeze_alert_content_inputs_in_transaction(
             continue
         # The oldest original receipt defines the acquired-material window, while
         # the exact selected observation is frozen and cannot be substituted later.
-        original = rows[0]
+        original = (
+            next((row for row in rows if row.id == selected_observations.get(version_id)), None)
+            if selected_observations is not None
+            else next(
+                (
+                    row
+                    for row in rows
+                    if observations_readable_in_transaction(
+                        session, owner_id=owner_id, observation_ids=(row.id,), now=now
+                    )
+                ),
+                None,
+            )
+        )
+        if original is None:
+            continue
         if not observations_readable_in_transaction(
             session, owner_id=owner_id, observation_ids=(original.id,), now=now
         ) or not report_inputs_readable_in_transaction(
@@ -70,5 +86,10 @@ def freeze_alert_content_inputs_in_transaction(
             )
         )
         assert first_received is not None
-        result[version_id] = AlertContentInput(version_id, (original.id,), first_received)
+        from content.observation_inputs import freeze_observation_inputs_in_transaction
+
+        inputs = freeze_observation_inputs_in_transaction(
+            session, owner_id=owner_id, observation_ids=(original.id,), now=now
+        )
+        result[version_id] = AlertContentInput(version_id, inputs, first_received)
     return result

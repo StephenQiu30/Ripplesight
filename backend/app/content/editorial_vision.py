@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from content.editorial_rendered import read_editorial_rendered_in_transaction
 from content.event_reading import load_event_member_content_in_transaction
-from content.models import ContentObservation
+from content.observation_context import load_observation_context_in_transaction
 from content.schemas import EventContentReadReference
 from evidence.schemas import AdmittedSourcePayload, DataClass
 from evidence.services import (
@@ -16,7 +16,6 @@ from evidence.services import (
     SourceAccessPolicyService,
     SourceAccessUnavailableError,
 )
-from jobs.services import load_content_job_context
 
 
 class EditorialVisionGrant(BaseModel):
@@ -39,6 +38,7 @@ def read_editorial_vision_grant_in_transaction(
         content_id=reference.content_id,
         content_version_id=reference.content_version_id,
         now=now,
+        observation_id=reference.observation_id,
     )
     if rendered is None:
         return None
@@ -48,12 +48,12 @@ def read_editorial_vision_grant_in_transaction(
     ).get(reference)
     if first is None or readable is None:
         return None
-    observation = session.get(ContentObservation, readable.observation.id)
-    context = (
-        load_content_job_context(session, owner_id=owner_id, job_id=observation.job_id)
-        if observation
-        else None
+    actual = load_observation_context_in_transaction(
+        session,
+        owner_id=owner_id,
+        observation_id=readable.observation.id,
     )
+    context = actual.job if actual else None
     if context is None or context.source_capability is None:
         return None
     try:

@@ -45,6 +45,19 @@ from content.models import (
     HotlistEntryRecord,
     HotlistSnapshot,
 )
+from content.native_identity import (
+    bind_native_content_in_transaction,
+    resolve_native_content_in_transaction,
+)
+from content.observation_context import (
+    load_observation_context_in_transaction,
+    load_observation_contexts_in_transaction,
+    load_observation_visibility_in_transaction,
+)
+from content.observation_inputs import (
+    observation_input_closure_in_transaction,
+    save_observation_inputs_in_transaction,
+)
 from content.schemas import (
     AnalysisCommentContentView,
     AnalysisPostAvailabilityView,
@@ -64,6 +77,7 @@ from content.schemas import (
     ContentRuleSampleView,
     ContentSamplePreviewInput,
     ContentSamplePreviewView,
+    ContentSourceObservationView,
     ContentTextOrigin,
     ContentTextScope,
     ContentTruncationReason,
@@ -79,7 +93,9 @@ from content.schemas import (
     RecordContentVisibilityInput,
 )
 from content.topic_matches import readable_editorial_topic_matches_in_transaction
-from content.version_inputs import version_inputs_readable_in_transaction
+from content.version_inputs import (
+    observations_readable_in_transaction,
+)
 from core.errors import ApplicationError
 from evidence.schemas import CleanupTargetKind, CleanupTargetSpec
 from evidence.services import (
@@ -106,6 +122,7 @@ from monitors.services import (
 )
 from sources.adapters.web_targets import normalize_web_url
 from sources.contracts import SourceCapability
+from sources.editorial_identity import EditorialNativeIdentityProof
 
 type Clock = Callable[[], datetime]
 
@@ -113,6 +130,7 @@ _RESOURCE_TYPE = "content_observation"
 _ALLOWED_FIELDS = frozenset(
     {
         "object_type",
+        "native_identity",
         "external_id",
         "identity_basis",
         "canonical_url",
@@ -452,7 +470,9 @@ class ContentService:
             statement = (
                 select(
                     ContentRecord.id.label("content_id"),
-                    ContentRecord.source_key,
+                    func.coalesce(ContentObservation.source_key, ContentRecord.source_key).label(
+                        "source_key"
+                    ),
                     ContentObservation.id.label("observation_id"),
                     ContentVersion.id.label("content_version_id"),
                     ContentObservation.published_at,
@@ -501,20 +521,32 @@ class ContentService:
                 )
             )
             if source_keys:
-                statement = statement.where(ContentRecord.source_key.in_(source_keys))
+                statement = statement.where(
+                    func.coalesce(ContentObservation.source_key, ContentRecord.source_key).in_(
+                        source_keys
+                    )
+                )
             candidates = statement.subquery()
             rows = self._session.execute(
                 select(candidates)
-                .where(candidates.c.position == 1)
+                .where(candidates.c.position <= 32)
                 .order_by(
                     candidates.c.observed_at.desc(),
                     candidates.c.received_at.desc(),
                     candidates.c.observation_id.desc(),
                 )
-                .limit(21)
+                .limit(672)
             ).all()
-            samples = []
-            for row in rows[:20]:
+            samples: list[ContentRuleSampleView] = []
+            selected_contents: set[UUID] = set()
+            for row in rows:
+                if row.content_id in selected_contents or not observations_readable_in_transaction(
+                    self._session, owner_id=owner_id, observation_ids=(row.observation_id,), now=now
+                ):
+                    continue
+                if len(samples) >= 20:
+                    break
+                selected_contents.add(row.content_id)
                 result = evaluate_monitor_rules(
                     rules, "\n".join(part for part in (row.title, row.body) if part)
                 )
@@ -745,6 +777,9 @@ class ContentService:
         command: PersistContentPostInput,
         representation_fingerprint: bytes | None = None,
         member_profile_id: UUID | None = None,
+        editorial_profile_id: UUID | None = None,
+        identity_proof: EditorialNativeIdentityProof | None = None,
+        input_observation_ids: tuple[UUID, ...] | None = None,
     ) -> ContentRecordDetailView:
         """Persist an admitted social post within the caller's page transaction."""
         now = self._clock()
@@ -774,6 +809,9 @@ class ContentService:
             now=now,
             representation_fingerprint=representation_fingerprint,
             member_profile_id=member_profile_id,
+            editorial_profile_id=editorial_profile_id,
+            identity_proof=identity_proof,
+            input_observation_ids=input_observation_ids,
         )
 
     def persist_comment(
@@ -1041,6 +1079,9 @@ class ContentService:
         identity_basis: str | None = None,
         representation_fingerprint: bytes | None = None,
         member_profile_id: UUID | None = None,
+        editorial_profile_id: UUID | None = None,
+        identity_proof: EditorialNativeIdentityProof | None = None,
+        input_observation_ids: tuple[UUID, ...] | None = None,
     ) -> ContentRecordDetailView:
         if representation_fingerprint is not None:
             if len(representation_fingerprint) != 32 or version_values is None:
@@ -1069,15 +1110,50 @@ class ContentService:
             or job.source_capability != command.admission.capability
         ):
             raise ApplicationError("resource_not_found")
-        content = self._find_or_create_content(
-            owner_id=owner_id,
-            source_key=command.admission.source_key,
-            object_type=object_type,
-            native_scope=native_scope,
-            external_id=external_id,
-            created_at=now,
-            identity_basis=identity_basis,
-        )
+        content = None
+        if identity_proof is not None:
+            if command.admission.fields.get("native_identity") != identity_proof.model_dump_json():
+                raise ApplicationError("editorial_material_unavailable")
+            content = resolve_native_content_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                source_key=command.admission.source_key,
+                native_scope=native_scope,
+                external_id=external_id,
+                object_type=object_type,
+                proof=identity_proof,
+                now=now,
+            )
+        if content is None:
+            content = self._find_or_create_content(
+                owner_id=owner_id,
+                source_key=command.admission.source_key,
+                object_type=object_type,
+                native_scope=native_scope,
+                external_id=external_id,
+                created_at=now,
+                identity_basis=identity_basis,
+            )
+        if identity_proof is not None:
+            bind_native_content_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                content_id=content.id,
+                proof=identity_proof,
+                now=now,
+            )
+        if editorial_profile_id is not None:
+            observation_values.update(
+                source_key=command.admission.source_key,
+                source_native_scope=native_scope,
+                source_external_id=external_id,
+                source_identity_basis=identity_basis,
+                editorial_profile_id=editorial_profile_id,
+                native_identity_proof=identity_proof.model_dump(mode="json")
+                if identity_proof
+                else None,
+                input_basis="observations_v1" if input_observation_ids else "source_v1",
+            )
         content_version = self._find_or_create_content_version(
             owner_id=owner_id,
             content_id=content.id,
@@ -1141,6 +1217,13 @@ class ContentService:
                 component_version=command.component_version,
             ),
         )
+        if input_observation_ids is not None:
+            save_observation_inputs_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                output_observation_id=observation.id,
+                input_observation_ids=input_observation_ids,
+            )
         readable_observations = self._readable_observation_history(
             owner_id=owner_id,
             content_id=content.id,
@@ -1252,6 +1335,7 @@ class ContentService:
                 owner_id=owner_id,
                 content_id=content.id,
                 readable_version_ids={item.content_version.id for item in version_history},
+                now=now,
             )
             topic_ids = {item.topic_id for item in annotations}
             topic_ids.update(
@@ -1396,7 +1480,19 @@ class ContentService:
                     .limit(batch_size)
                 )
                 if source_key is not None:
-                    statement = statement.where(ContentRecord.source_key == source_key)
+                    statement = statement.where(
+                        select(ContentObservation.id)
+                        .where(
+                            ContentObservation.owner_id == ContentRecord.owner_id,
+                            ContentObservation.content_id == ContentRecord.id,
+                            (ContentObservation.source_key == source_key)
+                            | (
+                                ContentObservation.source_key.is_(None)
+                                & (ContentRecord.source_key == source_key)
+                            ),
+                        )
+                        .exists()
+                    )
                 if scan_cursor is not None:
                     statement = statement.where(ContentRecord.id > scan_cursor)
                 records = list(self._session.scalars(statement).all())
@@ -1407,6 +1503,7 @@ class ContentService:
                     owner_id=owner_id,
                     content_ids={record.id for record in records},
                     now=now,
+                    source_key=source_key,
                 )
                 editorial_matches = {}
                 if topic_id is not None:
@@ -1477,6 +1574,7 @@ class ContentService:
                         topic_id=topic_id,
                         topic_rule_version=topic_context.current_version,
                         prompt_version=ANALYSIS_PROMPT_VERSION,
+                        now=now,
                         content_version_ids={
                             item[0].content_version_id
                             for item in projections.values()
@@ -2100,6 +2198,7 @@ class ContentService:
         owner_id: UUID,
         content_ids: set[UUID],
         now: datetime,
+        source_key: str | None = None,
     ) -> dict[UUID, tuple[ContentObservation, set[UUID]]]:
         if not content_ids:
             return {}
@@ -2120,12 +2219,23 @@ class ContentService:
         )
         grouped: dict[UUID, list[ContentObservation]] = {}
         for observation in observations:
-            if observation.id in readable_ids and (
-                observation.content_version_id is None
-                or version_inputs_readable_in_transaction(
+            actual = (
+                load_observation_context_in_transaction(
                     self._session,
                     owner_id=owner_id,
-                    content_version_ids=(observation.content_version_id,),
+                    observation_id=observation.id,
+                )
+                if source_key is not None
+                else None
+            )
+            if source_key is not None and (actual is None or actual.source_key != source_key):
+                continue
+            if observation.id in readable_ids and (
+                observation.content_version_id is None
+                or observations_readable_in_transaction(
+                    self._session,
+                    owner_id=owner_id,
+                    observation_ids=(observation.id,),
                     now=now,
                 )
             ):
@@ -2167,10 +2277,10 @@ class ContentService:
                 if item.id in readable_ids
                 and (
                     item.content_version_id is None
-                    or version_inputs_readable_in_transaction(
+                    or observations_readable_in_transaction(
                         self._session,
                         owner_id=owner_id,
-                        content_version_ids=(item.content_version_id,),
+                        observation_ids=(item.id,),
                         now=now,
                     )
                 )
@@ -2452,22 +2562,33 @@ class ContentService:
     ) -> ContentRecordSummaryView:
         from connections.editorial_source_names import load_editorial_source_names_in_transaction
 
+        actual = load_observation_context_in_transaction(
+            self._session, owner_id=content.owner_id, observation_id=observation.id
+        )
+        selected_source = actual.source_key if actual else content.source_key
+        if actual is not None:
+            selected_visibility = load_observation_visibility_in_transaction(
+                self._session, owner_id=content.owner_id, observation_id=observation.id
+            )
+            current_visibility = (
+                self._visibility_view(selected_visibility) if selected_visibility else None
+            )
         source_name = (
             load_editorial_source_names_in_transaction(
-                self._session, owner_id=content.owner_id, source_keys=(content.source_key,)
-            ).get(content.source_key)
-            if content.source_key.startswith("ed_")
+                self._session, owner_id=content.owner_id, source_keys=(selected_source,)
+            ).get(selected_source)
+            if selected_source.startswith("ed_")
             else None
         )
         timeline_at = observation.published_at or first_discovered_at
         return ContentRecordSummaryView(
             id=content.id,
-            source_key=content.source_key,
+            source_key=selected_source,
             source_name=source_name,
             object_type=content.object_type,
-            native_scope=content.native_scope,
-            external_id=content.external_id,
-            identity_basis=content.identity_basis,
+            native_scope=actual.native_scope if actual else content.native_scope,
+            external_id=actual.external_id if actual else content.external_id,
+            identity_basis=actual.identity_basis if actual else content.identity_basis,
             latest_observation=self._observation_view(observation, content_version),
             current_visibility=current_visibility,
             discovery_count=discovery_count,
@@ -2516,8 +2637,42 @@ class ContentService:
             discovery_count=len(discovery_views),
             first_discovered_at=min((item.first_observed_at for item in discoveries), default=None),
         )
+        from connections.editorial_source_names import load_editorial_source_names_in_transaction
+
+        history = self._readable_observation_history(
+            owner_id=content.owner_id, content_id=content.id, now=self._clock()
+        )
+        sources = []
+        for observed in history:
+            if observed.content_version_id is None:
+                continue
+            actual = load_observation_context_in_transaction(
+                self._session, owner_id=content.owner_id, observation_id=observed.id
+            )
+            version = self._session.get(ContentVersion, observed.content_version_id)
+            if actual is None or version is None:
+                continue
+            names = load_editorial_source_names_in_transaction(
+                self._session, owner_id=content.owner_id, source_keys=(actual.source_key,)
+            )
+            sources.append(
+                ContentSourceObservationView(
+                    source_key=actual.source_key,
+                    source_name=names.get(actual.source_key),
+                    observation_id=observed.id,
+                    observed_at=observed.observed_at,
+                    received_at=observed.received_at,
+                    published_at=observed.published_at,
+                    version_id=version.id,
+                    text_scope=version.text_scope,
+                    text_origin=version.text_origin,
+                )
+            )
         return ContentRecordDetailView(
             **summary.model_dump(),
+            readable_sources=sources[:32],
+            readable_sources_total=len(sources),
+            readable_sources_truncated=len(sources) > 32,
             discoveries=discovery_views,
             version_history=version_history,
             visibility_history=visibility_history,
@@ -3060,7 +3215,10 @@ def load_post_versions_for_analysis_scan(
         )
         .order_by(recent_versions.c.occurred_at, ContentVersion.id)
     ).all()
-    result = {version.id: _analysis_post_view(version, content) for version, content in rows}
+    result = {
+        version.id: _analysis_post_view(version, content, session=session)
+        for version, content in rows
+    }
     references = readable_editorial_topic_matches_in_transaction(
         session,
         owner_id=owner_id,
@@ -3082,7 +3240,12 @@ def load_post_versions_for_analysis_scan(
                 ContentVersion.id.in_({item.content_version_id for item in references}),
             )
         ):
-            result[version.id] = _analysis_post_view(version, content)
+            selected_match = next(
+                item for item in references if item.content_version_id == version.id
+            )
+            result[version.id] = _analysis_post_view(
+                version, content, session=session, observation_id=selected_match.observation_id
+            )
     return tuple(result.values())
 
 
@@ -3150,7 +3313,7 @@ def load_post_analysis_availability_in_transaction(
         )
     )
     return AnalysisPostAvailabilityView(
-        post=_analysis_post_view(version, content),
+        post=_analysis_post_view(version, content, session=session),
         source_key=content.source_key,
         first_received_at=first_received_at,
         first_hotlist_match_received_at=first_hotlist_match_received_at,
@@ -3177,6 +3340,7 @@ def load_post_versions_for_analysis(
     owner_id: UUID,
     content_version_ids: set[UUID],
     readable_at: datetime | None = None,
+    selected_observations: dict[UUID, UUID] | None = None,
 ) -> tuple[AnalysisPostContentView, ...]:
     """Read exact immutable post versions frozen into an analysis job."""
     if not session.in_transaction():
@@ -3200,17 +3364,41 @@ def load_post_versions_for_analysis(
         )
         .order_by(ContentVersion.id)
     ).all()
-    return tuple(
-        _analysis_post_view(version, content)
-        for version, content in rows
-        if readable_at is None
-        or version_inputs_readable_in_transaction(
-            session,
-            owner_id=owner_id,
-            content_version_ids=(version.id,),
-            now=readable_at,
+    result = []
+    for version, content in rows:
+        selected_id = (
+            selected_observations.get(version.id) if selected_observations is not None else None
         )
-    )
+        if selected_observations is not None and selected_id is None:
+            continue
+        if selected_observations is None:
+            witnesses = tuple(
+                session.scalars(
+                    select(ContentObservation)
+                    .where(
+                        ContentObservation.owner_id == owner_id,
+                        ContentObservation.content_version_id == version.id,
+                    )
+                    .order_by(ContentObservation.received_at, ContentObservation.id)
+                )
+            )
+            if (
+                any(item.native_identity_proof for item in witnesses)
+                or len({item.source_key for item in witnesses}) > 1
+            ):
+                continue
+            selected_id = witnesses[0].id if witnesses else None
+        if readable_at is not None and (
+            selected_id is None
+            or not observations_readable_in_transaction(
+                session, owner_id=owner_id, observation_ids=(selected_id,), now=readable_at
+            )
+        ):
+            continue
+        result.append(
+            _analysis_post_view(version, content, session=session, observation_id=selected_id)
+        )
+    return tuple(result)
 
 
 def load_post_comments_for_analysis(
@@ -3293,8 +3481,23 @@ def load_post_comments_for_analysis(
         text = "\n".join(part for part in (title, body) if part)
         if not text:
             continue
+        selected_observation = session.scalar(
+            select(ContentObservation)
+            .where(
+                ContentObservation.owner_id == owner_id,
+                ContentObservation.content_version_id == comment_version_id,
+            )
+            .order_by(ContentObservation.received_at.desc(), ContentObservation.id.desc())
+            .limit(1)
+        )
         comments.setdefault(post_content_id, []).append(
             AnalysisCommentContentView(
+                observation_id=selected_observation.id if selected_observation else None,
+                input_observation_ids=observation_input_closure_in_transaction(
+                    session, owner_id=owner_id, observation_ids=(selected_observation.id,)
+                )
+                if selected_observation
+                else (),
                 post_content_id=post_content_id,
                 comment_content_id=comment_content_id,
                 comment_version_id=comment_version_id,
@@ -3334,6 +3537,7 @@ def load_frozen_analysis_comments(
     owner_id: UUID,
     version_ids: set[UUID],
     now: datetime,
+    selected_observations: dict[UUID, UUID] | None = None,
 ) -> dict[UUID, AnalysisCommentContentView]:
     if not session.in_transaction():
         raise RuntimeError("analysis comment reads require the caller's transaction")
@@ -3343,33 +3547,90 @@ def load_frozen_analysis_comments(
         select(ContentVersion, ContentThread.post_content_id)
         .join(
             ContentThread,
-            and_(
-                ContentThread.owner_id == ContentVersion.owner_id,
-                ContentThread.content_id == ContentVersion.content_id,
-            ),
+            (ContentThread.owner_id == ContentVersion.owner_id)
+            & (ContentThread.content_id == ContentVersion.content_id),
         )
-        .where(
-            ContentVersion.owner_id == owner_id,
-            ContentVersion.id.in_(version_ids),
-            *_readable_version_conditions(owner_id=owner_id, now=now),
-        )
+        .where(ContentVersion.owner_id == owner_id, ContentVersion.id.in_(version_ids))
     ).all()
-    return {
-        version.id: AnalysisCommentContentView(
+    result: dict[UUID, AnalysisCommentContentView] = {}
+    for version, post_id in rows:
+        selected_id = (
+            selected_observations.get(version.id) if selected_observations is not None else None
+        )
+        if selected_observations is not None and selected_id is None:
+            continue
+        if selected_observations is None:
+            witnesses = tuple(
+                session.scalars(
+                    select(ContentObservation)
+                    .where(
+                        ContentObservation.owner_id == owner_id,
+                        ContentObservation.content_version_id == version.id,
+                    )
+                    .order_by(ContentObservation.received_at, ContentObservation.id)
+                )
+            )
+            if (
+                any(item.native_identity_proof for item in witnesses)
+                or len({item.source_key for item in witnesses}) > 1
+            ):
+                continue
+            selected_id = witnesses[0].id if witnesses else None
+        if selected_id is None or not observations_readable_in_transaction(
+            session, owner_id=owner_id, observation_ids=(selected_id,), now=now
+        ):
+            continue
+        selected = session.get(ContentObservation, selected_id)
+        if (
+            selected is None
+            or selected.owner_id != owner_id
+            or selected.content_version_id != version.id
+        ):
+            continue
+        result[version.id] = AnalysisCommentContentView(
+            observation_id=selected_id,
+            input_observation_ids=observation_input_closure_in_transaction(
+                session, owner_id=owner_id, observation_ids=(selected_id,)
+            ),
             post_content_id=post_id,
             comment_content_id=version.content_id,
             comment_version_id=version.id,
             text="\n".join(part for part in (version.title, version.body) if part),
         )
-        for version, post_id in rows
-    }
+    return result
 
 
 def _analysis_post_view(
     version: ContentVersion,
     content: ContentRecord,
+    *,
+    session: Session | None = None,
+    observation_id: UUID | None = None,
 ) -> AnalysisPostContentView:
+    selected = None
+    closure: tuple[UUID, ...] = ()
+    if session is not None:
+        query = select(ContentObservation).where(
+            ContentObservation.owner_id == content.owner_id,
+            ContentObservation.content_version_id == version.id,
+        )
+        if observation_id is not None:
+            query = query.where(ContentObservation.id == observation_id)
+        selected = session.scalar(
+            query.order_by(
+                ContentObservation.received_at.desc(), ContentObservation.id.desc()
+            ).limit(1)
+        )
+        if selected is not None:
+            try:
+                closure = observation_input_closure_in_transaction(
+                    session, owner_id=content.owner_id, observation_ids=(selected.id,)
+                )
+            except ApplicationError:
+                selected = None
     return AnalysisPostContentView(
+        observation_id=selected.id if selected else None,
+        input_observation_ids=closure,
         content_id=content.id,
         content_version_id=version.id,
         title=version.title,
@@ -3384,65 +3645,160 @@ def load_event_content_inputs_in_transaction(
     version_ids: tuple[UUID, ...],
     since: datetime,
 ) -> dict[UUID, EventContentInputView]:
-    """Return current content versions and their original source/time references."""
+    """Batch current versions and source/time references within the caller's transaction."""
     if not session.in_transaction() or since.tzinfo is None:
         raise RuntimeError("event content reads require a transaction and aware time")
+    if len(version_ids) > 2000:
+        raise ValueError("event input reads allow at most 2000 versions")
     if not version_ids:
         return {}
-    rows = session.execute(
-        select(ContentVersion, ContentRecord)
-        .join(
-            ContentRecord,
-            (ContentRecord.owner_id == ContentVersion.owner_id)
-            & (ContentRecord.id == ContentVersion.content_id),
+    rows: list[tuple[ContentVersion, ContentRecord]] = []
+    for offset in range(0, len(version_ids), 1000):
+        rows.extend(
+            (version, record)
+            for version, record in session.execute(
+                select(ContentVersion, ContentRecord)
+                .join(
+                    ContentRecord,
+                    (ContentRecord.owner_id == ContentVersion.owner_id)
+                    & (ContentRecord.id == ContentVersion.content_id),
+                )
+                .where(
+                    ContentVersion.owner_id == owner_id,
+                    ContentVersion.id.in_(version_ids[offset : offset + 1000]),
+                )
+                .execution_options(populate_existing=True)
+            ).all()
+            if record.source_key != "bilibili"
+            and version.title is not None
+            and version.title.strip()
         )
-        .where(ContentVersion.owner_id == owner_id, ContentVersion.id.in_(version_ids))
-    ).all()
+    content_ids = tuple({record.id for _, record in rows})
+    latest_versions: dict[UUID, UUID] = {}
+    original_times: dict[UUID, tuple[datetime | None, datetime | None]] = {}
+    first_comments: dict[UUID, UUID] = {}
+    for offset in range(0, len(content_ids), 1000):
+        batch = content_ids[offset : offset + 1000]
+        latest_versions.update(
+            (content_id, version_id)
+            for content_id, version_id in session.execute(
+                select(ContentVersion.content_id, ContentVersion.id)
+                .where(ContentVersion.owner_id == owner_id, ContentVersion.content_id.in_(batch))
+                .distinct(ContentVersion.content_id)
+                .order_by(
+                    ContentVersion.content_id,
+                    ContentVersion.created_at.desc(),
+                    ContentVersion.id.desc(),
+                )
+            ).all()
+        )
+        original_times.update(
+            (content_id, (published_at, observed_at))
+            for content_id, published_at, observed_at in session.execute(
+                select(
+                    ContentObservation.content_id,
+                    func.min(ContentObservation.published_at),
+                    func.min(ContentObservation.observed_at),
+                )
+                .where(
+                    ContentObservation.owner_id == owner_id,
+                    ContentObservation.content_id.in_(batch),
+                )
+                .group_by(ContentObservation.content_id)
+            ).all()
+        )
+        first_comments.update(
+            (post_content_id, comment_id)
+            for post_content_id, comment_id in session.execute(
+                select(ContentThread.post_content_id, ContentThread.content_id)
+                .where(
+                    ContentThread.owner_id == owner_id,
+                    ContentThread.post_content_id.in_(batch),
+                )
+                .distinct(ContentThread.post_content_id)
+                .order_by(
+                    ContentThread.post_content_id,
+                    ContentThread.created_at,
+                    ContentThread.content_id,
+                )
+            ).all()
+        )
+    rows = [(v, r) for v, r in rows if latest_versions.get(r.id) == v.id]
+    selected_observations: dict[UUID, ContentObservation] = {}
+    current_version_ids = tuple({version.id for version, _ in rows})
+    for offset in range(0, len(current_version_ids), 1000):
+        for observation in session.scalars(
+            select(ContentObservation)
+            .where(
+                ContentObservation.owner_id == owner_id,
+                ContentObservation.content_version_id.in_(
+                    current_version_ids[offset : offset + 1000]
+                ),
+            )
+            .distinct(ContentObservation.content_version_id)
+            .order_by(
+                ContentObservation.content_version_id,
+                ContentObservation.received_at.desc(),
+                ContentObservation.id.desc(),
+            )
+            .execution_options(populate_existing=True)
+        ):
+            if observation.content_version_id is not None:
+                selected_observations[observation.content_version_id] = observation
+    contexts = load_observation_contexts_in_transaction(
+        session,
+        owner_id=owner_id,
+        observation_ids={obs.id for obs in selected_observations.values()},
+    )
+    representative_comments = {
+        record.id: record.id if record.object_type == "comment" else first_comments.get(record.id)
+        for _, record in rows
+    }
+    comment_ids = tuple({i for i in representative_comments.values() if i is not None})
+    comment_observations: dict[UUID, UUID] = {}
+    for offset in range(0, len(comment_ids), 1000):
+        comment_observations.update(
+            (comment_id, observation_id)
+            for comment_id, observation_id in session.execute(
+                select(ContentObservation.content_id, ContentObservation.id)
+                .where(
+                    ContentObservation.owner_id == owner_id,
+                    ContentObservation.content_id.in_(comment_ids[offset : offset + 1000]),
+                )
+                .distinct(ContentObservation.content_id)
+                .order_by(
+                    ContentObservation.content_id,
+                    ContentObservation.received_at.desc(),
+                    ContentObservation.id.desc(),
+                )
+            ).all()
+        )
     result: dict[UUID, EventContentInputView] = {}
     for version, record in rows:
-        if record.source_key == "bilibili" or version.title is None or not version.title.strip():
+        if version.title is None:
             continue
-        latest_id = session.scalar(
-            select(ContentVersion.id)
-            .where(ContentVersion.owner_id == owner_id, ContentVersion.content_id == record.id)
-            .order_by(ContentVersion.created_at.desc(), ContentVersion.id.desc())
-            .limit(1)
-        )
-        if latest_id != version.id:
-            continue
-        published_at, observed_at = session.execute(
-            select(
-                func.min(ContentObservation.published_at),
-                func.min(ContentObservation.observed_at),
-            ).where(
-                ContentObservation.owner_id == owner_id,
-                ContentObservation.content_id == record.id,
-            )
-        ).one()
+        published_at, observed_at = original_times.get(record.id, (None, None))
         first_seen_at = published_at or observed_at or record.created_at
         if first_seen_at < since:
             continue
-        representative_comment_id = (
-            record.id
-            if record.object_type == "comment"
-            else session.scalar(
-                select(ContentThread.content_id)
-                .where(
-                    ContentThread.owner_id == owner_id,
-                    ContentThread.post_content_id == record.id,
-                )
-                .order_by(ContentThread.created_at, ContentThread.content_id)
-                .limit(1)
-            )
+        representative_comment_id = representative_comments[record.id]
+        selected_observation = selected_observations.get(version.id)
+        actual = contexts.get(selected_observation.id) if selected_observation else None
+        comment_observation = (
+            comment_observations.get(representative_comment_id)
+            if representative_comment_id is not None
+            else None
         )
         result[version.id] = EventContentInputView(
             content_id=record.id,
             content_version_id=version.id,
-            source_key=record.source_key,
+            source_key=actual.source_key if actual else record.source_key,
             title=version.title,
             body=version.body,
             first_seen_at=first_seen_at,
             first_seen_basis="published" if published_at is not None else "discovered",
             representative_comment_id=representative_comment_id,
+            observation_id=selected_observation.id if selected_observation else None,
+            representative_comment_observation_id=comment_observation,
         )
     return result

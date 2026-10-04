@@ -8,15 +8,14 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from content.models import ContentObservation, ContentRecord, ContentVersion, ContentVersionInput
+from content.models import ContentObservation, ContentRecord, ContentVersion
+from content.observation_context import load_observation_context_in_transaction
+from content.observation_inputs import observation_input_closure_in_transaction
 from content.version_inputs import (
     observations_readable_in_transaction,
-    version_inputs_readable_in_transaction,
 )
 from core.errors import ApplicationError
 from evidence.services import load_source_access_policy_in_transaction
-from jobs.editorial_member import load_content_job_context_for_editorial_member_in_transaction
-from jobs.services import load_content_job_context
 
 _EXPORT_PURPOSE = "hotkey:personal-file-export:v1"
 
@@ -60,37 +59,6 @@ class FrozenContentExportInput(BaseModel):
         return self
 
 
-def _input_ids(session: Session, *, owner_id: UUID, version_id: UUID) -> set[UUID]:
-    observations: set[UUID] = set()
-    pending = {version_id}
-    visited: set[UUID] = set()
-    while pending:
-        batch = pending - visited
-        if not batch:
-            break
-        visited.update(batch)
-        items = set(
-            session.scalars(
-                select(ContentVersionInput.observation_id).where(
-                    ContentVersionInput.owner_id == owner_id,
-                    ContentVersionInput.content_version_id.in_(batch),
-                )
-            )
-        )
-        observations.update(items)
-        pending = {
-            value
-            for value in session.scalars(
-                select(ContentObservation.content_version_id).where(
-                    ContentObservation.owner_id == owner_id,
-                    ContentObservation.id.in_(items),
-                )
-            )
-            if value is not None
-        } - visited
-    return observations
-
-
 def require_export_observations_in_transaction(
     session: Session, *, owner_id: UUID, observation_ids: tuple[UUID, ...], now: datetime
 ) -> None:
@@ -113,24 +81,17 @@ def require_export_observations_in_transaction(
         .join(ContentRecord, ContentRecord.id == ContentObservation.content_id)
         .where(ContentObservation.owner_id == owner_id, ContentObservation.id.in_(observation_ids))
     )
-    for original, original_version, original_record in input_rows:
-        context = load_content_job_context(session, owner_id=owner_id, job_id=original.job_id)
-        if context is not None and context.source_key != original_record.source_key:
-            try:
-                profile_id = UUID(
-                    (original_record.native_scope or "").removeprefix("editorial-profile:")
-                )
-            except ValueError:
-                raise ApplicationError("editorial_material_unavailable") from None
-            context = load_content_job_context_for_editorial_member_in_transaction(
-                session, owner_id=owner_id, job_id=original.job_id, profile_id=profile_id
-            )
-        if context is None:
+    for original, original_version, _original_record in input_rows:
+        actual = load_observation_context_in_transaction(
+            session, owner_id=owner_id, observation_id=original.id
+        )
+        if actual is None:
             raise ApplicationError("editorial_material_unavailable")
+        context = actual.job
         policy = load_source_access_policy_in_transaction(
             session,
             owner_id=owner_id,
-            source_key=original_record.source_key,
+            source_key=actual.source_key,
             capability=context.source_capability,
         )
         fields = {"object_type", "text_scope"}
@@ -169,10 +130,6 @@ def freeze_export_content_in_transaction(
         or len(set(content_version_ids)) != len(content_version_ids)
     ):
         raise ValueError("export freeze requires aware bounded caller transaction")
-    if not version_inputs_readable_in_transaction(
-        session, owner_id=owner_id, content_version_ids=content_version_ids, now=now
-    ):
-        raise ApplicationError("editorial_material_unavailable")
     rows = session.execute(
         select(ContentVersion, ContentRecord)
         .join(
@@ -193,19 +150,54 @@ def freeze_export_content_in_transaction(
         )
         if observation_ids is not None:
             observation_query = observation_query.where(ContentObservation.id.in_(observation_ids))
-        observation = session.scalar(
-            observation_query.order_by(
-                ContentObservation.received_at.desc(), ContentObservation.id.desc()
-            ).limit(1)
-        )
-        if observation is None:
-            raise ApplicationError("editorial_material_unavailable")
-        inputs = tuple(
-            sorted(
-                _input_ids(session, owner_id=owner_id, version_id=version.id) | {observation.id},
-                key=str,
+        failure_code = "editorial_material_unavailable"
+        if observation_ids is None:
+            observation = None
+            for candidate in session.scalars(
+                observation_query.order_by(
+                    ContentObservation.received_at.desc(), ContentObservation.id.desc()
+                ).limit(32)
+            ):
+                try:
+                    candidate_inputs = observation_input_closure_in_transaction(
+                        session,
+                        owner_id=owner_id,
+                        observation_ids=(candidate.id,),
+                    )
+                    for offset in range(0, len(candidate_inputs), 500):
+                        require_export_observations_in_transaction(
+                            session,
+                            owner_id=owner_id,
+                            observation_ids=candidate_inputs[offset : offset + 500],
+                            now=now,
+                        )
+                except ApplicationError as error:
+                    if error.code not in {
+                        "editorial_material_unavailable",
+                        "editorial_export_not_authorized",
+                    }:
+                        raise
+                    if error.code == "editorial_export_not_authorized":
+                        failure_code = error.code
+                    continue
+                observation = candidate
+                break
+        else:
+            observation = session.scalar(
+                observation_query.order_by(
+                    ContentObservation.received_at.desc(), ContentObservation.id.desc()
+                ).limit(1)
             )
+        if observation is None:
+            raise ApplicationError(failure_code)
+        inputs = observation_input_closure_in_transaction(
+            session, owner_id=owner_id, observation_ids=(observation.id,)
         )
+        actual = load_observation_context_in_transaction(
+            session, owner_id=owner_id, observation_id=observation.id
+        )
+        if actual is None:
+            raise ApplicationError("editorial_material_unavailable")
         for start in range(0, len(inputs), 32):
             if not observations_readable_in_transaction(
                 session, owner_id=owner_id, observation_ids=inputs[start : start + 32], now=now
@@ -227,7 +219,7 @@ def freeze_export_content_in_transaction(
             ContentExportItem(
                 content_id=record.id,
                 version_id=version.id,
-                source_key=record.source_key,
+                source_key=actual.source_key,
                 canonical_url=observation.canonical_url or observation.final_url,
                 title=version.title,
                 body=version.body,
@@ -282,6 +274,13 @@ def restore_export_content_in_transaction(
         if row is None:
             raise ApplicationError("editorial_material_unavailable")
         version, record, observation = row
+        actual = load_observation_context_in_transaction(
+            session, owner_id=owner_id, observation_id=observation.id
+        )
+        if actual is None or observation_input_closure_in_transaction(
+            session, owner_id=owner_id, observation_ids=(observation.id,)
+        ) != tuple(sorted(frozen.input_observation_ids, key=str)):
+            raise ApplicationError("editorial_material_unavailable")
         for start in range(0, len(frozen.input_observation_ids), 500):
             require_export_observations_in_transaction(
                 session,
@@ -293,7 +292,7 @@ def restore_export_content_in_transaction(
             ContentExportItem(
                 content_id=record.id,
                 version_id=version.id,
-                source_key=record.source_key,
+                source_key=actual.source_key,
                 canonical_url=observation.canonical_url or observation.final_url,
                 title=version.title,
                 body=version.body,

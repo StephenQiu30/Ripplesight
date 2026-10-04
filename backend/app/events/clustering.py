@@ -64,6 +64,22 @@ def candidate_fingerprint(
                 "body": item.body,
                 "provenance": item.provenance_fingerprint,
                 "editorial_frame": item.editorial_frame,
+                **(
+                    {
+                        "observation_id": str(item.observation_id),
+                        "representative_comment_observation_id": (
+                            str(item.representative_comment_observation_id)
+                            if item.representative_comment_observation_id
+                            else None
+                        ),
+                        "input_observation_ids": [str(i) for i in item.input_observation_ids],
+                        **(
+                            {"annotation_id": str(item.annotation_id)} if item.annotation_id else {}
+                        ),
+                    }
+                    if item.observation_id is not None
+                    else {}
+                ),
             }
             for item in ordered
         ],

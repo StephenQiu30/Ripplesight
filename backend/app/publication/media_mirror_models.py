@@ -35,12 +35,46 @@ class PublicationMediaRun(Base):
             ["content_versions.owner_id", "content_versions.content_id", "content_versions.id"],
             name="publication_media_runs_content_fk",
         ),
+        ForeignKeyConstraint(
+            ["owner_id", "observation_id", "content_id", "content_version_id"],
+            [
+                "content_observations.owner_id",
+                "content_observations.id",
+                "content_observations.content_id",
+                "content_observations.content_version_id",
+            ],
+            ondelete="RESTRICT",
+            name="publication_media_runs_observation_identity_fk",
+        ),
+        CheckConstraint(
+            "observation_source_key IS NULL OR observation_source_key=source_key",
+            name="publication_media_runs_observation_source_check",
+        ),
+        ForeignKeyConstraint(
+            [
+                "owner_id",
+                "observation_id",
+                "content_id",
+                "content_version_id",
+                "observation_source_key",
+            ],
+            [
+                "content_observations.owner_id",
+                "content_observations.id",
+                "content_observations.content_id",
+                "content_observations.content_version_id",
+                "content_observations.source_key",
+            ],
+            name="publication_media_runs_observation_source_fk",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("owner_id", "operation_id", name="publication_media_runs_operation_key"),
         UniqueConstraint(
             "owner_id",
             "content_id",
             "content_version_id",
             "policy_revision",
+            "observation_id",
             name="publication_media_runs_identity_key",
         ),
         CheckConstraint(
@@ -57,6 +91,8 @@ class PublicationMediaRun(Base):
     job_id: Mapped[UUID] = mapped_column()
     content_id: Mapped[UUID] = mapped_column()
     content_version_id: Mapped[UUID] = mapped_column()
+    observation_id: Mapped[UUID | None] = mapped_column()
+    observation_source_key: Mapped[str | None] = mapped_column(String(64))
     policy_revision: Mapped[int] = mapped_column(Integer)
     source_key: Mapped[str] = mapped_column(String(64))
     fixed_reference: Mapped[dict[str, Any]] = mapped_column(JSONB)

@@ -158,6 +158,9 @@ class EventPublicationMemberReference:
     content_id: UUID
     content_version_id: UUID
     representative_comment_id: UUID | None
+    observation_id: UUID | None = None
+    source_key: str | None = None
+    input_observation_ids: tuple[UUID, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,3 +176,4 @@ class EventPublicationStoryView:
     members: tuple[EventPublicationMemberReference, ...]
     heat: float | None = None
     attention: EventAttentionView | None = None
+    narrative_input_observation_ids: tuple[UUID, ...] = ()

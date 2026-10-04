@@ -1,4 +1,3 @@
-# ruff: noqa: F811
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
@@ -6,7 +5,13 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import select, text
 from tests.integration.test_ai_calls import _enable_ai_budget
-from tests.integration.test_event_reading import _seed_reading, event_read_client  # noqa: F401
+from tests.integration.test_event_reading import (
+    _fixed_member_fields,
+    _seed_reading,
+)
+from tests.integration.test_event_reading import (
+    event_read_client as event_read_client,
+)
 from tests.integration.test_event_reading_boundaries import _other_content
 
 from ai.models import AiCall
@@ -97,6 +102,7 @@ def _pair(client):
                 event_id=second_id,
                 content_id=other.id,
                 content_version_id=other.latest_observation.content_version.id,
+                **_fixed_member_fields(session, owner, other),
                 source_key="x",
                 representative_comment_id=None,
                 added_revision=1,
@@ -296,6 +302,7 @@ def test_consolidation_scan_passes_admitted_first_page_without_starving_later_pa
                     event_id=identity,
                     content_id=material.id,
                     content_version_id=material.latest_observation.content_version.id,
+                    **_fixed_member_fields(session, owner, material),
                     source_key="x",
                     representative_comment_id=None,
                     added_revision=1,

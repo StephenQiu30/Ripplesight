@@ -67,6 +67,43 @@ class ContentRecord(Base):
     created_at: Mapped[datetime]
 
 
+class ContentNativeIdentity(Base):
+    """Strong native key points to one owner identity; it grants no source permission."""
+
+    __tablename__ = "content_native_identities"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_id",
+            "platform",
+            "object_type",
+            "namespace",
+            "native_id",
+            name="content_native_identities_native_key",
+        ),
+        ForeignKeyConstraint(
+            ["owner_id", "content_id"],
+            ["content_records.owner_id", "content_records.id"],
+            ondelete="CASCADE",
+            name="content_native_identities_content_fkey",
+        ),
+        CheckConstraint(
+            "platform = 'threads' AND object_type = 'post' AND namespace = 'threads_shortcode'",
+            name="content_native_identities_namespace_check",
+        ),
+        CheckConstraint(
+            "native_id ~ '^[A-Za-z0-9_-]{1,128}$'", name="content_native_identities_id_check"
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    owner_id: Mapped[UUID]
+    content_id: Mapped[UUID]
+    platform: Mapped[str] = mapped_column(String(32))
+    object_type: Mapped[str] = mapped_column(String(16))
+    namespace: Mapped[str] = mapped_column(String(64))
+    native_id: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime]
+
+
 class ContentDiscovery(Base):
     __tablename__ = "content_discoveries"
     __table_args__ = (
@@ -309,6 +346,33 @@ class ContentObservation(Base):
             "content_version_id",
             name="content_observations_owner_identity_version_key",
         ),
+        UniqueConstraint(
+            "owner_id",
+            "id",
+            "content_id",
+            "content_version_id",
+            "source_key",
+            name="content_observations_source_context_key",
+        ),
+        CheckConstraint(
+            "input_basis IS NULL OR input_basis IN ('source_v1', 'observations_v1')",
+            name="content_observations_input_basis_check",
+        ),
+        CheckConstraint(
+            "(input_basis IS NULL AND source_key IS NULL AND source_native_scope IS NULL "
+            "AND source_external_id IS NULL AND source_identity_basis IS NULL "
+            "AND editorial_profile_id IS NULL AND native_identity_proof IS NULL) OR "
+            "(input_basis IS NOT NULL AND source_key IS NOT NULL "
+            "AND source_external_id IS NOT NULL AND source_identity_basis IS NOT NULL "
+            "AND source_key ~ '^[a-z][a-z0-9_-]{0,63}$' "
+            "AND source_external_id <> '' AND source_identity_basis IN ('guid', 'url_fallback'))",
+            name="content_observations_provenance_check",
+        ),
+        CheckConstraint(
+            "native_identity_proof IS NULL OR (jsonb_typeof(native_identity_proof) = 'object' "
+            "AND octet_length(native_identity_proof::text) <= 8192)",
+            name="content_observations_proof_check",
+        ),
         ForeignKeyConstraint(
             ["owner_id", "content_id"],
             ["content_records.owner_id", "content_records.id"],
@@ -382,6 +446,15 @@ class ContentObservation(Base):
     content_id: Mapped[UUID]
     job_id: Mapped[UUID]
     source_operation_id: Mapped[UUID]
+    source_key: Mapped[str | None] = mapped_column(String(64))
+    source_native_scope: Mapped[str | None] = mapped_column(String(512))
+    source_external_id: Mapped[str | None] = mapped_column(String(512))
+    source_identity_basis: Mapped[str | None] = mapped_column(String(16))
+    editorial_profile_id: Mapped[UUID | None]
+    native_identity_proof: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB(none_as_null=True)
+    )
+    input_basis: Mapped[str | None] = mapped_column(String(32))
     content_version_id: Mapped[UUID | None]
     observed_at: Mapped[datetime]
     received_at: Mapped[datetime]
@@ -397,6 +470,31 @@ class ContentObservation(Base):
     view_count: Mapped[int | None] = mapped_column(BigInteger)
     play_count: Mapped[int | None] = mapped_column(BigInteger)
     danmaku_count: Mapped[int | None] = mapped_column(BigInteger)
+
+
+class ContentObservationInput(Base):
+    __tablename__ = "content_observation_inputs"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["owner_id", "output_observation_id"],
+            ["content_observations.owner_id", "content_observations.id"],
+            ondelete="CASCADE",
+            name="content_observation_inputs_output_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["owner_id", "input_observation_id"],
+            ["content_observations.owner_id", "content_observations.id"],
+            ondelete="RESTRICT",
+            name="content_observation_inputs_input_fkey",
+        ),
+        CheckConstraint(
+            "output_observation_id <> input_observation_id",
+            name="content_observation_inputs_not_self_check",
+        ),
+    )
+    owner_id: Mapped[UUID] = mapped_column(primary_key=True)
+    output_observation_id: Mapped[UUID] = mapped_column(primary_key=True)
+    input_observation_id: Mapped[UUID] = mapped_column(primary_key=True)
 
 
 class ContentVersionInput(Base):

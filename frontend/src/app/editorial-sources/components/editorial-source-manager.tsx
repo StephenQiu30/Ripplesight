@@ -153,7 +153,9 @@ export function EditorialSourceManager() {
         cause instanceof ApiRequestError
           ? cause.code === "editorial_version_conflict"
             ? "来源配置版本已更新，请重新读取并重新打开表单。"
-            : cause.message
+            : cause.code === "editorial_target_conflict"
+              ? "相同平台入口与目标已有来源，请修改现有来源配置。"
+              : cause.message
           : "请求失败，请检查输入或重试读取。";
       const unknown =
         cause instanceof ApiRequestError &&

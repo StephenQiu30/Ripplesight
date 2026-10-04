@@ -20,10 +20,13 @@ from ai.embedding_services import load_frozen_embedding_configuration_in_transac
 from ai.schemas import AiCallError, AiCallStatus, AiCompletion, AiFailureCode
 from ai.services import AiService, load_saved_ai_call_in_transaction
 from content.event_reading import load_event_member_content_in_transaction
+from content.observation_inputs import freeze_observation_inputs_in_transaction
 from content.report_reading import report_inputs_readable_in_transaction
 from content.schemas import EventContentReadReference, EventContentReadView
+from content.version_inputs import observations_readable_in_transaction
 from core.config import Settings
 from events.embedding_models import EventContentEmbedding
+from events.observation_inputs import event_content_reference
 from events.schemas import EventInput
 from jobs.execution import ExecutionLease, JobCompletion, JobExecutionFailure, JobExecutionService
 from jobs.schemas import (
@@ -73,6 +76,7 @@ def _material(reading: EventContentReadView, settings: Settings) -> tuple[bytes,
                 "text_scope": version.text_scope,
                 "text_origin": version.text_origin,
                 "source": reading.source_key,
+                "observation_id": str(reading.observation.id),
                 "provider": settings.embedding_base_url.rstrip("/"),
                 "model": settings.embedding_model,
                 "dimensions": settings.embedding_dimensions,
@@ -122,14 +126,12 @@ def load_compatible_event_vectors_in_transaction(
     readings = load_event_member_content_in_transaction(
         session,
         owner_id=owner_id,
-        references=tuple(
-            EventContentReadReference(item.content_id, item.content_version_id) for item in inputs
-        ),
+        references=tuple(event_content_reference(item, include_comment=False) for item in inputs),
         now=now,
     )
     fingerprints = {}
     for item in inputs:
-        reading = readings.get(EventContentReadReference(item.content_id, item.content_version_id))
+        reading = readings.get(event_content_reference(item, include_comment=False))
         material = _guarded_material(
             session, owner_id=owner_id, reading=reading, settings=settings, now=now
         )
@@ -220,8 +222,7 @@ class EventEmbeddingService:
                 self._session,
                 owner_id=owner,
                 references=tuple(
-                    EventContentReadReference(item.content_id, item.content_version_id)
-                    for item in items
+                    event_content_reference(item, include_comment=False) for item in items
                 ),
                 now=now,
             )
@@ -254,6 +255,18 @@ class EventEmbeddingService:
                         scope={
                             "embedding_id": str(identity),
                             "input_fingerprint": fingerprint.hex(),
+                            "observation_id": str(reading.observation.id),
+                            "input_observation_ids": json.dumps(
+                                [
+                                    str(value)
+                                    for value in freeze_observation_inputs_in_transaction(
+                                        self._session,
+                                        owner_id=owner,
+                                        observation_ids=(reading.observation.id,),
+                                        now=now,
+                                    )
+                                ]
+                            ),
                             **FrozenEmbeddingConfiguration.from_settings(self._settings).scope(),
                         },
                     ),
@@ -350,12 +363,29 @@ class EventEmbeddingExecutor:
         )
         if row is None or row.input_fingerprint.hex() != configuration.scope["input_fingerprint"]:
             raise self._failure("event_embedding_input_changed")
+        observation_id = None
+        if configuration.scope.get("observation_id") is not None:
+            try:
+                observation_id = UUID(str(configuration.scope["observation_id"]))
+                inputs = tuple(
+                    UUID(str(value))
+                    for value in json.loads(str(configuration.scope["input_observation_ids"]))
+                )
+            except (KeyError, TypeError, ValueError):
+                raise self._failure("event_embedding_input_changed") from None
+            if observation_id not in inputs or not observations_readable_in_transaction(
+                session, owner_id=message.owner_id, observation_ids=inputs, now=self._clock()
+            ):
+                raise self._failure("event_embedding_input_changed")
+        reference = EventContentReadReference(
+            row.content_id, row.content_version_id, observation_id=observation_id
+        )
         reading = load_event_member_content_in_transaction(
             session,
             owner_id=message.owner_id,
-            references=(EventContentReadReference(row.content_id, row.content_version_id),),
+            references=(reference,),
             now=self._clock(),
-        ).get(EventContentReadReference(row.content_id, row.content_version_id))
+        ).get(reference)
         material = _guarded_material(
             session,
             owner_id=message.owner_id,

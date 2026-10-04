@@ -183,6 +183,7 @@ class ReportSourceCoverage(BaseModel):
 
 
 class ReportBuildDataset(BaseModel):
+    input_observation_ids: tuple[UUID, ...] = ()
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     posts: tuple[ReportPostInput, ...]

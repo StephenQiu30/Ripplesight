@@ -52,6 +52,7 @@ from connections.editorial_schemas import (
     ExternalIngressItem,
     ExternalIngressReceipt,
 )
+from connections.editorial_target_dedup import require_unique_rsshub_target_in_transaction
 from connections.models import SourceConnection, SourceConnectionVersion
 from content.editorial_body import (
     complete_editorial_body_in_transaction,
@@ -89,6 +90,7 @@ from operations.services import (
     load_completed_audit_in_transaction,
 )
 from sources.contracts import SourceCapability, WebPageResult
+from sources.editorial_identity import verify_editorial_native_identity
 from sources.editorial_registry import EditorialKnownMaterial
 from sources.editorial_schemas import (
     EditorialBodyCheckpoint,
@@ -99,6 +101,7 @@ from sources.editorial_schemas import (
     EditorialPage,
     EditorialProfileView,
     EditorialRunResult,
+    EditorialSourceConfiguration,
     fingerprint,
 )
 
@@ -429,6 +432,9 @@ class EditorialSourceService:
         if profile_id is None:
             if command.expected_revision != 0 or command.enabled:
                 raise ApplicationError("invalid_editorial_input")
+            require_unique_rsshub_target_in_transaction(
+                self._session, owner_id=owner_id, configuration=command.configuration
+            )
             profile_id = uuid4()
             p = EditorialSourceProfile(
                 id=profile_id,
@@ -460,6 +466,12 @@ class EditorialSourceService:
                 raise ApplicationError("invalid_editorial_input")
             if self._has_unresolved(p):
                 raise ApplicationError("editorial_version_conflict")
+            require_unique_rsshub_target_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                configuration=command.configuration,
+                profile_id=p.id,
+            )
             p.current_version += 1
             p.revision += 1
             p.name, p.enabled, p.updated_at = command.name, command.enabled, now
@@ -1074,7 +1086,12 @@ class EditorialSourceService:
                 applied = self._apply_material_in_transaction(
                     p=p, v=v, run=run, page=page, first=first, material=material, sink=sink
                 )
-                if body is not None and body.enabled and material.body_status != "ok":
+                if (
+                    applied.status != "duplicate"
+                    and body is not None
+                    and body.enabled
+                    and material.body_status != "ok"
+                ):
                     target = load_editorial_body_target_in_transaction(
                         self._session,
                         owner_id=owner_id,
@@ -1233,6 +1250,7 @@ class EditorialSourceService:
                     now=self._clock(),
                 )
                 saved.content_version_id = result.content_version_id
+                saved.observation_id = result.observation_id
                 saved.body_status, saved.updated_at = (
                     ("ok" if response.document.text_scope == "full" else "pending"),
                     self._clock(),
@@ -1353,6 +1371,11 @@ class EditorialSourceService:
                 "duplicate", None, saved.content_id, saved.content_version_id
             )
         previous_version = saved.content_version_id if saved is not None else None
+        execution = (
+            load_job_execution_configuration(self._session, job_id=run.job_id)
+            if v.kind == "rss"
+            else None
+        )
         command = EditorialContentInput(
             profile_id=p.id,
             source_key=p.source_key,
@@ -1370,6 +1393,14 @@ class EditorialSourceService:
             )
             is not None,
             material=material,
+            identity_proof=verify_editorial_native_identity(
+                material,
+                configuration=EditorialSourceConfiguration.model_validate(v.configuration),
+            )
+            # First-version proof authority is a single-profile poll. Grouped
+            # or other original Jobs retain their existing profile-scoped path.
+            if execution is not None and execution.kind == "source.editorial.poll"
+            else None,
         )
         ingested = (
             sink(self._session, owner_id, command)
@@ -1387,6 +1418,7 @@ class EditorialSourceService:
                 material_hash=digest,
                 content_id=ingested.content_id,
                 content_version_id=ingested.content_version_id,
+                observation_id=ingested.observation_id,
                 run_id=run.id,
                 body_status=material.body_status,
                 body_retry_count=0,
@@ -1408,8 +1440,15 @@ class EditorialSourceService:
                 saved.material_hash,
                 saved.content_id,
                 saved.content_version_id,
+                saved.observation_id,
                 saved.run_id,
-            ) = digest, ingested.content_id, ingested.content_version_id, run.id
+            ) = (
+                digest,
+                ingested.content_id,
+                ingested.content_version_id,
+                ingested.observation_id,
+                run.id,
+            )
             saved.body_status, saved.updated_at = material.body_status, now
         detail_title = material.metadata.get("detail_title")
         if isinstance(detail_title, str):

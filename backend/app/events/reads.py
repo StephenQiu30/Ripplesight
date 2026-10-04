@@ -14,6 +14,7 @@ from sqlalchemy import and_, func, or_, select, text, tuple_
 from sqlalchemy.orm import Session
 
 from content.event_reading import load_event_member_content_in_transaction
+from content.observation_inputs import freeze_observation_inputs_in_transaction
 from content.schemas import EventContentReadReference, EventContentReadView
 from core.errors import ApplicationError
 from events.digest import load_event_digest_input_in_transaction
@@ -25,6 +26,7 @@ from events.fact_schemas import (
 )
 from events.heat import load_event_attention_in_transaction
 from events.models import Event, EventMember
+from events.observation_inputs import event_content_reference
 from events.schemas import (
     EventMemberPageView,
     EventMemberReadView,
@@ -84,11 +86,7 @@ def list_story_indexing_changes_in_transaction(
 
 
 def _reference(member: EventMember) -> EventContentReadReference:
-    return EventContentReadReference(
-        content_id=member.content_id,
-        content_version_id=member.content_version_id,
-        representative_comment_id=member.representative_comment_id,
-    )
+    return event_content_reference(member)
 
 
 def _fingerprint(values: dict[str, str | int | None]) -> str:
@@ -534,11 +532,44 @@ def load_publication_stories_in_transaction(
     members, readings, available = service._members_and_readings(
         owner_id=owner_id, events={event.id: event.revision for event in events}, now=now
     )
+    # Event's compatibility narrative can contain removed reports even without a
+    # digest row. Preserve their original source permissions independently of the
+    # active public reports, matching the private narrative's historical guard.
+    historical = list(
+        session.scalars(
+            select(EventMember)
+            .where(EventMember.owner_id == owner_id, EventMember.event_id.in_(event_ids))
+            .limit(2001)
+        )
+    )
+    if len(historical) > 2000:
+        return {}
+    narrative_roots: dict[UUID, set[UUID]] = {}
+    for member in historical:
+        ref = event_content_reference(member)
+        reading = readings.get(ref)
+        if reading is None:
+            continue
+        roots = narrative_roots.setdefault(member.event_id, set())
+        roots.update((reading.observation.id, *ref.input_observation_ids))
+        if reading.representative_comment is not None:
+            roots.add(reading.representative_comment.observation.id)
     result = {}
     for event in events:
         active = members.get(event.id, [])
         view = service._view(event, active, readings, available[event.id])
         if view is None or not view.derived_text_available or not view.title or not view.summary:
+            continue
+        try:
+            narrative_inputs = freeze_observation_inputs_in_transaction(
+                session,
+                owner_id=owner_id,
+                observation_ids=tuple(narrative_roots.get(event.id, ())),
+                now=now,
+            )
+        except ApplicationError:
+            continue
+        if not narrative_inputs:
             continue
         attention = load_event_attention_in_transaction(
             session, owner_id=owner_id, event_id=event.id, now=now
@@ -554,9 +585,15 @@ def load_publication_stories_in_transaction(
             first_seen_at=view.first_seen_at,
             heat=attention.heat if attention and attention.participant_count else None,
             attention=attention if attention and attention.participant_count else None,
+            narrative_input_observation_ids=narrative_inputs,
             members=tuple(
                 EventPublicationMemberReference(
-                    member.content_id, member.content_version_id, member.representative_comment_id
+                    member.content_id,
+                    member.content_version_id,
+                    member.representative_comment_id,
+                    member.observation_id,
+                    member.source_key,
+                    event_content_reference(member).input_observation_ids,
                 )
                 for member in active
             ),

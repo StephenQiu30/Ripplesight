@@ -27,6 +27,7 @@ def purge_report_content_inputs_in_transaction(
     owner_id: UUID,
     content_version_ids: tuple[UUID, ...],
     observation_ids: tuple[UUID, ...],
+    legacy_content_version_ids: tuple[UUID, ...] = (),
 ) -> None:
     if not session.in_transaction():
         raise RuntimeError("report cleanup requires caller transaction")
@@ -37,6 +38,7 @@ def purge_report_content_inputs_in_transaction(
         observation_ids=observation_ids,
     )
     identifiers = {str(item) for item in (*content_version_ids, *observation_ids)}
+    legacy_identifiers = {str(i) for i in legacy_content_version_ids}
     rows = tuple(
         session.scalars(select(Report).where(Report.owner_id == owner_id).with_for_update())
     )
@@ -45,7 +47,14 @@ def purge_report_content_inputs_in_transaction(
         added = {
             row.id
             for row in rows
-            if row.id not in removed and _uses(row.input_manifest, identifiers)
+            if row.id not in removed
+            and (
+                _uses(row.input_manifest, identifiers)
+                or (
+                    not row.input_manifest.get("observation_ids")
+                    and _uses(row.input_manifest, legacy_identifiers)
+                )
+            )
         }
         if not added:
             break

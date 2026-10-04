@@ -11,130 +11,27 @@ from sqlalchemy.orm import Session
 
 from content.models import (
     ContentObservation,
-    ContentRecord,
     ContentVersion,
     ContentVersionInput,
-    ContentVisibilityObservation,
 )
 from core.errors import ApplicationError
-from evidence.schemas import DataClass
-from evidence.services import (
-    RetentionPolicyUnavailableError,
-    SourceAccessPolicyService,
-    SourceAccessUnavailableError,
-    load_readable_resources_in_transaction,
-    readable_resource_ids_query,
-)
-from jobs.editorial_member import load_content_job_context_for_editorial_member_in_transaction
-from jobs.services import load_content_job_context
 
 
 def observations_readable_in_transaction(
     session: Session, *, owner_id: UUID, observation_ids: tuple[UUID, ...], now: datetime
 ) -> bool:
-    """ALL actual original observations, fields and current policies; pause is not revocation."""
-    if not session.in_transaction() or now.tzinfo is None:
-        raise ValueError("match inputs require an aware caller transaction")
-    if not 1 <= len(observation_ids) <= 32 or len(set(observation_ids)) != len(observation_ids):
-        return False
-    rows = session.execute(
-        select(ContentObservation, ContentRecord, ContentVersion)
-        .join(
-            ContentRecord,
-            (ContentRecord.owner_id == ContentObservation.owner_id)
-            & (ContentRecord.id == ContentObservation.content_id),
-        )
-        .join(
-            ContentVersion,
-            (ContentVersion.owner_id == ContentObservation.owner_id)
-            & (ContentVersion.id == ContentObservation.content_version_id),
-        )
-        .where(
-            ContentObservation.owner_id == owner_id,
-            ContentObservation.id.in_(observation_ids),
-            ContentObservation.id.in_(
-                readable_resource_ids_query(
-                    owner_id=owner_id,
-                    resource_type="content_observation",
-                    now=now,
-                )
-            ),
-        )
-    ).all()
-    if {observation.id for observation, _, _ in rows} != set(observation_ids):
-        return False
-    original_permissions = load_readable_resources_in_transaction(
-        session,
-        owner_id=owner_id,
-        resource_type="content_observation",
-        resource_ids=set(observation_ids),
-        now=now,
+    """ALL exact original inputs, using the same bounded bulk read implementation."""
+    from content.observation_reading import readable_observation_groups_in_transaction
+
+    return (
+        readable_observation_groups_in_transaction(
+            session,
+            owner_id=owner_id,
+            observation_groups={"single": observation_ids},
+            now=now,
+        )["single"]
+        is not None
     )
-    policies = SourceAccessPolicyService(session, clock=lambda: now)
-    for observation, record, version in rows:
-        visibility = session.scalar(
-            select(ContentVisibilityObservation)
-            .where(
-                ContentVisibilityObservation.owner_id == owner_id,
-                ContentVisibilityObservation.content_id == record.id,
-            )
-            .order_by(
-                ContentVisibilityObservation.observed_at.desc(),
-                ContentVisibilityObservation.received_at.desc(),
-                ContentVisibilityObservation.id.desc(),
-            )
-            .limit(1)
-        )
-        if visibility is not None and visibility.status != "visible":
-            return False
-        context = load_content_job_context(session, owner_id=owner_id, job_id=observation.job_id)
-        if context is None or context.source_capability is None:
-            return False
-        if context.source_key != record.source_key:
-            prefix = "editorial-profile:"
-            if not (record.native_scope or "").startswith(prefix):
-                return False
-            try:
-                profile_id = UUID((record.native_scope or "")[len(prefix) :])
-            except ValueError:
-                return False
-            context = load_content_job_context_for_editorial_member_in_transaction(
-                session,
-                owner_id=owner_id,
-                job_id=observation.job_id,
-                profile_id=profile_id,
-            )
-            if context is None or context.source_key != record.source_key:
-                return False
-        source_key = context.source_key
-        payload: dict[str, object] = {}
-        for field in ("title", "body"):
-            value = getattr(version, field)
-            if value:
-                payload[field] = value
-        try:
-            admitted = policies.admit_payload_in_transaction(
-                owner_id=owner_id,
-                source_key=source_key,
-                capability=context.source_capability,
-                data_class=DataClass.STRUCTURED,
-                collected_at=observation.observed_at,
-                payload=payload,
-            )
-        except (SourceAccessUnavailableError, RetentionPolicyUnavailableError, ValueError):
-            return False
-        original = original_permissions.get(observation.id)
-        if (
-            original is None
-            or admitted.policy_id != original.source_policy_id
-            or admitted.policy_version != original.source_policy_version
-            or admitted.retention_policy_id != original.retention_policy_id
-            or admitted.retention_policy_version != original.retention_policy_version
-            or admitted.expires_at <= now
-            or any(admitted.fields.get(k) != v for k, v in payload.items())
-        ):
-            return False
-    return True
 
 
 def save_version_inputs_in_transaction(
@@ -246,3 +143,62 @@ def version_inputs_readable_in_transaction(
             if value is not None
         } - visited
     return True
+
+
+def legacy_content_versions_readable_in_transaction(
+    session: Session, *, owner_id: UUID, content_version_ids: tuple[UUID, ...], now: datetime
+) -> bool:
+    """Unfrozen legacy output must never acquire rights from a modern observation."""
+    if not session.in_transaction() or not 1 <= len(content_version_ids) <= 2000:
+        return False
+    pending = set(content_version_ids)
+    visited: set[UUID] = set()
+    originals: set[UUID] = set()
+    while pending:
+        batch = pending - visited
+        if not batch:
+            break
+        if len(visited) + len(batch) > 2000:
+            return False
+        rows = tuple(
+            session.scalars(
+                select(ContentObservation).where(
+                    ContentObservation.owner_id == owner_id,
+                    ContentObservation.content_version_id.in_(batch),
+                )
+            )
+        )
+        if {row.content_version_id for row in rows} != batch or any(
+            row.input_basis is not None for row in rows
+        ):
+            return False
+        originals.update(row.id for row in rows)
+        if len(originals) > 2000:
+            return False
+        visited.update(batch)
+        pending = {
+            value
+            for value in session.scalars(
+                select(ContentObservation.content_version_id).where(
+                    ContentObservation.owner_id == owner_id,
+                    ContentObservation.id.in_(
+                        select(ContentVersionInput.observation_id).where(
+                            ContentVersionInput.owner_id == owner_id,
+                            ContentVersionInput.content_version_id.in_(batch),
+                        )
+                    ),
+                )
+            )
+            if value is not None
+        } - visited
+    return observations_readable_in_transaction(
+        session,
+        owner_id=owner_id,
+        observation_ids=tuple(sorted(originals, key=str)),
+        now=now,
+    ) and version_inputs_readable_in_transaction(
+        session,
+        owner_id=owner_id,
+        content_version_ids=content_version_ids,
+        now=now,
+    )

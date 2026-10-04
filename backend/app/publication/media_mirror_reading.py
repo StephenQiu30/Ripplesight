@@ -20,6 +20,7 @@ from publication.media_mirror_services import (
     RESOURCE_TYPE,
     media_admission_in_transaction,
     require_media_grant_in_transaction,
+    require_media_run_source_in_transaction,
 )
 from publication.publication_models import PublicationRecord
 from publication.reading import PublicationReadingService
@@ -35,6 +36,7 @@ def load_available_media_in_transaction(
     policy_revision: int,
     now: datetime,
     redistribute: bool = False,
+    observation_id: UUID | None = None,
 ) -> dict[str, PublicMediaView]:
     if not session.in_transaction():
         raise RuntimeError("media read requires caller transaction")
@@ -44,11 +46,13 @@ def load_available_media_in_transaction(
             PublicationMediaRun.content_id == content_id,
             PublicationMediaRun.content_version_id == content_version_id,
             PublicationMediaRun.policy_revision == policy_revision,
+            PublicationMediaRun.observation_id == observation_id,
         )
     )
     if run is None:
         return {}
     try:
+        require_media_run_source_in_transaction(session, run, now=now)
         _, candidates, _ = require_media_grant_in_transaction(
             session,
             owner_id=owner_id,
@@ -145,6 +149,7 @@ class PublicationMediaReadingService:
         run = self.session.get(PublicationMediaRun, (owner_id, file.run_id))
         assert run
         try:
+            require_media_run_source_in_transaction(self.session, run, now=now)
             _, candidates, _ = require_media_grant_in_transaction(
                 self.session,
                 owner_id=owner_id,

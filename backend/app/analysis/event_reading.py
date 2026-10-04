@@ -89,7 +89,7 @@ def list_editorial_event_inputs_in_transaction(
                     session,
                     owner_id=owner_id,
                     content_version_ids=fixed,
-                    observation_ids=(),
+                    observation_ids=item.input_observation_ids,
                     now=now,
                 ):
                     continue
@@ -112,6 +112,8 @@ def list_editorial_event_inputs_in_transaction(
                 )
                 result.append(
                     EditorialEventInput(
+                        observation_id=item.observation_id,
+                        input_observation_ids=item.input_observation_ids,
                         owner_id=owner_id,
                         content_id=run.content_id,
                         content_version_id=run.content_version_id,
@@ -138,3 +140,33 @@ def list_editorial_event_inputs_in_transaction(
     result.sort(key=lambda item: (item.owner_id, item.content_id))
     next_after = (page[-1].owner_id, page[-1].content_id) if len(rows) > limit else None
     return EditorialEventInputPage(tuple(result), next_after)
+
+
+def load_frozen_editorial_event_input_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    content_id: UUID,
+    content_version_id: UUID,
+    observation_id: UUID,
+    provenance_fingerprint: str,
+    now: datetime,
+) -> EditorialEventInput | None:
+    page = list_editorial_event_inputs_in_transaction(
+        session,
+        since=datetime.min.replace(tzinfo=now.tzinfo),
+        now=now,
+        version_ids=(content_version_id,),
+    )
+    return next(
+        (
+            item
+            for item in page.items
+            if item.owner_id == owner_id
+            and item.content_id == content_id
+            and item.content_version_id == content_version_id
+            and item.observation_id == observation_id
+            and item.provenance_fingerprint == provenance_fingerprint
+        ),
+        None,
+    )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import (
@@ -68,6 +69,10 @@ class Event(Base):
 class EventMember(Base):
     __tablename__ = "event_members"
     __table_args__ = (
+        CheckConstraint(
+            "input_manifest IS NULL OR jsonb_typeof(input_manifest)='object'",
+            name="event_members_input_manifest_check",
+        ),
         ForeignKeyConstraint(
             ["owner_id", "topic_id", "event_id"],
             ["events.owner_id", "events.topic_id", "events.id"],
@@ -81,16 +86,49 @@ class EventMember(Base):
             name="event_members_content_version_fkey",
         ),
         ForeignKeyConstraint(
-            ["owner_id", "content_id", "source_key"],
-            ["content_records.owner_id", "content_records.id", "content_records.source_key"],
+            ["owner_id", "observation_id", "content_id", "content_version_id"],
+            [
+                "content_observations.owner_id",
+                "content_observations.id",
+                "content_observations.content_id",
+                "content_observations.content_version_id",
+            ],
             ondelete="RESTRICT",
-            name="event_members_content_source_fkey",
+            name="event_members_observation_identity_fkey",
+        ),
+        CheckConstraint(
+            "observation_source_key IS NULL OR observation_source_key=source_key",
+            name="event_members_observation_source_check",
+        ),
+        ForeignKeyConstraint(
+            [
+                "owner_id",
+                "observation_id",
+                "content_id",
+                "content_version_id",
+                "observation_source_key",
+            ],
+            [
+                "content_observations.owner_id",
+                "content_observations.id",
+                "content_observations.content_id",
+                "content_observations.content_version_id",
+                "content_observations.source_key",
+            ],
+            ondelete="RESTRICT",
+            name="event_members_observation_source_fkey",
         ),
         ForeignKeyConstraint(
             ["owner_id", "representative_comment_id"],
             ["content_records.owner_id", "content_records.id"],
             ondelete="RESTRICT",
             name="event_members_comment_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["owner_id", "representative_comment_observation_id"],
+            ["content_observations.owner_id", "content_observations.id"],
+            ondelete="RESTRICT",
+            name="event_members_comment_observation_fkey",
         ),
         UniqueConstraint(
             "owner_id",
@@ -136,8 +174,12 @@ class EventMember(Base):
     event_id: Mapped[UUID]
     content_id: Mapped[UUID]
     content_version_id: Mapped[UUID]
+    observation_id: Mapped[UUID | None]
+    observation_source_key: Mapped[str | None] = mapped_column(String(64))
+    input_manifest: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     source_key: Mapped[str] = mapped_column(String(64))
     representative_comment_id: Mapped[UUID | None]
+    representative_comment_observation_id: Mapped[UUID | None]
     added_revision: Mapped[int]
     removed_revision: Mapped[int | None]
     assignment_origin: Mapped[str] = mapped_column(String(16))
@@ -184,6 +226,10 @@ class EventCandidate(Base):
             "jsonb_typeof(expected_event_revisions) = 'object'",
             name="event_candidates_revisions_check",
         ),
+        CheckConstraint(
+            "input_manifest IS NULL OR jsonb_typeof(input_manifest) = 'object'",
+            name="event_candidates_input_manifest_check",
+        ),
         CheckConstraint("window_end > window_start", name="event_candidates_window_check"),
         CheckConstraint("prompt_version <> ''", name="event_candidates_prompt_check"),
         CheckConstraint(
@@ -208,11 +254,14 @@ class EventCandidate(Base):
     topic_id: Mapped[UUID]
     input_fingerprint: Mapped[bytes] = mapped_column(LargeBinary(32))
     member_version_ids: Mapped[list[str]] = mapped_column(JSONB)
-    expected_event_revisions: Mapped[dict[str, int]] = mapped_column(JSONB)
+    input_manifest: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    expected_event_revisions: Mapped[dict[str, int]] = mapped_column(
+        JSONB, server_default=text("'{}'::jsonb")
+    )
     window_start: Mapped[datetime]
     window_end: Mapped[datetime]
     prompt_version: Mapped[str] = mapped_column(String(128))
-    status: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(16), server_default=text("'pending'"))
     ai_call_id: Mapped[UUID | None]
     job_id: Mapped[UUID | None]
     event_id: Mapped[UUID | None]

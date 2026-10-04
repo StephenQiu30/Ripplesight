@@ -203,6 +203,16 @@ def test_actual_input_all_blocks_content_analysis_and_report_when_one_policy_rev
                 .where(ContentRecord.source_key == second_profile.source_key)
             )
             assert first_match is not None and second_observation is not None
+            session.execute(
+                text(
+                    "UPDATE content_observations SET input_basis=NULL, source_key=NULL, "
+                    "source_native_scope=NULL, source_external_id=NULL, "
+                    "source_identity_basis=NULL, "
+                    "editorial_profile_id=NULL, native_identity_proof=NULL WHERE id=:id"
+                ),
+                {"id": first_match.observation_id},
+            )
+            session.expire_all()
             dependencies = (first_match.observation_id, second_observation.id)
             save_version_inputs_in_transaction(
                 session,
@@ -360,6 +370,16 @@ def test_original_cleanup_deletes_derived_chain_reports_and_matches_atomically(e
                 select(ContentObservation).where(ContentObservation.id != feed_observation.id)
             )
             assert body_observation is not None and body_observation.content_version_id is not None
+            session.execute(
+                text(
+                    "UPDATE content_observations SET input_basis=NULL, source_key=NULL, "
+                    "source_native_scope=NULL, source_external_id=NULL, "
+                    "source_identity_basis=NULL, editorial_profile_id=NULL, "
+                    "native_identity_proof=NULL WHERE id=:id"
+                ),
+                {"id": body_observation.id},
+            )
+            session.expire_all()
             save_version_inputs_in_transaction(
                 session,
                 owner_id=owner,

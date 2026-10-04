@@ -7,8 +7,9 @@ from uuid import UUID
 
 from sqlalchemy import select
 
+from content.observation_context import load_observation_context_in_transaction
 from events.reads import load_publication_stories_in_transaction
-from publication.publication_models import PublicationRecord
+from publication.publication_models import PublicationRecord, PublicationSourcePolicy
 from publication.reading import PublicationReadingService
 from publication.schemas import PublicAttentionView, PublicStoriesPage, PublicStoryView
 
@@ -41,6 +42,27 @@ def public_stories_in_transaction(
         reports = []
         allowed = True
         indexable = reader.indexing_enabled
+        if not story.narrative_input_observation_ids:
+            continue
+        # Private-readable historical reports can still forbid public use. The
+        # narrative's complete inputs are independent of its active card subset.
+        for observation_id in story.narrative_input_observation_ids:
+            actual = load_observation_context_in_transaction(
+                reader.session, owner_id=owner_id, observation_id=observation_id
+            )
+            policy = (
+                reader.session.get(PublicationSourcePolicy, (owner_id, actual.source_key))
+                if actual
+                else None
+            )
+            if policy is None or policy.configuration.get("participation_mode") not in {
+                "editorial",
+                "hot_signal",
+            }:
+                allowed = False
+                break
+        if not allowed:
+            continue
         for member in story.members:
             value = values.get(member.content_id)
             if value is None:
@@ -50,6 +72,8 @@ def public_stories_in_transaction(
             indexable = indexable and projection.indexable
             if (
                 projection.content_version_id != member.content_version_id
+                or projection.observation_id != member.observation_id
+                or projection.source_key != member.source_key
                 or projection.visibility != "public"
                 or (
                     projection.selected
@@ -57,6 +81,25 @@ def public_stories_in_transaction(
                 )
             ):
                 allowed = False
+                break
+            # The narrative can depend on a whole analysis batch beyond visible
+            # reports. Its actual sources need current public participation too.
+            for observation_id in member.input_observation_ids:
+                actual = load_observation_context_in_transaction(
+                    reader.session, owner_id=owner_id, observation_id=observation_id
+                )
+                policy = (
+                    reader.session.get(PublicationSourcePolicy, (owner_id, actual.source_key))
+                    if actual
+                    else None
+                )
+                if policy is None or policy.configuration.get("participation_mode") not in {
+                    "editorial",
+                    "hot_signal",
+                }:
+                    allowed = False
+                    break
+            if not allowed:
                 break
             if projection.event_id == story.event_id and projection.fact_id:
                 reports.append(reader.item(projection))

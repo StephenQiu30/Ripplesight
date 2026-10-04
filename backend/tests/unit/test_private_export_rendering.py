@@ -2,6 +2,8 @@ import csv
 import io
 import json
 import time
+from contextlib import contextmanager
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
@@ -90,6 +92,51 @@ def test_missing_pinned_font_blocks_only_pdf(monkeypatch):
         assert render_export(document(), format, deadline=time.monotonic() + 120).body
     with pytest.raises(ExportRenderError, match="export_renderer_unavailable"):
         render_export(document(), "pdf", deadline=time.monotonic() + 120)
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected"),
+    [
+        ("missing_binary", "export_renderer_unavailable"),
+        ("launch_error", "export_renderer_unavailable"),
+        ("launch_timeout", "export_timeout"),
+    ],
+)
+def test_pinned_pdf_browser_failures_have_explicit_contract(
+    monkeypatch, tmp_path, failure, expected
+):
+    font = tmp_path / "font.ttc"
+    font.write_bytes(b"controlled font")
+    monkeypatch.setattr(rendering, "_FONT_PATHS", (font,))
+    monkeypatch.setattr(
+        rendering, "_FONT_HASH", rendering.hashlib.sha256(font.read_bytes()).hexdigest()
+    )
+    executable = tmp_path / "chromium-1243" / "chrome"
+    if failure != "missing_binary":
+        executable.parent.mkdir()
+        executable.touch()
+    launches = []
+
+    def launch(**kwargs):
+        launches.append(kwargs)
+        if failure == "launch_timeout":
+            raise rendering.PlaywrightTimeoutError("controlled timeout")
+        raise rendering.PlaywrightError("controlled unavailable browser")
+
+    @contextmanager
+    def playwright():
+        yield SimpleNamespace(
+            chromium=SimpleNamespace(executable_path=str(executable), launch=launch)
+        )
+
+    monkeypatch.setattr(rendering, "sync_playwright", playwright)
+    with pytest.raises(ExportRenderError, match=expected):
+        render_export(document(), "pdf", deadline=time.monotonic() + 120)
+    if failure == "missing_binary":
+        assert launches == []
+    else:
+        assert launches[0]["executable_path"] == str(executable)
+        assert "--host-resolver-rules=MAP * ~NOTFOUND" in launches[0]["args"]
 
 
 def test_pdf_markup_keeps_references_as_text_without_executable_provider_markup():

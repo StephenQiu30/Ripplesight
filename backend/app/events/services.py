@@ -25,6 +25,7 @@ from content.report_reading import report_inputs_readable_in_transaction
 from content.schemas import EventContentReadReference
 from content.services import load_event_content_inputs_in_transaction
 from core.config import Settings
+from core.errors import ApplicationError
 from events.ai_execution import (
     create_event_stage_client,
     freeze_event_ai_scope_in_transaction,
@@ -47,6 +48,12 @@ from events.fact_writer import (
 from events.facts import ensure_legacy_facts_in_transaction, invalidate_event_derived_in_transaction
 from events.heat import load_event_input_source_modes_in_transaction
 from events.models import Event, EventCandidate, EventMember
+from events.observation_inputs import (
+    event_content_reference,
+    event_member_input_manifest,
+    freeze_event_inputs_in_transaction,
+    load_frozen_event_inputs_in_transaction,
+)
 from events.schemas import EventDecision, EventInput, EventTarget
 from jobs.execution import ExecutionLease, JobCompletion, JobExecutionFailure, JobExecutionService
 from jobs.schemas import (
@@ -91,11 +98,11 @@ def load_relevant_event_inputs_in_transaction(
     after = None
     for page_number in range(1, 11):
         page = list_relevant_event_annotation_refs_in_transaction(
-            session, since=since, version_ids=version_ids, after=after, limit=2000
+            session, since=since, version_ids=version_ids, after=after, limit=2000, now=now
         )
         result.extend(
             _event_inputs_from_refs(
-                session, refs=page.items, since=since, exclude_assigned=exclude_assigned
+                session, refs=page.items, since=since, exclude_assigned=exclude_assigned, now=now
             )
         )
         if len(result) >= 2000 or (page_number == 10 and page.next_after is not None):
@@ -149,6 +156,8 @@ def load_relevant_event_inputs_in_transaction(
                     native_target_content_ids=native.get(item.content_version_id, frozenset()),
                     editorial_frame=item.fact_frame,
                     provenance_fingerprint=item.provenance_fingerprint,
+                    observation_id=item.observation_id,
+                    input_observation_ids=item.input_observation_ids,
                 )
             )
         if editorial.next_after is None or len(result) >= 4000:
@@ -192,7 +201,9 @@ def _event_inputs_from_refs(
     refs: Sequence[EventAnnotationRef],
     since: datetime,
     exclude_assigned: bool,
+    now: datetime | None = None,
 ) -> tuple[EventInput, ...]:
+    now = now or datetime.now(UTC)
     assigned: set[tuple[UUID, UUID, UUID]] = set()
     protected = (
         {
@@ -235,6 +246,31 @@ def _event_inputs_from_refs(
         )
         for owner, ids in by_owner.items()
     }
+    fixed_references = {
+        ref: EventContentReadReference(
+            ref.content_id,
+            ref.content_version_id,
+            observation_id=ref.observation_id,
+            input_observation_ids=ref.input_observation_ids,
+        )
+        for ref in refs
+        if ref.observation_id is not None
+    }
+    fixed_readings = {
+        owner: load_event_member_content_in_transaction(
+            session,
+            owner_id=owner,
+            references=tuple(
+                dict.fromkeys(
+                    reference
+                    for ref, reference in fixed_references.items()
+                    if ref.owner_id == owner
+                )
+            ),
+            now=now,
+        )
+        for owner in by_owner
+    }
     native_targets = {
         owner: load_native_event_targets_in_transaction(
             session,
@@ -243,7 +279,7 @@ def _event_inputs_from_refs(
                 EventContentReadReference(item.content_id, item.content_version_id)
                 for item in items.values()
             ),
-            now=datetime.now(UTC),
+            now=now,
         )
         for owner, items in content.items()
     }
@@ -258,6 +294,11 @@ def _event_inputs_from_refs(
         source = content[ref.owner_id].get(ref.content_version_id)
         if source is None:
             continue
+        fixed_reading = None
+        if ref.observation_id is not None:
+            fixed_reading = fixed_readings[ref.owner_id].get(fixed_references[ref])
+            if fixed_reading is None or fixed_reading.observation.content_version is None:
+                continue
         topic_key = (ref.owner_id, ref.topic_id)
         if topic_key not in topic_rules:
             version, rules, _ = topic_service.get_current_topic_rules_and_sources_in_transaction(
@@ -278,13 +319,23 @@ def _event_inputs_from_refs(
                 topic_id=ref.topic_id,
                 content_id=source.content_id,
                 content_version_id=source.content_version_id,
-                source_key=source.source_key,
+                source_key=fixed_reading.source_key if fixed_reading else source.source_key,
                 title=source.title,
                 body=source.body,
                 first_seen_at=source.first_seen_at,
                 first_seen_basis=source.first_seen_basis,
                 matched_keywords=keywords,
-                representative_comment_id=source.representative_comment_id,
+                representative_comment_id=(
+                    None if ref.observation_id is not None else source.representative_comment_id
+                ),
+                observation_id=ref.observation_id or source.observation_id,
+                representative_comment_observation_id=(
+                    None
+                    if ref.observation_id is not None
+                    else source.representative_comment_observation_id
+                ),
+                input_observation_ids=ref.input_observation_ids,
+                annotation_id=ref.annotation_id,
                 native_target_content_ids=native_targets[ref.owner_id].get(
                     source.content_version_id, frozenset()
                 ),
@@ -294,8 +345,14 @@ def _event_inputs_from_refs(
 
 
 def _load_event_targets(
-    session: Session, *, owner_id: UUID, topic_id: UUID, since: datetime
+    session: Session,
+    *,
+    owner_id: UUID,
+    topic_id: UUID,
+    since: datetime,
+    now: datetime | None = None,
 ) -> tuple[EventTarget, ...]:
+    now = now or datetime.now(UTC)
     events = session.scalars(
         select(Event)
         .where(
@@ -324,7 +381,7 @@ def _load_event_targets(
             topic_id=topic_id,
             members=members,
             since=since,
-            now=datetime.now(UTC),
+            now=now,
         )
     }
     recent_members: dict[UUID, list[EventInput]] = {}
@@ -383,12 +440,7 @@ def _fixed_context_inputs(
     now: datetime,
     apply_topic_rules: bool = True,
 ) -> tuple[EventInput, ...]:
-    references = tuple(
-        EventContentReadReference(
-            row.content_id, row.content_version_id, row.representative_comment_id
-        )
-        for row in members
-    )
+    references = tuple(event_content_reference(row) for row in members)
     readable = load_event_member_content_in_transaction(
         session, owner_id=owner_id, references=references, now=now
     )
@@ -437,6 +489,13 @@ def _fixed_context_inputs(
                 first_seen_basis=original.basis,
                 matched_keywords=keywords,
                 representative_comment_id=reference.representative_comment_id,
+                observation_id=reading.observation.id,
+                representative_comment_observation_id=(
+                    reading.representative_comment.observation.id
+                    if reading.representative_comment
+                    else None
+                ),
+                input_observation_ids=reference.input_observation_ids,
             )
         )
     return tuple(result)
@@ -445,6 +504,47 @@ def _fixed_context_inputs(
 def _load_candidate_inputs(
     session: Session, *, candidate: EventCandidate, now: datetime
 ) -> tuple[EventInput, ...]:
+    if candidate.input_manifest is not None:
+        inputs = load_frozen_event_inputs_in_transaction(
+            session,
+            owner_id=candidate.owner_id,
+            topic_id=candidate.topic_id,
+            manifest=candidate.input_manifest,
+            now=now,
+        )
+        if not inputs or candidate.topic_id == editorial_event_topic_id(candidate.owner_id):
+            return inputs
+        from analysis.reads import relevant_event_annotation_ids_in_transaction
+
+        context_ids = {
+            row.content_version_id for row in _candidate_context_members(session, candidate)
+        }
+        current_version, _, _ = MonitorTopicService(
+            session
+        ).get_current_topic_rules_and_sources_in_transaction(
+            owner_id=candidate.owner_id, topic_id=candidate.topic_id
+        )
+        annotations: dict[UUID, tuple[UUID, UUID]] = {}
+        for item in inputs:
+            if item.content_version_id in context_ids:
+                continue
+            if (
+                item.annotation_id is None
+                or item.observation_id is None
+                or item.annotation_id in annotations
+            ):
+                return ()
+            annotations[item.annotation_id] = (item.content_version_id, item.observation_id)
+        if relevant_event_annotation_ids_in_transaction(
+            session,
+            owner_id=candidate.owner_id,
+            topic_id=candidate.topic_id,
+            topic_rule_version=current_version,
+            references=annotations,
+            now=now,
+        ) != frozenset(annotations):
+            return ()
+        return inputs
     expected = {UUID(value) for value in candidate.member_version_ids}
     context = _candidate_context_members(session, candidate)
     context_ids = {row.content_version_id for row in context}
@@ -474,12 +574,7 @@ def _load_candidate_inputs(
     )
     if not inputs:
         return ()
-    references = tuple(
-        EventContentReadReference(
-            item.content_id, item.content_version_id, item.representative_comment_id
-        )
-        for item in inputs
-    )
+    references = tuple(event_content_reference(item) for item in inputs)
     readings = load_event_member_content_in_transaction(
         session, owner_id=candidate.owner_id, references=references, now=now
     )
@@ -558,7 +653,11 @@ class EventCandidateService:
         accepted = 0
         for (owner_id, topic_id), topic_inputs in by_topic.items():
             targets = _load_event_targets(
-                self._session, owner_id=owner_id, topic_id=topic_id, since=now - timedelta(hours=72)
+                self._session,
+                owner_id=owner_id,
+                topic_id=topic_id,
+                since=now - timedelta(hours=72),
+                now=now,
             )
             regroup_requests = {
                 row.content_id: str(row.operation_id)
@@ -605,6 +704,12 @@ class EventCandidateService:
                     continue
                 if len(members) == 1 and new_singletons >= MAX_NEW_SINGLETON_CANDIDATES_PER_SCAN:
                     break
+                try:
+                    members, input_manifest = freeze_event_inputs_in_transaction(
+                        self._session, owner_id=owner_id, inputs=tuple(members), now=now
+                    )
+                except ApplicationError:
+                    continue
                 fingerprint = candidate_fingerprint(
                     topic_id=topic_id,
                     members=members,
@@ -633,6 +738,7 @@ class EventCandidateService:
                             member_version_ids=sorted(
                                 str(item.content_version_id) for item in members
                             ),
+                            input_manifest=input_manifest,
                             expected_event_revisions=revisions,
                             window_start=min(item.first_seen_at for item in members),
                             window_end=max(item.first_seen_at for item in members)
@@ -828,8 +934,14 @@ class EventCandidateService:
                     event_id=event_id,
                     content_id=item.content_id,
                     content_version_id=item.content_version_id,
+                    observation_id=item.observation_id,
+                    observation_source_key=item.observation_source_key,
+                    input_manifest=event_member_input_manifest(item),
                     source_key=item.source_key,
                     representative_comment_id=item.representative_comment_id,
+                    representative_comment_observation_id=(
+                        item.representative_comment_observation_id
+                    ),
                     added_revision=added_revision,
                     removed_revision=None,
                     assignment_origin="model",

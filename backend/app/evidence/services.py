@@ -149,15 +149,11 @@ def load_readable_resources_in_transaction(
         raise ValueError("resource DTO reads require an aware bounded caller transaction")
     if not resource_ids:
         return {}
-    ids = readable_resource_ids_query(
-        owner_id=owner_id, resource_type=resource_type, now=now
-    ).where(EvidenceResource.resource_id.in_(resource_ids))
     rows = session.scalars(
-        select(EvidenceResource).where(
-            EvidenceResource.owner_id == owner_id,
-            EvidenceResource.resource_type == resource_type,
-            EvidenceResource.resource_id.in_(ids),
-        )
+        readable_resource_ids_query(owner_id=owner_id, resource_type=resource_type, now=now)
+        .where(EvidenceResource.resource_id.in_(resource_ids))
+        .with_only_columns(EvidenceResource)
+        .execution_options(populate_existing=True)
     )
     return {row.resource_id: LifecycleService._resource_view(row) for row in rows}
 
@@ -185,20 +181,24 @@ def readable_resource_ids_query(
 
 
 def load_source_access_policy_in_transaction(
-    session: Session, *, owner_id: UUID, source_key: str, capability: SourceCapability
+    session: Session,
+    *,
+    owner_id: UUID,
+    source_key: str,
+    capability: SourceCapability,
+    lock: bool = True,
 ) -> SourceAccessPolicyView | None:
-    """Read and lock the current machine-checkable purpose facts without foreign ORM."""
+    """Read current purpose facts; admission locks by default, read-only projections do not."""
     if not session.in_transaction():
         raise RuntimeError("source policy reads require caller transaction")
-    row = session.scalar(
-        select(SourceAccessPolicy)
-        .where(
-            SourceAccessPolicy.owner_id == owner_id,
-            SourceAccessPolicy.source_key == source_key,
-            SourceAccessPolicy.capability == capability.value,
-        )
-        .with_for_update()
+    statement = select(SourceAccessPolicy).where(
+        SourceAccessPolicy.owner_id == owner_id,
+        SourceAccessPolicy.source_key == source_key,
+        SourceAccessPolicy.capability == capability.value,
     )
+    if lock:
+        statement = statement.with_for_update()
+    row = session.scalar(statement.execution_options(populate_existing=True))
     return SourceAccessPolicyService._view(row) if row is not None else None
 
 

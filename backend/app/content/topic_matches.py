@@ -17,7 +17,6 @@ from content.models import (
 )
 from content.version_inputs import (
     observations_readable_in_transaction,
-    version_inputs_readable_in_transaction,
 )
 from core.errors import ApplicationError
 from jobs.editorial_member import load_content_job_context_for_editorial_member_in_transaction
@@ -45,29 +44,8 @@ class EditorialTopicMatchReference:
 def editorial_match_inputs_readable_in_transaction(
     session: Session, *, owner_id: UUID, observation_ids: tuple[UUID, ...], now: datetime
 ) -> bool:
-    if not observations_readable_in_transaction(
-        session,
-        owner_id=owner_id,
-        observation_ids=observation_ids,
-        now=now,
-    ):
-        return False
-    versions = tuple(
-        value
-        for value in session.scalars(
-            select(ContentObservation.content_version_id).where(
-                ContentObservation.owner_id == owner_id,
-                ContentObservation.id.in_(observation_ids),
-                ContentObservation.content_version_id.is_not(None),
-            )
-        )
-        if value is not None
-    )
-    return version_inputs_readable_in_transaction(
-        session,
-        owner_id=owner_id,
-        content_version_ids=versions,
-        now=now,
+    return observations_readable_in_transaction(
+        session, owner_id=owner_id, observation_ids=observation_ids, now=now
     )
 
 
@@ -128,7 +106,14 @@ def match_editorial_content_in_transaction(
         or context.configuration_version != profile_configuration_version
     ):
         raise ApplicationError("editorial_material_unavailable")
-    inputs = tuple(sorted(set(input_observation_ids or (observation_id,)), key=str))
+    from content.observation_inputs import freeze_observation_inputs_in_transaction
+
+    inputs = freeze_observation_inputs_in_transaction(
+        session,
+        owner_id=owner_id,
+        observation_ids=tuple(sorted(set(input_observation_ids or (observation_id,)), key=str)),
+        now=now,
+    )
     if observation_id not in inputs or not editorial_match_inputs_readable_in_transaction(
         session,
         owner_id=owner_id,

@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import Field
 
 from sources.contracts import SourceCapability
+from sources.editorial_identity import EditorialNativeIdentityProof
 from sources.editorial_schemas import EditorialContract, EditorialMaterial
 
 
@@ -25,6 +26,7 @@ class EditorialContentInput(EditorialContract):
     first_import: bool = False
     grouped_job: bool = False
     material: EditorialMaterial
+    identity_proof: EditorialNativeIdentityProof | None = None
 
 
 class EditorialContentResult(EditorialContract):
