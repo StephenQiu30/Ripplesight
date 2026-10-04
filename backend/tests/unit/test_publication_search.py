@@ -7,6 +7,7 @@ import pytest
 import publication.search as module
 from core.errors import ApplicationError
 from publication.listing import PublicationListingMember
+from publication.schemas import PublicSourceStatusView
 from tests.unit.test_publication_groups import member
 
 NOW = datetime(2026, 10, 2, tzinfo=UTC)
@@ -16,9 +17,18 @@ def _search(monkeypatch, rows, **kwargs):
     monkeypatch.setattr(
         module, "iter_current_publications_in_transaction", lambda *a, **k: iter(rows)
     )
-    return module.search_in_transaction(
-        SimpleNamespace(session=None), owner_id=uuid4(), now=NOW, query="needle", **kwargs
+    status = PublicSourceStatusView(
+        source_key="hackernews", name="Hacker News", enabled=True, health="ok", last_success_at=NOW
     )
+    result = module.search_in_transaction(
+        SimpleNamespace(session=None, source_status_in_transaction=lambda **kwargs: [status]),
+        owner_id=uuid4(),
+        now=NOW,
+        query="needle",
+        **kwargs,
+    )
+    assert result.source_status == [status]
+    return result
 
 
 def test_search_scans_beyond_old_raw_limit_and_ignores_html_attributes(monkeypatch):
