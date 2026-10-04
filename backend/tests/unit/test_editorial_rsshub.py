@@ -221,6 +221,27 @@ def test_threads_default_tags_cannot_be_declared_native_keyword_search():
     )
 
 
+def test_instagram_anonymous_declaration_and_review_cannot_certify_shared_cache():
+    config = rsshub_config(
+        platform="instagram",
+        target="sample",
+        route="/instagram/2/user/sample",
+        item_hosts=["www.instagram.com"],
+        downstream_hosts=["www.instagram.com"],
+        text_scope="caption",
+    )
+    assert rsshub_route_blocker(config.rsshub) == "rsshub_anonymous_cache_isolation_unverified"
+    http, sent, settled, _checked = client(
+        config, lambda request: httpx.Response(200, content=FEED)
+    )
+    registry = EditorialSourceRegistry(http=http, clock=lambda: NOW)
+    page = registry.collect(profile(config), EditorialCursor(), {})
+    registry.close()
+    assert page.status == "blocked"
+    assert page.reason == "rsshub_anonymous_cache_isolation_unverified"
+    assert not sent and not settled
+
+
 def test_approved_feed_retains_observed_dates_url_and_unknown_downstream_count():
     config = rsshub_config()
     http, sent, settled, checked = client(config, lambda request: httpx.Response(200, content=FEED))
