@@ -8,7 +8,7 @@ from typing import Any, cast
 from uuid import UUID, uuid4, uuid5
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import and_, bindparam, or_, select, text
+from sqlalchemy import and_, bindparam, or_, select, text, true
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session, aliased, sessionmaker
 
@@ -919,7 +919,7 @@ class ReportService:
                 Report.topic_id == topic_id,
                 Report.kind == kind.value,
                 Report.window_start == window_start,
-                Report.id == expected_report_id if expected_report_id is not None else True,
+                Report.id == expected_report_id if expected_report_id is not None else true(),
             )
             .order_by(Report.version.desc())
             .with_for_update()
