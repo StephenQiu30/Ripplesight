@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
+from sqlalchemy.orm import Session
 from tests.conftest import TEST_DATABASE_TRUNCATE, authenticate_test_client, authenticated_owner_id
 
 from connections.presets import SOURCE_PRESETS
@@ -19,13 +20,28 @@ from connections.services import (
 )
 from core.config import Settings
 from core.errors import ApplicationError
-from jobs.schemas import JobAcceptanceInput
-from jobs.services import JobService
+from jobs.schemas import BudgetMetric, BudgetPolicyInput, BudgetScopeKind, JobAcceptanceInput
+from jobs.services import JobService, ResourceBudgetService
 from main import create_app
 from monitors.services import MonitorTopicService
 from sources.contracts import SourceCapability, SourceStopReason
 
 _TRUNCATE = TEST_DATABASE_TRUNCATE
+
+
+def _seed_network_budget(session: Session, owner_id: UUID) -> None:
+    ResourceBudgetService(session).save_budget_policy_in_transaction(
+        owner_id=owner_id,
+        command=BudgetPolicyInput(
+            budget_key="test.network.daily",
+            metric=BudgetMetric.NETWORK_REQUEST,
+            scope_kind=BudgetScopeKind.GLOBAL,
+            limit_units=100,
+            window_seconds=86400,
+            window_anchor_at=datetime(2026, 1, 1, tzinfo=UTC),
+            enabled=True,
+        ),
+    )
 
 
 @pytest.fixture
@@ -44,7 +60,9 @@ def monitor_topic_client() -> Iterator[TestClient]:
         connection.execute(text(_TRUNCATE))
     try:
         with TestClient(create_app(settings)) as client:
-            authenticate_test_client(client)
+            owner_id = authenticate_test_client(client)
+            with client.app.state.session_factory.begin() as session:
+                _seed_network_budget(session, owner_id)
             yield client
     finally:
         with engine.begin() as connection:
@@ -246,8 +264,10 @@ def test_source_selection_rejects_revoked_access_policy(
     assert rejected.json()["code"] == "source_preset_not_applied"
 
 
+@pytest.mark.parametrize("budget_key", ["source.hackernews.network.daily", "missing_global"])
 def test_resume_rejects_unavailable_source_budget(
     monitor_topic_client: TestClient,
+    budget_key: str,
 ) -> None:
     _user_scope(monitor_topic_client)
     factory = monitor_topic_client.app.state.session_factory
@@ -265,10 +285,13 @@ def test_resume_rejects_unavailable_source_budget(
     with factory.begin() as session:
         session.execute(
             text(
-                "UPDATE resource_budget_policies SET enabled = false "
-                "WHERE owner_id = :owner_id AND budget_key = 'source.hackernews.network.daily'"
+                "DELETE FROM resource_budget_policies "
+                "WHERE owner_id = :owner_id AND scope_kind = 'global'"
+                if budget_key == "missing_global"
+                else "UPDATE resource_budget_policies SET enabled = false "
+                "WHERE owner_id = :owner_id AND budget_key = :budget_key"
             ),
-            {"owner_id": owner_id},
+            {"owner_id": owner_id, "budget_key": budget_key},
         )
     rejected = monitor_topic_client.post(
         f"{created.headers['location']}/resume",

@@ -25,7 +25,7 @@ export async function generateMetadata({
 }: Parameters): Promise<Metadata> {
   const kind = publicKind((await params).reportId);
   if (!kind)
-    return { title: "日报详情", robots: { index: false, follow: false } };
+    return { title: "个人报告详情", robots: { index: false, follow: false } };
   try {
     const page = await listPublicEditionCatalogue({ kind, limit: 1 });
     if (!page.entries.length)

@@ -134,7 +134,7 @@ describe("Demo topic editing", () => {
     expect(api.push).not.toHaveBeenCalled();
   });
 
-  it("keeps saved report preferences while removing their controls from the core form", async () => {
+  it("opens saved report preferences separately and persists changes without losing notification targets", async () => {
     const saved = {
       ...topic,
       report_time: "18:45:00",
@@ -142,20 +142,32 @@ describe("Demo topic editing", () => {
       notification_target_names: ["已有日报邮箱"],
     };
     api.get.mockResolvedValueOnce(saved);
-    api.update.mockResolvedValueOnce(saved);
+    api.update.mockResolvedValueOnce({
+      ...saved,
+      report_time: "10:30:00",
+      weekly_report_enabled: false,
+    });
     render(<TopicEditor topicId={topic.id} />);
     await screen.findByLabelText("主题名称");
     expect(screen.queryByLabelText("每日报告时间")).toBeNull();
     expect(screen.queryByLabelText("生成周报")).toBeNull();
     expect(screen.queryByLabelText("推送目标名称")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "报告设置" }));
+    expect(
+      (screen.getByLabelText("每日报告时间") as HTMLInputElement).value,
+    ).toBe("18:45");
+    fireEvent.change(screen.getByLabelText("每日报告时间"), {
+      target: { value: "10:30:00" },
+    });
+    fireEvent.click(screen.getByRole("switch", { name: "生成周报" }));
     fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
     await waitFor(() =>
       expect(api.update).toHaveBeenCalledWith(
         { topic_id: topic.id },
         expect.objectContaining({
           expected_version: 1,
-          report_time: "18:45:00",
-          weekly_report_enabled: true,
+          report_time: "10:30",
+          weekly_report_enabled: false,
           notification_target_names: ["已有日报邮箱"],
         }),
       ),

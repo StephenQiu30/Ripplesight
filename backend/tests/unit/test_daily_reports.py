@@ -479,6 +479,10 @@ def test_unknown_metrics_remain_unknown_and_pending_materials_are_cited() -> Non
     assert prepared.data.pending_contents[0].content_version_id == pending.content_version_id
     assert "已知指标：未知" in prepared.body_markdown
     assert "[c1]" in prepared.body_markdown
+    assert "相关性与情感尚待分析" in prepared.body_markdown
+    assert "风险尚待分析" in prepared.body_markdown
+    assert "情感分布：" not in prepared.body_markdown
+    assert "持平" not in prepared.body_markdown
 
 
 def test_weekly_iso_window_crosses_year_and_has_independent_operation_identity() -> None:

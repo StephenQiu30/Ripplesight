@@ -95,6 +95,8 @@ describe("core topic creation", () => {
       exclude: [],
       source_keys: [],
       collection_interval_seconds: 1800,
+      report_time: "09:00:00",
+      weekly_report_enabled: false,
     });
     expect(screen.queryByLabelText("每日报告时间")).toBeNull();
     resolve({ id: "persisted-topic" });

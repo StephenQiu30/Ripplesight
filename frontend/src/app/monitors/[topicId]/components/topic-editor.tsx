@@ -38,6 +38,7 @@ import {
   selectableTopicSources,
   TopicSettingsFields,
   TopicAdvancedFields,
+  TopicReportFields,
   type TopicSourceOption,
 } from "@/components/monitors/topic-settings-fields";
 import {
@@ -135,6 +136,8 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
   const [sourceKeys, setSourceKeys] = useState<string[]>([]);
   const [collectionIntervalSeconds, setCollectionIntervalSeconds] =
     useState(1800);
+  const [reportTime, setReportTime] = useState("09:00:00");
+  const [weeklyReportEnabled, setWeeklyReportEnabled] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(
     null,
   );
@@ -154,6 +157,8 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
     setExclude(value.rules.exclude.join("\n"));
     setSourceKeys(value.source_keys);
     setCollectionIntervalSeconds(value.collection_interval_seconds);
+    setReportTime(value.report_time);
+    setWeeklyReportEnabled(value.weekly_report_enabled);
   }, []);
 
   const loadTopic = useCallback(async () => {
@@ -266,6 +271,12 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
       pendingActionRef.current = false;
       return;
     }
+    if (!reportTime) {
+      setFieldErrors({ report_time: "请选择每日报告时间。" });
+      toast.error("请选择每日报告时间。");
+      pendingActionRef.current = false;
+      return;
+    }
     if (
       !Number.isInteger(collectionIntervalSeconds) ||
       collectionIntervalSeconds < 600 ||
@@ -290,8 +301,8 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
         expected_version: state.topic.current_version,
         source_keys: sourceKeys,
         collection_interval_seconds: collectionIntervalSeconds,
-        report_time: state.topic.report_time,
-        weekly_report_enabled: state.topic.weekly_report_enabled,
+        report_time: reportTime,
+        weekly_report_enabled: weeklyReportEnabled,
         notification_target_names: state.topic.notification_target_names,
       };
       const topic = await updateMonitorTopic({ topic_id: topicId }, payload);
@@ -557,6 +568,14 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
               onCollectionIntervalSecondsChange={setCollectionIntervalSeconds}
               disabled={formDisabled}
               fieldErrors={fieldErrors}
+            />
+            <TopicReportFields
+              reportTime={reportTime}
+              onReportTimeChange={setReportTime}
+              weeklyReportEnabled={weeklyReportEnabled}
+              onWeeklyReportEnabledChange={setWeeklyReportEnabled}
+              disabled={formDisabled}
+              error={fieldErrors.report_time}
             />
             <Field
               orientation="horizontal"

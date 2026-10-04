@@ -80,6 +80,39 @@ def render_daily_report(data: DailyReportData) -> str:
     )
     posts_comparison = _comparison(data.overview.posts.delta)
     comments_comparison = _comparison(data.overview.comments.delta)
+    pending_without_analysis = bool(data.pending_contents) and data.overview.posts.current == 0
+    overview_lines = (
+        [
+            f"- 待分析材料：{len(data.pending_contents)} 条",
+            "- 相关性与情感尚待分析，暂不作趋势比较。",
+            "- 评论摘录与采样范围见下方材料和覆盖说明。",
+        ]
+        if pending_without_analysis
+        else [
+            f"- 相关帖子：{data.overview.posts.current}"
+            + (
+                f"（较{previous_label} {posts_comparison}）"
+                if data.previous_sample_available
+                else "（上期样本未知，未作比较）"
+            ),
+            f"- 评论：{data.overview.comments.current}"
+            + (
+                f"（较{previous_label} {comments_comparison}）"
+                if data.previous_sample_available
+                else "（上期样本未知，未作比较）"
+            ),
+            f"- 平台分布：{_distribution(data.overview.platform_distribution)}",
+            "- 情感分布："
+            + "、".join(
+                f"{_SENTIMENT_LABELS[sentiment]} {data.overview.sentiment_distribution[sentiment]}"
+                for sentiment in (
+                    ReportSentiment.POSITIVE,
+                    ReportSentiment.NEUTRAL,
+                    ReportSentiment.NEGATIVE,
+                )
+            ),
+        ]
+    )
     lines = [
         f"# {_inline(data.topic_name)} {label}",
         "",
@@ -90,28 +123,7 @@ def render_daily_report(data: DailyReportData) -> str:
         "## 本周概览" if weekly else "## 今日概览",
         "",
         *_narrative(data, "overview"),
-        f"- 相关帖子：{data.overview.posts.current}"
-        + (
-            f"（较{previous_label} {posts_comparison}）"
-            if data.previous_sample_available
-            else "（上期样本未知，未作比较）"
-        ),
-        f"- 评论：{data.overview.comments.current}"
-        + (
-            f"（较{previous_label} {comments_comparison}）"
-            if data.previous_sample_available
-            else "（上期样本未知，未作比较）"
-        ),
-        f"- 平台分布：{_distribution(data.overview.platform_distribution)}",
-        "- 情感分布："
-        + "、".join(
-            f"{_SENTIMENT_LABELS[sentiment]} {data.overview.sentiment_distribution[sentiment]}"
-            for sentiment in (
-                ReportSentiment.POSITIVE,
-                ReportSentiment.NEUTRAL,
-                ReportSentiment.NEGATIVE,
-            )
-        ),
+        *overview_lines,
         "",
         "## 重点内容 Top 10",
         "",
@@ -145,7 +157,9 @@ def render_daily_report(data: DailyReportData) -> str:
             for item in data.risks
         )
     else:
-        lines.append("- 本时间窗暂无负面高互动内容")
+        lines.append(
+            "- 风险尚待分析。" if pending_without_analysis else "- 本时间窗暂无负面高互动内容"
+        )
 
     lines.extend(("", "## 值得关注的声音", "", *_narrative(data, "voices")))
     if data.voices:
