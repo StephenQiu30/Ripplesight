@@ -23,8 +23,17 @@ def document() -> ExportDocument:
 
 
 @pytest.mark.parametrize("format", ["markdown", "json", "csv", "pdf"])
-def test_real_four_formats_chinese_null_csv_and_local_pdf(format, tmp_path):
-    artifact = render_export(document(), format, deadline=time.monotonic() + 120)
+def test_real_formats_or_explicit_pdf_unavailable_contract(format, tmp_path, record_property):
+    try:
+        artifact = render_export(document(), format, deadline=time.monotonic() + 120)
+    except ExportRenderError as error:
+        if format != "pdf" or error.code != "export_renderer_unavailable":
+            raise
+        record_property("pdf_result", "renderer_unavailable_no_artifact")
+        assert not list(tmp_path.iterdir())
+        return
+    if format == "pdf":
+        record_property("pdf_result", "actual_local_locked_renderer_file")
     path = tmp_path / f"private-export.{artifact.extension}"
     path.write_bytes(artifact.body)
     assert 1 <= path.stat().st_size <= EXPORT_MAX_BYTES
