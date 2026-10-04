@@ -307,6 +307,238 @@ export async function getPublicationTopicShareImage(
   });
 }
 
+/** 匿名公开分发协议与范围说明 GET /public/agent.md */
+export async function getPublisherAgentInstructions(
+  options?: import("@/request").RequestOptions,
+) {
+  return request<string>("/public/agent.md", {
+    method: "GET",
+    ...(options || {}),
+  });
+}
+
+/** 发布账号当前ALL许可事件热度 GET /public/api/hot */
+export async function getPublisherHotStories(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: HotKeyAPI.getPublisherHotStoriesParams,
+  options?: import("@/request").RequestOptions,
+) {
+  return request<HotKeyAPI.PublicStoriesPage>("/public/api/hot", {
+    method: "GET",
+    params: {
+      // limit has a default value: 10
+      limit: "10",
+      ...params,
+    },
+    ...(options || {}),
+  });
+}
+
+/** 发布账号有界公开摘要与来源分页 GET /public/api/items */
+export async function listPublisherItems(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: HotKeyAPI.listPublisherItemsParams,
+  options?: import("@/request").RequestOptions,
+) {
+  return request<HotKeyAPI.PublicItemsPage>("/public/api/items", {
+    method: "GET",
+    params: {
+      // window has a default value: 24h
+      window: "24h",
+      // mode has a default value: selected
+      mode: "selected",
+
+      // limit has a default value: 50
+      limit: "50",
+      ...params,
+    },
+    ...(options || {}),
+  });
+}
+
+/** 发布账号当前再分发范围单篇JSON GET /public/api/items/${param0} */
+export async function getPublisherItem(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: HotKeyAPI.getPublisherItemParams,
+  options?: import("@/request").RequestOptions,
+) {
+  const { content_id: param0, ...queryParams } = params;
+  return request<HotKeyAPI.PublicItemDetailView>(
+    `/public/api/items/${param0}`,
+    {
+      method: "GET",
+      params: { ...queryParams },
+      ...(options || {}),
+    },
+  );
+}
+
+/** 发布账号当前ALL许可刊期JSON GET /public/api/reports/${param0}/${param1} */
+export async function getPublisherEdition(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: HotKeyAPI.getPublisherEditionParams,
+  options?: import("@/request").RequestOptions,
+) {
+  const { kind: param0, key: param1, ...queryParams } = params;
+  return request<HotKeyAPI.PublicEditionView>(
+    `/public/api/reports/${param0}/${param1}`,
+    {
+      method: "GET",
+      params: { ...queryParams },
+      ...(options || {}),
+    },
+  );
+}
+
+/** 发布账号当前ALL许可故事及出处 GET /public/api/stories/${param0} */
+export async function getPublisherStory(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: HotKeyAPI.getPublisherStoryParams,
+  options?: import("@/request").RequestOptions,
+) {
+  const { event_id: param0, ...queryParams } = params;
+  return request<HotKeyAPI.PublicStoryView>(`/public/api/stories/${param0}`, {
+    method: "GET",
+    params: { ...queryParams },
+    ...(options || {}),
+  });
+}
+
+/** 发布账号精选摘要RSS GET /public/feed.xml */
+export async function getPublisherSelectedRss(
+  options?: import("@/request").RequestOptions,
+) {
+  return request<string>("/public/feed.xml", {
+    method: "GET",
+    ...(options || {}),
+  });
+}
+
+/** 发布账号当前ALL许可日周月刊RSS GET /public/feed/${param0}.xml */
+export async function getPublisherEditionRss(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: HotKeyAPI.getPublisherEditionRssParams,
+  options?: import("@/request").RequestOptions,
+) {
+  const { kind: param0, ...queryParams } = params;
+  return request<string>(`/public/feed/${param0}.xml`, {
+    method: "GET",
+    params: { ...queryParams },
+    ...(options || {}),
+  });
+}
+
+/** 发布账号全部公开摘要RSS GET /public/feed/all.xml */
+export async function getPublisherAllRss(
+  options?: import("@/request").RequestOptions,
+) {
+  return request<string>("/public/feed/all.xml", {
+    method: "GET",
+    ...(options || {}),
+  });
+}
+
+/** 发布账号分类摘要RSS GET /public/feed/category/${param0}.xml */
+export async function getPublisherCategoryRss(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: HotKeyAPI.getPublisherCategoryRssParams,
+  options?: import("@/request").RequestOptions,
+) {
+  const { category: param0, ...queryParams } = params;
+  return request<string>(`/public/feed/category/${param0}.xml`, {
+    method: "GET",
+    params: { ...queryParams },
+    ...(options || {}),
+  });
+}
+
+/** 发布账号获准再分发全文RSS GET /public/feed/full.xml */
+export async function getPublisherFullRss(
+  options?: import("@/request").RequestOptions,
+) {
+  return request<string>("/public/feed/full.xml", {
+    method: "GET",
+    ...(options || {}),
+  });
+}
+
+/** 发布账号分类获准全文RSS GET /public/feed/full/category/${param0}.xml */
+export async function getPublisherCategoryFullRss(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: HotKeyAPI.getPublisherCategoryFullRssParams,
+  options?: import("@/request").RequestOptions,
+) {
+  const { category: param0, ...queryParams } = params;
+  return request<string>(`/public/feed/full/category/${param0}.xml`, {
+    method: "GET",
+    params: { ...queryParams },
+    ...(options || {}),
+  });
+}
+
+/** 发布账号获准再分发单篇Markdown GET /public/items/${param0}.md */
+export async function getPublisherItemMarkdown(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: HotKeyAPI.getPublisherItemMarkdownParams,
+  options?: import("@/request").RequestOptions,
+) {
+  const { content_id: param0, ...queryParams } = params;
+  return request<string>(`/public/items/${param0}.md`, {
+    method: "GET",
+    params: { ...queryParams },
+    ...(options || {}),
+  });
+}
+
+/** 匿名MCP只接受POST不提供独立监听流 GET /public/mcp */
+export async function getPublisherMcpStream(
+  options?: import("@/request").RequestOptions,
+) {
+  return request<any>("/public/mcp", {
+    method: "GET",
+    ...(options || {}),
+  });
+}
+
+/** 匿名发布账号五个有界只读MCP工具 POST /public/mcp */
+export async function callPublisherMcp(
+  body: Record<string, any>,
+  options?: import("@/request").RequestOptions,
+) {
+  return request<HotKeyAPI.McpResponse>("/public/mcp", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    data: body,
+    ...(options || {}),
+  });
+}
+
+/** 发布账号当前ALL许可刊期Markdown GET /public/reports/${param0}/${param1}.md */
+export async function getPublisherEditionMarkdown(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: HotKeyAPI.getPublisherEditionMarkdownParams,
+  options?: import("@/request").RequestOptions,
+) {
+  const { kind: param0, key: param1, ...queryParams } = params;
+  return request<string>(`/public/reports/${param0}/${param1}.md`, {
+    method: "GET",
+    params: { ...queryParams },
+    ...(options || {}),
+  });
+}
+
+/** 发布账号精选摘要Markdown GET /public/selected.md */
+export async function getPublisherSelectedMarkdown(
+  options?: import("@/request").RequestOptions,
+) {
+  return request<string>("/public/selected.md", {
+    method: "GET",
+    ...(options || {}),
+  });
+}
+
 /** 日周月刊Markdown GET /reports/${param0}/${param1}.md */
 export async function getEditionMarkdown(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)

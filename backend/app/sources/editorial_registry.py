@@ -124,9 +124,11 @@ class EditorialSourceRegistry:
         mp: KindCollector | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         preview: bool = False,
+        blocked_reason: str | None = None,
     ) -> None:
         self._http, self._x, self._mp, self._clock, self._jina = http, x, mp, clock, jina
         self._preview = preview
+        self._blocked_reason = blocked_reason
 
     def collect(
         self,
@@ -136,6 +138,10 @@ class EditorialSourceRegistry:
     ) -> EditorialPage:
         now = self._clock()
         c = profile.configuration
+        if self._blocked_reason:
+            return EditorialPage(
+                status="blocked", reason=self._blocked_reason, cursor=cursor, observed_at=now
+            )
         if not profile.enabled:
             return EditorialPage(
                 status="blocked", reason="source_disabled", cursor=cursor, observed_at=now
@@ -247,6 +253,8 @@ class EditorialSourceRegistry:
         if response.status == 304 and (
             not headers or not validator or response.url != validator.response_url
         ):
+            if c.rsshub is not None:
+                raise EditorialSourceError("rsshub_unexpected_not_modified")
             response = self._http.request(c.feed_url or "")
         if response.status == 304:
             return (), cursor, True

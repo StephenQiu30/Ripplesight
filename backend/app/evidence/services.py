@@ -184,6 +184,24 @@ def readable_resource_ids_query(
     )
 
 
+def load_source_access_policy_in_transaction(
+    session: Session, *, owner_id: UUID, source_key: str, capability: SourceCapability
+) -> SourceAccessPolicyView | None:
+    """Read and lock the current machine-checkable purpose facts without foreign ORM."""
+    if not session.in_transaction():
+        raise RuntimeError("source policy reads require caller transaction")
+    row = session.scalar(
+        select(SourceAccessPolicy)
+        .where(
+            SourceAccessPolicy.owner_id == owner_id,
+            SourceAccessPolicy.source_key == source_key,
+            SourceAccessPolicy.capability == capability.value,
+        )
+        .with_for_update()
+    )
+    return SourceAccessPolicyService._view(row) if row is not None else None
+
+
 def _is_admitted_scalar(value: object) -> TypeGuard[AdmittedScalar]:
     return value is None or isinstance(value, (str, int, float, bool))
 
@@ -732,6 +750,18 @@ class LifecycleService:
             .with_for_update()
         )
         if model is not None:
+            original_target_keys = {
+                (item["kind"], item["reference"]) for item in serialized_targets
+            }
+            stored_target_keys = {
+                (item["kind"], item["reference"]) for item in model.cleanup_targets
+            }
+            added_export_targets = stored_target_keys - original_target_keys
+            targets_compatible = original_target_keys.issubset(stored_target_keys) and all(
+                kind == CleanupTargetKind.MINIO_OBJECT.value
+                and reference.startswith("media/exports/")
+                for kind, reference in added_export_targets
+            )
             if (
                 model.source_policy_id != admission.policy_id
                 or model.source_policy_version != admission.policy_version
@@ -740,7 +770,7 @@ class LifecycleService:
                 or model.data_class != admission.data_class.value
                 or model.collected_at != admission.collected_at
                 or model.expires_at != admission.expires_at
-                or model.cleanup_targets != serialized_targets
+                or not targets_compatible
             ):
                 raise LifecycleConflictError("resource identity is already tracked differently")
             return self._resource_view(model)
@@ -872,7 +902,15 @@ class LifecycleService:
                 )
                 .with_for_update()
             )
-            resource = self._resource_by_identity(owner_id, resource_type, resource_id)
+            resource = self._session.scalar(
+                select(EvidenceResource)
+                .where(
+                    EvidenceResource.owner_id == owner_id,
+                    EvidenceResource.resource_type == resource_type,
+                    EvidenceResource.resource_id == resource_id,
+                )
+                .with_for_update()
+            )
             if resource is None:
                 raise ResourceUnavailableError("resource is unavailable")
             if operation_match is not None:

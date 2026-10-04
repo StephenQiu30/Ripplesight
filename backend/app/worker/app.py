@@ -74,6 +74,7 @@ from operations.maintenance import OperationsMaintenanceExecutor
 from publication.execution import PublicationRepublishExecutor
 from publication.media_mirror_execution import MediaObjectStorage, PublicationMediaExecutor
 from reports.edition_services import EditionExecutor
+from reports.export_execution import PrivateExportExecutor
 from reports.services import DailyReportExecutor
 from sources.adapters.firecrawl import FirecrawlAdapter
 from sources.editorial_group_job import EditorialXGroupJobExecutor
@@ -742,6 +743,9 @@ def _registered_job_handlers(
         sessions, indexing_enabled=settings.publication_indexing_enabled, clock=clock
     )
     daily_report_executor = DailyReportExecutor(sessions, settings=settings, clock=clock)
+    private_export_executor = PrivateExportExecutor(
+        sessions, media_storage, lease_seconds=settings.job_lease_seconds, clock=clock
+    )
     knowledge_executor = KnowledgeExportExecutor(sessions, settings, clock=clock)
     notification_executor = NotificationExecutor(sessions, settings, clock=clock)
     notification_scan_executor = NotificationScanExecutor(sessions, settings, clock=clock)
@@ -1003,7 +1007,14 @@ def _registered_job_handlers(
             context.message, context.lease, cancelled=context.cancellation_requested
         )
 
+    def export_private_file(context: JobExecutionContext) -> JobCompletion | None:
+        return private_export_executor.execute(
+            context.message, context.lease, cancelled=context.cancellation_requested
+        )
+
     return {
+        "report.export": export_private_file,
+        "content.export": export_private_file,
         "analysis.annotate": annotate_content,
         "analysis.editorial": editorial_content,
         "analysis.selectbench": evaluate_selection,

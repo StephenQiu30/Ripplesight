@@ -70,9 +70,11 @@ class EditorialXGroupJobExecutor:
         lease_seconds: int = 30,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         transport: httpx.BaseTransport | None = None,
+        zero_supplier_fee_only: bool = True,
     ) -> None:
         self._sessions, self._settings, self._lease_seconds = sessions, settings, lease_seconds
         self._clock, self._transport = clock, transport
+        self._zero_supplier_fee_only = zero_supplier_fee_only
 
     def _failure(self, code: str) -> JobExecutionFailure:
         return JobExecutionFailure(
@@ -96,6 +98,8 @@ class EditorialXGroupJobExecutor:
             raise ValueError("another Job kind reached grouped X executor")
         if not self._settings.editorial_sources_enabled:
             raise self._failure("editorial_sources_disabled")
+        if self._zero_supplier_fee_only:
+            raise self._failure("free_only_paid_source")
         if cancelled is not None and cancelled():
             return None
         deadline = monotonic() + SOURCE_JOB_TIMEOUT_SECONDS - 60

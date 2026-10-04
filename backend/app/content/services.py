@@ -78,6 +78,8 @@ from content.schemas import (
     PersistContentPostInput,
     RecordContentVisibilityInput,
 )
+from content.topic_matches import readable_editorial_topic_matches_in_transaction
+from content.version_inputs import version_inputs_readable_in_transaction
 from core.errors import ApplicationError
 from evidence.schemas import CleanupTargetKind, CleanupTargetSpec
 from evidence.services import (
@@ -1265,6 +1267,12 @@ class ContentService:
                         topic_ids.add(UUID(context.configuration_ref.removeprefix("topic:")))
                     except ValueError:
                         continue
+            topic_ids.update(
+                item.topic_id
+                for item in readable_editorial_topic_matches_in_transaction(
+                    self._session, owner_id=owner_id, content_ids={content.id}, now=now
+                )
+            )
             topic_contexts = load_content_topic_contexts_in_transaction(
                 self._session, owner_id=owner_id, topic_ids=topic_ids
             )
@@ -1400,6 +1408,25 @@ class ContentService:
                     content_ids={record.id for record in records},
                     now=now,
                 )
+                editorial_matches = {}
+                if topic_id is not None:
+                    for match in readable_editorial_topic_matches_in_transaction(
+                        self._session,
+                        owner_id=owner_id,
+                        topic_id=topic_id,
+                        content_ids={record.id for record in records},
+                        now=now,
+                    ):
+                        editorial_matches[match.content_id] = match
+                    for content_id, match in editorial_matches.items():
+                        matched_observation = self._session.get(
+                            ContentObservation, match.observation_id
+                        )
+                        if matched_observation is not None and content_id in projections:
+                            projections[content_id] = (
+                                matched_observation,
+                                projections[content_id][1],
+                            )
                 matched_version_ids: set[UUID] = set()
                 if search_terms:
                     search_statement = select(ContentVersion.id).where(
@@ -1467,6 +1494,7 @@ class ContentService:
                     if (
                         topic_id is not None
                         and topic_id not in hotlist_topics.get(record.id, set())
+                        and record.id not in editorial_matches
                         and not any(
                             (context := contexts.get(item.job_id)) is not None
                             and context.configuration_ref == f"topic:{topic_id}"
@@ -2092,7 +2120,15 @@ class ContentService:
         )
         grouped: dict[UUID, list[ContentObservation]] = {}
         for observation in observations:
-            if observation.id in readable_ids:
+            if observation.id in readable_ids and (
+                observation.content_version_id is None
+                or version_inputs_readable_in_transaction(
+                    self._session,
+                    owner_id=owner_id,
+                    content_version_ids=(observation.content_version_id,),
+                    now=now,
+                )
+            ):
                 grouped.setdefault(observation.content_id, []).append(observation)
         return {
             content_id: (
@@ -2125,7 +2161,20 @@ class ContentService:
             now=now,
         )
         return sorted(
-            (item for item in observations if item.id in readable_ids),
+            (
+                item
+                for item in observations
+                if item.id in readable_ids
+                and (
+                    item.content_version_id is None
+                    or version_inputs_readable_in_transaction(
+                        self._session,
+                        owner_id=owner_id,
+                        content_version_ids=(item.content_version_id,),
+                        now=now,
+                    )
+                )
+            ),
             key=lambda item: (item.observed_at, item.received_at, item.id),
             reverse=True,
         )
@@ -2389,9 +2438,8 @@ class ContentService:
             content_version=content_version,
         )
 
-    @classmethod
     def _summary_view(
-        cls,
+        self,
         *,
         content: ContentRecord,
         observation: ContentObservation,
@@ -2402,15 +2450,25 @@ class ContentService:
         analysis_state: str | None = None,
         analysis_relevant: bool | None = None,
     ) -> ContentRecordSummaryView:
+        from connections.editorial_source_names import load_editorial_source_names_in_transaction
+
+        source_name = (
+            load_editorial_source_names_in_transaction(
+                self._session, owner_id=content.owner_id, source_keys=(content.source_key,)
+            ).get(content.source_key)
+            if content.source_key.startswith("ed_")
+            else None
+        )
         timeline_at = observation.published_at or first_discovered_at
         return ContentRecordSummaryView(
             id=content.id,
             source_key=content.source_key,
+            source_name=source_name,
             object_type=content.object_type,
             native_scope=content.native_scope,
             external_id=content.external_id,
             identity_basis=content.identity_basis,
-            latest_observation=cls._observation_view(observation, content_version),
+            latest_observation=self._observation_view(observation, content_version),
             current_visibility=current_visibility,
             discovery_count=discovery_count,
             timeline_at=timeline_at,
@@ -2425,9 +2483,8 @@ class ContentService:
             analysis_relevant=analysis_relevant,
         )
 
-    @classmethod
     def _detail_view(
-        cls,
+        self,
         *,
         content: ContentRecord,
         observation: ContentObservation,
@@ -2451,7 +2508,7 @@ class ContentService:
             for item in discoveries
             if item.job_id in job_contexts
         ]
-        summary = cls._summary_view(
+        summary = self._summary_view(
             content=content,
             observation=observation,
             content_version=content_version,
@@ -2471,8 +2528,9 @@ class ContentService:
 
 
 class ContentObservationCleanup:
-    def __init__(self, sessions: sessionmaker[Session]) -> None:
+    def __init__(self, sessions: sessionmaker[Session], *, clock: Clock | None = None) -> None:
         self._sessions = sessions
+        self._clock = clock or (lambda: datetime.now(UTC))
 
     def __call__(self, reference: str) -> None:
         try:
@@ -2487,31 +2545,14 @@ class ContentObservationCleanup:
             )
             if observation is None:
                 return
-            content_id = observation.content_id
-            version_id = observation.content_version_id
-            session.delete(observation)
-            session.flush()
-            remaining_count = session.scalar(
-                select(func.count(ContentObservation.id)).where(
-                    ContentObservation.content_id == content_id
-                )
+            from content.lifecycle import purge_observation_dependants_in_transaction
+
+            purge_observation_dependants_in_transaction(
+                session,
+                owner_id=observation.owner_id,
+                observation_id=observation.id,
+                now=self._clock(),
             )
-            if not remaining_count:
-                content = session.get(ContentRecord, content_id)
-                if content is not None:
-                    session.delete(content)
-                return
-            if version_id is None:
-                return
-            version_reference_count = session.scalar(
-                select(func.count(ContentObservation.id)).where(
-                    ContentObservation.content_version_id == version_id
-                )
-            )
-            if not version_reference_count:
-                version = session.get(ContentVersion, version_id)
-                if version is not None:
-                    session.delete(version)
 
 
 @dataclass(frozen=True, slots=True)
@@ -2923,6 +2964,7 @@ def load_post_versions_for_analysis_scan(
     owner_id: UUID,
     topic_id: UUID,
     source_keys: tuple[str, ...],
+    topic_rule_version: int | None = None,
     as_of: datetime | None = None,
     readable_at: datetime | None = None,
 ) -> tuple[AnalysisPostContentView, ...]:
@@ -3018,7 +3060,30 @@ def load_post_versions_for_analysis_scan(
         )
         .order_by(recent_versions.c.occurred_at, ContentVersion.id)
     ).all()
-    return tuple(_analysis_post_view(version, content) for version, content in rows)
+    result = {version.id: _analysis_post_view(version, content) for version, content in rows}
+    references = readable_editorial_topic_matches_in_transaction(
+        session,
+        owner_id=owner_id,
+        topic_id=topic_id,
+        topic_rule_version=topic_rule_version,
+        now=readable_at or as_of or datetime.now(UTC),
+        as_of=as_of,
+    )
+    if references:
+        for version, content in session.execute(
+            select(ContentVersion, ContentRecord)
+            .join(
+                ContentRecord,
+                (ContentRecord.owner_id == ContentVersion.owner_id)
+                & (ContentRecord.id == ContentVersion.content_id),
+            )
+            .where(
+                ContentVersion.owner_id == owner_id,
+                ContentVersion.id.in_({item.content_version_id for item in references}),
+            )
+        ):
+            result[version.id] = _analysis_post_view(version, content)
+    return tuple(result.values())
 
 
 def load_post_analysis_availability_in_transaction(
@@ -3027,6 +3092,7 @@ def load_post_analysis_availability_in_transaction(
     owner_id: UUID,
     topic_id: UUID,
     content_version_id: UUID,
+    topic_rule_version: int | None = None,
 ) -> AnalysisPostAvailabilityView | None:
     """Read exact-version receipt and topic-matched hotlist facts."""
     if not session.in_transaction():
@@ -3088,6 +3154,20 @@ def load_post_analysis_availability_in_transaction(
         source_key=content.source_key,
         first_received_at=first_received_at,
         first_hotlist_match_received_at=first_hotlist_match_received_at,
+        first_editorial_match_received_at=min(
+            (
+                item.matched_at
+                for item in readable_editorial_topic_matches_in_transaction(
+                    session,
+                    owner_id=owner_id,
+                    topic_id=topic_id,
+                    topic_rule_version=topic_rule_version,
+                    content_version_ids={content_version_id},
+                    now=datetime.now(UTC),
+                )
+            ),
+            default=None,
+        ),
     )
 
 
@@ -3120,7 +3200,17 @@ def load_post_versions_for_analysis(
         )
         .order_by(ContentVersion.id)
     ).all()
-    return tuple(_analysis_post_view(version, content) for version, content in rows)
+    return tuple(
+        _analysis_post_view(version, content)
+        for version, content in rows
+        if readable_at is None
+        or version_inputs_readable_in_transaction(
+            session,
+            owner_id=owner_id,
+            content_version_ids=(version.id,),
+            now=readable_at,
+        )
+    )
 
 
 def load_post_comments_for_analysis(

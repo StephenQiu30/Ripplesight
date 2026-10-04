@@ -94,6 +94,7 @@ def search_in_transaction(
     tag: str | None = None,
     topic: str | None = None,
     search_order: Literal["relevance", "time"] = "relevance",
+    redistribute: bool = False,
 ) -> PublicItemsPage:
     terms = normalize_terms(query)
     if window not in {"24h", "7d"} or not 1 <= limit <= 100:
@@ -113,6 +114,8 @@ def search_in_transaction(
         "tag": tag,
         "topic": topic,
     }
+    if redistribute:
+        scope["redistribute"] = True
     anchor: tuple[int, datetime, str] | None = None
     as_of = now
     if cursor:
@@ -161,7 +164,7 @@ def search_in_transaction(
                 )
             ):
                 continue
-            body = member.permitted_body
+            body = member.permitted_body if not redistribute or projection.syndicate else ""
             if member.body_format in {"html", "markdown"}:
                 visible_html, _, _ = body_presentation(body, body_format=member.body_format)
                 parser = _BodyText()

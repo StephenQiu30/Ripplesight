@@ -21,6 +21,7 @@ import { listMonitorTopics } from "@/api/jiankongzhuti";
 import { listSourceCapabilities } from "@/api/laiyuannengli";
 import {
   contentScopeLabel,
+  contentSourceLabel,
   contentScopeNotice,
   formatTime,
   visibilityStatusLabel,
@@ -637,14 +638,17 @@ export function ContentList() {
               const version = content.latest_observation.content_version;
               const title =
                 version?.title || version?.body || content.external_id;
-              const source =
-                options.status === "ready"
-                  ? (options.sources.find(
-                      (item) => item.source_key === content.source_key,
-                    )?.display_name ?? content.source_key)
-                  : content.source_key;
+              const source = contentSourceLabel(
+                content.source_key,
+                content.source_name ??
+                  (options.status === "ready"
+                    ? options.sources.find(
+                        (item) => item.source_key === content.source_key,
+                      )?.display_name
+                    : null),
+              );
               const notice = version
-                ? contentScopeNotice(version.text_scope)
+                ? contentScopeNotice(version.text_scope, version.text_origin)
                 : "未取得正文";
               return (
                 <article
@@ -668,7 +672,10 @@ export function ContentList() {
                     <div className="flex flex-wrap items-center gap-3">
                       {version ? (
                         <Badge variant="secondary">
-                          {contentScopeLabel(version.text_scope)}
+                          {contentScopeLabel(
+                            version.text_scope,
+                            version.text_origin,
+                          )}
                         </Badge>
                       ) : null}
                       {content.current_visibility &&

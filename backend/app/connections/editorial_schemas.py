@@ -9,6 +9,7 @@ from uuid import UUID
 from pydantic import Field, JsonValue, model_validator
 
 from jobs.schemas import JobView
+from sources.editorial_rsshub import EditorialRsshubReview
 from sources.editorial_schemas import (
     EditorialContract,
     EditorialMaterial,
@@ -61,6 +62,26 @@ class EditorialRunReviewInput(EditorialContract):
     reason: str = Field(min_length=1, max_length=1000)
     actor: str = Field(min_length=1, max_length=128)
     action: Literal["acknowledge_unknown", "retry_failed"]
+
+
+class EditorialRsshubApprovalInput(EditorialContract):
+    operation_id: UUID
+    expected_revision: int = Field(ge=1)
+    configuration_version: int = Field(ge=1)
+    configuration_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    reason: str = Field(min_length=1, max_length=1000)
+    review: EditorialRsshubReview
+
+
+class EditorialRsshubApprovalView(EditorialContract):
+    profile_id: UUID
+    revision: int
+    configuration_version: int
+    configuration_sha256: str
+    policy_version: int
+    reviewed_at: datetime
+    expires_at: datetime
+    enabled: bool
 
 
 class EditorialPollInput(EditorialContract):

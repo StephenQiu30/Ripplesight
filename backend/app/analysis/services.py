@@ -204,6 +204,7 @@ def build_analysis_need_ledger_in_transaction(
             owner_id=owner_id,
             topic_id=rule.topic_id,
             source_keys=rule.source_keys,
+            topic_rule_version=rule.topic_rule_version,
             as_of=end,
         )
         if not posts:
@@ -341,6 +342,7 @@ def project_analysis_need_origin_in_transaction(
         owner_id=owner_id,
         topic_id=topic_id,
         content_version_id=content_version_id,
+        topic_rule_version=topic_rule_version,
     )
     if (
         availability is None
@@ -350,7 +352,17 @@ def project_analysis_need_origin_in_transaction(
     received_at = (
         availability.first_received_at
         if availability.source_key in timeline.source_keys
-        else availability.first_hotlist_match_received_at
+        else min(
+            (
+                value
+                for value in (
+                    availability.first_hotlist_match_received_at,
+                    availability.first_editorial_match_received_at,
+                )
+                if value is not None
+            ),
+            default=None,
+        )
     )
     if received_at is None:
         return AnalysisNeedOriginProjection("not_required", None)
@@ -982,6 +994,7 @@ class AnalysisService:
             owner_id=owner_id,
             topic_id=topic_id,
             source_keys=source_keys,
+            topic_rule_version=rule_version,
             readable_at=now,
         )
         matched = tuple(

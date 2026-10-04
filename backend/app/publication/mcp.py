@@ -83,11 +83,18 @@ class PublicationMcpService:
         )
 
     def handle(
-        self, *, owner_id: UUID, payload: Any, now: datetime | None = None
+        self,
+        *,
+        owner_id: UUID,
+        payload: Any,
+        now: datetime | None = None,
+        redistribute: bool = False,
     ) -> McpResponse | None:
         try:
+            if len(json.dumps(payload, ensure_ascii=True).encode()) > 16 * 1024:
+                raise ValueError("bounded MCP request required")
             request = McpRequest.model_validate(payload)
-        except ValidationError:
+        except (ValidationError, ValueError, TypeError, RecursionError):
             identity = (
                 payload.get("id")
                 if isinstance(payload, dict) and isinstance(payload.get("id"), (str, int))
@@ -129,7 +136,12 @@ class PublicationMcpService:
             )
         try:
             arguments = CallArguments.model_validate(request.params or {})
-            value = self._call(owner_id=owner_id, call=arguments, now=now or datetime.now(UTC))
+            value = self._call(
+                owner_id=owner_id,
+                call=arguments,
+                now=now or datetime.now(UTC),
+                redistribute=redistribute,
+            )
         except (ValidationError, ValueError):
             return McpResponse(id=request.id, error=McpError(code=-32602, message="Invalid params"))
         except ApplicationError as error:
@@ -152,7 +164,9 @@ class PublicationMcpService:
             },
         )
 
-    def _call(self, *, owner_id: UUID, call: CallArguments, now: datetime) -> BaseModel:
+    def _call(
+        self, *, owner_id: UUID, call: CallArguments, now: datetime, redistribute: bool = False
+    ) -> BaseModel:
         args = call.arguments
         if call.name == "hotkey_get_latest":
             latest = LatestArguments.model_validate(args)
@@ -161,6 +175,7 @@ class PublicationMcpService:
                 window=latest.window,
                 mode="selected" if latest.selected else "all",
                 limit=latest.limit,
+                cursor=latest.cursor,
                 now=now,
             )
         if call.name == "hotkey_search":
@@ -168,9 +183,11 @@ class PublicationMcpService:
             return self.application.items(
                 owner_id=owner_id,
                 q=search.q,
+                redistribute=redistribute,
                 window=search.window,
                 mode="selected" if search.selected else "all",
                 limit=search.limit,
+                cursor=search.cursor,
                 now=now,
             )
         if call.name == "hotkey_get_hot_topics":
@@ -182,6 +199,10 @@ class PublicationMcpService:
         if call.name == "hotkey_get_daily":
             daily = DailyArguments.model_validate(args)
             return self.application.edition(
-                owner_id=owner_id, kind="daily", key=daily.date, now=now
+                owner_id=owner_id,
+                kind="daily",
+                key=daily.date,
+                now=now,
+                redistribute=redistribute,
             )
         raise ValueError("Unknown tool")

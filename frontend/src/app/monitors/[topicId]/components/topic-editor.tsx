@@ -29,6 +29,7 @@ import {
   updateMonitorTopic,
 } from "@/api/jiankongzhuti";
 import { listSourceCapabilities } from "@/api/laiyuannengli";
+import { EditorialTopicSources } from "@/components/monitors/editorial-topic-sources";
 import {
   KeywordGroupField,
   parseKeywordLines,
@@ -134,6 +135,7 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
   const [exclude, setExclude] = useState("");
   const [sourceOptions, setSourceOptions] = useState<TopicSourceOption[]>([]);
   const [sourceKeys, setSourceKeys] = useState<string[]>([]);
+  const [editorialProfileIds, setEditorialProfileIds] = useState<string[]>([]);
   const [collectionIntervalSeconds, setCollectionIntervalSeconds] =
     useState(3600);
   const [reportTime, setReportTime] = useState("08:00:00");
@@ -159,6 +161,7 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
     setMatchAll(value.rules.match_all.join("\n"));
     setExclude(value.rules.exclude.join("\n"));
     setSourceKeys(value.source_keys);
+    setEditorialProfileIds(value.editorial_profile_ids ?? []);
     setCollectionIntervalSeconds(value.collection_interval_seconds);
     setReportTime(value.report_time);
     setWeeklyReportEnabled(value.weekly_report_enabled);
@@ -304,6 +307,7 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
         exclude: parseKeywordLines(exclude),
         expected_version: state.topic.current_version,
         source_keys: sourceKeys,
+        editorial_profile_ids: editorialProfileIds,
         collection_interval_seconds: collectionIntervalSeconds,
         report_time: reportTime,
         weekly_report_enabled: weeklyReportEnabled,
@@ -561,6 +565,11 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
               onSourceKeysChange={setSourceKeys}
               disabled={formDisabled}
               fieldErrors={fieldErrors}
+            />
+            <EditorialTopicSources
+              selectedProfileIds={editorialProfileIds}
+              onChange={setEditorialProfileIds}
+              disabled={formDisabled}
             />
             <TopicAdvancedFields
               key={`${topic.id}:${topic.current_version}`}

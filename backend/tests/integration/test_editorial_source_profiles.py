@@ -48,8 +48,14 @@ def engine() -> Iterator[Engine]:
         value.dispose()
 
 
-def setup(session: Session, *, kind: str = "rss", external_token: bool = False):
-    owner = uuid4()
+def setup(
+    session: Session,
+    *,
+    kind: str = "rss",
+    external_token: bool = False,
+    owner_id: UUID | None = None,
+):
+    owner = owner_id or uuid4()
     config = {"kind": kind}
     if kind == "rss":
         config.update(feed_url="https://example.com/feed", allowed_hosts=("example.com",))

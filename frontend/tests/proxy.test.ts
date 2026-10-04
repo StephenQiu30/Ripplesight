@@ -34,6 +34,62 @@ function pageRequest(url: string, method = "GET") {
 }
 
 describe("authenticated navigation and CSP", () => {
+  it.each([
+    ["GET", "/public/feed.xml"],
+    ["GET", "/public/feed/full/category/ai-models.xml"],
+    ["GET", "/public/selected.md"],
+    ["GET", "/public/items/00000000-0000-4000-8000-000000000001.md"],
+    ["GET", "/public/reports/daily/2026-10-04.md"],
+    ["GET", "/public/agent.md"],
+    ["GET", "/public/api/items"],
+    ["GET", "/public/api/hot"],
+    ["GET", "/public/api/stories/00000000-0000-4000-8000-000000000001"],
+    ["GET", "/public/api/reports/daily/2026-10-04"],
+    ["POST", "/public/mcp"],
+  ])(
+    "forwards the anonymous %s protocol %s without a Cookie-selected account",
+    async (method, path) => {
+      getIdentitySession.mockRejectedValue(new Error("identity unavailable"));
+      const response = await proxy(
+        new NextRequest(`https://hotkey.test${path}`, {
+          method,
+          headers: {
+            Cookie: "hotkey_session=unrelated; hotkey_csrf=unrelated",
+            "x-hotkey-session": "forged",
+          },
+        }),
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get("x-middleware-next")).toBe("1");
+      expect(response.headers.get("location")).toBeNull();
+      expect(
+        response.headers.get("x-middleware-request-x-hotkey-session"),
+      ).toBeNull();
+      expect(response.headers.get("set-cookie")).toBeNull();
+      expect(getIdentitySession).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    "/public",
+    "/public/api/operations",
+    "/public/api/contents",
+    "/public/items/private.jsonld",
+    "/public/og/site.png",
+    "/public/mcp/extra",
+  ])(
+    "does not grant anonymous navigation to an unlisted public-prefixed protocol: %s",
+    async (path) => {
+      const response = await proxy(
+        new NextRequest(`https://hotkey.test${path}`),
+      );
+      expect(response.status).toBe(307);
+      expect(new URL(response.headers.get("location")!).pathname).toBe(
+        "/login",
+      );
+    },
+  );
+
   it.each(["GET", "HEAD"])(
     "canonicalizes a loopback alias before authentication for %s",
     async (method) => {
@@ -153,7 +209,6 @@ describe("authenticated navigation and CSP", () => {
     "/monitors/new",
     "/workspace",
     "/publication/manage",
-    "/feeds",
     "/operations",
   ])(
     "requires a session before opening %s, including prefetch",
@@ -178,6 +233,20 @@ describe("authenticated navigation and CSP", () => {
     },
   );
 
+  it.each(["/agent.md", "/feed.xml", "/feed/full.xml", "/selected.md", "/mcp"])(
+    "keeps the original personal protocol behind authentication: %s",
+    async (path) => {
+      const response = await proxy(
+        new NextRequest(`https://hotkey.test${path}`),
+      );
+      expect(response.status).toBe(307);
+      expect(new URL(response.headers.get("location")!).pathname).toBe(
+        "/login",
+      );
+      expect(getIdentitySession).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([
     "/",
     "/login",
@@ -186,6 +255,8 @@ describe("authenticated navigation and CSP", () => {
     "/terms",
     "/contact",
     "/changelog",
+    "/feeds",
+    "/agent",
     "/discover",
     "/discover/topics/ai",
     "/items/content-1",

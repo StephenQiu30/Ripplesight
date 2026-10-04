@@ -21,6 +21,12 @@ def load_notification_material_in_transaction(
 ) -> NotificationSubjectMaterial | None:
     if not session.in_transaction():
         raise RuntimeError("notification materials require caller transaction")
+    if kind == "alert":
+        from notifications.alert_services import load_alert_notification_in_transaction
+
+        return load_alert_notification_in_transaction(
+            session, owner_id=owner_id, evaluation_id=subject_id, revision=revision, now=now
+        )
     if kind == "selected":
         candidate = load_selected_notification_candidate_in_transaction(
             session,

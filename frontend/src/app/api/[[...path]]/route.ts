@@ -1,3 +1,5 @@
+import { isPublicDistributionPath } from "@/components/auth/public-distribution-path";
+
 const DEFAULT_API_ORIGIN = "http://127.0.0.1:8667";
 const API_TIMEOUT_MS = 15_000;
 
@@ -171,6 +173,9 @@ export const OPTIONS = proxyApiRequest;
 
 function isPublicExport(path: string[]): boolean {
   const joined = path.join("/");
+  if (path[0] === "public") {
+    return isPublicDistributionPath(`/${joined}`);
+  }
   return /^(?:og\/(?:site|pages\/(?:site|all|hot|daily|weekly|monthly|topics|leaderboard|codex-reset|about|terms|privacy|changelog|feedback|agent|contact)|(?:items|stories|posters)\/[a-zA-Z0-9-]+|posters\/stories\/[a-zA-Z0-9-]+|(?:posters\/)?reports\/(?:daily|weekly|monthly)\/[a-zA-Z0-9-]+|topics\/[a-z0-9-]+)\.png|feed\.xml|feed\/(?:full|all|daily|weekly|monthly)\.xml|feed\/(?:full\/)?category\/[a-z-]+\.xml|items\/[a-zA-Z0-9-]+\.(?:md|jsonld)|(?:items|events)\/[a-zA-Z0-9-]+\/poster\.svg|selected\.md|reports\/(?:daily|weekly|monthly)\/[a-zA-Z0-9-]+(?:\.md|\/poster\.svg)|llms\.txt|agent\.md|robots\.txt|hotkey-indexnow-key\.txt|sitemap\.xml|sitemaps\/(?:items|stories|reports|topics)-(?:0|[1-9][0-9]{0,5})\.xml|mcp)$/.test(
     joined,
   );

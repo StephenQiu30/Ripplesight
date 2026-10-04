@@ -114,3 +114,42 @@ def test_malformed_requests_and_unknown_tools_do_not_execute_any_reading() -> No
         response = service.handle(owner_id=uuid4(), payload=payload)
         assert response and response.error and response.error.code in {-32600, -32602}
     assert not controlled.calls
+
+
+def test_cursor_and_public_search_permission_scope_reach_same_reader() -> None:
+    controlled = ControlledReading()
+    service = PublicationMcpService(cast(PublicationApplicationService, controlled))
+    for name, args in (
+        ("hotkey_get_latest", {"cursor": "bounded-next"}),
+        ("hotkey_search", {"q": "模型", "cursor": "bounded-next"}),
+    ):
+        result = service.handle(
+            owner_id=uuid4(),
+            payload={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": args},
+            },
+            redistribute=True,
+        )
+        assert result and result.result and not result.result["isError"]
+        assert controlled.calls[-1]["cursor"] == "bounded-next"
+    assert controlled.calls[-1]["redistribute"] is True
+
+
+def test_oversized_mcp_input_and_cursor_never_execute_reader() -> None:
+    controlled = ControlledReading()
+    service = PublicationMcpService(cast(PublicationApplicationService, controlled))
+    for payload in (
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {"x": "x" * 17000}},
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": "hotkey_get_latest", "arguments": {"cursor": "x" * 4097}},
+        },
+    ):
+        result = service.handle(owner_id=uuid4(), payload=payload)
+        assert result and result.error and result.error.code in {-32600, -32602}
+    assert controlled.calls == []

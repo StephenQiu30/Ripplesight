@@ -1203,6 +1203,13 @@ class ReportService:
                     WHERE cd.owner_id = :owner_id
                       AND (
                           discovery_job.configuration_ref = :configuration_ref
+                          OR EXISTS (
+                              SELECT 1 FROM content_topic_matches AS match
+                              WHERE match.owner_id = cd.owner_id
+                                AND match.content_id = cd.content_id
+                                AND match.topic_id = :topic_id
+                                AND match.matched_at <= :cutoff_at
+                          )
                           OR (
                               discovery_job.kind = 'source.hotlist'
                               AND EXISTS (
@@ -1236,6 +1243,24 @@ class ReportService:
                     WHERE observation.owner_id = :owner_id
                       AND observation.content_version_id IS NOT NULL
                       AND observation.observed_at <= :cutoff_at
+                      AND (
+                          NOT EXISTS (
+                              SELECT 1 FROM content_topic_matches AS match
+                              WHERE match.owner_id = observation.owner_id
+                                AND match.content_id = observation.content_id
+                                AND match.topic_id = :topic_id
+                                AND match.matched_at <= :cutoff_at
+                          )
+                          OR EXISTS (
+                              SELECT 1 FROM content_topic_matches AS match
+                              WHERE match.owner_id = observation.owner_id
+                                AND match.content_id = observation.content_id
+                                AND match.topic_id = :topic_id
+                                AND match.observation_id = observation.id
+                                AND match.content_version_id = observation.content_version_id
+                                AND match.matched_at <= :cutoff_at
+                          )
+                      )
                 )
                 SELECT
                     record.id AS content_id,

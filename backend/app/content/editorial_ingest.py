@@ -16,6 +16,7 @@ from content.editorial_rendered import (
 from content.editorial_schemas import EditorialContentInput, EditorialContentResult
 from content.schemas import PersistContentPostInput
 from content.services import ContentService
+from content.topic_matches import match_editorial_content_in_transaction
 from core.errors import ApplicationError
 from evidence.schemas import DataClass
 from evidence.services import SourceAccessPolicyService
@@ -129,6 +130,21 @@ class EditorialContentIngestService:
             content_version_id=version.id,
             representation=representation,
             now=self._clock(),
+        )
+        match_editorial_content_in_transaction(
+            self._session,
+            owner_id=owner_id,
+            profile_id=command.profile_id,
+            profile_configuration_version=command.configuration_version,
+            content_id=result.id,
+            content_version_id=version.id,
+            observation_id=result.latest_observation.id,
+            job_id=command.job_id,
+            connection_id=command.connection_id,
+            connection_version=command.connection_version,
+            policy_version=command.policy_version,
+            now=self._clock(),
+            grouped_job=command.grouped_job,
         )
         return EditorialContentResult(
             content_id=result.id,

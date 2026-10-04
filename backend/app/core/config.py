@@ -502,6 +502,8 @@ class Settings(BaseSettings):
     def job_process_execution_timeout_seconds(
         self, kind: str, source_key: str | None = None
     ) -> int:
+        if kind in {"report.export", "content.export"}:
+            return 120
         if kind == "source.hotlist":
             return 60
         if kind in {"keyword.search", "source.comments"}:

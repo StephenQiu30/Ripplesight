@@ -21,6 +21,7 @@ const api = vi.hoisted(() => ({
   push: vi.fn(),
 }));
 vi.mock("@/api/jiankongzhuti", () => ({
+  listMonitorEditorialSources: () => Promise.resolve([]),
   getMonitorTopic: api.get,
   updateMonitorTopic: api.update,
   archiveMonitorTopic: vi.fn(),

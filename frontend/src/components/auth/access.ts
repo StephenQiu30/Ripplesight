@@ -1,3 +1,5 @@
+import { isPublicDistributionPath } from "./public-distribution-path";
+
 export const PUBLIC_PAGE_PATHS = [
   "/",
   "/login",
@@ -6,6 +8,8 @@ export const PUBLIC_PAGE_PATHS = [
   "/terms",
   "/contact",
   "/changelog",
+  "/feeds",
+  "/agent",
 ] as const;
 
 export const PUBLIC_READING_PREFIXES = [
@@ -28,6 +32,7 @@ export const SYSTEM_PAGE_PREFIXES = [
   "/items",
   "/editions",
   "/reports",
+  "/alerts",
   "/sources",
   "/editorial-sources",
   "/operations",
@@ -44,6 +49,7 @@ export const SYSTEM_PAGE_PREFIXES = [
 
 export function isPublicPagePath(pathname: string | null) {
   return (
+    isPublicDistributionPath(pathname) ||
     PUBLIC_PAGE_PATHS.some((path) => path === pathname) ||
     PUBLIC_READING_PREFIXES.some((path) => {
       if (path.startsWith("/reports/")) {

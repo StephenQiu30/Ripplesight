@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from connections.editorial_services import EditorialSourceService, Guard, PreparedEditorialRun
 from core.errors import ApplicationError
+from evidence.services import RetentionPolicyUnavailableError, SourceAccessUnavailableError
 from jobs.schemas import (
     BudgetContext,
     BudgetDecisionStatus,
@@ -37,7 +38,8 @@ from sources.adapters.editorial_jina import EditorialJinaReader
 from sources.adapters.editorial_mp import DajialaEditorialClient, EditorialMpCollector
 from sources.adapters.editorial_x import EditorialXCollector, OfficialEditorialXClient
 from sources.editorial_registry import EditorialSourceRegistry
-from sources.editorial_schemas import EditorialAuthorization
+from sources.editorial_rsshub import EditorialRsshubAdmission, rsshub_route_blocker
+from sources.editorial_schemas import EditorialAuthorization, fingerprint
 
 
 class EditorialRequestMeter:
@@ -254,6 +256,9 @@ class ConfiguredEditorialCollectorFactory:
         guard: Guard | None = None,
         begin_request: Callable[[Session], bool] | None = None,
         admission: Callable[[Session], None] | None = None,
+        rsshub_admission: Callable[[Session, PreparedEditorialRun], EditorialRsshubAdmission]
+        | None = None,
+        zero_supplier_fee_only: bool = True,
         preview: bool = False,
         public_enabled: bool = False,
         x_authorized: bool = False,
@@ -290,11 +295,20 @@ class ConfiguredEditorialCollectorFactory:
         self._transport, self._clock = transport, clock
         self._begin_request = begin_request
         self._admission, self._preview = admission, preview
+        self._rsshub_admission, self._zero_fee = rsshub_admission, zero_supplier_fee_only
 
     def __call__(self, prepared: PreparedEditorialRun) -> EditorialSourceRegistry:
         p = prepared.profile
         c = p.configuration
         kind = c.kind
+        if self._zero_fee and (
+            kind in {"x_search", "mp_account"} or (c.url or "").startswith("https://r.jina.ai/")
+        ):
+            return EditorialSourceRegistry(
+                clock=self._clock, blocked_reason="free_only_paid_source"
+            )
+        if c.rsshub and (blocker := rsshub_route_blocker(c.rsshub)):
+            return EditorialSourceRegistry(clock=self._clock, blocked_reason=blocker)
         x_enabled = (
             kind == "x_search"
             and self._x
@@ -374,6 +388,14 @@ class ConfiguredEditorialCollectorFactory:
             settle_request=meter.settle,
             transport=self._transport,
             allow_network=enabled,
+            rsshub=c.rsshub,
+            rsshub_configuration_sha256=fingerprint(c.model_dump(mode="json")).hex()
+            if c.rsshub
+            else None,
+            rsshub_admission=(lambda: self._require_rsshub_admission(prepared))
+            if c.rsshub
+            else None,
+            clock=self._clock,
         )
         xclient = (
             OfficialEditorialXClient(http, bearer=self._xtoken, report_posts=meter.report_x_posts)
@@ -409,3 +431,21 @@ class ConfiguredEditorialCollectorFactory:
             clock=self._clock,
             preview=self._preview,
         )
+
+    def _require_rsshub_admission(self, prepared: PreparedEditorialRun) -> EditorialRsshubAdmission:
+        if self._rsshub_admission is None:
+            raise EditorialSourceError("rsshub_route_review_required", blocked=True)
+        with self._sessions.begin() as session:
+            try:
+                return self._rsshub_admission(session, prepared)
+            except ApplicationError as error:
+                reason = str(error.context.get("reason") or "rsshub_admission_changed")
+                raise EditorialSourceError(reason, blocked=True) from None
+            except (
+                SourceAccessUnavailableError,
+                RetentionPolicyUnavailableError,
+                ResourceBudgetError,
+            ):
+                raise EditorialSourceError(
+                    "rsshub_source_policy_unavailable", blocked=True
+                ) from None

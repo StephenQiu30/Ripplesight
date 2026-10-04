@@ -8,6 +8,8 @@ from uuid import UUID
 import httpx
 from sqlalchemy.orm import Session, sessionmaker
 
+from connections.editorial_rsshub import require_editorial_rsshub_execution_in_transaction
+from connections.editorial_services import PreparedEditorialRun
 from core.config import Settings
 from core.errors import ApplicationError
 from jobs.execution import (
@@ -19,8 +21,12 @@ from jobs.execution import (
 )
 from jobs.schemas import JobFailureCategory, JobMessage, JobStatus
 from jobs.services import load_job_execution_configuration
+from sources.editorial_body import LocalEditorialBodyFetcher
+from sources.editorial_body_meter import EditorialBodyRequestMeter
 from sources.editorial_execution import EditorialSourceExecutor
 from sources.editorial_factory import ConfiguredEditorialCollectorFactory
+from sources.editorial_rsshub import EditorialRsshubAdmission
+from sources.editorial_schemas import fingerprint
 
 SOURCE_JOB_TIMEOUT_SECONDS = 600
 
@@ -103,6 +109,18 @@ class EditorialSourceJobExecutor:
             ).begin_request_in_transaction(lease)
             return allowed
 
+        def rsshub_admission(
+            session: Session, prepared: PreparedEditorialRun
+        ) -> EditorialRsshubAdmission:
+            return require_editorial_rsshub_execution_in_transaction(
+                session,
+                owner_id=message.owner_id,
+                profile_id=prepared.profile.id,
+                configuration_version=message.configuration_version,
+                revision=revision,
+                now=self._clock(),
+            )
+
         factory = ConfiguredEditorialCollectorFactory(
             self._sessions,
             owner_id=message.owner_id,
@@ -110,6 +128,8 @@ class EditorialSourceJobExecutor:
             operation_id=message.operation_id,
             guard=guard,
             begin_request=begin_request,
+            zero_supplier_fee_only=True,
+            rsshub_admission=rsshub_admission,
             public_enabled=settings.editorial_public_requests_enabled,
             x_authorized=settings.editorial_x_authorized,
             x_token=settings.editorial_x_token,
@@ -123,10 +143,46 @@ class EditorialSourceJobExecutor:
             transport=self._transport,
             clock=self._clock,
         )
+
+        def body_factory(prepared: PreparedEditorialRun) -> LocalEditorialBodyFetcher:
+            body = prepared.profile.configuration.body_extraction
+            digest = fingerprint(prepared.profile.configuration.model_dump(mode="json")).hex()
+            if (
+                body is None
+                or prepared.profile.connection_id is None
+                or not settings.firecrawl_enabled
+                or not settings.editorial_public_requests_enabled
+            ):
+                return LocalEditorialBodyFetcher(
+                    base_url=settings.firecrawl_base_url,
+                    configuration_sha256=digest,
+                    clock=self._clock,
+                )
+            meter = EditorialBodyRequestMeter(
+                self._sessions,
+                lease=lease,
+                source_ref=prepared.profile.source_key,
+                connection_id=prepared.profile.connection_id,
+                max_target_requests=body.max_target_requests,
+                guard=guard,
+                lease_seconds=self._lease_seconds,
+                clock=self._clock,
+            )
+            return LocalEditorialBodyFetcher(
+                base_url=settings.firecrawl_base_url,
+                configuration_sha256=digest,
+                admission=meter.admission,
+                before_request=meter.before_request,
+                settle=meter.settle,
+                transport=self._transport,
+                clock=self._clock,
+            )
+
         try:
             result = EditorialSourceExecutor(
                 self._sessions,
                 collector_factory=factory,
+                body_fetcher_factory=body_factory,
                 execution_guard=guard,
                 clock=self._clock,
             ).execute(

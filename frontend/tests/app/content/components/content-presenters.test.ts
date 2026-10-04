@@ -22,6 +22,14 @@ const completeMetrics: HotKeyAPI.ContentMetricView = {
 };
 
 describe("content presenters", () => {
+  it("distinguishes an untruncated page extraction from verified whole-source coverage", () => {
+    expect(contentScopeLabel("full", "machine_extracted")).toBe("页面文本");
+    expect(contentScopeNotice("full", "machine_extracted")).toContain(
+      "完整覆盖尚未验证",
+    );
+    expect(contentScopeNotice("summary", "source")).toContain("仅保存来源摘要");
+  });
+
   it("keeps an observed zero distinct from an unavailable metric", () => {
     expect(formatMetric(0)).toBe("0");
     expect(formatMetric(null)).toBe("未知");

@@ -2,6 +2,7 @@
 /* eslint-disable */
 // API 更新时间：
 // API 唯一标识：
+import * as gerentufagaojing from "./gerentufagaojing";
 import * as gerenbaogaotongzhi from "./gerenbaogaotongzhi";
 import * as identity from "./identity";
 import * as moxingpeizhi from "./moxingpeizhi";
@@ -20,6 +21,7 @@ import * as jiankongzhuti from "./jiankongzhuti";
 import * as yunyingweihu from "./yunyingweihu";
 import * as fankui from "./fankui";
 import * as ribao from "./ribao";
+import * as siyoudaochu from "./siyoudaochu";
 import * as rizhouyuekan from "./rizhouyuekan";
 import * as gongkaifabu from "./gongkaifabu";
 import * as gongkaikanwumulu from "./gongkaikanwumulu";
@@ -28,6 +30,7 @@ import * as zhandiziliao from "./zhandiziliao";
 import * as laiyuannengli from "./laiyuannengli";
 import * as gongkaifenfa from "./gongkaifenfa";
 export default {
+  gerentufagaojing,
   gerenbaogaotongzhi,
   identity,
   moxingpeizhi,
@@ -46,6 +49,7 @@ export default {
   yunyingweihu,
   fankui,
   ribao,
+  siyoudaochu,
   rizhouyuekan,
   gongkaifabu,
   gongkaikanwumulu,

@@ -17,7 +17,10 @@ const api = vi.hoisted(() => ({
   replace: vi.fn(),
   refresh: vi.fn(),
 }));
-vi.mock("@/api/jiankongzhuti", () => ({ createMonitorTopic: api.create }));
+vi.mock("@/api/jiankongzhuti", () => ({
+  createMonitorTopic: api.create,
+  listMonitorEditorialSources: () => Promise.resolve([]),
+}));
 vi.mock("@/api/laiyuannengli", () => ({ listSourceCapabilities: api.sources }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: api.replace, refresh: api.refresh }),
@@ -94,6 +97,7 @@ describe("core topic creation", () => {
       match_all: [],
       exclude: [],
       source_keys: [],
+      editorial_profile_ids: [],
       collection_interval_seconds: 3600,
       report_time: "08:00:00",
       weekly_report_enabled: true,

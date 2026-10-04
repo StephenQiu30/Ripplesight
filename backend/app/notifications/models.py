@@ -40,8 +40,8 @@ class NotificationTarget(Base):
         CheckConstraint("updated_at >= created_at", name="notification_targets_updated_at_check"),
         CheckConstraint("revision >= 1", name="notification_targets_revision_check"),
         CheckConstraint(
-            "jsonb_typeof(subscriptions)='array' AND jsonb_array_length(subscriptions)<=4 AND "
-            'subscriptions <@ \'["report","edition","selected","codex_reset"]\'::jsonb',
+            "jsonb_typeof(subscriptions)='array' AND jsonb_array_length(subscriptions)<=5 AND "
+            'subscriptions <@ \'["report","edition","selected","codex_reset","alert"]\'::jsonb',
             name="notification_targets_subscriptions_check",
         ),
         CheckConstraint(
@@ -87,7 +87,7 @@ class NotificationDelivery(Base):
             name="notification_deliveries_subject_target_key",
         ),
         CheckConstraint(
-            "subject_kind IN ('report','edition','selected','codex_reset') AND "
+            "subject_kind IN ('report','edition','selected','codex_reset','alert') AND "
             "((subject_kind='report' AND report_id IS NOT NULL AND subject_id IS NULL) OR "
             "(subject_kind<>'report' AND report_id IS NULL AND subject_id IS NOT NULL))",
             name="notification_deliveries_subject_check",

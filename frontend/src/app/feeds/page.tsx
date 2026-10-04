@@ -15,12 +15,12 @@ export const metadata: Metadata = {
 export default async function FeedsPage() {
   await connection();
   const feeds = [
-    ["/feed.xml", "精选摘要"],
-    ["/feed/full.xml", "精选全文"],
-    ["/feed/all.xml", "全部公开摘要"],
-    ["/feed/daily.xml", "日报"],
-    ["/feed/weekly.xml", "周刊"],
-    ["/feed/monthly.xml", "月刊"],
+    ["/public/feed.xml", "精选摘要"],
+    ["/public/feed/full.xml", "精选全文"],
+    ["/public/feed/all.xml", "全部公开摘要"],
+    ["/public/feed/daily.xml", "日报"],
+    ["/public/feed/weekly.xml", "周刊"],
+    ["/public/feed/monthly.xml", "月刊"],
   ];
   return (
     <>
@@ -29,7 +29,7 @@ export default async function FeedsPage() {
         <h1 className="text-3xl font-medium">订阅资讯</h1>
         <p className="text-muted-foreground mt-5 text-sm leading-7">
           复制链接到 RSS
-          阅读器。全文订阅只包含有明确再分发许可的正文，其余条目保留摘要和站内阅读入口。
+          阅读器。订阅读取服务器明确设置的发布账号，未设置时保持未发布。全文订阅只包含有明确再分发许可的正文，其余条目保留摘要和站内阅读入口。每个订阅最多50项，公开接口共享每60秒120次的访问额度。
         </p>
         <ItemGroup className="mt-8 flex flex-col gap-y-5">
           {feeds.map(([href, label]) => (
@@ -62,11 +62,14 @@ export default async function FeedsPage() {
             >
               <ItemContent className="min-w-0 gap-3">
                 <span className="w-16">{label}</span>
-                <a href={`/feed/category/${key}.xml`} className="underline">
+                <a
+                  href={`/public/feed/category/${key}.xml`}
+                  className="underline"
+                >
                   摘要
                 </a>
                 <a
-                  href={`/feed/full/category/${key}.xml`}
+                  href={`/public/feed/full/category/${key}.xml`}
                   className="underline"
                 >
                   获准全文
@@ -77,7 +80,7 @@ export default async function FeedsPage() {
         </ItemGroup>
         <h2 className="mt-12 text-lg font-medium">其他格式</h2>
         <p className="mt-5 flex flex-wrap gap-5 text-sm">
-          <a href="/selected.md" className="underline">
+          <a href="/public/selected.md" className="underline">
             精选 Markdown
           </a>
           <a href="/agent" className="underline">

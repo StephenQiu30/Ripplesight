@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from hmac import compare_digest
+from ipaddress import ip_address
 from typing import Annotated, cast
 from uuid import UUID
 
@@ -36,18 +37,21 @@ from leaderboard.reads import LeaderboardReadService
 from monitors.codex_services import CodexResetService
 from monitors.runs import MonitorTopicRunService
 from monitors.services import MonitorTopicService
+from notifications.alert_services import AlertService
 from notifications.email_subscription import ReportEmailSubscriptionService
 from notifications.operator import NotificationOperatorService
 from notifications.services import NotificationTargetService
 from operations.services import OperationsService
 from operations.site_services import SiteConfigurationService
 from publication.application import PublicationApplicationService
+from publication.distribution_limits import PublicDistributionLimiter
 from publication.mcp import PublicationMcpService
 from publication.media_mirror_execution import MediaObjectStorage
 from publication.media_mirror_reading import PublicationMediaReadingService
 from publication.media_mirror_services import PublicationMediaService
 from publication.site_reading import PublicSiteReadingService
 from reports.edition_services import EditionService
+from reports.export_services import PrivateExportService
 from reports.services import ReportService
 from sources.editorial_preview_services import EditorialSourcePreviewService
 from sources.icons_reading import SourceIconReadingService
@@ -65,6 +69,13 @@ def get_session(request: Request) -> Generator[Session, None, None]:
 
 
 SessionDependency = Annotated[Session, Depends(get_session)]
+
+
+def get_alert_service(request: Request, session: SessionDependency) -> AlertService:
+    return AlertService(session, request.app.state.settings)
+
+
+AlertServiceDependency = Annotated[AlertService, Depends(get_alert_service)]
 
 
 def get_ai_capability_service(request: Request, session: SessionDependency) -> AiCapabilityService:
@@ -392,6 +403,17 @@ def get_report_service(request: Request, session: SessionDependency) -> ReportSe
 ReportServiceDependency = Annotated[ReportService, Depends(get_report_service)]
 
 
+def get_private_export_service(
+    request: Request, session: SessionDependency
+) -> PrivateExportService:
+    return PrivateExportService(session, getattr(request.app.state, "media_storage", None))
+
+
+PrivateExportServiceDependency = Annotated[
+    PrivateExportService, Depends(get_private_export_service)
+]
+
+
 def get_event_read_service(session: SessionDependency) -> EventReadService:
     return EventReadService(session)
 
@@ -527,6 +549,40 @@ def get_public_publication_scope(request: Request) -> UUID:
 
 
 PublicPublicationScopeDependency = Annotated[UUID, Depends(get_public_publication_scope)]
+
+
+def get_public_distribution_scope(request: Request) -> UUID:
+    try:
+        return get_public_publication_scope(request)
+    except ApplicationError as error:
+        if error.code == "publication_not_configured":
+            raise ApplicationError("resource_not_found") from None
+        raise
+
+
+PublicDistributionScopeDependency = Annotated[UUID, Depends(get_public_distribution_scope)]
+
+
+def get_public_distribution_limiter(request: Request) -> PublicDistributionLimiter:
+    return PublicDistributionLimiter(request.app.state.identity_redis)
+
+
+PublicDistributionLimiterDependency = Annotated[
+    PublicDistributionLimiter, Depends(get_public_distribution_limiter)
+]
+
+
+def require_public_distribution_limit(
+    request: Request,
+    owner_id: PublicDistributionScopeDependency,
+    limiter: PublicDistributionLimiterDependency,
+) -> None:
+    # Use the trusted TCP peer, matching identity's treatment of forwarding headers.
+    try:
+        peer = str(ip_address(request.client.host)) if request.client else "unknown"
+    except ValueError:
+        peer = "unknown"
+    limiter.require_allowed(owner_id=owner_id, peer=peer)
 
 
 def get_operator_scope(

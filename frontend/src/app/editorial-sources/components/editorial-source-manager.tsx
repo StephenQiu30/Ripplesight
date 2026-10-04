@@ -44,6 +44,7 @@ import { ApiRequestError } from "@/request";
 import { EditorialSourcePreview } from "./editorial-source-preview";
 import { EditorialSourceMaterials } from "./editorial-source-materials";
 import { EditorialExternalIngress } from "./editorial-external-ingress";
+import { EditorialLocalApproval } from "./editorial-local-approval";
 
 const kinds: [HotKeyAPI.EditorialSourceKind, string][] = [
   ["rss", "RSS / Atom"],
@@ -752,6 +753,13 @@ export function EditorialSourceManager() {
             token={token}
             sourceKey={selected.source_key}
             name={selected.name}
+          />
+        )}
+        {selected && (
+          <EditorialLocalApproval
+            key={`${selected.id}:${selected.revision}:${selected.configuration_version}`}
+            profile={selected}
+            token={token}
           />
         )}
         {selected && (

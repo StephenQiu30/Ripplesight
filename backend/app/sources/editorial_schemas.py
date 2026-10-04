@@ -10,9 +10,13 @@ from typing import Literal, Self
 from urllib.parse import parse_qsl, urlsplit, urlunsplit
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator, model_validator
+from pydantic import Field, JsonValue, field_validator, model_validator
 
+from sources.adapters.rsshub_endpoint import RSSHUB_HOSTS
 from sources.adapters.web_targets import normalize_public_article_url, normalize_web_host
+from sources.editorial_base import EditorialContract as EditorialContract
+from sources.editorial_body_review import EditorialBodyReview
+from sources.editorial_rsshub import EditorialRsshubConfiguration
 
 type EditorialSourceKind = Literal[
     "rss", "web_list", "json_list", "x_search", "mp_account", "external"
@@ -91,19 +95,6 @@ def fingerprint(value: object) -> bytes:
     ).digest()
 
 
-class EditorialContract(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    @field_validator("*")
-    @classmethod
-    def aware_contract_time(cls, value: object) -> object:
-        if isinstance(value, datetime):
-            if value.utcoffset() is None:
-                raise ValueError("editorial contract time must be timezone-aware")
-            return value.astimezone(UTC)
-        return value
-
-
 class NoiseFilter(EditorialContract):
     drop_markers: tuple[str, ...] = Field(default=(), max_length=100)
     drop_markers_title_only: tuple[str, ...] = Field(default=(), max_length=100)
@@ -150,6 +141,26 @@ class DetailConfiguration(EditorialContract):
     summary_selector: str | None = Field(default=None, max_length=512)
 
 
+class EditorialBodyConfiguration(EditorialContract):
+    enabled: bool = False
+    required: bool = True
+    max_fetches: int = Field(default=5, ge=1, le=20)
+    max_target_requests: int = Field(default=5, ge=1, le=20)
+    timeout_seconds: int = Field(default=20, ge=1, le=20)
+    max_response_bytes: int = Field(default=2 * 1024 * 1024, ge=1, le=2 * 1024 * 1024)
+    max_content_characters: int = Field(default=100_000, ge=1, le=100_000)
+    allowed_hosts: tuple[str, ...] = Field(min_length=1, max_length=32)
+    review: EditorialBodyReview | None = None
+
+    @field_validator("allowed_hosts")
+    @classmethod
+    def exact_public_hosts(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        normalized = tuple(sorted(normalize_web_host(host) for host in value))
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("body hosts must be unique exact public domains")
+        return normalized
+
+
 class EditorialSourceConfiguration(EditorialContract):
     kind: EditorialSourceKind
     allowed_hosts: tuple[str, ...] = Field(default=(), max_length=32)
@@ -160,9 +171,11 @@ class EditorialSourceConfiguration(EditorialContract):
     sort_by_published_at: bool = False
     detail: DetailConfiguration | None = None
     fetch_public_content: bool = False
+    body_extraction: EditorialBodyConfiguration | None = None
     initial_backfill_limit: int = Field(default=30, ge=1, le=200)
     initial_backfill_months: int = Field(default=12, ge=1, le=24)
     feed_url: str | None = Field(default=None, max_length=2048)
+    rsshub: EditorialRsshubConfiguration | None = None
     summary_is_body: bool = False
     preserve_url_fragment: bool = False
     allow_categories: tuple[str, ...] = Field(default=(), max_length=100)
@@ -215,11 +228,13 @@ class EditorialSourceConfiguration(EditorialContract):
             "sort_by_published_at",
             "detail",
             "fetch_public_content",
+            "body_extraction",
         }
         allowed = {
             "rss": collected
             | {
                 "feed_url",
+                "rsshub",
                 "summary_is_body",
                 "preserve_url_fragment",
                 "allow_categories",
@@ -275,6 +290,21 @@ class EditorialSourceConfiguration(EditorialContract):
             default = field.get_default(call_default_factory=True, validated_data={})
             if getattr(self, name) != default:
                 raise ValueError("unsupported fields for this source kind")
+        if self.rsshub is not None:
+            if self.kind != "rss" or len(self.allowed_hosts) != 1:
+                raise ValueError("local RSSHub mode requires exactly one local RSS host")
+            host = self.allowed_hosts[0]
+            if host not in RSSHUB_HOSTS or self.feed_url != self.rsshub.endpoint(host):
+                raise ValueError("RSSHub endpoint must exactly match its frozen local contract")
+            if self.detail is not None or self.fetch_public_content or self.item_url_prefix_rewrite:
+                raise ValueError("RSSHub mode forbids implicit remote detail or URL rewriting")
+            if self.summary_is_body or self.preserve_url_fragment:
+                raise ValueError(
+                    "RSSHub text scope is explicit; generic RSS full-text flags are unsupported"
+                )
+            if self.initial_backfill_limit > self.rsshub.max_items:
+                raise ValueError("initial RSSHub backfill exceeds the frozen item bound")
+            return self
         normalized = tuple(sorted(normalize_web_host(host) for host in self.allowed_hosts))
         if len(set(normalized)) != len(normalized):
             raise ValueError("source hosts must be unique exact domains")
@@ -436,6 +466,34 @@ class EditorialPage(EditorialContract):
     observed_at: datetime
 
 
+class EditorialBodyTarget(EditorialContract):
+    owner_id: UUID
+    run_id: UUID
+    profile_id: UUID
+    configuration_version: int
+    profile_revision: int
+    job_id: UUID
+    operation_id: UUID
+    content_id: UUID
+    expected_content_version_id: UUID
+    feed_observation_id: UUID
+    material: EditorialMaterial
+
+    @property
+    def target_url(self) -> str:
+        return self.material.url
+
+
+class EditorialBodyCheckpoint(EditorialContract):
+    targets: tuple[EditorialBodyTarget, ...] = Field(default=(), max_length=20)
+    next_index: int = Field(default=0, ge=0, le=20)
+    request_pending: bool = False
+    completed_observation_ids: tuple[UUID, ...] = Field(default=(), max_length=20)
+    failure_codes: tuple[str, ...] = Field(default=(), max_length=21)
+    local_collector_calls: int = Field(default=0, ge=0, le=20)
+    target_request_count: None = None
+
+
 class EditorialAuthorization(EditorialContract):
     connection_enabled: bool = False
     owner_authorized: bool = False
@@ -461,6 +519,7 @@ class EditorialProfileView(EditorialContract):
     enabled: bool
     revision: int
     configuration_version: int
+    configuration_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     configuration: EditorialSourceConfiguration
     participation_mode: ParticipationMode
     tier: Literal["T1", "T1_5", "T2", "T3"]

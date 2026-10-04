@@ -32,6 +32,7 @@ from content.schemas import (
     EventSignalContentInput,
     EventSignalContentPage,
 )
+from content.version_inputs import version_inputs_readable_in_transaction
 from evidence.services import readable_resource_ids_query
 from jobs.source_scopes import load_collection_source_scopes_in_transaction
 
@@ -82,6 +83,9 @@ def load_event_member_content_in_transaction(
         (record.id, version.id): (record, version)
         for record, version in versions_and_records
         if (record.id, version.id) in requested
+        and version_inputs_readable_in_transaction(
+            session, owner_id=owner_id, content_version_ids=(version.id,), now=now
+        )
     }
     if not fixed:
         return {}
@@ -164,6 +168,10 @@ def load_event_member_content_in_transaction(
             )
         ).all()
         for thread, version, observation in comment_rows:
+            if not version_inputs_readable_in_transaction(
+                session, owner_id=owner_id, content_version_ids=(version.id,), now=now
+            ):
+                continue
             comments.setdefault(
                 (thread.post_content_id, thread.content_id), (thread, version, observation)
             )

@@ -8,6 +8,7 @@ from sqlalchemy import (
     CheckConstraint,
     ForeignKeyConstraint,
     Index,
+    Integer,
     LargeBinary,
     SmallInteger,
     String,
@@ -300,6 +301,14 @@ class ContentVersionRelation(Base):
 class ContentObservation(Base):
     __tablename__ = "content_observations"
     __table_args__ = (
+        UniqueConstraint("owner_id", "id", name="content_observations_owner_id_key"),
+        UniqueConstraint(
+            "owner_id",
+            "id",
+            "content_id",
+            "content_version_id",
+            name="content_observations_owner_identity_version_key",
+        ),
         ForeignKeyConstraint(
             ["owner_id", "content_id"],
             ["content_records.owner_id", "content_records.id"],
@@ -388,6 +397,123 @@ class ContentObservation(Base):
     view_count: Mapped[int | None] = mapped_column(BigInteger)
     play_count: Mapped[int | None] = mapped_column(BigInteger)
     danmaku_count: Mapped[int | None] = mapped_column(BigInteger)
+
+
+class ContentVersionInput(Base):
+    __tablename__ = "content_version_inputs"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["owner_id", "content_version_id"],
+            ["content_versions.owner_id", "content_versions.id"],
+            ondelete="CASCADE",
+            name="content_version_inputs_version_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["owner_id", "observation_id"],
+            ["content_observations.owner_id", "content_observations.id"],
+            ondelete="RESTRICT",
+            name="content_version_inputs_observation_fkey",
+        ),
+    )
+    owner_id: Mapped[UUID] = mapped_column(primary_key=True)
+    content_version_id: Mapped[UUID] = mapped_column(primary_key=True)
+    observation_id: Mapped[UUID] = mapped_column(primary_key=True)
+
+
+class ContentTopicMatch(Base):
+    """Frozen local match and exact original inputs, never another collection observation."""
+
+    __tablename__ = "content_topic_matches"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_id",
+            "topic_id",
+            "topic_rule_version",
+            "content_version_id",
+            "profile_id",
+            "profile_configuration_version",
+            name="content_topic_matches_frozen_key",
+        ),
+        ForeignKeyConstraint(
+            ["owner_id", "topic_id"],
+            ["monitor_topics.owner_id", "monitor_topics.id"],
+            ondelete="CASCADE",
+            name="content_topic_matches_owner_topic_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["topic_id", "topic_rule_version"],
+            ["monitor_topic_versions.topic_id", "monitor_topic_versions.version"],
+            ondelete="CASCADE",
+            name="content_topic_matches_topic_rule_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["owner_id", "content_id", "content_version_id"],
+            ["content_versions.owner_id", "content_versions.content_id", "content_versions.id"],
+            ondelete="CASCADE",
+            name="content_topic_matches_content_version_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["owner_id", "observation_id", "content_id", "content_version_id"],
+            [
+                "content_observations.owner_id",
+                "content_observations.id",
+                "content_observations.content_id",
+                "content_observations.content_version_id",
+            ],
+            ondelete="CASCADE",
+            name="content_topic_matches_observation_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["owner_id", "profile_id", "profile_configuration_version"],
+            [
+                "editorial_source_profile_versions.owner_id",
+                "editorial_source_profile_versions.profile_id",
+                "editorial_source_profile_versions.version",
+            ],
+            name="content_topic_matches_profile_version_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["owner_id", "job_id"],
+            ["jobs.owner_id", "jobs.id"],
+            name="content_topic_matches_job_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["owner_id", "connection_id", "connection_version"],
+            [
+                "source_connection_versions.owner_id",
+                "source_connection_versions.connection_id",
+                "source_connection_versions.version",
+            ],
+            name="content_topic_matches_connection_fkey",
+        ),
+        CheckConstraint(
+            "topic_rule_version >= 1 AND profile_configuration_version >= 1 "
+            "AND connection_version >= 1 AND policy_version >= 1",
+            name="content_topic_matches_versions_check",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(input_observation_ids) = 'array' AND "
+            "jsonb_array_length(input_observation_ids) BETWEEN 1 AND 32",
+            name="content_topic_matches_inputs_check",
+        ),
+        Index("content_topic_matches_topic_idx", "owner_id", "topic_id", "matched_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    owner_id: Mapped[UUID]
+    topic_id: Mapped[UUID]
+    topic_rule_version: Mapped[int] = mapped_column(Integer)
+    content_id: Mapped[UUID]
+    content_version_id: Mapped[UUID]
+    profile_id: Mapped[UUID]
+    profile_configuration_version: Mapped[int] = mapped_column(Integer)
+    observation_id: Mapped[UUID]
+    job_id: Mapped[UUID]
+    connection_id: Mapped[UUID]
+    connection_version: Mapped[int] = mapped_column(Integer)
+    policy_version: Mapped[int] = mapped_column(Integer)
+    input_observation_ids: Mapped[list[str]] = mapped_column(JSONB)
+    matched_at: Mapped[datetime]
 
 
 class ContentThread(Base):

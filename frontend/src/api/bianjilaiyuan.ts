@@ -66,6 +66,28 @@ export async function updateEditorialSourceProfile(
   );
 }
 
+/** 批准固定来源的本机正文补全声明 审批绑定配置版本、原帖读取保存用途、零费用和固定出口证据; 不启用来源或发起请求。 POST /api/editorial-sources/${param0}/body-approval */
+export async function approveEditorialBodyExtraction(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: HotKeyAPI.approveEditorialBodyExtractionParams,
+  body: HotKeyAPI.EditorialBodyApprovalInput,
+  options?: import("@/request").RequestOptions,
+) {
+  const { profile_id: param0, ...queryParams } = params;
+  return request<HotKeyAPI.EditorialBodyApprovalView>(
+    `/api/editorial-sources/${param0}/body-approval`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      params: { ...queryParams },
+      data: body,
+      ...(options || {}),
+    },
+  );
+}
+
 /** 读取独立MEDIA许可的来源图标缓存状态 仅读取当前来源版本和Evidence,不采外源。撤权、保留许可失效与旧版本不返回图像。 GET /api/editorial-sources/${param0}/icon */
 export async function getEditorialSourceIcon(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
@@ -168,6 +190,28 @@ export async function previewStoredEditorialSource(
   const { profile_id: param0, ...queryParams } = params;
   return request<HotKeyAPI.JobView>(
     `/api/editorial-sources/${param0}/previews`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      params: { ...queryParams },
+      data: body,
+      ...(options || {}),
+    },
+  );
+}
+
+/** 按固定配置和证据审批本机RSSHub入口 运营CSRF写权限、独立操作ID和当前修订/配置SHA核验。将用途、下游出口、缓存、费用和风控停止证据绑定原组件政策; 不启用来源、不批准数据许可、不发HTTP。 POST /api/editorial-sources/${param0}/rsshub-approval */
+export async function approveEditorialRsshubSource(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: HotKeyAPI.approveEditorialRsshubSourceParams,
+  body: HotKeyAPI.EditorialRsshubApprovalInput,
+  options?: import("@/request").RequestOptions,
+) {
+  const { profile_id: param0, ...queryParams } = params;
+  return request<HotKeyAPI.EditorialRsshubApprovalView>(
+    `/api/editorial-sources/${param0}/rsshub-approval`,
     {
       method: "POST",
       headers: {

@@ -15,6 +15,7 @@ from api.dependencies import (
 from content.schemas import ContentSamplePreviewInput, ContentSamplePreviewView
 from core.schemas import ErrorView, PageView
 from monitors.schemas import (
+    EditorialTopicSourceView,
     MonitorTopicCreateInput,
     MonitorTopicPreviewInput,
     MonitorTopicPreviewView,
@@ -41,6 +42,31 @@ _WRITE_RESPONSES: dict[int | str, dict[str, Any]] = {
     422: {"model": ErrorView, "description": "请求参数校验失败"},
     500: {"model": ErrorView, "description": "服务内部异常"},
 }
+
+
+@router.get(
+    "/editorial-sources",
+    operation_id="listMonitorEditorialSources",
+    response_model=list[EditorialTopicSourceView],
+    status_code=status.HTTP_200_OK,
+    summary="列出当前账户可选的主题订阅流",
+    description=(
+        "只读本账户编辑来源及当前准入, 返回名称、文本范围、更新节奏与选择限制。"
+        "不返回运营配置或凭据, 不调用采集服务, 不创建来源、任务或主题关联。"
+    ),
+    responses={
+        401: {"model": ErrorView, "description": "会话无效或已撤销"},
+        503: {"model": ErrorView, "description": "持久库不可用"},
+        500: {"model": ErrorView, "description": "服务内部异常"},
+    },
+)
+def list_editorial_sources(
+    response: Response,
+    service: MonitorTopicServiceDependency,
+    scope_id: UserScopeDependency,
+) -> list[EditorialTopicSourceView]:
+    response.headers["cache-control"] = "private, no-store"
+    return service.list_editorial_sources(owner_id=scope_id)
 
 
 @router.get(
