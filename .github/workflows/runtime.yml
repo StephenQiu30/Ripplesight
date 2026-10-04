@@ -266,6 +266,7 @@ jobs:
           public_paths = {
               "/", "/about", "/privacy", "/terms", "/contact", "/changelog",
               "/discover", "/leaderboard", "/reports/daily", "/reports/weekly", "/reports/monthly",
+              "/feeds", "/agent",
           }
           locations = [entry.text for entry in ET.fromstring(content).findall(
               "{http://www.sitemaps.org/schemas/sitemap/0.9}url/{http://www.sitemaps.org/schemas/sitemap/0.9}loc"
@@ -282,7 +283,7 @@ jobs:
           for path in ("/api/topics", "/api/source-capabilities", "/api/identity/session", "/api/__exports/feed.xml"):
               status, _, content = request(path)
               assert status == 401 and json.loads(content)["code"] == "invalid_session", path
-          for path in ("/events", "/monitors/new", "/workspace"):
+          for path in ("/events", "/monitors/new", "/workspace", "/alerts"):
               status, headers, _ = request(path)
               assert status == 307
               target = urllib.parse.urlsplit(headers["Location"])
