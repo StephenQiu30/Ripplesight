@@ -17,6 +17,7 @@ import { TopicRulePreview } from "@/components/monitors/topic-rule-preview";
 import {
   selectableTopicSources,
   TopicAdvancedFields,
+  TopicReportFields,
   TopicSettingsFields,
   type TopicSourceOption,
 } from "@/components/monitors/topic-settings-fields";
@@ -95,6 +96,8 @@ export function TopicForm() {
   const [sourceKeys, setSourceKeys] = useState<string[]>([]);
   const [collectionIntervalSeconds, setCollectionIntervalSeconds] =
     useState(1800);
+  const [reportTime, setReportTime] = useState("09:00:00");
+  const [weeklyReportEnabled, setWeeklyReportEnabled] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const [fieldErrors, setFieldErrors] = useState<TopicFieldErrors>({});
@@ -165,6 +168,7 @@ export function TopicForm() {
     if (!name.trim()) fields.name = "请填写关注名称。";
     if (!any.length && !all.length)
       fields.match_any = "至少填写一个包含关键词。";
+    if (!reportTime) fields.report_time = "请选择每日报告时间。";
     if (
       !Number.isInteger(collectionIntervalSeconds) ||
       collectionIntervalSeconds < 600 ||
@@ -187,6 +191,8 @@ export function TopicForm() {
         exclude: parseKeywordLines(exclude),
         source_keys: sourceKeys,
         collection_interval_seconds: collectionIntervalSeconds,
+        report_time: reportTime,
+        weekly_report_enabled: weeklyReportEnabled,
       };
       const topic = await createMonitorTopic(payload);
       if (!mounted.current) return;
@@ -310,6 +316,14 @@ export function TopicForm() {
               onCollectionIntervalSecondsChange={setCollectionIntervalSeconds}
               disabled={isSubmitting}
               fieldErrors={fieldErrors}
+            />
+            <TopicReportFields
+              reportTime={reportTime}
+              onReportTimeChange={setReportTime}
+              weeklyReportEnabled={weeklyReportEnabled}
+              onWeeklyReportEnabledChange={setWeeklyReportEnabled}
+              disabled={isSubmitting}
+              error={fieldErrors.report_time}
             />
             <Field
               orientation="horizontal"

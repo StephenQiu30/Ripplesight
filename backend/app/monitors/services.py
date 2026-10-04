@@ -1249,7 +1249,9 @@ class MonitorTopicService:
                     or budget.scope_kind is BudgetScopeKind.GLOBAL
                 )
             ]
-            if not any(budget.scope_kind is BudgetScopeKind.SOURCE for budget in matching) or any(
+            if not {BudgetScopeKind.GLOBAL, BudgetScopeKind.SOURCE}.issubset(
+                {budget.scope_kind for budget in matching}
+            ) or any(
                 not budget.enabled or budget.remaining_units is None or budget.remaining_units < 1
                 for budget in matching
             ):

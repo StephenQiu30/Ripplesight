@@ -312,7 +312,9 @@ class MonitorTopicRunService:
                 )
             )
         ]
-        return any(budget.scope_kind is BudgetScopeKind.SOURCE for budget in relevant) and all(
+        return {BudgetScopeKind.GLOBAL, BudgetScopeKind.SOURCE}.issubset(
+            {budget.scope_kind for budget in relevant}
+        ) and all(
             budget.enabled and budget.remaining_units is not None and budget.remaining_units > 0
             for budget in relevant
         )

@@ -173,6 +173,29 @@ def test_old_hn_post_manual_comments_are_accepted_once(request: pytest.FixtureRe
         assert session.scalar(text("SELECT count(*) FROM outbox_messages")) == 2
 
 
+def test_comments_without_global_budget_do_not_accept_an_outbound_job(
+    request: pytest.FixtureRequest,
+) -> None:
+    client: TestClient = request.getfixturevalue("_topic_client")
+    content_id = _seed_old_hn_post(client)
+    with client.app.state.session_factory.begin() as session:
+        session.execute(text("DELETE FROM resource_budget_policies WHERE scope_kind = 'global'"))
+    readiness = client.get(f"/api/contents/{content_id}/comment-run-readiness")
+    assert readiness.json() == {
+        "supported": True,
+        "available": False,
+        "reason": "comments_budget_exhausted",
+    }
+    rejected = client.post(
+        f"/api/contents/{content_id}/comment-runs",
+        headers=_csrf_headers(client),
+        json={"operation_id": str(uuid4())},
+    )
+    assert rejected.status_code == 409
+    with client.app.state.session_factory() as session:
+        assert session.scalar(text("SELECT count(*) FROM jobs WHERE kind = 'source.comments'")) == 0
+
+
 def test_comment_refresh_readiness_is_read_only_and_tracks_admission(
     request: pytest.FixtureRequest,
 ) -> None:
@@ -559,4 +582,5 @@ def test_old_hn_root_is_revisited_and_new_reply_keeps_direct_parent(
         assert budget_usage == [
             ("global.plan038.comments.daily", 2),
             ("source.hackernews.network.daily", 2),
+            ("test.network.daily", 2),
         ]

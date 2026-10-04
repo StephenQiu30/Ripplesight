@@ -17,6 +17,7 @@ from tests.conftest import authenticate_test_client, authenticated_owner_id
 from tests.integration.test_monitor_topics import (
     _TRUNCATE,
     _csrf_headers,
+    _seed_network_budget,
     _topic_payload,
     _user_scope,
 )
@@ -50,7 +51,9 @@ def monitor_topic_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient
     monkeypatch.setattr(scheduler, "get_settings", lambda: settings)
     try:
         with TestClient(create_app(settings)) as client:
-            authenticate_test_client(client)
+            owner_id = authenticate_test_client(client)
+            with client.app.state.session_factory.begin() as session:
+                _seed_network_budget(session, owner_id)
             yield client
     finally:
         with engine.begin() as connection:
@@ -130,7 +133,10 @@ def test_manual_run_replays_one_job_and_outbox(monitor_topic_client: TestClient)
         assert session.scalar(text("SELECT count(*) FROM outbox_messages")) == 1
 
 
-def test_manual_run_requires_csrf_and_rejects_all_skipped(monitor_topic_client: TestClient) -> None:
+@pytest.mark.parametrize("budget_key", ["source.hackernews.network.daily", "missing_global"])
+def test_manual_run_requires_csrf_and_rejects_all_skipped(
+    monitor_topic_client: TestClient, budget_key: str
+) -> None:
     location = _ready_topic(monitor_topic_client, source_keys=("hackernews",))
     payload = {"operation_id": str(uuid4()), "source_keys": ["hackernews"]}
     anonymous = TestClient(monitor_topic_client.app)
@@ -142,9 +148,12 @@ def test_manual_run_requires_csrf_and_rejects_all_skipped(monitor_topic_client: 
     with monitor_topic_client.app.state.session_factory.begin() as session:
         session.execute(
             text(
-                "UPDATE resource_budget_policies SET enabled = false "
-                "WHERE budget_key = 'source.hackernews.network.daily'"
-            )
+                "DELETE FROM resource_budget_policies WHERE scope_kind = 'global'"
+                if budget_key == "missing_global"
+                else "UPDATE resource_budget_policies SET enabled = false "
+                "WHERE budget_key = :budget_key"
+            ),
+            {"budget_key": budget_key},
         )
     response = monitor_topic_client.post(
         location + "/runs", headers=_csrf_headers(monitor_topic_client), json=payload

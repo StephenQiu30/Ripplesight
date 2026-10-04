@@ -4,7 +4,7 @@ import { connection } from "next/server";
 import { ReportList } from "@/app/reports/components/report-list";
 
 export const metadata: Metadata = {
-  title: "日报",
+  title: "个人报告",
   robots: { index: false, follow: false },
 };
 

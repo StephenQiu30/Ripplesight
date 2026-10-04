@@ -353,7 +353,9 @@ class CommentManualRunService:
                 )
             )
         ]
-        return any(item.scope_kind is BudgetScopeKind.SOURCE for item in relevant) and all(
+        return {BudgetScopeKind.GLOBAL, BudgetScopeKind.SOURCE}.issubset(
+            {item.scope_kind for item in relevant}
+        ) and all(
             item.enabled and item.remaining_units is not None and item.remaining_units > 0
             for item in relevant
         )

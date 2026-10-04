@@ -21,6 +21,7 @@ import {
   FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   SelectLabel,
   Select,
@@ -304,6 +305,77 @@ export function TopicAdvancedFields({
               </FieldDescription>
             </Field>
           ) : null}
+        </FieldGroup>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+export function TopicReportFields({
+  reportTime,
+  onReportTimeChange,
+  weeklyReportEnabled,
+  onWeeklyReportEnabledChange,
+  disabled,
+  error,
+}: {
+  reportTime: string;
+  onReportTimeChange: (value: string) => void;
+  weeklyReportEnabled: boolean;
+  onWeeklyReportEnabledChange: (value: boolean) => void;
+  disabled: boolean;
+  error?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Collapsible open={open || Boolean(error)} onOpenChange={setOpen}>
+      <CollapsibleTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="navigation"
+          className="w-full justify-between"
+          disabled={disabled}
+        >
+          报告设置 <ChevronDownIcon data-icon="inline-end" />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-6">
+        <FieldGroup>
+          <Field data-disabled={disabled} data-invalid={Boolean(error)}>
+            <FieldLabel htmlFor="report-time">每日报告时间</FieldLabel>
+            <Input
+              id="report-time"
+              type="time"
+              step="any"
+              value={reportTime}
+              onChange={(event) => onReportTimeChange(event.target.value)}
+              disabled={disabled}
+              required
+              aria-invalid={Boolean(error)}
+              aria-describedby="report-time-description"
+            />
+            <FieldDescription id="report-time-description">
+              北京时间，汇总前一自然日的已获取材料。{error}
+            </FieldDescription>
+          </Field>
+          <Field orientation="horizontal" data-disabled={disabled}>
+            <FieldContent>
+              <FieldLabel htmlFor="weekly-report">生成周报</FieldLabel>
+              <FieldDescription>
+                每周一北京时间 09:00，汇总上一周的已获取材料。
+              </FieldDescription>
+            </FieldContent>
+            <Switch
+              id="weekly-report"
+              checked={weeklyReportEnabled}
+              onCheckedChange={onWeeklyReportEnabledChange}
+              disabled={disabled}
+            />
+          </Field>
+          <FieldDescription>
+            报告保留资料缺口；这些设置只生成个人报告。投递渠道在运营与通知中单独配置。
+          </FieldDescription>
         </FieldGroup>
       </CollapsibleContent>
     </Collapsible>
