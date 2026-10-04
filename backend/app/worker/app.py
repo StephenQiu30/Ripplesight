@@ -1031,6 +1031,7 @@ def _registered_job_handlers(
         "notification.send": send_notification,
         "notification.scan": scan_notifications,
         "report.daily": generate_daily_report,
+        "report.weekly": generate_daily_report,
         "source.comments": collect_comments,
         "source.hotlist": collect_hotlist,
         "webpage.collect": collect_webpage,

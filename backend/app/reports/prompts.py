@@ -62,7 +62,8 @@ def report_metrics(data: DailyReportData) -> dict[str, int]:
         "overview.comments.delta": data.overview.comments.delta,
     }
     for item in data.top_contents:
-        metrics[f"top.{item.citation}.interaction_count"] = item.interaction_count
+        if item.interaction_count is not None:
+            metrics[f"top.{item.citation}.interaction_count"] = item.interaction_count
     return metrics
 
 
@@ -92,7 +93,8 @@ def build_report_prompt(data: DailyReportData) -> str:
     serialized = serialized.replace("<", "\\u003c").replace(">", "\\u003e")
     return "\n".join(
         (
-            "请为日报的 overview、top_content、risks、voices 四个区块分别撰写简短中文叙述。",
+            f"请为{'周报' if data.kind.value == 'weekly' else '日报'}的 "
+            "overview、top_content、risks、voices 四个区块分别撰写简短中文叙述。",
             "每句必须在 citations 中列出至少一个下方已有的 c 编号；只能使用给出的事实。",
             "text 不要包含引用编号，引用由程序添加。不得自行写任何阿拉伯数字。",
             "如需数字，只能使用 {metric:键名} 占位，键名必须出现在 data.metrics 中；程序负责替换。",

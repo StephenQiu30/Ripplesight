@@ -85,3 +85,25 @@ describe("report reads from Swagger operations", () => {
     expect(api.reports.mock.calls[1][0].date_from).toBe("2026-10-01");
   });
 });
+
+it("switches to weekly reports with a fresh cursor and aborts daily pagination", async () => {
+  api.topics.mockResolvedValue({ items: [], next_cursor: null });
+  api.reports
+    .mockResolvedValueOnce({ items: [report], next_cursor: "daily-next" })
+    .mockResolvedValueOnce({
+      items: [{ ...report, id: "weekly-one", kind: "weekly" }],
+      next_cursor: null,
+    });
+  render(<ReportList />);
+  await screen.findByRole("button", { name: "加载更多" });
+  const signal = api.reports.mock.calls[0][1].signal as AbortSignal;
+  fireEvent.click(screen.getByRole("radio", { name: "周报" }));
+  await waitFor(() => expect(api.reports).toHaveBeenCalledTimes(2));
+  expect(signal.aborted).toBe(true);
+  expect(api.reports.mock.calls[1][0]).toMatchObject({
+    kind: "weekly",
+    limit: 20,
+  });
+  expect(api.reports.mock.calls[1][0].cursor).toBeUndefined();
+  expect(screen.queryByRole("button", { name: "加载更多" })).toBeNull();
+});

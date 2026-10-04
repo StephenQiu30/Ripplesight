@@ -2,7 +2,9 @@
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
+
+import pytest
 
 from ai.schemas import AiCallError, AiCompletion, AiFailureCode, AiTokenUsage
 from reports.render import render_daily_report
@@ -276,12 +278,22 @@ def test_fixed_dataset_renders_expected_daily_markdown() -> None:
 - [c1] “升级文档还需要更清楚” — [原帖](<https://example.com/posts/1>)
 - [c2] “期待下一轮性能优化” — [原帖](<https://example.com/posts/2>)
 
+## 未分析材料
+
+以下材料尚未完成分析，不计入相关性或情感统计。
+
+- [c3] [尚未完成分析的内容](<https://example.com/posts/4>)
+  - 来源：google_news；发布时间：2026-09-24 10:04
+  - 已知指标：点赞 1、来源评论计数 0、转发 0、浏览 100、播放 0、弹幕 0
+
 ## 数据覆盖说明
 
 - google_news：部分成功（成功 1，部分成功 0，失败 1，进行中 0）
 - hackernews：成功（成功 2，部分成功 0，失败 0，进行中 0）
 - 按发现时间计入：1 条
 - 未分析：1 条
+- 概览仅统计已分析且相关的帖子及其评论，未分析材料单独列出。
+- 未分析材料每帖最多展示 50 条评论摘录，已存样本量见采样说明。
 - 样本观察，不代表全网
 """
     )
@@ -444,3 +456,47 @@ def test_report_model_rejects_unknown_metric_and_unlinked_citation() -> None:
     )
 
     assert apply_model_narratives(data, client.complete) == data
+
+
+def test_unknown_metrics_remain_unknown_and_pending_materials_are_cited() -> None:
+    unknown = ReportMetricInput()
+    assert unknown.interaction_count is None
+    assert unknown.interaction_fields == ()
+    assert ReportMetricInput(like_count=0).interaction_count == 0
+    dataset = _dataset()
+    pending = next(
+        post for post in dataset.posts if post.annotation_state is not AnnotationState.ANNOTATED
+    )
+    prepared = _prepare(
+        dataset.model_copy(
+            update={
+                "posts": (pending.model_copy(update={"metrics": unknown}),),
+            }
+        )
+    )
+    assert prepared.data.overview.posts.current == 0
+    assert sum(prepared.data.overview.sentiment_distribution.values()) == 0
+    assert prepared.data.pending_contents[0].content_version_id == pending.content_version_id
+    assert "已知指标：未知" in prepared.body_markdown
+    assert "[c1]" in prepared.body_markdown
+
+
+def test_weekly_iso_window_crosses_year_and_has_independent_operation_identity() -> None:
+    from reports.schemas import WeeklyReportJobScope
+    from reports.services import previous_weekly_window, weekly_report_operation_id
+
+    now = datetime(2027, 1, 4, 1, 10, tzinfo=UTC)
+    start, end = previous_weekly_window(now)
+    assert start == datetime(2026, 12, 27, 16, tzinfo=UTC)
+    assert end == datetime(2027, 1, 3, 16, tzinfo=UTC)
+    topic = uuid4()
+    WeeklyReportJobScope(topic_id=topic, window_start=start, window_end=end)
+    assert weekly_report_operation_id(
+        topic_id=topic, window_start=start
+    ) != daily_report_operation_id(topic_id=topic, window_start=start)
+    with pytest.raises(ValueError):
+        WeeklyReportJobScope(
+            topic_id=topic,
+            window_start=start + timedelta(hours=1),
+            window_end=end + timedelta(hours=1),
+        )

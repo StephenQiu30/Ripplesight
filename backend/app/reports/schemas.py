@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from enum import StrEnum
 from typing import Literal, Self
 from urllib.parse import urlsplit
@@ -52,16 +52,25 @@ class SourceCoverageStatus(StrEnum):
 class ReportMetricInput(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    like_count: int = Field(default=0, ge=0)
-    comment_count: int = Field(default=0, ge=0)
-    repost_count: int = Field(default=0, ge=0)
-    view_count: int = Field(default=0, ge=0)
-    play_count: int = Field(default=0, ge=0)
-    danmaku_count: int = Field(default=0, ge=0)
+    like_count: int | None = Field(default=None, ge=0)
+    comment_count: int | None = Field(default=None, ge=0)
+    repost_count: int | None = Field(default=None, ge=0)
+    view_count: int | None = Field(default=None, ge=0)
+    play_count: int | None = Field(default=None, ge=0)
+    danmaku_count: int | None = Field(default=None, ge=0)
 
     @property
-    def interaction_count(self) -> int:
-        return self.like_count + self.comment_count + self.repost_count + self.danmaku_count
+    def interaction_count(self) -> int | None:
+        values = [getattr(self, field) for field in self.interaction_fields]
+        return sum(values) if values else None
+
+    @property
+    def interaction_fields(self) -> tuple[str, ...]:
+        return tuple(
+            field
+            for field in ("like_count", "comment_count", "repost_count", "danmaku_count")
+            if getattr(self, field) is not None
+        )
 
 
 class ReportPostInput(BaseModel):
@@ -139,6 +148,20 @@ class ReportCommentInput(BaseModel):
     text: str = Field(min_length=1, max_length=100_000)
     occurred_at: datetime
     metrics: ReportMetricInput
+    source_key: str | None = None
+    native_id: str | None = None
+    url: str | None = None
+    root_content_id: UUID | None = None
+    parent_content_id: UUID | None = None
+    reply_target_content_id: UUID | None = None
+    parent_relation_status: str = "unknown"
+    collected_at: datetime | None = None
+    job_id: UUID | None = None
+    connection_version: int | None = None
+    entry_point: str | None = None
+    sort_key: str | None = None
+    first_level_limit: int | None = None
+    replies_per_thread_limit: int | None = None
 
     @field_validator("occurred_at")
     @classmethod
@@ -165,6 +188,7 @@ class ReportBuildDataset(BaseModel):
     posts: tuple[ReportPostInput, ...]
     comments: tuple[ReportCommentInput, ...]
     source_coverage: tuple[ReportSourceCoverage, ...]
+    comment_scopes: tuple[ReportCommentScope, ...] = ()
 
 
 class ReportInputManifest(BaseModel):
@@ -177,6 +201,18 @@ class ReportInputManifest(BaseModel):
     source_coverage: tuple[ReportSourceCoverage, ...]
     discovered_at_count: int = Field(ge=0)
     unanalyzed_count: int = Field(ge=0)
+    daily_reports: tuple[ReportDailyReference, ...] = ()
+    missing_daily_dates: tuple[date, ...] = ()
+
+
+class ReportDailyReference(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    report_id: UUID
+    version: int = Field(ge=1)
+    day: date
+    posts: int = Field(ge=0)
+    comments: int = Field(ge=0)
 
 
 class ReportComparison(BaseModel):
@@ -202,7 +238,8 @@ class ReportRepresentativeComment(BaseModel):
     content_id: UUID
     content_version_id: UUID
     text: str
-    interaction_count: int = Field(ge=0)
+    interaction_count: int | None = Field(default=None, ge=0)
+    reference: ReportCommentInput | None = None
 
 
 class ReportContentItem(BaseModel):
@@ -216,7 +253,8 @@ class ReportContentItem(BaseModel):
     sentiment: ReportSentiment
     source_key: str
     url: str | None
-    interaction_count: int = Field(ge=0)
+    interaction_count: int | None = Field(default=None, ge=0)
+    interaction_fields: tuple[str, ...] = ()
     representative_comments: tuple[ReportRepresentativeComment, ...]
 
 
@@ -227,7 +265,7 @@ class ReportRiskItem(BaseModel):
     title: str
     url: str | None
     reason: str
-    interaction_count: int = Field(ge=0)
+    interaction_count: int | None = Field(default=None, ge=0)
 
 
 class ReportVoiceItem(BaseModel):
@@ -244,7 +282,37 @@ class ReportCoverage(BaseModel):
     sources: tuple[ReportSourceCoverage, ...]
     discovered_at_count: int = Field(ge=0)
     unanalyzed_count: int = Field(ge=0)
+    comments: tuple[ReportCommentScope, ...] = ()
     disclaimer: str = "样本观察，不代表全网"  # noqa: RUF001
+
+
+class ReportCommentScope(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    post_content_id: UUID
+    source_key: str
+    status: Literal[
+        "unknown", "unsupported", "not_authorized", "not_attempted", "failed", "partial", "observed"
+    ]
+    stored_comments: int = Field(ge=0)
+    unresolved_relations: int = Field(ge=0)
+    note: str = "仅本报告时间窗内已存样本；未确认远端完整覆盖。"  # noqa: RUF001
+
+
+class ReportPendingContent(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    citation: str = Field(pattern=r"^c[1-9][0-9]*$")
+    content_id: UUID
+    content_version_id: UUID
+    title: str
+    source_key: str
+    url: str | None
+    occurred_at: datetime
+    time_basis: Literal["published", "discovered"]
+    annotation_state: AnnotationState
+    metrics: ReportMetricInput
+    comments: tuple[ReportCommentInput, ...] = ()
 
 
 type ReportSection = Literal["overview", "top_content", "risks", "voices"]
@@ -265,11 +333,17 @@ class DailyReportData(BaseModel):
     window_start: datetime
     window_end: datetime
     cutoff_at: datetime
+    kind: ReportKind = ReportKind.DAILY
     overview: ReportOverview
+    previous_sample_available: bool = False
     top_contents: tuple[ReportContentItem, ...]
     risks: tuple[ReportRiskItem, ...]
     voices: tuple[ReportVoiceItem, ...]
     coverage: ReportCoverage
+    pending_contents: tuple[ReportPendingContent, ...] = ()
+    daily_reports: tuple[ReportDailyReference, ...] = ()
+    missing_daily_dates: tuple[date, ...] = ()
+    daily_totals_match: bool | None = None
     narratives: dict[ReportSection, tuple[ReportNarrativeSentence, ...]] = Field(
         default_factory=dict
     )
@@ -308,6 +382,7 @@ class DailyReportJobScope(BaseModel):
     topic_id: UUID
     window_start: datetime
     window_end: datetime
+    report_id: UUID | None = None
 
     @field_validator("window_start", "window_end")
     @classmethod
@@ -329,8 +404,20 @@ class DailyReportJobScope(BaseModel):
                 "topic_id": scope.get("topic_id"),
                 "window_start": scope.get("window_start"),
                 "window_end": scope.get("window_end"),
+                "report_id": scope.get("report_id"),
             }
         )
+
+
+class WeeklyReportJobScope(DailyReportJobScope):
+    @model_validator(mode="after")
+    def validate_window(self) -> Self:
+        if self.window_end - self.window_start != timedelta(days=7):
+            raise ValueError("weekly report job window must be seven days")
+        # Monday 00:00 Asia/Shanghai is Sunday 16:00 UTC.
+        if self.window_start.weekday() != 6 or self.window_start.time().isoformat() != "16:00:00":
+            raise ValueError("weekly report window must use the Shanghai ISO week")
+        return self
 
 
 class ReportView(BaseModel):
