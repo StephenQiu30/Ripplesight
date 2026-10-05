@@ -35,7 +35,7 @@ it("offers public reading before account actions and keeps unpublished content h
       .getAttribute("href"),
   ).toBe("/reports/weekly");
   expect(
-    screen.getByRole("link", { name: "定制我的关注" }).getAttribute("href"),
+    screen.getByRole("link", { name: "登录设置关注" }).getAttribute("href"),
   ).toBe("/login?returnTo=%2Fworkspace");
   expect(screen.getAllByText("等待新的公开内容")).toHaveLength(1);
   expect(screen.queryByText("暂时无法读取")).toBeNull();

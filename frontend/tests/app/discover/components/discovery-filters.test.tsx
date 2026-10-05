@@ -1,5 +1,11 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import { DiscoveryFilters } from "@/app/discover/components/discovery-filters";
 import { selectOption } from "../../../select";
@@ -60,4 +66,30 @@ it("shows readable source names while submitting stable keys and supports all so
   expect(new FormData(form).get("source_key")).toBe("ed_json_example");
   await selectOption(source, "全部来源");
   expect(new FormData(form).get("source_key")).toBe("");
+});
+
+it("keeps advanced form values when filters are collapsed and restores the draft on reopen", () => {
+  render(
+    <DiscoveryFilters
+      mode="all"
+      window="7d"
+      by="timeline"
+      params={{}}
+      categories={[]}
+    />,
+  );
+  const toggle = screen.getByRole("button", { name: "高级筛选" });
+  const form = screen.getByRole("button", { name: "查看" }).closest("form")!;
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  expect(new FormData(form).get("by")).toBe("timeline");
+  expect(new FormData(form).get("search_order")).toBe("relevance");
+  fireEvent.click(toggle);
+  fireEvent.change(screen.getByLabelText("标签"), {
+    target: { value: "研究" },
+  });
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  expect(new FormData(form).get("tag")).toBe("研究");
+  fireEvent.click(toggle);
+  expect(screen.getByLabelText<HTMLInputElement>("标签").value).toBe("研究");
 });

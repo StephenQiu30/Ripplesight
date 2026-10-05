@@ -1,40 +1,20 @@
-import * as UI from "@/components/ui/content";
-import { Badge } from "@/components/ui/badge";
 import {
   Item,
   ItemContent,
   ItemGroup,
-  ItemTitle,
   ItemDescription,
 } from "@/components/ui/item";
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import Link from "next/link";
-import Image from "next/image";
-
-export { PublicationNavigation } from "./reading-navigation";
 
 import { PageState } from "@/components/system/page-state";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ApiRequestError } from "@/request";
 
-export const categories = [
-  ["ai-models", "模型"],
-  ["ai-products", "产品"],
-  ["industry", "行业"],
-  ["paper", "论文"],
-  ["tip", "技巧"],
-  ["opinion", "观点"],
-] as const;
-
-export function publicationTime(value: string | null) {
-  if (!value || Number.isNaN(new Date(value).getTime())) return "时间未知";
-  return new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
+import { publicationTime } from "./reading-format";
+import { PublicItemFeed } from "./item-feed";
+export { categories, publicationTime } from "./reading-format";
 
 export function PublicationFailure({
   error,
@@ -87,90 +67,7 @@ export function PublicItemCards({
         </EmptyHeader>
       </Empty>
     );
-  return (
-    <ItemGroup>
-      {items.map((item) => (
-        <Item asChild key={item.id}>
-          <UI.Content as="article" role="listitem">
-            <ItemContent className="min-w-0 gap-3">
-              <UI.Content className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                <UI.Text as="span">
-                  {item.source.icon_url &&
-                  [
-                    `/api/site/source-icons/${encodeURIComponent(item.source.key)}.svg`,
-                    `/api/site/source-icons/${encodeURIComponent(item.source.key)}/avatar-48`,
-                  ].includes(item.source.icon_url) ? (
-                    <Image
-                      src={item.source.icon_url}
-                      alt=""
-                      unoptimized
-                      width={16}
-                      height={16}
-                      className="mr-2 inline-block size-4 rounded-sm"
-                    />
-                  ) : null}
-                  {item.source.name}
-                  {item.source.first_party ? " · 第一方" : ""}
-                </UI.Text>
-                <UI.Timestamp dateTime={item.timeline_at}>
-                  {item.published_at ? "发布于 " : "发现于 "}
-                  {publicationTime(item.timeline_at)}
-                </UI.Timestamp>
-                {item.backfill ? <UI.Text as="span">历史导入</UI.Text> : null}
-                {item.analysis_state === "not_analyzed" ? (
-                  <UI.Text as="span">未分析</UI.Text>
-                ) : null}
-                {item.category ? (
-                  <UI.Text as="span">
-                    {categories.find(([key]) => key === item.category)?.[1]}
-                  </UI.Text>
-                ) : null}
-                {item.selected ? <Badge variant="secondary">精选</Badge> : null}
-              </UI.Content>
-              <ItemTitle className="line-clamp-none">
-                <UI.Heading level={2}>
-                  <Link href={item.reading_url}>{item.title}</Link>
-                </UI.Heading>
-              </ItemTitle>
-              {item.summary ? (
-                <ItemDescription className="line-clamp-none">
-                  {item.summary_origin === "source" ? (
-                    <UI.Text as="span">来源摘要： </UI.Text>
-                  ) : null}
-                  {item.summary}
-                </ItemDescription>
-              ) : item.analysis_state === "not_analyzed" ? (
-                <ItemDescription>
-                  来源未提供摘要，可前往原文阅读。
-                </ItemDescription>
-              ) : null}
-              <UI.Content className="text-muted-foreground flex flex-wrap gap-3 text-xs">
-                {item.tags.map((tag) => (
-                  <UI.Text as="span" key={tag}>
-                    #{tag}
-                  </UI.Text>
-                ))}
-                {item.original_url ? (
-                  <UI.TextLink
-                    href={item.original_url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    来源原文 ↗
-                  </UI.TextLink>
-                ) : null}
-                {item.event_id ? (
-                  <Link href={`/discover/stories/${item.event_id}`}>
-                    查看事件
-                  </Link>
-                ) : null}
-              </UI.Content>
-            </ItemContent>
-          </UI.Content>
-        </Item>
-      ))}
-    </ItemGroup>
-  );
+  return <PublicItemFeed items={items} />;
 }
 
 export function PublicSourceStatus({

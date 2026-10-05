@@ -4,10 +4,7 @@ import { connection } from "next/server";
 
 import { getSitePublicationItem } from "@/api/gongkaifabu";
 import { getPublicSiteMeta } from "@/api/zhandiziliao";
-import {
-  PublicationFailure,
-  PublicationNavigation,
-} from "@/components/publication/reading-parts";
+import { PublicationFailure } from "@/components/publication/reading-parts";
 import { ItemReader } from "./components/item-reader";
 import { ApiRequestError } from "@/request";
 
@@ -58,14 +55,12 @@ export default async function ItemPage({
     if (error instanceof ApiRequestError && error.status === 404) notFound();
     return (
       <>
-        <PublicationNavigation />
         <PublicationFailure error={error} href="/discover" />
       </>
     );
   }
   return (
     <>
-      <PublicationNavigation />
       <ItemReader item={item} />
     </>
   );

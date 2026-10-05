@@ -4,21 +4,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 type ReadingLayoutProps = {
   title: string;
-  navigation: ReactNode;
   children: ReactNode;
   aside: ReactNode;
 };
 
-// BasicLayout owns the single main/scroll container. This layout only arranges
-// reading content: desktop 20/50/30, mobile feed first and recommendations after.
-export function ReadingLayout({
-  title,
-  navigation,
-  children,
-  aside,
-}: ReadingLayoutProps) {
+// BasicLayout owns the main/scroll container and the global navigation.
+// This layout arranges the reading feed and discovery sidebar.
+export function ReadingLayout({ title, children, aside }: ReadingLayoutProps) {
   return (
-    <Card data-reading-layout="" className="overflow-visible p-0">
+    <Card
+      data-reading-layout=""
+      className="min-h-full overflow-visible rounded-none p-0"
+    >
       <CardHeader className="sr-only">
         <CardTitle role="heading" aria-level={1}>
           {title}
@@ -26,24 +23,19 @@ export function ReadingLayout({
       </CardHeader>
       <CardContent
         data-reading-columns=""
-        className="grid grid-cols-1 items-start gap-6 px-0 lg:grid-cols-[minmax(0,2fr)_minmax(0,5fr)_minmax(0,3fr)] xl:gap-8"
+        className="grid min-h-full grid-cols-1 items-start gap-6 px-0 lg:grid-cols-3 lg:gap-0"
       >
         <Content
-          as="aside"
-          aria-label="阅读导航"
-          data-reading-navigation=""
-          className="hidden min-w-0 lg:sticky lg:top-4 lg:block"
+          data-reading-feed=""
+          className="min-h-full min-w-0 border-x lg:col-span-2"
         >
-          {navigation}
-        </Content>
-        <Content data-reading-feed="" className="min-w-0">
           {children}
         </Content>
         <Content
           as="aside"
           aria-label="发现更多"
           data-reading-aside=""
-          className="min-w-0 lg:sticky lg:top-4"
+          className="min-w-0 px-4 pb-6 lg:pt-3 xl:px-6"
         >
           {aside}
         </Content>

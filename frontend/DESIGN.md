@@ -4,7 +4,7 @@
 
 - 使用 Geist；Geist Mono 仅用于数据和技术标识。字体装配集中在 `src/layout/layout-fonts.ts`，根 HTML 和全局恢复页复用相同字体变量。
 - 颜色、字体和圆角统一定义在 `src/app/globals.css`，业务组件只使用语义令牌。
-- 页面通过留白、排版和表面明度建立层级，静态信息区不使用装饰性边框。
+- 页面通过留白、排版和表面明度建立层级，静态信息区不使用装饰性边框；信息流外侧可使用结构分隔线，区分固定导航、阅读正文与发现区域。
 - 输入、选择、错误、键盘焦点和浮层保留必要轮廓。
 - 布局只使用 Tailwind 命名尺度和 `sm`、`md`、`lg`、`xl`、`2xl`，禁止原始像素值和任意布局尺寸。
 
@@ -20,10 +20,10 @@
 - 组件使用原生 variant/size，className 只调整布局；避免额外卡片、阴影和装饰边框。表单窄屏单列、控件允许收缩、长选项在触发器中截断并在浮层中换行。Select 的“全部/清除覆盖”保留空值和原 FormData；Collapsible 关闭时保留内部已填状态。间距使用 flex/grid + gap，不使用 space-x/space-y。
 - 跨页面复用组件按功能领域放在 `src/components/<feature>/`。
 - 页面专属组件放在对应 `src/app/<route>/components/`；根页面使用 `src/app/components/`。
-- 全站外壳统一在独立 `src/layout/`：BasicLayout 在根 App Router layout 装配，BasicHeader、BasicFooter 和共用 UsageGuide 在同目录。外壳使用 `h-dvh` 的 flex 布局，头尾不收缩，正文 main 独立滚动；所有页面的头尾及正文统一 `max-w-7xl`、`px-5 sm:px-8`，正文 `py-10 sm:py-12`。仅保留一个 main，页面组件不再设置全屏高度、页面级最大宽度和外侧内边距；内部表单、文章、表格按内容保留合理尺度。路由切换重置正文滚动，提供跳到正文的键盘入口；打印恢复正常流并隐藏头尾。
-- `/login` 在 BasicLayout 内省略顶部 Header，加载、错误恢复和正常表单保持相同外壳；正文、页脚和 Sonner 沿用全局实现。短请求的登录、发送验证码、保存等操作只显示主按钮忙碌并禁用重复提交，不额外追加请求取消按钮；保留离页自动中止以及真正的任务取消、编辑退出和对话框取消。
-- LayoutContainer 是头尾和正文的唯一宽度定义；三处 region 同时预留对称的稳定滚动条槽，长页/短页切换不会产生容器宽度偏移。阅读进度通过布局提供的滚动节点保存与恢复，保留本机数据格式。
-- 主题切换统一放在 BasicHeader 的登录/账户入口旁，使用官方 Button 与 DropdownMenu/RadioGroup，提供浅色、深色和跟随系统及当前选中状态。BasicLayout 的 ThemeProvider 在所有页面（含无 Header 的登录页）应用同一本机偏好，沿用既有存储键和导入导出格式；同步系统变化、跨标签与导入更新，存储失败仍应用当前选择并由 Sonner 提示。阅读子导航不重复显示主题控件。
+- 全站外壳统一在独立 `src/layout/`：BasicLayout 在根 App Router 装配 BasicSidebar；全站移除顶部 Header。外壳使用 `h-dvh`，唯一宽度源 LayoutContainer 定义 `max-w-7xl`；侧栏固定在正文滚动区之外，md 为图标栏 `w-20`，lg 为 `w-60`，xl 为 `w-64`。正文只有一个 main，沿用真实滚动节点、路由重置、阅读位置与跳到正文入口；首页正文没有外侧内边距，其他页面统一 `px-5 sm:px-8`、`py-8 sm:py-10`。站点 Footer 位于正文结束处，不占用固定底部视口；打印隐藏侧栏并恢复正常文档流。
+- md 以下使用固定底部导航，提供首页、探索资讯、本机收藏、个人工作台与更多；正文预留 `pb-16`，不遮挡最后的操作。更多菜单提供专题、刊物、模型榜、说明和登录/账户入口，手机主题选择在同一菜单内。桌面侧栏的导航、定制关注按钮和真实账户/主题入口保持键盘可达；较矮视口允许导航区域滚动。
+- `/login` 在 BasicLayout 内省略侧栏与底部导航；加载、错误恢复和正常表单使用同一外壳，保留正文滚动、Footer 与 Sonner。短请求只显示主按钮忙碌并禁重复，不追加 HTTP 取消按钮。
+- 主题偏好仍由全局 ThemeProvider 管理，桌面切换入口位于侧栏账户旁；手机通过更多菜单的 RadioGroup 切换浅色、深色和跟随系统。沿用既有存储键、导入导出、系统变化与跨标签同步；存储失败由 Sonner 提示。
 - 不创建 `features`、`common`、`patterns` 或 `shared` 目录。
 - `page.tsx` 只处理页面入口、数据边界和组件组合。
 - 组件至少被两个页面稳定复用后才能迁入 `src/components/<feature>/`。
@@ -32,19 +32,19 @@
 
 ## 公开信息首页与个人工作台
 
-首页是公开阅读入口，保持黑白留白与现有 BasicLayout。范围切换使用全宽line Tabs，分类使用单选ToggleGroup；搜索统一FieldGroup/Field/InputGroup，桌面右侧和手机顶部各自只显示一个搜索框，支持回车、空白拦截与中文输入法组合态。帖子使用Item/Avatar、Card标题摘要和Badge真实状态；头像与来源时间仅占头部行，标题、摘要、标记及操作区使用帖子全宽，不在头像下保留空列，完整宽度Separator分隔；右侧专题/事件/周刊采用完整Card组合。参考X的阅读布局，取消宣传Hero，首屏直接显示较醒目的帖子标题与来源摘要；三栏由 `src/layout/reading-layout.tsx` 的 ReadingLayout 统一管理navigation/children/aside插槽、标题与响应式排列；桌面（lg及以上）扣除栏间距后按2:5:3分配左侧导航20%、中间帖子流50%、右侧专题/事件/周报30%，各轨道minmax(0,fr)避免长内容撑宽；导航内容保持紧凑尺度。取消信息流顶部可见的“首页”标题，只保留屏幕阅读器可读的公开资讯标题；窄屏帖子优先，辅助信息后置。全局LayoutContainer仅为首页提供紧凑正文间距，仍使用唯一main与原滚动节点。全部/精选、分类与真实游标分页留在首页，检索进入已有资讯页；不伪造推荐、互动数据或无来源正文。个人关注、已有报告与管理使用真实会话。首页个人CTA引导配置关注/查看已有报告，个人周报执行与独立调度按 Design005 完成相应验收后再承诺；公共周刊保持独立阅读入口。使用现有 Umi publication 与刊物目录函数并行读取，每块独立处理空/错误；未配置公开发布账号显示未发布，真实错误显示重载入口，无模拟资讯、指标或默认账户。
+首页使用 X 式阅读布局：全局侧栏承担导航，ReadingLayout 只组合信息流与发现区。lg 以上主内容采用三等份网格，帖子流跨两份、右侧发现区占一份；在 `max-w-7xl` 和 xl 侧栏下约为导航 256、帖子流 672、发现区 336 CSS px（浏览器滚动条占用另计）。低于 lg 发现区后置，低于 md 使用底部导航。首页首屏直接阅读，不展示宣传 Hero 或重复页面导航。
 
-| 组件                        | 领域与复用范围 | 目标路径                                                          | 数据与状态                                                                               |
-| --------------------------- | -------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| ReadingLayout               | 阅读三栏布局   | src/layout/reading-layout.tsx                                     | navigation/children/aside；lg以上2:5:3、窄屏隐藏左导航且辅助区后置；不新建main或滚动节点 |
-| Home / HomeContent          | 首页专属       | src/app/page.tsx；src/app/components/home-content.tsx             | 生成的公开资讯、事件、专题、周刊目录；SSR并行读取、真实空态、局部错误                    |
-| HomePosts                   | 首页专属       | src/app/components/home-posts.tsx                                 | 原公开帖子DTO；标题/来源摘要/实际时间/原文，未分析/历史/无摘要如实显示，真实游标分页     |
-| BasicHeader / AccountMenu   | 全站导航       | src/layout/basic-header.tsx；src/components/auth/account-menu.tsx | 桌面资讯/专题/模型榜，已登录增加工作台与账户；窄屏阅读菜单，键盘与焦点恢复               |
-| WorkspacePage               | 个人工作台     | src/app/workspace/page.tsx                                        | 私有路由；按关注报告、资料采集、发布管理展示现有入口                                     |
-| PublicationNavigation       | 阅读路由复用   | src/components/publication/reading-navigation.tsx                 | 阅读入口；管理和认证出口移入工作台                                                       |
-| ThemeProvider / ThemeToggle | 全站外壳       | src/layout/theme-toggle.tsx                                       | 本机主题偏好；默认跟随系统、保存/存储失败、跨标签与导入更新、键盘与焦点恢复              |
+信息流顶部使用 sticky timeline Tabs、单行横向滚动分类和 Separator；桌面搜索位于右侧，手机搜索位于信息流顶部，支持回车、空白拦截和输入法组合态。HomePosts 使用 Item/Avatar、Card 标题/摘要和真实 Badge：头像在左、来源与时间在上、标题及摘要对齐内容列；标题采用 post 字号、摘要最多三行。没有来源图标时使用图标库 RSS 回退，不造人像；提供站内阅读、来源原文、已有事件和本机收藏，不造互动计数。右侧使用 muted Card 呈现关注入口、专题、事件与刊物，长于视口时随唯一正文滚动区滚动，避免固定后无法阅读底部内容。
 
-Header不再常驻事件、内容、热榜、来源、运营、帮助等业务菜单；工作台集中这些入口，账户菜单只提供工作台、关注、报告、账户设置与退出。使用指南、关于、隐私、条款和联系仍在Footer。公开内容与个人操作分开，已登录首页仍提供同样的公开阅读导航和真实账户菜单。
+首页全部/精选、已有分类与真实游标分页沿用 SSR 和生成客户端；搜索进入既有资讯检索，不触发采集或模型。公开发布分区、许可、无摘要、未分析、历史导入、加载/空/部分错误和真实会话合同保持。个人工作台仍集中关注、报告与管理；资讯、专题、刊物、单篇及发布辅助页移除重复 PublicationNavigation，模型榜的评测来源/计算规则保留为领域子导航。
+
+| 组件                                         | 领域与复用范围     | 目标路径                                            | 数据与状态                                                                         |
+| -------------------------------------------- | ------------------ | --------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| BasicLayout / BasicSidebar                   | 全站外壳与导航     | src/layout/basic-layout.tsx；basic-sidebar.tsx      | 真实全局会话；路由最长匹配、桌面/图标栏/手机、账户与主题、键盘焦点；登录页省略导航 |
+| ReadingLayout                                | 首页阅读布局       | src/layout/reading-layout.tsx                       | children/aside；lg 2:1、窄屏辅助区后置，不创建 main 或业务滚动节点                 |
+| HomeContent / HomePosts                      | 首页专属           | src/app/components/home-content.tsx；home-posts.tsx | 原公开 DTO；真实筛选/游标/来源/摘要/空态/部分错误；复用 SaveItem 本机收藏          |
+| SaveItem                                     | 收藏与阅读跨页复用 | src/components/publication/local-reading.tsx        | 沿用原收藏 ID 存储键和跨标签同步；compact 图标/pressed 状态；失败 Sonner           |
+| ThemeProvider / ThemeToggle / ThemeMenuItems | 全站主题           | src/layout/theme-toggle.tsx                         | 原本机偏好；桌面入口、手机菜单、系统/导入/跨标签同步                               |
 
 `/discover`（含专题、事件与本机收藏）、`/items`、`/leaderboard`、`/reports/daily|weekly|monthly`及合法刊期阅读公开；`/reports`个人列表、UUID详情与archive、`/editions`编选、个人关注/内容/任务、公告监控及全部管理页面仍经会话守卫。公开publication、刊物目录、正文媒体、来源图标与分享图只使用明确的`HOTKEY_PUBLIC_PUBLICATION_OWNER_ID`，不回退访问者或遍历全部账户；未配置返回503 `publication_not_configured`。RSS、Markdown、MCP及精选同步仍保持原会话边界。
 
@@ -151,3 +151,7 @@ GitHub 按钮使用官方 GitHub-Mark 栅格素材 `public/brand/github-mark.png
 `AccountSettings`（src/app/account/components/account-settings.tsx）复现选定方案3：左侧浅灰资料摘要展示头像、用户名、绑定邮箱和验证状态，右侧使用官方line Tabs切换基本资料与登录安全；lg以上1:2双列，窄屏顺序堆叠。用户名独立保存不要求填密码，头像上传独立于密码操作；两者通过生成的updateIdentityProfile/uploadIdentityAvatar返回真实会话后刷新导航。文件类型/2 MiB在客户端预检，服务端重新解码校验并规范化；上传中禁重复，失败保留旧头像，成功统一Sonner。未上传使用用户图标，读取失败允许在资料栏重试；无伪造人像或默认账户。`UserAvatar`跨页复用在components/auth，经getIdentityAvatar读Blob，只显示当前哈希，离页/换图中止读取并释放object URL。密码表单复用CredentialsForm嵌入模式，保留当前密码/绑定邮箱验证码、首次设置和安全回跳合同。分类切换保留输入草稿，短提交期间限制其他账户修改。并行已有IdentityConnections继续在右侧登录安全下展示真实绑定能力。
 
 ReportEmailSubscription为账户页专属组件（app/account/components/report-email-subscription.tsx），使用生成的个人邮件订阅GET/PUT，展示本人已验证邮箱、订阅及平台SMTP就绪；缺绑定引导登录安全，未配置发信保留偏好并说明暂不能发送。TopicReportFields创建/编辑复用，新增个人订阅读取与主题发送开关，保留其他目标偏好。正常、未绑定、未订阅、未就绪、加载失败重试、冲突与取消依真实响应和Sonner/Empty呈现。新主题默认每小时、08:00日报及周一08:00周报，既有自定义值保持。
+
+### 探索与公共阅读列表
+
+首页、探索、专题和刊物的资讯列表统一使用 `PublicItemFeed`，保留真实来源、发布时间或发现时间、来源摘要、许可内的站内阅读与本机收藏。摘要最多显示三行，完整内容由阅读页承接。探索页优先展示搜索与范围、时间、分类，其他条件进入可展开的高级筛选；收起时保留表单值，有已用高级条件时默认展开。

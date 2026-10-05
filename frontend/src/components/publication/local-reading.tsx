@@ -20,6 +20,7 @@ import { FieldLabel, Field } from "@/components/ui/field";
 import Link from "next/link";
 import { useId, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { BookmarkIcon } from "lucide-react";
 
 import { getSitePublicationItem } from "@/api/gongkaifabu";
 import { Button } from "@/components/ui/button";
@@ -58,7 +59,13 @@ export function MarkItemRead({ id }: { id: string }) {
   return null;
 }
 
-export function SaveItem({ id }: { id: string }) {
+export function SaveItem({
+  id,
+  compact = false,
+}: {
+  id: string;
+  compact?: boolean;
+}) {
   const [saved, setSaved] = useState(false);
   const storageFailed = useRef(false);
   useEffect(() => {
@@ -86,7 +93,11 @@ export function SaveItem({ id }: { id: string }) {
   return (
     <>
       <Button
-        variant="outline"
+        variant={compact ? "ghost" : "outline"}
+        size={compact ? "icon" : "default"}
+        className={compact ? "size-11" : undefined}
+        aria-label={saved ? "取消本机收藏" : "本机收藏"}
+        aria-pressed={saved}
         onClick={() => {
           void toggleSaved(id)
             .then((value) => {
@@ -95,7 +106,16 @@ export function SaveItem({ id }: { id: string }) {
             .catch(() => toast.error("本机存储不可用，未保存收藏。"));
         }}
       >
-        {saved ? "取消本机收藏" : "本机收藏"}
+        {compact ? (
+          <BookmarkIcon
+            data-icon="inline-start"
+            fill={saved ? "currentColor" : "none"}
+          />
+        ) : saved ? (
+          "取消本机收藏"
+        ) : (
+          "本机收藏"
+        )}
       </Button>
     </>
   );

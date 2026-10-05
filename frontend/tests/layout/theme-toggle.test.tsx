@@ -20,7 +20,6 @@ vi.mock("sonner", () => ({
 }));
 
 import { BasicLayout } from "@/layout/basic-layout";
-import { PublicationNavigation } from "@/components/publication/reading-navigation";
 import {
   exportLocalBundle,
   importLocalBundle,
@@ -46,7 +45,7 @@ afterEach(() => {
   notifications.error.mockReset();
 });
 
-const page = <PublicationNavigation />;
+const page = <h1>资讯正文</h1>;
 const trigger = () => screen.getByRole("button", { name: /切换主题/ });
 
 async function choose(name: string) {
@@ -55,12 +54,15 @@ async function choose(name: string) {
   await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
 }
 
-it("has one header theme control and retains the existing preference across routes and remounts", async () => {
+it("has one sidebar theme control and retains the existing preference across routes and remounts", async () => {
   const view = render(<BasicLayout>{page}</BasicLayout>);
   expect(
-    within(screen.getByRole("banner")).getByRole("button", {
-      name: /切换主题/,
-    }),
+    within(screen.getByRole("complementary", { name: "站点侧边栏" })).getByRole(
+      "button",
+      {
+        name: /切换主题/,
+      },
+    ),
   ).toBe(trigger());
   expect(within(screen.getByRole("main")).queryByRole("combobox")).toBeNull();
   await choose("深色");

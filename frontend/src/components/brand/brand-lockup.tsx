@@ -24,12 +24,14 @@ type BrandLockupProps = {
   href: string;
   compactOnMobile?: boolean;
   showEnglish?: boolean;
+  rail?: boolean;
 };
 
 export function BrandLockup({
   href,
   compactOnMobile = false,
   showEnglish = false,
+  rail = false,
 }: BrandLockupProps) {
   return (
     <Button
@@ -47,6 +49,7 @@ export function BrandLockup({
           className={cn(
             "text-base font-semibold tracking-tight sm:text-lg",
             compactOnMobile && "hidden sm:inline",
+            rail && "hidden lg:inline",
           )}
         >
           知微见澜

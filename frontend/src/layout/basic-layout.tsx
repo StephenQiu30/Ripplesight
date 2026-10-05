@@ -14,7 +14,7 @@ import {
 } from "react";
 
 import { BasicFooter } from "./basic-footer";
-import { BasicHeader } from "./basic-header";
+import { BasicSidebar } from "./basic-sidebar";
 import { LayoutContainer } from "./layout-container";
 import { IdentitySessionProvider } from "@/components/auth/session-context";
 import { Toaster } from "@/components/ui/sonner";
@@ -53,25 +53,28 @@ export function BasicLayout({
             >
               <UI.TextLink href="#main-content">跳到正文</UI.TextLink>
             </Button>
-            {pathname !== "/login" && <BasicHeader />}
-            <UI.Content
-              as="main"
-              id="main-content"
-              ref={mainRef}
-              tabIndex={-1}
-              className="layout-region min-h-0 flex-1 overflow-y-auto overscroll-y-contain scroll-smooth focus-visible:outline-none motion-reduce:scroll-auto print:overflow-visible"
-            >
-              <LayoutContainer
-                className={
-                  pathname === "/"
-                    ? "flex min-h-full flex-col py-4 sm:py-5 print:block print:py-0"
-                    : "flex min-h-full flex-col py-10 sm:py-12 print:block print:py-0"
-                }
+            <LayoutContainer className="flex min-h-0 flex-1 overflow-hidden px-0 sm:px-0 print:block print:overflow-visible">
+              {pathname !== "/login" && <BasicSidebar />}
+              <UI.Content
+                as="main"
+                id="main-content"
+                ref={mainRef}
+                tabIndex={-1}
+                data-login={pathname === "/login" || undefined}
+                className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-y-contain scroll-smooth pb-16 focus-visible:outline-none data-[login=true]:pb-0 motion-reduce:scroll-auto md:pb-0 print:overflow-visible"
               >
-                {children}
-              </LayoutContainer>
-            </UI.Content>
-            <BasicFooter />
+                <LayoutContainer
+                  className={
+                    pathname === "/"
+                      ? "flex min-h-full flex-col px-0 py-0 sm:px-0 print:block"
+                      : "flex min-h-full flex-col py-8 sm:py-10 print:block print:py-0"
+                  }
+                >
+                  {children}
+                </LayoutContainer>
+                <BasicFooter />
+              </UI.Content>
+            </LayoutContainer>
           </UI.Content>
           <Toaster
             position="top-right"

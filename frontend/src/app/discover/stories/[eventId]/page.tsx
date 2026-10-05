@@ -8,7 +8,6 @@ import { PosterDownload } from "@/components/publication/poster-download";
 import { ApiRequestError } from "@/request";
 import {
   PublicationFailure,
-  PublicationNavigation,
   PublicItemCards,
   publicationTime,
 } from "@/components/publication/reading-parts";
@@ -61,14 +60,12 @@ export default async function PublicStoryPage({
     if (error instanceof ApiRequestError && error.status === 404) notFound();
     return (
       <>
-        <PublicationNavigation />
         <PublicationFailure error={error} href="/discover" />
       </>
     );
   }
   return (
     <>
-      <PublicationNavigation />
       <UI.Content className="flex flex-col gap-y-8">
         <UI.Content className="text-muted-foreground flex flex-wrap gap-4 text-sm">
           <UI.Timestamp dateTime={story.first_seen_at}>

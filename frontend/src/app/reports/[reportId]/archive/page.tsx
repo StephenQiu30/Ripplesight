@@ -6,10 +6,7 @@ import {
   listPublicEditionCatalogue,
 } from "@/api/gongkaikanwumulu";
 import { PublicEditionCatalogue } from "@/components/publication/edition-catalogue";
-import {
-  PublicationFailure,
-  PublicationNavigation,
-} from "@/components/publication/reading-parts";
+import { PublicationFailure } from "@/components/publication/reading-parts";
 import { publicSiteMetadata } from "@/components/publication/site-metadata";
 const labels = { daily: "日报", weekly: "周报", monthly: "月报" } as const;
 type Parameters = { params: Promise<{ reportId: string }> };
@@ -55,7 +52,6 @@ export default async function PublicEditionArchive({ params }: Parameters) {
   } catch (error) {
     return (
       <>
-        <PublicationNavigation />
         <PublicationFailure
           error={error}
           href={`/reports/${current}/archive`}
@@ -65,7 +61,6 @@ export default async function PublicEditionArchive({ params }: Parameters) {
   }
   return (
     <>
-      <PublicationNavigation />
       <PublicEditionCatalogue initial={initial} initialCalendar={calendar} />
     </>
   );

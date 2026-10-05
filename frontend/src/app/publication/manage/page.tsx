@@ -2,7 +2,6 @@ import * as UI from "@/components/ui/content";
 import type { Metadata } from "next";
 import { connection } from "next/server";
 
-import { PublicationNavigation } from "@/components/publication/reading-parts";
 import { PublicationManager } from "./components/publication-manager";
 import { EditorialCorrectionManager } from "./components/editorial-correction-manager";
 
@@ -20,7 +19,6 @@ export default async function ManagePublicationPage({
   const { content_id: contentId } = await searchParams;
   return (
     <>
-      <PublicationNavigation />
       <UI.Content>
         <UI.Heading level={1} className="text-3xl font-medium">
           发布管理

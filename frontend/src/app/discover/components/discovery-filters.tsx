@@ -4,6 +4,17 @@ import * as UI from "@/components/ui/content";
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ChevronDownIcon, SearchIcon } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import {
   SelectLabel,
@@ -39,13 +50,47 @@ export function DiscoveryFilters({
   const [selectedCategory, setSelectedCategory] = useState(category ?? "");
   const [selectedChannel, setSelectedChannel] = useState(channel ?? "");
   const [selectedSource, setSelectedSource] = useState(params.source_key ?? "");
+  const [advancedOpen, setAdvancedOpen] = useState(
+    Boolean(
+      channel ||
+      by === "published" ||
+      params.source_key ||
+      params.tag ||
+      params.topic ||
+      params.search_order === "time",
+    ),
+  );
   return (
-    <UI.Form method="get" className="my-7">
-      <FieldGroup className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <UI.Form method="get" className="my-6 flex flex-col gap-4">
+      <FieldGroup className="flex-row items-center gap-2">
+        <Field className="min-w-0 flex-1">
+          <FieldLabel htmlFor={`${fieldId}-page-field-10`} className="sr-only">
+            检索
+          </FieldLabel>
+          <InputGroup className="h-12 rounded-full">
+            <InputGroupAddon className="pl-4">
+              <SearchIcon aria-hidden="true" />
+            </InputGroupAddon>
+            <InputGroupInput
+              name="q"
+              defaultValue={params.q}
+              maxLength={200}
+              placeholder="搜索公开资讯"
+              id={`${fieldId}-page-field-10`}
+              className="text-base"
+            />
+          </InputGroup>
+        </Field>
+        <Button type="submit" className="h-12 rounded-full px-5">
+          查看
+        </Button>
+      </FieldGroup>
+      <FieldGroup className="grid grid-cols-3 gap-3">
         <Field className="min-w-0">
           <FieldLabel htmlFor={`${fieldId}-page-field-1`}>范围</FieldLabel>
           <Select name="mode" defaultValue={mode}>
             <SelectTrigger
+              size="lg"
               id={`${fieldId}-page-field-1`}
               className="w-full min-w-0"
             >
@@ -68,6 +113,7 @@ export function DiscoveryFilters({
           <FieldLabel htmlFor={`${fieldId}-page-field-2`}>时间</FieldLabel>
           <Select name="window" defaultValue={window}>
             <SelectTrigger
+              size="lg"
               id={`${fieldId}-page-field-2`}
               className="w-full min-w-0"
             >
@@ -96,6 +142,7 @@ export function DiscoveryFilters({
             }
           >
             <SelectTrigger
+              size="lg"
               id={`${fieldId}-page-field-3`}
               className="w-full min-w-0"
             >
@@ -120,159 +167,181 @@ export function DiscoveryFilters({
             </SelectContent>
           </Select>
         </Field>
-        <Field className="min-w-0">
-          <FieldLabel htmlFor={`${fieldId}-page-field-4`}>频道</FieldLabel>
-          <Select
-            name="channel"
-            value={selectedChannel}
-            onValueChange={(value) =>
-              setSelectedChannel(value === "__none__" ? "" : value)
-            }
-          >
-            <SelectTrigger
-              id={`${fieldId}-page-field-4`}
-              className="w-full min-w-0"
-            >
-              <SelectValue placeholder="全部频道" />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectGroup>
-                <SelectLabel className="sr-only">频道</SelectLabel>
-                <SelectItem value="__none__" className="whitespace-normal">
-                  全部频道
-                </SelectItem>
-                <SelectItem value="news" className="whitespace-normal">
-                  资讯
-                </SelectItem>
-                <SelectItem value="x" className="whitespace-normal">
-                  X
-                </SelectItem>
-                <SelectItem value="firstParty" className="whitespace-normal">
-                  第一方
-                </SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field className="min-w-0">
-          <FieldLabel htmlFor={`${fieldId}-page-field-5`}>排列</FieldLabel>
-          <Select name="by" defaultValue={by}>
-            <SelectTrigger
-              id={`${fieldId}-page-field-5`}
-              className="w-full min-w-0"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectGroup>
-                <SelectLabel className="sr-only">排列</SelectLabel>
-                <SelectItem value="timeline" className="whitespace-normal">
-                  发现时间线
-                </SelectItem>
-                <SelectItem value="published" className="whitespace-normal">
-                  来源发布时间
-                </SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field className="min-w-0">
-          <FieldLabel htmlFor={`${fieldId}-page-field-6`}>来源</FieldLabel>
-          <Select
-            name="source_key"
-            value={selectedSource}
-            onValueChange={(value) =>
-              setSelectedSource(value === "__none__" ? "" : value)
-            }
-          >
-            <SelectTrigger
-              id={`${fieldId}-page-field-6`}
-              className="w-full min-w-0"
-            >
-              <SelectValue placeholder="全部来源" />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectGroup>
-                <SelectLabel className="sr-only">来源</SelectLabel>
-                <SelectItem value="__none__">全部来源</SelectItem>
-                {sources.map((source) => (
-                  <SelectItem
-                    key={source.key}
-                    value={source.key}
-                    className="whitespace-normal"
-                  >
-                    {source.name}
-                  </SelectItem>
-                ))}
-                {selectedSource &&
-                !sources.some((source) => source.key === selectedSource) ? (
-                  <SelectItem value={selectedSource}>
-                    指定来源（暂无可读资料）
-                  </SelectItem>
-                ) : null}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field className="min-w-0">
-          <FieldLabel htmlFor={`${fieldId}-page-field-7`}>标签</FieldLabel>
-          <Input
-            name="tag"
-            defaultValue={params.tag}
-            maxLength={128}
-            placeholder="正式标签"
-            id={`${fieldId}-page-field-7`}
-          />
-        </Field>
-        <Field className="min-w-0">
-          <FieldLabel htmlFor={`${fieldId}-page-field-8`}>专题</FieldLabel>
-          <Input
-            name="topic"
-            defaultValue={params.topic}
-            maxLength={64}
-            placeholder="专题标识，如 openai"
-            id={`${fieldId}-page-field-8`}
-          />
-        </Field>
-        <Field className="min-w-0">
-          <FieldLabel htmlFor={`${fieldId}-page-field-9`}>搜索排序</FieldLabel>
-          <Select
-            name="search_order"
-            defaultValue={params.search_order === "time" ? "time" : "relevance"}
-          >
-            <SelectTrigger
-              id={`${fieldId}-page-field-9`}
-              className="w-full min-w-0"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectGroup>
-                <SelectLabel className="sr-only">搜索排序</SelectLabel>
-                <SelectItem value="relevance" className="whitespace-normal">
-                  相关性
-                </SelectItem>
-                <SelectItem value="time" className="whitespace-normal">
-                  最新时间
-                </SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field className="min-w-0 sm:col-span-2">
-          <FieldLabel htmlFor={`${fieldId}-page-field-10`}>检索</FieldLabel>
-          <Input
-            name="q"
-            defaultValue={params.q}
-            maxLength={200}
-            placeholder="所有词项均匹配"
-            id={`${fieldId}-page-field-10`}
-          />
-        </Field>
-        <Button type="submit" className="self-end">
-          查看
-        </Button>
       </FieldGroup>
+      <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+        <CollapsibleTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            className="group h-11 gap-2 px-0 hover:bg-transparent"
+          >
+            高级筛选
+            <ChevronDownIcon
+              className="transition-transform group-data-[state=open]:rotate-180"
+              aria-hidden="true"
+            />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent
+          forceMount
+          className="pt-3 data-[state=closed]:hidden"
+        >
+          <FieldGroup className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-page-field-4`}>频道</FieldLabel>
+              <Select
+                name="channel"
+                value={selectedChannel}
+                onValueChange={(value) =>
+                  setSelectedChannel(value === "__none__" ? "" : value)
+                }
+              >
+                <SelectTrigger
+                  size="lg"
+                  id={`${fieldId}-page-field-4`}
+                  className="w-full min-w-0"
+                >
+                  <SelectValue placeholder="全部频道" />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectGroup>
+                    <SelectLabel className="sr-only">频道</SelectLabel>
+                    <SelectItem value="__none__" className="whitespace-normal">
+                      全部频道
+                    </SelectItem>
+                    <SelectItem value="news" className="whitespace-normal">
+                      资讯
+                    </SelectItem>
+                    <SelectItem value="x" className="whitespace-normal">
+                      X
+                    </SelectItem>
+                    <SelectItem
+                      value="firstParty"
+                      className="whitespace-normal"
+                    >
+                      第一方
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-page-field-5`}>排列</FieldLabel>
+              <Select name="by" defaultValue={by}>
+                <SelectTrigger
+                  size="lg"
+                  id={`${fieldId}-page-field-5`}
+                  className="w-full min-w-0"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectGroup>
+                    <SelectLabel className="sr-only">排列</SelectLabel>
+                    <SelectItem value="timeline" className="whitespace-normal">
+                      发现时间线
+                    </SelectItem>
+                    <SelectItem value="published" className="whitespace-normal">
+                      来源发布时间
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-page-field-6`}>来源</FieldLabel>
+              <Select
+                name="source_key"
+                value={selectedSource}
+                onValueChange={(value) =>
+                  setSelectedSource(value === "__none__" ? "" : value)
+                }
+              >
+                <SelectTrigger
+                  size="lg"
+                  id={`${fieldId}-page-field-6`}
+                  className="w-full min-w-0"
+                >
+                  <SelectValue placeholder="全部来源" />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectGroup>
+                    <SelectLabel className="sr-only">来源</SelectLabel>
+                    <SelectItem value="__none__">全部来源</SelectItem>
+                    {sources.map((source) => (
+                      <SelectItem
+                        key={source.key}
+                        value={source.key}
+                        className="whitespace-normal"
+                      >
+                        {source.name}
+                      </SelectItem>
+                    ))}
+                    {selectedSource &&
+                    !sources.some((source) => source.key === selectedSource) ? (
+                      <SelectItem value={selectedSource}>
+                        指定来源（暂无可读资料）
+                      </SelectItem>
+                    ) : null}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-page-field-7`}>标签</FieldLabel>
+              <Input
+                className="h-11"
+                name="tag"
+                defaultValue={params.tag}
+                maxLength={128}
+                placeholder="正式标签"
+                id={`${fieldId}-page-field-7`}
+              />
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-page-field-8`}>专题</FieldLabel>
+              <Input
+                className="h-11"
+                name="topic"
+                defaultValue={params.topic}
+                maxLength={64}
+                placeholder="专题标识，如 openai"
+                id={`${fieldId}-page-field-8`}
+              />
+            </Field>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${fieldId}-page-field-9`}>
+                搜索排序
+              </FieldLabel>
+              <Select
+                name="search_order"
+                defaultValue={
+                  params.search_order === "time" ? "time" : "relevance"
+                }
+              >
+                <SelectTrigger
+                  size="lg"
+                  id={`${fieldId}-page-field-9`}
+                  className="w-full min-w-0"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectGroup>
+                    <SelectLabel className="sr-only">搜索排序</SelectLabel>
+                    <SelectItem value="relevance" className="whitespace-normal">
+                      相关性
+                    </SelectItem>
+                    <SelectItem value="time" className="whitespace-normal">
+                      最新时间
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+          </FieldGroup>
+        </CollapsibleContent>
+      </Collapsible>
     </UI.Form>
   );
 }

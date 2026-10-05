@@ -3,10 +3,7 @@ import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
 import type { Metadata } from "next";
 import { connection } from "next/server";
 
-import {
-  categories,
-  PublicationNavigation,
-} from "@/components/publication/reading-parts";
+import { categories } from "@/components/publication/reading-parts";
 
 export const metadata: Metadata = {
   title: "RSS 订阅",
@@ -25,7 +22,6 @@ export default async function FeedsPage() {
   ];
   return (
     <>
-      <PublicationNavigation />
       <UI.Content>
         <UI.Heading level={1} className="text-3xl font-medium">
           订阅资讯

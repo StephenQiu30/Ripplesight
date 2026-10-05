@@ -11,10 +11,7 @@ import { connection } from "next/server";
 
 import { getPublisherAgentInstructions } from "@/api/gongkaifenfa";
 import { SelectedSnapshotDownload } from "@/app/agent/components/selected-snapshot-download";
-import {
-  PublicationNavigation,
-  PublicationFailure,
-} from "@/components/publication/reading-parts";
+import { PublicationFailure } from "@/components/publication/reading-parts";
 
 export const metadata: Metadata = {
   title: "Agent 接入",
@@ -29,7 +26,6 @@ export default async function AgentPage() {
   } catch (error) {
     return (
       <>
-        <PublicationNavigation />
         <PublicationFailure error={error} href="/agent" />
       </>
     );
@@ -43,7 +39,6 @@ export default async function AgentPage() {
   ];
   return (
     <>
-      <PublicationNavigation />
       <UI.Content>
         <UI.Heading level={1} className="text-3xl font-medium">
           让 Agent 读取资讯

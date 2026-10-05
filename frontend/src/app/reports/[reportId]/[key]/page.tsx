@@ -4,10 +4,7 @@ import { connection } from "next/server";
 
 import { getPublicEditionNavigation } from "@/api/gongkaikanwumulu";
 import { getPublicEdition } from "@/api/gongkaifabu";
-import {
-  PublicationFailure,
-  PublicationNavigation,
-} from "@/components/publication/reading-parts";
+import { PublicationFailure } from "@/components/publication/reading-parts";
 import { ApiRequestError } from "@/request";
 import { PublicEditionReader } from "./components/public-edition-reader";
 
@@ -70,7 +67,6 @@ export default async function PublicEditionPage({ params }: Parameters) {
     if (error instanceof ApiRequestError && error.status === 404) notFound();
     return (
       <>
-        <PublicationNavigation />
         <PublicationFailure
           error={error}
           href={`/reports/${kind}/${encodeURIComponent(key)}`}
@@ -80,7 +76,6 @@ export default async function PublicEditionPage({ params }: Parameters) {
   }
   return (
     <>
-      <PublicationNavigation />
       <PublicEditionReader edition={edition} navigation={navigation} />
     </>
   );

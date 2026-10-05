@@ -52,7 +52,10 @@ describe("BasicLayout", () => {
     main.scrollTop = 100;
     route.pathname = "/";
     view.rerender(<BasicLayout>{page}</BasicLayout>);
-    expect(screen.getByRole("banner")).toBeTruthy();
+    expect(screen.queryByRole("banner")).toBeNull();
+    expect(
+      screen.getByRole("complementary", { name: "站点侧边栏" }),
+    ).toBeTruthy();
     expect(screen.getByRole("main")).toBe(main);
     expect(main.scrollTop).toBe(0);
   });
@@ -61,7 +64,7 @@ describe("BasicLayout", () => {
     render(<BasicLayout>{page}</BasicLayout>);
     expect(screen.getByRole("navigation", { name: "站点导航" })).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: "登录" }).getAttribute("href"),
+      screen.getByRole("link", { name: "登录账户" }).getAttribute("href"),
     ).toBe("/login");
     expect(screen.queryByRole("button", { name: "全部导航" })).toBeNull();
     expect(screen.queryByRole("button", { name: "账户菜单" })).toBeNull();
@@ -76,10 +79,10 @@ describe("BasicLayout", () => {
     expect(screen.queryByRole("navigation", { name: "工作区导航" })).toBeNull();
   });
 
-  it("provides a single accessible main between the shared header and footer", () => {
+  it("provides a single accessible main beside the sidebar with site information in the reading flow", () => {
     render(<BasicLayout session={session}>{page}</BasicLayout>);
 
-    const header = screen.getByRole("banner");
+    const header = screen.getByRole("complementary", { name: "站点侧边栏" });
     const main = screen.getByRole("main");
     const footer = screen.getByRole("contentinfo");
     expect(screen.getAllByRole("main")).toHaveLength(1);
@@ -134,17 +137,22 @@ describe("BasicLayout", () => {
     route.pathname = "/discover/topics/topic-1";
     render(<BasicLayout session={session}>{page}</BasicLayout>);
     expect(
-      screen.getByRole("link", { name: "专题", current: "page" }),
+      within(screen.getByRole("navigation", { name: "站点导航" })).getByRole(
+        "link",
+        { name: "专题", current: "page" },
+      ),
     ).toBeTruthy();
-    const trigger = screen.getByRole("button", { name: "阅读导航" });
+    const trigger = within(
+      screen.getByRole("navigation", { name: "手机导航" }),
+    ).getByRole("button", { name: "更多导航" });
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
-    const menu = await screen.findByRole("menu", { name: "阅读导航" });
+    const menu = await screen.findByRole("menu", { name: "更多导航" });
     expect(
-      within(menu)
-        .getByRole("menuitem", { name: "专题" })
-        .getAttribute("aria-current"),
-    ).toBe("page");
-    expect(within(menu).getAllByRole("menuitem")).toHaveLength(4);
+      within(menu).getByRole("menuitem", { name: "专题" }).getAttribute("href"),
+    ).toBe("/discover/topics");
+    expect(
+      within(menu).getByRole("menuitem", { name: "账户设置" }),
+    ).toBeTruthy();
     fireEvent.keyDown(menu, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(trigger));
@@ -187,7 +195,9 @@ describe("BasicLayout", () => {
   it("opens the guide from the footer and restores focus on close", async () => {
     render(<BasicLayout session={session}>{page}</BasicLayout>);
     expect(
-      within(screen.getByRole("banner")).queryByRole("button", {
+      within(
+        screen.getByRole("complementary", { name: "站点侧边栏" }),
+      ).queryByRole("button", {
         name: "使用指南",
       }),
     ).toBeNull();
@@ -211,7 +221,10 @@ describe("BasicLayout", () => {
   it("keeps the shell usable while the router pathname is unavailable and recovers its active navigation", () => {
     route.pathname = null;
     const view = render(<BasicLayout session={session}>{page}</BasicLayout>);
-    expect(screen.getByRole("banner")).toBeTruthy();
+    expect(screen.queryByRole("banner")).toBeNull();
+    expect(
+      screen.getByRole("complementary", { name: "站点侧边栏" }),
+    ).toBeTruthy();
     expect(screen.getByRole("main")).toBeTruthy();
     expect(screen.getByRole("contentinfo")).toBeTruthy();
     expect(screen.getByRole("button", { name: "使用指南" })).toBeTruthy();
