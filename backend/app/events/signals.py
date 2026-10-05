@@ -18,6 +18,7 @@ from ai.adapters.embeddings import cosine
 from ai.capability_schemas import FrozenAiRouting
 from ai.schemas import AiCallError, AiFailureCode
 from ai.services import AiService, create_ai_client
+from analysis.event_reading import load_editorial_event_inputs_for_versions_in_transaction
 from content.event_reading import (
     list_recent_signal_content_in_transaction,
     load_event_member_content_in_transaction,
@@ -49,7 +50,12 @@ from events.observation_inputs import (
     event_content_reference,
     load_fact_observation_inputs_in_transaction,
 )
-from events.relations import RelationPairOutput, RelationReportInput, relation_pair_request
+from events.relations import (
+    RelationPairOutput,
+    RelationReportInput,
+    relation_frame,
+    relation_pair_request,
+)
 from events.schemas import EventInput
 from jobs.execution import ExecutionLease, JobCompletion, JobExecutionFailure, JobExecutionService
 from jobs.schemas import (
@@ -161,8 +167,20 @@ def load_waiting_signal_inputs_in_transaction(
                 now=now,
                 after_content_id=after,
             )
+            editorial = load_editorial_event_inputs_for_versions_in_transaction(
+                session,
+                owner_id=owner,
+                since=datetime.min.replace(tzinfo=now.tzinfo),
+                now=now,
+                version_ids=tuple(item.reference.content_version_id for item in page.items),
+            )
             for item in page.items:
                 if content_id is not None and item.reference.content_id != content_id:
+                    continue
+                if (
+                    item.reference.content_version_id in editorial
+                    and editorial[item.reference.content_version_id].scope == "unknown"
+                ):
                     continue
                 source = resolve_attention_source(
                     [row for row in sources if row.owner_id == owner], item.reading
@@ -289,6 +307,13 @@ def _fact_reports(session: Session, *, owner_id: UUID, now: datetime) -> tuple[S
     readings = load_event_member_content_in_transaction(
         session, owner_id=owner_id, references=references, now=now
     )
+    editorial = load_editorial_event_inputs_for_versions_in_transaction(
+        session,
+        owner_id=owner_id,
+        since=datetime.min.replace(tzinfo=now.tzinfo),
+        now=now,
+        version_ids=tuple(reference.content_version_id for reference in references),
+    )
     sources = list(
         session.scalars(
             select(EventAttentionSource).where(EventAttentionSource.owner_id == owner_id)
@@ -307,6 +332,13 @@ def _fact_reports(session: Session, *, owner_id: UUID, now: datetime) -> tuple[S
         session, owner_id=owner_id, fact_ids=tuple({fact.id for _, fact, _, _ in rows}), now=now
     )
     for (member, fact, event, event_member), reference in zip(rows, references, strict=True):
+        if (
+            member.content_version_id in editorial
+            and editorial[member.content_version_id].scope != "single"
+        ) or (
+            (event_member.input_manifest or {}).get("editorial_scope") in {"composite", "unknown"}
+        ):
+            continue
         reading = readings.get(reference)
         source = resolve_attention_source(sources, reading) if reading else None
         if (
@@ -353,7 +385,7 @@ def _fact_reports(session: Session, *, owner_id: UUID, now: datetime) -> tuple[S
                     first_party=source.first_party,
                     published_at=fact.first_seen_at,
                     summary=(version.body or "")[:300] or None,
-                    frame=fact.frame,
+                    frame=relation_frame(fact.frame),
                 ),
                 observation_id=reading.observation.id,
                 input_observation_ids=freeze_observation_inputs_in_transaction(
