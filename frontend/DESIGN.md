@@ -32,16 +32,16 @@
 
 ## 公开信息首页与个人工作台
 
-首页是公开阅读入口，保持黑白留白与现有 BasicLayout。正文优先展示最新资讯及分类、值得关注的事件、公开周报和专题/模型榜入口，主操作直接浏览资讯；个人关注、已有报告与管理使用真实会话。首页个人CTA引导配置关注/查看已有报告，个人周报执行与独立调度按 Design005 完成相应验收后再承诺；公共周刊保持独立阅读入口。使用现有 Umi publication 与刊物目录函数并行读取，每块独立处理空/错误；未配置公开发布账号显示未发布，真实错误显示重载入口，无模拟资讯、指标或默认账户。
+首页是公开阅读入口，保持黑白留白与现有 BasicLayout。参考X的阅读布局，取消宣传Hero，首屏直接显示较醒目的帖子标题与来源摘要；宽屏左侧阅读导航、中间帖子流、右侧专题/事件/周报，中屏辅助信息后置，窄屏帖子优先。全局LayoutContainer仅为首页提供紧凑正文间距，仍使用唯一main与原滚动节点。全部/精选、分类与真实游标分页留在首页，检索进入已有资讯页；不伪造推荐、互动数据或无来源正文。个人关注、已有报告与管理使用真实会话。首页个人CTA引导配置关注/查看已有报告，个人周报执行与独立调度按 Design005 完成相应验收后再承诺；公共周刊保持独立阅读入口。使用现有 Umi publication 与刊物目录函数并行读取，每块独立处理空/错误；未配置公开发布账号显示未发布，真实错误显示重载入口，无模拟资讯、指标或默认账户。
 
-| 组件                        | 领域与复用范围 | 目标路径                                                          | 数据与状态                                                                  |
-| --------------------------- | -------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Home / HomeContent          | 首页专属       | src/app/page.tsx；src/app/components/home-content.tsx             | 生成的公开资讯、事件、专题、周刊目录；SSR并行读取、真实空态、局部错误       |
-| HeroSection                 | 首页专属       | src/app/components/hero-section.tsx                               | 浏览资讯与安全登录回跳到工作台；真实会话                                    |
-| BasicHeader / AccountMenu   | 全站导航       | src/layout/basic-header.tsx；src/components/auth/account-menu.tsx | 桌面资讯/专题/模型榜，已登录增加工作台与账户；窄屏阅读菜单，键盘与焦点恢复  |
-| WorkspacePage               | 个人工作台     | src/app/workspace/page.tsx                                        | 私有路由；按关注报告、资料采集、发布管理展示现有入口                        |
-| PublicationNavigation       | 阅读路由复用   | src/components/publication/reading-navigation.tsx                 | 阅读入口；管理和认证出口移入工作台                                          |
-| ThemeProvider / ThemeToggle | 全站外壳       | src/layout/theme-toggle.tsx                                       | 本机主题偏好；默认跟随系统、保存/存储失败、跨标签与导入更新、键盘与焦点恢复 |
+| 组件                        | 领域与复用范围 | 目标路径                                                          | 数据与状态                                                                           |
+| --------------------------- | -------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Home / HomeContent          | 首页专属       | src/app/page.tsx；src/app/components/home-content.tsx             | 生成的公开资讯、事件、专题、周刊目录；SSR并行读取、真实空态、局部错误                |
+| HomePosts                   | 首页专属       | src/app/components/home-posts.tsx                                 | 原公开帖子DTO；标题/来源摘要/实际时间/原文，未分析/历史/无摘要如实显示，真实游标分页 |
+| BasicHeader / AccountMenu   | 全站导航       | src/layout/basic-header.tsx；src/components/auth/account-menu.tsx | 桌面资讯/专题/模型榜，已登录增加工作台与账户；窄屏阅读菜单，键盘与焦点恢复           |
+| WorkspacePage               | 个人工作台     | src/app/workspace/page.tsx                                        | 私有路由；按关注报告、资料采集、发布管理展示现有入口                                 |
+| PublicationNavigation       | 阅读路由复用   | src/components/publication/reading-navigation.tsx                 | 阅读入口；管理和认证出口移入工作台                                                   |
+| ThemeProvider / ThemeToggle | 全站外壳       | src/layout/theme-toggle.tsx                                       | 本机主题偏好；默认跟随系统、保存/存储失败、跨标签与导入更新、键盘与焦点恢复          |
 
 Header不再常驻事件、内容、热榜、来源、运营、帮助等业务菜单；工作台集中这些入口，账户菜单只提供工作台、关注、报告、账户设置与退出。使用指南、关于、隐私、条款和联系仍在Footer。公开内容与个人操作分开，已登录首页仍提供同样的公开阅读导航和真实账户菜单。
 

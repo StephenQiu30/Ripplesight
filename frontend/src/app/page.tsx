@@ -9,6 +9,7 @@ import {
 import { listPublicEditionCatalogue } from "@/api/gongkaikanwumulu";
 import { welcomeMetadata } from "@/components/site/welcome-metadata";
 import { ApiRequestError } from "@/request";
+import { categories } from "@/components/publication/reading-parts";
 
 export const metadata = {
   ...welcomeMetadata(
@@ -19,10 +20,18 @@ export const metadata = {
   title: { absolute: "知微见澜 Ripplesight · 开放的信息平台" },
 };
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ mode?: string; category?: string; cursor?: string }>;
+}) {
   await connection();
+  const params = await searchParams;
+  const mode = params.mode === "selected" ? "selected" : "all";
+  const category = categories.find(([key]) => key === params.category)?.[0];
+  const cursor = typeof params.cursor === "string" ? params.cursor : undefined;
   const results = await Promise.allSettled([
-    listPublicItems({ mode: "all", window: "7d", limit: 8 }),
+    listPublicItems({ mode, category, cursor, window: "7d", limit: 20 }),
     getPublicHotStories({ limit: 4 }),
     getPublicTopicDirectory(),
     listPublicEditionCatalogue({ kind: "weekly", limit: 2 }),
@@ -36,6 +45,8 @@ export default async function Home() {
     stories: results[1].status === "fulfilled" ? results[1].value.stories : [],
     topics: results[2].status === "fulfilled" ? results[2].value.topics : [],
     editions: results[3].status === "fulfilled" ? results[3].value.entries : [],
+    nextCursor:
+      results[0].status === "fulfilled" ? results[0].value.next_cursor : null,
     unavailable: results.flatMap((result, index) =>
       result.status === "rejected" &&
       !(
@@ -46,5 +57,12 @@ export default async function Home() {
         : [],
     ),
   };
-  return <HomeContent reading={reading} />;
+  return (
+    <HomeContent
+      reading={reading}
+      mode={mode}
+      category={category}
+      cursor={cursor}
+    />
+  );
 }
