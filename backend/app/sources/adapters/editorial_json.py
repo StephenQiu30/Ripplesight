@@ -45,7 +45,7 @@ def parse_json_list(
         return None
 
     def date(value: object) -> datetime | None:
-        if value in (None, ""):
+        if not isinstance(value, (str, int, float)) or isinstance(value, bool) or value == "":
             return None
         try:
             if config.published_at_unit in {"epoch_ms", "epoch_s"}:
@@ -54,7 +54,7 @@ def parse_json_list(
                 )
             if config.published_at_unit == "yyyymmdd":
                 return datetime.strptime(str(value), "%Y%m%d").replace(tzinfo=UTC)
-            return parse_loose_date(str(value), "+00:00")
+            return parse_loose_date(str(value), config.published_at_utc_offset)
         except (ValueError, OverflowError, OSError):
             return None
 
@@ -79,6 +79,13 @@ def parse_json_list(
             continue
         summary = first(item, config.summary_paths)
         external: Any = get_path(item, config.external_id_path) if config.external_id_path else None
+        date_value = get_path(item, config.published_at_path) if config.published_at_path else None
+        published_at = date(date_value)
+        metadata = (
+            {"publication_date_reason": "invalid_publication_date"}
+            if published_at is None and date_value not in (None, "")
+            else {}
+        )
         try:
             out.append(
                 material(
@@ -86,7 +93,8 @@ def parse_json_list(
                     title,
                     author=first(item, config.author_paths),
                     external_id=str(external)[:512] if external is not None else None,
-                    published_at=date(get_path(item, config.published_at_path)),
+                    published_at=published_at,
+                    metadata=metadata,
                     excerpt=plain(summary)[:2000] if summary else None,
                     body_text=plain(summary) if config.summary_is_body and summary else None,
                     body_status="ok" if config.summary_is_body and summary else "pending",

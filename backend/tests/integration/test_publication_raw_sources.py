@@ -132,6 +132,44 @@ def test_raw_metadata_republish_and_reads_do_not_fabricate_analysis_or_fulltext(
                 assert session.scalar(text(f"SELECT count(*) FROM {table}")) == 0
 
 
+def test_undated_source_abstract_remains_in_raw_list_with_explicit_collection_time(engine):
+    from publication.exports import list_markdown, render_rss
+
+    with Session(engine, expire_on_commit=False) as session:
+        _, owner, _, _, _ = ingest(
+            session,
+            materials=(
+                EditorialMaterial(
+                    identity_key="guid:undated",
+                    url="https://example.com/undated",
+                    title="Undated raw",
+                    excerpt="Actual undated source abstract",
+                    published_at=None,
+                ),
+            ),
+        )
+        with session.begin():
+            before = session.scalar(text("SELECT count(*) FROM jobs"))
+            reader = PublicationReadingService(session)
+            raw = reader.items_in_transaction(owner_id=owner, now=NOW)
+            assert len(raw.items) == 1 and raw.items[0].published_at is None
+            assert raw.items[0].discovered_at == NOW
+            assert raw.items[0].analysis_state == "not_analyzed"
+            assert not reader.items_in_transaction(owner_id=owner, now=NOW, selected=True).items
+            assert "收录时间" in list_markdown(
+                raw.items, title="原始资讯", origin="https://hotkey.example"
+            )
+            xml = render_rss(
+                raw.items,
+                origin="https://hotkey.example",
+                self_path="/feed.xml",
+                title="原始资讯",
+                now=NOW,
+            )
+            assert "收录时间" in xml and "<pubDate>" not in xml
+            assert session.scalar(text("SELECT count(*) FROM jobs")) == before
+
+
 def test_source_pause_retains_public_metadata_but_live_revocation_removes_it(engine):
     with Session(engine, expire_on_commit=False) as session:
         service, owner, profile, command, ids = ingest(session)

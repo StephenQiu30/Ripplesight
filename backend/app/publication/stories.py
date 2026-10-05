@@ -55,10 +55,16 @@ def public_stories_in_transaction(
                 if actual
                 else None
             )
-            if policy is None or policy.configuration.get("participation_mode") not in {
-                "editorial",
-                "hot_signal",
-            }:
+            if (
+                actual is None
+                or actual.published_at is None
+                or policy is None
+                or policy.configuration.get("participation_mode")
+                not in {
+                    "editorial",
+                    "hot_signal",
+                }
+            ):
                 allowed = False
                 break
         if not allowed:
@@ -75,6 +81,7 @@ def public_stories_in_transaction(
                 or projection.observation_id != member.observation_id
                 or projection.source_key != member.source_key
                 or projection.visibility != "public"
+                or projection.published_at is None
                 or (
                     projection.selected
                     and (projection.visible_after is None or projection.visible_after > now)
@@ -93,10 +100,16 @@ def public_stories_in_transaction(
                     if actual
                     else None
                 )
-                if policy is None or policy.configuration.get("participation_mode") not in {
-                    "editorial",
-                    "hot_signal",
-                }:
+                if (
+                    actual is None
+                    or actual.published_at is None
+                    or policy is None
+                    or policy.configuration.get("participation_mode")
+                    not in {
+                        "editorial",
+                        "hot_signal",
+                    }
+                ):
                     allowed = False
                     break
             if not allowed:

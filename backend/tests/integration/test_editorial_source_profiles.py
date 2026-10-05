@@ -54,11 +54,13 @@ def setup(
     kind: str = "rss",
     external_token: bool = False,
     owner_id: UUID | None = None,
+    configuration: dict | None = None,
 ):
     owner = owner_id or uuid4()
     config = {"kind": kind}
     if kind == "rss":
         config.update(feed_url="https://example.com/feed", allowed_hosts=("example.com",))
+    config.update(configuration or {})
     command = EditorialProfileInput.model_validate(
         dict(
             operation_id=uuid4(),

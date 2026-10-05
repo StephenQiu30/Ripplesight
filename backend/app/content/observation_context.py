@@ -1,6 +1,7 @@
 """Resolve actual source provenance without substituting a canonical record's first source."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import select
@@ -23,6 +24,7 @@ class ContentObservationContext:
     editorial_profile_id: UUID | None
     job: ContentJobContext
     input_basis: str | None = None
+    published_at: datetime | None = None
 
 
 def load_observation_contexts_in_transaction(
@@ -90,6 +92,7 @@ def load_observation_contexts_in_transaction(
             profile_id,
             job,
             observation.input_basis,
+            observation.published_at,
         )
     return result
 
@@ -257,6 +260,7 @@ def load_observation_context_in_transaction(
         profile_id,
         job,
         obs.input_basis,
+        obs.published_at,
     )
 
 

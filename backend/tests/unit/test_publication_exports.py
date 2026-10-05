@@ -55,7 +55,8 @@ def test_full_rss_needs_separate_redistribution_permission_and_escapes_source_ma
         include_content=True,
     )
     tree = ElementTree.fromstring(xml)
-    assert tree.find(".//pubDate").text == "Thu, 01 Oct 2026 00:00:00 +0000"
+    assert tree.find(".//pubDate") is None
+    assert "收录时间" in tree.find(".//item/description").text
     assert tree.find(".//{http://purl.org/rss/1.0/modules/content/}encoded") is None
     xml = render_rss(
         [item.model_copy(update={"syndicate_fulltext": True})],
@@ -79,6 +80,8 @@ def test_markdown_and_seo_drop_restricted_outputs_and_escape_script_delimiters()
     text = item_markdown(item, origin="https://hotkey.example", redistribute=True)
     assert text and "来源许可" in text and "untrusted" not in text
     assert "untrusted" in item_markdown(item, origin="https://hotkey.example")
+    assert "收录时间: 2026-10-01T00:00:00+00:00" in text and "发布时间" not in text
+    assert '"datePublished"' not in item_jsonld(item, origin="https://hotkey.example")
     assert item_jsonld(item, origin="https://hotkey.example") and "<script>" not in item_jsonld(
         item, origin="https://hotkey.example"
     )
@@ -86,6 +89,28 @@ def test_markdown_and_seo_drop_restricted_outputs_and_escape_script_delimiters()
     assert item_markdown(restricted, origin="https://hotkey.example") is None
     assert item_jsonld(restricted, origin="https://hotkey.example") is None
     assert "/items/fixed" not in render_sitemap([restricted], origin="https://hotkey.example")
+
+
+def test_dated_exports_use_publication_time_and_lists_label_collection_time() -> None:
+    from publication.exports import list_markdown
+
+    undated = detail()
+    published = datetime(2026, 9, 30, tzinfo=UTC)
+    dated = undated.model_copy(update={"published_at": published})
+    text = list_markdown([dated, undated], title="资讯", origin="https://hotkey.example")
+    assert "发布时间: 2026-09-30T00:00:00+00:00" in text
+    assert "收录时间: 2026-10-01T00:00:00+00:00" in text
+    assert '"datePublished":"2026-09-30T00:00:00+00:00"' in item_jsonld(
+        dated, origin="https://hotkey.example"
+    )
+    xml = render_rss(
+        [dated],
+        origin="https://hotkey.example",
+        self_path="/feed.xml",
+        title="资讯",
+        now=published,
+    )
+    assert ElementTree.fromstring(xml).find(".//pubDate").text == "Wed, 30 Sep 2026 00:00:00 +0000"
 
 
 def test_sitemap_index_contains_all_approved_collections_and_bounded_local_paths() -> None:

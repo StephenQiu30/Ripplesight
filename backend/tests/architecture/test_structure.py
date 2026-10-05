@@ -62,7 +62,13 @@ def _sql_files(root: Path) -> set[Path]:
     }
     files: set[Path] = set()
     for directory, subdirectories, filenames in root.walk():
-        subdirectories[:] = [name for name in subdirectories if name not in generated_directories]
+        subdirectories[:] = [
+            name
+            for name in subdirectories
+            if name not in generated_directories
+            # Root worktrees are independent checkouts with their own canonical DDL.
+            and not (directory == root and name == ".worktrees")
+        ]
         files.update(directory / name for name in filenames if Path(name).suffix.lower() == ".sql")
     return files
 
@@ -224,6 +230,9 @@ def test_ddl_boundary_rejects_an_additional_sql_file(tmp_path: Path) -> None:
     schema.touch()
     extra = tmp_path / "backend" / "database" / "patch.sql"
     extra.touch()
+    checkout_schema = tmp_path / ".worktrees" / "parallel" / "backend" / "database" / "schema.sql"
+    checkout_schema.parent.mkdir(parents=True)
+    checkout_schema.touch()
     assert _sql_files(tmp_path) - {schema} == {extra}
 
 

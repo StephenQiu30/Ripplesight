@@ -51,6 +51,14 @@ def _md(value: str) -> str:
     )
 
 
+def _item_time(item: PublicItemView) -> str:
+    return (
+        f"发布时间: {item.published_at.isoformat()}"
+        if item.published_at is not None
+        else f"收录时间: {item.discovered_at.isoformat()} (原文发布日期未知)"
+    )
+
+
 def item_markdown(
     detail: PublicItemDetailView, *, origin: str, redistribute: bool = False
 ) -> str | None:
@@ -62,6 +70,7 @@ def item_markdown(
         f"# {_md(detail.title)}",
         "",
         f"来源: {_md(detail.source.name)}",
+        _item_time(detail),
         f"站内阅读: {base}{detail.reading_url}",
     ]
     if original:
@@ -91,6 +100,7 @@ def list_markdown(items: list[PublicItemView], *, title: str, origin: str) -> st
             [
                 f"## {_md(item.title)}",
                 f"来源: {_md(item.source.name)} | 阅读: {base}{item.reading_url}",
+                _item_time(item),
                 item.summary or "",
                 "",
             ]
@@ -126,7 +136,6 @@ def render_rss(
     ]
     for item in items[:50]:
         link = base + item.reading_url
-        date = item.published_at or item.discovered_at
         description = (
             f"<p>{esc(item.summary or '')}</p><p>来源: {esc(item.source.name)} · "
             f'<a href="{esc(link, quote=True)}">站内阅读</a></p>'
@@ -134,16 +143,18 @@ def render_rss(
         original = safe_link(item.original_url)
         if original:
             description += f'<p><a href="{esc(original, quote=True)}">原文</a></p>'
+        description += f"<p>{esc(_item_time(item))}</p>"
         parts.extend(
             [
                 "<item>",
                 f'<guid isPermaLink="false">hotkey:item:{item.id}</guid>',
                 f"<title>{esc(item.title)}</title>",
                 f"<link>{esc(link)}</link>",
-                f"<pubDate>{format_datetime(date)}</pubDate>",
                 f"<description>{esc(description)}</description>",
             ]
         )
+        if item.published_at is not None:
+            parts.append(f"<pubDate>{format_datetime(item.published_at)}</pubDate>")
         if item.category:
             parts.append(f"<category>{esc(item.category)}</category>")
         if include_content and item.syndicate_fulltext and item.body:
@@ -174,11 +185,12 @@ def item_jsonld(detail: PublicItemDetailView, *, origin: str) -> str | None:
         "headline": detail.title,
         "description": detail.summary,
         "url": base + detail.reading_url,
-        "datePublished": (detail.published_at or detail.discovered_at).isoformat(),
         "publisher": {"@type": "Organization", "name": "HotKey"},
         "isAccessibleForFree": True,
         "citation": safe_link(detail.original_url) or None,
     }
+    if detail.published_at is not None:
+        data["datePublished"] = detail.published_at.isoformat()
     return (
         json.dumps(data, ensure_ascii=False, separators=(",", ":"))
         .replace("<", "\\u003c")
