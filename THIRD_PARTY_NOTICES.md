@@ -24,6 +24,14 @@ The prefilter, independent scoring, structure, writing and identity rules under
 WP-008-002 updates the structure template, category guides and original-quote validation from AIHOT commit `9acad0c3d7687d9210c2b7774f83799dfd36734b`, preserving HotKey JSONB persistence and adding field-level discard diagnostics.
 WP-008-003 adapts group-definitions/group-method/group-pair, composite mention guards and relation comparison tests from the same `9acad0c` snapshot; unused group-batch/group-signal templates are removed because HotKey uses its existing fact-partition and pair-output contracts.
 
+WP-008-004 adapts `industry/prompts/story-digest.md`,
+`docs/story-digest-evaluation.md`, `scripts/eval-story-digests-core.ts` and the
+related story-digest evaluation tests from AIHOT commit
+`9acad0c3d7687d9210c2b7774f83799dfd36734b`. HotKey uses Chinese
+title/summary/latest_progress, existing prompt partials/content hashes and the
+original Job/AiCall ledger; its comparison uses controlled offline outputs and
+program checks only, with no real model requests or separate evaluation store.
+
 Codex announcement logic under `backend/app/monitors/codex_*` is adapted from
 upstream `monitor/{time,recognize,assemble,scan,read}.ts` and the monitor administration
 semantics. HotKey uses its existing model ledger and source authorization; it does not
