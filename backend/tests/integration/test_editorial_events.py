@@ -19,6 +19,7 @@ from content.schemas import RecordContentVisibilityInput
 from content.services import ContentService
 from core.errors import ApplicationError
 from events.fact_models import EventFact, EventFactMember
+from events.facts import EventFactReadService
 from events.models import Event, EventCandidate
 from events.services import EventCandidateService, EventClusterExecutor
 from jobs.execution import JobExecutionFailure, JobExecutionService
@@ -35,12 +36,15 @@ class EditorialWithFact(ControlledClient):
     def complete(self, **kwargs):
         result = super().complete(**kwargs)
         if kwargs["output_schema"]["title"] == "StructureOutput":
+            result.output["scope"] = "single"
             result.output["fact"] = {
                 "title": "OpenAI 新模型发布",
                 "subject": "openai",
                 "action": "发布",
                 "object": "新模型",
                 "occurredAt": NOW.date().isoformat(),
+                "evidence": "OpenAI 发布新模型,公开 API。",
+                "conditions": [{"quote": "OpenAI 发布新模型,公开 API。"}],
             }
         return result
 
@@ -138,7 +142,9 @@ def test_selected_editorial_material_creates_story_without_a_user_monitor(
     assert '"editorial_frame"' in provider.calls[0]["prompt"]
     with factory() as session:
         event = session.scalar(select(Event))
+        event_id = event.id
         fact = session.scalar(select(EventFact))
+        fact_id = fact.id
         member = session.scalar(select(EventFactMember))
         assert event.topic_id == editorial_event_topic_id(owner)
         assert fact.frame == {
@@ -146,6 +152,8 @@ def test_selected_editorial_material_creates_story_without_a_user_monitor(
             "action": "发布",
             "object": "新模型",
             "occurredAt": NOW.date().isoformat(),
+            "evidence": "OpenAI 发布新模型,公开 API。",
+            "conditions": [{"quote": "OpenAI 发布新模型,公开 API。"}],
         }
         assert member.fact_id == fact.id and member.role == "primary"
         assert (
@@ -184,7 +192,24 @@ def test_selected_editorial_material_creates_story_without_a_user_monitor(
                     exclude=[],
                 ),
             )
+    with factory() as session:
+        view = EventFactReadService(session).list_facts(owner_id=owner, event_id=event_id)
+        assert view.facts[0].evidence == "OpenAI 发布新模型,公开 API。"
+        assert [item.quote for item in view.facts[0].conditions] == ["OpenAI 发布新模型,公开 API。"]
     assert _candidate(factory, owner)[0] == 0
+    with factory() as session, session.begin():
+        stored_fact = session.get(EventFact, fact_id)
+        stored_fact.status = "unreviewed"
+    with factory() as session:
+        hidden = EventFactReadService(session).list_facts(owner_id=owner, event_id=event_id)
+        assert hidden.facts[0].evidence is None and hidden.facts[0].conditions == []
+    with factory() as session, session.begin():
+        stored_fact = session.get(EventFact, fact_id)
+        stored_fact.status = "confirmed"
+        stored_fact.frame = {"subject": "openai", "action": "发布", "object": "新模型"}
+    with factory() as session:
+        legacy = EventFactReadService(session).list_facts(owner_id=owner, event_id=event_id)
+        assert legacy.facts[0].evidence is None and legacy.facts[0].conditions == []
 
 
 def test_editorial_source_withdrawal_blocks_a_queued_story_before_another_paid_call(

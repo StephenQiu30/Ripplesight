@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal, Self
+from typing import Any, Literal, Self
 from uuid import UUID
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
@@ -112,6 +112,29 @@ class FactOutput(InputModel):
     occurred_at: str | None = Field(
         alias="occurredAt", default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"
     )
+    evidence: str | None = Field(default=None, max_length=600)
+    conditions: list[FactCondition] = Field(default_factory=list, max_length=4)
+
+
+class FactCondition(InputModel):
+    quote: str = Field(min_length=1, max_length=400, strict=True)
+
+
+class StructureDiscard(OutputModel):
+    field: str
+    reason: Literal[
+        "invalid_type",
+        "too_long",
+        "empty",
+        "ellipsis",
+        "cross_paragraph",
+        "not_in_original",
+        "not_in_model_input",
+        "too_many",
+        "composite",
+        "no_original",
+        "invalid_scope",
+    ]
 
 
 class StructureOutput(InputModel):
@@ -119,6 +142,26 @@ class StructureOutput(InputModel):
     tags: list[str] = Field(max_length=12)
     subjects: list[str] = Field(max_length=6)
     fact: FactOutput | None
+    scope: Literal["single", "composite", "unknown"] = "unknown"
+    discards: list[StructureDiscard] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def composite_has_no_fact(cls, value: Any) -> Any:
+        if (
+            isinstance(value, dict)
+            and value.get("scope") == "composite"
+            and value.get("fact") is not None
+        ):
+            return {
+                **value,
+                "fact": None,
+                "discards": [
+                    *value.get("discards", []),
+                    StructureDiscard(field="fact", reason="composite"),
+                ],
+            }
+        return value
 
 
 class UnderstandOutput(InputModel):
