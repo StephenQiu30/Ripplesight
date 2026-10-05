@@ -11,11 +11,14 @@ from bs4 import BeautifulSoup
 
 from sources.adapters.editorial_http import EditorialSourceError
 from sources.adapters.editorial_parsing import (
+    EditorialParsingStats,
     collapse,
     material,
     parse_loose_date,
     plain,
+    required_terms_match,
     sanitize_html,
+    summary_excerpt,
 )
 from sources.editorial_identity import rsshub_native_identity_proofs
 from sources.editorial_schemas import EditorialMaterial, EditorialSourceConfiguration, public_url
@@ -34,7 +37,11 @@ def is_teaser(text: str) -> bool:
 
 
 def parse_feed(
-    text: str | bytes, response_url: str, config: EditorialSourceConfiguration
+    text: str | bytes,
+    response_url: str,
+    config: EditorialSourceConfiguration,
+    *,
+    stats: EditorialParsingStats | None = None,
 ) -> tuple[EditorialMaterial, ...]:
     if config.kind != "rss":
         raise ValueError("RSS parser requires RSS configuration")
@@ -63,6 +70,8 @@ def parse_feed(
     if rsshub and len(doc.entries) > rsshub.max_items:
         raise EditorialSourceError("rsshub_item_bound_exceeded")
     out = []
+    stats = stats if stats is not None else EditorialParsingStats()
+    filtered_before = stats.filtered
     native_proofs = rsshub_native_identity_proofs(
         text,
         configuration=config,
@@ -103,10 +112,10 @@ def parse_feed(
         else:
             html, body_text = sanitize_html(body, url) if body else (None, None)
         teaser = bool(body_text and is_teaser(body_text))
-        excerpt = (
-            (summary.strip() if summary_is_text else sanitize_html(summary, url)[1])[:4000]
+        source_summary = (
+            (summary.strip() if summary_is_text else sanitize_html(summary, url)[1])
             if summary
-            else body_text[:4000]
+            else body_text
             if body_text
             else None
         )
@@ -116,8 +125,12 @@ def parse_feed(
         if rsshub:
             # RSS route descriptions are an observed text scope, not a proven
             # article, transcript or platform-native ID. Keep the original URL.
-            excerpt = collapse(plain(summary or body))[:4000] or None
+            source_summary = collapse(plain(summary or body)) or None
             complete = False
+        title_is_text = atom and entry.get("title_detail", {}).get("type") == "text/plain"
+        excerpt, truncated = summary_excerpt(
+            source_summary, config.summary_max_chars, default_limit=4000
+        )
         media = []
         enclosures = entry.get("enclosures", [])
         for enclosure in enclosures:
@@ -141,46 +154,50 @@ def parse_feed(
             )
 
         try:
-            out.append(
-                material(
-                    url,
-                    title,
-                    title_is_text=atom
-                    and entry.get("title_detail", {}).get("type") == "text/plain",
-                    preserve_fragment=config.preserve_url_fragment,
-                    external_id=None if rsshub else str(entry.get("id", ""))[:512] or None,
-                    native_identity=native_proofs[index],
-                    author=entry.get("author", None),
-                    published_at=date("published")
-                    if rsshub
-                    else date("published") or date("updated"),
-                    source_updated_at=date("updated"),
-                    excerpt=excerpt,
-                    body_html=html if complete else None,
-                    body_text=body_text if complete else None,
-                    body_status="ok" if complete else "pending",
-                    media=tuple(dict.fromkeys(media))[:6],
-                    categories=tuple(
-                        str(tag.get("term", "")) for tag in entry.get("tags", []) if tag.get("term")
-                    )[:100],
-                    metadata={
-                        "collector": "rsshub",
-                        "collector_revision": rsshub.revision,
-                        "query_mode": rsshub.query_mode,
-                        "returned_text_scope": rsshub.text_scope,
-                        "snapshot_scope": "limited_feed",
-                        "identity_basis": "canonical_url",
-                        "feed_guid": str(entry.get("id", ""))[:512] or None,
-                        "downstream_request_count": None,
-                    }
-                    if rsshub
-                    else {},
-                )
+            candidate = material(
+                url,
+                title,
+                title_is_text=title_is_text,
+                preserve_fragment=config.preserve_url_fragment,
+                external_id=None if rsshub else str(entry.get("id", ""))[:512] or None,
+                native_identity=native_proofs[index],
+                author=entry.get("author", None),
+                published_at=date("published") if rsshub else date("published") or date("updated"),
+                source_updated_at=date("updated"),
+                excerpt=excerpt,
+                body_html=html if complete else None,
+                body_text=body_text if complete else None,
+                body_status="ok" if complete else "pending",
+                media=tuple(dict.fromkeys(media))[:6],
+                categories=tuple(
+                    str(tag.get("term", "")) for tag in entry.get("tags", []) if tag.get("term")
+                )[:100],
+                metadata={
+                    **({"summary_truncated": True} if truncated else {}),
+                    **(
+                        {
+                            "collector": "rsshub",
+                            "collector_revision": rsshub.revision,
+                            "query_mode": rsshub.query_mode,
+                            "returned_text_scope": rsshub.text_scope,
+                            "snapshot_scope": "limited_feed",
+                            "identity_basis": "canonical_url",
+                            "feed_guid": str(entry.get("id", ""))[:512] or None,
+                            "downstream_request_count": None,
+                        }
+                        if rsshub
+                        else {}
+                    ),
+                },
             )
         except ValueError:
             if rsshub:
                 raise
             continue
-    if doc.entries and not out:
+        if not required_terms_match(candidate.title, source_summary, config.require_any_terms):
+            stats.filtered += 1
+            continue
+        out.append(candidate)
+    if doc.entries and not out and stats.filtered == filtered_before:
         raise ValueError("feed entries did not map to valid materials")
     return tuple(out)
