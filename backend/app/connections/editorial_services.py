@@ -1170,6 +1170,11 @@ class EditorialSourceService:
             }
         else:
             run.prepared_page = None
+        if page.filtered:
+            run.prepared_page = {
+                **(run.prepared_page or {}),
+                "_filter_receipt": {"filtered": page.filtered},
+            }
         return self._result(run)
 
     def body_checkpoint(
@@ -1724,11 +1729,14 @@ class EditorialSourceService:
 
     @staticmethod
     def _result(r: EditorialSourceRun) -> EditorialRunResult:
+        prepared = r.prepared_page or {}
+        counts = cast(dict[str, object], prepared.get("_filter_receipt", prepared))
         return EditorialRunResult(
             run_id=r.id,
             status="running" if r.status == "staged" else r.status,
             configuration_version=r.configuration_version,
             found=r.found,
+            filtered=cast(int, counts.get("filtered", 0)),
             created=r.created,
             revised=r.revised,
             reason=r.failure_code,

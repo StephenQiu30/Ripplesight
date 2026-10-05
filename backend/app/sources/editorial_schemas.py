@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import unicodedata
 from datetime import UTC, datetime
 from typing import Literal, Self
 from urllib.parse import parse_qsl, urlsplit, urlunsplit
@@ -170,6 +171,8 @@ class EditorialSourceConfiguration(EditorialContract):
     allow_url_prefixes: tuple[str, ...] = Field(default=(), max_length=100)
     deny_url_prefixes: tuple[str, ...] = Field(default=(), max_length=100)
     ingest_noise_filter: NoiseFilter | None = None
+    require_any_terms: tuple[str, ...] = Field(default=(), max_length=100)
+    summary_max_chars: int | None = Field(default=None, ge=1, le=4000, strict=True)
     item_url_prefix_rewrite: PrefixRewrite | None = None
     sort_by_published_at: bool = False
     detail: DetailConfiguration | None = None
@@ -220,6 +223,16 @@ class EditorialSourceConfiguration(EditorialContract):
     ghid: str | None = Field(default=None, max_length=128)
     nickname: str | None = Field(default=None, max_length=128)
 
+    @field_validator("require_any_terms")
+    @classmethod
+    def bounded_required_terms(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        normalized = tuple(" ".join(unicodedata.normalize("NFKC", term).split()) for term in value)
+        if any(len(term) > 128 for term in value) or any(
+            not term or len(term) > 128 for term in normalized
+        ):
+            raise ValueError("required terms must be bounded and non-empty")
+        return normalized
+
     @model_validator(mode="after")
     def validate_kind_contract(self) -> Self:
         common = {"kind", "allowed_hosts", "initial_backfill_limit", "initial_backfill_months"}
@@ -243,6 +256,8 @@ class EditorialSourceConfiguration(EditorialContract):
                 "allow_categories",
                 "deny_categories",
                 "published_at_utc_offset",
+                "require_any_terms",
+                "summary_max_chars",
             },
             "web_list": collected
             | {
@@ -284,6 +299,8 @@ class EditorialSourceConfiguration(EditorialContract):
                 "raw_drop_keys",
                 "require_boolean",
                 "min_numeric",
+                "require_any_terms",
+                "summary_max_chars",
             },
             "x_search": {"query", "search_type", "ingest_noise_filter", "item_url_prefix_rewrite"},
             "mp_account": {"wxid", "ghid", "nickname"},
@@ -331,7 +348,8 @@ class EditorialSourceConfiguration(EditorialContract):
                 raise ValueError("Jina target requires its own approved host")
         for header, value in self.headers.items():
             if (
-                header.casefold() not in {"accept", "content-type", "x-requested-with"}
+                header.casefold()
+                not in {"accept", "content-type", "x-requested-with", "x-github-api-version"}
                 or len(value) > 256
                 or any(ord(c) < 32 for c in value)
             ):
@@ -466,6 +484,7 @@ class EditorialCursor(EditorialContract):
 class EditorialPage(EditorialContract):
     status: Literal["complete", "unchanged", "partial", "blocked", "unknown"]
     materials: tuple[EditorialMaterial, ...] = Field(default=(), max_length=1000)
+    filtered: int = Field(default=0, ge=0, le=1000)
     cursor: EditorialCursor = EditorialCursor()
     reason: str | None = Field(default=None, max_length=64)
     request_count: int = Field(default=0, ge=0, le=100)
@@ -558,6 +577,7 @@ class EditorialRunResult(EditorialContract):
     status: Literal["running", "succeeded", "partial", "unknown", "failed", "blocked", "cancelled"]
     configuration_version: int
     found: int = Field(default=0, ge=0)
+    filtered: int = Field(default=0, ge=0)
     created: int = Field(default=0, ge=0)
     revised: int = Field(default=0, ge=0)
     reason: str | None = Field(default=None, max_length=64)

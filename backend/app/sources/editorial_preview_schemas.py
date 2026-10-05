@@ -53,6 +53,7 @@ class EditorialSourcePreviewView(EditorialContract):
     status: Literal["complete", "partial", "blocked", "unknown"]
     kind: EditorialSourceKind
     count: int = Field(ge=0, le=1000)
+    filtered: int = Field(default=0, ge=0, le=1000)
     ms: int = Field(ge=0, le=600000)
     requests: int = Field(ge=0, le=500)
     items: tuple[EditorialPreviewItem, ...] = Field(max_length=20)
