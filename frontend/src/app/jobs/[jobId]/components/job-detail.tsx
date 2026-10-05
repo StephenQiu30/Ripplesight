@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 
@@ -108,10 +110,14 @@ function toErrorState(
 
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0">
-      <dt className="text-muted-foreground text-sm">{label}</dt>
-      <dd className="mt-1 text-base font-medium break-words">{value}</dd>
-    </div>
+    <UI.Content className="min-w-0">
+      <UI.Content as="dt" className="text-muted-foreground text-sm">
+        {label}
+      </UI.Content>
+      <UI.Content as="dd" className="mt-1 text-base font-medium break-words">
+        {value}
+      </UI.Content>
+    </UI.Content>
   );
 }
 
@@ -147,12 +153,20 @@ export function JobSourceFreshness({
   freshness: HotKeyAPI.SourceFreshnessView;
 }) {
   return (
-    <section className="mt-8" aria-labelledby="source-freshness-title">
-      <h2 id="source-freshness-title" className="text-xl font-medium">
+    <UI.Content
+      as="section"
+      className="mt-8"
+      aria-labelledby="source-freshness-title"
+    >
+      <UI.Heading
+        level={2}
+        id="source-freshness-title"
+        className="text-xl font-medium"
+      >
         来源时效
-      </h2>
-      <div className="mt-6">
-        <dl className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
+      </UI.Heading>
+      <UI.Content className="mt-6">
+        <UI.Content as="dl" className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
           <DetailItem
             label="最近尝试"
             value={
@@ -169,19 +183,19 @@ export function JobSourceFreshness({
                 : "尚无完整成功记录"
             }
           />
-        </dl>
+        </UI.Content>
         {freshness.delay_reason ? (
-          <p className="text-muted-foreground mt-5 text-sm leading-6">
+          <UI.Text className="text-muted-foreground mt-5 text-sm leading-6">
             当前延期：{DELAY_LABELS[freshness.delay_reason]}，已等待{" "}
             {formatDelayDuration(freshness.delay_duration_us)}
             {freshness.delay_since_at
               ? `（自 ${formatTime(freshness.delay_since_at)}）`
               : ""}
             。
-          </p>
+          </UI.Text>
         ) : null}
-      </div>
-    </section>
+      </UI.Content>
+    </UI.Content>
   );
 }
 
@@ -232,12 +246,23 @@ export function JobCycleTiming({ job }: { job: HotKeyAPI.JobStatusView }) {
       : formatDelayDuration(job.total_elapsed_us);
 
   return (
-    <section className="mt-10" aria-labelledby="job-cycle-title">
-      <h2 id="job-cycle-title" className="text-xl font-medium">
+    <UI.Content
+      as="section"
+      className="mt-10"
+      aria-labelledby="job-cycle-title"
+    >
+      <UI.Heading
+        level={2}
+        id="job-cycle-title"
+        className="text-xl font-medium"
+      >
         任务时间与采集周期
-      </h2>
-      <div className="mt-6">
-        <dl className="grid gap-x-8 gap-y-6 sm:grid-cols-2 xl:grid-cols-3">
+      </UI.Heading>
+      <UI.Content className="mt-6">
+        <UI.Content
+          as="dl"
+          className="grid gap-x-8 gap-y-6 sm:grid-cols-2 xl:grid-cols-3"
+        >
           <DetailItem label="采集周期" value={cycleLabel} />
           <DetailItem label="周期开始" value={cycleStarted} />
           <DetailItem label="本周期已发请求" value={cycleRequests} />
@@ -266,9 +291,9 @@ export function JobCycleTiming({ job }: { job: HotKeyAPI.JobStatusView }) {
                   : "尚无结束记录"
             }
           />
-        </dl>
-      </div>
-    </section>
+        </UI.Content>
+      </UI.Content>
+    </UI.Content>
   );
 }
 
@@ -282,13 +307,15 @@ export function JobResult({
   updatedAt: string | null;
 }) {
   return (
-    <section className="mt-10">
-      <h2 className="text-xl font-medium">已写入结果</h2>
-      <div className="mt-6">
-        <p className="text-base font-medium">{savedDescription}</p>
-        <p className="text-muted-foreground mt-2 text-sm leading-6">
+    <UI.Content as="section" className="mt-10">
+      <UI.Heading level={2} className="text-xl font-medium">
+        已写入结果
+      </UI.Heading>
+      <UI.Content className="mt-6">
+        <UI.Text className="text-base font-medium">{savedDescription}</UI.Text>
+        <UI.Text className="text-muted-foreground mt-2 text-sm leading-6">
           最后进度时间：{formatTime(updatedAt)}。
-        </p>
+        </UI.Text>
         {resultContentId ? (
           <Button asChild className="mt-5">
             <Link href={`/content/${resultContentId}`}>
@@ -305,8 +332,8 @@ export function JobResult({
             </EmptyHeader>
           </Empty>
         )}
-      </div>
-    </section>
+      </UI.Content>
+    </UI.Content>
   );
 }
 
@@ -320,13 +347,21 @@ export function JobCoverageWindows({
   }
 
   return (
-    <section className="mt-8" aria-labelledby="coverage-windows-title">
-      <h2 id="coverage-windows-title" className="text-xl font-medium">
+    <UI.Content
+      as="section"
+      className="mt-8"
+      aria-labelledby="coverage-windows-title"
+    >
+      <UI.Heading
+        level={2}
+        id="coverage-windows-title"
+        className="text-xl font-medium"
+      >
         采集窗口记录
-      </h2>
-      <p className="text-muted-foreground mt-2 text-sm leading-6">
+      </UI.Heading>
+      <UI.Text className="text-muted-foreground mt-2 text-sm leading-6">
         仅展示已保存窗口，不代表未记录范围已完整覆盖。
-      </p>
+      </UI.Text>
       <ItemGroup className="mt-4 grid gap-3">
         {windows.map((window) => (
           <Item
@@ -336,17 +371,17 @@ export function JobCoverageWindows({
             className="flex flex-col items-start gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
           >
             <ItemContent className="min-w-0 gap-3">
-              <div>
-                <p className="font-medium">
+              <UI.Content>
+                <UI.Text className="font-medium">
                   {formatTime(window.starts_at)} — {formatTime(window.ends_at)}
-                </p>
-                <p className="text-muted-foreground mt-1 text-sm">
+                </UI.Text>
+                <UI.Text className="text-muted-foreground mt-1 text-sm">
                   {window.page_count} 页
                   {window.stop_reason
                     ? ` · ${COVERAGE_STOP_REASON_LABELS[window.stop_reason] ?? "窗口尚未确认"}`
                     : ""}
-                </p>
-              </div>
+                </UI.Text>
+              </UI.Content>
               <Badge variant="secondary">
                 {COVERAGE_STATUS_LABELS[window.status]}
               </Badge>
@@ -354,7 +389,7 @@ export function JobCoverageWindows({
           </Item>
         ))}
       </ItemGroup>
-    </section>
+    </UI.Content>
   );
 }
 
@@ -571,13 +606,16 @@ export function JobDetail({ jobId }: JobDetailProps) {
       : `已持久保存 ${job.progress.items_saved} 条结果。`;
 
   return (
-    <div>
-      <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-normal tracking-tight sm:text-4xl">
+    <UI.Content>
+      <UI.Content className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+        <UI.Content>
+          <UI.Content className="flex flex-wrap items-center gap-3">
+            <UI.Heading
+              level={1}
+              className="text-3xl font-normal tracking-tight sm:text-4xl"
+            >
               采集任务
-            </h1>
+            </UI.Heading>
             <Badge
               variant={
                 job.status === "failed" || job.cancellation?.timed_out
@@ -588,12 +626,12 @@ export function JobDetail({ jobId }: JobDetailProps) {
               {STATUS_LABELS[job.status]}
             </Badge>
             {isStale ? <Badge variant="outline">状态待刷新</Badge> : null}
-          </div>
-          <p className="text-muted-foreground mt-3 text-sm">
+          </UI.Content>
+          <UI.Text className="text-muted-foreground mt-3 text-sm">
             受理后在这里查看采集进度与结果。
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+          </UI.Text>
+        </UI.Content>
+        <UI.Content className="flex flex-wrap gap-2">
           <Button
             type="button"
             variant="secondary"
@@ -628,8 +666,8 @@ export function JobDetail({ jobId }: JobDetailProps) {
               {isRetrying ? "正在提交" : "重试任务"}
             </Button>
           ) : null}
-        </div>
-      </div>
+        </UI.Content>
+      </UI.Content>
       {job.cancellation ? (
         <Alert
           variant={job.cancellation.timed_out ? "destructive" : "default"}
@@ -651,39 +689,44 @@ export function JobDetail({ jobId }: JobDetailProps) {
         <Alert variant="destructive" className="mt-8" aria-live="polite">
           <AlertTitle>{FAILURE_LABELS[job.failure.category]}</AlertTitle>
           <AlertDescription>
-            <p>
+            <UI.Text>
               {job.failure.next_action} 错误代码：{job.failure.error_code}。
-            </p>
-            <p>
+            </UI.Text>
+            <UI.Text>
               发生时间：{formatTime(job.failure.occurred_at)}。
               {job.next_run_at
                 ? ` 下次尝试：${formatTime(job.next_run_at)}。`
                 : " 当前没有自动重试计划。"}
-            </p>
+            </UI.Text>
           </AlertDescription>
         </Alert>
       ) : null}
-      <section
+      <UI.Content
+        as="section"
         className="mt-10 grid gap-4 sm:grid-cols-3"
         aria-label="任务进度"
       >
-        <div className="py-4">
-          <p className="text-muted-foreground text-sm">当前阶段</p>
-          <p className="mt-2 text-xl font-medium">
+        <UI.Content className="py-4">
+          <UI.Text className="text-muted-foreground text-sm">当前阶段</UI.Text>
+          <UI.Text className="mt-2 text-xl font-medium">
             {job.progress.stage ? STAGE_LABELS[job.progress.stage] : "尚未开始"}
-          </p>
-        </div>
-        <div className="py-4">
-          <p className="text-muted-foreground text-sm">已发请求</p>
-          <p className="mt-2 text-xl font-medium">
+          </UI.Text>
+        </UI.Content>
+        <UI.Content className="py-4">
+          <UI.Text className="text-muted-foreground text-sm">已发请求</UI.Text>
+          <UI.Text className="mt-2 text-xl font-medium">
             {job.progress.requests_sent}
-          </p>
-        </div>
-        <div className="py-4">
-          <p className="text-muted-foreground text-sm">已保存结果</p>
-          <p className="mt-2 text-xl font-medium">{job.progress.items_saved}</p>
-        </div>
-      </section>
+          </UI.Text>
+        </UI.Content>
+        <UI.Content className="py-4">
+          <UI.Text className="text-muted-foreground text-sm">
+            已保存结果
+          </UI.Text>
+          <UI.Text className="mt-2 text-xl font-medium">
+            {job.progress.items_saved}
+          </UI.Text>
+        </UI.Content>
+      </UI.Content>
       <JobResult
         resultContentId={job.result_content_id}
         savedDescription={savedDescription}
@@ -702,11 +745,22 @@ export function JobDetail({ jobId }: JobDetailProps) {
             <JobSourceFreshness freshness={job.source_freshness} />
           ) : null}
           <JobCoverageWindows windows={job.coverage_windows ?? []} />
-          <section className="mt-10" aria-labelledby="job-facts-title">
-            <h2 id="job-facts-title" className="text-xl font-medium">
+          <UI.Content
+            as="section"
+            className="mt-10"
+            aria-labelledby="job-facts-title"
+          >
+            <UI.Heading
+              level={2}
+              id="job-facts-title"
+              className="text-xl font-medium"
+            >
               执行信息
-            </h2>
-            <dl className="mt-5 grid gap-x-8 gap-y-6 sm:grid-cols-2">
+            </UI.Heading>
+            <UI.Content
+              as="dl"
+              className="mt-5 grid gap-x-8 gap-y-6 sm:grid-cols-2"
+            >
               <DetailItem label="任务编号" value={job.id} />
               <DetailItem
                 label="配置"
@@ -736,10 +790,10 @@ export function JobDetail({ jobId }: JobDetailProps) {
                 value={formatTime(job.next_run_at)}
               />
               <DetailItem label="重试次数" value={String(job.retry_count)} />
-            </dl>
-          </section>
+            </UI.Content>
+          </UI.Content>
         </CollapsibleContent>
       </Collapsible>
-    </div>
+    </UI.Content>
   );
 }

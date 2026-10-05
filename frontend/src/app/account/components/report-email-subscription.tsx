@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -81,14 +82,20 @@ export function ReportEmailSubscription() {
   }
 
   return (
-    <section aria-label="报告邮件订阅" className="flex max-w-xl flex-col gap-6">
-      <header className="flex flex-col gap-3">
-        <h2 className="text-2xl font-medium">报告通知</h2>
-        <p className="text-muted-foreground text-sm leading-6">
+    <UI.Content
+      as="section"
+      aria-label="报告邮件订阅"
+      className="flex max-w-xl flex-col gap-6"
+    >
+      <UI.Content as="header" className="flex flex-col gap-3">
+        <UI.Heading level={2} className="text-2xl font-medium">
+          报告通知
+        </UI.Heading>
+        <UI.Text className="text-muted-foreground text-sm leading-6">
           日报汇总前一天，周报汇总上一周。默认北京时间每天 08:00、周一 08:00
           开始生成，完成后发送。
-        </p>
-      </header>
+        </UI.Text>
+      </UI.Content>
       {failed ? (
         <Empty>
           <EmptyDescription>暂时无法读取订阅设置。</EmptyDescription>
@@ -106,13 +113,13 @@ export function ReportEmailSubscription() {
         </Item>
       ) : (
         <>
-          <p className="text-sm break-all">
+          <UI.Text className="text-sm break-all">
             收件邮箱：{subscription.email || "尚未绑定"}
-          </p>
+          </UI.Text>
           {!subscription.email && (
-            <p className="text-muted-foreground text-sm">
+            <UI.Text className="text-muted-foreground text-sm">
               请先在“登录安全”中绑定并验证邮箱。
-            </p>
+            </UI.Text>
           )}
           <Field
             orientation="horizontal"
@@ -134,15 +141,15 @@ export function ReportEmailSubscription() {
             />
           </Field>
           {!subscription.delivery_available && (
-            <p className="text-muted-foreground text-sm leading-6">
+            <UI.Text className="text-muted-foreground text-sm leading-6">
               平台邮件发送服务尚未就绪。订阅偏好可以保存，当前暂不能发送邮件。
-            </p>
+            </UI.Text>
           )}
           <Button asChild variant="outline" className="self-start">
             <Link href="/topics">选择需要发送的关注主题</Link>
           </Button>
         </>
       )}
-    </section>
+    </UI.Content>
   );
 }

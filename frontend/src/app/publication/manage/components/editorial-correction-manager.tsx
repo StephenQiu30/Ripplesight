@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -177,12 +179,14 @@ export function EditorialCorrectionManager({
     );
   }
   return (
-    <section className="mt-12 flex flex-col gap-y-5">
-      <h2 className="text-lg font-medium">精选与中文文案纠正</h2>
-      <p className="text-muted-foreground text-sm leading-7">
+    <UI.Content as="section" className="mt-12 flex flex-col gap-y-5">
+      <UI.Heading level={2} className="text-lg font-medium">
+        精选与中文文案纠正
+      </UI.Heading>
+      <UI.Text className="text-muted-foreground text-sm leading-7">
         按当前人工版本修改或清除字段。静默仅停止新的精选通知；恢复自动结果复用原模型结果。
-      </p>
-      <form
+      </UI.Text>
+      <UI.Form
         onSubmit={(event) => {
           event.preventDefault();
           void action(
@@ -223,7 +227,7 @@ export function EditorialCorrectionManager({
               id={`${fieldId}-editorial-correction-manager-field-2`}
             />
           </Field>
-          <div className="flex gap-3 sm:col-span-2">
+          <UI.Content className="flex gap-3 sm:col-span-2">
             <Button disabled={busy || !token}>读取当前分析</Button>
             <Button
               type="button"
@@ -237,12 +241,12 @@ export function EditorialCorrectionManager({
             >
               清除令牌
             </Button>
-          </div>
+          </UI.Content>
         </FieldGroup>
-      </form>
+      </UI.Form>
 
       {run ? (
-        <form
+        <UI.Form
           key={`${run.id}:${run.manual_version}`}
           onSubmit={(event) => {
             event.preventDefault();
@@ -250,10 +254,10 @@ export function EditorialCorrectionManager({
           }}
         >
           <FieldGroup className="flex flex-col gap-y-4">
-            <p className="text-sm">
+            <UI.Text className="text-sm">
               人工版本 {run.manual_version} ·{" "}
               {run.result?.manual ? "人工覆盖" : "自动结果"} · {run.status}
-            </p>
+            </UI.Text>
             {run.job_id ? (
               <Link
                 href={`/jobs/${run.job_id}`}
@@ -263,7 +267,10 @@ export function EditorialCorrectionManager({
               </Link>
             ) : null}
             {FIELDS.map((field) => (
-              <div key={field} className="grid min-w-0 gap-3 sm:grid-cols-3">
+              <UI.Content
+                key={field}
+                className="grid min-w-0 gap-3 sm:grid-cols-3"
+              >
                 <FieldLabel htmlFor={`correction-${field}`}>
                   {LABELS[field]}
                 </FieldLabel>
@@ -392,7 +399,7 @@ export function EditorialCorrectionManager({
                     maxLength={field === "title_zh" ? 200 : 1600}
                   />
                 )}
-              </div>
+              </UI.Content>
             ))}
             <Field className="min-w-0">
               <FieldLabel
@@ -407,7 +414,7 @@ export function EditorialCorrectionManager({
                 id={`${fieldId}-editorial-correction-manager-field-3`}
               />
             </Field>
-            <div className="flex flex-wrap gap-3">
+            <UI.Content className="flex flex-wrap gap-3">
               <Button
                 disabled={
                   busy ||
@@ -443,10 +450,10 @@ export function EditorialCorrectionManager({
               >
                 全部恢复自动结果
               </Button>
-            </div>
+            </UI.Content>
           </FieldGroup>
-        </form>
+        </UI.Form>
       ) : null}
-    </section>
+    </UI.Content>
   );
 }

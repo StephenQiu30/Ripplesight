@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
 import Link from "next/link";
@@ -16,10 +17,14 @@ import {
 
 function Fact({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="mt-1 text-sm font-medium wrap-break-word">{value}</dd>
-    </div>
+    <UI.Content>
+      <UI.Content as="dt" className="text-muted-foreground text-xs">
+        {label}
+      </UI.Content>
+      <UI.Content as="dd" className="mt-1 text-sm font-medium wrap-break-word">
+        {value}
+      </UI.Content>
+    </UI.Content>
   );
 }
 
@@ -29,13 +34,17 @@ function version(value: number | null): string {
 
 function RecordLinks({ row }: { row: HotKeyAPI.CollectionCoverageView }) {
   return (
-    <div className="grid gap-5 sm:grid-cols-2">
-      <div>
-        <h4 className="font-medium">入库内容</h4>
+    <UI.Content className="grid gap-5 sm:grid-cols-2">
+      <UI.Content>
+        <UI.Heading level={4} className="font-medium">
+          入库内容
+        </UI.Heading>
         {row.content_ids === null ? (
-          <p className="text-muted-foreground mt-2 text-sm">未知</p>
+          <UI.Text className="text-muted-foreground mt-2 text-sm">未知</UI.Text>
         ) : row.content_ids.length === 0 ? (
-          <p className="text-muted-foreground mt-2 text-sm">明确为 0 条</p>
+          <UI.Text className="text-muted-foreground mt-2 text-sm">
+            明确为 0 条
+          </UI.Text>
         ) : (
           <ItemGroup className="mt-2 flex flex-col gap-2 text-sm">
             {row.content_ids.map((contentId) => (
@@ -51,13 +60,17 @@ function RecordLinks({ row }: { row: HotKeyAPI.CollectionCoverageView }) {
             ))}
           </ItemGroup>
         )}
-      </div>
-      <div>
-        <h4 className="font-medium">热榜快照</h4>
+      </UI.Content>
+      <UI.Content>
+        <UI.Heading level={4} className="font-medium">
+          热榜快照
+        </UI.Heading>
         {row.snapshot_ids === null ? (
-          <p className="text-muted-foreground mt-2 text-sm">未知</p>
+          <UI.Text className="text-muted-foreground mt-2 text-sm">未知</UI.Text>
         ) : row.snapshot_ids.length === 0 ? (
-          <p className="text-muted-foreground mt-2 text-sm">明确为 0 个</p>
+          <UI.Text className="text-muted-foreground mt-2 text-sm">
+            明确为 0 个
+          </UI.Text>
         ) : (
           <ItemGroup className="mt-2 flex flex-col gap-2 text-sm">
             {row.snapshot_ids.map((snapshotId) => (
@@ -75,8 +88,8 @@ function RecordLinks({ row }: { row: HotKeyAPI.CollectionCoverageView }) {
             ))}
           </ItemGroup>
         )}
-      </div>
-    </div>
+      </UI.Content>
+    </UI.Content>
   );
 }
 
@@ -88,31 +101,33 @@ export function CoverageWindowDetail({
   onClose: () => void;
 }) {
   return (
-    <section
+    <UI.Content
+      as="section"
       id="coverage-detail"
       aria-labelledby="coverage-detail-heading"
       className="flex flex-col"
     >
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-muted-foreground text-xs tracking-wider uppercase">
+      <UI.Content className="flex flex-wrap items-start justify-between gap-4">
+        <UI.Content>
+          <UI.Text className="text-muted-foreground text-xs tracking-wider uppercase">
             窗口详情
-          </p>
-          <h3
+          </UI.Text>
+          <UI.Heading
+            level={3}
             id="coverage-detail-heading"
             className="mt-2 text-xl font-semibold"
           >
             {row.source_key} · {capabilityLabel(row.capability)}
-          </h3>
-          <p className="text-muted-foreground mt-2 text-sm">
+          </UI.Heading>
+          <UI.Text className="text-muted-foreground mt-2 text-sm">
             到期：{coverageTime(row.due_at)}（北京时间）
-          </p>
-        </div>
+          </UI.Text>
+        </UI.Content>
         <Button type="button" variant="ghost" size="sm" onClick={onClose}>
           关闭详情
         </Button>
-      </div>
-      <div className="mt-5 flex flex-wrap gap-2">
+      </UI.Content>
+      <UI.Content className="mt-5 flex flex-wrap gap-2">
         <Badge variant="outline">{admissionLabel(row.admission_state)}</Badge>
         <Badge
           variant={
@@ -127,25 +142,27 @@ export function CoverageWindowDetail({
         {row.gaps.length > 0 ? (
           <Badge variant="outline">{row.gaps.length} 段未确认缺口</Badge>
         ) : null}
-      </div>
+      </UI.Content>
       {row.admission_reason || row.stop_reason ? (
-        <div className="mt-5 flex flex-col gap-2 text-sm">
+        <UI.Content className="mt-5 flex flex-col gap-2 text-sm">
           {row.admission_reason ? (
-            <p>受理原因：{row.admission_reason}</p>
+            <UI.Text>受理原因：{row.admission_reason}</UI.Text>
           ) : null}
-          {row.stop_reason ? <p>停止原因：{row.stop_reason}</p> : null}
-        </div>
+          {row.stop_reason ? (
+            <UI.Text>停止原因：{row.stop_reason}</UI.Text>
+          ) : null}
+        </UI.Content>
       ) : null}
       {row.job_id === null ? (
-        <p className="mt-5 text-sm font-medium">
+        <UI.Text className="mt-5 text-sm font-medium">
           这个到期窗口没有关联 Job；窗口和缺口仍保留。
-        </p>
+        </UI.Text>
       ) : (
         <Button asChild variant="secondary" size="sm" className="mt-5">
           <Link href={`/jobs/${row.job_id}`}>打开关联任务</Link>
         </Button>
       )}
-      <dl className="mt-8 grid gap-x-6 gap-y-5 sm:grid-cols-2">
+      <UI.Content as="dl" className="mt-8 grid gap-x-6 gap-y-5 sm:grid-cols-2">
         <Fact label="窗口起点" value={coverageTime(row.window_start)} />
         <Fact label="窗口终点" value={coverageTime(row.window_end)} />
         <Fact
@@ -171,14 +188,20 @@ export function CoverageWindowDetail({
         <Fact label="去重条数" value={coverageCount(row.deduplicated_count)} />
         <Fact label="关联 Job 状态" value={row.job_status ?? "未知"} />
         <Fact label="主题 ID" value={row.topic_id ?? "未知"} />
-      </dl>
-      <div className="mt-8 grid gap-8 sm:grid-cols-2">
-        <div>
-          <h4 className="font-medium">任务尝试</h4>
+      </UI.Content>
+      <UI.Content className="mt-8 grid gap-8 sm:grid-cols-2">
+        <UI.Content>
+          <UI.Heading level={4} className="font-medium">
+            任务尝试
+          </UI.Heading>
           {row.attempts === null ? (
-            <p className="text-muted-foreground mt-2 text-sm">未知</p>
+            <UI.Text className="text-muted-foreground mt-2 text-sm">
+              未知
+            </UI.Text>
           ) : row.attempts.length === 0 ? (
-            <p className="text-muted-foreground mt-2 text-sm">明确为 0 次</p>
+            <UI.Text className="text-muted-foreground mt-2 text-sm">
+              明确为 0 次
+            </UI.Text>
           ) : (
             <ItemGroup className="mt-3 flex flex-col gap-2 text-sm">
               {row.attempts.map((attempt) => (
@@ -197,28 +220,38 @@ export function CoverageWindowDetail({
               ))}
             </ItemGroup>
           )}
-        </div>
-        <div>
-          <h4 className="font-medium">分析状态</h4>
+        </UI.Content>
+        <UI.Content>
+          <UI.Heading level={4} className="font-medium">
+            分析状态
+          </UI.Heading>
           {row.analysis === null ? (
-            <p className="text-muted-foreground mt-2 text-sm">未知</p>
+            <UI.Text className="text-muted-foreground mt-2 text-sm">
+              未知
+            </UI.Text>
           ) : (
-            <p className="mt-2 text-sm">
+            <UI.Text className="mt-2 text-sm">
               待处理 {coverageCount(row.analysis.pending_count)} · 失败{" "}
               {coverageCount(row.analysis.failed_count)} · 标注异常{" "}
               {coverageCount(row.analysis.invalid_count)} · 有效{" "}
               {coverageCount(row.analysis.valid_count)}
-            </p>
+            </UI.Text>
           )}
-        </div>
-      </div>
-      <div className="mt-8 grid gap-8 sm:grid-cols-2">
-        <div>
-          <h4 className="font-medium">资源预算</h4>
+        </UI.Content>
+      </UI.Content>
+      <UI.Content className="mt-8 grid gap-8 sm:grid-cols-2">
+        <UI.Content>
+          <UI.Heading level={4} className="font-medium">
+            资源预算
+          </UI.Heading>
           {row.budgets === null ? (
-            <p className="text-muted-foreground mt-2 text-sm">未知</p>
+            <UI.Text className="text-muted-foreground mt-2 text-sm">
+              未知
+            </UI.Text>
           ) : row.budgets.length === 0 ? (
-            <p className="text-muted-foreground mt-2 text-sm">明确为 0 项</p>
+            <UI.Text className="text-muted-foreground mt-2 text-sm">
+              明确为 0 项
+            </UI.Text>
           ) : (
             <ItemGroup className="mt-3 flex flex-col gap-3 text-sm">
               {row.budgets.map((budget) => (
@@ -228,21 +261,23 @@ export function CoverageWindowDetail({
                   key={`${budget.budget_key}:${budget.policy_version}`}
                 >
                   <ItemContent className="min-w-0 gap-3">
-                    <span className="font-medium">
+                    <UI.Text as="span" className="font-medium">
                       {budget.budget_key} · v{budget.policy_version}
-                    </span>
-                    <span className="text-muted-foreground block">
+                    </UI.Text>
+                    <UI.Text as="span" className="text-muted-foreground block">
                       上限 {budget.limit_units} · 预留 {budget.reserved_units} ·
                       实耗 {budget.consumed_units}
-                    </span>
+                    </UI.Text>
                   </ItemContent>
                 </Item>
               ))}
             </ItemGroup>
           )}
-        </div>
-        <div>
-          <h4 className="font-medium">未确认缺口</h4>
+        </UI.Content>
+        <UI.Content>
+          <UI.Heading level={4} className="font-medium">
+            未确认缺口
+          </UI.Heading>
           {row.gaps.length === 0 ? (
             <Empty className="mt-2">
               <EmptyHeader>
@@ -261,20 +296,20 @@ export function CoverageWindowDetail({
                 >
                   <ItemContent className="min-w-0 gap-3">
                     {coverageTime(gap.starts_at)} → {coverageTime(gap.ends_at)}
-                    <span className="text-muted-foreground block">
+                    <UI.Text as="span" className="text-muted-foreground block">
                       原因：{gap.reason}
-                    </span>
+                    </UI.Text>
                   </ItemContent>
                 </Item>
               ))}
             </ItemGroup>
           )}
-        </div>
-      </div>
-      <div className="mt-8 flex flex-col gap-6">
+        </UI.Content>
+      </UI.Content>
+      <UI.Content className="mt-8 flex flex-col gap-6">
         <Separator />
         <RecordLinks row={row} />
-      </div>
-    </section>
+      </UI.Content>
+    </UI.Content>
   );
 }

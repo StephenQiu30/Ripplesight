@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import {
   NavigationMenu,
   NavigationMenuList,
@@ -49,17 +50,22 @@ export function BoardReading({
       ? "/leaderboard"
       : `/leaderboard/category/${data.board.key}`;
   return (
-    <div className="flex flex-col gap-y-10">
-      <header className="flex max-w-3xl flex-col gap-y-4">
-        <p className="text-muted-foreground text-sm">公开评测共识</p>
-        <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
+    <UI.Content className="flex flex-col gap-y-10">
+      <UI.Content as="header" className="flex max-w-3xl flex-col gap-y-4">
+        <UI.Text className="text-muted-foreground text-sm">
+          公开评测共识
+        </UI.Text>
+        <UI.Heading
+          level={1}
+          className="text-3xl font-medium tracking-tight sm:text-4xl"
+        >
           {data.board.name}
-        </h1>
-        <p className="text-muted-foreground leading-7">
+        </UI.Heading>
+        <UI.Text className="text-muted-foreground leading-7">
           {data.board.description}
-        </p>
+        </UI.Text>
         <RunStamp run={data.run} />
-      </header>
+      </UI.Content>
       <NavigationMenu
         viewport={false}
         className="max-w-full justify-start"
@@ -81,12 +87,13 @@ export function BoardReading({
         </NavigationMenuList>
       </NavigationMenu>
       <Item variant="muted" asChild>
-        <section
+        <UI.Content
+          as="section"
           className="flex flex-col gap-y-3 p-5 sm:p-6"
           aria-label="榜单解读"
         >
           <ItemContent className="min-w-0 gap-3">
-            <p className="leading-7">{data.board.how_to_read}</p>
+            <UI.Text className="leading-7">{data.board.how_to_read}</UI.Text>
             <ItemDescription className="line-clamp-none leading-6">
               排名由加权 Kemeny
               共识决定，支持指数基于固定锚点。指数不是能力差距或获胜概率；缺失证据不补分、不重新分配预算。
@@ -103,10 +110,14 @@ export function BoardReading({
               阅读计算规则
             </Link>
           </ItemContent>
-        </section>
+        </UI.Content>
       </Item>
-      <section className="flex flex-col gap-y-5" aria-label="模型排名">
-        <form action={href} method="get">
+      <UI.Content
+        as="section"
+        className="flex flex-col gap-y-5"
+        aria-label="模型排名"
+      >
+        <UI.Form action={href} method="get">
           <FieldGroup className="flex flex-row flex-wrap items-center gap-4">
             <Field orientation="horizontal" className="w-auto">
               <Checkbox
@@ -142,11 +153,11 @@ export function BoardReading({
               </Link>
             ) : null}
           </FieldGroup>
-        </form>
-        <p className="text-muted-foreground text-sm">
+        </UI.Form>
+        <UI.Text className="text-muted-foreground text-sm">
           筛选保留原排名，最多展示 30 个模型；输入 / 输出价格单位为每百万
           token。
-        </p>
+        </UI.Text>
         {data.entries.length === 0 ? (
           <Alert role="note" className="p-8">
             <AlertDescription>当前筛选没有符合条件的模型</AlertDescription>
@@ -169,41 +180,41 @@ export function BoardReading({
                 <TableRow key={entry.model.slug} className="border-0">
                   <TableCell className="font-mono">{entry.rank}</TableCell>
                   <TableCell>
-                    <div className="flex min-w-44 items-center gap-3">
+                    <UI.Content className="flex min-w-44 items-center gap-3">
                       <ModelMark model={entry.model} />
-                      <div className="flex flex-col gap-y-1">
+                      <UI.Content className="flex flex-col gap-y-1">
                         <Link
                           className="font-medium hover:underline"
                           href={`/leaderboard/models/${entry.model.slug}`}
                         >
                           {entry.model.name}
                         </Link>
-                        <p className="text-muted-foreground text-xs">
+                        <UI.Text className="text-muted-foreground text-xs">
                           {entry.model.provider ?? "运营方未知"}
-                        </p>
+                        </UI.Text>
                         {entry.access.weights_url ? (
-                          <a
+                          <UI.TextLink
                             className="text-muted-foreground text-xs underline underline-offset-4"
                             href={entry.access.weights_url}
                             target="_blank"
                             rel="noreferrer"
                           >
                             开放权重
-                          </a>
+                          </UI.TextLink>
                         ) : null}
-                      </div>
-                    </div>
+                      </UI.Content>
+                    </UI.Content>
                   </TableCell>
                   <TableCell className="font-mono text-base">
                     {entry.score.toFixed(1)}
                   </TableCell>
                   <TableCell>
-                    <p>
+                    <UI.Text>
                       {entry.source_count} 项 / {entry.operator_count} 家
-                    </p>
-                    <p className="text-muted-foreground font-mono text-xs">
+                    </UI.Text>
+                    <UI.Text className="text-muted-foreground font-mono text-xs">
                       {Math.round(entry.coverage * 100)}%
-                    </p>
+                    </UI.Text>
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary">
@@ -216,15 +227,15 @@ export function BoardReading({
                             : "证据有限"}
                     </Badge>
                     {entry.stability ? (
-                      <p className="text-muted-foreground mt-1 text-xs">
+                      <UI.Text className="text-muted-foreground mt-1 text-xs">
                         重算范围 {entry.stability.from_rank}–
                         {entry.stability.to_rank}；不可用{" "}
                         {entry.stability.unavailable} 轮
-                      </p>
+                      </UI.Text>
                     ) : (
-                      <p className="text-muted-foreground mt-1 text-xs">
+                      <UI.Text className="text-muted-foreground mt-1 text-xs">
                         未提供稳定性结果
-                      </p>
+                      </UI.Text>
                     )}
                   </TableCell>
                   <TableCell className="min-w-44">
@@ -235,13 +246,15 @@ export function BoardReading({
             </TableBody>
           </Table>
         )}
-      </section>
+      </UI.Content>
       {data.pending.length > 0 ? (
-        <section className="flex flex-col gap-y-3">
-          <h2 className="text-xl font-medium">综合榜模型的分类证据缺口</h2>
-          <p className="text-muted-foreground text-sm">
+        <UI.Content as="section" className="flex flex-col gap-y-3">
+          <UI.Heading level={2} className="text-xl font-medium">
+            综合榜模型的分类证据缺口
+          </UI.Heading>
+          <UI.Text className="text-muted-foreground text-sm">
             这些模型尚未满足当前分类的独立证据资格，不能把未上榜解释为能力较低。
-          </p>
+          </UI.Text>
           <ItemGroup className="flex flex-wrap gap-3">
             {data.pending.map((item) => (
               <Item
@@ -254,16 +267,16 @@ export function BoardReading({
                   <Link href={`/leaderboard/models/${item.model.slug}`}>
                     {item.model.name}
                   </Link>
-                  <span className="text-muted-foreground">
+                  <UI.Text as="span" className="text-muted-foreground">
                     {" "}
                     · {item.sources} 个来源
-                  </span>
+                  </UI.Text>
                 </ItemContent>
               </Item>
             ))}
           </ItemGroup>
-        </section>
+        </UI.Content>
       ) : null}
-    </div>
+    </UI.Content>
   );
 }

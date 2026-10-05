@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Separator } from "@/components/ui/separator";
 
 import { Item, ItemContent } from "@/components/ui/item";
@@ -134,13 +136,19 @@ export function EditorialExternalIngress({
     );
   }
   return (
-    <section className="flex flex-col gap-y-4 pt-5" aria-label="外部材料摄入">
+    <UI.Content
+      as="section"
+      className="flex flex-col gap-y-4 pt-5"
+      aria-label="外部材料摄入"
+    >
       <Separator />
-      <h3 className="font-medium">外部材料摄入</h3>
-      <p className="text-muted-foreground text-sm">
+      <UI.Heading level={3} className="font-medium">
+        外部材料摄入
+      </UI.Heading>
+      <UI.Text className="text-muted-foreground text-sm">
         单批 1—50 项、最多 4
         MiB。专属来源令牌至少32字符，仅保存在当前页面内存中；服务端未配置专用盐、来源许可或访问范围时拒绝受理。任务排队与单项待处理均不表示正文已经保存。
-      </p>
+      </UI.Text>
       <Label htmlFor="external-token">来源专属令牌</Label>
       <Input
         id="external-token"
@@ -171,18 +179,18 @@ export function EditorialExternalIngress({
         受理材料摄入
       </Button>
       {receipt ? (
-        <div className="flex flex-col gap-y-3 text-sm">
-          <p>
+        <UI.Content className="flex flex-col gap-y-3 text-sm">
+          <UI.Text>
             本批收到 {receipt.received} 项 · 配置版本{" "}
             {receipt.configuration_version} · 任务 {receipt.job.status}
-          </p>
+          </UI.Text>
           <Link
             href={`/jobs/${receipt.job.id}`}
             className="underline underline-offset-4"
           >
             查看任务 {receipt.job.id}
           </Link>
-          <div>
+          <UI.Content>
             <Button
               variant="outline"
               disabled={busy || token.length < 32}
@@ -190,24 +198,26 @@ export function EditorialExternalIngress({
             >
               读取逐条摄入回执
             </Button>
-          </div>
-          <p className="text-muted-foreground">
+          </UI.Content>
+          <UI.Text className="text-muted-foreground">
             读取仅查看原批次回执，不重发材料、不启动新的摄入任务。
-          </p>
+          </UI.Text>
           {receipt.items.map((item) => (
             <Item variant="muted" key={item.index} asChild>
-              <article className="flex flex-col gap-y-2 p-3">
+              <UI.Content as="article" className="flex flex-col gap-y-2 p-3">
                 <ItemContent className="min-w-0 gap-3">
-                  <p>
+                  <UI.Text>
                     第 {item.index + 1} 项 · {statuses[item.status]}
                     {item.change ? ` · ${item.change}` : ""}
                     {item.duplicate_of != null
                       ? ` · 同批第 ${item.duplicate_of + 1} 项`
                       : ""}
                     {item.reason ? ` · ${item.reason}` : ""}
-                  </p>
+                  </UI.Text>
                   {item.identity_key ? (
-                    <p className="break-all">身份 {item.identity_key}</p>
+                    <UI.Text className="break-all">
+                      身份 {item.identity_key}
+                    </UI.Text>
                   ) : null}
                   {item.content_id ? (
                     <Link
@@ -218,16 +228,16 @@ export function EditorialExternalIngress({
                     </Link>
                   ) : null}
                   {item.content_version_id ? (
-                    <p className="break-all">
+                    <UI.Text className="break-all">
                       固定版本 {item.content_version_id}
-                    </p>
+                    </UI.Text>
                   ) : null}
                 </ItemContent>
-              </article>
+              </UI.Content>
             </Item>
           ))}
-        </div>
+        </UI.Content>
       ) : null}
-    </section>
+    </UI.Content>
   );
 }

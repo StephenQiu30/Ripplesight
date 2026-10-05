@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { toast } from "sonner";
 
@@ -227,9 +228,9 @@ export function TimelineBasis({
         ? "首次发现"
         : "时间未知";
   return (
-    <span>
+    <UI.Text as="span">
       {label}：{formatTime(content.timeline_at ?? null)}
-    </span>
+    </UI.Text>
   );
 }
 
@@ -375,17 +376,20 @@ export function ContentList() {
 
   const filtered = Object.values(applied).some(Boolean);
   return (
-    <div>
-      <div className="flex flex-wrap items-end justify-between gap-6">
-        <div className="flex max-w-xl flex-col gap-4">
-          <h1 className="text-3xl font-normal tracking-tight sm:text-4xl">
+    <UI.Content>
+      <UI.Content className="flex flex-wrap items-end justify-between gap-6">
+        <UI.Content className="flex max-w-xl flex-col gap-4">
+          <UI.Heading
+            level={1}
+            className="text-3xl font-normal tracking-tight sm:text-4xl"
+          >
             作品资料
-          </h1>
-          <p className="text-muted-foreground leading-7">
+          </UI.Heading>
+          <UI.Text className="text-muted-foreground leading-7">
             阅读已保存的内容，查看评论与主题分析。
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-3">
+          </UI.Text>
+        </UI.Content>
+        <UI.Content className="flex flex-wrap gap-3">
           <Dialog open={filterOpen} onOpenChange={setFilterOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">
@@ -400,7 +404,7 @@ export function ContentList() {
                   日期按北京时间，结束日期包含当日。日期范围最多 31 天。
                 </DialogDescription>
               </DialogHeader>
-              <form onSubmit={applyFilters} aria-label="筛选作品资料">
+              <UI.Form onSubmit={applyFilters} aria-label="筛选作品资料">
                 <FieldGroup>
                   <Field>
                     <FieldLabel htmlFor="content-query">正文搜索</FieldLabel>
@@ -561,7 +565,7 @@ export function ContentList() {
                       </Button>
                     </FieldDescription>
                   ) : null}
-                  <div className="flex flex-wrap gap-3">
+                  <UI.Content className="flex flex-wrap gap-3">
                     <Button type="submit">应用筛选</Button>
                     <Button
                       type="button"
@@ -575,9 +579,9 @@ export function ContentList() {
                     >
                       清除筛选
                     </Button>
-                  </div>
+                  </UI.Content>
                 </FieldGroup>
-              </form>
+              </UI.Form>
             </DialogContent>
           </Dialog>
           <Dialog>
@@ -597,17 +601,17 @@ export function ContentList() {
               <WebPageCaptureForm />
             </DialogContent>
           </Dialog>
-        </div>
-      </div>
+        </UI.Content>
+      </UI.Content>
       {state.status === "loading" ? (
-        <div
+        <UI.Content
           aria-label="正在读取作品资料"
           className="mt-12 flex flex-col gap-6"
         >
           {[0, 1, 2].map((item) => (
             <Skeleton key={item} className="h-24 w-full" />
           ))}
-        </div>
+        </UI.Content>
       ) : null}
       {state.status === "error" ? (
         <Alert variant="destructive" className="mt-12">
@@ -633,7 +637,11 @@ export function ContentList() {
       ) : null}
       {state.status === "ready" && state.items.length > 0 ? (
         <>
-          <section aria-label="作品列表" className="mt-12 flex flex-col gap-10">
+          <UI.Content
+            as="section"
+            aria-label="作品列表"
+            className="mt-12 flex flex-col gap-10"
+          >
             {state.items.map((content) => {
               const version = content.latest_observation.content_version;
               const title =
@@ -651,25 +659,29 @@ export function ContentList() {
                 ? contentScopeNotice(version.text_scope, version.text_origin)
                 : "未取得正文";
               return (
-                <article
+                <UI.Content
+                  as="article"
                   key={content.id}
                   className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:gap-8"
                 >
-                  <div className="flex min-w-0 flex-col gap-3">
-                    <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-                      <span>{source}</span>
+                  <UI.Content className="flex min-w-0 flex-col gap-3">
+                    <UI.Content className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                      <UI.Text as="span">{source}</UI.Text>
                       <TimelineBasis content={content} />
                       <ContentAnalysisStatus content={content} />
-                    </div>
-                    <h2 className="line-clamp-2 text-xl leading-8 font-medium break-words">
+                    </UI.Content>
+                    <UI.Heading
+                      level={2}
+                      className="line-clamp-2 text-xl leading-8 font-medium break-words"
+                    >
                       <Link href={`/content/${content.id}`}>{title}</Link>
-                    </h2>
+                    </UI.Heading>
                     {version?.title && version.body ? (
-                      <p className="text-muted-foreground line-clamp-2 max-w-2xl text-sm leading-6 break-words">
+                      <UI.Text className="text-muted-foreground line-clamp-2 max-w-2xl text-sm leading-6 break-words">
                         {version.body}
-                      </p>
+                      </UI.Text>
                     ) : null}
-                    <div className="flex flex-wrap items-center gap-3">
+                    <UI.Content className="flex flex-wrap items-center gap-3">
                       {version ? (
                         <Badge variant="secondary">
                           {contentScopeLabel(
@@ -686,33 +698,33 @@ export function ContentList() {
                           )}
                         </Badge>
                       ) : null}
-                    </div>
+                    </UI.Content>
                     {notice ? (
-                      <p className="text-muted-foreground text-xs leading-5">
+                      <UI.Text className="text-muted-foreground text-xs leading-5">
                         {notice}
-                      </p>
+                      </UI.Text>
                     ) : null}
                     {content.current_visibility &&
                     content.current_visibility.status !== "visible" ? (
-                      <p className="text-muted-foreground text-xs leading-5">
+                      <UI.Text className="text-muted-foreground text-xs leading-5">
                         {visibilityStatusNotice(
                           content.current_visibility.status,
                         )}
-                      </p>
+                      </UI.Text>
                     ) : null}
-                  </div>
+                  </UI.Content>
                   <Button asChild variant="ghost" className="self-start">
                     <Link href={`/content/${content.id}`}>
                       查看详情
                       <ArrowRightIcon data-icon="inline-end" />
                     </Link>
                   </Button>
-                </article>
+                </UI.Content>
               );
             })}
-          </section>
+          </UI.Content>
           {state.nextCursor ? (
-            <div className="mt-12 flex justify-center">
+            <UI.Content className="mt-12 flex justify-center">
               <Button
                 variant="outline"
                 onClick={() => void loadMore()}
@@ -720,10 +732,10 @@ export function ContentList() {
               >
                 {isLoadingMore ? "正在加载" : "加载更多"}
               </Button>
-            </div>
+            </UI.Content>
           ) : null}
         </>
       ) : null}
-    </div>
+    </UI.Content>
   );
 }

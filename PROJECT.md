@@ -4,6 +4,8 @@ HotKey 是 ToC 信息监控产品，覆盖主题与来源配置、信息获取�
 
 产品要求见 [PRD001](docs/prd/001-热点舆情监控平台需求.md) 及 [完整业务需求](docs/prd/008-完整业务需求.md)；领域合同见 [Design001](docs/design/001-热点舆情监控平台总体设计.md) 及 [完整业务设计](docs/design/008-完整业务设计.md)。本文维护技术、目录、API 和数据库边界，[AGENTS](AGENTS.md) 维护工程检查，[BACKLOG](BACKLOG.md) 是总体进度入口，[PLAN007-01](docs/plan/007-01-公开信息免费采集执行计划.md) 维护本轮详细工作包和checklist，[Acceptance](docs/README.md) 记录证据。
 
+Web页面使用shadcn/Radix UI层；`frontend/src/components/ui/content.tsx`统一语义排版、结构、表单和媒体原语，业务/布局无原生JSX。源码边界由ESLint与全目录AST回归验证。首页三栏经 `frontend/src/layout/reading-layout.tsx` 的 ReadingLayout 统一组合导航、信息流和辅助阅读插槽，桌面2:5:3，窄屏信息流优先；不增加main或独立滚动容器。
+
 ## 技术与运行
 
 | 范围 | 固定技术与入口 |

@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { format } from "date-fns";
 import { zhCN } from "react-day-picker/locale";
 import { Calendar } from "@/components/ui/calendar";
@@ -85,8 +87,10 @@ export function PublicEditionCatalogue({
     }
   }
   return (
-    <div className="flex flex-col gap-y-8">
-      <h1 className="text-3xl font-medium">{labels[initial.kind]}历史</h1>
+    <UI.Content className="flex flex-col gap-y-8">
+      <UI.Heading level={1} className="text-3xl font-medium">
+        {labels[initial.kind]}历史
+      </UI.Heading>
       <NavigationMenu
         viewport={false}
         className="max-w-full justify-start"
@@ -116,15 +120,16 @@ export function PublicEditionCatalogue({
       </NavigationMenu>
       {initial.kind === "daily" ? (
         <Item variant="outline" asChild>
-          <section
+          <UI.Content
+            as="section"
             aria-label="日报月份日历"
             className="flex flex-col gap-y-4 p-5"
           >
             <ItemContent className="min-w-0 gap-3">
               <ItemTitle className="line-clamp-none w-full">
-                <h2>月份日历</h2>
+                <UI.Heading level={2}>月份日历</UI.Heading>
               </ItemTitle>
-              <div className="flex flex-wrap items-end gap-3">
+              <UI.Content className="flex flex-wrap items-end gap-3">
                 <Field className="w-full min-w-0 sm:w-auto">
                   <FieldLabel htmlFor={`${fieldId}-edition-catalogue-field-1`}>
                     月份
@@ -145,10 +150,10 @@ export function PublicEditionCatalogue({
                 >
                   读取月份
                 </Button>
-              </div>
+              </UI.Content>
               {calendar ? <DailyCalendar calendar={calendar} /> : null}
             </ItemContent>
-          </section>
+          </UI.Content>
         </Item>
       ) : null}
       {!entries.length ? (
@@ -189,7 +194,7 @@ export function PublicEditionCatalogue({
           {busy ? "正在读取…" : "更早刊期"}
         </Button>
       ) : null}
-    </div>
+    </UI.Content>
   );
 }
 

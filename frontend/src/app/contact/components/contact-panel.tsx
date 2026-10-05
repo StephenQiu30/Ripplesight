@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Spinner } from "@/components/ui/spinner";
 import { Item, ItemContent, ItemDescription } from "@/components/ui/item";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -35,7 +37,11 @@ export function ContactPanel() {
     return () => controller.abort();
   }, [refresh]);
   return (
-    <section aria-label="联系资料" className="flex flex-col gap-y-6">
+    <UI.Content
+      as="section"
+      aria-label="联系资料"
+      className="flex flex-col gap-y-6"
+    >
       {failed ? (
         <Alert>
           <AlertDescription>联系资料暂不可用，可以重新读取。</AlertDescription>
@@ -51,17 +57,19 @@ export function ContactPanel() {
         </Item>
       ) : view.enabled ? (
         <>
-          <h2 className="text-foreground text-lg font-medium">{view.title}</h2>
-          <p className="whitespace-pre-wrap">{view.text}</p>
+          <UI.Heading level={2} className="text-foreground text-lg font-medium">
+            {view.title}
+          </UI.Heading>
+          <UI.Text className="whitespace-pre-wrap">{view.text}</UI.Text>
           {view.url && (
-            <a
+            <UI.TextLink
               href={view.url}
               target="_blank"
               rel="noopener noreferrer"
               className="underline"
             >
               打开联系入口
-            </a>
+            </UI.TextLink>
           )}
           {[
             { url: view.wechat_qr_url, label: "微信二维码" },
@@ -69,8 +77,14 @@ export function ContactPanel() {
           ].map(
             ({ url, label }) =>
               url && (
-                <figure key={label} className="flex flex-col gap-y-2">
-                  <figcaption className="text-sm">{label}</figcaption>
+                <UI.Content
+                  as="figure"
+                  key={label}
+                  className="flex flex-col gap-y-2"
+                >
+                  <UI.Content as="figcaption" className="text-sm">
+                    {label}
+                  </UI.Content>
                   <Image
                     src={url}
                     alt={label}
@@ -79,14 +93,14 @@ export function ContactPanel() {
                     unoptimized
                     className="h-auto max-w-full"
                   />
-                </figure>
+                </UI.Content>
               ),
           )}
         </>
       ) : (
-        <p>维护者尚未启用公开联系资料。登录后可以提交站内反馈。</p>
+        <UI.Text>维护者尚未启用公开联系资料。登录后可以提交站内反馈。</UI.Text>
       )}
-      <div className="flex flex-wrap gap-5">
+      <UI.Content className="flex flex-wrap gap-5">
         <Button
           variant="outline"
           onClick={() => setRefresh((value) => value + 1)}
@@ -96,7 +110,7 @@ export function ContactPanel() {
         <Button variant="ghost" asChild>
           <Link href="/feedback">登录后提交反馈</Link>
         </Button>
-      </div>
-    </section>
+      </UI.Content>
+    </UI.Content>
   );
 }

@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import Link from "next/link";
@@ -20,24 +21,27 @@ export function evidenceDate(value: string | null) {
 
 export function RunStamp({ run }: { run: HotKeyAPI.RunView | null }) {
   return (
-    <div className="text-muted-foreground flex flex-col gap-y-1 text-sm leading-6">
-      <p>
+    <UI.Content className="text-muted-foreground flex flex-col gap-y-1 text-sm leading-6">
+      <UI.Text>
         {run
           ? `发布轮次：${evidenceDate(run.generated_at)}（北京时间）`
           : "尚无已发布轮次；当前展示来源与方法注册表。"}
-      </p>
+      </UI.Text>
       {run ? (
-        <p>
-          方法 <span className="font-mono">{run.methodology_version}</span>
-        </p>
+        <UI.Text>
+          方法{" "}
+          <UI.Text as="span" className="font-mono">
+            {run.methodology_version}
+          </UI.Text>
+        </UI.Text>
       ) : null}
       {run?.fx ? (
-        <p>
+        <UI.Text>
           人民币换算：1 USD = {run.fx.rate.toFixed(4)} CNY，{run.fx.as_of}{" "}
           {run.fx.source_name}
-        </p>
+        </UI.Text>
       ) : null}
-    </div>
+    </UI.Content>
   );
 }
 
@@ -82,31 +86,31 @@ export function OfficialPrice({
     ? price.cny_cached_input_price
     : price.cached_input_price;
   return (
-    <div className="flex flex-col gap-y-1 text-sm leading-6">
-      <p className="font-mono">
+    <UI.Content className="flex flex-col gap-y-1 text-sm leading-6">
+      <UI.Text className="font-mono">
         {priceAmount(input, currency)} / {priceAmount(output, currency)}
-      </p>
+      </UI.Text>
       {!compact ? (
-        <p>
+        <UI.Text>
           输入 / 输出，每百万 token；缓存输入 {priceAmount(cached, currency)}。
-        </p>
+        </UI.Text>
       ) : null}
       {!compact && hasCny && price.currency !== "CNY" ? (
-        <p className="text-muted-foreground">
+        <UI.Text className="text-muted-foreground">
           原价 {priceAmount(price.input_price, price.currency)} /{" "}
           {priceAmount(price.output_price, price.currency)}
           ；人民币金额按本轮汇率换算。
-        </p>
+        </UI.Text>
       ) : null}
-      <a
+      <UI.TextLink
         className="text-muted-foreground underline underline-offset-4"
         href={price.source_url}
         target="_blank"
         rel="noreferrer"
       >
         官方价格 · 核对于 {price.verified_on}
-      </a>
-    </div>
+      </UI.TextLink>
+    </UI.Content>
   );
 }
 
@@ -156,7 +160,7 @@ export function LeaderboardFailure({
       title={absent ? "没有这条公开记录" : "暂时无法读取模型榜"}
       description={description}
       action={
-        <div className="flex flex-wrap items-center gap-3">
+        <UI.Content className="flex flex-wrap items-center gap-3">
           {!absent ? (
             <Button asChild>
               <Link href={href}>重新加载</Link>
@@ -166,11 +170,11 @@ export function LeaderboardFailure({
             <Link href="/leaderboard/sources">查看来源</Link>
           </Button>
           {known?.requestId ? (
-            <p className="text-muted-foreground font-mono text-xs">
+            <UI.Text className="text-muted-foreground font-mono text-xs">
               请求 ID：{known.requestId}
-            </p>
+            </UI.Text>
           ) : null}
-        </div>
+        </UI.Content>
       }
     />
   );

@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldLabel, FieldGroup } from "@/components/ui/field";
@@ -161,11 +163,13 @@ export function SiteManager() {
   }
   return (
     <>
-      <div>
-        <h1 className="text-3xl font-medium">站点联系设置</h1>
-        <p className="text-muted-foreground mt-4 text-sm leading-7">
+      <UI.Content>
+        <UI.Heading level={1} className="text-3xl font-medium">
+          站点联系设置
+        </UI.Heading>
+        <UI.Text className="text-muted-foreground mt-4 text-sm leading-7">
           运营令牌仅保存在当前页面内存。启用、更换和关闭均保存修订与原因；关闭后旧二维码链接不可读取。
-        </p>
+        </UI.Text>
         <Field className="mt-8 flex flex-col gap-y-3">
           <FieldLabel htmlFor="site-token">运营令牌</FieldLabel>
           <Input
@@ -188,11 +192,11 @@ export function SiteManager() {
         </Field>
 
         {view && (
-          <form onSubmit={save}>
+          <UI.Form onSubmit={save}>
             <FieldGroup className="mt-8 flex flex-col gap-y-6">
-              <p className="text-muted-foreground text-sm">
+              <UI.Text className="text-muted-foreground text-sm">
                 当前修订 {view.revision}
-              </p>
+              </UI.Text>
               <Label className="flex items-center gap-3">
                 <Checkbox
                   checked={enabled}
@@ -241,7 +245,7 @@ export function SiteManager() {
                     void choose(event.target.files?.[0], "wechat")
                   }
                 />
-                <p className="text-muted-foreground text-sm">
+                <UI.Text className="text-muted-foreground text-sm">
                   {qrAction === "replace"
                     ? "保存时替换为已选图片"
                     : qrAction === "clear"
@@ -249,7 +253,7 @@ export function SiteManager() {
                       : view.wechat_qr_url
                         ? "保留现有图片"
                         : "尚无图片"}
-                </p>
+                </UI.Text>
                 <Button
                   type="button"
                   variant="outline"
@@ -273,7 +277,7 @@ export function SiteManager() {
                     void choose(event.target.files?.[0], "feishu")
                   }
                 />
-                <p className="text-muted-foreground text-sm">
+                <UI.Text className="text-muted-foreground text-sm">
                   {feishuAction === "replace"
                     ? "保存时替换为已选飞书图片"
                     : feishuAction === "clear"
@@ -281,7 +285,7 @@ export function SiteManager() {
                       : view.feishu_qr_url
                         ? "保留现有飞书图片"
                         : "尚无飞书图片"}
-                </p>
+                </UI.Text>
                 <Button
                   type="button"
                   variant="outline"
@@ -315,14 +319,14 @@ export function SiteManager() {
                 保存配置
               </Button>
             </FieldGroup>
-          </form>
+          </UI.Form>
         )}
-        <p className="mt-10 text-sm">
+        <UI.Text className="mt-10 text-sm">
           <Link href="/contact" className="underline">
             查看公开联系页
           </Link>
-        </p>
-      </div>
+        </UI.Text>
+      </UI.Content>
     </>
   );
 }

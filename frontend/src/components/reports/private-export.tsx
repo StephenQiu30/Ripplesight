@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -137,7 +138,7 @@ function PrivateExportControl({ target }: { target: ExportTarget }) {
   const cancelled = view?.failure_code === "export_cancelled";
   const empty = target.kind === "content" && !target.contentVersionIds.length;
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <UI.Content className="flex flex-wrap items-center gap-3">
       <Select
         value={format}
         disabled={busy || pending}
@@ -169,7 +170,11 @@ function PrivateExportControl({ target }: { target: ExportTarget }) {
         </Button>
       ) : null}
       {view ? (
-        <span className="text-muted-foreground text-sm" role="status">
+        <UI.Text
+          as="span"
+          className="text-muted-foreground text-sm"
+          role="status"
+        >
           {cancelled
             ? "导出任务已取消"
             : view.status === "pending"
@@ -181,7 +186,7 @@ function PrivateExportControl({ target }: { target: ExportTarget }) {
                   : view.status === "blocked"
                     ? "材料权限或固定版本已不可用"
                     : "导出任务失败"}
-        </span>
+        </UI.Text>
       ) : null}
       {view?.status === "succeeded" ? (
         <Button
@@ -281,10 +286,10 @@ function PrivateExportControl({ target }: { target: ExportTarget }) {
         </Button>
       ) : null}
       {empty ? (
-        <span className="text-muted-foreground text-sm">
+        <UI.Text as="span" className="text-muted-foreground text-sm">
           没有可导出的固定内容版本。
-        </span>
+        </UI.Text>
       ) : null}
-    </div>
+    </UI.Content>
   );
 }

@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { toast } from "sonner";
 
@@ -133,7 +134,7 @@ export function SourceConnectionActions({
   }
 
   return (
-    <div
+    <UI.Content
       role="group"
       className="flex max-w-md flex-col gap-3"
       aria-label={`${platform.display_name}连接管理`}
@@ -168,7 +169,7 @@ export function SourceConnectionActions({
           </Field>
         </FieldGroup>
       ) : null}
-      <div className="flex flex-wrap gap-2">
+      <UI.Content className="flex flex-wrap gap-2">
         <Button
           ref={enableButton}
           variant="outline"
@@ -199,7 +200,7 @@ export function SourceConnectionActions({
             停用连接
           </Button>
         ) : null}
-      </div>
+      </UI.Content>
       {safetyPaused ? (
         <Alert>
           <AlertTitle>来源已暂停</AlertTitle>
@@ -207,13 +208,13 @@ export function SourceConnectionActions({
         </Alert>
       ) : null}
       {!canEnable && !editableHosts ? (
-        <p className="text-muted-foreground text-sm">
+        <UI.Text className="text-muted-foreground text-sm">
           {platform.source_key === "bilibili" ||
           platform.status === "unconfigured"
             ? "尚未完成来源配置。请维护者配置对应来源预设；需要凭据的来源，请维护者先配置服务端凭据。"
             : "请维护者先配置服务端凭据。"}
           页面不接收或显示会话秘密。
-        </p>
+        </UI.Text>
       ) : null}
       <AlertDialog
         open={confirm !== null}
@@ -297,6 +298,6 @@ export function SourceConnectionActions({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </UI.Content>
   );
 }

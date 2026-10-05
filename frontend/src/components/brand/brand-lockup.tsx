@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import Link from "next/link";
@@ -41,18 +42,22 @@ export function BrandLockup({
         aria-label={href === "/" ? "知微见澜首页" : "知微见澜工作台"}
       >
         <BrandMark />
-        <span
+        <UI.Text
+          as="span"
           className={cn(
             "text-base font-semibold tracking-tight sm:text-lg",
             compactOnMobile && "hidden sm:inline",
           )}
         >
           知微见澜
-        </span>
+        </UI.Text>
         {showEnglish ? (
-          <span className="text-muted-foreground hidden text-sm sm:inline">
+          <UI.Text
+            as="span"
+            className="text-muted-foreground hidden text-sm sm:inline"
+          >
             / Ripplesight
-          </span>
+          </UI.Text>
         ) : null}
       </Link>
     </Button>

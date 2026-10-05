@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import { Viewer } from "@/components/editor";
 import {
   NavigationMenu,
@@ -33,57 +34,71 @@ export function PublicEditionReader({
   const references = (ids: string[]) =>
     edition.entries.filter((entry) => ids.includes(entry.id));
   return (
-    <div className="flex flex-col gap-y-9">
-      <div className="text-muted-foreground flex flex-wrap gap-4 text-sm">
-        <span>
+    <UI.Content className="flex flex-col gap-y-9">
+      <UI.Content className="text-muted-foreground flex flex-wrap gap-4 text-sm">
+        <UI.Text as="span">
           {labels[edition.kind]} · {edition.key}
-        </span>
-        <span>修订 {edition.revision}</span>
-        <time dateTime={edition.created_at}>
+        </UI.Text>
+        <UI.Text as="span">修订 {edition.revision}</UI.Text>
+        <UI.Timestamp dateTime={edition.created_at}>
           {publicationTime(edition.created_at)}
-        </time>
-      </div>
-      <h1 className="text-3xl leading-tight font-medium">{edition.title}</h1>
+        </UI.Timestamp>
+      </UI.Content>
+      <UI.Heading level={1} className="text-3xl leading-tight font-medium">
+        {edition.title}
+      </UI.Heading>
       <Viewer value={edition.lead} className="text-muted-foreground" />
-      <div className="text-muted-foreground flex flex-wrap gap-4 text-sm">
-        <span>
+      <UI.Content className="text-muted-foreground flex flex-wrap gap-4 text-sm">
+        <UI.Text as="span">
           {edition.metrics.selected_count ?? edition.entries.length} 条精选
-        </span>
-        <span>{edition.metrics.sources_count ?? 0} 个来源</span>
-        <a
+        </UI.Text>
+        <UI.Text as="span">{edition.metrics.sources_count ?? 0} 个来源</UI.Text>
+        <UI.TextLink
           href={`/reports/${edition.kind}/${encodeURIComponent(edition.key)}.md`}
           className="underline"
         >
           读取 Markdown
-        </a>
+        </UI.TextLink>
         <Link href={`/feed/${edition.kind}.xml`} className="underline">
           订阅{labels[edition.kind]}
         </Link>
-      </div>
+      </UI.Content>
       {edition.highlights.length ? (
-        <section>
-          <h2 className="text-xl font-medium">重点关注</h2>
+        <UI.Content as="section">
+          <UI.Heading level={2} className="text-xl font-medium">
+            重点关注
+          </UI.Heading>
           <PublicItemCards items={references(edition.highlights)} />
-        </section>
+        </UI.Content>
       ) : null}
       {edition.themes.map((theme) => (
-        <section key={theme.heading} className="flex flex-col gap-y-4">
-          <h2 className="text-xl font-medium">{theme.heading}</h2>
+        <UI.Content
+          as="section"
+          key={theme.heading}
+          className="flex flex-col gap-y-4"
+        >
+          <UI.Heading level={2} className="text-xl font-medium">
+            {theme.heading}
+          </UI.Heading>
           <Viewer value={theme.summary} className="text-muted-foreground" />
           <PublicItemCards items={references(theme.content_ids)} />
-        </section>
+        </UI.Content>
       ))}
       {edition.sections.map((section) => (
-        <section key={section.label}>
-          <h2 className="text-xl font-medium">{section.label}</h2>
+        <UI.Content as="section" key={section.label}>
+          <UI.Heading level={2} className="text-xl font-medium">
+            {section.label}
+          </UI.Heading>
           <PublicItemCards items={references(section.content_ids)} />
-        </section>
+        </UI.Content>
       ))}
       {edition.flashes.length ? (
-        <section>
-          <h2 className="text-xl font-medium">更多动态</h2>
+        <UI.Content as="section">
+          <UI.Heading level={2} className="text-xl font-medium">
+            更多动态
+          </UI.Heading>
           <PublicItemCards items={references(edition.flashes)} />
-        </section>
+        </UI.Content>
       ) : null}
       <Collapsible className="flex flex-col gap-4">
         <CollapsibleTrigger asChild>
@@ -92,9 +107,9 @@ export function PublicEditionReader({
             variant="ghost"
             className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
           >
-            <span className="min-w-0 text-left">
+            <UI.Text as="span" className="min-w-0 text-left">
               全部 {edition.entries.length} 条固定引用
-            </span>
+            </UI.Text>
             <ChevronDownIcon
               aria-hidden="true"
               data-icon="inline-end"
@@ -146,10 +161,10 @@ export function PublicEditionReader({
           ) : null}
         </NavigationMenuList>
       </NavigationMenu>
-      <div className="flex flex-wrap items-start gap-4 print:hidden">
+      <UI.Content className="flex flex-wrap items-start gap-4 print:hidden">
         <EditionPrint />
         <PosterDownload target={{ kind: edition.kind, key: edition.key }} />
-      </div>
-    </div>
+      </UI.Content>
+    </UI.Content>
   );
 }

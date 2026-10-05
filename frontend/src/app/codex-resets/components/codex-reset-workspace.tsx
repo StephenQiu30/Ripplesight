@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Spinner } from "@/components/ui/spinner";
 import { Item, ItemContent, ItemDescription } from "@/components/ui/item";
 import { FieldLabel, Field } from "@/components/ui/field";
@@ -145,8 +147,10 @@ export function CodexResetWorkspace() {
   }
   if (state.status === "loading")
     return (
-      <div>
-        <h1 className="text-3xl font-medium">Codex 重置公告</h1>
+      <UI.Content>
+        <UI.Heading level={1} className="text-3xl font-medium">
+          Codex 重置公告
+        </UI.Heading>
         <Item role="status" className="mt-6">
           <Spinner aria-hidden="true" />
           <ItemContent>
@@ -155,7 +159,7 @@ export function CodexResetWorkspace() {
             </ItemDescription>
           </ItemContent>
         </Item>
-      </div>
+      </UI.Content>
     );
   if (state.status === "error")
     return (
@@ -173,14 +177,14 @@ export function CodexResetWorkspace() {
         title="尚未配置公告监控"
         description="公告监控需要维护者配置官方 X 来源并确认凭据、本人授权与预算。当前没有公告记录。"
         action={
-          <div className="flex flex-wrap gap-3">
+          <UI.Content className="flex flex-wrap gap-3">
             <Button variant="outline" onClick={reload}>
               刷新公告
             </Button>
             <Button asChild>
               <Link href="/codex-resets/manage">配置与人工复核</Link>
             </Button>
-          </div>
+          </UI.Content>
         }
       />
     );
@@ -196,26 +200,29 @@ export function CodexResetWorkspace() {
     : active.events;
   const health = snapshot.monitor;
   return (
-    <div>
-      <div className="flex flex-wrap items-end justify-between gap-5">
-        <div>
-          <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
+    <UI.Content>
+      <UI.Content className="flex flex-wrap items-end justify-between gap-5">
+        <UI.Content>
+          <UI.Heading
+            level={1}
+            className="text-3xl font-medium tracking-tight sm:text-4xl"
+          >
             Codex 重置公告
-          </h1>
-          <p className="text-muted-foreground mt-4 max-w-2xl leading-7">
+          </UI.Heading>
+          <UI.Text className="text-muted-foreground mt-4 max-w-2xl leading-7">
             从源公告阅读重置、重置额度与确认进展。时间估计和推测始终保留未确认状态。
-          </p>
+          </UI.Text>
           <Link
             href="/codex-resets/manage"
             className="mt-3 inline-block text-sm underline underline-offset-4"
           >
             配置与人工复核
           </Link>
-        </div>
+        </UI.Content>
         <Button variant="outline" onClick={reload} disabled={state.refreshing}>
           {state.refreshing ? "正在刷新…" : "刷新公告"}
         </Button>
-      </div>
+      </UI.Content>
       {state.stale && (
         <Alert className="mt-6">
           <AlertDescription>
@@ -230,31 +237,40 @@ export function CodexResetWorkspace() {
           </AlertDescription>
         </Alert>
       )}
-      <section
+      <UI.Content
+        as="section"
         aria-label="公告监控健康"
         className="mt-10 flex flex-col gap-y-5"
       >
-        <div className="flex flex-wrap gap-2">
+        <UI.Content className="flex flex-wrap gap-2">
           <Badge variant="secondary">
             {configuration.enabled ? healthLabel[health.status] : "监控已关闭"}
           </Badge>
           <Badge variant="outline">待处理 {health.pending_count}</Badge>
           <Badge variant="outline">待复核 {health.review_count}</Badge>
           <Badge variant="outline">采集缺口 {health.held_window_count}</Badge>
-        </div>
-        <dl className="text-muted-foreground grid gap-4 text-sm sm:grid-cols-3">
+        </UI.Content>
+        <UI.Content
+          as="dl"
+          className="text-muted-foreground grid gap-4 text-sm sm:grid-cols-3"
+        >
           {[
             ["最近尝试", health.last_attempt_at],
             ["最近采集", health.last_collected_at],
             ["最近完整核验", health.last_verified_at],
           ].map(([label, time]) => (
-            <div key={label}>
-              <dt>{label}</dt>
-              <dd className="text-foreground mt-1">{beijingTime(time)}</dd>
-            </div>
+            <UI.Content key={label}>
+              <UI.Content as="dt">{label}</UI.Content>
+              <UI.Content as="dd" className="text-foreground mt-1">
+                {beijingTime(time)}
+              </UI.Content>
+            </UI.Content>
           ))}
-        </dl>
-        <dl className="grid grid-cols-2 gap-5 py-4 sm:grid-cols-4">
+        </UI.Content>
+        <UI.Content
+          as="dl"
+          className="grid grid-cols-2 gap-5 py-4 sm:grid-cols-4"
+        >
           {[
             ["90 日直接重置", snapshot.statistics.resets_90],
             ["90 日重置额度", snapshot.statistics.credits_90],
@@ -266,21 +282,25 @@ export function CodexResetWorkspace() {
             ],
             ["上次确认日期", snapshot.statistics.last_reset_date ?? "暂无记录"],
           ].map(([label, value]) => (
-            <div key={label}>
-              <dt className="text-muted-foreground text-sm">{label}</dt>
-              <dd className="mt-2 text-2xl font-medium">{value}</dd>
-            </div>
+            <UI.Content key={label}>
+              <UI.Content as="dt" className="text-muted-foreground text-sm">
+                {label}
+              </UI.Content>
+              <UI.Content as="dd" className="mt-2 text-2xl font-medium">
+                {value}
+              </UI.Content>
+            </UI.Content>
           ))}
-        </dl>
-      </section>
-      <div className="mt-8 grid items-start gap-10 lg:grid-cols-2">
+        </UI.Content>
+      </UI.Content>
+      <UI.Content className="mt-8 grid items-start gap-10 lg:grid-cols-2">
         <ResetCalendar
           snapshot={snapshot}
           selectedDate={selectedDate}
           onSelect={setSelectedDate}
         />
-        <div>
-          <div className="mb-7 flex flex-wrap items-center gap-3">
+        <UI.Content>
+          <UI.Content className="mb-7 flex flex-wrap items-center gap-3">
             <ToggleGroup
               type="single"
               value={range}
@@ -309,16 +329,16 @@ export function CodexResetWorkspace() {
                 包含已撤回
               </FieldLabel>
             </Field>
-          </div>
+          </UI.Content>
           {selectedDate && (
-            <p className="text-muted-foreground mb-5 text-sm">
+            <UI.Text className="text-muted-foreground mb-5 text-sm">
               {selectedDate} 的公告
-            </p>
+            </UI.Text>
           )}
           <ResetTimeline events={events} outage={active.outage} />
-        </div>
-      </div>
+        </UI.Content>
+      </UI.Content>
       <ResetSourcePosts refresh={refresh} />
-    </div>
+    </UI.Content>
   );
 }

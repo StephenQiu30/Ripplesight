@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import {
   NavigationMenu,
   NavigationMenuList,
@@ -14,11 +15,13 @@ export function InformationPage({
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <h1 className="text-3xl font-medium">{title}</h1>
-      <div className="text-muted-foreground mt-8 flex flex-col gap-y-6 text-sm leading-7">
+    <UI.Content>
+      <UI.Heading level={1} className="text-3xl font-medium">
+        {title}
+      </UI.Heading>
+      <UI.Content className="text-muted-foreground mt-8 flex flex-col gap-y-6 text-sm leading-7">
         {children}
-      </div>
+      </UI.Content>
       <NavigationMenu
         viewport={false}
         className="mt-12 max-w-full justify-start"
@@ -57,6 +60,6 @@ export function InformationPage({
           </NavigationMenuItem>
         </NavigationMenuList>
       </NavigationMenu>
-    </div>
+    </UI.Content>
   );
 }

@@ -1,16 +1,31 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/",
+  useRouter: () => navigation,
+}));
 import { HomeContent, type HomeReading } from "@/app/components/home-content";
 import { IdentitySessionProvider } from "@/components/auth/session-context";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 it("offers public reading before account actions and keeps unpublished content honest", () => {
   render(<HomeContent />);
-  expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("首页");
+  expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+    "公开资讯",
+  );
   expect(
     screen.getByRole("link", { name: "浏览全部资讯" }).getAttribute("href"),
   ).toBe("/discover?mode=all&window=7d");
@@ -99,21 +114,21 @@ it("keeps filters on the homepage, resets cursors on changes and preserves the s
       }}
     />,
   );
-  const categories = screen.getByRole("navigation", { name: "资讯分类" });
-  expect(
-    within(categories).getByRole("link", { name: "模型" }).getAttribute("href"),
-  ).toBe("/?mode=selected&category=ai-models");
-  expect(
-    within(categories).getByRole("link", { name: "全部" }).getAttribute("href"),
-  ).toBe("/?mode=selected");
+  const categories = screen.getByRole("radiogroup", { name: "资讯分类" });
+  fireEvent.click(within(categories).getByRole("radio", { name: "模型" }));
+  expect(navigation.push).toHaveBeenLastCalledWith(
+    "/?mode=selected&category=ai-models",
+  );
+  fireEvent.click(within(categories).getByRole("radio", { name: "全部" }));
+  expect(navigation.push).toHaveBeenLastCalledWith("/?mode=selected");
   expect(
     within(categories)
-      .getByRole("link", { name: "论文" })
-      .getAttribute("aria-current"),
-  ).toBe("page");
-  expect(
-    screen.getByRole("link", { name: "最新发现" }).getAttribute("href"),
-  ).toBe("/?category=paper");
+      .getByRole("radio", { name: "论文" })
+      .getAttribute("aria-checked"),
+  ).toBe("true");
+  const latest = screen.getByRole("tab", { name: "最新发现" });
+  fireEvent.mouseDown(latest, { button: 0, ctrlKey: false });
+  expect(navigation.push).toHaveBeenLastCalledWith("/?category=paper");
   const next = new URL(
     screen.getByRole("link", { name: "下一页" }).getAttribute("href")!,
     "http://localhost",
@@ -162,7 +177,7 @@ it("reads the real post while secondary sections fail, preserving source summary
       }}
     />,
   );
-  const feed = screen.getByRole("region", { name: "首页" });
+  const feed = screen.getByRole("region", { name: "公开资讯" });
   expect(within(feed).getByRole("heading", { name: item.title })).toBeTruthy();
   expect(
     within(feed).getByText("来源已经提供的摘要。", { exact: false }),
@@ -176,4 +191,20 @@ it("reads the real post while secondary sections fail, preserving source summary
   ).toBe(item.reading_url);
   expect(screen.getByText("专题暂时无法读取。")).toBeTruthy();
   expect(screen.getByText("事件暂时无法读取。")).toBeTruthy();
+});
+
+it("searches trimmed text with Enter and ignores composition and empty queries", () => {
+  render(<HomeContent />);
+  const input = screen.getAllByRole("searchbox", { name: "搜索公开资讯" })[0];
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(navigation.push).not.toHaveBeenCalled();
+  fireEvent.change(input, { target: { value: "  模型 & 产品  " } });
+  fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+  expect(navigation.push).not.toHaveBeenCalled();
+  fireEvent.keyDown(input, { key: "Enter" });
+  const url = new URL(navigation.push.mock.calls[0][0], "http://localhost");
+  expect(url.pathname).toBe("/discover");
+  expect(url.searchParams.get("q")).toBe("模型 & 产品");
+  expect(url.searchParams.get("mode")).toBe("all");
+  expect(url.searchParams.get("window")).toBe("7d");
 });

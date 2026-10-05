@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { useCallback, useMemo, useState, type ComponentProps } from "react";
 import { format } from "date-fns";
@@ -65,7 +66,11 @@ export function ResetCalendar({
           className="aspect-auto min-h-11 min-w-0 sm:min-h-14"
         >
           {day.date.getDate()}
-          <span aria-hidden="true" className="flex min-h-1.5 gap-1">
+          <UI.Text
+            as="span"
+            aria-hidden="true"
+            className="flex min-h-1.5 gap-1"
+          >
             {daily.map((mark) => (
               <Badge
                 key={mark.event_id}
@@ -78,10 +83,12 @@ export function ResetCalendar({
                 }
                 className="size-1.5 p-0"
               >
-                <span className="sr-only">{stateLabels[mark.state]}</span>
+                <UI.Text as="span" className="sr-only">
+                  {stateLabels[mark.state]}
+                </UI.Text>
               </Badge>
             ))}
-          </span>
+          </UI.Text>
         </CalendarDayButton>
       );
     },
@@ -97,10 +104,14 @@ export function ResetCalendar({
   );
   return (
     <Item variant="muted" asChild>
-      <section aria-label="重置公告日历" className="min-w-0 p-5 sm:p-6">
+      <UI.Content
+        as="section"
+        aria-label="重置公告日历"
+        className="min-w-0 p-5 sm:p-6"
+      >
         <ItemContent className="min-w-0 gap-4">
           <ItemTitle>
-            <h2>重置公告日历</h2>
+            <UI.Heading level={2}>重置公告日历</UI.Heading>
           </ItemTitle>
           <ItemDescription className="line-clamp-none">
             日期按北京时间。推测状态不表示已确认到账。
@@ -132,7 +143,7 @@ export function ResetCalendar({
             }}
             components={{ DayButton: renderDay }}
           />
-          <div className="flex flex-wrap gap-2">
+          <UI.Content className="flex flex-wrap gap-2">
             {Object.entries(stateLabels).map(([key, label]) => (
               <Badge
                 key={key}
@@ -147,7 +158,7 @@ export function ResetCalendar({
                 {label}
               </Badge>
             ))}
-          </div>
+          </UI.Content>
           {marks.length === 0 && (
             <Empty>
               <EmptyHeader>
@@ -161,7 +172,7 @@ export function ResetCalendar({
             </Button>
           )}
         </ItemContent>
-      </section>
+      </UI.Content>
     </Item>
   );
 }

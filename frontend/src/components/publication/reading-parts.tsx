@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import { Badge } from "@/components/ui/badge";
 import {
   Item,
@@ -90,10 +91,10 @@ export function PublicItemCards({
     <ItemGroup>
       {items.map((item) => (
         <Item asChild key={item.id}>
-          <article role="listitem">
+          <UI.Content as="article" role="listitem">
             <ItemContent className="min-w-0 gap-3">
-              <div className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                <span>
+              <UI.Content className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                <UI.Text as="span">
                   {item.source.icon_url &&
                   [
                     `/api/site/source-icons/${encodeURIComponent(item.source.key)}.svg`,
@@ -110,31 +111,31 @@ export function PublicItemCards({
                   ) : null}
                   {item.source.name}
                   {item.source.first_party ? " · 第一方" : ""}
-                </span>
-                <time dateTime={item.timeline_at}>
+                </UI.Text>
+                <UI.Timestamp dateTime={item.timeline_at}>
                   {item.published_at ? "发布于 " : "发现于 "}
                   {publicationTime(item.timeline_at)}
-                </time>
-                {item.backfill ? <span>历史导入</span> : null}
+                </UI.Timestamp>
+                {item.backfill ? <UI.Text as="span">历史导入</UI.Text> : null}
                 {item.analysis_state === "not_analyzed" ? (
-                  <span>未分析</span>
+                  <UI.Text as="span">未分析</UI.Text>
                 ) : null}
                 {item.category ? (
-                  <span>
+                  <UI.Text as="span">
                     {categories.find(([key]) => key === item.category)?.[1]}
-                  </span>
+                  </UI.Text>
                 ) : null}
                 {item.selected ? <Badge variant="secondary">精选</Badge> : null}
-              </div>
+              </UI.Content>
               <ItemTitle className="line-clamp-none">
-                <h2>
+                <UI.Heading level={2}>
                   <Link href={item.reading_url}>{item.title}</Link>
-                </h2>
+                </UI.Heading>
               </ItemTitle>
               {item.summary ? (
                 <ItemDescription className="line-clamp-none">
                   {item.summary_origin === "source" ? (
-                    <span>来源摘要： </span>
+                    <UI.Text as="span">来源摘要： </UI.Text>
                   ) : null}
                   {item.summary}
                 </ItemDescription>
@@ -143,23 +144,29 @@ export function PublicItemCards({
                   来源未提供摘要，可前往原文阅读。
                 </ItemDescription>
               ) : null}
-              <div className="text-muted-foreground flex flex-wrap gap-3 text-xs">
+              <UI.Content className="text-muted-foreground flex flex-wrap gap-3 text-xs">
                 {item.tags.map((tag) => (
-                  <span key={tag}>#{tag}</span>
+                  <UI.Text as="span" key={tag}>
+                    #{tag}
+                  </UI.Text>
                 ))}
                 {item.original_url ? (
-                  <a href={item.original_url} target="_blank" rel="noreferrer">
+                  <UI.TextLink
+                    href={item.original_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
                     来源原文 ↗
-                  </a>
+                  </UI.TextLink>
                 ) : null}
                 {item.event_id ? (
                   <Link href={`/discover/stories/${item.event_id}`}>
                     查看事件
                   </Link>
                 ) : null}
-              </div>
+              </UI.Content>
             </ItemContent>
-          </article>
+          </UI.Content>
         </Item>
       ))}
     </ItemGroup>
@@ -180,20 +187,29 @@ export function PublicSourceStatus({
     <Alert className="mb-5">
       <AlertTitle>部分来源暂未更新</AlertTitle>
       <AlertDescription>
-        <ul className="space-y-2">
+        <ItemGroup className="gap-2">
           {affected.map((source) => (
-            <li key={source.source_key}>
-              {source.name} ·{" "}
-              {!source.enabled
-                ? "已暂停"
-                : source.health === "failing"
-                  ? "采集失败"
-                  : "采集不完整"}
-              {" · "}最近成功：{publicationTime(source.last_success_at)}
-            </li>
+            <Item
+              key={source.source_key}
+              role="listitem"
+              size="xs"
+              className="p-0"
+            >
+              <ItemContent>
+                <ItemDescription className="line-clamp-none">
+                  {source.name} ·{" "}
+                  {!source.enabled
+                    ? "已暂停"
+                    : source.health === "failing"
+                      ? "采集失败"
+                      : "采集不完整"}
+                  {" · "}最近成功：{publicationTime(source.last_success_at)}
+                </ItemDescription>
+              </ItemContent>
+            </Item>
           ))}
-        </ul>
-        <p>已保存且许可仍有效的资讯可以继续阅读。</p>
+        </ItemGroup>
+        已保存且许可仍有效的资讯可以继续阅读。
       </AlertDescription>
     </Alert>
   );

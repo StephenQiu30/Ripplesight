@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import {
   NavigationMenu,
   NavigationMenuList,
@@ -181,13 +183,13 @@ export function SavedItems({ full = false }: { full?: boolean }) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   return (
-    <section>
-      <h2 className="font-medium">
+    <UI.Content as="section">
+      <UI.Heading level={2} className="font-medium">
         本机收藏{ids.length ? ` · ${ids.length}` : ""}
-      </h2>
-      <p className="text-muted-foreground mt-2 text-xs">
+      </UI.Heading>
+      <UI.Text className="text-muted-foreground mt-2 text-xs">
         最多 500 篇收藏与 5000 个已读标记，仅保留编号，阅读时重新检查许可。
-      </p>
+      </UI.Text>
       {busy ? (
         <Item role="status" className="mt-4">
           <Spinner aria-hidden="true" />
@@ -217,9 +219,12 @@ export function SavedItems({ full = false }: { full?: boolean }) {
                 <Link href={item.reading_url} className="text-sm leading-6">
                   {item.title}
                   {read.includes(item.id) ? (
-                    <span className="text-muted-foreground ml-2 text-xs">
+                    <UI.Text
+                      as="span"
+                      className="text-muted-foreground ml-2 text-xs"
+                    >
                       已读
-                    </span>
+                    </UI.Text>
                   ) : null}
                 </Link>
                 {full ? (
@@ -240,17 +245,17 @@ export function SavedItems({ full = false }: { full?: boolean }) {
           ))}
         </ItemGroup>
       ) : (
-        <p className="text-muted-foreground mt-4 text-sm">
+        <UI.Text className="text-muted-foreground mt-4 text-sm">
           {ids.length
             ? "本页收藏暂时不可公开读取，可稍后重试或移除。"
             : "还没有收藏。"}
-        </p>
+        </UI.Text>
       )}
       {!busy && ids.slice((page - 1) * 20, page * 20).length > items.length ? (
-        <p className="text-muted-foreground mt-3 text-xs">
+        <UI.Text className="text-muted-foreground mt-3 text-xs">
           本页 {ids.slice((page - 1) * 20, page * 20).length - items.length}{" "}
           篇材料已撤回、许可变化或暂时无法读取。
-        </p>
+        </UI.Text>
       ) : null}
       {full ? (
         <>
@@ -267,9 +272,12 @@ export function SavedItems({ full = false }: { full?: boolean }) {
                     className="flex items-start justify-between gap-3"
                   >
                     <ItemContent className="min-w-0 gap-3">
-                      <span className="text-muted-foreground break-all">
+                      <UI.Text
+                        as="span"
+                        className="text-muted-foreground break-all"
+                      >
                         暂时不可读取 · {id}
-                      </span>
+                      </UI.Text>
                       <Button
                         size="sm"
                         variant="ghost"
@@ -300,9 +308,9 @@ export function SavedItems({ full = false }: { full?: boolean }) {
                 </NavigationMenuItem>
               ) : null}
               <NavigationMenuItem>
-                <span className="text-sm">
+                <UI.Text as="span" className="text-sm">
                   第 {page} / {Math.max(1, Math.ceil(ids.length / 20))} 页
-                </span>
+                </UI.Text>
               </NavigationMenuItem>
               {page * 20 < ids.length ? (
                 <NavigationMenuItem>
@@ -321,7 +329,7 @@ export function SavedItems({ full = false }: { full?: boolean }) {
               </NavigationMenuItem>
             </NavigationMenuList>
           </NavigationMenu>
-          <div className="flex flex-wrap gap-3">
+          <UI.Content className="flex flex-wrap gap-3">
             <Button
               variant="outline"
               onClick={() => {
@@ -401,7 +409,7 @@ export function SavedItems({ full = false }: { full?: boolean }) {
             >
               明确清空本机数据
             </Button>
-          </div>
+          </UI.Content>
         </>
       ) : (
         <Link
@@ -411,6 +419,6 @@ export function SavedItems({ full = false }: { full?: boolean }) {
           管理全部收藏与导入导出
         </Link>
       )}
-    </section>
+    </UI.Content>
   );
 }

@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
@@ -38,7 +39,7 @@ export function SnapshotSelector({
   onLoadMore,
 }: SnapshotSelectorProps) {
   return (
-    <div className="flex flex-wrap items-end gap-3">
+    <UI.Content className="flex flex-wrap items-end gap-3">
       <Field className="min-w-0 flex-1 sm:max-w-sm">
         <FieldLabel htmlFor="snapshot-select">观察时间</FieldLabel>
         <Select value={selectedId} onValueChange={onSelect}>
@@ -71,6 +72,6 @@ export function SnapshotSelector({
           {loadingMore ? "正在加载" : "更多时间"}
         </Button>
       ) : null}
-    </div>
+    </UI.Content>
   );
 }

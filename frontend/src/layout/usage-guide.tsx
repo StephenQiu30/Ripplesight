@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
 import Link from "next/link";
 import { ArrowRightIcon } from "lucide-react";
@@ -63,39 +64,56 @@ export function UsageGuide({
                 className="flex gap-4"
               >
                 <ItemContent className="min-w-0 gap-3">
-                  <span className="text-muted-foreground font-mono text-xs">
+                  <UI.Text
+                    as="span"
+                    className="text-muted-foreground font-mono text-xs"
+                  >
                     {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <div>
-                    <h3 className="font-medium">{title}</h3>
-                    <p className="text-muted-foreground mt-2 leading-relaxed">
+                  </UI.Text>
+                  <UI.Content>
+                    <UI.Heading level={3} className="font-medium">
+                      {title}
+                    </UI.Heading>
+                    <UI.Text className="text-muted-foreground mt-2 leading-relaxed">
                       {description}
-                    </p>
-                  </div>
+                    </UI.Text>
+                  </UI.Content>
                 </ItemContent>
               </Item>
             ))}
           </ItemGroup>
         ) : (
-          <div className="my-4 flex flex-col gap-6">
-            <dl className="flex flex-col gap-4">
-              <div>
-                <dt className="text-muted-foreground">关注关键词</dt>
-                <dd className="mt-1">AI 编程 · Coding agent</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">更新频率</dt>
-                <dd className="mt-1">每 30 分钟</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">可能关注的内容</dt>
-                <dd className="mt-1">产品更新、发布记录与社区讨论。</dd>
-              </div>
-            </dl>
-            <p className="text-muted-foreground text-xs leading-relaxed">
+          <UI.Content className="my-4 flex flex-col gap-6">
+            <UI.Content as="dl" className="flex flex-col gap-4">
+              <UI.Content>
+                <UI.Content as="dt" className="text-muted-foreground">
+                  关注关键词
+                </UI.Content>
+                <UI.Content as="dd" className="mt-1">
+                  AI 编程 · Coding agent
+                </UI.Content>
+              </UI.Content>
+              <UI.Content>
+                <UI.Content as="dt" className="text-muted-foreground">
+                  更新频率
+                </UI.Content>
+                <UI.Content as="dd" className="mt-1">
+                  每 30 分钟
+                </UI.Content>
+              </UI.Content>
+              <UI.Content>
+                <UI.Content as="dt" className="text-muted-foreground">
+                  可能关注的内容
+                </UI.Content>
+                <UI.Content as="dd" className="mt-1">
+                  产品更新、发布记录与社区讨论。
+                </UI.Content>
+              </UI.Content>
+            </UI.Content>
+            <UI.Text className="text-muted-foreground text-xs leading-relaxed">
               内容仅为设置示例，实际来源以创建页的可用配置为准。
-            </p>
-          </div>
+            </UI.Text>
+          </UI.Content>
         )}
         <Button asChild size="hero">
           <Link

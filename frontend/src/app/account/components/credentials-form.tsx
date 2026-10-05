@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -219,40 +220,46 @@ export function CredentialsForm({
   );
 
   return (
-    <section
+    <UI.Content
+      as="section"
       aria-labelledby={embedded ? "password-title" : "account-title"}
       className={`flex w-full flex-col gap-y-8 ${embedded ? "" : "max-w-xl"}`}
     >
-      <header className="flex flex-col gap-y-3">
+      <UI.Content as="header" className="flex flex-col gap-y-3">
         {!hasPassword && account.user.email && (
-          <p className="text-muted-foreground text-sm">
+          <UI.Text className="text-muted-foreground text-sm">
             邮箱已验证 · 设置登录密码
-          </p>
+          </UI.Text>
         )}
         {embedded ? (
-          <h2 id="password-title" className="text-2xl font-medium">
+          <UI.Heading
+            level={2}
+            id="password-title"
+            className="text-2xl font-medium"
+          >
             {hasPassword ? "修改密码" : "设置登录密码"}
-          </h2>
+          </UI.Heading>
         ) : (
-          <h1
+          <UI.Heading
+            level={1}
             id="account-title"
             className="text-3xl font-medium tracking-tight"
           >
             {hasPassword ? "账户设置" : "设置登录密码"}
-          </h1>
+          </UI.Heading>
         )}
-        <p className="text-muted-foreground text-sm leading-6">
+        <UI.Text className="text-muted-foreground text-sm leading-6">
           {hasPassword
             ? "修改密码后，当前设备保持登录，其他设备的旧会话将退出。"
             : "为账户设置密码。以后可以直接使用已验证邮箱和密码登录。"}
-        </p>
+        </UI.Text>
         {!embedded && account.user.email && (
-          <p className="text-muted-foreground text-sm break-all">
+          <UI.Text className="text-muted-foreground text-sm break-all">
             已验证邮箱：{account.user.email}
-          </p>
+          </UI.Text>
         )}
-      </header>
-      <form onSubmit={submit} aria-label="设置登录凭据">
+      </UI.Content>
+      <UI.Form onSubmit={submit} aria-label="设置登录凭据">
         <FieldGroup>
           {hasPassword && !embedded && (
             <Field data-disabled={unavailable}>
@@ -307,8 +314,12 @@ export function CredentialsForm({
             />
           </Field>
           {hasPassword && (
-            <div className="flex flex-col gap-5">
-              {embedded && <h3 className="text-2xl font-medium">验证身份</h3>}
+            <UI.Content className="flex flex-col gap-5">
+              {embedded && (
+                <UI.Heading level={3} className="text-2xl font-medium">
+                  验证身份
+                </UI.Heading>
+              )}
               <Tabs
                 value={verification}
                 onValueChange={(value) => {
@@ -367,7 +378,7 @@ export function CredentialsForm({
                   <TabsContent value="email">{emailVerification}</TabsContent>
                 )}
               </Tabs>
-            </div>
+            </UI.Content>
           )}
           {!hasPassword && verification === "email" && emailVerification}
           {!hasPassword && verification === "recent" && account.user.email && (
@@ -395,7 +406,7 @@ export function CredentialsForm({
                 : "保存密码"}
           </Button>
         </FieldGroup>
-      </form>
-    </section>
+      </UI.Form>
+    </UI.Content>
   );
 }

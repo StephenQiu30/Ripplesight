@@ -13,7 +13,7 @@
 - 富文本阅读统一使用 `src/components/editor/Viewer`（经目录入口导出），接收块 JSON 或显式 markdown/html/text，SSR 可读、空内容为空、无编辑工具栏，所有内容和 URL 白名单清洗。段落/标题/嵌套列表/任务列表/引用/代码/表格/分隔符/图片共用块合同，报告引用只绑定当前报告给定 URL，未知引用保留文字。通用 Viewer 用于私人报告、公开刊期和资讯正文；阅读页不提供本机笔记，不装载 Editor.js 编辑器及块工具。原本机阅读状态键只保存 mode/scroll，忽略旧 note/noteDocument，后续保存不携带笔记字段，不新增业务 API。
 
 - shadcn/Radix 基础组件放在 `src/components/ui/`。
-- 全部页面的交互控件只组合官方 shadcn/ui + Radix：选择使用 Select/SelectGroup，布尔选项使用 Checkbox/Switch，折叠内容使用 Collapsible，数据表使用 Table，表单使用 FieldGroup/Field/FieldLabel。业务源码不手写 button、input、select、textarea、details 或表格组件；ESLint 检查此边界。文档标题、段落、列表、页面结构、链接及音视频仍保留必要语义标签，不为它们增加包装组件。
+- 全部页面的交互控件只组合官方 shadcn/ui + Radix：选择使用 Select/SelectGroup，布尔选项使用 Checkbox/Switch，折叠内容使用 Collapsible，数据表使用 Table，表单使用 FieldGroup/Field/FieldLabel。业务源码不手写 button、input、select、textarea、details 或表格组件；ESLint 检查此边界。标题、段落、列表、结构、链接、原生表单和音视频统一经 `ui/content.tsx` 的 Heading/Text/Content/ContentList/TextLink/Form/AudioPlayer/VideoPlayer 组合；该层补齐官方注册表未提供的语义能力，不伪称额外组件来自官方注册表。原生 JSX 仅留在 UI 层，业务页面、复用组件和布局不直接写原生标签；ESLint 拒绝全部小写 JSX 标签。DocumentRoot/DocumentBody保留Next文档根，Form保留原生提交/校验，媒体保留原生控件；不改变回调、ref、URL或正文清洗合同。
 - 信息面板和数据列表组合 Item/ItemContent/ItemTitle/ItemDescription/ItemGroup，持久提示使用 Alert，空状态使用 Empty，分隔线使用 Separator，导航使用 NavigationMenu。业务页面不再用原生容器绘制圆角面板、提示和分隔线；ESLint 对手写控件及这些视觉容器统一检查。
 - 日期组件使用官方 Calendar（React Day Picker），公告单日选择和刊期只读日历均保持北京时间、真实数据及真实刊期链接。互斥范围、状态和刊期类型使用 ToggleGroup；业务逻辑保留已有筛选和分页重置。基础组件通过官方 shadcn CLI 引入，不建立替代基础组件的自定义包装层。
 - 全站操作反馈使用官方 shadcn Sonner：失败和提交校验使用 `toast.error`，成功使用 `toast.success`，主动取消使用 `toast.info`。BasicLayout 唯一挂载 Toaster，统一右上角、可关闭、语义颜色和无障碍通知；业务组件直接调用 `sonner`，传输层不自动弹提示。不在表单、菜单或内容底部保留错误/成功消息块，不创建自定义 Toast 或通知包装层。字段可保留 `data-invalid`/`aria-invalid` 和纠错焦点；加载失败只保留原生 Empty/Alert 的恢复入口及稳定说明，具体请求错误由 Sonner 提示。持久任务失败事实、权限/覆盖状态和全局恢复页面仍使用原生 shadcn 组件；请求取消、失效响应和重新渲染不得重复通知。
@@ -32,16 +32,17 @@
 
 ## 公开信息首页与个人工作台
 
-首页是公开阅读入口，保持黑白留白与现有 BasicLayout。参考X的阅读布局，取消宣传Hero，首屏直接显示较醒目的帖子标题与来源摘要；宽屏左侧阅读导航、中间帖子流、右侧专题/事件/周报，中屏辅助信息后置，窄屏帖子优先。全局LayoutContainer仅为首页提供紧凑正文间距，仍使用唯一main与原滚动节点。全部/精选、分类与真实游标分页留在首页，检索进入已有资讯页；不伪造推荐、互动数据或无来源正文。个人关注、已有报告与管理使用真实会话。首页个人CTA引导配置关注/查看已有报告，个人周报执行与独立调度按 Design005 完成相应验收后再承诺；公共周刊保持独立阅读入口。使用现有 Umi publication 与刊物目录函数并行读取，每块独立处理空/错误；未配置公开发布账号显示未发布，真实错误显示重载入口，无模拟资讯、指标或默认账户。
+首页是公开阅读入口，保持黑白留白与现有 BasicLayout。范围切换使用全宽line Tabs，分类使用单选ToggleGroup；搜索统一FieldGroup/Field/InputGroup，桌面右侧和手机顶部各自只显示一个搜索框，支持回车、空白拦截与中文输入法组合态。帖子使用Item/Avatar、Card标题摘要和Badge真实状态；头像与来源时间仅占头部行，标题、摘要、标记及操作区使用帖子全宽，不在头像下保留空列，完整宽度Separator分隔；右侧专题/事件/周刊采用完整Card组合。参考X的阅读布局，取消宣传Hero，首屏直接显示较醒目的帖子标题与来源摘要；三栏由 `src/layout/reading-layout.tsx` 的 ReadingLayout 统一管理navigation/children/aside插槽、标题与响应式排列；桌面（lg及以上）扣除栏间距后按2:5:3分配左侧导航20%、中间帖子流50%、右侧专题/事件/周报30%，各轨道minmax(0,fr)避免长内容撑宽；导航内容保持紧凑尺度。取消信息流顶部可见的“首页”标题，只保留屏幕阅读器可读的公开资讯标题；窄屏帖子优先，辅助信息后置。全局LayoutContainer仅为首页提供紧凑正文间距，仍使用唯一main与原滚动节点。全部/精选、分类与真实游标分页留在首页，检索进入已有资讯页；不伪造推荐、互动数据或无来源正文。个人关注、已有报告与管理使用真实会话。首页个人CTA引导配置关注/查看已有报告，个人周报执行与独立调度按 Design005 完成相应验收后再承诺；公共周刊保持独立阅读入口。使用现有 Umi publication 与刊物目录函数并行读取，每块独立处理空/错误；未配置公开发布账号显示未发布，真实错误显示重载入口，无模拟资讯、指标或默认账户。
 
-| 组件                        | 领域与复用范围 | 目标路径                                                          | 数据与状态                                                                           |
-| --------------------------- | -------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Home / HomeContent          | 首页专属       | src/app/page.tsx；src/app/components/home-content.tsx             | 生成的公开资讯、事件、专题、周刊目录；SSR并行读取、真实空态、局部错误                |
-| HomePosts                   | 首页专属       | src/app/components/home-posts.tsx                                 | 原公开帖子DTO；标题/来源摘要/实际时间/原文，未分析/历史/无摘要如实显示，真实游标分页 |
-| BasicHeader / AccountMenu   | 全站导航       | src/layout/basic-header.tsx；src/components/auth/account-menu.tsx | 桌面资讯/专题/模型榜，已登录增加工作台与账户；窄屏阅读菜单，键盘与焦点恢复           |
-| WorkspacePage               | 个人工作台     | src/app/workspace/page.tsx                                        | 私有路由；按关注报告、资料采集、发布管理展示现有入口                                 |
-| PublicationNavigation       | 阅读路由复用   | src/components/publication/reading-navigation.tsx                 | 阅读入口；管理和认证出口移入工作台                                                   |
-| ThemeProvider / ThemeToggle | 全站外壳       | src/layout/theme-toggle.tsx                                       | 本机主题偏好；默认跟随系统、保存/存储失败、跨标签与导入更新、键盘与焦点恢复          |
+| 组件                        | 领域与复用范围 | 目标路径                                                          | 数据与状态                                                                               |
+| --------------------------- | -------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| ReadingLayout               | 阅读三栏布局   | src/layout/reading-layout.tsx                                     | navigation/children/aside；lg以上2:5:3、窄屏隐藏左导航且辅助区后置；不新建main或滚动节点 |
+| Home / HomeContent          | 首页专属       | src/app/page.tsx；src/app/components/home-content.tsx             | 生成的公开资讯、事件、专题、周刊目录；SSR并行读取、真实空态、局部错误                    |
+| HomePosts                   | 首页专属       | src/app/components/home-posts.tsx                                 | 原公开帖子DTO；标题/来源摘要/实际时间/原文，未分析/历史/无摘要如实显示，真实游标分页     |
+| BasicHeader / AccountMenu   | 全站导航       | src/layout/basic-header.tsx；src/components/auth/account-menu.tsx | 桌面资讯/专题/模型榜，已登录增加工作台与账户；窄屏阅读菜单，键盘与焦点恢复               |
+| WorkspacePage               | 个人工作台     | src/app/workspace/page.tsx                                        | 私有路由；按关注报告、资料采集、发布管理展示现有入口                                     |
+| PublicationNavigation       | 阅读路由复用   | src/components/publication/reading-navigation.tsx                 | 阅读入口；管理和认证出口移入工作台                                                       |
+| ThemeProvider / ThemeToggle | 全站外壳       | src/layout/theme-toggle.tsx                                       | 本机主题偏好；默认跟随系统、保存/存储失败、跨标签与导入更新、键盘与焦点恢复              |
 
 Header不再常驻事件、内容、热榜、来源、运营、帮助等业务菜单；工作台集中这些入口，账户菜单只提供工作台、关注、报告、账户设置与退出。使用指南、关于、隐私、条款和联系仍在Footer。公开内容与个人操作分开，已登录首页仍提供同样的公开阅读导航和真实账户菜单。
 

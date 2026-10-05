@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { useEffect, useId, useRef, useState } from "react";
 import {
@@ -102,20 +103,26 @@ export function EditorialLocalApproval({
   }
 
   return (
-    <section className="space-y-4" aria-label="本机采集组件审批">
-      <h2 className="text-xl font-medium">本机采集组件审批</h2>
-      <p className="text-muted-foreground text-sm leading-6">
+    <UI.Content
+      as="section"
+      className="space-y-4"
+      aria-label="本机采集组件审批"
+    >
+      <UI.Heading level={2} className="text-xl font-medium">
+        本机采集组件审批
+      </UI.Heading>
+      <UI.Text className="text-muted-foreground text-sm leading-6">
         审查当前配置中的读取、保存、零费用、出口及请求上限依据。提交只登记固定配置的组件审批；不会启用来源或发出采集请求。
-      </p>
-      <p className="text-sm">
+      </UI.Text>
+      <UI.Text className="text-sm">
         来源修订 {profile.revision} · 配置版本 {profile.configuration_version}
-      </p>
+      </UI.Text>
       <Collapsible>
         <CollapsibleTrigger asChild>
           <Button variant="outline">查看固定配置与审查依据</Button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <pre className="bg-muted mt-3 max-h-80 overflow-auto rounded-lg p-3 text-xs">
+          <UI.CodeBlock className="bg-muted mt-3 max-h-80 overflow-auto rounded-lg p-3 text-xs">
             {JSON.stringify(
               {
                 configuration_sha256: profile.configuration_sha256,
@@ -125,7 +132,7 @@ export function EditorialLocalApproval({
               null,
               2,
             )}
-          </pre>
+          </UI.CodeBlock>
         </CollapsibleContent>
       </Collapsible>
       <Field>
@@ -140,7 +147,7 @@ export function EditorialLocalApproval({
           证据必须来自实际审查；配置中的声明需独立审批后才能参与执行准入。
         </FieldDescription>
       </Field>
-      <div className="flex flex-wrap gap-3">
+      <UI.Content className="flex flex-wrap gap-3">
         {rsshub && (
           <Button
             variant="outline"
@@ -175,7 +182,7 @@ export function EditorialLocalApproval({
             审批正文提取
           </Button>
         )}
-      </div>
+      </UI.Content>
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
@@ -186,6 +193,6 @@ export function EditorialLocalApproval({
           <AlertDescription>{result}</AlertDescription>
         </Alert>
       )}
-    </section>
+    </UI.Content>
   );
 }

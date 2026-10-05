@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
@@ -25,14 +26,14 @@ export default async function RootLayout({
 }) {
   const session = await readLayoutSession();
   return (
-    <html
+    <UI.DocumentRoot
       lang="zh-CN"
       data-scroll-behavior="smooth"
       className={layoutFontClassName}
     >
-      <body className="overflow-hidden print:overflow-visible">
+      <UI.DocumentBody className="overflow-hidden print:overflow-visible">
         <BasicLayout session={session}>{children}</BasicLayout>
-      </body>
-    </html>
+      </UI.DocumentBody>
+    </UI.DocumentRoot>
   );
 }

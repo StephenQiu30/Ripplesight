@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import {
   SelectLabel,
   Select,
@@ -173,15 +175,23 @@ export function EventCorrections({
     }
   }
   return (
-    <section className="mt-12" aria-labelledby="event-correction-heading">
-      <h2 id="event-correction-heading" className="text-2xl font-medium">
+    <UI.Content
+      as="section"
+      className="mt-12"
+      aria-labelledby="event-correction-heading"
+    >
+      <UI.Heading
+        level={2}
+        id="event-correction-heading"
+        className="text-2xl font-medium"
+      >
         人工修订
-      </h2>
-      <p className="text-muted-foreground mt-3 leading-7">
+      </UI.Heading>
+      <UI.Text className="text-muted-foreground mt-3 leading-7">
         已选择 {selectedContentIds.length} 个成员、{selectedFactIds.length}{" "}
         个事实。修订保留历史证据，摘要会重新生成。
-      </p>
-      <form onSubmit={(form) => void submit(form)}>
+      </UI.Text>
+      <UI.Form onSubmit={(form) => void submit(form)}>
         <FieldGroup className="mt-6 grid max-w-2xl gap-5">
           <Field>
             <FieldLabel htmlFor="event-correction-kind">修订操作</FieldLabel>
@@ -312,7 +322,7 @@ export function EventCorrections({
             {submitting ? "正在提交修订…" : "提交人工修订"}
           </Button>
         </FieldGroup>
-      </form>
-    </section>
+      </UI.Form>
+    </UI.Content>
   );
 }

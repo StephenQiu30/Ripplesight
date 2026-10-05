@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -165,25 +166,30 @@ export function IdentityConnections({
   }
   const wait = Math.max(0, Math.ceil((resendAt - now) / 1000));
   return (
-    <section
+    <UI.Content
+      as="section"
       aria-labelledby="connections-title"
       className="flex w-full max-w-xl flex-col gap-6"
     >
-      <header className="flex flex-col gap-2">
-        <h2 id="connections-title" className="text-xl font-medium">
+      <UI.Content as="header" className="flex flex-col gap-2">
+        <UI.Heading
+          level={2}
+          id="connections-title"
+          className="text-xl font-medium"
+        >
           登录方式
-        </h2>
-        <p className="text-muted-foreground text-sm">
+        </UI.Heading>
+        <UI.Text className="text-muted-foreground text-sm">
           邮箱和 GitHub 共用当前账户及工作区。
-        </p>
-      </header>
-      <div className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <p className="font-medium">邮箱</p>
-          <p className="text-muted-foreground text-sm break-all">
+        </UI.Text>
+      </UI.Content>
+      <UI.Content className="flex items-center justify-between gap-4">
+        <UI.Content className="min-w-0">
+          <UI.Text className="font-medium">邮箱</UI.Text>
+          <UI.Text className="text-muted-foreground text-sm break-all">
             {account.email ?? "尚未绑定"}
-          </p>
-        </div>
+          </UI.Text>
+        </UI.Content>
         <Dialog
           open={open}
           onOpenChange={(value) => {
@@ -211,7 +217,7 @@ export function IdentityConnections({
                 验证新邮箱后即可用于登录当前账户。
               </DialogDescription>
             </DialogHeader>
-            <form
+            <UI.Form
               onSubmit={(event) => {
                 if (challenge) {
                   event.preventDefault();
@@ -272,21 +278,23 @@ export function IdentityConnections({
                   </>
                 )}
               </FieldGroup>
-            </form>
+            </UI.Form>
           </DialogContent>
         </Dialog>
-      </div>
+      </UI.Content>
       {!options?.email && options && (
-        <p className="text-muted-foreground text-sm">邮箱登录暂不可用。</p>
+        <UI.Text className="text-muted-foreground text-sm">
+          邮箱登录暂不可用。
+        </UI.Text>
       )}
       <Separator />
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="font-medium">GitHub</p>
-          <p className="text-muted-foreground text-sm">
+      <UI.Content className="flex items-center justify-between gap-4">
+        <UI.Content>
+          <UI.Text className="font-medium">GitHub</UI.Text>
+          <UI.Text className="text-muted-foreground text-sm">
             {account.github_connected ? "已连接" : "尚未连接"}
-          </p>
-        </div>
+          </UI.Text>
+        </UI.Content>
         {!account.github_connected && (
           <Button
             variant="outline"
@@ -296,10 +304,12 @@ export function IdentityConnections({
             {busy === "github" ? "正在跳转…" : "连接 GitHub"}
           </Button>
         )}
-      </div>
+      </UI.Content>
       {!options?.github && options && (
-        <p className="text-muted-foreground text-sm">GitHub 登录暂不可用。</p>
+        <UI.Text className="text-muted-foreground text-sm">
+          GitHub 登录暂不可用。
+        </UI.Text>
       )}
-    </section>
+    </UI.Content>
   );
 }

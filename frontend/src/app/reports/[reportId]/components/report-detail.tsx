@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
 
 import { toast } from "sonner";
@@ -88,15 +90,18 @@ function ReportDetailContent({ reportId }: { reportId: string }) {
   }, [reportId, retryKey]);
   const report = state.status === "ready" ? state.report : null;
   return (
-    <div>
+    <UI.Content>
       <Button asChild variant="ghost" className="mb-8">
         <Link href="/reports">返回报告列表</Link>
       </Button>
       {state.status === "loading" ? (
-        <div aria-label="正在读取报告内容" className="flex flex-col gap-5">
+        <UI.Content
+          aria-label="正在读取报告内容"
+          className="flex flex-col gap-5"
+        >
           <Skeleton className="h-10 w-2/3" />
           <Skeleton className="h-60 w-full" />
-        </div>
+        </UI.Content>
       ) : null}
       {state.status === "not-found" ? (
         <Empty className="py-16">
@@ -117,7 +122,7 @@ function ReportDetailContent({ reportId }: { reportId: string }) {
         <Alert variant="destructive">
           <AlertTitle>暂时无法读取报告</AlertTitle>
           <AlertDescription>
-            <p>请重新加载报告内容。</p>
+            <UI.Text>请重新加载报告内容。</UI.Text>
             <Button
               variant="outline"
               className="mt-4"
@@ -137,24 +142,33 @@ function ReportDetailContent({ reportId }: { reportId: string }) {
           <Badge variant="secondary">
             {report.kind === "weekly" ? "周报" : "日报"}
           </Badge>
-          <h1 className="mt-4 text-3xl font-medium tracking-tight break-words sm:text-4xl">
+          <UI.Heading
+            level={1}
+            className="mt-4 text-3xl font-medium tracking-tight break-words sm:text-4xl"
+          >
             {report.topic_name}
-          </h1>
-          <p className="text-muted-foreground mt-4 text-sm leading-6">
+          </UI.Heading>
+          <UI.Text className="text-muted-foreground mt-4 text-sm leading-6">
             {reportTime(report.window_start)} 至 {reportTime(report.window_end)}
-          </p>
-          <article className="mt-10">
+          </UI.Text>
+          <UI.Content as="article" className="mt-10">
             <Viewer
               value={report.body_markdown}
               citations={report.citations}
               headingOffset={1}
             />
-          </article>
-          <section className="mt-8 space-y-3" aria-label="私人报告导出">
-            <h2 className="text-lg font-medium">导出这版报告</h2>
-            <p className="text-muted-foreground text-sm">
+          </UI.Content>
+          <UI.Content
+            as="section"
+            className="mt-8 space-y-3"
+            aria-label="私人报告导出"
+          >
+            <UI.Heading level={2} className="text-lg font-medium">
+              导出这版报告
+            </UI.Heading>
+            <UI.Text className="text-muted-foreground text-sm">
               文件保留固定版本与引用；生成和下载均需当前有效的导出许可。
-            </p>
+            </UI.Text>
             <PrivateExport
               target={{
                 kind: "report",
@@ -162,7 +176,7 @@ function ReportDetailContent({ reportId }: { reportId: string }) {
                 reportVersion: report.version,
               }}
             />
-          </section>
+          </UI.Content>
           <Collapsible className="mt-12">
             <CollapsibleTrigger asChild>
               <Button variant="ghost">
@@ -171,26 +185,33 @@ function ReportDetailContent({ reportId }: { reportId: string }) {
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-6 flex flex-col gap-6">
-              <dl className="text-muted-foreground grid gap-4 text-sm sm:grid-cols-2">
-                <div>
-                  <dt>生成版本</dt>
-                  <dd className="text-foreground mt-1">
+              <UI.Content
+                as="dl"
+                className="text-muted-foreground grid gap-4 text-sm sm:grid-cols-2"
+              >
+                <UI.Content>
+                  <UI.Content as="dt">生成版本</UI.Content>
+                  <UI.Content as="dd" className="text-foreground mt-1">
                     第 {report.version} 版 ·{" "}
                     {report.generator === "model" ? "模型版" : "模板版"}
-                  </dd>
-                </div>
-                <div>
-                  <dt>资料截止</dt>
-                  <dd className="text-foreground mt-1">
+                  </UI.Content>
+                </UI.Content>
+                <UI.Content>
+                  <UI.Content as="dt">资料截止</UI.Content>
+                  <UI.Content as="dd" className="text-foreground mt-1">
                     {reportTime(report.cutoff_at)}
-                  </dd>
-                </div>
-              </dl>
+                  </UI.Content>
+                </UI.Content>
+              </UI.Content>
               {report.citations.length ? (
-                <section aria-labelledby="report-citations">
-                  <h2 id="report-citations" className="font-medium">
+                <UI.Content as="section" aria-labelledby="report-citations">
+                  <UI.Heading
+                    level={2}
+                    id="report-citations"
+                    className="font-medium"
+                  >
                     原帖引用
-                  </h2>
+                  </UI.Heading>
                   <ItemGroup className="mt-4 flex flex-col gap-3">
                     {report.citations.map((citation) => {
                       const url = safeHttpUrl(citation.url);
@@ -202,18 +223,21 @@ function ReportDetailContent({ reportId }: { reportId: string }) {
                           className="break-words"
                         >
                           <ItemContent className="min-w-0 gap-3">
-                            <span className="text-muted-foreground mr-2">
+                            <UI.Text
+                              as="span"
+                              className="text-muted-foreground mr-2"
+                            >
                               [{citation.citation}]
-                            </span>
+                            </UI.Text>
                             {url ? (
-                              <a
+                              <UI.TextLink
                                 href={url}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="break-all underline underline-offset-4"
                               >
                                 {citation.title}
-                              </a>
+                              </UI.TextLink>
                             ) : (
                               citation.title
                             )}
@@ -222,12 +246,12 @@ function ReportDetailContent({ reportId }: { reportId: string }) {
                       );
                     })}
                   </ItemGroup>
-                </section>
+                </UI.Content>
               ) : null}
             </CollapsibleContent>
           </Collapsible>
         </>
       ) : null}
-    </div>
+    </UI.Content>
   );
 }

@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDownIcon, RotateCcwIcon } from "lucide-react";
@@ -68,12 +69,15 @@ function EntryDetails({ entry }: { entry: HotKeyAPI.PublicPlatformEntryView }) {
     { label: "启用前需要", items: entry.admission_requirements },
   ];
   return (
-    <section
+    <UI.Content
+      as="section"
       aria-label={`${entry.display_name}能力详情`}
       className="flex flex-col gap-4"
     >
-      <h4 className="font-medium">{entry.display_name}</h4>
-      <dl className="grid gap-4 text-sm sm:grid-cols-2">
+      <UI.Heading level={4} className="font-medium">
+        {entry.display_name}
+      </UI.Heading>
+      <UI.Content as="dl" className="grid gap-4 text-sm sm:grid-cols-2">
         {[
           ["目标对象", entry.object_scope],
           ["查询方式", QUERY_LABELS[entry.query_mode]],
@@ -84,47 +88,52 @@ function EntryDetails({ entry }: { entry: HotKeyAPI.PublicPlatformEntryView }) {
           ["真实试点", entry.trial_verified ? "已验证" : "未验证"],
           ["产品可用", entry.product_available ? "已可用" : "尚未上线"],
         ].map(([label, value]) => (
-          <div key={label}>
-            <dt className="text-muted-foreground">{label}</dt>
-            <dd className="mt-1 leading-6">{value}</dd>
-          </div>
+          <UI.Content key={label}>
+            <UI.Content as="dt" className="text-muted-foreground">
+              {label}
+            </UI.Content>
+            <UI.Content as="dd" className="mt-1 leading-6">
+              {value}
+            </UI.Content>
+          </UI.Content>
         ))}
-      </dl>
-      <div className="flex flex-col gap-2">
-        <p className="text-sm font-medium">资料声明</p>
-        <ul className="grid gap-2 text-sm sm:grid-cols-2">
+      </UI.Content>
+      <UI.Content className="flex flex-col gap-2">
+        <UI.Text className="text-sm font-medium">资料声明</UI.Text>
+        <UI.ContentList className="grid gap-2 text-sm sm:grid-cols-2">
           {entry.capabilities.map((capability) => (
-            <li
+            <UI.ContentListItem
               key={capability.capability}
               className="flex items-start justify-between gap-3"
             >
-              <span>{capability.display_name}</span>
-              <span className="text-muted-foreground">
+              <UI.Text as="span">{capability.display_name}</UI.Text>
+              <UI.Text as="span" className="text-muted-foreground">
                 {DOCUMENT_LABELS[capability.documented_support]}
-              </span>
-            </li>
+              </UI.Text>
+            </UI.ContentListItem>
           ))}
-        </ul>
-        <p className="text-muted-foreground text-sm leading-6">
+        </UI.ContentList>
+        <UI.Text className="text-muted-foreground text-sm leading-6">
           候选代码只说明存在技术入口，执行和产品可用仍须逐项验证。
-        </p>
-      </div>
+        </UI.Text>
+      </UI.Content>
       {requirementGroups.map(({ label, items }) => (
-        <div key={label} className="flex flex-col gap-2">
-          <p className="text-sm font-medium">{label}</p>
-          <ul className="text-muted-foreground flex flex-col gap-2 text-sm leading-6">
+        <UI.Content key={label} className="flex flex-col gap-2">
+          <UI.Text className="text-sm font-medium">{label}</UI.Text>
+          <UI.ContentList className="text-muted-foreground flex flex-col gap-2 text-sm leading-6">
             {items.map((value) => (
-              <li key={value}>{value}</li>
+              <UI.ContentListItem key={value}>{value}</UI.ContentListItem>
             ))}
-          </ul>
-        </div>
+          </UI.ContentList>
+        </UI.Content>
       ))}
-      <div className="text-muted-foreground flex flex-col gap-2 text-sm">
-        <p>
-          技术入口：<code>{entry.route_template ?? "尚未确认"}</code>
-        </p>
+      <UI.Content className="text-muted-foreground flex flex-col gap-2 text-sm">
+        <UI.Text>
+          技术入口：
+          <UI.InlineCode>{entry.route_template ?? "尚未确认"}</UI.InlineCode>
+        </UI.Text>
         {entry.evidence_urls.map((url, index) => (
-          <a
+          <UI.TextLink
             key={url}
             href={url}
             target="_blank"
@@ -132,10 +141,10 @@ function EntryDetails({ entry }: { entry: HotKeyAPI.PublicPlatformEntryView }) {
             className="w-fit underline underline-offset-4"
           >
             查看固定源码依据 {index + 1}
-          </a>
+          </UI.TextLink>
         ))}
-      </div>
-    </section>
+      </UI.Content>
+    </UI.Content>
   );
 }
 
@@ -149,43 +158,59 @@ function Platform({
       <Item className="items-start px-0">
         <ItemContent className="gap-4">
           <ItemTitle>
-            <h3 className="text-lg font-medium">{platform.display_name}</h3>
+            <UI.Heading level={3} className="text-lg font-medium">
+              {platform.display_name}
+            </UI.Heading>
           </ItemTitle>
           <ItemDescription className="line-clamp-none leading-6">
             {platform.scope_description}
           </ItemDescription>
-          <ul className="flex flex-col gap-4">
+          <UI.ContentList className="flex flex-col gap-4">
             {platform.entries.map((entry) => (
-              <li key={entry.entry_key} className="flex flex-col gap-2">
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="font-medium">{entry.display_name}</span>
+              <UI.ContentListItem
+                key={entry.entry_key}
+                className="flex flex-col gap-2"
+              >
+                <UI.Content className="flex flex-wrap items-center gap-2 text-sm">
+                  <UI.Text as="span" className="font-medium">
+                    {entry.display_name}
+                  </UI.Text>
                   <Badge variant="outline">{STATUS_LABELS[entry.status]}</Badge>
-                </div>
-                <p className="text-muted-foreground text-sm leading-6">
+                </UI.Content>
+                <UI.Text className="text-muted-foreground text-sm leading-6">
                   {QUERY_LABELS[entry.query_mode]} · {entry.block_reason}
-                </p>
-                <dl className="text-muted-foreground flex flex-wrap gap-x-5 gap-y-2 text-sm">
-                  <div>
-                    <dt className="inline">供应商费用上限：</dt>
-                    <dd className="inline">{entry.supplier_fee_cap_micros}</dd>
-                    <span>
+                </UI.Text>
+                <UI.Content
+                  as="dl"
+                  className="text-muted-foreground flex flex-wrap gap-x-5 gap-y-2 text-sm"
+                >
+                  <UI.Content>
+                    <UI.Content as="dt" className="inline">
+                      供应商费用上限：
+                    </UI.Content>
+                    <UI.Content as="dd" className="inline">
+                      {entry.supplier_fee_cap_micros}
+                    </UI.Content>
+                    <UI.Text as="span">
                       {entry.fee_status === "disallowed"
                         ? "（本轮禁止收费路径）"
                         : "（入口零费用待核实）"}
-                    </span>
-                  </div>
-                  <div>
-                    <dt className="inline">最近持久成功：</dt>
-                    <dd className="inline">
+                    </UI.Text>
+                  </UI.Content>
+                  <UI.Content>
+                    <UI.Content as="dt" className="inline">
+                      最近持久成功：
+                    </UI.Content>
+                    <UI.Content as="dd" className="inline">
                       {entry.last_persisted_success_at
                         ? coverageTime(entry.last_persisted_success_at)
                         : "尚无记录"}
-                    </dd>
-                  </div>
-                </dl>
-              </li>
+                    </UI.Content>
+                  </UI.Content>
+                </UI.Content>
+              </UI.ContentListItem>
             ))}
-          </ul>
+          </UI.ContentList>
         </ItemContent>
         <ItemActions>
           <CollapsibleTrigger asChild>
@@ -201,11 +226,13 @@ function Platform({
         </ItemActions>
       </Item>
       <CollapsibleContent className="flex flex-col gap-6 pt-4 pb-6">
-        <p className="text-muted-foreground text-sm leading-6">
+        <UI.Text className="text-muted-foreground text-sm leading-6">
           资料核验日期：{platform.inspected_at}。固定源码版本：
-          <code className="break-all">{platform.inspected_revision}</code>。
-          本记录未验证当前运行服务或平台采集结果。
-        </p>
+          <UI.InlineCode className="break-all">
+            {platform.inspected_revision}
+          </UI.InlineCode>
+          。 本记录未验证当前运行服务或平台采集结果。
+        </UI.Text>
         {platform.entries.map((entry) => (
           <EntryDetails key={entry.entry_key} entry={entry} />
         ))}
@@ -265,20 +292,25 @@ export function PublicPlatformCatalog() {
   }, [read]);
 
   return (
-    <section
+    <UI.Content
+      as="section"
       aria-labelledby="public-platform-heading"
       className="flex flex-col gap-6"
     >
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-col gap-2">
-          <h2 id="public-platform-heading" className="text-xl font-medium">
+      <UI.Content className="flex flex-wrap items-start justify-between gap-4">
+        <UI.Content className="flex flex-col gap-2">
+          <UI.Heading
+            level={2}
+            id="public-platform-heading"
+            className="text-xl font-medium"
+          >
             七平台免费入口
-          </h2>
-          <p className="text-muted-foreground max-w-2xl text-sm leading-6">
+          </UI.Heading>
+          <UI.Text className="text-muted-foreground max-w-2xl text-sm leading-6">
             查看各平台能研究的入口、范围和阻断原因。候选入口尚不可执行，
             热榜、作者订阅和关键词结果分别验证。本机资源仍有成本。
-          </p>
-        </div>
+          </UI.Text>
+        </UI.Content>
         <Button
           variant="outline"
           size="sm"
@@ -288,7 +320,7 @@ export function PublicPlatformCatalog() {
           <RotateCcwIcon data-icon="inline-start" />
           刷新平台目录
         </Button>
-      </div>
+      </UI.Content>
       {readFailed ? (
         <Alert variant="destructive">
           <AlertTitle>暂时无法读取平台目录</AlertTitle>
@@ -308,10 +340,13 @@ export function PublicPlatformCatalog() {
         </Alert>
       ) : null}
       {platforms === null && loading ? (
-        <div aria-label="正在读取平台目录" className="flex flex-col gap-3">
+        <UI.Content
+          aria-label="正在读取平台目录"
+          className="flex flex-col gap-3"
+        >
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-24 w-full" />
-        </div>
+        </UI.Content>
       ) : null}
       {platforms?.length === 0 ? (
         <Empty>
@@ -325,12 +360,12 @@ export function PublicPlatformCatalog() {
       ) : null}
       <ItemGroup className="gap-8">
         {platforms?.map((platform, index) => (
-          <div key={platform.platform_key}>
+          <UI.Content key={platform.platform_key}>
             {index > 0 ? <Separator className="mb-8" /> : null}
             <Platform platform={platform} />
-          </div>
+          </UI.Content>
         ))}
       </ItemGroup>
-    </section>
+    </UI.Content>
   );
 }

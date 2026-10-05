@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
@@ -68,37 +69,45 @@ export default async function PublicStoryPage({
   return (
     <>
       <PublicationNavigation />
-      <div className="flex flex-col gap-y-8">
-        <div className="text-muted-foreground flex flex-wrap gap-4 text-sm">
-          <time dateTime={story.first_seen_at}>
+      <UI.Content className="flex flex-col gap-y-8">
+        <UI.Content className="text-muted-foreground flex flex-wrap gap-4 text-sm">
+          <UI.Timestamp dateTime={story.first_seen_at}>
             {publicationTime(story.first_seen_at)}
-          </time>
-          <span>
+          </UI.Timestamp>
+          <UI.Text as="span">
             {
               { active: "持续发展", watching: "观察中", settled: "已收束" }[
                 story.phase
               ]
             }
-          </span>
-          <span>修订 {story.revision}</span>
+          </UI.Text>
+          <UI.Text as="span">修订 {story.revision}</UI.Text>
           {story.heat !== null && story.heat !== undefined ? (
-            <span>热度 {story.heat.toFixed(2)}</span>
+            <UI.Text as="span">热度 {story.heat.toFixed(2)}</UI.Text>
           ) : null}
-        </div>
-        <h1 className="text-3xl leading-tight font-medium">{story.title}</h1>
-        <p className="text-muted-foreground leading-8">{story.summary}</p>
+        </UI.Content>
+        <UI.Heading level={1} className="text-3xl leading-tight font-medium">
+          {story.title}
+        </UI.Heading>
+        <UI.Text className="text-muted-foreground leading-8">
+          {story.summary}
+        </UI.Text>
         {story.latest_progress ? (
-          <section className="flex flex-col gap-y-3">
-            <h2 className="text-lg font-medium">最新进展</h2>
-            <p className="leading-7">{story.latest_progress}</p>
-          </section>
+          <UI.Content as="section" className="flex flex-col gap-y-3">
+            <UI.Heading level={2} className="text-lg font-medium">
+              最新进展
+            </UI.Heading>
+            <UI.Text className="leading-7">{story.latest_progress}</UI.Text>
+          </UI.Content>
         ) : null}
         <PosterDownload target={{ eventId: story.id }} />
-        <section>
-          <h2 className="text-xl font-medium">来源与报道</h2>
+        <UI.Content as="section">
+          <UI.Heading level={2} className="text-xl font-medium">
+            来源与报道
+          </UI.Heading>
           <PublicItemCards items={story.reports} />
-        </section>
-      </div>
+        </UI.Content>
+      </UI.Content>
     </>
   );
 }

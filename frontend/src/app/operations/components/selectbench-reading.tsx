@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import {
   Item,
   ItemContent,
@@ -191,11 +193,13 @@ export function SelectBenchReading({ token }: { token: string }) {
     }
   }
   return (
-    <section className="grid gap-5">
-      <h2 className="text-xl font-semibold">SelectBench 筛选评测</h2>
-      <p className="text-muted-foreground text-sm">
+    <UI.Content as="section" className="grid gap-5">
+      <UI.Heading level={2} className="text-xl font-semibold">
+        SelectBench 筛选评测
+      </UI.Heading>
+      <UI.Text className="text-muted-foreground text-sm">
         同一批黄金样本比较模型。失败结果保留为空；导入报告不会发起模型调用。
-      </p>
+      </UI.Text>
       <SelectBenchRunner
         token={token}
         accepted={(run) => {
@@ -208,7 +212,7 @@ export function SelectBenchReading({ token }: { token: string }) {
           刷新当前评测
         </Button>
       )}
-      <form onSubmit={importReport}>
+      <UI.Form onSubmit={importReport}>
         <FieldGroup className="grid gap-3 sm:grid-cols-2">
           <Field className="min-w-0">
             <FieldLabel htmlFor={`${fieldId}-selectbench-reading-field-1`}>
@@ -262,8 +266,8 @@ export function SelectBenchReading({ token }: { token: string }) {
             导入并复算评测
           </Button>
         </FieldGroup>
-      </form>
-      <div className="flex flex-wrap gap-2">
+      </UI.Form>
+      <UI.Content className="flex flex-wrap gap-2">
         {runs.map((row) => (
           <Button
             key={row.id}
@@ -273,13 +277,13 @@ export function SelectBenchReading({ token }: { token: string }) {
             {row.label} · {row.sample_size} 条
           </Button>
         ))}
-      </div>
+      </UI.Content>
       {cases && (
         <>
-          <p className="text-muted-foreground text-sm break-all">
+          <UI.Text className="text-muted-foreground text-sm break-all">
             黄金集 {cases.run.gold_fingerprint} · {cases.run.prompt_version} ·{" "}
             {cases.run.split ?? "无分组"} · seed {cases.run.seed ?? "未知"}
-          </p>
+          </UI.Text>
           <Collapsible>
             <CollapsibleTrigger asChild>
               <Button
@@ -287,7 +291,9 @@ export function SelectBenchReading({ token }: { token: string }) {
                 variant="ghost"
                 className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
               >
-                <span className="min-w-0 text-left">指标与阈值扫描</span>
+                <UI.Text as="span" className="min-w-0 text-left">
+                  指标与阈值扫描
+                </UI.Text>
                 <ChevronDownIcon
                   aria-hidden="true"
                   data-icon="inline-end"
@@ -299,12 +305,12 @@ export function SelectBenchReading({ token }: { token: string }) {
               forceMount
               className="data-[state=closed]:hidden"
             >
-              <pre className="bg-muted/40 mt-3 max-h-96 overflow-auto rounded-lg p-4 text-xs">
+              <UI.CodeBlock className="bg-muted/40 mt-3 max-h-96 overflow-auto rounded-lg p-4 text-xs">
                 {JSON.stringify(cases.run.summary, null, 2)}
-              </pre>
+              </UI.CodeBlock>
             </CollapsibleContent>
           </Collapsible>
-          <form
+          <UI.Form
             onSubmit={(e) => {
               e.preventDefault();
               void load();
@@ -419,44 +425,44 @@ export function SelectBenchReading({ token }: { token: string }) {
                 应用评测筛选
               </Button>
             </FieldGroup>
-          </form>
-          <div className="grid gap-4">
+          </UI.Form>
+          <UI.Content className="grid gap-4">
             {cases.items.map((row) => (
               <Item variant="muted" key={row.case_id} asChild>
-                <article className="min-w-0 p-4">
+                <UI.Content as="article" className="min-w-0 p-4">
                   <ItemContent className="min-w-0 gap-3">
                     <ItemTitle className="line-clamp-none w-full">
-                      <h3>{row.title}</h3>
+                      <UI.Heading level={3}>{row.title}</UI.Heading>
                     </ItemTitle>
                     <ItemDescription className="line-clamp-none">
                       {row.case_id} · gold {row.gold} ·{" "}
                       {row.stratum ?? "未分层"}
                     </ItemDescription>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <UI.Content className="mt-3 grid gap-3 sm:grid-cols-2">
                       {Object.entries(row.by_model).map(([name, value]) => {
                         const result = value as HotKeyAPI.SelectBenchCaseInput;
                         return (
-                          <div key={name} className="min-w-0">
-                            <p className="break-all">
+                          <UI.Content key={name} className="min-w-0">
+                            <UI.Text className="break-all">
                               {name} · {result.decision ?? "结果失败"} ·{" "}
                               {result.score == null
                                 ? "分数未知"
                                 : `${result.score} 分`}
-                            </p>
-                            <p className="text-muted-foreground text-sm">
+                            </UI.Text>
+                            <UI.Text className="text-muted-foreground text-sm">
                               {result.error_code ??
                                 result.reason ??
                                 "无理由说明"}
-                            </p>
-                          </div>
+                            </UI.Text>
+                          </UI.Content>
                         );
                       })}
-                    </div>
+                    </UI.Content>
                   </ItemContent>
-                </article>
+                </UI.Content>
               </Item>
             ))}
-          </div>
+          </UI.Content>
           {cases.next_cursor && (
             <Button
               disabled={busy}
@@ -469,6 +475,6 @@ export function SelectBenchReading({ token }: { token: string }) {
           )}
         </>
       )}
-    </section>
+    </UI.Content>
   );
 }

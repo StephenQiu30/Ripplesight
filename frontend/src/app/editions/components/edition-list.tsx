@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import { ItemGroup } from "@/components/ui/item";
 import { FieldGroup, FieldLabel, Field } from "@/components/ui/field";
@@ -93,12 +95,14 @@ export function EditionList() {
 
   return (
     <>
-      <div>
-        <h1 className="text-3xl font-medium tracking-tight">日周月刊</h1>
-        <p className="text-muted-foreground mt-4 leading-7">
+      <UI.Content>
+        <UI.Heading level={1} className="text-3xl font-medium tracking-tight">
+          日周月刊
+        </UI.Heading>
+        <UI.Text className="text-muted-foreground mt-4 leading-7">
           按北京时间的完整自然刊期编选资讯，阅读来源、关键事实和历史修订。
-        </p>
-        <div className="my-7 flex flex-wrap gap-3">
+        </UI.Text>
+        <UI.Content className="my-7 flex flex-wrap gap-3">
           <ToggleGroup
             type="single"
             variant="outline"
@@ -129,15 +133,19 @@ export function EditionList() {
           >
             刷新
           </Button>
-        </div>
+        </UI.Content>
         {loadFailed ? (
           <Alert variant="destructive">
             <AlertTitle>刊期暂不可用</AlertTitle>
             <AlertDescription>刷新后可以重新读取刊期档案。</AlertDescription>
           </Alert>
         ) : null}
-        <div className="grid gap-12 lg:grid-cols-3">
-          <section className="lg:col-span-2" aria-label="刊期档案">
+        <UI.Content className="grid gap-12 lg:grid-cols-3">
+          <UI.Content
+            as="section"
+            className="lg:col-span-2"
+            aria-label="刊期档案"
+          >
             {loading ? (
               <Skeleton className="h-32 w-full" />
             ) : loadFailed ? null : rows.length ? (
@@ -179,10 +187,12 @@ export function EditionList() {
                 返回最新
               </Button>
             ) : null}
-          </section>
-          <aside>
-            <h2 className="font-medium">编选{editionKinds[kind]}</h2>
-            <form onSubmit={generate}>
+          </UI.Content>
+          <UI.Content as="aside">
+            <UI.Heading level={2} className="font-medium">
+              编选{editionKinds[kind]}
+            </UI.Heading>
+            <UI.Form onSubmit={generate}>
               <FieldGroup className="mt-5 flex flex-col gap-y-5">
                 <Field className="min-w-0">
                   <FieldLabel htmlFor={`${fieldId}-edition-list-field-1`}>
@@ -214,14 +224,14 @@ export function EditionList() {
                     id={`${fieldId}-edition-list-field-2`}
                   />
                 </Field>
-                <p className="text-muted-foreground text-xs leading-6">
+                <UI.Text className="text-muted-foreground text-xs leading-6">
                   请选择已结束的刊期。有新材料或需要重新编选时会保留此前修订。
-                </p>
+                </UI.Text>
                 <Button type="submit" disabled={saving}>
                   {saving ? "正在受理…" : "提交编选"}
                 </Button>
               </FieldGroup>
-            </form>
+            </UI.Form>
             {accepted ? (
               <Alert role="status" className="mt-5">
                 <AlertDescription>
@@ -232,9 +242,9 @@ export function EditionList() {
                 </AlertDescription>
               </Alert>
             ) : null}
-          </aside>
-        </div>
-      </div>
+          </UI.Content>
+        </UI.Content>
+      </UI.Content>
     </>
   );
 }

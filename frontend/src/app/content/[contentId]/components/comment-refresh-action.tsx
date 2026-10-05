@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -67,7 +68,7 @@ export function CommentRefreshControls({
 }) {
   if (!readiness.supported) return null;
   return (
-    <div className="mt-4">
+    <UI.Content className="mt-4">
       {readiness.supported ? (
         <Button
           type="button"
@@ -86,7 +87,7 @@ export function CommentRefreshControls({
           </AlertDescription>
         </Alert>
       ) : null}
-    </div>
+    </UI.Content>
   );
 }
 
@@ -186,7 +187,7 @@ function CommentRefreshActionContent({ postId }: { postId: string }) {
   if (state.status === "loading") return null;
   if (state.status === "error") {
     return (
-      <div className="mt-4 flex flex-col items-start gap-3">
+      <UI.Content className="mt-4 flex flex-col items-start gap-3">
         <Alert variant="destructive">
           <AlertDescription>{state.message}</AlertDescription>
         </Alert>
@@ -200,7 +201,7 @@ function CommentRefreshActionContent({ postId }: { postId: string }) {
           <RotateCcwIcon data-icon="inline-start" />
           重试
         </Button>
-      </div>
+      </UI.Content>
     );
   }
   if (state.status === "accepted") {

@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -65,12 +67,12 @@ export function AnnotationResult({
 }) {
   if (annotation === null) {
     return (
-      <div className="mt-6 py-4">
+      <UI.Content className="mt-6 py-4">
         <Badge variant="outline">暂无标注记录</Badge>
-        <p className="text-muted-foreground mt-3 text-sm leading-6">
+        <UI.Text className="text-muted-foreground mt-3 text-sm leading-6">
           此主题、正文版本、规则与提示词组合尚无分析结果；不能将无记录当作不相关。
-        </p>
-      </div>
+        </UI.Text>
+      </UI.Content>
     );
   }
 
@@ -86,8 +88,8 @@ export function AnnotationResult({
           : "标注无效";
 
   return (
-    <article className="mt-6 py-4">
-      <div className="flex flex-wrap items-center gap-2">
+    <UI.Content as="article" className="mt-6 py-4">
+      <UI.Content className="flex flex-wrap items-center gap-2">
         <Badge
           variant={
             annotation.result_state === "valid" ? "secondary" : "outline"
@@ -96,44 +98,47 @@ export function AnnotationResult({
           {label}
         </Badge>
         {historical ? <Badge variant="outline">历史结果</Badge> : null}
-        <span className="text-muted-foreground text-xs">
+        <UI.Text as="span" className="text-muted-foreground text-xs">
           主题规则 v{annotation.topic_rule_version} ·{annotation.prompt_version}
-        </span>
-      </div>
+        </UI.Text>
+      </UI.Content>
       {annotation.result_state === "valid" ? (
         <>
-          <p className="mt-4 text-sm leading-6 break-words whitespace-pre-wrap">
+          <UI.Text className="mt-4 text-sm leading-6 break-words whitespace-pre-wrap">
             判断理由：{annotation.relevance_reason}
-          </p>
-          <p className="mt-2 text-sm leading-6 break-words whitespace-pre-wrap">
+          </UI.Text>
+          <UI.Text className="mt-2 text-sm leading-6 break-words whitespace-pre-wrap">
             摘要：{annotation.summary}
-          </p>
+          </UI.Text>
           {annotation.relevant ? (
-            <p className="text-muted-foreground mt-2 text-sm">
+            <UI.Text className="text-muted-foreground mt-2 text-sm">
               情感：{sentimentLabel(annotation.sentiment)}
-            </p>
+            </UI.Text>
           ) : null}
           {annotation.viewpoints.length > 0 ? (
-            <ul className="mt-3 flex list-disc flex-col gap-1 pl-5 text-sm leading-6">
+            <UI.ContentList className="mt-3 flex list-disc flex-col gap-1 pl-5 text-sm leading-6">
               {annotation.viewpoints.map((viewpoint, index) => (
-                <li key={`${index}-${viewpoint}`} className="break-words">
+                <UI.ContentListItem
+                  key={`${index}-${viewpoint}`}
+                  className="break-words"
+                >
                   {viewpoint}
-                </li>
+                </UI.ContentListItem>
               ))}
-            </ul>
+            </UI.ContentList>
           ) : null}
         </>
       ) : (
-        <p className="text-muted-foreground mt-3 text-sm leading-6">
+        <UI.Text className="text-muted-foreground mt-3 text-sm leading-6">
           {annotation.result_state === "pending"
             ? "分析任务尚未产生有效结论。"
             : `没有有效相关性结论${annotation.error_code ? `，原因代码：${annotation.error_code}` : ""}。`}
-        </p>
+        </UI.Text>
       )}
-      <p className="text-muted-foreground mt-3 text-xs">
+      <UI.Text className="text-muted-foreground mt-3 text-xs">
         最近更新 {formatTime(annotation.updated_at)}
-      </p>
-    </article>
+      </UI.Text>
+    </UI.Content>
   );
 }
 
@@ -164,17 +169,25 @@ export function AnnotationPanel({
   const isCurrentVersion = versionId === currentVersionId;
 
   return (
-    <section aria-labelledby="annotation-heading" className="mt-10">
-      <h2 id="annotation-heading" className="text-xl font-medium">
+    <UI.Content
+      as="section"
+      aria-labelledby="annotation-heading"
+      className="mt-10"
+    >
+      <UI.Heading
+        level={2}
+        id="annotation-heading"
+        className="text-xl font-medium"
+      >
         主题分析
-      </h2>
-      <p className="text-muted-foreground mt-2 text-sm leading-6">
+      </UI.Heading>
+      <UI.Text className="text-muted-foreground mt-2 text-sm leading-6">
         仅当前正文、主题规则与提示词版本一致的有效标注可作为当前结论。页面读取不会发起模型请求。
-      </p>
+      </UI.Text>
       {content.analysis_topics.length === 0 ? (
-        <p className="text-muted-foreground mt-4 text-sm">
+        <UI.Text className="text-muted-foreground mt-4 text-sm">
           此作品尚无可关联的监控主题或标注记录。
-        </p>
+        </UI.Text>
       ) : (
         <>
           <FieldGroup className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -248,9 +261,9 @@ export function AnnotationPanel({
                     </Button>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
-                    <p className="text-muted-foreground mt-1 text-sm">
+                    <UI.Text className="text-muted-foreground mt-1 text-sm">
                       以下记录不能替代当前版本的分析结论。
-                    </p>
+                    </UI.Text>
                     {selection.historical.map((item) => (
                       <AnnotationResult
                         key={item.id}
@@ -271,6 +284,6 @@ export function AnnotationPanel({
           )}
         </>
       )}
-    </section>
+    </UI.Content>
   );
 }

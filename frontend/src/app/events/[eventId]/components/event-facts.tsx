@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import {
   Item,
   ItemContent,
@@ -71,13 +73,21 @@ export function EventFacts({
     return () => controller.abort();
   }, [eventId, revision, retry, onFactsLoaded]);
   return (
-    <section className="mt-12" aria-labelledby="event-facts-heading">
-      <h2 id="event-facts-heading" className="text-2xl font-medium">
+    <UI.Content
+      as="section"
+      className="mt-12"
+      aria-labelledby="event-facts-heading"
+    >
+      <UI.Heading
+        level={2}
+        id="event-facts-heading"
+        className="text-2xl font-medium"
+      >
         事实与进展
-      </h2>
-      <p className="text-muted-foreground mt-3 leading-7">
+      </UI.Heading>
+      <UI.Text className="text-muted-foreground mt-3 leading-7">
         重复报道归于同一事实；直接进展和背景保留各自身份与根事实关系。
-      </p>
+      </UI.Text>
       {failed ? (
         <Alert className="mt-6" variant="destructive">
           <AlertTitle>无法读取事实</AlertTitle>
@@ -98,7 +108,9 @@ export function EventFacts({
       ) : facts === null ? (
         <Skeleton className="mt-6 h-24 w-full" />
       ) : facts.length === 0 ? (
-        <p className="text-muted-foreground mt-6">当前事件尚无细分事实关系。</p>
+        <UI.Text className="text-muted-foreground mt-6">
+          当前事件尚无细分事实关系。
+        </UI.Text>
       ) : (
         <ItemGroup className="mt-6 flex flex-col gap-y-7">
           {facts.map((fact) => (
@@ -109,7 +121,7 @@ export function EventFacts({
               className="flex flex-col gap-y-3"
             >
               <ItemContent className="min-w-0 gap-3">
-                <div className="flex flex-wrap items-center gap-3">
+                <UI.Content className="flex flex-wrap items-center gap-3">
                   {onToggleFact ? (
                     <Field orientation="horizontal" className="w-auto">
                       <Checkbox
@@ -125,12 +137,14 @@ export function EventFacts({
                   <Badge variant="secondary">
                     {relationLabels[fact.relation]}
                   </Badge>
-                  <span className="text-muted-foreground text-sm">
+                  <UI.Text as="span" className="text-muted-foreground text-sm">
                     {fact.members.length} 份固定证据 · 事实修订 {fact.revision}
-                  </span>
-                </div>
+                  </UI.Text>
+                </UI.Content>
                 <ItemTitle className="line-clamp-none w-full">
-                  <h3>{fact.title ?? "事实文本待复核或不可读"}</h3>
+                  <UI.Heading level={3}>
+                    {fact.title ?? "事实文本待复核或不可读"}
+                  </UI.Heading>
                 </ItemTitle>
                 {fact.summary ? (
                   <ItemDescription className="line-clamp-none leading-7 whitespace-pre-wrap">
@@ -155,6 +169,6 @@ export function EventFacts({
           ))}
         </ItemGroup>
       )}
-    </section>
+    </UI.Content>
   );
 }

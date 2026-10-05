@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { SavedItems } from "@/components/publication/local-reading";
@@ -11,10 +12,12 @@ export default async function StarredPage() {
   return (
     <>
       <PublicationNavigation />
-      <div>
-        <h1 className="mb-8 text-3xl font-medium">收藏与阅读记录</h1>
+      <UI.Content>
+        <UI.Heading level={1} className="mb-8 text-3xl font-medium">
+          收藏与阅读记录
+        </UI.Heading>
         <SavedItems full />
-      </div>
+      </UI.Content>
     </>
   );
 }
