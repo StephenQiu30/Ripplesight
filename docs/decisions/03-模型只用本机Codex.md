@@ -5,8 +5,8 @@ summary: 相关性、情感、观点、写作、问答都走本机 Codex app-ser
 status: 生效
 decided: 2026-10-06
 related:
-  - 02-能力/04-评论舆情.md
-  - 02-能力/05-报告推送与知识库.md
+  - capabilities/04-评论舆情.md
+  - capabilities/05-报告推送与知识库.md
 updated: 2026-10-06
 ---
 
@@ -22,5 +22,5 @@ updated: 2026-10-06
 
 ## 相关
 
-- [评论舆情](../02-能力/04-评论舆情.md)
-- [报告、推送与知识库](../02-能力/05-报告推送与知识库.md)
+- [评论舆情](../capabilities/04-评论舆情.md)
+- [报告、推送与知识库](../capabilities/05-报告推送与知识库.md)

@@ -5,7 +5,7 @@ summary: Reddit 获批之前不发任何请求
 status: 生效
 decided: 2026-10-06
 related:
-  - 02-能力/04-评论舆情.md
+  - capabilities/04-评论舆情.md
 updated: 2026-10-06
 ---
 
@@ -21,4 +21,4 @@ Reddit 明确禁止未获批的访问。
 
 ## 相关
 
-- [评论舆情](../02-能力/04-评论舆情.md)
+- [评论舆情](../capabilities/04-评论舆情.md)
