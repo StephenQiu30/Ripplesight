@@ -1395,7 +1395,9 @@ CREATE TABLE ai_calls (
     input_fingerprint BYTEA NOT NULL CHECK (octet_length(input_fingerprint) = 32),
     status VARCHAR(16) NOT NULL CHECK (status IN ('running', 'unknown', 'succeeded', 'failed')),
     failure_code VARCHAR(32) CHECK (
-        failure_code IN ('rate_limited', 'unavailable', 'timeout', 'invalid_output', 'failed')
+        failure_code IN (
+            'rate_limited', 'unavailable', 'timeout', 'invalid_output', 'output_truncated', 'failed'
+        )
     ),
     input_tokens BIGINT NOT NULL CHECK (input_tokens >= 0),
     cached_input_tokens BIGINT NOT NULL CHECK (cached_input_tokens >= 0),

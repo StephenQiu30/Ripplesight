@@ -11,7 +11,7 @@ from typing import Any, Literal, Self, cast
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, StrictInt, model_validator
 
 from operations.schemas import OperatorAuditView
 
@@ -148,10 +148,13 @@ class AiModelServerSpec(AiCapabilityContract):
     output_rate_micros_per_million: Decimal | None = Field(default=None, ge=0)
     cached_input_rate_micros_per_million: Decimal | None = Field(default=None, ge=0)
     max_output_tokens: int = Field(default=4096, ge=512, le=32768)
+    reasoning_tokens: StrictInt = Field(default=0, ge=0, le=32768)
     timeout_seconds: int = Field(default=120, ge=1, le=600)
 
     @model_validator(mode="after")
     def protected_spec(self) -> Self:
+        if self.output_tokens_limit > 32768:
+            raise ValueError("model answer and reasoning tokens exceed the output limit")
         if not self.text_compatible:
             raise ValueError("registered editorial capabilities require text compatibility")
         if self.transport == "codex" and self.provider_key != "codex_app_server":
@@ -194,6 +197,10 @@ class AiModelServerSpec(AiCapabilityContract):
         return self
 
     @property
+    def output_tokens_limit(self) -> int:
+        return self.max_output_tokens + self.reasoning_tokens
+
+    @property
     def component_key(self) -> str:
         return "codex.app-server" if self.transport == "codex" else f"ai.llm.{self.provider_key}"
 
@@ -204,6 +211,9 @@ class AiModelServerSpec(AiCapabilityContract):
     @property
     def sha256(self) -> str:
         payload = {**self.model_dump(mode="json"), "endpoint": self.base_url}
+        if self.reasoning_tokens == 0:
+            # Preserve already-frozen model identities when the new allowance is disabled.
+            payload.pop("reasoning_tokens")
         return digest(payload)
 
     def quote(self, *, input_tokens_cap: int, output_tokens_cap: int) -> AiPriceQuote:

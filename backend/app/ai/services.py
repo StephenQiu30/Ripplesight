@@ -87,6 +87,7 @@ def create_ai_client(settings: Settings) -> AiCompletionClient:
         command=command,
         effort=settings.ai_effort,
         timeout_seconds=settings.ai_timeout_seconds,
+        reasoning_tokens=settings.ai_reasoning_tokens,
     )
     client.capability_settings = settings
     return client
@@ -313,7 +314,7 @@ class AiService:
                     + len(json.dumps(dict(output_schema), ensure_ascii=False).encode())
                     + sum(image.input_tokens_cap for image in images)
                     + 1024,
-                    output_tokens_cap=pricing.max_output_tokens,
+                    output_tokens_cap=pricing.output_tokens_limit,
                 )
             paid = quote is not None and quote.cap_micros > 0
             if paid and (
@@ -381,7 +382,7 @@ class AiService:
                     call_id,
                     status=AiCallStatus.UNKNOWN if unknown else AiCallStatus.FAILED,
                     failure=error.code,
-                    completion=None,
+                    completion=error.receipt,
                     quote=quote,
                 )
                 error.call_id = call_id

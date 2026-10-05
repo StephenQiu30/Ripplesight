@@ -473,14 +473,19 @@ class Settings(BaseSettings):
     @field_validator("ai_model_catalog")
     @classmethod
     def validate_ai_model_catalog(
-        cls, value: dict[str, dict[str, Any]]
+        cls, value: dict[str, dict[str, Any]], info: ValidationInfo
     ) -> dict[str, dict[str, Any]]:
         if len(value) > 64 or any(
             re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", key) is None for key in value
         ):
             raise ValueError("AI model catalog needs at most 64 bounded model keys")
-        for spec in value.values():
-            AiModelServerSpec.model_validate(spec)
+        for key, spec in value.items():
+            defaults = (
+                {"reasoning_tokens": info.data.get("ai_reasoning_tokens", 0)}
+                if key == "default"
+                else {}
+            )
+            AiModelServerSpec.model_validate({**defaults, **spec})
         return value
 
     @field_validator("ai_capability_models")
@@ -672,6 +677,7 @@ class Settings(BaseSettings):
     ai_enabled: bool = False
     events_cluster_enabled: bool = False
     ai_model: str = "gpt-5.6-luna"
+    ai_reasoning_tokens: StrictInt = Field(default=0, ge=0, le=28672)
     ai_model_catalog: dict[str, dict[str, Any]] = Field(
         default_factory=dict, exclude=True, repr=False
     )
@@ -682,6 +688,13 @@ class Settings(BaseSettings):
     ai_command: str = "codex app-server"
     ai_timeout_seconds: int = Field(default=300, ge=1, le=900)
     ai_effort: str = "low"
+
+    @field_validator("ai_reasoning_tokens", mode="before")
+    @classmethod
+    def parse_ai_reasoning_tokens(cls, value: object) -> object:
+        if isinstance(value, str) and re.fullmatch(r"[0-9]+", value):
+            return int(value)
+        return value
 
 
 @lru_cache
