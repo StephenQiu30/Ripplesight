@@ -1,12 +1,14 @@
 """Races at the final provider boundary use separate real PostgreSQL transactions."""
 
 from collections.abc import Callable, Iterator
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
+from sqlalchemy.orm import Session, sessionmaker
 from tests.integration import test_editorial_execution as editorial_fixture
 from tests.integration import test_report_editions as edition_fixture
 from tests.integration.test_ai_calls import _enable_ai_budget
@@ -18,16 +20,18 @@ from tests.integration.test_translation_recovery import _admit as admit_translat
 from ai.services import AiService
 from analysis.editorial_services import EditorialExecutor
 from analysis.translation_services import ContentTranslationExecutor
+from core.errors import ApplicationError
 from jobs.execution import JobExecutionFailure
 from monitors.codex_services import CodexResetService
-from reports.edition_services import EditionExecutor
+from publication.application import PublicationApplicationService
+from publication.schemas import PublicationOverrideInput
+from publication.services import PublicationService
+from reports.edition_services import EditionExecutor, EditionService
 
 
 @pytest.fixture
-def editorial_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
-    for client in editorial_fixture.editorial_client.__wrapped__():
-        monkeypatch.setattr(edition_fixture, "NOW", editorial_fixture.NOW)
-        yield client
+def editorial_client() -> Iterator[TestClient]:
+    yield from editorial_fixture.editorial_client.__wrapped__()
 
 
 def at_final_admission(monkeypatch: pytest.MonkeyPatch, purpose: str, change: Callable[[], None]):
@@ -101,49 +105,142 @@ def test_translation_final_admission_rechecks_each_frozen_input_before_spending(
     assert triggered and provider.calls == 0 and counts(sessions) == before
 
 
-@pytest.mark.parametrize("change", ["permission", "manual"])
+_EDITION_CHANGES = [
+    pytest.param("permission", 1, id="permission"),
+    pytest.param("manual", 0, id="manual-first"),
+    pytest.param("manual", 1, id="manual-last"),
+    pytest.param("withdrawal", 1, id="withdrawal-last"),
+]
+
+
+def _edition_candidates(sessions: sessionmaker[Session], edition_id: UUID) -> list[dict[str, Any]]:
+    with sessions() as session:
+        snapshot = session.execute(
+            text("SELECT input_snapshot FROM report_editions WHERE id=:id"), {"id": edition_id}
+        ).scalar_one()
+        assert len(snapshot) == 2  # First-only validation must not satisfy this guarantee.
+        return snapshot
+
+
+def _revoke_edition_candidate(
+    sessions: sessionmaker[Session],
+    owner: UUID,
+    candidate: dict[str, Any],
+    change: str,
+    now: datetime,
+) -> None:
+    with sessions.begin() as session:
+        if change == "permission":
+            session.execute(
+                text(
+                    "UPDATE publication_source_policies SET configuration="
+                    "jsonb_set(configuration,'{participation_mode}','\"isolated\"') "
+                    "WHERE owner_id=:owner AND source_key=:source"
+                ),
+                {"owner": owner, "source": candidate["source_key"]},
+            )
+        elif change == "manual":
+            for table in ("editorial_runs", "editorial_content_states"):
+                session.execute(
+                    text(
+                        f"UPDATE {table} SET manual_version=manual_version+1 "
+                        "WHERE owner_id=:owner AND content_id=:content"
+                    ),
+                    {"owner": owner, "content": UUID(candidate["content_id"])},
+                )
+        else:
+            assert change == "withdrawal"
+            PublicationService(session).override_in_transaction(
+                owner_id=owner,
+                actor_id=owner,
+                content_id=UUID(candidate["content_id"]),
+                now=now,
+                command=PublicationOverrideInput(
+                    operation_id=uuid4(),
+                    expected_revision=candidate["publication_revision"],
+                    visibility="withdrawn",
+                    reason="受控撤回末项固定输入",
+                ),
+            )
+
+
+@pytest.mark.parametrize("kind", ["weekly", "monthly"])
+@pytest.mark.parametrize(("change", "candidate_index"), _EDITION_CHANGES)
 def test_edition_final_admission_rechecks_all_fixed_candidates_before_spending(
-    editorial_client, monkeypatch, change
+    editorial_client, monkeypatch, kind, change, candidate_index
 ):
-    owner, edition, message, lease = edition_fixture._admit(editorial_client)
+    owner, edition, message, lease = edition_fixture._admit(
+        editorial_client, kind=kind, candidate_count=2
+    )
     sessions = editorial_client.app.state.session_factory
     now = edition.window_end + timedelta(hours=2)
+    candidates = _edition_candidates(sessions, edition.id)
     before = counts(sessions)
 
     def revoke():
-        with sessions.begin() as session:
-            if change == "permission":
-                session.execute(
-                    text(
-                        "UPDATE publication_source_policies SET configuration="
-                        "jsonb_set(configuration,'{participation_mode}','\"isolated\"') "
-                        "WHERE owner_id=:owner"
-                    ),
-                    {"owner": owner},
-                )
-            else:
-                session.execute(
-                    text(
-                        "UPDATE editorial_runs SET manual_version=manual_version+1 "
-                        "WHERE owner_id=:owner"
-                    ),
-                    {"owner": owner},
-                )
-                session.execute(
-                    text(
-                        "UPDATE editorial_content_states SET manual_version=manual_version+1 "
-                        "WHERE owner_id=:owner"
-                    ),
-                    {"owner": owner},
-                )
+        _revoke_edition_candidate(sessions, owner, candidates[candidate_index], change, now)
 
-    triggered = at_final_admission(monkeypatch, "report.edition.daily", revoke)
+    triggered = at_final_admission(monkeypatch, f"report.edition.{kind}", revoke)
     provider = edition_fixture.ReportClient()
     with sessions() as session, pytest.raises(JobExecutionFailure, match="edition_input_withdrawn"):
         EditionExecutor(sessions, editorial_client.app.state.settings, clock=lambda: now).execute(
             message, lease, ai=AiService(session, provider, clock=lambda: now)
         )
     assert triggered and provider.calls == 0 and counts(sessions) == before
+    with sessions() as session:
+        view = EditionService(session, clock=lambda: now).get(owner_id=owner, edition_id=edition.id)
+        assert view.status == "failed" and view.ai_call_id is None and view.content is None
+
+
+@pytest.mark.parametrize("before_commit", [False, True], ids=["before-execution", "before-commit"])
+@pytest.mark.parametrize(("change", "candidate_index"), _EDITION_CHANGES)
+def test_daily_rechecks_all_fixed_candidates_without_model_or_invalid_publication(
+    editorial_client, monkeypatch, before_commit, change, candidate_index
+):
+    import reports.edition_services as edition_module
+
+    owner, edition, message, lease = edition_fixture._admit(editorial_client, candidate_count=2)
+    sessions = editorial_client.app.state.session_factory
+    now = edition.window_end + timedelta(hours=2)
+    candidates = _edition_candidates(sessions, edition.id)
+    before = counts(sessions)
+    triggered = []
+
+    def revoke():
+        triggered.append(change)
+        _revoke_edition_candidate(sessions, owner, candidates[candidate_index], change, now)
+
+    if before_commit:
+        compose = edition_module.compose_edition
+
+        def compose_then_revoke(*args, **kwargs):
+            content = compose(*args, **kwargs)
+            revoke()
+            return content
+
+        monkeypatch.setattr(edition_module, "compose_edition", compose_then_revoke)
+    else:
+        revoke()
+    provider = edition_fixture.ReportClient()
+    error = "edition_input_changed" if before_commit else "edition_input_withdrawn"
+    with sessions() as session, pytest.raises(JobExecutionFailure, match=error):
+        EditionExecutor(sessions, editorial_client.app.state.settings, clock=lambda: now).execute(
+            message, lease, ai=AiService(session, provider, clock=lambda: now)
+        )
+    assert triggered == [change] and provider.calls == 0 and counts(sessions) == before
+    with sessions() as session:
+        view = EditionService(session, clock=lambda: now).get(owner_id=owner, edition_id=edition.id)
+        assert not view.valid and view.content is None and view.body_markdown is None
+        assert session.execute(
+            text(
+                "SELECT content IS NULL AND body_markdown IS NULL FROM report_editions WHERE id=:id"
+            ),
+            {"id": edition.id},
+        ).scalar_one()
+        with pytest.raises(ApplicationError, match="resource_not_found"):
+            PublicationApplicationService(session).edition(
+                owner_id=owner, kind="daily", key=edition.key, now=now
+            )
 
 
 @pytest.mark.parametrize("change", ["permission", "source", "manual"])

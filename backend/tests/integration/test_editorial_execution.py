@@ -23,6 +23,7 @@ from analysis.editorial_schemas import (
     EditorialSourceInput,
 )
 from analysis.editorial_services import EditorialExecutor, EditorialService
+from content.schemas import ContentRecordSummaryView
 from core.config import Settings
 from core.errors import ApplicationError
 from jobs.execution import ExecutionLease, JobExecutionFailure, JobExecutionService
@@ -98,9 +99,16 @@ def editorial_client() -> Iterator[TestClient]:
         yield client
 
 
-def _source(client: TestClient, owner: UUID, *, operation_id: UUID | None = None) -> None:
+def _source(
+    client: TestClient,
+    owner: UUID,
+    *,
+    operation_id: UUID | None = None,
+    now: datetime | None = None,
+) -> None:
+    now = now or NOW
     with client.app.state.session_factory() as session:
-        EditorialService(session, clock=lambda: NOW).save_source(
+        EditorialService(session, clock=lambda: now).save_source(
             owner_id=owner,
             source_key="x",
             command=EditorialSourceInput(
@@ -114,16 +122,26 @@ def _source(client: TestClient, owner: UUID, *, operation_id: UUID | None = None
         )
 
 
-def _run(client: TestClient) -> tuple[UUID, EditorialRunView, JobAcceptedMessage, ExecutionLease]:
-    owner, _, posts = _seed_posts(client, [("OpenAI new model", "OpenAI 发布新模型,公开 API。")])
-    _source(client, owner)
-    version = posts[0].latest_observation.content_version
+def _run(
+    client: TestClient, *, now: datetime | None = None
+) -> tuple[UUID, EditorialRunView, JobAcceptedMessage, ExecutionLease]:
+    owner, _, posts = _seed_posts(
+        client, [("OpenAI new model", "OpenAI 发布新模型,公开 API。")], now=now
+    )
+    _source(client, owner, now=now)
+    return _request_run(client, owner, posts[0], now=now or NOW)
+
+
+def _request_run(
+    client: TestClient, owner: UUID, post: ContentRecordSummaryView, *, now: datetime
+) -> tuple[UUID, EditorialRunView, JobAcceptedMessage, ExecutionLease]:
+    version = post.latest_observation.content_version
     assert version is not None
     sessions = client.app.state.session_factory
     with sessions() as session:
-        run = EditorialService(session, clock=lambda: NOW).request_run(
+        run = EditorialService(session, clock=lambda: now).request_run(
             owner_id=owner,
-            content_id=posts[0].id,
+            content_id=post.id,
             source_key="x",
             command=EditorialRunInput(operation_id=uuid4(), content_version_id=version.id),
         )
@@ -139,13 +157,14 @@ def _run(client: TestClient) -> tuple[UUID, EditorialRunView, JobAcceptedMessage
             "event_type": outbox.event_type,
             "schema_version": 2,
         }
-        lease = JobExecutionService(session, lease_seconds=30, clock=lambda: NOW).acquire(
+        lease = JobExecutionService(session, lease_seconds=30, clock=lambda: now).acquire(
             job_id=run.job_id, worker_id="controlled-editorial"
         )
     return owner, run, JobAcceptedMessage.model_validate(payload), lease
 
 
-def _budget(client: TestClient, owner: UUID) -> None:
+def _budget(client: TestClient, owner: UUID, *, now: datetime | None = None) -> None:
+    now = now or NOW
     # Reuse the existing budget test fixture while moving its frozen window to this test's clock.
     _enable_ai_budget(client.app.state.session_factory.kw["bind"], owner)
     with client.app.state.session_factory.begin() as session:
@@ -154,7 +173,7 @@ def _budget(client: TestClient, owner: UUID) -> None:
                 "UPDATE resource_budget_policies SET window_anchor_at=:now, limit_units=50 "
                 "WHERE owner_id=:owner"
             ),
-            {"now": NOW, "owner": owner},
+            {"now": now, "owner": owner},
         )
 
 
@@ -164,11 +183,14 @@ def _execute(
     message: JobAcceptedMessage,
     lease: ExecutionLease,
     provider: ControlledClient,
+    *,
+    now: datetime | None = None,
 ) -> None:
+    now = now or NOW
     sessions = client.app.state.session_factory
     with sessions() as ai_session:
-        result = EditorialExecutor(sessions, client.app.state.settings, clock=lambda: NOW).execute(
-            message, lease, ai=AiService(ai_session, provider, clock=lambda: NOW)
+        result = EditorialExecutor(sessions, client.app.state.settings, clock=lambda: now).execute(
+            message, lease, ai=AiService(ai_session, provider, clock=lambda: now)
         )
     assert result.status == JobStatus.SUCCEEDED
 

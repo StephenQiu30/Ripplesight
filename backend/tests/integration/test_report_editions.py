@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -9,12 +9,14 @@ from zoneinfo import ZoneInfo
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
+from tests.integration.test_content_search import _seed_posts
 from tests.integration.test_editorial_execution import (
-    NOW,
     ControlledClient,
     _budget,
     _execute,
+    _request_run,
     _run,
+    _source,
 )
 from tests.integration.test_editorial_execution import editorial_client as _editorial_client
 
@@ -29,6 +31,8 @@ from reports.edition_reading import load_current_edition_in_transaction
 from reports.edition_rules import EditionKind, period_window
 from reports.edition_schemas import EditionCorrectionInput, EditionDetailView, EditionRequestInput
 from reports.edition_services import EditionExecutor, EditionService
+
+NOW = datetime(2026, 10, 1, 9, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -69,10 +73,18 @@ def _admit(
     client: TestClient,
     *,
     kind: EditionKind = "daily",
+    candidate_count: int = 1,
 ) -> tuple[UUID, EditionDetailView, JobAcceptedMessage, ExecutionLease]:
-    owner, run, message, lease = _run(client)
-    _budget(client, owner)
-    _execute(client, owner, message, lease, ControlledClient())
+    # Freeze receipt, analysis, publication and budget clocks together. Imported NOW
+    # values otherwise outlive the upstream fixture's per-test clock in a full suite.
+    owner, _, posts = _seed_posts(
+        client, [("OpenAI new model", "OpenAI 发布新模型,公开 API。")] * candidate_count, now=NOW
+    )
+    _source(client, owner, now=NOW)
+    _budget(client, owner, now=NOW)
+    for post in posts:
+        _, _, message, lease = _request_run(client, owner, post, now=NOW)
+        _execute(client, owner, message, lease, ControlledClient(), now=NOW)
     sessions = client.app.state.session_factory
     with sessions.begin() as session:
         # The controlled monthly window can end 31 days ahead; keep its fixture licensed.
@@ -105,7 +117,8 @@ def _admit(
                 reason="受控刊期输入",
             ),
         )
-        service.publish_in_transaction(owner_id=owner, content_id=run.content_id, now=NOW)
+        for post in posts:
+            service.publish_in_transaction(owner_id=owner, content_id=post.id, now=NOW)
     key = NOW.astimezone(ZoneInfo("Asia/Shanghai")).date().isoformat()
     _, end = period_window("daily", key)
     at = end + timedelta(hours=2)
@@ -240,9 +253,32 @@ def test_model_timeout_records_one_receipt_and_never_repays(editorial_client: Te
                 )
     assert provider.calls == 1
     with sessions() as session:
-        view = EditionService(session).get(owner_id=owner, edition_id=edition.id)
+        view = EditionService(session, clock=lambda: edition.window_end + timedelta(hours=2)).get(
+            owner_id=owner, edition_id=edition.id
+        )
         assert view.status == "unknown" and view.ai_call_id and view.content is None
         assert session.execute(text("SELECT count(*) FROM ai_calls")).scalar_one() == 6
+
+
+@pytest.mark.parametrize("kind", ["weekly", "monthly"])
+def test_period_model_runs_once_with_all_fixed_candidates_and_replays(
+    editorial_client: TestClient, kind: EditionKind
+) -> None:
+    owner, edition, message, lease = _admit(editorial_client, kind=kind, candidate_count=2)
+    sessions = editorial_client.app.state.session_factory
+    now = edition.window_end + timedelta(hours=2)
+    provider = ReportClient()
+    with sessions() as ai_session:
+        ai = AiService(ai_session, provider, clock=lambda: now)
+        executor = _executor(editorial_client, edition)
+        assert executor.execute(message, lease, ai=ai).status == JobStatus.SUCCEEDED
+        assert executor.execute(message, lease, ai=ai).status == JobStatus.SUCCEEDED
+    assert provider.calls == 1
+    with sessions() as session:
+        view = EditionService(session, clock=lambda: now).get(owner_id=owner, edition_id=edition.id)
+        assert view.valid and view.generator == "model" and view.ai_call_id and view.content
+        assert len(view.content.entries) == 2
+        assert session.execute(text("SELECT count(*) FROM ai_calls")).scalar_one() == 11
 
 
 @pytest.mark.parametrize("during_call", [False, True])
@@ -288,7 +324,9 @@ def test_withdrawal_hides_whole_draft_and_rejects_late_model(
         _executor(editorial_client, edition).execute(message, lease)
         revoke()
     with sessions() as session:
-        view = EditionService(session).get(owner_id=owner, edition_id=edition.id)
+        view = EditionService(session, clock=lambda: edition.window_end + timedelta(hours=2)).get(
+            owner_id=owner, edition_id=edition.id
+        )
         assert (
             not view.valid
             and view.title is None
@@ -325,7 +363,9 @@ def test_template_crash_resumes_without_turning_into_unknown(
         _executor(editorial_client, edition).execute(message, lease)
     sessions = editorial_client.app.state.session_factory
     with sessions() as session:
-        view = EditionService(session).get(owner_id=owner, edition_id=edition.id)
+        view = EditionService(session, clock=lambda: edition.window_end + timedelta(hours=2)).get(
+            owner_id=owner, edition_id=edition.id
+        )
         assert view.status == "running" and view.generator == "template"
     monkeypatch.setattr(edition_module, "compose_edition", compose)
     assert (
@@ -392,8 +432,13 @@ def test_empty_edition_gaps_advance_durably_and_bound_each_round(
 @pytest.mark.parametrize("kind", ["daily", "weekly", "monthly"])
 def test_model_off_rules_publish_all_kinds_and_replays_preserve_issue(
     editorial_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
     kind: EditionKind,
 ) -> None:
+    from tests.integration import test_editorial_execution as editorial_fixture
+
+    # Simulate a different upstream fixture having changed its module's clock.
+    monkeypatch.setattr(editorial_fixture, "NOW", NOW - timedelta(days=400))
     owner, edition, message, lease = _admit(editorial_client, kind=kind)
     executor = _executor(editorial_client, edition)
     assert executor.execute(message, lease).status == JobStatus.SUCCEEDED
@@ -540,9 +585,9 @@ def test_confirmation_boundary_assigns_each_selected_report_to_one_daily(
     editorial_client: TestClient,
     seconds: int,
 ) -> None:
-    owner, run, message, lease = _run(editorial_client)
-    _budget(editorial_client, owner)
-    _execute(editorial_client, owner, message, lease, ControlledClient())
+    owner, run, message, lease = _run(editorial_client, now=NOW)
+    _budget(editorial_client, owner, now=NOW)
+    _execute(editorial_client, owner, message, lease, ControlledClient(), now=NOW)
     key = NOW.astimezone(ZoneInfo("Asia/Shanghai")).date().isoformat()
     _, end = period_window("daily", key)
     confirmation = end + timedelta(seconds=seconds)
