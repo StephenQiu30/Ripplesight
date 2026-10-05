@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from core.errors import ApplicationError
 from publication.listing import PublicationListingMember, iter_current_publications_in_transaction
 from publication.reading import public_item
+from publication.schemas import Category
 from publication.topic_schemas import (
     PublicRelatedTopicView,
     PublicTopicDirectoryView,
@@ -112,9 +113,14 @@ def topic_directory_in_transaction(
     owner_id: UUID,
     now: datetime,
     indexing_enabled: bool = False,
+    public_categories: tuple[Category, ...] = (),
 ) -> PublicTopicDirectoryView:
     members = iter_current_publications_in_transaction(
-        session, owner_id=owner_id, now=now, indexing_enabled=indexing_enabled
+        session,
+        owner_id=owner_id,
+        now=now,
+        indexing_enabled=indexing_enabled,
+        public_categories=public_categories,
     )
     return topic_summaries(members, now=now, indexing_enabled=indexing_enabled)
 
@@ -127,6 +133,7 @@ def topic_page_in_transaction(
     page: int,
     now: datetime,
     indexing_enabled: bool = False,
+    public_categories: tuple[Category, ...] = (),
 ) -> PublicTopicPageView:
     topic = next((topic for topic in industry_topics() if topic.slug == slug), None)
     if topic is None or page < 1:
@@ -138,7 +145,12 @@ def topic_page_in_transaction(
     recent_from = now - timedelta(days=30)
     offset = (page - 1) * TOPIC_PAGE_SIZE
     for row in iter_current_publications_in_transaction(
-        session, owner_id=owner_id, now=now, order="timeline", indexing_enabled=indexing_enabled
+        session,
+        owner_id=owner_id,
+        now=now,
+        order="timeline",
+        indexing_enabled=indexing_enabled,
+        public_categories=public_categories,
     ):
         p = row.projection
         if not p.selected or not p.visible_after or not matches.intersection(row.subject_tags):

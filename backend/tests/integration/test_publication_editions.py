@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 from datetime import timedelta
 from uuid import uuid4
+from xml.etree import ElementTree
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,6 +14,48 @@ from publication.application import PublicationApplicationService
 from publication.indexnow_reading import read_indexable_path_eligibilities_in_transaction
 from publication.schemas import SourcePolicyInput
 from publication.services import PublicationService
+
+
+def test_category_scope_hides_whole_edition_calendar_rss_and_share_without_clipping(
+    editorial_client,
+):
+    owner, edition, message, lease = _admit(editorial_client)
+    _executor(editorial_client, edition).execute(message, lease)
+    now = edition.window_end + timedelta(hours=2)
+    sessions = editorial_client.app.state.session_factory
+    with sessions() as session:
+        unfiltered = PublicationApplicationService(session)
+        original = unfiltered.edition(owner_id=owner, key=edition.key, now=now)
+        categories = tuple(sorted({entry.category for entry in original.entries}))
+        assert categories and all(category is not None for category in categories)
+        permitted = PublicationApplicationService(session, public_categories=categories)
+        assert permitted.edition(owner_id=owner, key=edition.key, now=now) == original
+        assert permitted.edition_catalogue(owner_id=owner, kind="daily", now=now).entries
+        blocked_category = next(
+            key
+            for key in ("tip", "opinion", "paper", "industry", "ai-products", "ai-models")
+            if key not in categories
+        )
+        blocked = PublicationApplicationService(session, public_categories=(blocked_category,))
+        for read in (
+            lambda: blocked.edition(owner_id=owner, key=edition.key, now=now),
+            lambda: blocked.edition_markdown(owner_id=owner, key=edition.key, now=now),
+            lambda: blocked.share_edition(owner_id=owner, kind="daily", key=edition.key, now=now),
+        ):
+            with pytest.raises(ApplicationError, match="resource_not_found"):
+                read()
+        assert not blocked.edition_catalogue(owner_id=owner, kind="daily", now=now).entries
+        assert (
+            blocked.edition_navigation(
+                owner_id=owner, kind="daily", key=edition.key, now=now
+            ).current
+            is None
+        )
+        assert not blocked.daily_calendar(owner_id=owner, month=edition.key[:7], now=now).entries
+        rss = blocked.edition_feed(owner_id=owner, now=now)
+        assert not ElementTree.fromstring(rss).findall("./channel/item")
+        # Public read scope does not invalidate or rewrite the underlying private edition.
+        assert unfiltered.edition(owner_id=owner, key=edition.key, now=now) == original
 
 
 @pytest.fixture

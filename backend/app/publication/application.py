@@ -78,19 +78,27 @@ class PublicationApplicationService:
         *,
         origin: str = "http://127.0.0.1:8667",
         indexing_enabled: bool = False,
+        public_categories: tuple[Category, ...] = (),
     ) -> None:
         self.session, self.origin, self.indexing_enabled = session, origin, indexing_enabled
+        self.public_categories = tuple(sorted(set(public_categories)))
 
     @contextmanager
     def _read(self) -> Iterator[PublicationReadingService]:
         if self.session.in_transaction():
-            yield PublicationReadingService(self.session, indexing_enabled=self.indexing_enabled)
+            yield PublicationReadingService(
+                self.session,
+                indexing_enabled=self.indexing_enabled,
+                public_categories=self.public_categories,
+            )
         else:
             with self.session.begin():
                 self.session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
                 self.session.execute(text("SET TRANSACTION READ ONLY"))
                 yield PublicationReadingService(
-                    self.session, indexing_enabled=self.indexing_enabled
+                    self.session,
+                    indexing_enabled=self.indexing_enabled,
+                    public_categories=self.public_categories,
                 )
 
     def items(
@@ -162,6 +170,7 @@ class PublicationApplicationService:
         with self._read():
             return timeline_in_transaction(
                 self.session,
+                public_categories=self.public_categories,
                 owner_id=owner_id,
                 filters=filters,
                 limit=limit,
@@ -185,6 +194,7 @@ class PublicationApplicationService:
         with self._read():
             return fact_reports_in_transaction(
                 self.session,
+                public_categories=self.public_categories,
                 owner_id=owner_id,
                 fact_id=fact_id,
                 filters=filters,
@@ -210,6 +220,7 @@ class PublicationApplicationService:
         with self._read():
             return developments_in_transaction(
                 self.session,
+                public_categories=self.public_categories,
                 owner_id=owner_id,
                 event_id=event_id,
                 filters=filters,
@@ -230,6 +241,7 @@ class PublicationApplicationService:
                 owner_id=owner_id,
                 now=now or datetime.now(UTC),
                 indexing_enabled=self.indexing_enabled,
+                public_categories=self.public_categories,
             )
 
     def topic_page(
@@ -245,6 +257,7 @@ class PublicationApplicationService:
                 page=page,
                 now=now or datetime.now(UTC),
                 indexing_enabled=self.indexing_enabled,
+                public_categories=self.public_categories,
             )
 
     def detail(
@@ -287,6 +300,7 @@ class PublicationApplicationService:
                     kind=kind,
                     now=now or datetime.now(UTC),
                     indexing_enabled=self.indexing_enabled,
+                    public_categories=self.public_categories,
                     before_key=before_key,
                     limit=limit,
                 )
@@ -312,6 +326,7 @@ class PublicationApplicationService:
                     key=key,
                     now=now or datetime.now(UTC),
                     indexing_enabled=self.indexing_enabled,
+                    public_categories=self.public_categories,
                 )
             except ValueError as error:
                 raise ApplicationError("invalid_publication_input") from error
@@ -333,6 +348,7 @@ class PublicationApplicationService:
                     month=month,
                     now=now or datetime.now(UTC),
                     indexing_enabled=self.indexing_enabled,
+                    public_categories=self.public_categories,
                 )
             except ValueError as error:
                 raise ApplicationError("invalid_publication_input") from error
@@ -402,9 +418,14 @@ class PublicationApplicationService:
         with self._read() as reader:
             from publication.listing import iter_current_publications_in_transaction
 
-            details = []
+            details: list[PublicItemView | PublicItemDetailView] = []
             for member in iter_current_publications_in_transaction(
-                self.session, owner_id=owner_id, now=at, order="timeline", ends_at=at
+                self.session,
+                owner_id=owner_id,
+                now=at,
+                order="timeline",
+                ends_at=at,
+                public_categories=self.public_categories,
             ):
                 projection = member.projection
                 if (
@@ -416,8 +437,15 @@ class PublicationApplicationService:
                     )
                 ):
                     continue
-                detail = reader.detail_in_transaction(
-                    owner_id=owner_id, content_id=projection.content_id, now=at, redistribute=True
+                detail = (
+                    reader.detail_in_transaction(
+                        owner_id=owner_id,
+                        content_id=projection.content_id,
+                        now=at,
+                        redistribute=True,
+                    )
+                    if kind == "selected-full"
+                    else reader.item(projection)
                 )
                 if detail:
                     details.append(detail)
@@ -818,12 +846,12 @@ class PublicationApplicationService:
         now: datetime | None = None,
         redistribute: bool = False,
     ) -> str:
-        from reports.edition_reading import list_current_editions_in_transaction
+        from reports.edition_reading import iter_current_editions_in_transaction
 
         at = now or datetime.now(UTC)
         with self._read():
-            editions = list_current_editions_in_transaction(
-                self.session, owner_id=owner_id, kind=kind, limit=50, now=at
+            editions = iter_current_editions_in_transaction(
+                self.session, owner_id=owner_id, kind=kind, now=at
             )
             values = []
             for edition in editions:
@@ -840,6 +868,8 @@ class PublicationApplicationService:
                 except ApplicationError as error:
                     if error.code != "resource_not_found":
                         raise
+                if len(values) == 50:
+                    break
             return render_edition_rss(values, origin=self.origin, kind=kind, now=at)
 
     def robots(self) -> str:
