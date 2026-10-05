@@ -75,6 +75,8 @@ Router 只处理 HTTP、身份/CSRF 和 DTO，经 API dependencies 注入服务�
 
 Session 按请求或任务创建，不跨线程/任务共享。同步数据库使用同步路由，阻塞 SDK 不直接放入异步执行。Engine/客户端由所属进程创建关闭，导入模块不联网；API lifespan 不启动消费者。Worker 父进程独占 Kafka/offset 和任务终结，`spawn` 子进程自己建立资源，不继承 Session、Engine 或网络客户端。
 
+进程装配向 `create_session_factory` 传入已解析的 Settings，随新 Session 的 `info["settings"]` 提供给跨出口的只读配置判断；领域代码不修改该配置，未注入的独立调用回退到 `get_settings()`。精选读取与发布使用同一进程的事件归组开关，不因重新加载默认配置而改变门禁。
+
 ## API 与身份
 
 FastAPI 路由装饰器、类型注解和 Pydantic 是唯一可编辑契约。运行时 `/openapi.json` 供 Swagger、Scalar、契约检查、Umi 与 App 共用；禁止手写 OpenAPI JSON/YAML 或客户端 DTO。API 采用无版本 `/api/*` 路径；只有同时兼容不兼容公共契约时才另行设计版本。

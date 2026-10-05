@@ -23,6 +23,7 @@ The prefilter, independent scoring, structure, writing and identity rules under
 `industry/taxonomy.ts`; HotKey retains its own persistence, topic relevance and jobs.
 WP-008-002 updates the structure template, category guides and original-quote validation from AIHOT commit `9acad0c3d7687d9210c2b7774f83799dfd36734b`, preserving HotKey JSONB persistence and adding field-level discard diagnostics.
 WP-008-003 adapts group-definitions/group-method/group-pair, composite mention guards and relation comparison tests from the same `9acad0c` snapshot; unused group-batch/group-signal templates are removed because HotKey uses its existing fact-partition and pair-output contracts.
+WP-008-001 adapts the selection candidate/identity/value gate and failure semantics from AIHOT `9acad0c` (`docs/selection.md` step 6, `events/group.ts`, `events/relate.ts`, `publication/publish.ts`, `tests/selected-news-gate.test.ts` and `tests/selection-eval-runtime.test.ts`). HotKey reuses confirmed event relations and grounded fact evidence/conditions in a deterministic Python gate without additional model calls, retains its original Job/AI budget and permission contracts, and persists one representative per occurrence through the existing publication revisions and ledger.
 
 WP-008-004 adapts `industry/prompts/story-digest.md`,
 `docs/story-digest-evaluation.md`, `scripts/eval-story-digests-core.ts` and the

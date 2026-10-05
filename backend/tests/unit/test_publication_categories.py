@@ -70,7 +70,11 @@ def test_live_gate_uses_current_category_without_merging_or_bypassing_permission
         "load_editorial_publication_inputs_in_transaction",
         lambda *a, **k: {stored.content_id: snapshot},
     )
-    monkeypatch.setattr(reading, "load_publication_groupings_in_transaction", lambda *a, **k: {})
+    monkeypatch.setattr(
+        reading,
+        "load_publication_selection_in_transaction",
+        lambda *a, **k: SimpleNamespace(groupings={}, gates={}),
+    )
     monkeypatch.setattr(reading, "policy_view", lambda _: None)
     monkeypatch.setattr(reading, "derive_projection", lambda *a, **k: current)
     reader = PublicationReadingService(session, public_categories=configured)

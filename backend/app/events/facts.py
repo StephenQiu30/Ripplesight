@@ -11,7 +11,13 @@ from sqlalchemy.orm import Session
 
 from content.event_reading import load_event_member_content_in_transaction
 from core.errors import ApplicationError
-from events.fact_models import EventDerivedContent, EventFact, EventFactAssignment, EventFactMember
+from events.fact_models import (
+    EventDerivedContent,
+    EventFact,
+    EventFactAssignment,
+    EventFactMember,
+    EventGroupingOverride,
+)
 from events.fact_schemas import (
     EventFactMemberView,
     EventFactPageView,
@@ -19,11 +25,13 @@ from events.fact_schemas import (
     EventPublicationGrouping,
     FactRelation,
 )
+from events.heat import load_event_input_source_modes_in_transaction
 from events.models import Event, EventMember
 from events.observation_inputs import (
     event_content_reference,
     load_fact_observation_inputs_in_transaction,
 )
+from events.schemas import EventInput
 
 
 def load_publication_groupings_in_transaction(
@@ -100,9 +108,66 @@ def load_publication_groupings_in_transaction(
                 fact_revision=fact.revision,
                 grouped_at=fact_member.created_at,
                 role=cast(Literal["primary", "report"], fact_member.role),
+                relation=cast(FactRelation, assignment.relation),
+                frame=fact.frame,
+                assignment_origin=cast(
+                    Literal["model", "manual", "legacy"], fact_member.assignment_origin
+                ),
             )
         )
     return {identity: groups[0] for identity, groups in by_content.items() if len(groups) == 1}
+
+
+def load_selection_peer_ids_in_transaction(
+    session: Session, *, owner_id: UUID, event_ids: tuple[UUID, ...]
+) -> tuple[UUID, ...]:
+    """Identity-only recall; callers must separately check fixed versions and ALL rights."""
+    if not session.in_transaction():
+        raise RuntimeError("selection peers require caller transaction")
+    if not event_ids:
+        return ()
+    return tuple(
+        session.scalars(
+            select(EventMember.content_id)
+            .where(
+                EventMember.owner_id == owner_id,
+                EventMember.event_id.in_(event_ids),
+                EventMember.removed_revision.is_(None),
+            )
+            .distinct()
+            .order_by(EventMember.content_id)
+        )
+    )
+
+
+def load_selection_grouping_exempt_ids_in_transaction(
+    session: Session, *, owner_id: UUID, inputs: tuple[EventInput, ...], now: datetime
+) -> frozenset[UUID]:
+    """Reuse explicit isolated/standalone and composite mention-only grouping contracts."""
+    if not session.in_transaction():
+        raise RuntimeError("selection grouping scope requires caller transaction")
+    if not inputs:
+        return frozenset()
+    modes = load_event_input_source_modes_in_transaction(
+        session, owner_id=owner_id, inputs=inputs, now=now
+    )
+    standalone = {
+        (row.topic_id, row.content_id)
+        for row in session.scalars(
+            select(EventGroupingOverride).where(
+                EventGroupingOverride.owner_id == owner_id,
+                EventGroupingOverride.content_id.in_([item.content_id for item in inputs]),
+                EventGroupingOverride.mode == "standalone",
+            )
+        )
+    }
+    return frozenset(
+        item.content_id
+        for item in inputs
+        if modes.get(item.content_version_id) == "isolated"
+        or (item.topic_id, item.content_id) in standalone
+        or item.editorial_scope == "composite"
+    )
 
 
 def ensure_legacy_facts_in_transaction(session: Session, *, event: Event, now: datetime) -> None:

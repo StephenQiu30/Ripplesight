@@ -11,6 +11,7 @@
 - core 只通用配置/错误/Schema/时间，db 只基类/连接池/模型注册；新增领域须在 PROJECT/Design 登记，并先用失败架构测试证明未登记代码被拒绝，不能预先白名单。
 - 来源/MinIO/模型 SDK 分别归 sources/adapters、evidence/adapters、ai/adapters；持久业务状态归原领域。复用官方客户端与标准库，仅封装业务合同/生命周期/外部差异。
 - Session 不跨线程/任务，DTO 在 Session 有效期内构造；同步数据库使用同步路由，阻塞 SDK 不直接运行在异步路由。资源按所属进程创建关闭，导入不联网；API lifespan 不启动 Worker。
+- 进程装配向 Session factory 注入已解析 Settings，跨出口只读配置可从 `Session.info["settings"]` 获取；领域不修改配置，独立调用未注入时回退 `get_settings()`，不另读环境文件。
 - Worker 父进程独占 Kafka Consumer/offset/任务终结，spawn 子进程自行建立资源。取消、硬截止、未知退出均有界回收整个进程组，不能以协作截止或重建 Consumer 代替进程恢复。
 - 状态与 Outbox 同事务；幂等业务提交后仅提交连续完成 offset。jobs 管持久重试、预算、租约和执行权；Redis 只可重建状态，适配器重试不持持久任务。重复消费、旧 lease/epoch、撤权与取消不能继续写。
 
