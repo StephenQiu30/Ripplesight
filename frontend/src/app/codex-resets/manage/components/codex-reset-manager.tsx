@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Item,
@@ -355,22 +357,25 @@ export function CodexResetManager() {
   }
   const canWrite = !!token && !!reason.trim() && !busy;
   return (
-    <div className="flex flex-col gap-y-8">
-      <div>
-        <h1 className="text-3xl font-medium">公告配置与人工复核</h1>
-        <p className="text-muted-foreground mt-3">
+    <UI.Content className="flex flex-col gap-y-8">
+      <UI.Content>
+        <UI.Heading level={1} className="text-3xl font-medium">
+          公告配置与人工复核
+        </UI.Heading>
+        <UI.Text className="text-muted-foreground mt-3">
           固定官方作者
           thsottiaux。预测日程与确认到账分别记录，未知来源或模型请求需要人工复核。
-        </p>
+        </UI.Text>
         <Link
           href="/codex-resets"
           className="mt-3 inline-block underline underline-offset-4"
         >
           返回公告日历
         </Link>
-      </div>
+      </UI.Content>
       <Item variant="muted" asChild>
-        <section
+        <UI.Content
+          as="section"
           className="flex flex-col gap-y-4 p-5"
           aria-label="运营权限与原因"
         >
@@ -393,7 +398,7 @@ export function CodexResetManager() {
               maxLength={2000}
               onChange={(e) => setReason(e.target.value)}
             />
-            <div className="flex flex-wrap gap-3">
+            <UI.Content className="flex flex-wrap gap-3">
               <Button
                 variant="outline"
                 disabled={busy}
@@ -414,19 +419,23 @@ export function CodexResetManager() {
               <Button variant="ghost" onClick={() => changeToken("")}>
                 清除令牌
               </Button>
-            </div>
+            </UI.Content>
           </ItemContent>
-        </section>
+        </UI.Content>
       </Item>
-      <section className="flex flex-col gap-y-5" aria-label="官方监控配置">
-        <h2 className="text-xl font-medium">
+      <UI.Content
+        as="section"
+        className="flex flex-col gap-y-5"
+        aria-label="官方监控配置"
+      >
+        <UI.Heading level={2} className="text-xl font-medium">
           {monitor
             ? `监控修订 ${monitor.revision} · 配置版本 ${monitor.configuration_version}`
             : loaded
               ? "尚未配置公告监控"
               : "正在读取配置…"}
-        </h2>
-        <div className="grid gap-5 sm:grid-cols-2">
+        </UI.Heading>
+        <UI.Content className="grid gap-5 sm:grid-cols-2">
           <Field className="flex flex-col gap-y-2">
             <FieldLabel htmlFor="codex-author-id">官方作者外部 ID</FieldLabel>
             <Input
@@ -507,7 +516,7 @@ export function CodexResetManager() {
               readOnly
             />
           </Field>
-        </div>
+        </UI.Content>
         {monitor && (
           <Field orientation="horizontal" className="w-auto">
             <Checkbox
@@ -523,14 +532,20 @@ export function CodexResetManager() {
         <Button disabled={!canWrite || !loaded} onClick={save}>
           {monitor ? "保存公告配置" : "创建关闭公告监控"}
         </Button>
-        <p className="text-muted-foreground text-sm">
+        <UI.Text className="text-muted-foreground text-sm">
           首次创建保持关闭。X
           凭据、付费预算与模型开关由服务端批准，配置保存不会发起外部请求。
-        </p>
-      </section>
+        </UI.Text>
+      </UI.Content>
       {monitor && (
-        <section className="flex flex-col gap-y-4" aria-label="人工扫描">
-          <h2 className="text-xl font-medium">人工受理扫描</h2>
+        <UI.Content
+          as="section"
+          className="flex flex-col gap-y-4"
+          aria-label="人工扫描"
+        >
+          <UI.Heading level={2} className="text-xl font-medium">
+            人工受理扫描
+          </UI.Heading>
           <Label htmlFor="codex-lookback">回看小时数</Label>
           <Input
             id="codex-lookback"
@@ -556,28 +571,31 @@ export function CodexResetManager() {
               </AlertDescription>
             </Alert>
           )}
-        </section>
+        </UI.Content>
       )}
       {!!gaps.length && (
-        <section
+        <UI.Content
+          as="section"
           className="flex flex-col gap-y-4"
           aria-label="分页积压与未知请求"
         >
-          <h2 className="text-xl font-medium">扫描缺口</h2>
+          <UI.Heading level={2} className="text-xl font-medium">
+            扫描缺口
+          </UI.Heading>
           {gaps.map((gap) => (
             <Item variant="muted" key={gap.id} asChild>
-              <article className="flex flex-col gap-y-3 p-5">
+              <UI.Content as="article" className="flex flex-col gap-y-3 p-5">
                 <ItemContent className="min-w-0 gap-3">
-                  <p className="break-words">
+                  <UI.Text className="break-words">
                     {gap.state} · {gap.failure_code ?? "未完成窗口"} · 配置版本{" "}
                     {gap.configuration_version}
-                  </p>
+                  </UI.Text>
                   <ItemDescription className="line-clamp-none break-all">
                     查询 {gap.query} ·{" "}
                     {gap.has_resume_token ? "已保留分页凭证" : "无分页凭证"}
                   </ItemDescription>
                   {gap.state !== "complete" && (
-                    <div className="flex flex-wrap gap-3">
+                    <UI.Content className="flex flex-wrap gap-3">
                       <Button
                         variant="outline"
                         disabled={!canWrite}
@@ -592,36 +610,44 @@ export function CodexResetManager() {
                       >
                         确认此缺口
                       </Button>
-                    </div>
+                    </UI.Content>
                   )}
                 </ItemContent>
-              </article>
+              </UI.Content>
             </Item>
           ))}
-        </section>
+        </UI.Content>
       )}
       {monitor && (
-        <section className="flex flex-col gap-y-4" aria-label="帖子复核">
-          <h2 className="text-xl font-medium">源帖子复核 · 第 {page} 页</h2>
+        <UI.Content
+          as="section"
+          className="flex flex-col gap-y-4"
+          aria-label="帖子复核"
+        >
+          <UI.Heading level={2} className="text-xl font-medium">
+            源帖子复核 · 第 {page} 页
+          </UI.Heading>
           {posts.map((post) => (
             <Item variant="muted" key={post.id} asChild>
-              <article className="flex flex-col gap-y-3 p-5">
+              <UI.Content as="article" className="flex flex-col gap-y-3 p-5">
                 <ItemContent className="min-w-0 gap-3">
-                  <p className="break-words whitespace-pre-wrap">{post.text}</p>
+                  <UI.Text className="break-words whitespace-pre-wrap">
+                    {post.text}
+                  </UI.Text>
                   <ItemDescription className="line-clamp-none">
                     复核版本 {post.review_version} ·{" "}
                     {post.failure_code ?? (post.reviewed ? "已复核" : "待处理")}{" "}
                     · 失败 {post.failure_count}
                   </ItemDescription>
-                  <a
+                  <UI.TextLink
                     href={post.url}
                     target="_blank"
                     rel="noreferrer"
                     className="text-sm underline underline-offset-4"
                   >
                     官方原帖
-                  </a>
-                  <div className="flex flex-wrap gap-3">
+                  </UI.TextLink>
+                  <UI.Content className="flex flex-wrap gap-3">
                     <Button
                       variant="outline"
                       disabled={!canWrite}
@@ -663,12 +689,12 @@ export function CodexResetManager() {
                         更改公告归属
                       </Button>
                     )}
-                  </div>
+                  </UI.Content>
                 </ItemContent>
-              </article>
+              </UI.Content>
             </Item>
           ))}
-          <div className="flex gap-3">
+          <UI.Content className="flex gap-3">
             <Button
               variant="outline"
               disabled={busy || !token || page <= 1}
@@ -683,23 +709,24 @@ export function CodexResetManager() {
             >
               下一页帖子
             </Button>
-          </div>
-        </section>
+          </UI.Content>
+        </UI.Content>
       )}
       {relinkPost && relinkSource && (
         <Item variant="muted" asChild>
-          <section
+          <UI.Content
+            as="section"
             className="flex flex-col gap-y-4 p-5"
             aria-label="帖子公告归属"
           >
             <ItemContent className="min-w-0 gap-3">
               <ItemTitle className="line-clamp-none w-full">
-                <h2>更改帖子公告归属</h2>
+                <UI.Heading level={2}>更改帖子公告归属</UI.Heading>
               </ItemTitle>
-              <p className="text-sm leading-7">
+              <UI.Text className="text-sm leading-7">
                 帖子 {relinkPost.external_id}
                 ；两份公告均按打开表单时的修订提交。版本冲突后请重读并重新打开，不自动覆盖。
-              </p>
+              </UI.Text>
               <Label htmlFor="codex-relink-source">原公告</Label>
               <Select
                 value={relinkSource.id}
@@ -734,7 +761,9 @@ export function CodexResetManager() {
                   </SelectGroup>
                 </SelectContent>
               </Select>
-              <p className="text-sm">原公告预期修订 {relinkSource.revision}</p>
+              <UI.Text className="text-sm">
+                原公告预期修订 {relinkSource.revision}
+              </UI.Text>
               <Label htmlFor="codex-relink-target">目标公告</Label>
               <Select
                 value={relinkTarget?.id ?? ""}
@@ -775,15 +804,15 @@ export function CodexResetManager() {
                   </SelectGroup>
                 </SelectContent>
               </Select>
-              <p className="text-sm">
+              <UI.Text className="text-sm">
                 {relinkTarget
                   ? `目标公告预期修订 ${relinkTarget.revision}`
                   : "目标公告与目标修订均为空；仅解除原关联。"}
-              </p>
+              </UI.Text>
               <ItemDescription className="line-clamp-none">
                 使用上方复核原因记录审计。此操作只修正帖子关联，不调用模型，不确认到账。
               </ItemDescription>
-              <div className="flex gap-3">
+              <UI.Content className="flex gap-3">
                 <Button disabled={!canWrite} onClick={relink}>
                   保存帖子归属
                 </Button>
@@ -794,25 +823,28 @@ export function CodexResetManager() {
                 >
                   关闭归属表单
                 </Button>
-              </div>
+              </UI.Content>
             </ItemContent>
-          </section>
+          </UI.Content>
         </Item>
       )}
       {!!events.length && (
-        <section
+        <UI.Content
+          as="section"
           className="flex flex-col gap-y-4"
           aria-label="公告日期与到账复核"
         >
-          <h2 className="text-xl font-medium">公告日期与到账复核</h2>
+          <UI.Heading level={2} className="text-xl font-medium">
+            公告日期与到账复核
+          </UI.Heading>
           {events.map((item) => (
             <Item variant="muted" key={item.id} asChild>
-              <article className="flex flex-col gap-y-3 p-5">
+              <UI.Content as="article" className="flex flex-col gap-y-3 p-5">
                 <ItemContent className="min-w-0 gap-3">
-                  <p>
+                  <UI.Text>
                     {item.title ?? item.kind} · {item.status} · 修订{" "}
                     {item.revision}· {item.withdrawn ? "已撤回" : "有效"}
-                  </p>
+                  </UI.Text>
                   <Button
                     variant="outline"
                     onClick={() => {
@@ -825,16 +857,20 @@ export function CodexResetManager() {
                     修订此公告
                   </Button>
                 </ItemContent>
-              </article>
+              </UI.Content>
             </Item>
           ))}
-        </section>
+        </UI.Content>
       )}
       {event && (
-        <section className="flex flex-col gap-y-5" aria-label="公告修订表单">
-          <h2 className="text-xl font-medium">
+        <UI.Content
+          as="section"
+          className="flex flex-col gap-y-5"
+          aria-label="公告修订表单"
+        >
+          <UI.Heading level={2} className="text-xl font-medium">
             修订公告 · 预期版本 {event.revision}
-          </h2>
+          </UI.Heading>
           <Label htmlFor="codex-event-json">公告修订 JSON</Label>
           <Textarea
             id="codex-event-json"
@@ -843,11 +879,11 @@ export function CodexResetManager() {
             maxLength={65536}
             onChange={(e) => setPatch(e.target.value)}
           />
-          <p className="text-muted-foreground text-sm">
+          <UI.Text className="text-muted-foreground text-sm">
             支持类型、明确日程与范围；时间填写带时区的 ISO
             值。人工修改不会自动确认到账。
-          </p>
-          <div className="flex flex-wrap gap-3">
+          </UI.Text>
+          <UI.Content className="flex flex-wrap gap-3">
             <Button disabled={!canWrite} onClick={correctJson}>
               保存公告修订
             </Button>
@@ -858,8 +894,8 @@ export function CodexResetManager() {
             >
               {event.withdrawn ? "恢复撤回公告" : "撤回此公告"}
             </Button>
-          </div>
-          <div className="grid gap-5 sm:grid-cols-2">
+          </UI.Content>
+          <UI.Content className="grid gap-5 sm:grid-cols-2">
             <Field className="flex flex-col gap-y-2">
               <FieldLabel htmlFor="codex-receipt-date">
                 人工核验到账日期（北京）
@@ -882,15 +918,15 @@ export function CodexResetManager() {
                 onChange={(e) => setReceiptTime(e.target.value)}
               />
             </Field>
-          </div>
+          </UI.Content>
           <Button
             disabled={!canWrite || !receiptDate || !receiptTime}
             onClick={receipt}
           >
             保存人工到账核验
           </Button>
-        </section>
+        </UI.Content>
       )}
-    </div>
+    </UI.Content>
   );
 }

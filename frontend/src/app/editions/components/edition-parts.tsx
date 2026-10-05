@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import { Item, ItemContent } from "@/components/ui/item";
 import Link from "next/link";
 import { ApiRequestError } from "@/request";
@@ -33,27 +34,27 @@ export function EditionCard({ row }: { row: HotKeyAPI.EditionSummaryView }) {
       className="flex flex-col gap-y-3 py-6"
     >
       <ItemContent className="min-w-0 gap-3">
-        <div className="text-muted-foreground flex flex-wrap gap-3 text-xs">
-          <span>
+        <UI.Content className="text-muted-foreground flex flex-wrap gap-3 text-xs">
+          <UI.Text as="span">
             {editionKinds[row.kind]} · {row.key}
-          </span>
+          </UI.Text>
           <Badge variant="outline">{editionStates[row.status]}</Badge>
-          <span>修订 {row.revision}</span>
-        </div>
+          <UI.Text as="span">修订 {row.revision}</UI.Text>
+        </UI.Content>
         <Link href={`/editions/${row.id}`} className="text-xl font-medium">
           {row.valid && row.title
             ? row.title
             : `${row.key} ${editionKinds[row.kind]}`}
         </Link>
         {row.valid && row.status === "complete" && (
-          <p>
+          <UI.Text>
             <Link
               href={`/reports/${row.kind}/${row.key}`}
               className="text-primary text-sm underline-offset-4 hover:underline"
             >
               公开阅读
             </Link>
-          </p>
+          </UI.Text>
         )}
       </ItemContent>
     </Item>

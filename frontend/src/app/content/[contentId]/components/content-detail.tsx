@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 
 import { toast } from "sonner";
@@ -55,10 +57,14 @@ type DetailState =
 
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0">
-      <dt className="text-muted-foreground text-sm">{label}</dt>
-      <dd className="mt-1 font-medium break-words">{value}</dd>
-    </div>
+    <UI.Content className="min-w-0">
+      <UI.Content as="dt" className="text-muted-foreground text-sm">
+        {label}
+      </UI.Content>
+      <UI.Content as="dd" className="mt-1 font-medium break-words">
+        {value}
+      </UI.Content>
+    </UI.Content>
   );
 }
 
@@ -69,12 +75,20 @@ function ContentVersionSection({
 }) {
   if (version === null) {
     return (
-      <section aria-labelledby="content-heading" className="mt-10">
-        <h2 id="content-heading" className="text-xl font-medium">
+      <UI.Content
+        as="section"
+        aria-labelledby="content-heading"
+        className="mt-10"
+      >
+        <UI.Heading
+          level={2}
+          id="content-heading"
+          className="text-xl font-medium"
+        >
           正文与上下文
-        </h2>
-        <div className="mt-6">
-          <p className="font-medium">未取得正文</p>
+        </UI.Heading>
+        <UI.Content className="mt-6">
+          <UI.Text className="font-medium">未取得正文</UI.Text>
           <Empty className="mt-2 leading-6">
             <EmptyHeader>
               <EmptyDescription>
@@ -82,45 +96,56 @@ function ContentVersionSection({
               </EmptyDescription>
             </EmptyHeader>
           </Empty>
-        </div>
-      </section>
+        </UI.Content>
+      </UI.Content>
     );
   }
 
   const notice = contentScopeNotice(version.text_scope, version.text_origin);
   return (
-    <section aria-labelledby="content-heading" className="mt-10">
-      <h2 id="content-heading" className="text-xl font-medium">
+    <UI.Content
+      as="section"
+      aria-labelledby="content-heading"
+      className="mt-10"
+    >
+      <UI.Heading
+        level={2}
+        id="content-heading"
+        className="text-xl font-medium"
+      >
         正文与上下文
-      </h2>
-      <div className="mt-6">
-        <div className="flex flex-wrap gap-2">
+      </UI.Heading>
+      <UI.Content className="mt-6">
+        <UI.Content className="flex flex-wrap gap-2">
           <Badge variant="secondary">
             {contentScopeLabel(version.text_scope, version.text_origin)}
           </Badge>
           <Badge variant="outline">
             {contentOriginLabel(version.text_origin)}
           </Badge>
-        </div>
+        </UI.Content>
         {notice ? (
-          <p className="border-border text-muted-foreground mt-4 border-l-2 pl-4 text-sm leading-6">
+          <UI.Text className="border-border text-muted-foreground mt-4 border-l-2 pl-4 text-sm leading-6">
             {notice}
-          </p>
+          </UI.Text>
         ) : null}
         {version.title ? (
-          <h3 className="mt-6 text-lg font-medium break-words whitespace-pre-wrap">
+          <UI.Heading
+            level={3}
+            className="mt-6 text-lg font-medium break-words whitespace-pre-wrap"
+          >
             {version.title}
-          </h3>
+          </UI.Heading>
         ) : null}
         {version.body ? (
-          <p className="mt-4 leading-7 break-words whitespace-pre-wrap">
+          <UI.Text className="mt-4 leading-7 break-words whitespace-pre-wrap">
             {version.body}
-          </p>
+          </UI.Text>
         ) : null}
         {version.truncation_reason ? (
-          <p className="text-muted-foreground mt-4 text-sm">
+          <UI.Text className="text-muted-foreground mt-4 text-sm">
             截断原因：{truncationReasonLabel(version.truncation_reason)}
-          </p>
+          </UI.Text>
         ) : null}
         {version.text_origin_ref ? (
           <Collapsible className="mt-4">
@@ -135,24 +160,25 @@ function ContentVersionSection({
             </CollapsibleContent>
           </Collapsible>
         ) : null}
-      </div>
+      </UI.Content>
       {version.relations.length > 0 ? (
-        <div className="mt-6 grid gap-6 sm:grid-cols-2">
+        <UI.Content className="mt-6 grid gap-6 sm:grid-cols-2">
           {version.relations.map((relation) => (
-            <article
+            <UI.Content
+              as="article"
               key={`${relation.relation_type}:${relation.target_native_scope ?? ""}:${relation.target_external_id}`}
               className="py-4"
             >
               <Badge variant="outline">
                 {relationTypeLabel(relation.relation_type)}
               </Badge>
-              <p className="mt-3 font-mono text-sm break-all">
+              <UI.Text className="mt-3 font-mono text-sm break-all">
                 {relation.target_external_id}
-              </p>
-              <p className="text-muted-foreground mt-2 text-xs break-all">
+              </UI.Text>
+              <UI.Text className="text-muted-foreground mt-2 text-xs break-all">
                 目标作者：
                 {relation.target_author_external_id ?? "未知"}
-              </p>
+              </UI.Text>
               {relation.target_content_id ? (
                 <Link
                   className="mt-3 inline-flex text-sm underline underline-offset-4"
@@ -161,15 +187,15 @@ function ContentVersionSection({
                   查看已获取的目标作品
                 </Link>
               ) : (
-                <p className="text-muted-foreground mt-3 text-sm">
+                <UI.Text className="text-muted-foreground mt-3 text-sm">
                   目标作品未获取或当前不可读。
-                </p>
+                </UI.Text>
               )}
-            </article>
+            </UI.Content>
           ))}
-        </div>
+        </UI.Content>
       ) : null}
-    </section>
+    </UI.Content>
   );
 }
 
@@ -190,24 +216,32 @@ function VisibilitySummary({
   visibility: HotKeyAPI.ContentVisibilityView | null;
 }) {
   return (
-    <section aria-labelledby="visibility-heading" className="mt-8">
-      <h2 id="visibility-heading" className="text-xl font-medium">
+    <UI.Content
+      as="section"
+      aria-labelledby="visibility-heading"
+      className="mt-8"
+    >
+      <UI.Heading
+        level={2}
+        id="visibility-heading"
+        className="text-xl font-medium"
+      >
         当前来源状态
-      </h2>
-      <div className="mt-6">
+      </UI.Heading>
+      <UI.Content className="mt-6">
         {visibility ? (
           <>
-            <div className="flex flex-wrap items-center gap-2">
+            <UI.Content className="flex flex-wrap items-center gap-2">
               <Badge variant={visibilityBadgeVariant(visibility.status)}>
                 {visibilityStatusLabel(visibility.status)}
               </Badge>
-              <span className="text-muted-foreground text-xs">
+              <UI.Text as="span" className="text-muted-foreground text-xs">
                 观察于 {formatTime(visibility.observed_at)}
-              </span>
-            </div>
-            <p className="mt-3 text-sm leading-6">
+              </UI.Text>
+            </UI.Content>
+            <UI.Text className="mt-3 text-sm leading-6">
               {visibilityStatusNotice(visibility.status)}
-            </p>
+            </UI.Text>
           </>
         ) : (
           <Empty className="leading-6">
@@ -218,8 +252,8 @@ function VisibilitySummary({
             </EmptyHeader>
           </Empty>
         )}
-      </div>
-    </section>
+      </UI.Content>
+    </UI.Content>
   );
 }
 
@@ -229,17 +263,29 @@ function VersionHistory({
   history: HotKeyAPI.ContentVersionHistoryView[];
 }) {
   return (
-    <section aria-labelledby="version-history-heading" className="mt-10">
-      <h2 id="version-history-heading" className="text-xl font-medium">
+    <UI.Content
+      as="section"
+      aria-labelledby="version-history-heading"
+      className="mt-10"
+    >
+      <UI.Heading
+        level={2}
+        id="version-history-heading"
+        className="text-xl font-medium"
+      >
         正文版本历史
-      </h2>
-      <p className="text-muted-foreground mt-2 text-sm leading-6">
+      </UI.Heading>
+      <UI.Text className="text-muted-foreground mt-2 text-sm leading-6">
         按来源观察时间排序；稳定版本 ID 可供后续分析引用。
-      </p>
-      <div className="mt-6 flex flex-col gap-6">
+      </UI.Text>
+      <UI.Content className="mt-6 flex flex-col gap-6">
         {history.map((entry) => (
-          <article key={entry.content_version.id} className="py-4">
-            <div className="flex flex-wrap items-center gap-2">
+          <UI.Content
+            as="article"
+            key={entry.content_version.id}
+            className="py-4"
+          >
+            <UI.Content className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary">
                 {contentScopeLabel(
                   entry.content_version.text_scope,
@@ -249,30 +295,30 @@ function VersionHistory({
               <Badge variant="outline">
                 {contentOriginLabel(entry.content_version.text_origin)}
               </Badge>
-              <span className="text-muted-foreground text-xs">
+              <UI.Text as="span" className="text-muted-foreground text-xs">
                 {entry.observation_count} 次观察
-              </span>
-            </div>
-            <p className="mt-3 font-mono text-xs break-all">
+              </UI.Text>
+            </UI.Content>
+            <UI.Text className="mt-3 font-mono text-xs break-all">
               {entry.content_version.id}
-            </p>
-            <p className="text-muted-foreground mt-2 text-xs leading-5">
+            </UI.Text>
+            <UI.Text className="text-muted-foreground mt-2 text-xs leading-5">
               首次 {formatTime(entry.first_observed_at)} · 最近{" "}
               {formatTime(entry.last_observed_at)}
-            </p>
+            </UI.Text>
             {(entry.content_version.title ?? entry.content_version.body) ? (
-              <p className="mt-3 line-clamp-3 text-sm break-words whitespace-pre-wrap">
+              <UI.Text className="mt-3 line-clamp-3 text-sm break-words whitespace-pre-wrap">
                 {entry.content_version.title ?? entry.content_version.body}
-              </p>
+              </UI.Text>
             ) : (
-              <p className="text-muted-foreground mt-3 text-sm">
+              <UI.Text className="text-muted-foreground mt-3 text-sm">
                 仅媒体，无文本
-              </p>
+              </UI.Text>
             )}
-          </article>
+          </UI.Content>
         ))}
-      </div>
-    </section>
+      </UI.Content>
+    </UI.Content>
   );
 }
 
@@ -282,24 +328,34 @@ function VisibilityHistory({
   history: HotKeyAPI.ContentVisibilityView[];
 }) {
   return (
-    <section aria-labelledby="visibility-history-heading" className="mt-10">
-      <h2 id="visibility-history-heading" className="text-xl font-medium">
+    <UI.Content
+      as="section"
+      aria-labelledby="visibility-history-heading"
+      className="mt-10"
+    >
+      <UI.Heading
+        level={2}
+        id="visibility-history-heading"
+        className="text-xl font-medium"
+      >
         来源状态历史
-      </h2>
-      <div className="mt-6 grid gap-6 sm:grid-cols-2">
+      </UI.Heading>
+      <UI.Content className="mt-6 grid gap-6 sm:grid-cols-2">
         {history.map((entry) => (
-          <article key={entry.id} className="py-4">
+          <UI.Content as="article" key={entry.id} className="py-4">
             <Badge variant={visibilityBadgeVariant(entry.status)}>
               {visibilityStatusLabel(entry.status)}
             </Badge>
-            <p className="mt-3 text-sm">{visibilityBasisLabel(entry.basis)}</p>
-            <p className="text-muted-foreground mt-2 text-xs">
+            <UI.Text className="mt-3 text-sm">
+              {visibilityBasisLabel(entry.basis)}
+            </UI.Text>
+            <UI.Text className="text-muted-foreground mt-2 text-xs">
               观察于 {formatTime(entry.observed_at)}
-            </p>
-          </article>
+            </UI.Text>
+          </UI.Content>
         ))}
-      </div>
-    </section>
+      </UI.Content>
+    </UI.Content>
   );
 }
 
@@ -413,42 +469,51 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
 
   const title = observation.content_version?.title ?? content.external_id;
   return (
-    <div>
+    <UI.Content>
       <Button asChild variant="ghost" size="sm">
         <Link href="/content">
           <ArrowLeftIcon data-icon="inline-start" />
           返回作品列表
         </Link>
       </Button>
-      <h1 className="mt-8 text-3xl font-normal tracking-tight break-words sm:text-4xl">
+      <UI.Heading
+        level={1}
+        className="mt-8 text-3xl font-normal tracking-tight break-words sm:text-4xl"
+      >
         {title}
-      </h1>
-      <div className="text-muted-foreground mt-4 flex flex-wrap items-center gap-3 text-sm">
-        <span>
+      </UI.Heading>
+      <UI.Content className="text-muted-foreground mt-4 flex flex-wrap items-center gap-3 text-sm">
+        <UI.Text as="span">
           {contentSourceLabel(content.source_key, content.source_name)}
-        </span>
-        <span>
+        </UI.Text>
+        <UI.Text as="span">
           {formatTime(observation.published_at ?? observation.observed_at)}
-        </span>
+        </UI.Text>
         {hasUnknownMetrics(observation.metrics) ? (
-          <span>部分指标未知</span>
+          <UI.Text as="span">部分指标未知</UI.Text>
         ) : null}
         {canonicalHref ? (
           <Button asChild variant="ghost" size="sm">
-            <a href={canonicalHref} target="_blank" rel="noreferrer">
+            <UI.TextLink href={canonicalHref} target="_blank" rel="noreferrer">
               打开原文
               <ExternalLinkIcon data-icon="inline-end" />
-            </a>
+            </UI.TextLink>
           </Button>
         ) : (
-          <span>原文链接未知</span>
+          <UI.Text as="span">原文链接未知</UI.Text>
         )}
-      </div>
-      <section className="mt-6 space-y-3" aria-label="私人内容导出">
-        <h2 className="text-lg font-medium">导出这版材料</h2>
-        <p className="text-muted-foreground text-sm">
+      </UI.Content>
+      <UI.Content
+        as="section"
+        className="mt-6 space-y-3"
+        aria-label="私人内容导出"
+      >
+        <UI.Heading level={2} className="text-lg font-medium">
+          导出这版材料
+        </UI.Heading>
+        <UI.Text className="text-muted-foreground text-sm">
           保留当前版本、来源与实际文本范围；下载需有效的文件导出许可。
-        </p>
+        </UI.Text>
         <PrivateExport
           target={{
             kind: "content",
@@ -457,7 +522,7 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
               : [],
           }}
         />
-      </section>
+      </UI.Content>
       <Tabs defaultValue="body" className="mt-10 min-w-0">
         <TabsList className="max-w-full">
           <TabsTrigger value="body">正文</TabsTrigger>
@@ -485,14 +550,22 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
           <AnnotationPanel key={`annotation-${content.id}`} content={content} />
         </TabsContent>
         <TabsContent value="records">
-          <p className="text-muted-foreground mt-8 text-sm">
+          <UI.Text className="text-muted-foreground mt-8 text-sm">
             读取已保存的观察，不会刷新来源。未知指标保留为未知。
-          </p>
-          <section aria-labelledby="identity-heading" className="mt-10">
-            <h2 id="identity-heading" className="text-xl font-medium">
+          </UI.Text>
+          <UI.Content
+            as="section"
+            aria-labelledby="identity-heading"
+            className="mt-10"
+          >
+            <UI.Heading
+              level={2}
+              id="identity-heading"
+              className="text-xl font-medium"
+            >
               作品身份
-            </h2>
-            <dl className="mt-6 grid gap-6 sm:grid-cols-2">
+            </UI.Heading>
+            <UI.Content as="dl" className="mt-6 grid gap-6 sm:grid-cols-2">
               <DetailItem
                 label="当前读取来源"
                 value={contentSourceLabel(
@@ -517,61 +590,89 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
                 label="观察时间"
                 value={formatTime(observation.observed_at)}
               />
-            </dl>
-          </section>
+            </UI.Content>
+          </UI.Content>
           <ContentSources content={content} />
           <VersionHistory history={content.version_history} />
           <VisibilityHistory history={content.visibility_history} />
-          <section aria-labelledby="metrics-heading" className="mt-10">
-            <h2 id="metrics-heading" className="text-xl font-medium">
+          <UI.Content
+            as="section"
+            aria-labelledby="metrics-heading"
+            className="mt-10"
+          >
+            <UI.Heading
+              level={2}
+              id="metrics-heading"
+              className="text-xl font-medium"
+            >
               最近指标观察
-            </h2>
-            <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            </UI.Heading>
+            <UI.Content
+              as="dl"
+              className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3"
+            >
               {METRIC_LABELS.map(([key, label]) => (
-                <div key={key} className="py-4">
-                  <dt className="text-muted-foreground text-sm">{label}</dt>
-                  <dd className="mt-2 text-2xl font-semibold tabular-nums">
+                <UI.Content key={key} className="py-4">
+                  <UI.Content as="dt" className="text-muted-foreground text-sm">
+                    {label}
+                  </UI.Content>
+                  <UI.Content
+                    as="dd"
+                    className="mt-2 text-2xl font-semibold tabular-nums"
+                  >
                     {formatMetric(observation.metrics[key])}
-                  </dd>
-                </div>
+                  </UI.Content>
+                </UI.Content>
               ))}
-            </dl>
-          </section>
-          <section aria-labelledby="discoveries-heading" className="mt-10">
-            <h2 id="discoveries-heading" className="text-xl font-medium">
+            </UI.Content>
+          </UI.Content>
+          <UI.Content
+            as="section"
+            aria-labelledby="discoveries-heading"
+            className="mt-10"
+          >
+            <UI.Heading
+              level={2}
+              id="discoveries-heading"
+              className="text-xl font-medium"
+            >
               发现依据
-            </h2>
-            <p className="text-muted-foreground mt-2 text-sm">
+            </UI.Heading>
+            <UI.Text className="text-muted-foreground mt-2 text-sm">
               同一作品可由多个任务发现；以下仅显示仍有可读观察的任务关系。
-            </p>
-            <div className="mt-6 flex flex-col gap-6">
+            </UI.Text>
+            <UI.Content className="mt-6 flex flex-col gap-6">
               {content.discoveries.map((discovery) => (
-                <article key={discovery.job_id} className="py-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="font-medium break-words">
+                <UI.Content
+                  as="article"
+                  key={discovery.job_id}
+                  className="py-4"
+                >
+                  <UI.Content className="flex flex-wrap items-start justify-between gap-3">
+                    <UI.Content className="min-w-0">
+                      <UI.Heading level={3} className="font-medium break-words">
                         {discovery.configuration_ref}
-                      </h3>
-                      <p className="text-muted-foreground mt-1 text-xs">
+                      </UI.Heading>
+                      <UI.Text className="text-muted-foreground mt-1 text-xs">
                         配置版本 v{discovery.configuration_version}
-                      </p>
-                      <p className="text-muted-foreground mt-1 text-xs">
+                      </UI.Text>
+                      <UI.Text className="text-muted-foreground mt-1 text-xs">
                         {scanKindLabel(discovery.scan_kind)}
-                      </p>
-                    </div>
+                      </UI.Text>
+                    </UI.Content>
                     <Badge variant="outline">
                       {formatTime(discovery.first_observed_at)}
                     </Badge>
-                  </div>
+                  </UI.Content>
                   <Button asChild variant="ghost" size="sm" className="mt-3">
                     <Link href={`/jobs/${discovery.job_id}`}>查看采集任务</Link>
                   </Button>
-                </article>
+                </UI.Content>
               ))}
-            </div>
-          </section>
+            </UI.Content>
+          </UI.Content>
         </TabsContent>
       </Tabs>
-    </div>
+    </UI.Content>
   );
 }

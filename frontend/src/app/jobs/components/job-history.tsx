@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { toast } from "sonner";
 
@@ -65,37 +66,42 @@ function statusVariant(
 
 export function JobHistoryCard({ job }: { job: HotKeyAPI.JobHistoryItemView }) {
   return (
-    <article className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-8">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-medium">{jobKindLabel(job.kind)}</h2>
+    <UI.Content
+      as="article"
+      className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-8"
+    >
+      <UI.Content className="min-w-0">
+        <UI.Content className="flex flex-wrap items-center gap-2">
+          <UI.Heading level={2} className="text-lg font-medium">
+            {jobKindLabel(job.kind)}
+          </UI.Heading>
           <Badge variant={statusVariant(job.status)}>
             {STATUS_LABELS[job.status]}
           </Badge>
           {job.source_key ? (
-            <span className="text-muted-foreground text-xs">
+            <UI.Text as="span" className="text-muted-foreground text-xs">
               {job.source_key}
               {job.source_capability
                 ? ` · ${capabilityLabel(job.source_capability)}`
                 : ""}
-            </span>
+            </UI.Text>
           ) : null}
-        </div>
-        <p className="text-muted-foreground mt-3 text-sm">
+        </UI.Content>
+        <UI.Text className="text-muted-foreground mt-3 text-sm">
           创建于 {formatTime(job.created_at)}
-        </p>
-        <p className="text-muted-foreground mt-1 text-xs">
+        </UI.Text>
+        <UI.Text className="text-muted-foreground mt-1 text-xs">
           请求 {job.requests_sent} 次 · 已保存 {job.items_saved} 条
           {job.next_run_at ? ` · 下次运行 ${formatTime(job.next_run_at)}` : ""}
-        </p>
-      </div>
+        </UI.Text>
+      </UI.Content>
       <Button asChild variant="ghost" size="sm" className="self-start">
         <Link href={`/jobs/${job.id}`}>
           查看详情
           <ArrowRightIcon data-icon="inline-end" />
         </Link>
       </Button>
-    </article>
+    </UI.Content>
   );
 }
 
@@ -124,15 +130,15 @@ export function JobHistoryContent({
           </EmptyHeader>
         </Empty>
       ) : (
-        <div className="mt-8 flex flex-col gap-6">
+        <UI.Content className="mt-8 flex flex-col gap-6">
           {items.map((job) => (
             <JobHistoryCard key={job.id} job={job} />
           ))}
-        </div>
+        </UI.Content>
       )}
 
       {nextCursor ? (
-        <div className="mt-8 flex justify-center">
+        <UI.Content className="mt-8 flex justify-center">
           <Button
             type="button"
             variant="secondary"
@@ -141,7 +147,7 @@ export function JobHistoryContent({
           >
             {isLoadingMore ? "正在加载" : "加载更多"}
           </Button>
-        </div>
+        </UI.Content>
       ) : null}
     </>
   );
@@ -265,13 +271,16 @@ export function JobHistory() {
   }
 
   return (
-    <div>
-      <h1 className="mt-3 text-3xl font-normal tracking-tight sm:text-4xl">
+    <UI.Content>
+      <UI.Heading
+        level={1}
+        className="mt-3 text-3xl font-normal tracking-tight sm:text-4xl"
+      >
         任务记录
-      </h1>
-      <p className="text-muted-foreground mt-4 max-w-2xl leading-7">
+      </UI.Heading>
+      <UI.Text className="text-muted-foreground mt-4 max-w-2xl leading-7">
         查看任务状态与已持久保存的进度。
-      </p>
+      </UI.Text>
 
       <JobHealthSummary />
 
@@ -281,6 +290,6 @@ export function JobHistory() {
         isLoadingMore={isLoadingMore}
         onLoadMore={() => void loadMore()}
       />
-    </div>
+    </UI.Content>
   );
 }

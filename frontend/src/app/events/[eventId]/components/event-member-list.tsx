@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import {
   Item,
   ItemContent,
@@ -141,10 +143,13 @@ export function EventMemberList({
 
   if (state.status === "loading")
     return (
-      <div aria-label="正在读取成员证据" className="mt-8 flex flex-col gap-y-5">
+      <UI.Content
+        aria-label="正在读取成员证据"
+        className="mt-8 flex flex-col gap-y-5"
+      >
         <Skeleton className="h-40 w-full" />
         <Skeleton className="h-40 w-full" />
-      </div>
+      </UI.Content>
     );
   if (state.status === "error")
     return (
@@ -165,10 +170,10 @@ export function EventMemberList({
       </Alert>
     );
   return (
-    <div className="mt-8 flex flex-col gap-y-8">
-      <p className="text-muted-foreground text-sm">
+    <UI.Content className="mt-8 flex flex-col gap-y-8">
+      <UI.Text className="text-muted-foreground text-sm">
         正在阅读修订 {state.page.revision} 的固定成员。
-      </p>
+      </UI.Text>
       {state.page.current_revision !== state.page.revision ? (
         <Alert>
           <AlertTitle>当前展示历史成员</AlertTitle>
@@ -184,7 +189,7 @@ export function EventMemberList({
         </Alert>
       ) : null}
       {state.page.items.map((member) => (
-        <div key={member.id} className="flex flex-col gap-y-3">
+        <UI.Content key={member.id} className="flex flex-col gap-y-3">
           {onToggleContent && member.availability === "readable" ? (
             <Field orientation="horizontal" className="w-auto">
               <Checkbox
@@ -198,7 +203,7 @@ export function EventMemberList({
             </Field>
           ) : null}
           <MemberReading member={member} />
-        </div>
+        </UI.Content>
       ))}
       {state.page.next_cursor ? (
         <Button
@@ -209,7 +214,7 @@ export function EventMemberList({
           {loadingMore ? "正在读取更多成员…" : "加载更多成员"}
         </Button>
       ) : null}
-    </div>
+    </UI.Content>
   );
 }
 
@@ -218,16 +223,16 @@ function MemberReading({ member }: { member: HotKeyAPI.EventMemberReadView }) {
   if (!reading || member.availability === "unavailable")
     return (
       <Item variant="muted" asChild>
-        <article className="p-6">
+        <UI.Content as="article" className="p-6">
           <ItemContent className="min-w-0 gap-3">
             <ItemTitle className="line-clamp-none w-full">
-              <h3>该成员证据暂不可读</h3>
+              <UI.Heading level={3}>该成员证据暂不可读</UI.Heading>
             </ItemTitle>
             <ItemDescription className="mt-3 line-clamp-none leading-7">
               固定版本的观察已失效或被移除，不以新版内容替代。
             </ItemDescription>
           </ItemContent>
-        </article>
+        </UI.Content>
       </Item>
     );
   const observation = reading.observation;
@@ -246,9 +251,9 @@ function MemberReading({ member }: { member: HotKeyAPI.EventMemberReadView }) {
   ] as const;
   return (
     <Item variant="muted" asChild>
-      <article className="p-6 sm:p-8">
+      <UI.Content as="article" className="p-6 sm:p-8">
         <ItemContent className="min-w-0 gap-3">
-          <div className="flex flex-wrap gap-3">
+          <UI.Content className="flex flex-wrap gap-3">
             <Badge variant="secondary">{reading.source_key}</Badge>
             {version ? (
               <Badge variant="secondary">
@@ -258,9 +263,11 @@ function MemberReading({ member }: { member: HotKeyAPI.EventMemberReadView }) {
             <Badge variant="secondary">
               {member.assignment_origin === "manual" ? "人工归入" : "模型归并"}
             </Badge>
-          </div>
+          </UI.Content>
           <ItemTitle className="line-clamp-none w-full">
-            <h3 className="mt-5">{version?.title ?? "成员内容"}</h3>
+            <UI.Heading level={3} className="mt-5">
+              {version?.title ?? "成员内容"}
+            </UI.Heading>
           </ItemTitle>
           <ItemDescription className="mt-3 line-clamp-none">
             {observation.author_external_id
@@ -275,9 +282,9 @@ function MemberReading({ member }: { member: HotKeyAPI.EventMemberReadView }) {
             </ItemDescription>
           ) : null}
           {version?.body ? (
-            <p className="mt-5 leading-8 break-words whitespace-pre-wrap">
+            <UI.Text className="mt-5 leading-8 break-words whitespace-pre-wrap">
               {version.body}
-            </p>
+            </UI.Text>
           ) : (
             <ItemDescription className="mt-5 line-clamp-none">
               此版本没有可读正文。
@@ -288,13 +295,13 @@ function MemberReading({ member }: { member: HotKeyAPI.EventMemberReadView }) {
               正文由机器提取。依据：{version.text_origin_ref}
             </ItemDescription>
           ) : null}
-          <div className="text-muted-foreground mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+          <UI.Content className="text-muted-foreground mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm">
             {metricValues.map(([label, count]) => (
-              <span key={label}>
+              <UI.Text as="span" key={label}>
                 {label}：{count === null ? "未知" : count}
-              </span>
+              </UI.Text>
             ))}
-          </div>
+          </UI.Content>
           {reading.current_visibility ? (
             <ItemDescription className="mt-4 line-clamp-none">
               {visibilityLabels[reading.current_visibility.status]}，状态观察于{" "}
@@ -304,9 +311,9 @@ function MemberReading({ member }: { member: HotKeyAPI.EventMemberReadView }) {
             </ItemDescription>
           ) : null}
           {version?.relations.length ? (
-            <div className="mt-6 flex flex-col gap-y-2">
+            <UI.Content className="mt-6 flex flex-col gap-y-2">
               {version.relations.map((relation, index) => (
-                <p
+                <UI.Text
                   key={`${relation.relation_type}:${relation.target_external_id}:${index}`}
                   className="text-muted-foreground text-sm"
                 >
@@ -322,16 +329,20 @@ function MemberReading({ member }: { member: HotKeyAPI.EventMemberReadView }) {
                   ) : (
                     "（本地引用证据不可读）"
                   )}
-                </p>
+                </UI.Text>
               ))}
-            </div>
+            </UI.Content>
           ) : null}
           {comment ? (
             <Item variant="muted" asChild>
-              <section aria-label="代表评论" className="mt-6 p-5">
+              <UI.Content
+                as="section"
+                aria-label="代表评论"
+                className="mt-6 p-5"
+              >
                 <ItemContent className="min-w-0 gap-3">
                   <ItemTitle className="line-clamp-none w-full">
-                    <h4>代表评论的最新可读观察</h4>
+                    <UI.Heading level={4}>代表评论的最新可读观察</UI.Heading>
                   </ItemTitle>
                   <ItemDescription className="mt-2 line-clamp-none">
                     观察于{" "}
@@ -340,31 +351,35 @@ function MemberReading({ member }: { member: HotKeyAPI.EventMemberReadView }) {
                     )}
                     ；评论未固定到事件成员版本。
                   </ItemDescription>
-                  <p className="mt-3 leading-7 break-words whitespace-pre-wrap">
+                  <UI.Text className="mt-3 leading-7 break-words whitespace-pre-wrap">
                     {comment.observation.content_version?.body ??
                       comment.observation.content_version?.title ??
                       "无可读评论正文"}
-                  </p>
+                  </UI.Text>
                 </ItemContent>
-              </section>
+              </UI.Content>
             </Item>
           ) : reading.representative_comment_state === "unavailable" ? (
             <ItemDescription className="mt-6 line-clamp-none">
               代表评论证据暂不可读。
             </ItemDescription>
           ) : null}
-          <div className="mt-6 flex flex-wrap gap-3">
+          <UI.Content className="mt-6 flex flex-wrap gap-3">
             {originalUrl ? (
               <Button asChild variant="outline">
-                <a href={originalUrl} target="_blank" rel="noopener noreferrer">
+                <UI.TextLink
+                  href={originalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   阅读原文
-                </a>
+                </UI.TextLink>
               </Button>
             ) : null}
             <Button asChild variant="ghost">
               <Link href={`/content/${reading.id}`}>查看当前内容记录</Link>
             </Button>
-          </div>
+          </UI.Content>
           <Collapsible className="text-muted-foreground mt-6 text-sm">
             <CollapsibleTrigger asChild>
               <Button
@@ -372,7 +387,9 @@ function MemberReading({ member }: { member: HotKeyAPI.EventMemberReadView }) {
                 variant="ghost"
                 className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
               >
-                <span className="min-w-0 text-left">证据记录与归入修订</span>
+                <UI.Text as="span" className="min-w-0 text-left">
+                  证据记录与归入修订
+                </UI.Text>
                 <ChevronDownIcon
                   aria-hidden="true"
                   data-icon="inline-end"
@@ -384,20 +401,20 @@ function MemberReading({ member }: { member: HotKeyAPI.EventMemberReadView }) {
               forceMount
               className="data-[state=closed]:hidden"
             >
-              <div className="mt-3 flex flex-col gap-y-2 break-all">
-                <p>内容版本：{member.content_version_id}</p>
-                <p>观察：{observation.id}</p>
-                <p>
+              <UI.Content className="mt-3 flex flex-col gap-y-2 break-all">
+                <UI.Text>内容版本：{member.content_version_id}</UI.Text>
+                <UI.Text>观察：{observation.id}</UI.Text>
+                <UI.Text>
                   加入修订：{member.added_revision}
                   {member.removed_revision
                     ? `；移除修订：${member.removed_revision}`
                     : ""}
-                </p>
-              </div>
+                </UI.Text>
+              </UI.Content>
             </CollapsibleContent>
           </Collapsible>
         </ItemContent>
-      </article>
+      </UI.Content>
     </Item>
   );
 }

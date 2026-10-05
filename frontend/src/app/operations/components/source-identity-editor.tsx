@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Item, ItemContent } from "@/components/ui/item";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -90,24 +92,29 @@ export function SourceIdentityEditor({ token }: { token: string }) {
     }
   }
   return (
-    <section className="grid gap-5">
-      <h2 className="text-xl font-semibold">来源独立性与热度</h2>
-      <p className="text-muted-foreground text-sm">
+    <UI.Content as="section" className="grid gap-5">
+      <UI.Heading level={2} className="text-xl font-semibold">
+        来源独立性与热度
+      </UI.Heading>
+      <UI.Text className="text-muted-foreground text-sm">
         集团或同一实体的来源只计算一个独立参与者。搜索、评论、榜单和网页的成功时间按实际请求范围更新。
-      </p>
-      <div className="grid gap-2">
+      </UI.Text>
+      <UI.Content className="grid gap-2">
         {rows.map((row) => (
           <Item variant="muted" key={row.id} asChild>
-            <div className="flex flex-wrap items-center justify-between gap-2 p-3">
+            <UI.Content className="flex flex-wrap items-center justify-between gap-2 p-3">
               <ItemContent className="min-w-0 gap-3">
-                <span className="min-w-0 break-all">
+                <UI.Text as="span" className="min-w-0 break-all">
                   {row.name} · {row.mode} · {row.selector_kind}:
                   {row.selector_ref}
-                  <span className="text-muted-foreground block text-xs">
+                  <UI.Text
+                    as="span"
+                    className="text-muted-foreground block text-xs"
+                  >
                     版本 {row.revision} · 成功采集{" "}
                     {row.last_successful_fetch_at ?? "尚无成功记录"}
-                  </span>
-                </span>
+                  </UI.Text>
+                </UI.Text>
                 <Button
                   variant="ghost"
                   onClick={() =>
@@ -132,11 +139,11 @@ export function SourceIdentityEditor({ token }: { token: string }) {
                   编辑 {row.name}
                 </Button>
               </ItemContent>
-            </div>
+            </UI.Content>
           </Item>
         ))}
-      </div>
-      <form onSubmit={save}>
+      </UI.Content>
+      <UI.Form onSubmit={save}>
         <FieldGroup className="grid gap-4 sm:grid-cols-2">
           <Field
             className="min-w-0"
@@ -344,7 +351,7 @@ export function SourceIdentityEditor({ token }: { token: string }) {
               id={`${fieldId}-source-identity-editor-field-9`}
             />
           </Field>
-          <div className="flex flex-wrap items-center gap-4">
+          <UI.Content className="flex flex-wrap items-center gap-4">
             {(["enabled", "scheduled", "first_party"] as const).map(
               (key, index) => (
                 <Field key={key} orientation="horizontal" className="w-auto">
@@ -363,8 +370,8 @@ export function SourceIdentityEditor({ token }: { token: string }) {
                 </Field>
               ),
             )}
-          </div>
-          <div className="flex gap-2">
+          </UI.Content>
+          <UI.Content className="flex gap-2">
             <Button disabled={busy} type="submit">
               保存来源身份
             </Button>
@@ -375,9 +382,9 @@ export function SourceIdentityEditor({ token }: { token: string }) {
             >
               新建来源身份
             </Button>
-          </div>
+          </UI.Content>
         </FieldGroup>
-      </form>
-    </section>
+      </UI.Form>
+    </UI.Content>
   );
 }

@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -99,10 +101,10 @@ function CapabilityCard({
   const [reason, setReason] = useState("");
   return (
     <Item variant="muted" asChild>
-      <section className="flex min-w-0 flex-col gap-y-4 p-5">
+      <UI.Content as="section" className="flex min-w-0 flex-col gap-y-4 p-5">
         <ItemContent className="min-w-0 gap-3">
           <ItemTitle className="line-clamp-none w-full">
-            <h2>{capability.label}</h2>
+            <UI.Heading level={2}>{capability.label}</UI.Heading>
           </ItemTitle>
           <ItemDescription className="line-clamp-none">
             当前 {capability.current.provider} / {capability.current.model} ·{" "}
@@ -181,7 +183,7 @@ function CapabilityCard({
             保存 {capability.label}
           </Button>
         </ItemContent>
-      </section>
+      </UI.Content>
     </Item>
   );
 }
@@ -202,25 +204,29 @@ function CostCircuitCard({
   const [reason, setReason] = useState("");
   return (
     <Item variant="muted" asChild>
-      <section className="flex flex-col gap-y-3 p-4">
+      <UI.Content as="section" className="flex flex-col gap-y-3 p-4">
         <ItemContent className="min-w-0 gap-3">
-          <p className="text-sm font-medium">
+          <UI.Text className="text-sm font-medium">
             {circuit.provider}/{circuit.model} ·{" "}
             {circuit.acknowledged ? "已人工核对" : "成本熔断待核对"}
-          </p>
+          </UI.Text>
           <ItemDescription className="line-clamp-none">
             调用 {circuit.call_id} · {time(circuit.created_at)}
           </ItemDescription>
-          <dl className="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <dt>供应商实际</dt>
-              <dd>{money(circuit.cost_actual_micros, circuit.currency)}</dd>
-            </div>
-            <div>
-              <dt>冻结上限</dt>
-              <dd>{money(circuit.cost_cap_micros, circuit.currency)}</dd>
-            </div>
-          </dl>
+          <UI.Content as="dl" className="grid grid-cols-2 gap-3 text-sm">
+            <UI.Content>
+              <UI.Content as="dt">供应商实际</UI.Content>
+              <UI.Content as="dd">
+                {money(circuit.cost_actual_micros, circuit.currency)}
+              </UI.Content>
+            </UI.Content>
+            <UI.Content>
+              <UI.Content as="dt">冻结上限</UI.Content>
+              <UI.Content as="dd">
+                {money(circuit.cost_cap_micros, circuit.currency)}
+              </UI.Content>
+            </UI.Content>
+          </UI.Content>
           {!circuit.acknowledged ? (
             <>
               <Label htmlFor={`ack-${circuit.call_id}`}>
@@ -249,7 +255,7 @@ function CostCircuitCard({
             </>
           ) : null}
         </ItemContent>
-      </section>
+      </UI.Content>
     </Item>
   );
 }
@@ -369,17 +375,17 @@ export function ModelManager() {
   }
   return (
     <>
-      <div className="flex flex-col gap-y-8">
-        <header className="flex flex-col gap-y-3">
-          <h1 className="text-3xl font-medium tracking-tight">
+      <UI.Content className="flex flex-col gap-y-8">
+        <UI.Content as="header" className="flex flex-col gap-y-3">
+          <UI.Heading level={1} className="text-3xl font-medium tracking-tight">
             模型配置与费用
-          </h1>
-          <p className="text-muted-foreground text-sm">
+          </UI.Heading>
+          <UI.Text className="text-muted-foreground text-sm">
             11
             个能力独立配置；已受理任务保留原模型与预算。读取配置不会调用模型。
-          </p>
-        </header>
-        <section className="flex flex-wrap items-end gap-3">
+          </UI.Text>
+        </UI.Content>
+        <UI.Content as="section" className="flex flex-wrap items-end gap-3">
           <Field className="min-w-0 flex-1 basis-full gap-2 sm:basis-64">
             <FieldLabel htmlFor="operator-token">操作员令牌</FieldLabel>
             <Input
@@ -415,10 +421,10 @@ export function ModelManager() {
           >
             读取模型配置
           </Button>
-        </section>
-        <p className="text-muted-foreground text-xs">
+        </UI.Content>
+        <UI.Text className="text-muted-foreground text-xs">
           令牌只保存在本页内存，清除或离开页面后不再保留。
-        </p>
+        </UI.Text>
         {busy ? (
           <Item role="status">
             <Spinner aria-hidden="true" />
@@ -431,9 +437,11 @@ export function ModelManager() {
         ) : null}
         {configuration ? (
           <>
-            <section className="flex flex-col gap-y-2">
-              <h2 className="font-medium">配置版本 {configuration.version}</h2>
-              <p className="text-muted-foreground text-sm">
+            <UI.Content as="section" className="flex flex-col gap-y-2">
+              <UI.Heading level={2} className="font-medium">
+                配置版本 {configuration.version}
+              </UI.Heading>
+              <UI.Text className="text-muted-foreground text-sm">
                 {configuration.calls_enabled
                   ? "模型调用已启用"
                   : "模型调用已关闭"}{" "}
@@ -445,12 +453,12 @@ export function ModelManager() {
                 {configuration.compatible_requests_enabled
                   ? "兼容API已启用"
                   : "兼容API已关闭"}
-              </p>
-              <p className="text-muted-foreground text-sm">
+              </UI.Text>
+              <UI.Text className="text-muted-foreground text-sm">
                 这些开关是当前执行许可。模型目录的视觉声明表示输入能力，质量与真实供应商可用性需独立验证。
-              </p>
-            </section>
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              </UI.Text>
+            </UI.Content>
+            <UI.Content className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
               {configuration.capabilities.map((capability) => (
                 <CapabilityCard
                   key={`${capability.key}:${configuration.version}`}
@@ -460,92 +468,104 @@ export function ModelManager() {
                   save={save}
                 />
               ))}
-            </div>
+            </UI.Content>
           </>
         ) : (
-          <p className="text-muted-foreground">
+          <UI.Text className="text-muted-foreground">
             输入操作员令牌并读取服务端配置。
-          </p>
+          </UI.Text>
         )}
         {overview ? (
           <>
-            <section className="flex flex-col gap-y-4">
-              <h2 className="text-xl font-medium">
+            <UI.Content as="section" className="flex flex-col gap-y-4">
+              <UI.Heading level={2} className="text-xl font-medium">
                 原调用账本 · 最近 {overview.days} 天
-              </h2>
-              <p className="text-muted-foreground text-sm">
+              </UI.Heading>
+              <UI.Text className="text-muted-foreground text-sm">
                 估计、供应商实际与冻结上限分列；币种分别显示。未知结果不计作成功。
-              </p>
+              </UI.Text>
               {overview.usage.length ? (
-                <div className="flex flex-col gap-y-4">
+                <UI.Content className="flex flex-col gap-y-4">
                   {overview.usage.map((row, index) => (
                     <Item
                       variant="muted"
                       key={`${row.purpose}:${row.provider}:${row.model}:${row.currency}:${index}`}
                       asChild
                     >
-                      <article className="flex flex-col gap-y-3 p-4">
+                      <UI.Content
+                        as="article"
+                        className="flex flex-col gap-y-3 p-4"
+                      >
                         <ItemContent className="min-w-0 gap-3">
-                          <p className="text-sm font-medium">
+                          <UI.Text className="text-sm font-medium">
                             {row.capability} · {row.provider}/{row.model} ·{" "}
                             {row.prompt_version}
-                          </p>
+                          </UI.Text>
                           <ItemDescription className="line-clamp-none">
                             {row.purpose} · 调用 {row.calls} · 成功{" "}
                             {row.succeeded}· 失败 {row.failed} ·{" "}
-                            <span>进行中 {row.running ?? 0}</span> ·{" "}
-                            <span>未知 {row.unknown}</span>
+                            <UI.Text as="span">
+                              进行中 {row.running ?? 0}
+                            </UI.Text>{" "}
+                            · <UI.Text as="span">未知 {row.unknown}</UI.Text>
                           </ItemDescription>
-                          <dl className="grid gap-3 text-sm sm:grid-cols-3">
-                            <div>
-                              <dt>估计费用</dt>
-                              <dd>
+                          <UI.Content
+                            as="dl"
+                            className="grid gap-3 text-sm sm:grid-cols-3"
+                          >
+                            <UI.Content>
+                              <UI.Content as="dt">估计费用</UI.Content>
+                              <UI.Content as="dd">
                                 {money(row.cost_estimate_micros, row.currency)}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt>供应商实际</dt>
-                              <dd>
+                              </UI.Content>
+                            </UI.Content>
+                            <UI.Content>
+                              <UI.Content as="dt">供应商实际</UI.Content>
+                              <UI.Content as="dd">
                                 {money(row.cost_actual_micros, row.currency)}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt>冻结上限</dt>
-                              <dd>
+                              </UI.Content>
+                            </UI.Content>
+                            <UI.Content>
+                              <UI.Content as="dt">冻结上限</UI.Content>
+                              <UI.Content as="dd">
                                 {money(row.cost_cap_micros, row.currency)}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt>输入 / 缓存 / 输出 token</dt>
-                              <dd>
+                              </UI.Content>
+                            </UI.Content>
+                            <UI.Content>
+                              <UI.Content as="dt">
+                                输入 / 缓存 / 输出 token
+                              </UI.Content>
+                              <UI.Content as="dd">
                                 {row.input_tokens} / {row.cached_input_tokens} /{" "}
                                 {row.output_tokens}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt>延迟 p50 / p95</dt>
-                              <dd>
+                              </UI.Content>
+                            </UI.Content>
+                            <UI.Content>
+                              <UI.Content as="dt">延迟 p50 / p95</UI.Content>
+                              <UI.Content as="dd">
                                 {row.latency_p50_ms ?? "未知"} /{" "}
                                 {row.latency_p95_ms ?? "未知"} ms
-                              </dd>
-                            </div>
-                          </dl>
+                              </UI.Content>
+                            </UI.Content>
+                          </UI.Content>
                         </ItemContent>
-                      </article>
+                      </UI.Content>
                     </Item>
                   ))}
-                </div>
+                </UI.Content>
               ) : (
-                <p className="text-muted-foreground text-sm">
+                <UI.Text className="text-muted-foreground text-sm">
                   这段时间没有原调用记录。
-                </p>
+                </UI.Text>
               )}
-            </section>
-            <section className="flex flex-col gap-y-4">
-              <h2 className="text-xl font-medium">成本熔断核对</h2>
-              <p className="text-muted-foreground text-sm">
+            </UI.Content>
+            <UI.Content as="section" className="flex flex-col gap-y-4">
+              <UI.Heading level={2} className="text-xl font-medium">
+                成本熔断核对
+              </UI.Heading>
+              <UI.Text className="text-muted-foreground text-sm">
                 按具体超额调用与当前配置版本核对，只解除该成本阻断。
-              </p>
+              </UI.Text>
               {overview.cost_circuits?.length && configuration ? (
                 overview.cost_circuits.map((circuit) => (
                   <CostCircuitCard
@@ -557,13 +577,15 @@ export function ModelManager() {
                   />
                 ))
               ) : (
-                <p className="text-muted-foreground text-sm">
+                <UI.Text className="text-muted-foreground text-sm">
                   没有需要核对的超额调用。
-                </p>
+                </UI.Text>
               )}
-            </section>
-            <section className="flex flex-col gap-y-4">
-              <h2 className="text-xl font-medium">配置与成本核对审计</h2>
+            </UI.Content>
+            <UI.Content as="section" className="flex flex-col gap-y-4">
+              <UI.Heading level={2} className="text-xl font-medium">
+                配置与成本核对审计
+              </UI.Heading>
               {overview.history.length ? (
                 <ItemGroup className="flex flex-col gap-y-4">
                   {overview.history.map((entry) => (
@@ -574,10 +596,10 @@ export function ModelManager() {
                       className="p-4"
                     >
                       <ItemContent className="min-w-0 gap-3">
-                        <p>
+                        <UI.Text>
                           {entry.action} · {entry.target_ref} · {entry.status}
-                        </p>
-                        <p>{entry.reason}</p>
+                        </UI.Text>
+                        <UI.Text>{entry.reason}</UI.Text>
                         <ItemDescription className="line-clamp-none">
                           版本{" "}
                           {typeof entry.before_state.version === "number"
@@ -610,10 +632,10 @@ export function ModelManager() {
                   </EmptyHeader>
                 </Empty>
               )}
-            </section>
+            </UI.Content>
           </>
         ) : null}
-      </div>
+      </UI.Content>
     </>
   );
 }

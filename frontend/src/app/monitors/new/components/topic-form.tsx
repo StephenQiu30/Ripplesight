@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { toast } from "sonner";
 
@@ -227,23 +228,26 @@ export function TopicForm() {
   }
 
   return (
-    <div>
+    <UI.Content>
       <Button asChild variant="ghost" size="navigation" className="mb-10">
         <Link href="/topics">返回我的关注</Link>
       </Button>
-      <div className="grid gap-12 md:grid-cols-2 md:gap-16">
-        <section>
-          <p className="text-muted-foreground text-sm">创建关注</p>
-          <h1 className="mt-5 text-4xl leading-tight font-normal tracking-tight sm:text-5xl">
+      <UI.Content className="grid gap-12 md:grid-cols-2 md:gap-16">
+        <UI.Content as="section">
+          <UI.Text className="text-muted-foreground text-sm">创建关注</UI.Text>
+          <UI.Heading
+            level={1}
+            className="mt-5 text-4xl leading-tight font-normal tracking-tight sm:text-5xl"
+          >
             从你关心的
-            <br />
+            <UI.TextBreak />
             事情开始。
-          </h1>
-          <p className="text-muted-foreground mt-6 max-w-sm text-sm leading-7">
+          </UI.Heading>
+          <UI.Text className="text-muted-foreground mt-6 max-w-sm text-sm leading-7">
             选好关键词和信息来源，以适合自己的节奏了解新的变化。
-          </p>
-        </section>
-        <form
+          </UI.Text>
+        </UI.Content>
+        <UI.Form
           ref={formRef}
           onSubmit={handleSubmit}
           noValidate
@@ -300,7 +304,7 @@ export function TopicForm() {
               <Alert variant="destructive">
                 <AlertTitle>信息来源暂时不可用</AlertTitle>
                 <AlertDescription>
-                  <p>可以先保存关注，之后再配置来源。</p>
+                  <UI.Text>可以先保存关注，之后再配置来源。</UI.Text>
                 </AlertDescription>
                 <Button
                   type="button"
@@ -362,8 +366,8 @@ export function TopicForm() {
               保存后保持暂停。准备好后可在关注详情开始运行。
             </FieldDescription>
           </FieldGroup>
-        </form>
-      </div>
-    </div>
+        </UI.Form>
+      </UI.Content>
+    </UI.Content>
   );
 }

@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { RotateCcwIcon } from "lucide-react";
 
@@ -16,8 +17,8 @@ type GlobalErrorProps = {
 
 export default function GlobalError({ reset }: GlobalErrorProps) {
   return (
-    <html lang="zh-CN" className={layoutFontClassName}>
-      <body className="overflow-hidden print:overflow-visible">
+    <UI.DocumentRoot lang="zh-CN" className={layoutFontClassName}>
+      <UI.DocumentBody className="overflow-hidden print:overflow-visible">
         <BasicLayout>
           <PageState
             eyebrow="应用恢复"
@@ -31,7 +32,7 @@ export default function GlobalError({ reset }: GlobalErrorProps) {
             }
           />
         </BasicLayout>
-      </body>
-    </html>
+      </UI.DocumentBody>
+    </UI.DocumentRoot>
   );
 }

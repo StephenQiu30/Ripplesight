@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Item } from "@/components/ui/item";
 
 import { CheckCircle2Icon, ChevronRightIcon, UploadIcon } from "lucide-react";
@@ -144,48 +146,51 @@ export function AccountSettings({
 
   if (initialSetup)
     return (
-      <div className="flex flex-col gap-12">
+      <UI.Content className="flex flex-col gap-12">
         <CredentialsForm session={session} initialSetup returnTo={returnTo} />
         <IdentityConnections
           session={session}
           oauthError={oauthError}
           githubLinked={githubLinked}
         />
-      </div>
+      </UI.Content>
     );
   const disabled = !!busy || credentialsBusy;
   return (
-    <section
+    <UI.Content
+      as="section"
       aria-labelledby="account-title"
       className="flex w-full flex-col gap-8"
     >
-      <header className="flex flex-col gap-3">
-        <h1
+      <UI.Content as="header" className="flex flex-col gap-3">
+        <UI.Heading
+          level={1}
           id="account-title"
           className="text-3xl font-medium tracking-tight sm:text-4xl"
         >
           账户设置
-        </h1>
-        <p className="text-muted-foreground text-sm leading-6">
+        </UI.Heading>
+        <UI.Text className="text-muted-foreground text-sm leading-6">
           让资料与登录方式保持最新。
-        </p>
-      </header>
-      <div className="flex flex-col items-stretch gap-8 lg:flex-row lg:items-start lg:gap-12">
+        </UI.Text>
+      </UI.Content>
+      <UI.Content className="flex flex-col items-stretch gap-8 lg:flex-row lg:items-start lg:gap-12">
         <Item variant="muted" className="bg-muted items-stretch" asChild>
-          <aside
+          <UI.Content
+            as="aside"
             aria-label="个人资料"
             className="flex flex-col gap-8 p-6 sm:px-8 sm:py-10 lg:w-1/3 lg:shrink-0"
           >
-            <div className="flex flex-col items-center gap-5">
+            <UI.Content className="flex flex-col items-center gap-5">
               <UserAvatar
                 user={account.user}
                 className="size-32 sm:size-36"
                 retryable
               />
-              <p className="max-w-full text-center text-xl font-medium break-all">
+              <UI.Text className="max-w-full text-center text-xl font-medium break-all">
                 {account.user.username}
-              </p>
-              <div className="flex flex-col items-center gap-3">
+              </UI.Text>
+              <UI.Content className="flex flex-col items-center gap-3">
                 <Input
                   ref={fileInput}
                   id="account-avatar"
@@ -211,33 +216,41 @@ export function AccountSettings({
                       ? "更换头像"
                       : "上传头像"}
                 </Button>
-                <p className="text-muted-foreground text-center text-xs leading-5">
+                <UI.Text className="text-muted-foreground text-center text-xs leading-5">
                   JPG、PNG 或 WebP，最大 2 MB。
-                </p>
-              </div>
-            </div>
+                </UI.Text>
+              </UI.Content>
+            </UI.Content>
             <Separator />
-            <dl className="grid grid-cols-1 gap-5 text-sm">
-              <div className="flex flex-col gap-2 sm:flex-row sm:gap-4 lg:flex-col xl:flex-row">
-                <dt className="text-muted-foreground shrink-0">用户名</dt>
-                <dd className="min-w-0 break-all">{account.user.username}</dd>
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:gap-4 lg:flex-col xl:flex-row">
-                <dt className="text-muted-foreground shrink-0">邮箱</dt>
-                <dd className="min-w-0 break-all">
+            <UI.Content as="dl" className="grid grid-cols-1 gap-5 text-sm">
+              <UI.Content className="flex flex-col gap-2 sm:flex-row sm:gap-4 lg:flex-col xl:flex-row">
+                <UI.Content as="dt" className="text-muted-foreground shrink-0">
+                  用户名
+                </UI.Content>
+                <UI.Content as="dd" className="min-w-0 break-all">
+                  {account.user.username}
+                </UI.Content>
+              </UI.Content>
+              <UI.Content className="flex flex-col gap-2 sm:flex-row sm:gap-4 lg:flex-col xl:flex-row">
+                <UI.Content as="dt" className="text-muted-foreground shrink-0">
+                  邮箱
+                </UI.Content>
+                <UI.Content as="dd" className="min-w-0 break-all">
                   {account.user.email || "尚未绑定"}
-                </dd>
-              </div>
+                </UI.Content>
+              </UI.Content>
               {account.user.email && (
-                <div className="flex items-center gap-4">
-                  <dt className="text-muted-foreground">验证状态</dt>
-                  <dd className="flex items-center gap-2">
+                <UI.Content className="flex items-center gap-4">
+                  <UI.Content as="dt" className="text-muted-foreground">
+                    验证状态
+                  </UI.Content>
+                  <UI.Content as="dd" className="flex items-center gap-2">
                     <CheckCircle2Icon className="size-4" aria-hidden="true" />
                     已验证
-                  </dd>
-                </div>
+                  </UI.Content>
+                </UI.Content>
               )}
-            </dl>
+            </UI.Content>
             <Separator />
             <Button
               type="button"
@@ -249,7 +262,7 @@ export function AccountSettings({
               编辑资料
               <ChevronRightIcon aria-hidden="true" />
             </Button>
-          </aside>
+          </UI.Content>
         </Item>
         <Tabs
           value={tab}
@@ -290,17 +303,19 @@ export function AccountSettings({
             forceMount
             className="data-[state=inactive]:hidden"
           >
-            <form
+            <UI.Form
               aria-label="编辑个人资料"
               onSubmit={saveProfile}
               className="flex max-w-xl flex-col gap-8"
             >
-              <header className="flex flex-col gap-3">
-                <h2 className="text-2xl font-medium">基本资料</h2>
-                <p className="text-muted-foreground text-sm leading-6">
+              <UI.Content as="header" className="flex flex-col gap-3">
+                <UI.Heading level={2} className="text-2xl font-medium">
+                  基本资料
+                </UI.Heading>
+                <UI.Text className="text-muted-foreground text-sm leading-6">
                   更新用户名，也可用于登录当前账户。
-                </p>
-              </header>
+                </UI.Text>
+              </UI.Content>
               <FieldGroup>
                 <Field>
                   <FieldLabel htmlFor="profile-username">用户名</FieldLabel>
@@ -329,7 +344,7 @@ export function AccountSettings({
                   {busy === "profile" ? "正在保存…" : "保存资料"}
                 </Button>
               </FieldGroup>
-            </form>
+            </UI.Form>
           </TabsContent>
           <TabsContent
             value="security"
@@ -351,7 +366,7 @@ export function AccountSettings({
             />
           </TabsContent>
         </Tabs>
-      </div>
-    </section>
+      </UI.Content>
+    </UI.Content>
   );
 }

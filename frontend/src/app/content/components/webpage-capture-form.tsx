@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { toast } from "sonner";
 
@@ -126,15 +127,17 @@ export function WebPageCaptureForm() {
   }
 
   return (
-    <section className="flex flex-col gap-6">
-      <div className="max-w-3xl">
-        <h2 className="text-lg font-medium">添加网页</h2>
-        <p className="text-muted-foreground mt-2 text-sm leading-6">
+    <UI.Content as="section" className="flex flex-col gap-6">
+      <UI.Content className="max-w-3xl">
+        <UI.Heading level={2} className="text-lg font-medium">
+          添加网页
+        </UI.Heading>
+        <UI.Text className="text-muted-foreground mt-2 text-sm leading-6">
           提交当前允许范围内的公开网页。系统会创建后台任务，完成后可从任务页打开已保存资料。
-        </p>
-      </div>
+        </UI.Text>
+      </UI.Content>
 
-      <form
+      <UI.Form
         className="flex flex-col gap-5"
         noValidate
         onSubmit={(event) => void handleSubmit(event)}
@@ -193,7 +196,7 @@ export function WebPageCaptureForm() {
             )}
           </Button>
         </FieldGroup>
-      </form>
-    </section>
+      </UI.Form>
+    </UI.Content>
   );
 }

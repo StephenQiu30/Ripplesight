@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import {
   NavigationMenu,
   NavigationMenuList,
@@ -19,9 +21,12 @@ export function BasicFooter() {
 
   return (
     <>
-      <footer className="layout-region bg-background shrink-0 overflow-hidden print:hidden">
+      <UI.Content
+        as="footer"
+        className="layout-region bg-background shrink-0 overflow-hidden print:hidden"
+      >
         <LayoutContainer className="text-muted-foreground flex min-h-16 flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3 text-xs">
-          <p>知微见澜 · Ripplesight</p>
+          <UI.Text>知微见澜 · Ripplesight</UI.Text>
           <NavigationMenu
             viewport={false}
             className="max-w-full justify-start"
@@ -62,7 +67,7 @@ export function BasicFooter() {
             </NavigationMenuList>
           </NavigationMenu>
         </LayoutContainer>
-      </footer>
+      </UI.Content>
       <UsageGuide
         view={guideOpen ? "guide" : null}
         onClose={() => setGuideOpen(false)}

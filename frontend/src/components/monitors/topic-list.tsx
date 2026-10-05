@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { toast } from "sonner";
 
@@ -157,11 +158,19 @@ export function TopicList() {
   }
 
   return (
-    <section className="mt-10" aria-labelledby="monitor-topics-heading">
-      <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-        <h2 id="monitor-topics-heading" className="text-xl font-normal">
+    <UI.Content
+      as="section"
+      className="mt-10"
+      aria-labelledby="monitor-topics-heading"
+    >
+      <UI.Content className="mb-8 flex flex-wrap items-center justify-between gap-4">
+        <UI.Heading
+          level={2}
+          id="monitor-topics-heading"
+          className="text-xl font-normal"
+        >
           我的关注
-        </h2>
+        </UI.Heading>
         <Field orientation="horizontal" className="w-fit">
           <Switch
             id="include-archived"
@@ -170,15 +179,15 @@ export function TopicList() {
           />
           <FieldLabel htmlFor="include-archived">显示已归档</FieldLabel>
         </Field>
-      </div>
+      </UI.Content>
       {state.status === "loading" ? (
-        <div
+        <UI.Content
           className="text-muted-foreground flex items-center gap-3 text-sm"
           role="status"
         >
           <Spinner />
           正在读取关注
-        </div>
+        </UI.Content>
       ) : null}
       {state.status === "error" ? (
         <Alert variant="destructive">
@@ -213,7 +222,7 @@ export function TopicList() {
       {state.status === "ready" && state.topics.length > 0 ? (
         <ItemGroup>
           {state.topics.map((topic) => (
-            <div key={topic.id} role="listitem">
+            <UI.Content key={topic.id} role="listitem">
               <Item asChild>
                 <Link href={`/monitors/${topic.id}`}>
                   <ItemContent>
@@ -242,7 +251,7 @@ export function TopicList() {
                   </ItemActions>
                 </Link>
               </Item>
-            </div>
+            </UI.Content>
           ))}
         </ItemGroup>
       ) : null}
@@ -261,6 +270,6 @@ export function TopicList() {
           {loadingMore ? "正在读取" : "加载更多"}
         </Button>
       ) : null}
-    </section>
+    </UI.Content>
   );
 }

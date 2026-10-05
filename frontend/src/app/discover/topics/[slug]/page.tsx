@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import {
   NavigationMenu,
   NavigationMenuList,
@@ -79,17 +80,19 @@ export default async function TopicPage({
   return (
     <>
       <PublicationNavigation />
-      <div>
+      <UI.Content>
         <Link href="/discover/topics" className="text-muted-foreground text-sm">
           ← 全部专题
         </Link>
-        <h1 className="mt-6 text-3xl font-medium">{page.topic.name}</h1>
-        <p className="text-muted-foreground mt-3 leading-7">
+        <UI.Heading level={1} className="mt-6 text-3xl font-medium">
+          {page.topic.name}
+        </UI.Heading>
+        <UI.Text className="text-muted-foreground mt-3 leading-7">
           {page.topic.definition}
-        </p>
-        <p className="text-muted-foreground mt-3 text-sm">
+        </UI.Text>
+        <UI.Text className="text-muted-foreground mt-3 text-sm">
           {page.topic.total} 篇精选 · 最近 30 天 {page.topic.recent} 篇
-        </p>
+        </UI.Text>
         {page.related.length ? (
           <NavigationMenu
             viewport={false}
@@ -126,9 +129,9 @@ export default async function TopicPage({
               </NavigationMenuItem>
             ) : null}
             <NavigationMenuItem>
-              <span className="text-muted-foreground text-sm">
+              <UI.Text as="span" className="text-muted-foreground text-sm">
                 第 {page.page} / {page.page_count} 页
-              </span>
+              </UI.Text>
             </NavigationMenuItem>
             {page.page < page.page_count ? (
               <NavigationMenuItem>
@@ -141,7 +144,7 @@ export default async function TopicPage({
             ) : null}
           </NavigationMenuList>
         </NavigationMenu>
-      </div>
+      </UI.Content>
     </>
   );
 }

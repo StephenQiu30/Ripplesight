@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -47,7 +48,10 @@ export function BasicHeader() {
   }
 
   return (
-    <header className="layout-region bg-background shrink-0 overflow-hidden print:hidden">
+    <UI.Content
+      as="header"
+      className="layout-region bg-background shrink-0 overflow-hidden print:hidden"
+    >
       <LayoutContainer className="flex h-20 items-center justify-between gap-4">
         <BrandLockup href="/" compactOnMobile />
         <NavigationMenu
@@ -127,6 +131,6 @@ export function BasicHeader() {
           </NavigationMenuList>
         </NavigationMenu>
       </LayoutContainer>
-    </header>
+    </UI.Content>
   );
 }

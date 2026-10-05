@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Spinner } from "@/components/ui/spinner";
 import {
   Item,
@@ -90,8 +92,8 @@ export function GroupExpansion({
     }
   }
   return (
-    <div className="flex flex-col gap-y-3">
-      <div className="flex flex-wrap gap-2">
+    <UI.Content className="flex flex-col gap-y-3">
+      <UI.Content className="flex flex-wrap gap-2">
         <Button
           size="sm"
           variant="outline"
@@ -124,10 +126,10 @@ export function GroupExpansion({
                 : `展开 ${group.development_count} 个事实与进展`}
           </Button>
         ) : null}
-      </div>
+      </UI.Content>
       {mode ? (
         <Item variant="muted" asChild>
-          <section aria-live="polite" className="p-4">
+          <UI.Content as="section" aria-live="polite" className="p-4">
             <ItemContent className="min-w-0 gap-3">
               {busy ? (
                 <Item role="status">
@@ -158,13 +160,13 @@ export function GroupExpansion({
               ) : null}
               {!failed && mode === "developments"
                 ? developments.map((entry) => (
-                    <section key={entry.fact_id}>
-                      <p className="text-muted-foreground text-xs">
+                    <UI.Content as="section" key={entry.fact_id}>
+                      <UI.Text className="text-muted-foreground text-xs">
                         {publicationTime(entry.anchor_at)} ·{" "}
                         {entry.report_count} 篇公开报道
-                      </p>
+                      </UI.Text>
                       <PublicItemCards items={[entry.representative]} />
-                    </section>
+                    </UI.Content>
                   ))
                 : null}
               {cursor && !busy && !failed ? (
@@ -177,10 +179,10 @@ export function GroupExpansion({
                 </Button>
               ) : null}
             </ItemContent>
-          </section>
+          </UI.Content>
         </Item>
       ) : null}
-    </div>
+    </UI.Content>
   );
 }
 
@@ -195,31 +197,31 @@ export function PublicTimelineCards({
     );
   if (!page.cards.length) return <PublicItemCards items={[]} />;
   return (
-    <div>
+    <UI.Content>
       {page.cards.map((card, index) => (
-        <section key={card.key}>
+        <UI.Content as="section" key={card.key}>
           {!index ||
           day(page.cards[index - 1].anchor_at) !== day(card.anchor_at) ? (
             <Item variant="muted" className="mt-5">
               <ItemTitle>
-                <h2>
+                <UI.Heading level={2}>
                   {day(card.anchor_at)} ·{" "}
                   {String(page.day_counts?.[day(card.anchor_at)] ?? "")} 条精选
-                </h2>
+                </UI.Heading>
               </ItemTitle>
             </Item>
           ) : null}
           <PublicItemCards items={[card.item]} />
           {card.group?.latest_development ? (
-            <p className="text-muted-foreground mb-3 text-sm">
+            <UI.Text className="text-muted-foreground mb-3 text-sm">
               最新进展 · {card.group.latest_development.title}
-            </p>
+            </UI.Text>
           ) : null}
           {card.group ? (
             <GroupExpansion group={card.group} filters={page.filters} />
           ) : null}
-        </section>
+        </UI.Content>
       ))}
-    </div>
+    </UI.Content>
   );
 }

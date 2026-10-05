@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Spinner } from "@/components/ui/spinner";
 import { Item, ItemContent, ItemDescription } from "@/components/ui/item";
 
@@ -52,39 +54,45 @@ export function JobHealthSummaryView({ state }: { state: IssueState }) {
   }
 
   return (
-    <section
+    <UI.Content
+      as="section"
       className="mt-8 flex flex-col gap-6"
       aria-labelledby="job-issues-title"
     >
-      <h2 id="job-issues-title" className="text-lg font-medium">
+      <UI.Heading
+        level={2}
+        id="job-issues-title"
+        className="text-lg font-medium"
+      >
         需要处理
-      </h2>
+      </UI.Heading>
       {state.issues.map((issue) => (
-        <article
+        <UI.Content
+          as="article"
           key={issue.latest_failed_job_id}
           className="flex flex-col items-start gap-4 py-4 sm:flex-row sm:justify-between sm:gap-6"
         >
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
+          <UI.Content className="min-w-0">
+            <UI.Content className="flex flex-wrap items-center gap-2">
               <Badge variant="destructive">
                 <CircleAlertIcon data-icon="inline-start" />
                 连续失败
               </Badge>
-              <span className="text-sm font-medium">
+              <UI.Text as="span" className="text-sm font-medium">
                 {issue.source_key} · {capabilityLabel(issue.source_capability)}
-              </span>
-              <span className="text-muted-foreground text-xs">
+              </UI.Text>
+              <UI.Text as="span" className="text-muted-foreground text-xs">
                 配置 {issue.configuration_ref} · v{issue.configuration_version}
-              </span>
-            </div>
-            <p className="mt-3 text-sm">
+              </UI.Text>
+            </UI.Content>
+            <UI.Text className="mt-3 text-sm">
               最近三条已结束任务均失败。{issue.failure.next_action}
-            </p>
-            <p className="text-muted-foreground mt-1 text-xs">
+            </UI.Text>
+            <UI.Text className="text-muted-foreground mt-1 text-xs">
               错误代码：{issue.failure.error_code} · 最近失败：
               {formatTime(issue.failure.occurred_at)}
-            </p>
-          </div>
+            </UI.Text>
+          </UI.Content>
           <Button
             asChild
             variant="secondary"
@@ -96,9 +104,9 @@ export function JobHealthSummaryView({ state }: { state: IssueState }) {
               <ArrowRightIcon data-icon="inline-end" />
             </Link>
           </Button>
-        </article>
+        </UI.Content>
       ))}
-    </section>
+    </UI.Content>
   );
 }
 

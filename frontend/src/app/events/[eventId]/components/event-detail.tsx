@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import Link from "next/link";
 import { type FormEvent, useEffect, useState } from "react";
@@ -73,31 +74,34 @@ export function EventDetail({ eventId }: { eventId: string }) {
             : "可以重试详情读取，或返回事件列表。"
         }
         action={
-          <div className="flex flex-wrap gap-3">
+          <UI.Content className="flex flex-wrap gap-3">
             <Button onClick={refresh}>重试事件详情</Button>
             <Button asChild variant="outline">
               <Link href="/events">返回事件列表</Link>
             </Button>
-          </div>
+          </UI.Content>
         }
       />
     );
 
   return (
-    <div>
-      <div className="mb-8 flex flex-wrap justify-between gap-4">
+    <UI.Content>
+      <UI.Content className="mb-8 flex flex-wrap justify-between gap-4">
         <Button asChild variant="ghost">
           <Link href="/events">返回事件列表</Link>
         </Button>
         <Button variant="outline" onClick={refresh}>
           刷新事件详情
         </Button>
-      </div>
+      </UI.Content>
       {state.status === "loading" ? (
-        <div aria-label="正在读取事件详情" className="flex flex-col gap-y-6">
+        <UI.Content
+          aria-label="正在读取事件详情"
+          className="flex flex-col gap-y-6"
+        >
           <Skeleton className="h-12 w-3/4" />
           <Skeleton className="h-32 w-full" />
-        </div>
+        </UI.Content>
       ) : (
         <EventReading
           key={`${state.event.id}:${state.event.revision}`}
@@ -105,7 +109,7 @@ export function EventDetail({ eventId }: { eventId: string }) {
           onChanged={refresh}
         />
       )}
-    </div>
+    </UI.Content>
   );
 }
 
@@ -153,7 +157,7 @@ function EventReading({
           </AlertDescription>
         </Alert>
       ) : null}
-      <div className="flex flex-wrap gap-3">
+      <UI.Content className="flex flex-wrap gap-3">
         <Badge variant="secondary">修订 {event.revision}</Badge>
         <Badge variant="secondary">
           {
@@ -165,14 +169,17 @@ function EventReading({
         <Badge variant="secondary">
           {event.readable_member_count} / {event.member_count} 条成员可读
         </Badge>
-      </div>
-      <h1 className="mt-5 text-3xl font-medium tracking-tight sm:text-4xl">
+      </UI.Content>
+      <UI.Heading
+        level={1}
+        className="mt-5 text-3xl font-medium tracking-tight sm:text-4xl"
+      >
         {event.title ?? "摘要待更新或暂不可读的事件"}
-      </h1>
+      </UI.Heading>
       {event.summary ? (
-        <p className="text-muted-foreground mt-5 max-w-3xl leading-8 whitespace-pre-wrap">
+        <UI.Text className="text-muted-foreground mt-5 max-w-3xl leading-8 whitespace-pre-wrap">
           {event.summary}
-        </p>
+        </UI.Text>
       ) : (
         <Alert className="mt-6">
           <AlertTitle>派生摘要暂不可读</AlertTitle>
@@ -181,23 +188,25 @@ function EventReading({
           </AlertDescription>
         </Alert>
       )}
-      <p className="text-muted-foreground mt-6 text-sm">
+      <UI.Text className="text-muted-foreground mt-6 text-sm">
         来源分布：
         {Object.entries(event.source_counts)
           .map(([source, count]) => `${source} ${count} 条`)
           .join(" · ")}
-      </p>
-      <p className="text-muted-foreground mt-2 text-sm">
+      </UI.Text>
+      <UI.Text className="text-muted-foreground mt-2 text-sm">
         首次{event.first_seen_basis === "published" ? "发布" : "发现"}：
         {new Date(event.first_seen_at).toLocaleString("zh-CN")}
-      </p>
+      </UI.Text>
       {event.latest_progress ? (
-        <section className="mt-6">
-          <h2 className="text-xl font-medium">最新直接进展</h2>
-          <p className="text-muted-foreground mt-3 leading-7 whitespace-pre-wrap">
+        <UI.Content as="section" className="mt-6">
+          <UI.Heading level={2} className="text-xl font-medium">
+            最新直接进展
+          </UI.Heading>
+          <UI.Text className="text-muted-foreground mt-3 leading-7 whitespace-pre-wrap">
             {event.latest_progress}
-          </p>
-        </section>
+          </UI.Text>
+        </UI.Content>
       ) : null}
       <EventHeat eventId={event.id} />
       <EventFacts
@@ -217,15 +226,23 @@ function EventReading({
             : undefined
         }
       />
-      <section className="mt-12" aria-labelledby="event-members-heading">
-        <h2 id="event-members-heading" className="text-2xl font-medium">
+      <UI.Content
+        as="section"
+        className="mt-12"
+        aria-labelledby="event-members-heading"
+      >
+        <UI.Heading
+          level={2}
+          id="event-members-heading"
+          className="text-2xl font-medium"
+        >
           事件成员与固定版本证据
-        </h2>
-        <p className="text-muted-foreground mt-3 leading-7">
+        </UI.Heading>
+        <UI.Text className="text-muted-foreground mt-3 leading-7">
           正文对应事件归并时选定的版本；观察指标和可见性分别标明时间。
-        </p>
+        </UI.Text>
         {event.revision > 1 ? (
-          <form onSubmit={selectRevision}>
+          <UI.Form onSubmit={selectRevision}>
             <FieldGroup className="mt-6 flex flex-row flex-wrap items-end gap-4">
               <Field className="w-40">
                 <FieldLabel htmlFor="event-revision">事件修订</FieldLabel>
@@ -242,7 +259,7 @@ function EventReading({
                 读取该修订成员
               </Button>
             </FieldGroup>
-          </form>
+          </UI.Form>
         ) : null}
         <EventMemberList
           key={`${event.id}:${revision}`}
@@ -260,7 +277,7 @@ function EventReading({
               : undefined
           }
         />
-      </section>
+      </UI.Content>
       {revision === event.revision ? (
         <EventCorrections
           event={event}

@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Spinner } from "@/components/ui/spinner";
 import {
   Item,
@@ -80,13 +82,19 @@ export function ResetSourcePosts({ refresh }: { refresh: number }) {
     setPage((value) => value + delta);
   }
   return (
-    <section aria-label="公告源帖子" className="mt-14 flex flex-col gap-y-6">
-      <div>
-        <h2 className="text-xl font-medium">公告源帖子</h2>
-        <p className="text-muted-foreground mt-2 text-sm">
+    <UI.Content
+      as="section"
+      aria-label="公告源帖子"
+      className="mt-14 flex flex-col gap-y-6"
+    >
+      <UI.Content>
+        <UI.Heading level={2} className="text-xl font-medium">
+          公告源帖子
+        </UI.Heading>
+        <UI.Text className="text-muted-foreground mt-2 text-sm">
           固定源原文、上下文和处理状态。未处理或失败的帖子保留未知状态。
-        </p>
-      </div>
+        </UI.Text>
+      </UI.Content>
       <ToggleGroup
         type="single"
         value={filter}
@@ -144,10 +152,10 @@ export function ResetSourcePosts({ refresh }: { refresh: number }) {
                 className="flex flex-col gap-y-3"
               >
                 <ItemContent className="min-w-0 gap-3">
-                  <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <span className="text-muted-foreground">
+                  <UI.Content className="flex flex-wrap items-center gap-2 text-sm">
+                    <UI.Text as="span" className="text-muted-foreground">
                       {beijingTime(post.published_at)}
-                    </span>
+                    </UI.Text>
                     <Badge variant="secondary">
                       {post.needs_review && !post.reviewed
                         ? "待复核"
@@ -160,11 +168,11 @@ export function ResetSourcePosts({ refresh }: { refresh: number }) {
                         识别失败 {post.failure_count} 次
                       </Badge>
                     )}
-                  </div>
+                  </UI.Content>
                   {post.translation_zh && (
-                    <p className="leading-7 whitespace-pre-wrap">
+                    <UI.Text className="leading-7 whitespace-pre-wrap">
                       {post.translation_zh}
-                    </p>
+                    </UI.Text>
                   )}
                   <Collapsible
                     className="text-sm"
@@ -176,7 +184,9 @@ export function ResetSourcePosts({ refresh }: { refresh: number }) {
                         variant="ghost"
                         className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
                       >
-                        <span className="min-w-0 text-left">原文与上下文</span>
+                        <UI.Text as="span" className="min-w-0 text-left">
+                          原文与上下文
+                        </UI.Text>
                         <ChevronDownIcon
                           aria-hidden="true"
                           data-icon="inline-end"
@@ -188,44 +198,44 @@ export function ResetSourcePosts({ refresh }: { refresh: number }) {
                       forceMount
                       className="data-[state=closed]:hidden"
                     >
-                      <p className="mt-3 leading-7 whitespace-pre-wrap">
+                      <UI.Text className="mt-3 leading-7 whitespace-pre-wrap">
                         {post.text}
-                      </p>
+                      </UI.Text>
                       {post.context.map((context) => (
-                        <blockquote
+                        <UI.Quote
                           key={`${context.relation}-${context.id}`}
                           className="bg-muted/40 mt-3 rounded-lg p-4"
                         >
-                          <p className="text-muted-foreground mb-2">
+                          <UI.Text className="text-muted-foreground mb-2">
                             {context.relation === "reply"
                               ? "回复上下文"
                               : "引用上下文"}{" "}
                             · {context.author}
-                          </p>
-                          <p className="leading-6 whitespace-pre-wrap">
+                          </UI.Text>
+                          <UI.Text className="leading-6 whitespace-pre-wrap">
                             {context.text_zh ?? context.original_text}
-                          </p>
+                          </UI.Text>
                           <Button asChild variant="link" className="px-0">
-                            <a
+                            <UI.TextLink
                               href={context.url}
                               target="_blank"
                               rel="noopener noreferrer"
                             >
                               阅读上下文原帖
-                            </a>
+                            </UI.TextLink>
                           </Button>
-                        </blockquote>
+                        </UI.Quote>
                       ))}
                     </CollapsibleContent>
                   </Collapsible>
                   <Button asChild variant="link" className="px-0">
-                    <a
+                    <UI.TextLink
                       href={post.url}
                       target="_blank"
                       rel="noopener noreferrer"
                     >
                       阅读源帖子
-                    </a>
+                    </UI.TextLink>
                   </Button>
                 </ItemContent>
               </Item>
@@ -233,7 +243,7 @@ export function ResetSourcePosts({ refresh }: { refresh: number }) {
           </ItemGroup>
         </>
       )}
-      <div className="flex flex-wrap items-center gap-3">
+      <UI.Content className="flex flex-wrap items-center gap-3">
         <Button
           variant="outline"
           disabled={page === 1 || state.status !== "ready"}
@@ -241,9 +251,9 @@ export function ResetSourcePosts({ refresh }: { refresh: number }) {
         >
           上一页帖子
         </Button>
-        <span className="text-muted-foreground text-sm">
+        <UI.Text as="span" className="text-muted-foreground text-sm">
           第 {page} 页，每页最多 50 条
-        </span>
+        </UI.Text>
         <Button
           variant="outline"
           disabled={
@@ -253,7 +263,7 @@ export function ResetSourcePosts({ refresh }: { refresh: number }) {
         >
           下一页帖子
         </Button>
-      </div>
-    </section>
+      </UI.Content>
+    </UI.Content>
   );
 }

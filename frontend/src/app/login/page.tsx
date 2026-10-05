@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { headers } from "next/headers";
@@ -37,7 +38,7 @@ export default async function LoginPage({
         description="登录服务暂时无法响应。你的会话没有被退出，请稍后重新加载。"
         action={
           <Button asChild>
-            <a href={returnTo}>重新加载</a>
+            <UI.TextLink href={returnTo}>重新加载</UI.TextLink>
           </Button>
         }
       />

@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Button } from "@/components/ui/button";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -59,7 +61,7 @@ export function SelectedSnapshotDownload() {
   }
 
   return (
-    <span className="inline-flex flex-col items-start gap-2">
+    <UI.Text as="span" className="inline-flex flex-col items-start gap-2">
       <Button
         type="button"
         disabled={busy}
@@ -69,6 +71,6 @@ export function SelectedSnapshotDownload() {
       >
         {busy ? "正在读取快照…" : "精选同步快照"}
       </Button>
-    </span>
+    </UI.Text>
   );
 }

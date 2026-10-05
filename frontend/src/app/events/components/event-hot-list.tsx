@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -42,13 +44,21 @@ export function EventHotList({ topicId }: { topicId?: string }) {
     return () => controller.abort();
   }, [topicId, retry]);
   return (
-    <section className="mt-10" aria-labelledby="event-hot-heading">
-      <h2 id="event-hot-heading" className="text-xl font-medium">
+    <UI.Content
+      as="section"
+      className="mt-10"
+      aria-labelledby="event-hot-heading"
+    >
+      <UI.Heading
+        level={2}
+        id="event-hot-heading"
+        className="text-xl font-medium"
+      >
         48 小时独立来源热榜
-      </h2>
-      <p className="text-muted-foreground mt-3 text-sm">
+      </UI.Heading>
+      <UI.Text className="text-muted-foreground mt-3 text-sm">
         同一机构或来源组计一次，至少两个参与者并含编辑报道。
-      </p>
+      </UI.Text>
       {state === "loading" ? (
         <Item className="mt-4" role="status">
           <Spinner aria-hidden="true" />
@@ -59,7 +69,7 @@ export function EventHotList({ topicId }: { topicId?: string }) {
           </ItemContent>
         </Item>
       ) : state === "error" ? (
-        <div className="mt-4">
+        <UI.Content className="mt-4">
           <Alert>
             <AlertDescription>热榜读取失败。</AlertDescription>
           </Alert>
@@ -70,7 +80,7 @@ export function EventHotList({ topicId }: { topicId?: string }) {
           >
             重试热榜
           </Button>
-        </div>
+        </UI.Content>
       ) : !items.length ? (
         <Empty className="mt-4">
           <EmptyHeader>
@@ -95,7 +105,7 @@ export function EventHotList({ topicId }: { topicId?: string }) {
                 >
                   {index + 1}. {item.representative?.title ?? "查看事件证据"}
                 </Link>
-                <div className="mt-3 flex flex-wrap gap-2">
+                <UI.Content className="mt-3 flex flex-wrap gap-2">
                   <Badge variant="secondary">热度 {item.heat.toFixed(1)}</Badge>
                   <Badge variant="secondary">
                     {item.participant_count} 个参与者
@@ -103,7 +113,7 @@ export function EventHotList({ topicId }: { topicId?: string }) {
                   {!item.complete ? (
                     <Badge variant="outline">覆盖待补全</Badge>
                   ) : null}
-                </div>
+                </UI.Content>
                 <ItemDescription className="mt-3 line-clamp-none">
                   {item.source_names.join(" · ")}
                 </ItemDescription>
@@ -112,6 +122,6 @@ export function EventHotList({ topicId }: { topicId?: string }) {
           ))}
         </ItemGroup>
       )}
-    </section>
+    </UI.Content>
   );
 }

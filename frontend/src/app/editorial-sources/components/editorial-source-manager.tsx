@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import {
@@ -350,15 +352,18 @@ export function EditorialSourceManager() {
   }
   return (
     <>
-      <div className="flex flex-col gap-y-8">
-        <div>
-          <h1 className="text-3xl font-medium">编辑来源配置</h1>
-          <p className="text-muted-foreground mt-3">
+      <UI.Content className="flex flex-col gap-y-8">
+        <UI.Content>
+          <UI.Heading level={1} className="text-3xl font-medium">
+            编辑来源配置
+          </UI.Heading>
+          <UI.Text className="text-muted-foreground mt-3">
             六类来源共用批准策略、原内容版本和任务回执。来源健康依据真实完整抓取，默认关闭。
-          </p>
-        </div>
+          </UI.Text>
+        </UI.Content>
         <Item variant="muted" asChild>
-          <section
+          <UI.Content
+            as="section"
             className="flex flex-col gap-y-4 p-5"
             aria-label="操作员权限"
           >
@@ -378,7 +383,7 @@ export function EditorialSourceManager() {
               <ItemDescription className="line-clamp-none">
                 令牌仅在当前页面内存中使用。服务端未配置操作员权限时保持关闭。
               </ItemDescription>
-              <div className="flex flex-wrap gap-3">
+              <UI.Content className="flex flex-wrap gap-3">
                 <Button
                   disabled={!token || busy}
                   onClick={() => void perform(reload)}
@@ -409,9 +414,9 @@ export function EditorialSourceManager() {
                 >
                   新增来源
                 </Button>
-              </div>
+              </UI.Content>
             </ItemContent>
-          </section>
+          </UI.Content>
         </Item>
         {profiles?.length === 0 && (
           <Empty>
@@ -423,40 +428,48 @@ export function EditorialSourceManager() {
           </Empty>
         )}
         {!!profiles?.length && (
-          <section
+          <UI.Content
+            as="section"
             className="grid gap-4 md:grid-cols-2"
             aria-label="来源与健康"
           >
             {profiles.map((p) => (
               <Item variant="muted" key={p.id} asChild>
-                <article className="flex flex-col gap-y-3 p-5">
+                <UI.Content as="article" className="flex flex-col gap-y-3 p-5">
                   <ItemContent className="min-w-0 gap-3">
                     <ItemTitle className="line-clamp-none w-full">
-                      <h2>{p.name}</h2>
+                      <UI.Heading level={2}>{p.name}</UI.Heading>
                     </ItemTitle>
                     <ItemDescription className="line-clamp-none">
                       {kinds.find(([key]) => key === p.configuration.kind)?.[1]}{" "}
                       ·{p.enabled ? "配置已启用" : "配置关闭"} ·{" "}
                       {p.participation_mode} · {p.tier}
                     </ItemDescription>
-                    <p className="text-sm">
+                    <UI.Text className="text-sm">
                       健康：{p.health} · 连续失败 {p.failure_count} ·{" "}
                       {p.has_unknown_run
                         ? "存在未知请求，需人工复核"
                         : p.has_backlog
                           ? "存在扫描积压"
                           : "无已记录积压"}
-                    </p>
-                    <dl className="text-muted-foreground flex flex-col gap-y-1 text-sm">
-                      <div>最近完整抓取：{time(p.last_ok_at)}</div>
-                      <div>最近尝试：{time(p.last_fetch_at)}</div>
-                      <div>下次计划：{time(p.next_fetch_at)}</div>
-                      <div className="break-all">来源标识：{p.source_key}</div>
-                      <div>
+                    </UI.Text>
+                    <UI.Content
+                      as="dl"
+                      className="text-muted-foreground flex flex-col gap-y-1 text-sm"
+                    >
+                      <UI.Content>
+                        最近完整抓取：{time(p.last_ok_at)}
+                      </UI.Content>
+                      <UI.Content>最近尝试：{time(p.last_fetch_at)}</UI.Content>
+                      <UI.Content>下次计划：{time(p.next_fetch_at)}</UI.Content>
+                      <UI.Content className="break-all">
+                        来源标识：{p.source_key}
+                      </UI.Content>
+                      <UI.Content>
                         修订 {p.revision} · 配置版本 {p.configuration_version} ·
                         许可版本 {p.policy_version}
-                      </div>
-                    </dl>
+                      </UI.Content>
+                    </UI.Content>
                     <Button
                       variant="outline"
                       disabled={busy}
@@ -465,22 +478,25 @@ export function EditorialSourceManager() {
                       管理 {p.name}
                     </Button>
                   </ItemContent>
-                </article>
+                </UI.Content>
               </Item>
             ))}
-          </section>
+          </UI.Content>
         )}
         {!!groups.length && (
-          <section
+          <UI.Content
+            as="section"
             className="flex flex-col gap-y-5"
             aria-label="X 分组分页恢复"
           >
-            <h2 className="text-xl font-medium">X 分组分页恢复</h2>
-            <p className="text-muted-foreground text-sm">
+            <UI.Heading level={2} className="text-xl font-medium">
+              X 分组分页恢复
+            </UI.Heading>
+            <UI.Text className="text-muted-foreground text-sm">
               续页保留原查询和全部成员。配置变化后，需要人工按全部成员版本退回原水位；未知请求先在来源运行记录中核验。
               每个成员须批准 provider_usd_micros
               的来源预算，全局费用与网络计数各记一次。
-            </p>
+            </UI.Text>
             <Label htmlFor="group-backlog-reason">分组重建原因</Label>
             <Textarea
               id="group-backlog-reason"
@@ -490,10 +506,12 @@ export function EditorialSourceManager() {
             />
             {groups.map((group) => (
               <Item variant="muted" key={group.group_sha256} asChild>
-                <article className="flex flex-col gap-y-3 p-4">
+                <UI.Content as="article" className="flex flex-col gap-y-3 p-4">
                   <ItemContent className="min-w-0 gap-3">
-                    <p className="break-all">{group.query}</p>
-                    <p className="text-sm">积压状态：{group.state}</p>
+                    <UI.Text className="break-all">{group.query}</UI.Text>
+                    <UI.Text className="text-sm">
+                      积压状态：{group.state}
+                    </UI.Text>
                     <ItemGroup className="flex flex-col gap-y-1 text-sm">
                       {group.members.map((member) => (
                         <Item
@@ -516,22 +534,26 @@ export function EditorialSourceManager() {
                       复核全部成员并退回原水位
                     </Button>
                   </ItemContent>
-                </article>
+                </UI.Content>
               </Item>
             ))}
-          </section>
+          </UI.Content>
         )}
         {editing && (
-          <section className="flex flex-col gap-y-5" aria-label="来源表单">
-            <h2 className="text-xl font-medium">
+          <UI.Content
+            as="section"
+            className="flex flex-col gap-y-5"
+            aria-label="来源表单"
+          >
+            <UI.Heading level={2} className="text-xl font-medium">
               {selected ? "修改来源" : "新增关闭来源"}
-            </h2>
+            </UI.Heading>
             {formProfileId && (
-              <p className="text-muted-foreground text-sm">
+              <UI.Text className="text-muted-foreground text-sm">
                 本表单预期修订 {formRevision}。版本变化后请重新打开来源配置。
-              </p>
+              </UI.Text>
             )}
-            <div className="grid gap-5 sm:grid-cols-2">
+            <UI.Content className="grid gap-5 sm:grid-cols-2">
               <Field className="flex flex-col gap-y-2">
                 <FieldLabel htmlFor="source-name">来源名称</FieldLabel>
                 <Input
@@ -667,9 +689,9 @@ export function EditorialSourceManager() {
                   value={connection}
                   onChange={(e) => setConnection(e.target.value)}
                 />
-                <p className="text-muted-foreground text-sm">
+                <UI.Text className="text-muted-foreground text-sm">
                   X 与公众号必须绑定当前批准连接；密钥在服务端保存。
-                </p>
+                </UI.Text>
               </Field>
               <Field className="flex flex-col gap-y-2">
                 <FieldLabel htmlFor="source-connection-version">
@@ -683,7 +705,7 @@ export function EditorialSourceManager() {
                   onChange={(e) => setConnectionVersion(Number(e.target.value))}
                 />
               </Field>
-            </div>
+            </UI.Content>
             <Field orientation="horizontal" className="w-auto">
               <Checkbox
                 checked={firstParty}
@@ -719,9 +741,9 @@ export function EditorialSourceManager() {
                 value={config}
                 onChange={(e) => setConfig(e.target.value)}
               />
-              <p className="text-muted-foreground text-sm">
+              <UI.Text className="text-muted-foreground text-sm">
                 可设置选择器、分页、时间解释、噪声过滤与官方搜索参数；配置不接受密钥或许可声明。
-              </p>
+              </UI.Text>
             </Field>
             <Field className="flex flex-col gap-y-2">
               <FieldLabel htmlFor="source-reason">操作原因</FieldLabel>
@@ -747,7 +769,7 @@ export function EditorialSourceManager() {
               expectedRevision={formRevision}
               sourceEnabled={selected?.enabled ?? false}
             />
-          </section>
+          </UI.Content>
         )}
         {selected && (
           <EditorialSourceMaterials
@@ -765,22 +787,28 @@ export function EditorialSourceManager() {
           />
         )}
         {selected && (
-          <section className="flex flex-col gap-y-4" aria-label="来源图标缓存">
-            <h2 className="text-xl font-medium">来源图标</h2>
-            <p className="text-muted-foreground text-sm">
+          <UI.Content
+            as="section"
+            className="flex flex-col gap-y-4"
+            aria-label="来源图标缓存"
+          >
+            <UI.Heading level={2} className="text-xl font-medium">
+              来源图标
+            </UI.Heading>
+            <UI.Text className="text-muted-foreground text-sm">
               仅读现有缓存，正文许可不会授权图标。预期来源修订 {formRevision}
               ；未知请求必须人工核验后受理新任务。
-            </p>
-            <p>缓存状态：{icon?.status ?? "未读取"}</p>
+            </UI.Text>
+            <UI.Text>缓存状态：{icon?.status ?? "未读取"}</UI.Text>
             {icon?.failure_code && (
-              <p className="text-muted-foreground text-sm">
+              <UI.Text className="text-muted-foreground text-sm">
                 {icon.failure_code}
-              </p>
+              </UI.Text>
             )}
             {icon?.next_retry_at && (
-              <p className="text-muted-foreground text-sm">
+              <UI.Text className="text-muted-foreground text-sm">
                 下次缺项检查：{time(icon.next_retry_at)}
-              </p>
+              </UI.Text>
             )}
             <Button
               variant="outline"
@@ -819,16 +847,17 @@ export function EditorialSourceManager() {
                 ? "已核验未知请求，重新受理图标"
                 : "受理图标采集"}
             </Button>
-          </section>
+          </UI.Content>
         )}
         {selected && (
-          <section
+          <UI.Content
+            as="section"
             className="flex flex-col gap-y-5"
             aria-label="来源运行与恢复"
           >
-            <h2 className="text-xl font-medium">
+            <UI.Heading level={2} className="text-xl font-medium">
               {selected.name} · 运行与恢复
-            </h2>
+            </UI.Heading>
             <Button
               variant="outline"
               disabled={busy}
@@ -869,12 +898,12 @@ export function EditorialSourceManager() {
             )}
             {runs.map((run) => (
               <Item variant="muted" key={run.run_id} asChild>
-                <article className="flex flex-col gap-y-3 p-4">
+                <UI.Content as="article" className="flex flex-col gap-y-3 p-4">
                   <ItemContent className="min-w-0 gap-3">
-                    <p className="break-all">
+                    <UI.Text className="break-all">
                       {run.status} · {run.reason ?? "无附加原因"} · 运行{" "}
                       {run.run_id}
-                    </p>
+                    </UI.Text>
                     <ItemDescription className="line-clamp-none">
                       发现 {run.found ?? 0}，新增 {run.created ?? 0}，修订{" "}
                       {run.revised ?? 0}
@@ -898,7 +927,7 @@ export function EditorialSourceManager() {
                       </Button>
                     )}
                   </ItemContent>
-                </article>
+                </UI.Content>
               </Item>
             ))}
             {selected.configuration.kind === "external" && (
@@ -910,7 +939,7 @@ export function EditorialSourceManager() {
                 enabled={selected.enabled}
               />
             )}
-          </section>
+          </UI.Content>
         )}
         {job && (
           <Alert role="status">
@@ -925,7 +954,7 @@ export function EditorialSourceManager() {
             </AlertDescription>
           </Alert>
         )}
-      </div>
+      </UI.Content>
     </>
   );
 }

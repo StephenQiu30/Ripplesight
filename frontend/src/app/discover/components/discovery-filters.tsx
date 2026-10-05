@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -39,7 +40,7 @@ export function DiscoveryFilters({
   const [selectedChannel, setSelectedChannel] = useState(channel ?? "");
   const [selectedSource, setSelectedSource] = useState(params.source_key ?? "");
   return (
-    <form method="get" className="my-7">
+    <UI.Form method="get" className="my-7">
       <FieldGroup className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Field className="min-w-0">
           <FieldLabel htmlFor={`${fieldId}-page-field-1`}>范围</FieldLabel>
@@ -272,6 +273,6 @@ export function DiscoveryFilters({
           查看
         </Button>
       </FieldGroup>
-    </form>
+    </UI.Form>
   );
 }

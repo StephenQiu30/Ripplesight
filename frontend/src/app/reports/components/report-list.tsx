@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { toast } from "sonner";
 
@@ -115,16 +116,19 @@ export function ReportList() {
   }, [reloadToken]);
 
   return (
-    <div>
-      <div className="flex flex-wrap items-end justify-between gap-5">
-        <div>
-          <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
+    <UI.Content>
+      <UI.Content className="flex flex-wrap items-end justify-between gap-5">
+        <UI.Content>
+          <UI.Heading
+            level={1}
+            className="text-3xl font-medium tracking-tight sm:text-4xl"
+          >
             已有报告
-          </h1>
-          <p className="text-muted-foreground mt-4 leading-7">
+          </UI.Heading>
+          <UI.Text className="text-muted-foreground mt-4 leading-7">
             按主题和日期，阅读已经定稿的日报和周报。
-          </p>
-        </div>
+          </UI.Text>
+        </UI.Content>
         <Button
           variant="outline"
           onClick={() => setReloadToken((value) => value + 1)}
@@ -132,7 +136,7 @@ export function ReportList() {
           <RotateCcwIcon data-icon="inline-start" />
           刷新
         </Button>
-      </div>
+      </UI.Content>
       <ToggleGroup
         type="single"
         value={kind}
@@ -154,7 +158,7 @@ export function ReportList() {
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-5 flex flex-col gap-4">
-          <div className="grid gap-5 sm:grid-cols-3">
+          <UI.Content className="grid gap-5 sm:grid-cols-3">
             <Field>
               <FieldLabel htmlFor="report-topic">关注主题</FieldLabel>
               <Select value={topicId} onValueChange={setTopicId}>
@@ -206,11 +210,11 @@ export function ReportList() {
                 }}
               />
             </Field>
-          </div>
+          </UI.Content>
           {topicOptionsError ? (
-            <p className="text-muted-foreground text-sm">
+            <UI.Text className="text-muted-foreground text-sm">
               主题选项暂时无法读取，仍可按日期查看报告。
-            </p>
+            </UI.Text>
           ) : null}
         </CollapsibleContent>
       </Collapsible>
@@ -222,7 +226,7 @@ export function ReportList() {
         dateTo={dateTo}
         onRetry={() => setReloadToken((value) => value + 1)}
       />
-    </div>
+    </UI.Content>
   );
 }
 
@@ -321,16 +325,19 @@ function ReportResults({
   return (
     <>
       {state.status === "loading" ? (
-        <div aria-label="正在读取报告" className="mt-10 flex flex-col gap-4">
+        <UI.Content
+          aria-label="正在读取报告"
+          className="mt-10 flex flex-col gap-4"
+        >
           <Skeleton className="h-20 w-full" />
           <Skeleton className="h-20 w-full" />
-        </div>
+        </UI.Content>
       ) : null}
       {state.status === "error" ? (
         <Alert variant="destructive" className="mt-10">
           <AlertTitle>暂时无法读取报告</AlertTitle>
           <AlertDescription>
-            <p>请重新加载报告。</p>
+            <UI.Text>请重新加载报告。</UI.Text>
             <Button variant="outline" className="mt-4" onClick={onRetry}>
               重新加载
             </Button>
@@ -338,7 +345,7 @@ function ReportResults({
         </Alert>
       ) : null}
       {state.status === "ready" ? (
-        <section aria-label="报告列表" className="mt-10">
+        <UI.Content as="section" aria-label="报告列表" className="mt-10">
           {!state.items.length ? (
             <Empty className="py-16">
               <EmptyHeader>
@@ -385,7 +392,7 @@ function ReportResults({
               {loadingMore ? "正在加载" : "加载更多"}
             </Button>
           ) : null}
-        </section>
+        </UI.Content>
       ) : null}
     </>
   );

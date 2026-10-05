@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { UserRoundIcon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -54,7 +55,7 @@ export function UserAvatar({
 
   const current = asset?.hash === hash ? asset : null;
   return (
-    <div className="flex flex-col items-center gap-2">
+    <UI.Content className="flex flex-col items-center gap-2">
       <Avatar className={className}>
         {current?.url && (
           <AvatarImage
@@ -81,6 +82,6 @@ export function UserAvatar({
           重新加载头像
         </Button>
       )}
-    </div>
+    </UI.Content>
   );
 }

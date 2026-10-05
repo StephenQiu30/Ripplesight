@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -87,14 +88,14 @@ function CoverageStatus({ row }: { row: HotKeyAPI.CollectionCoverageView }) {
         ? "secondary"
         : "outline";
   return (
-    <div className="flex flex-wrap gap-2">
+    <UI.Content className="flex flex-wrap gap-2">
       <Badge variant={variant}>
         {coverageStatusLabel(row.coverage_status)}
       </Badge>
       {row.gaps.length > 0 ? (
         <Badge variant="outline">{row.gaps.length} 段未确认缺口</Badge>
       ) : null}
-    </div>
+    </UI.Content>
   );
 }
 
@@ -109,7 +110,7 @@ export function CoverageWindowTable({
 }) {
   return (
     <>
-      <div className="mt-6 hidden md:block">
+      <UI.Content className="mt-6 hidden md:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -117,7 +118,9 @@ export function CoverageWindowTable({
               <TableHead>来源 / 能力</TableHead>
               <TableHead>采集状态</TableHead>
               <TableHead>
-                <span className="sr-only">操作</span>
+                <UI.Text as="span" className="sr-only">
+                  操作
+                </UI.Text>
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -131,16 +134,18 @@ export function CoverageWindowTable({
               >
                 <TableCell>{coverageTime(row.due_at)}</TableCell>
                 <TableCell>
-                  <span className="block font-medium">{row.source_key}</span>
-                  <span className="text-muted-foreground text-xs">
+                  <UI.Text as="span" className="block font-medium">
+                    {row.source_key}
+                  </UI.Text>
+                  <UI.Text as="span" className="text-muted-foreground text-xs">
                     {capabilityLabel(row.capability)}
-                  </span>
+                  </UI.Text>
                 </TableCell>
                 <TableCell>
-                  <div className="flex flex-col gap-2">
-                    <p>{admissionLabel(row.admission_state)}</p>
+                  <UI.Content className="flex flex-col gap-2">
+                    <UI.Text>{admissionLabel(row.admission_state)}</UI.Text>
                     <CoverageStatus row={row} />
-                  </div>
+                  </UI.Content>
                 </TableCell>
                 <TableCell>
                   <Button
@@ -157,9 +162,9 @@ export function CoverageWindowTable({
             ))}
           </TableBody>
         </Table>
-      </div>
+      </UI.Content>
 
-      <div className="mt-6 grid gap-3 md:hidden">
+      <UI.Content className="mt-6 grid gap-3 md:hidden">
         {items.map((row) => (
           <Card
             key={row.window_id}
@@ -167,9 +172,9 @@ export function CoverageWindowTable({
           >
             <CardHeader>
               <CardTitle asChild>
-                <h3>
+                <UI.Heading level={3}>
                   {row.source_key} · {capabilityLabel(row.capability)}
-                </h3>
+                </UI.Heading>
               </CardTitle>
               <CardDescription>{coverageTime(row.due_at)}</CardDescription>
               <CardAction>
@@ -184,12 +189,12 @@ export function CoverageWindowTable({
               </CardAction>
             </CardHeader>
             <CardContent className="flex flex-col gap-2">
-              <p>{admissionLabel(row.admission_state)}</p>
+              <UI.Text>{admissionLabel(row.admission_state)}</UI.Text>
               <CoverageStatus row={row} />
             </CardContent>
           </Card>
         ))}
-      </div>
+      </UI.Content>
     </>
   );
 }

@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import { cn } from "@/lib/utils";
 import {
   cleanHtml,
@@ -36,7 +37,7 @@ export function Viewer({
             headingOffset,
           );
   return (
-    <div
+    <UI.Content
       data-slot="viewer"
       className={cn("rich-content min-w-0 break-words", className)}
       dangerouslySetInnerHTML={{ __html: html }}

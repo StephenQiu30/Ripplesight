@@ -97,25 +97,9 @@ const eslintConfig = defineConfig([
         },
         {
           selector:
-            "JSXOpeningElement[name.name=/^(button|input|select|option|textarea|details|summary|dialog|table|thead|tbody|tfoot|tr|th|td|caption|hr|progress|label|fieldset|legend|nav)$/]",
+            "JSXOpeningElement[name.type='JSXIdentifier'][name.name=/^[a-z]/]",
           message:
-            "页面控件必须组合 src/components/ui 中的官方 shadcn/ui + Radix 组件。",
-        },
-        {
-          selector:
-            "JSXOpeningElement[name.name=/^(div|section|article|aside|li|span|p|h[2-6])$/] > JSXAttribute[name.name='className'][value.value=/(^| )(rounded|shadow|divide-y|border-t|border-b|border-y)(-| |$)/]",
-          message:
-            "面板、提示和分隔线必须使用 shadcn 的 Item、Alert、Separator 等组件。",
-        },
-        {
-          selector:
-            "JSXOpeningElement[name.name='p'] > JSXAttribute[name.name='role'][value.value='status']",
-          message: "状态消息使用 shadcn 的 Alert 或 Spinner + Item 组合。",
-        },
-        {
-          selector:
-            "JSXOpeningElement[name.name=/^(div|span|p)$/] > JSXAttribute[name.name='role'][value.value=/^(button|checkbox|switch|tab|dialog|alert)$/]",
-          message: "使用对应的 shadcn/Radix 交互组件，不手写交互角色。",
+            "业务页面和布局必须组合 shadcn/Radix 及 UI 语义组件；原生标签仅允许在 src/components/ui 中实现。",
         },
       ],
     },

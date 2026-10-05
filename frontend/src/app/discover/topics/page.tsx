@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import {
   Item,
   ItemContent,
@@ -38,17 +39,21 @@ export default async function PublicTopicsPage() {
   return (
     <>
       <PublicationNavigation />
-      <div className="flex flex-col gap-y-10">
-        <header>
-          <h1 className="text-3xl font-medium">行业专题</h1>
-          <p className="text-muted-foreground mt-3 text-sm">
+      <UI.Content className="flex flex-col gap-y-10">
+        <UI.Content as="header">
+          <UI.Heading level={1} className="text-3xl font-medium">
+            行业专题
+          </UI.Heading>
+          <UI.Text className="text-muted-foreground mt-3 text-sm">
             围绕明确的主体与技术信号，持续阅读当前可公开的精选材料。
-          </p>
-        </header>
+          </UI.Text>
+        </UI.Content>
         {groups.map(([group, label]) => (
-          <section key={group}>
-            <h2 className="mb-4 text-lg font-medium">{label}</h2>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <UI.Content as="section" key={group}>
+            <UI.Heading level={2} className="mb-4 text-lg font-medium">
+              {label}
+            </UI.Heading>
+            <UI.Content className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {directory.topics
                 .filter((topic) => topic.group === group)
                 .map((topic) => (
@@ -56,22 +61,22 @@ export default async function PublicTopicsPage() {
                     <Link href={`/discover/topics/${topic.slug}`}>
                       <ItemContent className="min-w-0 gap-3">
                         <ItemTitle>
-                          <h3>{topic.name}</h3>
+                          <UI.Heading level={3}>{topic.name}</UI.Heading>
                         </ItemTitle>
                         <ItemDescription className="line-clamp-none">
                           {topic.definition}
                         </ItemDescription>
-                        <p className="mt-4 text-xs">
+                        <UI.Text className="mt-4 text-xs">
                           {topic.total} 篇精选 · 最近 30 天 {topic.recent} 篇
-                        </p>
+                        </UI.Text>
                       </ItemContent>
                     </Link>
                   </Item>
                 ))}
-            </div>
-          </section>
+            </UI.Content>
+          </UI.Content>
         ))}
-      </div>
+      </UI.Content>
     </>
   );
 }

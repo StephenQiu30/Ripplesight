@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import {
   Item,
   ItemContent,
@@ -107,24 +109,27 @@ export function EventList() {
   }
 
   return (
-    <div>
-      <div className="flex flex-wrap items-end justify-between gap-5">
-        <div>
-          <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
+    <UI.Content>
+      <UI.Content className="flex flex-wrap items-end justify-between gap-5">
+        <UI.Content>
+          <UI.Heading
+            level={1}
+            className="text-3xl font-medium tracking-tight sm:text-4xl"
+          >
             已确认事件
-          </h1>
-          <p className="text-muted-foreground mt-4 leading-7">
+          </UI.Heading>
+          <UI.Text className="text-muted-foreground mt-4 leading-7">
             阅读已归并的事件与对应的固定版本证据。
-          </p>
-        </div>
+          </UI.Text>
+        </UI.Content>
         <Button
           variant="outline"
           onClick={() => setRefresh((value) => value + 1)}
         >
           刷新事件
         </Button>
-      </div>
-      <form onSubmit={applyFilters}>
+      </UI.Content>
+      <UI.Form onSubmit={applyFilters}>
         <FieldGroup className="mt-8 grid items-end gap-5 sm:grid-cols-2 lg:grid-cols-4">
           <Field>
             <FieldLabel htmlFor="event-query">搜索事件</FieldLabel>
@@ -170,14 +175,14 @@ export function EventList() {
           </Field>
           <Button type="submit">应用筛选</Button>
         </FieldGroup>
-      </form>
+      </UI.Form>
       <EventHotList topicId={params.topic_id ?? undefined} />
       <EventResults
         key={`${JSON.stringify(params)}:${refresh}`}
         params={params}
         sources={sources}
       />
-    </div>
+    </UI.Content>
   );
 }
 
@@ -251,11 +256,14 @@ function EventResults({
 
   if (state.status === "loading")
     return (
-      <div aria-label="正在读取事件" className="mt-10 flex flex-col gap-y-5">
+      <UI.Content
+        aria-label="正在读取事件"
+        className="mt-10 flex flex-col gap-y-5"
+      >
         {[1, 2, 3].map((id) => (
           <Skeleton key={id} className="h-28 w-full" />
         ))}
-      </div>
+      </UI.Content>
     );
   if (state.status === "error")
     return (
@@ -280,7 +288,8 @@ function EventResults({
     sources.map((source) => [source.source_key, source.display_name]),
   );
   return (
-    <section
+    <UI.Content
+      as="section"
       aria-label="已确认事件列表"
       className="mt-10 flex flex-col gap-y-8"
     >
@@ -299,28 +308,28 @@ function EventResults({
       ) : (
         state.page.items.map((item) => (
           <Item variant="muted" key={item.id} asChild>
-            <article className="p-6">
+            <UI.Content as="article" className="p-6">
               <ItemContent className="min-w-0 gap-3">
-                <div className="flex flex-wrap items-center gap-3">
+                <UI.Content className="flex flex-wrap items-center gap-3">
                   <Badge variant="secondary">
                     {item.evidence_state === "partial"
                       ? "部分证据可读"
                       : "已确认"}
                   </Badge>
-                  <span className="text-muted-foreground text-sm">
+                  <UI.Text as="span" className="text-muted-foreground text-sm">
                     {item.readable_member_count} / {item.member_count}{" "}
                     条成员可读
-                  </span>
-                </div>
+                  </UI.Text>
+                </UI.Content>
                 <ItemTitle className="line-clamp-none w-full">
-                  <h2 className="mt-4">
+                  <UI.Heading level={2} className="mt-4">
                     <Link
                       className="underline-offset-4 hover:underline"
                       href={`/events/${item.id}`}
                     >
                       {item.title ?? "证据暂不可读的事件"}
                     </Link>
-                  </h2>
+                  </UI.Heading>
                 </ItemTitle>
                 {item.summary ? (
                   <ItemDescription className="mt-3 line-clamp-none leading-7">
@@ -344,7 +353,7 @@ function EventResults({
                   ：{new Date(item.first_seen_at).toLocaleString("zh-CN")}
                 </ItemDescription>
               </ItemContent>
-            </article>
+            </UI.Content>
           </Item>
         ))
       )}
@@ -357,6 +366,6 @@ function EventResults({
           {loadingMore ? "正在读取更多事件…" : "加载更多事件"}
         </Button>
       ) : null}
-    </section>
+    </UI.Content>
   );
 }

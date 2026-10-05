@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { toast } from "sonner";
 
@@ -287,11 +288,11 @@ function QueryFailure({
         {failure.kind === "forbidden" ? "记录不存在或无权查看" : title}
       </AlertTitle>
       <AlertDescription>
-        <p>
+        <UI.Text>
           {failure.kind === "forbidden"
             ? "请检查当前账户的访问权限。"
             : "请重新加载当前查询。"}
-        </p>
+        </UI.Text>
         {failure.kind === "error" ? (
           <Button type="button" size="sm" variant="outline" onClick={onRetry}>
             <RotateCcwIcon data-icon="inline-start" />
@@ -319,21 +320,29 @@ function MetricSummary({
   value: HotKeyAPI.CollectionCoverageMetricsView;
 }) {
   return (
-    <section aria-labelledby="coverage-metrics-heading" className="mt-10">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h3 id="coverage-metrics-heading" className="text-lg font-semibold">
+    <UI.Content
+      as="section"
+      aria-labelledby="coverage-metrics-heading"
+      className="mt-10"
+    >
+      <UI.Content className="flex flex-wrap items-baseline justify-between gap-3">
+        <UI.Heading
+          level={3}
+          id="coverage-metrics-heading"
+          className="text-lg font-semibold"
+        >
           逐来源指标
-        </h3>
-        <p className="text-muted-foreground text-xs">
+        </UI.Heading>
+        <UI.Text className="text-muted-foreground text-xs">
           统计截止：{coverageTime(value.cutoff_at)}
-        </p>
-      </div>
-      <p className="text-muted-foreground mt-2 text-sm">
+        </UI.Text>
+      </UI.Content>
+      <UI.Text className="text-muted-foreground mt-2 text-sm">
         {value.analysis_status === "not_computable"
           ? "分析时效尚不可计算。"
           : `分析状态：${value.analysis_status}。`}
         热榜相位未完成冻结验证时，延迟结论与成功桶比例仅供核对。
-      </p>
+      </UI.Text>
       {value.sources.length === 0 ? (
         <Empty className="mt-4">
           <EmptyHeader>
@@ -342,18 +351,18 @@ function MetricSummary({
           </EmptyHeader>
         </Empty>
       ) : (
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <UI.Content className="mt-4 grid gap-3 md:grid-cols-2">
           {value.sources.map((source) => (
             <Card key={`${source.source_key}:${source.capability}`}>
               <CardHeader>
                 <CardTitle asChild>
-                  <h4>
+                  <UI.Heading level={4}>
                     {source.source_key} · {capabilityLabel(source.capability)}
-                  </h4>
+                  </UI.Heading>
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex flex-wrap items-start justify-between gap-2">
+                <UI.Content className="flex flex-wrap items-start justify-between gap-2">
                   <Badge
                     variant={
                       source.timing.result === "failed"
@@ -363,13 +372,13 @@ function MetricSummary({
                   >
                     {TIMING_LABELS[source.timing.result]}
                   </Badge>
-                </div>
-                <p className="mt-3 text-sm">
+                </UI.Content>
+                <UI.Text className="mt-3 text-sm">
                   到期 {source.timing.due_count} · 排除{" "}
                   {source.timing.excluded_count} · 超时{" "}
                   {source.timing.timeout_count}
-                </p>
-                <p className="text-muted-foreground mt-1 text-sm">
+                </UI.Text>
+                <UI.Text className="text-muted-foreground mt-1 text-sm">
                   中位延迟：
                   {source.timing.median_seconds === null
                     ? "未知"
@@ -378,18 +387,18 @@ function MetricSummary({
                   source.timing.median_lower_bound_seconds !== null
                     ? `（下界 ${source.timing.median_lower_bound_seconds} 秒）`
                     : ""}
-                </p>
+                </UI.Text>
                 {source.hotlist ? (
-                  <p className="text-muted-foreground mt-2 text-sm">
+                  <UI.Text className="text-muted-foreground mt-2 text-sm">
                     热榜桶：成功 {source.hotlist.success_count} / 应到{" "}
                     {source.hotlist.expected_count}
                     {source.hotlist.phase_verified
                       ? " · 相位已验证"
                       : " · 相位未验证"}
-                  </p>
+                  </UI.Text>
                 ) : null}
                 {source.exclusions.length > 0 ? (
-                  <p className="text-muted-foreground mt-2 text-xs">
+                  <UI.Text className="text-muted-foreground mt-2 text-xs">
                     排除依据：
                     {source.exclusions
                       .map(
@@ -397,14 +406,14 @@ function MetricSummary({
                           `${item.reason} · ${item.evidence_id.slice(0, 8)}`,
                       )
                       .join("；")}
-                  </p>
+                  </UI.Text>
                 ) : null}
               </CardContent>
             </Card>
           ))}
-        </div>
+        </UI.Content>
       )}
-    </section>
+    </UI.Content>
   );
 }
 
@@ -668,19 +677,24 @@ export function SourceCoveragePanel() {
       ];
 
   return (
-    <section
+    <UI.Content
+      as="section"
       id="coverage"
       aria-labelledby="source-coverage-heading"
       className="flex flex-col gap-6"
     >
-      <div className="flex flex-col gap-2">
-        <h2 id="source-coverage-heading" className="text-xl font-medium">
+      <UI.Content className="flex flex-col gap-2">
+        <UI.Heading
+          level={2}
+          id="source-coverage-heading"
+          className="text-xl font-medium"
+        >
           采集覆盖
-        </h2>
-        <p className="text-muted-foreground max-w-2xl text-sm leading-6">
+        </UI.Heading>
+        <UI.Text className="text-muted-foreground max-w-2xl text-sm leading-6">
           查看来源在指定时间内的采集记录。时间输入与列表均为北京时间。
-        </p>
-      </div>
+        </UI.Text>
+      </UI.Content>
       {sourcesFailure ? (
         <QueryFailure
           title="来源选项加载失败"
@@ -688,7 +702,7 @@ export function SourceCoveragePanel() {
           onRetry={() => setSourcesRefresh((count) => count + 1)}
         />
       ) : null}
-      <form onSubmit={applyFilters}>
+      <UI.Form onSubmit={applyFilters}>
         <FieldGroup className="grid gap-5 sm:grid-cols-2">
           <Field>
             <FieldLabel htmlFor="coverage-source">来源</FieldLabel>
@@ -773,12 +787,12 @@ export function SourceCoveragePanel() {
             <FieldDescription>
               时间范围不超过 31 天，包含起点，不包含终点。
             </FieldDescription>
-            <div>
+            <UI.Content>
               <Button type="submit">查询窗口</Button>
-            </div>
+            </UI.Content>
           </Field>
         </FieldGroup>
-      </form>
+      </UI.Form>
       {!applied ? (
         <Alert>
           <AlertTitle>请确认查询条件</AlertTitle>
@@ -795,10 +809,10 @@ export function SourceCoveragePanel() {
             <TabsTrigger value="metrics">指标核对</TabsTrigger>
           </TabsList>
           <TabsContent value="windows">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <p className="text-muted-foreground max-w-lg text-sm leading-6">
+            <UI.Content className="flex flex-wrap items-start justify-between gap-4">
+              <UI.Text className="text-muted-foreground max-w-lg text-sm leading-6">
                 没有任务的到期记录仍保留；未知计数不显示为 0。
-              </p>
+              </UI.Text>
               <Button
                 ref={refreshButton}
                 type="button"
@@ -809,16 +823,16 @@ export function SourceCoveragePanel() {
                 <RotateCcwIcon data-icon="inline-start" />
                 刷新
               </Button>
-            </div>
+            </UI.Content>
             {!visibleList ? (
-              <div
+              <UI.Content
                 aria-label="正在读取覆盖窗口"
                 className="mt-5 flex flex-col gap-3"
               >
                 <Skeleton className="h-16 w-full" />
                 <Skeleton className="h-16 w-full" />
                 <Skeleton className="h-16 w-full" />
-              </div>
+              </UI.Content>
             ) : visibleList.status === "error" ? (
               <QueryFailure
                 title="覆盖窗口加载失败"
@@ -859,7 +873,7 @@ export function SourceCoveragePanel() {
                   }}
                 />
                 {visibleList.nextCursor ? (
-                  <div className="mt-6 flex justify-center">
+                  <UI.Content className="mt-6 flex justify-center">
                     <Button
                       type="button"
                       variant="outline"
@@ -868,20 +882,20 @@ export function SourceCoveragePanel() {
                     >
                       {loadingMore ? "正在加载…" : "加载更多"}
                     </Button>
-                  </div>
+                  </UI.Content>
                 ) : null}
               </>
             )}
           </TabsContent>
           <TabsContent value="metrics">
             {!visibleMetrics ? (
-              <div
+              <UI.Content
                 aria-label="正在读取逐来源指标"
                 className="grid gap-3 sm:grid-cols-2"
               >
                 <Skeleton className="h-36" />
                 <Skeleton className="h-36" />
-              </div>
+              </UI.Content>
             ) : visibleMetrics.status === "error" ? (
               <QueryFailure
                 title="逐来源指标加载失败"
@@ -927,7 +941,7 @@ export function SourceCoveragePanel() {
               <XIcon data-icon="inline-start" />
             </Button>
           </SheetClose>
-          <div className="px-4 pb-8">
+          <UI.Content className="px-4 pb-8">
             {!visibleDetail ? (
               <Skeleton aria-label="正在读取窗口详情" className="h-64 w-full" />
             ) : visibleDetail.status === "error" ? (
@@ -957,9 +971,9 @@ export function SourceCoveragePanel() {
                 onClose={closeDetail}
               />
             )}
-          </div>
+          </UI.Content>
         </SheetContent>
       </Sheet>
-    </section>
+    </UI.Content>
   );
 }

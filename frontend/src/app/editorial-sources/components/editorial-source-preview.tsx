@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Separator } from "@/components/ui/separator";
 
 import {
@@ -206,16 +208,22 @@ export function EditorialSourcePreview({
   const allowed = !!token && !!reason.trim() && !busy;
   return (
     <Item variant="muted" asChild>
-      <section aria-label="配置试抓" className="flex flex-col gap-y-4 p-5">
+      <UI.Content
+        as="section"
+        aria-label="配置试抓"
+        className="flex flex-col gap-y-4 p-5"
+      >
         <ItemContent className="min-w-0 gap-3">
           <ItemTitle className="line-clamp-none w-full">
-            <h3>配置试抓</h3>
+            <UI.Heading level={3}>配置试抓</UI.Heading>
           </ItemTitle>
           <ItemDescription className="line-clamp-none leading-7">
             试抓不写入正式材料、不推进采集游标。本地样本只解析当前表单；远程试抓使用已保存配置，可能产生来源费用，仍需现行许可与预算。
           </ItemDescription>
           {unsupported ? (
-            <p>公众号与外部摄入不支持试抓；请使用对应的正式有界入口。</p>
+            <UI.Text>
+              公众号与外部摄入不支持试抓；请使用对应的正式有界入口。
+            </UI.Text>
           ) : (
             <>
               <Label htmlFor="source-preview-reason">试抓原因</Label>
@@ -252,17 +260,17 @@ export function EditorialSourcePreview({
                   X 本地样本解析未提供；保存并批准官方连接后可受理单页远程试抓。
                 </ItemDescription>
               )}
-              <div className="flex flex-col gap-y-3 pt-4">
+              <UI.Content className="flex flex-col gap-y-3 pt-4">
                 <Separator />
-                <p className="text-sm">
+                <UI.Text className="text-sm">
                   {profileId
                     ? `远程试抓预期来源修订 ${expectedRevision}。未保存的表单改动不会参与远程试抓。`
                     : "远程试抓需要先保存关闭来源配置，再批准许可与来源开关。"}
-                </p>
-                <p className="text-muted-foreground text-sm">
+                </UI.Text>
+                <UI.Text className="text-muted-foreground text-sm">
                   远程试抓只读列表，X 限单页；网页不抓取详情。仅显示最多 20
                   条摘要，不能用来证明全历史完整。
-                </p>
+                </UI.Text>
                 <Button
                   disabled={
                     !allowed ||
@@ -276,16 +284,16 @@ export function EditorialSourcePreview({
                   受理远程试抓
                 </Button>
                 {profileId && !sourceEnabled ? (
-                  <p className="text-muted-foreground text-sm">
+                  <UI.Text className="text-muted-foreground text-sm">
                     已保存来源尚未启用；本地样本仍可解析。
-                  </p>
+                  </UI.Text>
                 ) : null}
-              </div>
+              </UI.Content>
             </>
           )}
           {job ? (
-            <div className="flex flex-col gap-y-3 text-sm">
-              <p>
+            <UI.Content className="flex flex-col gap-y-3 text-sm">
+              <UI.Text>
                 试抓任务 {jobStatus?.status ?? job.status} ·{" "}
                 <Link
                   href={`/jobs/${job.id}`}
@@ -293,7 +301,7 @@ export function EditorialSourcePreview({
                 >
                   查看任务回执
                 </Link>
-              </p>
+              </UI.Text>
               <Button
                 variant="outline"
                 disabled={busy || !token}
@@ -310,10 +318,10 @@ export function EditorialSourcePreview({
                   </EmptyHeader>
                 </Empty>
               ) : null}
-            </div>
+            </UI.Content>
           ) : null}
           {preview ? (
-            <div className="flex flex-col gap-y-3 text-sm">
+            <UI.Content className="flex flex-col gap-y-3 text-sm">
               <Alert role="status">
                 <AlertDescription>
                   {statuses[preview.status]} ·{" "}
@@ -323,17 +331,17 @@ export function EditorialSourcePreview({
                 </AlertDescription>
               </Alert>
               {preview.reason ? (
-                <p className="break-words">{preview.reason}</p>
+                <UI.Text className="break-words">{preview.reason}</UI.Text>
               ) : null}
               {preview.status === "unknown" ? (
-                <div className="flex flex-col gap-y-3">
-                  <p>
+                <UI.Content className="flex flex-col gap-y-3">
+                  <UI.Text>
                     请先在任务回执核验未知结果，不会自动重试或额外发送收费请求。人工核对保留原未知结果与保守预算回执。
-                  </p>
+                  </UI.Text>
                   {reviewed ? (
-                    <p>
+                    <UI.Text>
                       已记录人工核对；原结果仍为未知。如确需再次试抓，请显式点击受理远程试抓，新任务仍需当前许可与预算。
-                    </p>
+                    </UI.Text>
                   ) : job?.operation_id ? (
                     <Button
                       variant="outline"
@@ -343,16 +351,21 @@ export function EditorialSourcePreview({
                       已核对未知试抓
                     </Button>
                   ) : null}
-                </div>
+                </UI.Content>
               ) : null}
               {!preview.items.length && preview.status === "complete" ? (
-                <p>本次已完成解析，未发现候选；不表示来源历史为空。</p>
+                <UI.Text>
+                  本次已完成解析，未发现候选；不表示来源历史为空。
+                </UI.Text>
               ) : null}
               {preview.items.map((item, index) => (
                 <Item variant="muted" key={`${item.url}:${index}`} asChild>
-                  <article className="flex flex-col gap-y-2 p-3">
+                  <UI.Content
+                    as="article"
+                    className="flex flex-col gap-y-2 p-3"
+                  >
                     <ItemContent className="min-w-0 gap-3">
-                      <p className="font-medium">{item.title}</p>
+                      <UI.Text className="font-medium">{item.title}</UI.Text>
                       <ItemDescription className="line-clamp-none">
                         {item.published_at
                           ? new Date(item.published_at).toLocaleString(
@@ -364,28 +377,28 @@ export function EditorialSourcePreview({
                           : "发布时间未知"}
                       </ItemDescription>
                       {safeExternalHref(item.url) ? (
-                        <a
+                        <UI.TextLink
                           href={safeExternalHref(item.url)!}
                           target="_blank"
                           rel="noreferrer"
                           className="break-all underline underline-offset-4"
                         >
                           {item.url}
-                        </a>
+                        </UI.TextLink>
                       ) : (
-                        <p className="break-all">{item.url}</p>
+                        <UI.Text className="break-all">{item.url}</UI.Text>
                       )}
-                      <p className="break-words whitespace-pre-wrap">
+                      <UI.Text className="break-words whitespace-pre-wrap">
                         {item.excerpt}
-                      </p>
+                      </UI.Text>
                     </ItemContent>
-                  </article>
+                  </UI.Content>
                 </Item>
               ))}
-            </div>
+            </UI.Content>
           ) : null}
         </ItemContent>
-      </section>
+      </UI.Content>
     </Item>
   );
 }

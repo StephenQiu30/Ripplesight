@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import {
   Item,
@@ -131,8 +132,10 @@ export default async function DiscoverPage({
   return (
     <>
       <PublicationNavigation />
-      <div>
-        <h1 className="text-3xl font-medium tracking-tight">值得关注的资讯</h1>
+      <UI.Content>
+        <UI.Heading level={1} className="text-3xl font-medium tracking-tight">
+          值得关注的资讯
+        </UI.Heading>
         <DiscoveryFilters
           key={JSON.stringify(params)}
           mode={mode}
@@ -161,8 +164,8 @@ export default async function DiscoverPage({
             ]).values(),
           )}
         />
-        <div className="grid gap-12 lg:grid-cols-3">
-          <section className="lg:col-span-2">
+        <UI.Content className="grid gap-12 lg:grid-cols-3">
+          <UI.Content as="section" className="lg:col-span-2">
             <PublicSourceStatus sources={page.source_status ?? []} />
             {timeline ? (
               <PublicTimelineCards page={timeline} />
@@ -174,10 +177,12 @@ export default async function DiscoverPage({
                 <Link href={`/discover?${next}`}>下一页</Link>
               </Button>
             ) : null}
-          </section>
-          <aside className="flex flex-col gap-y-10">
-            <section>
-              <h2 className="font-medium">事件热度</h2>
+          </UI.Content>
+          <UI.Content as="aside" className="flex flex-col gap-y-10">
+            <UI.Content as="section">
+              <UI.Heading level={2} className="font-medium">
+                事件热度
+              </UI.Heading>
               {hot?.stories.length ? (
                 <ItemGroup className="mt-4 flex flex-col gap-y-5">
                   {hot.stories.map((story) => (
@@ -206,11 +211,11 @@ export default async function DiscoverPage({
                   </EmptyHeader>
                 </Empty>
               )}
-            </section>
+            </UI.Content>
             <SavedItems />
-          </aside>
-        </div>
-      </div>
+          </UI.Content>
+        </UI.Content>
+      </UI.Content>
     </>
   );
 }

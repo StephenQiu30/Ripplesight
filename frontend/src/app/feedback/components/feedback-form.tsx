@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { FieldGroup, FieldLabel, Field } from "@/components/ui/field";
 import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -92,7 +94,7 @@ export function FeedbackForm() {
     }
   }
   return (
-    <form onSubmit={submit}>
+    <UI.Form onSubmit={submit}>
       <FieldGroup className="mt-8 grid gap-5">
         <Field className="min-w-0">
           <FieldLabel htmlFor={`${fieldId}-feedback-form-field-1`}>
@@ -157,6 +159,6 @@ export function FeedbackForm() {
           {pending ? "正在提交" : "提交反馈"}
         </Button>
       </FieldGroup>
-    </form>
+    </UI.Form>
   );
 }

@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -69,12 +71,20 @@ export function EventHeat({ eventId }: { eventId: string }) {
     return () => controller.abort();
   }, [eventId, retry]);
   return (
-    <section className="mt-10" aria-labelledby="event-heat-heading">
-      <h2 id="event-heat-heading" className="text-2xl font-medium">
+    <UI.Content
+      as="section"
+      className="mt-10"
+      aria-labelledby="event-heat-heading"
+    >
+      <UI.Heading
+        level={2}
+        id="event-heat-heading"
+        className="text-2xl font-medium"
+      >
         当前事件热度
-      </h2>
+      </UI.Heading>
       {failed ? (
-        <div className="mt-4">
+        <UI.Content className="mt-4">
           <Alert>
             <AlertDescription>热度读取失败。</AlertDescription>
           </Alert>
@@ -84,7 +94,7 @@ export function EventHeat({ eventId }: { eventId: string }) {
           >
             重试热度
           </Button>
-        </div>
+        </UI.Content>
       ) : !data ? (
         <Item className="mt-4" role="status">
           <Spinner aria-hidden="true" />
@@ -96,7 +106,7 @@ export function EventHeat({ eventId }: { eventId: string }) {
         </Item>
       ) : (
         <>
-          <div className="mt-4 flex flex-wrap gap-3">
+          <UI.Content className="mt-4 flex flex-wrap gap-3">
             <Badge variant="secondary">
               48 小时热度{" "}
               {data.participant_count ? data.heat.toFixed(1) : "待确定"}
@@ -113,8 +123,8 @@ export function EventHeat({ eventId }: { eventId: string }) {
             {data.badges.map((value) => (
               <Badge key={value}>{badges[value]}</Badge>
             ))}
-          </div>
-          <p className="text-muted-foreground mt-4 leading-7">
+          </UI.Content>
+          <UI.Text className="text-muted-foreground mt-4 leading-7">
             编辑来源 {data.editorial_participant_count} 个，讨论来源{" "}
             {data.signal_participant_count} 个。
             {data.eligible
@@ -124,10 +134,10 @@ export function EventHeat({ eventId }: { eventId: string }) {
             {data.uncomparable_participant_count
               ? ` ${data.uncomparable_participant_count} 个参与者因新增或采集时钟不足未用于趋势比较。`
               : ""}
-          </p>
-          <p className="text-muted-foreground mt-2 text-sm">
+          </UI.Text>
+          <UI.Text className="text-muted-foreground mt-2 text-sm">
             {data.formula_version} · 24 小时半衰期 · 对比 6 小时前同一可比来源组
-          </p>
+          </UI.Text>
           {data.roster.length ? (
             <ItemGroup className="mt-4 grid gap-3 sm:grid-cols-2">
               {data.roster.map((source) => (
@@ -138,37 +148,37 @@ export function EventHeat({ eventId }: { eventId: string }) {
                   key={source.participant_key}
                 >
                   <ItemContent className="min-w-0 gap-3">
-                    <p className="font-medium">
+                    <UI.Text className="font-medium">
                       {source.source_name}{" "}
                       {source.first_party ? "· 一手来源" : ""}
-                    </p>
+                    </UI.Text>
                     <ItemDescription className="mt-1 line-clamp-none">
                       {source.mode === "editorial" ? "编辑报道" : "讨论信号"}
                       {source.tier ? ` · ${source.tier}` : ""} ·{" "}
                       {new Date(source.source_time).toLocaleString("zh-CN")}
                     </ItemDescription>
-                    <p className="mt-2 text-sm break-words">
+                    <UI.Text className="mt-2 text-sm break-words">
                       {source.title ?? "固定版本证据"}
-                    </p>
+                    </UI.Text>
                   </ItemContent>
                 </Item>
               ))}
             </ItemGroup>
           ) : (
-            <p className="text-muted-foreground mt-4">
+            <UI.Text className="text-muted-foreground mt-4">
               尚未配置可参与计算的来源身份。
-            </p>
+            </UI.Text>
           )}
           {data.interaction ? (
             <Item variant="outline" asChild>
-              <div className="mt-6 p-4">
+              <UI.Content className="mt-6 p-4">
                 <ItemContent className="min-w-0 gap-3">
-                  <p className="font-medium">
+                  <UI.Text className="font-medium">
                     互动热度{" "}
                     {data.interaction.score == null
                       ? "待确定"
                       : data.interaction.score.toFixed(2)}
-                  </p>
+                  </UI.Text>
                   <ItemDescription className="mt-2 line-clamp-none">
                     按赞、评、转、浏览计算独立指标，未知值保留。
                     {data.interaction.rising_state === "insufficient"
@@ -178,7 +188,7 @@ export function EventHeat({ eventId }: { eventId: string }) {
                         : "近期互动保持平稳。"}
                   </ItemDescription>
                 </ItemContent>
-              </div>
+              </UI.Content>
             </Item>
           ) : null}
           <Collapsible className="mt-6">
@@ -188,9 +198,9 @@ export function EventHeat({ eventId }: { eventId: string }) {
                 variant="ghost"
                 className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
               >
-                <span className="min-w-0 text-left">
+                <UI.Text as="span" className="min-w-0 text-left">
                   小时热度历史（{history.length}）
-                </span>
+                </UI.Text>
                 <ChevronDownIcon
                   aria-hidden="true"
                   data-icon="inline-end"
@@ -203,7 +213,7 @@ export function EventHeat({ eventId }: { eventId: string }) {
               className="data-[state=closed]:hidden"
             >
               {history.length ? (
-                <div className="mt-3 overflow-x-auto">
+                <UI.Content className="mt-3 overflow-x-auto">
                   <Table className="w-full text-sm">
                     <TableHeader>
                       <TableRow className="border-b text-left">
@@ -228,7 +238,7 @@ export function EventHeat({ eventId }: { eventId: string }) {
                       ))}
                     </TableBody>
                   </Table>
-                </div>
+                </UI.Content>
               ) : (
                 <Empty className="mt-3">
                   <EmptyHeader>
@@ -242,6 +252,6 @@ export function EventHeat({ eventId }: { eventId: string }) {
           </Collapsible>
         </>
       )}
-    </section>
+    </UI.Content>
   );
 }

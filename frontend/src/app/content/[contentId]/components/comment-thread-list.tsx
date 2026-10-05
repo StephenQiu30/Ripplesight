@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { toast } from "sonner";
 
@@ -175,8 +176,8 @@ export function CommentCard({
   const relationNotice = parentRelationLabel(comment.parent_relation_status);
 
   return (
-    <article className="py-4">
-      <div className="flex flex-wrap items-center gap-2">
+    <UI.Content as="article" className="py-4">
+      <UI.Content className="flex flex-wrap items-center gap-2">
         <Badge variant={observation ? "secondary" : "outline"}>
           {observation ? "已保存评论" : "关系占位"}
         </Badge>
@@ -184,31 +185,35 @@ export function CommentCard({
           <Badge variant="outline">{relationNotice}</Badge>
         ) : null}
         {observation ? (
-          <span className="text-muted-foreground text-xs">
+          <UI.Text as="span" className="text-muted-foreground text-xs">
             观察于 {formatTime(observation.observed_at)}
-          </span>
+          </UI.Text>
         ) : null}
-      </div>
+      </UI.Content>
       {body ? (
-        <p className="mt-3 leading-7 break-words whitespace-pre-wrap">{body}</p>
+        <UI.Text className="mt-3 leading-7 break-words whitespace-pre-wrap">
+          {body}
+        </UI.Text>
       ) : (
-        <p className="text-muted-foreground mt-3 text-sm">
+        <UI.Text className="text-muted-foreground mt-3 text-sm">
           {observation
             ? "未取得评论正文"
             : "此节点暂无可读正文，保留其线程关系。"}
-        </p>
+        </UI.Text>
       )}
       {context ? (
-        <p className="text-muted-foreground mt-2 text-xs">{context}</p>
+        <UI.Text className="text-muted-foreground mt-2 text-xs">
+          {context}
+        </UI.Text>
       ) : null}
       {observation ? (
-        <p className="text-muted-foreground mt-3 text-xs">
+        <UI.Text className="text-muted-foreground mt-3 text-xs">
           作者 {observation.author_external_id ?? "未知"} · 点赞{" "}
           {formatMetric(observation.metrics.like_count)}
-        </p>
+        </UI.Text>
       ) : null}
       {externalHref ? (
-        <a
+        <UI.TextLink
           className="mt-3 inline-flex items-center gap-1 text-sm underline underline-offset-4"
           href={externalHref}
           target="_blank"
@@ -216,9 +221,9 @@ export function CommentCard({
         >
           打开原评论
           <ExternalLinkIcon className="size-3" aria-hidden="true" />
-        </a>
+        </UI.TextLink>
       ) : null}
-    </article>
+    </UI.Content>
   );
 }
 
@@ -233,7 +238,9 @@ function PageNotice({
 }) {
   if (state.status === "loading") {
     return (
-      <p className="text-muted-foreground mt-4 text-sm">正在读取已保存评论…</p>
+      <UI.Text className="text-muted-foreground mt-4 text-sm">
+        正在读取已保存评论…
+      </UI.Text>
     );
   }
   if (state.status === "error") {
@@ -270,7 +277,7 @@ function MoreButton({
   onClick: () => void;
 }) {
   return (
-    <div className="mt-4">
+    <UI.Content className="mt-4">
       {cursor ? (
         <Button
           type="button"
@@ -281,7 +288,7 @@ function MoreButton({
           {loading ? "正在加载…" : "加载更多已保存评论"}
         </Button>
       ) : null}
-    </div>
+    </UI.Content>
   );
 }
 
@@ -299,7 +306,7 @@ function CommentBranch({
       : [],
   );
   return (
-    <div className="mt-3 flex flex-col gap-6 pl-3 sm:pl-6">
+    <UI.Content className="mt-3 flex flex-col gap-6 pl-3 sm:pl-6">
       <PageNotice
         state={page.state}
         onRetry={() => void page.reload()}
@@ -321,7 +328,7 @@ function CommentBranch({
           onClick={() => void page.loadMore()}
         />
       ) : null}
-    </div>
+    </UI.Content>
   );
 }
 
@@ -354,13 +361,21 @@ function CommentRoot({
 export function CommentThreadList({ postId }: { postId: string }) {
   const page = useCommentPage(postId, null);
   return (
-    <section aria-labelledby="comments-heading" className="mt-10">
-      <h2 id="comments-heading" className="text-xl font-medium">
+    <UI.Content
+      as="section"
+      aria-labelledby="comments-heading"
+      className="mt-10"
+    >
+      <UI.Heading
+        level={2}
+        id="comments-heading"
+        className="text-xl font-medium"
+      >
         已保存评论
-      </h2>
-      <p className="text-muted-foreground mt-2 text-sm leading-6">
+      </UI.Heading>
+      <UI.Text className="text-muted-foreground mt-2 text-sm leading-6">
         按线程根阅读本地仍可读的评论。父链缺口会保留；本地分页结束不代表来源尾段已核对。
-      </p>
+      </UI.Text>
       <CommentRefreshAction postId={postId} />
       <PageNotice
         state={page.state}
@@ -368,11 +383,11 @@ export function CommentThreadList({ postId }: { postId: string }) {
         emptyText="暂无可读评论；当前为空不代表来源没有评论。"
       />
       {page.state.status === "ready" ? (
-        <div className="mt-6 flex flex-col gap-8">
+        <UI.Content className="mt-6 flex flex-col gap-8">
           {page.state.items.map((root) => (
             <CommentRoot key={root.content_id} postId={postId} root={root} />
           ))}
-        </div>
+        </UI.Content>
       ) : null}
       {page.state.status === "ready" ? (
         <MoreButton
@@ -381,6 +396,6 @@ export function CommentThreadList({ postId }: { postId: string }) {
           onClick={() => void page.loadMore()}
         />
       ) : null}
-    </section>
+    </UI.Content>
   );
 }

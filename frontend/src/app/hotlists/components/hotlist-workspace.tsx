@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
 
 import Link from "next/link";
@@ -138,7 +140,7 @@ function InlineState({
   return (
     <Empty className="mt-12">
       <EmptyHeader>
-        <p className="text-muted-foreground text-sm">{eyebrow}</p>
+        <UI.Text className="text-muted-foreground text-sm">{eyebrow}</UI.Text>
         <EmptyTitle>{title}</EmptyTitle>
         <EmptyDescription>{description}</EmptyDescription>
       </EmptyHeader>
@@ -153,11 +155,11 @@ export function SnapshotDetail({
   snapshot: HotKeyAPI.HotlistSnapshotView;
 }) {
   return (
-    <section aria-label="热榜快照" className="mt-10">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <h2 className="text-xl font-medium tracking-tight">
+    <UI.Content as="section" aria-label="热榜快照" className="mt-10">
+      <UI.Content className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <UI.Heading level={2} className="text-xl font-medium tracking-tight">
           {formatHotlistTime(snapshot.observed_at)}
-        </h2>
+        </UI.Heading>
         <Badge variant="secondary">{snapshot.entry_count} 条</Badge>
         {(snapshot.gap_count ?? 0) > 0 ? (
           <Alert className="mt-4">
@@ -167,12 +169,12 @@ export function SnapshotDetail({
             </AlertDescription>
           </Alert>
         ) : null}
-      </div>
-      <p className="text-muted-foreground mt-3 text-sm leading-6">
+      </UI.Content>
+      <UI.Text className="text-muted-foreground mt-3 text-sm leading-6">
         {snapshot.previous_snapshot_id
           ? "排名与同来源前一成功快照比较。"
           : "这是该来源的首个成功快照，所有榜位均为新上榜。"}
-      </p>
+      </UI.Text>
       {snapshot.previous_snapshot_id ? (
         <Link
           className="text-foreground mt-2 inline-flex items-center gap-1 text-sm underline underline-offset-4"
@@ -200,12 +202,15 @@ export function SnapshotDetail({
                 className="py-4"
               >
                 <ItemContent className="min-w-0 gap-3">
-                  <div className="flex items-start gap-4">
-                    <span className="text-muted-foreground w-8 shrink-0 text-xl tabular-nums">
+                  <UI.Content className="flex items-start gap-4">
+                    <UI.Text
+                      as="span"
+                      className="text-muted-foreground w-8 shrink-0 text-xl tabular-nums"
+                    >
                       {entry.rank}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
+                    </UI.Text>
+                    <UI.Content className="min-w-0 flex-1">
+                      <UI.Content className="flex flex-wrap items-center gap-2">
                         <Badge
                           variant={
                             entry.rank_change === "up" ? "secondary" : "outline"
@@ -222,21 +227,24 @@ export function SnapshotDetail({
                         {entry.matched ? (
                           <Badge variant="secondary">命中主题</Badge>
                         ) : null}
-                      </div>
-                      <h3 className="mt-3 text-base leading-7 font-medium break-words">
+                      </UI.Content>
+                      <UI.Heading
+                        level={3}
+                        className="mt-3 text-base leading-7 font-medium break-words"
+                      >
                         {entry.title}
-                      </h3>
+                      </UI.Heading>
                       {entry.summary ? (
-                        <p className="text-muted-foreground mt-2 line-clamp-3 text-sm leading-6 break-words">
+                        <UI.Text className="text-muted-foreground mt-2 line-clamp-3 text-sm leading-6 break-words">
                           {entry.summary}
-                        </p>
+                        </UI.Text>
                       ) : null}
                       {entry.matched_topic_names.length > 0 ? (
-                        <p className="text-muted-foreground mt-3 text-xs">
+                        <UI.Text className="text-muted-foreground mt-3 text-xs">
                           主题：{entry.matched_topic_names.join("、")}
-                        </p>
+                        </UI.Text>
                       ) : null}
-                      <div className="mt-4 flex flex-wrap gap-4 text-sm">
+                      <UI.Content className="mt-4 flex flex-wrap gap-4 text-sm">
                         {entry.content_id ? (
                           <Link
                             className="text-foreground inline-flex items-center gap-1 underline underline-offset-4"
@@ -250,7 +258,7 @@ export function SnapshotDetail({
                           </Link>
                         ) : null}
                         {originalHref ? (
-                          <a
+                          <UI.TextLink
                             className="text-muted-foreground inline-flex items-center gap-1 underline underline-offset-4"
                             href={originalHref}
                             target="_blank"
@@ -261,18 +269,18 @@ export function SnapshotDetail({
                               className="size-4"
                               aria-hidden="true"
                             />
-                          </a>
+                          </UI.TextLink>
                         ) : null}
-                      </div>
-                    </div>
-                  </div>
+                      </UI.Content>
+                    </UI.Content>
+                  </UI.Content>
                 </ItemContent>
               </Item>
             );
           })}
         </ItemGroup>
       )}
-    </section>
+    </UI.Content>
   );
 }
 
@@ -540,13 +548,16 @@ export function HotlistWorkspace() {
     );
 
   return (
-    <div>
-      <h1 className="mt-3 text-3xl font-normal tracking-tight sm:text-4xl">
+    <UI.Content>
+      <UI.Heading
+        level={1}
+        className="mt-3 text-3xl font-normal tracking-tight sm:text-4xl"
+      >
         热榜
-      </h1>
-      <p className="text-muted-foreground mt-4 max-w-2xl leading-7">
+      </UI.Heading>
+      <UI.Text className="text-muted-foreground mt-4 max-w-2xl leading-7">
         选择来源，查看已保存的热榜与排名变化。
-      </p>
+      </UI.Text>
       {sources.items.length > 0 ? (
         <FieldGroup className="mt-8 max-w-sm">
           <Field>
@@ -607,13 +618,13 @@ export function HotlistWorkspace() {
           }
         />
       ) : history?.status !== "ready" || history.sourceKey !== activeSource ? (
-        <div
+        <UI.Content
           aria-label="正在读取历史快照"
           className="mt-10 flex flex-col gap-3"
         >
           <Skeleton className="h-12 w-full" />
           <Skeleton className="h-28 w-full" />
-        </div>
+        </UI.Content>
       ) : history.items.length === 0 ? (
         <InlineState
           eyebrow="尚无快照"
@@ -622,7 +633,7 @@ export function HotlistWorkspace() {
         />
       ) : (
         <>
-          <div className="mt-10">
+          <UI.Content className="mt-10">
             <SnapshotSelector
               snapshots={history.items}
               selectedId={selectedSnapshot ?? ""}
@@ -631,13 +642,13 @@ export function HotlistWorkspace() {
               onSelect={selectSnapshot}
               onLoadMore={() => void loadHistoryMore()}
             />
-          </div>
+          </UI.Content>
           {detail?.status === "ready" &&
           detail.snapshotId === selectedSnapshot ? (
             <>
               <SnapshotDetail snapshot={detail.value} />
               {detail.value.next_cursor ? (
-                <div className="mt-8 flex justify-center">
+                <UI.Content className="mt-8 flex justify-center">
                   <Button
                     variant="secondary"
                     onClick={() => void loadEntriesMore()}
@@ -645,7 +656,7 @@ export function HotlistWorkspace() {
                   >
                     {loadingEntriesMore ? "正在加载" : "加载更多榜位"}
                   </Button>
-                </div>
+                </UI.Content>
               ) : null}
             </>
           ) : detail?.status === "error" &&
@@ -666,16 +677,16 @@ export function HotlistWorkspace() {
               }
             />
           ) : (
-            <div
+            <UI.Content
               aria-label="正在读取榜位"
               className="mt-10 flex flex-col gap-3"
             >
               <Skeleton className="h-28 w-full" />
               <Skeleton className="h-28 w-full" />
-            </div>
+            </UI.Content>
           )}
         </>
       )}
-    </div>
+    </UI.Content>
   );
 }

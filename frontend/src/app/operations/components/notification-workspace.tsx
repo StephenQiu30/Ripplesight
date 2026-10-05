@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Item, ItemContent, ItemDescription } from "@/components/ui/item";
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import { toast } from "sonner";
@@ -137,7 +139,7 @@ function TargetEditor({
     }
   }
   return (
-    <form onSubmit={submit}>
+    <UI.Form onSubmit={submit}>
       <Item variant="muted" asChild>
         <FieldGroup className="grid gap-3 p-4 sm:grid-cols-2">
           <Field className="min-w-0">
@@ -208,7 +210,7 @@ function TargetEditor({
           )}
           <FieldSet className="grid gap-2 sm:col-span-2">
             <FieldLegend className="mb-2">订阅类别</FieldLegend>
-            <div className="flex flex-wrap gap-4">
+            <UI.Content className="flex flex-wrap gap-4">
               {(Object.keys(kinds) as Kind[]).map((kind) => (
                 <Field key={kind} orientation="horizontal" className="w-auto">
                   <Checkbox
@@ -229,7 +231,7 @@ function TargetEditor({
                   </FieldLabel>
                 </Field>
               ))}
-            </div>
+            </UI.Content>
           </FieldSet>
           <Field className="min-w-0 sm:col-span-2">
             <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-6`}>
@@ -257,16 +259,16 @@ function TargetEditor({
             保存通知目标
           </Button>
           {row && (
-            <p className="text-muted-foreground text-sm sm:col-span-2">
+            <UI.Text className="text-muted-foreground text-sm sm:col-span-2">
               修订 {row.revision} · 启用时间{" "}
               {row.enabled_at
                 ? new Date(row.enabled_at).toLocaleString("zh-CN")
                 : "未启用"}
-            </p>
+            </UI.Text>
           )}
         </FieldGroup>
       </Item>
-    </form>
+    </UI.Form>
   );
 }
 function UnknownResolution({
@@ -316,7 +318,7 @@ function UnknownResolution({
     }
   }
   return (
-    <form onSubmit={submit}>
+    <UI.Form onSubmit={submit}>
       <FieldGroup className="mt-3 grid gap-3 sm:grid-cols-2">
         <Field className="min-w-0">
           <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-8`}>
@@ -359,14 +361,14 @@ function UnknownResolution({
             id={`${fieldId}-notification-workspace-field-9`}
           />
         </Field>
-        <p className="text-muted-foreground text-sm sm:col-span-2">
+        <UI.Text className="text-muted-foreground text-sm sm:col-span-2">
           核对仅更新账本与原任务重试资格。确认未送达后，请到原任务显式重试；不会立即重发。
-        </p>
+        </UI.Text>
         <Button type="submit" disabled={busy}>
           保存人工核对
         </Button>
       </FieldGroup>
-    </form>
+    </UI.Form>
   );
 }
 
@@ -448,9 +450,11 @@ export function NotificationWorkspace({ token }: { token: string }) {
   }
   const target = targets.find((row) => row.id === selected);
   return (
-    <section className="grid gap-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-semibold">通知订阅与投递账本</h2>
+    <UI.Content as="section" className="grid gap-5">
+      <UI.Content className="flex flex-wrap items-center justify-between gap-3">
+        <UI.Heading level={2} className="text-xl font-semibold">
+          通知订阅与投递账本
+        </UI.Heading>
         <Button
           variant="secondary"
           disabled={busy}
@@ -458,12 +462,12 @@ export function NotificationWorkspace({ token }: { token: string }) {
         >
           刷新通知状态
         </Button>
-      </div>
-      <p className="text-muted-foreground text-sm">
+      </UI.Content>
+      <UI.Text className="text-muted-foreground text-sm">
         SMTP
         和飞书凭据在服务端环境中配置，新目标默认停用。主题报告还需在关注主题中绑定目标名称；全站刊物由刊物订阅处理。保存启用配置后从新的启用时间开始扫描，首个扫描窗口可能等待
         5 分钟。
-      </p>
+      </UI.Text>
       <Field className="min-w-0">
         <FieldLabel htmlFor={`${fieldId}-notification-workspace-field-10`}>
           选择通知目标
@@ -514,9 +518,9 @@ export function NotificationWorkspace({ token }: { token: string }) {
       )}
       {deliveries.map((row) => (
         <Item variant="muted" key={`${row.id}:${row.revision}`} asChild>
-          <article className="p-4">
+          <UI.Content as="article" className="p-4">
             <ItemContent className="min-w-0 gap-3">
-              <p className="break-all">
+              <UI.Text className="break-all">
                 {kinds[row.subject_kind]} ·{" "}
                 {targets.find((value) => value.id === row.target_id)?.name ??
                   row.target_id}{" "}
@@ -524,14 +528,16 @@ export function NotificationWorkspace({ token }: { token: string }) {
                 {row.status === "succeeded"
                   ? "渠道受理 / 人工确认"
                   : row.status}
-              </p>
+              </UI.Text>
               <ItemDescription className="mt-1 line-clamp-none break-all">
                 主体 {row.subject_id} · 版本 {row.subject_revision} · 尝试{" "}
                 {row.attempt_count}/3 ·{" "}
                 {new Date(row.updated_at).toLocaleString("zh-CN")}
               </ItemDescription>
               {row.last_error_code && (
-                <p className="mt-2 text-sm">{row.last_error_code}</p>
+                <UI.Text className="mt-2 text-sm">
+                  {row.last_error_code}
+                </UI.Text>
               )}
               {Object.keys(row.provider_receipt).length > 0 && (
                 <Collapsible className="mt-3">
@@ -541,9 +547,9 @@ export function NotificationWorkspace({ token }: { token: string }) {
                       variant="ghost"
                       className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
                     >
-                      <span className="min-w-0 text-left">
+                      <UI.Text as="span" className="min-w-0 text-left">
                         渠道实际回执（SMTP 受理不表示已到达收件箱）
-                      </span>
+                      </UI.Text>
                       <ChevronDownIcon
                         aria-hidden="true"
                         data-icon="inline-end"
@@ -555,9 +561,9 @@ export function NotificationWorkspace({ token }: { token: string }) {
                     forceMount
                     className="data-[state=closed]:hidden"
                   >
-                    <pre className="mt-2 overflow-auto text-xs">
+                    <UI.CodeBlock className="mt-2 overflow-auto text-xs">
                       {JSON.stringify(row.provider_receipt, null, 2)}
-                    </pre>
+                    </UI.CodeBlock>
                   </CollapsibleContent>
                 </Collapsible>
               )}
@@ -565,7 +571,7 @@ export function NotificationWorkspace({ token }: { token: string }) {
                 <UnknownResolution row={row} options={options} saved={reload} />
               )}
             </ItemContent>
-          </article>
+          </UI.Content>
         </Item>
       ))}
       {cursor && (
@@ -573,6 +579,6 @@ export function NotificationWorkspace({ token }: { token: string }) {
           加载更多投递记录
         </Button>
       )}
-    </section>
+    </UI.Content>
   );
 }

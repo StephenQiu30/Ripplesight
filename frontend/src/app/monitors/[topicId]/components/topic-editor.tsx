@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import { toast } from "sonner";
 
@@ -443,13 +444,13 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
   const { topic } = state;
   const formDisabled = isBusy || topic.status === "archived";
   return (
-    <div>
+    <UI.Content>
       <Button asChild variant="ghost" size="navigation" className="mb-10">
         <Link href="/topics">返回我的关注</Link>
       </Button>
-      <div className="grid gap-12 md:grid-cols-2 md:gap-16">
-        <section>
-          <div className="flex flex-wrap items-center gap-2">
+      <UI.Content className="grid gap-12 md:grid-cols-2 md:gap-16">
+        <UI.Content as="section">
+          <UI.Content className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">
               {topic.status === "archived"
                 ? "已归档"
@@ -457,17 +458,20 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
                   ? "运行中"
                   : "已暂停"}
             </Badge>
-            <span className="text-muted-foreground text-sm">
+            <UI.Text as="span" className="text-muted-foreground text-sm">
               版本 v{topic.current_version}
-            </span>
-          </div>
-          <h1 className="mt-5 text-4xl leading-tight font-normal tracking-tight sm:text-5xl">
+            </UI.Text>
+          </UI.Content>
+          <UI.Heading
+            level={1}
+            className="mt-5 text-4xl leading-tight font-normal tracking-tight sm:text-5xl"
+          >
             编辑关注
-          </h1>
-          <p className="text-muted-foreground mt-6 max-w-sm text-sm leading-7">
+          </UI.Heading>
+          <UI.Text className="text-muted-foreground mt-6 max-w-sm text-sm leading-7">
             调整关键词和来源，让关注更贴近你在意的事情。保存不会立即开始采集。
-          </p>
-          <div className="mt-8 flex flex-wrap gap-2">
+          </UI.Text>
+          <UI.Content className="mt-8 flex flex-wrap gap-2">
             {topic.status === "active" ? (
               <Button
                 type="button"
@@ -512,8 +516,8 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
                 归档
               </Button>
             ) : null}
-          </div>
-          <div className="mt-10">
+          </UI.Content>
+          <UI.Content className="mt-10">
             <TopicRunActions
               key={`${topic.id}:${topic.current_version}:${topic.source_keys.join(",")}`}
               topic={topic}
@@ -525,9 +529,9 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
               )}
               disabled={isBusy}
             />
-          </div>
-        </section>
-        <form
+          </UI.Content>
+        </UI.Content>
+        <UI.Form
           ref={formRef}
           onSubmit={handleSubmit}
           noValidate
@@ -621,8 +625,8 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
                   : "开始关注前，会再次检查来源与预算。"}
             </FieldDescription>
           </FieldGroup>
-        </form>
-      </div>
-    </div>
+        </UI.Form>
+      </UI.Content>
+    </UI.Content>
   );
 }

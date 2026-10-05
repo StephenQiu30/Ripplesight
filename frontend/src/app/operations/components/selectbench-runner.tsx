@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Item } from "@/components/ui/item";
 
 import { toast } from "sonner";
@@ -165,7 +167,9 @@ export function SelectBenchRunner({
             variant="ghost"
             className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
           >
-            <span className="min-w-0 text-left">运行生产筛选链路评测</span>
+            <UI.Text as="span" className="min-w-0 text-left">
+              运行生产筛选链路评测
+            </UI.Text>
             <ChevronDownIcon
               aria-hidden="true"
               data-icon="inline-end"
@@ -174,11 +178,11 @@ export function SelectBenchRunner({
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent forceMount className="data-[state=closed]:hidden">
-          <p className="text-muted-foreground my-3 text-sm">
+          <UI.Text className="text-muted-foreground my-3 text-sm">
             使用当前预筛选与两次独立评分，按固定 seed
             分层抽样；会使用配置模型额度。运行开关默认关闭，失败或未知结果保留，未知付费阶段须人工复核。
-          </p>
-          <form onSubmit={submit}>
+          </UI.Text>
+          <UI.Form onSubmit={submit}>
             <FieldGroup className="grid gap-3 sm:grid-cols-2">
               <Field className="min-w-0">
                 <FieldLabel htmlFor={`${fieldId}-selectbench-runner-field-1`}>
@@ -267,16 +271,16 @@ export function SelectBenchRunner({
                 受理模型评测任务
               </Button>
             </FieldGroup>
-          </form>
+          </UI.Form>
 
           {jobIds.length > 0 && (
-            <div className="mt-3 flex max-h-32 flex-wrap gap-2 overflow-auto text-xs">
+            <UI.Content className="mt-3 flex max-h-32 flex-wrap gap-2 overflow-auto text-xs">
               {jobIds.map((id) => (
                 <Link key={id} href={`/jobs/${id}`} className="underline">
                   任务 {id.slice(0, 8)}
                 </Link>
               ))}
-            </div>
+            </UI.Content>
           )}
         </CollapsibleContent>
       </Collapsible>

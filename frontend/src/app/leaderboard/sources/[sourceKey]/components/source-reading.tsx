@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import { AlertDescription, Alert } from "@/components/ui/alert";
 import Link from "next/link";
 
@@ -19,77 +20,99 @@ import {
 
 export function SourceReading({ data }: { data: HotKeyAPI.SourceDetailView }) {
   return (
-    <div className="flex flex-col gap-y-10">
-      <header className="flex max-w-3xl flex-col gap-y-4">
+    <UI.Content className="flex flex-col gap-y-10">
+      <UI.Content as="header" className="flex max-w-3xl flex-col gap-y-4">
         <Link
           className="text-muted-foreground text-sm hover:underline"
           href="/leaderboard/sources"
         >
           ← 评测来源
         </Link>
-        <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
+        <UI.Heading
+          level={1}
+          className="text-3xl font-medium tracking-tight sm:text-4xl"
+        >
           {data.full_name}
-        </h1>
-        <div className="flex flex-wrap items-center gap-3">
+        </UI.Heading>
+        <UI.Content className="flex flex-wrap items-center gap-3">
           <SourceStatus source={data.source} />
-          <span className="text-muted-foreground text-sm">
+          <UI.Text as="span" className="text-muted-foreground text-sm">
             {data.source.operator}
             {data.area ? ` · ${data.area}` : ""}
-          </span>
-        </div>
-        <p className="text-muted-foreground leading-7">
+          </UI.Text>
+        </UI.Content>
+        <UI.Text className="text-muted-foreground leading-7">
           {data.source.description}
-        </p>
+        </UI.Text>
         <RunStamp run={data.run} />
-        <p className="text-muted-foreground text-xs leading-6">
+        <UI.Text className="text-muted-foreground text-xs leading-6">
           用途、限制与许可说明来自 AIHOT 2026-09-26
           固定注册表，来源条款以官方现行说明为准。
-        </p>
+        </UI.Text>
         {data.official_url ? (
-          <a
+          <UI.TextLink
             className="text-sm underline underline-offset-4"
             href={data.official_url}
             target="_blank"
             rel="noreferrer"
           >
             官方来源
-          </a>
+          </UI.TextLink>
         ) : null}
-      </header>
-      <section
+      </UI.Content>
+      <UI.Content
+        as="section"
         className="grid gap-8 md:grid-cols-2"
         aria-label="来源用途与限制"
       >
-        <div className="flex flex-col gap-y-3">
-          <h2 className="text-xl font-medium">测量什么</h2>
-          <p className="text-muted-foreground leading-7">{data.what}</p>
-          <h2 className="pt-2 text-xl font-medium">如何使用</h2>
-          <p className="text-muted-foreground leading-7">{data.usage}</p>
-        </div>
-        <div className="flex flex-col gap-y-3">
-          <h2 className="text-xl font-medium">限制与许可</h2>
-          <p className="text-muted-foreground leading-7">{data.limits}</p>
-          <p className="text-sm leading-6">数据许可：{data.license}</p>
+        <UI.Content className="flex flex-col gap-y-3">
+          <UI.Heading level={2} className="text-xl font-medium">
+            测量什么
+          </UI.Heading>
+          <UI.Text className="text-muted-foreground leading-7">
+            {data.what}
+          </UI.Text>
+          <UI.Heading level={2} className="pt-2 text-xl font-medium">
+            如何使用
+          </UI.Heading>
+          <UI.Text className="text-muted-foreground leading-7">
+            {data.usage}
+          </UI.Text>
+        </UI.Content>
+        <UI.Content className="flex flex-col gap-y-3">
+          <UI.Heading level={2} className="text-xl font-medium">
+            限制与许可
+          </UI.Heading>
+          <UI.Text className="text-muted-foreground leading-7">
+            {data.limits}
+          </UI.Text>
+          <UI.Text className="text-sm leading-6">
+            数据许可：{data.license}
+          </UI.Text>
           {data.attribution ? (
-            <p className="text-muted-foreground text-sm leading-6">
+            <UI.Text className="text-muted-foreground text-sm leading-6">
               署名：{data.attribution}
-            </p>
+            </UI.Text>
           ) : null}
-        </div>
-      </section>
-      <section className="flex flex-col gap-y-5" aria-label="来源原始成绩">
-        <div className="flex flex-col gap-y-2">
-          <h2 className="text-xl font-medium">
+        </UI.Content>
+      </UI.Content>
+      <UI.Content
+        as="section"
+        className="flex flex-col gap-y-5"
+        aria-label="来源原始成绩"
+      >
+        <UI.Content className="flex flex-col gap-y-2">
+          <UI.Heading level={2} className="text-xl font-medium">
             {data.system_rows ? "系统与代理配置成绩" : "来源原始成绩"}
-          </h2>
-          <p className="text-muted-foreground text-sm">
+          </UI.Heading>
+          <UI.Text className="text-muted-foreground text-sm">
             上游时间 {evidenceDate(data.upstream_at)} · 本地同步{" "}
             {evidenceDate(data.synced_at)}
-          </p>
+          </UI.Text>
           {data.rows_note ? (
-            <p className="text-muted-foreground text-sm leading-6">
+            <UI.Text className="text-muted-foreground text-sm leading-6">
               {data.rows_note}
-            </p>
+            </UI.Text>
           ) : null}
           {data.system_rows ? (
             <Alert role="note" className="p-4 leading-6">
@@ -98,7 +121,7 @@ export function SourceReading({ data }: { data: HotKeyAPI.SourceDetailView }) {
               </AlertDescription>
             </Alert>
           ) : null}
-        </div>
+        </UI.Content>
         {data.rows.length === 0 ? (
           <Alert role="note" className="p-6 leading-6">
             <AlertDescription>
@@ -138,21 +161,23 @@ export function SourceReading({ data }: { data: HotKeyAPI.SourceDetailView }) {
                         {row.source_model_name}
                       </Link>
                     ) : (
-                      <span>{row.source_model_name}</span>
+                      <UI.Text as="span">{row.source_model_name}</UI.Text>
                     )}
                     {row.provider ? (
-                      <p className="text-muted-foreground mt-1 text-xs">
+                      <UI.Text className="text-muted-foreground mt-1 text-xs">
                         {row.provider}
-                      </p>
+                      </UI.Text>
                     ) : null}
                   </TableCell>
                   <TableCell className="font-mono">{row.display}</TableCell>
                   <TableCell className="min-w-44">
-                    <p className="text-sm">{row.configuration_label}</p>
+                    <UI.Text className="text-sm">
+                      {row.configuration_label}
+                    </UI.Text>
                     {row.excluded ? (
-                      <p className="text-muted-foreground mt-1 text-xs">
+                      <UI.Text className="text-muted-foreground mt-1 text-xs">
                         排除：{row.excluded}
-                      </p>
+                      </UI.Text>
                     ) : (
                       <Badge className="mt-1" variant="secondary">
                         {data.system_rows ? "参考配置" : "代表配置"}
@@ -164,7 +189,7 @@ export function SourceReading({ data }: { data: HotKeyAPI.SourceDetailView }) {
             </TableBody>
           </Table>
         )}
-      </section>
-    </div>
+      </UI.Content>
+    </UI.Content>
   );
 }

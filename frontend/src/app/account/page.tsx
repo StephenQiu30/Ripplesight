@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import type { Metadata } from "next";
 import { connection } from "next/server";
 
@@ -35,9 +36,11 @@ export default async function AccountPage({
         description="验证当前会话后可以修改账户设置。"
         action={
           <Button asChild>
-            <a href={`/login?returnTo=${encodeURIComponent(loginReturnTo)}`}>
+            <UI.TextLink
+              href={`/login?returnTo=${encodeURIComponent(loginReturnTo)}`}
+            >
               登录
-            </a>
+            </UI.TextLink>
           </Button>
         }
       />

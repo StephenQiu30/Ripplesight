@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import Link from "next/link";
@@ -62,24 +63,28 @@ const groups = [
 export default async function WorkspacePage() {
   await connection();
   return (
-    <div className="flex flex-col gap-10">
-      <div className="flex flex-wrap items-start justify-between gap-5">
-        <div>
-          <h1 className="text-3xl font-medium tracking-tight">我的工作台</h1>
-          <p className="text-muted-foreground mt-4 leading-7">
+    <UI.Content className="flex flex-col gap-10">
+      <UI.Content className="flex flex-wrap items-start justify-between gap-5">
+        <UI.Content>
+          <UI.Heading level={1} className="text-3xl font-medium tracking-tight">
+            我的工作台
+          </UI.Heading>
+          <UI.Text className="text-muted-foreground mt-4 leading-7">
             个人关注、报告与管理功能，从这里继续。
-          </p>
-        </div>
+          </UI.Text>
+        </UI.Content>
         <Button asChild variant="outline">
           <Link href="/">返回信息首页</Link>
         </Button>
-      </div>
+      </UI.Content>
       {groups.map((group) => (
-        <section key={group.title} aria-label={group.title}>
-          <h2 className="text-xl font-medium">{group.title}</h2>
-          <p className="text-muted-foreground mt-2 text-sm leading-6">
+        <UI.Content as="section" key={group.title} aria-label={group.title}>
+          <UI.Heading level={2} className="text-xl font-medium">
+            {group.title}
+          </UI.Heading>
+          <UI.Text className="text-muted-foreground mt-2 text-sm leading-6">
             {group.description}
-          </p>
+          </UI.Text>
           <ItemGroup className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {group.links.map(([href, title, description]) => (
               <Item role="listitem" key={href} variant="muted">
@@ -96,8 +101,8 @@ export default async function WorkspacePage() {
               </Item>
             ))}
           </ItemGroup>
-        </section>
+        </UI.Content>
       ))}
-    </div>
+    </UI.Content>
   );
 }

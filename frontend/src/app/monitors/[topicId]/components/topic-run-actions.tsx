@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
 
@@ -98,10 +100,10 @@ export function TopicRunResult({
   sourceNames: Record<string, string>;
 }) {
   return (
-    <div className="flex flex-col gap-3" role="status">
-      <p className="text-sm font-medium">
+    <UI.Content className="flex flex-col gap-3" role="status">
+      <UI.Text className="text-sm font-medium">
         已按规则版本 v{result.topic_version} 处理
-      </p>
+      </UI.Text>
       <ItemGroup className="flex flex-col gap-4 text-sm">
         {result.sources.map((source) => (
           <Item
@@ -111,17 +113,17 @@ export function TopicRunResult({
             className="py-3 first:pt-0 last:pb-0"
           >
             <ItemContent className="min-w-0 gap-3">
-              <span className="font-medium">
+              <UI.Text as="span" className="font-medium">
                 {sourceNames[source.source_key] ?? source.source_key}
-              </span>
+              </UI.Text>
               {source.skip_reason ? (
-                <span className="text-muted-foreground ml-2">
+                <UI.Text as="span" className="text-muted-foreground ml-2">
                   {SKIP_LABELS[source.skip_reason]}
-                </span>
+                </UI.Text>
               ) : (
-                <span className="text-muted-foreground ml-2">
+                <UI.Text as="span" className="text-muted-foreground ml-2">
                   已受理 {source.job_ids.length} 个任务
-                </span>
+                </UI.Text>
               )}
               {source.job_ids.map((jobId) => (
                 <Link
@@ -136,7 +138,7 @@ export function TopicRunResult({
           </Item>
         ))}
       </ItemGroup>
-    </div>
+    </UI.Content>
   );
 }
 
@@ -220,9 +222,9 @@ export function TopicRunActions({
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="pt-4">
-        <p className="text-muted-foreground text-sm leading-6">
+        <UI.Text className="text-muted-foreground text-sm leading-6">
           按已保存的规则采集一次，查看每个来源的受理结果。
-        </p>
+        </UI.Text>
         {topic.status !== "active" ? (
           <Alert className="mt-4" role="status">
             <AlertDescription>
@@ -263,7 +265,7 @@ export function TopicRunActions({
               </FieldGroup>
             </FieldSet>
             {result ? (
-              <div className="mt-6 flex flex-col gap-4">
+              <UI.Content className="mt-6 flex flex-col gap-4">
                 <TopicRunResult result={result} sourceNames={sourceNames} />
                 <Button
                   type="button"
@@ -277,7 +279,7 @@ export function TopicRunActions({
                 >
                   发起新一轮
                 </Button>
-              </div>
+              </UI.Content>
             ) : (
               <Button
                 type="button"

@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import {
   useCallback,
@@ -224,14 +225,14 @@ function RuleEditor({
   }
 
   return (
-    <form
+    <UI.Form
       onSubmit={submit}
       className="rounded-xl border p-5"
       aria-label={row ? "编辑告警规则" : "新建告警规则"}
     >
-      <h2 className="mb-5 text-lg font-medium">
+      <UI.Heading level={2} className="mb-5 text-lg font-medium">
         {row ? "编辑告警规则" : "新建告警规则"}
-      </h2>
+      </UI.Heading>
       <FieldGroup className="grid gap-5 sm:grid-cols-2">
         <Field>
           <FieldLabel htmlFor={`${id}-name`}>规则名称</FieldLabel>
@@ -336,7 +337,7 @@ function RuleEditor({
           )}
         </Field>
         <Field className="sm:col-span-2">
-          <div className="flex items-center gap-3">
+          <UI.Content className="flex items-center gap-3">
             <Checkbox
               id={`${id}-enabled`}
               checked={enabled}
@@ -344,7 +345,7 @@ function RuleEditor({
               onCheckedChange={(value) => setEnabled(value === true)}
             />
             <FieldLabel htmlFor={`${id}-enabled`}>启用规则</FieldLabel>
-          </div>
+          </UI.Content>
           <FieldDescription>
             规则默认关闭；保存不会发送测试通知。通知发送及目标验证需要各自就绪。
           </FieldDescription>
@@ -355,7 +356,7 @@ function RuleEditor({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <div className="mt-5 flex gap-3">
+      <UI.Content className="mt-5 flex gap-3">
         <Button
           type="submit"
           disabled={busy || !sources.topics.length || !sources.targets.length}
@@ -370,8 +371,8 @@ function RuleEditor({
         >
           取消
         </Button>
-      </div>
-    </form>
+      </UI.Content>
+    </UI.Form>
   );
 }
 
@@ -409,7 +410,7 @@ function History({ ruleId }: { ruleId: string }) {
     withdrawn: "输入已撤回",
   };
   return (
-    <div className="mt-4 space-y-3" aria-label="告警评估历史">
+    <UI.Content className="mt-4 space-y-3" aria-label="告警评估历史">
       {error ? (
         <Alert variant="destructive">
           <AlertDescription>
@@ -430,34 +431,34 @@ function History({ ruleId }: { ruleId: string }) {
           <ItemContent>正在读取评估历史…</ItemContent>
         </Item>
       ) : !rows.length ? (
-        <p className="text-muted-foreground text-sm">
+        <UI.Text className="text-muted-foreground text-sm">
           尚无评估记录。启用后每五分钟评估一次；条件不足会保留原因。
-        </p>
+        </UI.Text>
       ) : (
         rows.map((item) => (
           <Item key={item.id} variant="outline">
             <ItemContent>
-              <p>
+              <UI.Text>
                 {labels[item.status]} ·{" "}
                 {new Date(item.window_end).toLocaleString("zh-CN")}
-              </p>
-              <p className="text-muted-foreground mt-1">
+              </UI.Text>
+              <UI.Text className="text-muted-foreground mt-1">
                 指标：{item.value === null ? "未知" : item.value} · 规则版本{" "}
                 {item.rule_version}
-              </p>
+              </UI.Text>
               {item.reason && (
-                <p className="mt-1">{reasonLabel(item.reason)}</p>
+                <UI.Text className="mt-1">{reasonLabel(item.reason)}</UI.Text>
               )}
               {item.cooldown_until && (
-                <p className="mt-1">
+                <UI.Text className="mt-1">
                   冷却至 {new Date(item.cooldown_until).toLocaleString("zh-CN")}
-                </p>
+                </UI.Text>
               )}
             </ItemContent>
           </Item>
         ))
       )}
-    </div>
+    </UI.Content>
   );
 }
 
@@ -501,13 +502,15 @@ export function AlertsWorkspace() {
     };
   }, [load]);
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-      <div>
-        <h1 className="text-3xl font-medium tracking-tight">突发告警</h1>
-        <p className="text-muted-foreground mt-3 leading-7">
+    <UI.Content className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+      <UI.Content>
+        <UI.Heading level={1} className="text-3xl font-medium tracking-tight">
+          突发告警
+        </UI.Heading>
+        <UI.Text className="text-muted-foreground mt-3 leading-7">
           使用已取得且许可有效的材料评估规则，查看触发与冷却记录。无法判定和送达未知分别记录；未知送达不会自动重发。
-        </p>
-      </div>
+        </UI.Text>
+      </UI.Content>
       {error && (
         <Alert variant="destructive">
           <AlertDescription>
@@ -533,22 +536,22 @@ export function AlertsWorkspace() {
       ) : (
         <>
           {!data.topics.length && (
-            <p>
+            <UI.Text>
               先
               <Link href="/monitors/new" className="underline">
                 创建关注方向
               </Link>
               ，再配置告警规则。
-            </p>
+            </UI.Text>
           )}
           {!data.targets.length && (
-            <p>
+            <UI.Text>
               尚无通知目标。请在
               <Link href="/operations" className="underline">
                 运营与通知
               </Link>
               中配置获准的目标，完成验证后再启用规则。
-            </p>
+            </UI.Text>
           )}
           {editing !== null ? (
             <RuleEditor
@@ -583,30 +586,35 @@ export function AlertsWorkspace() {
             </Button>
           )}
           {!data.rules.length ? (
-            <p className="text-muted-foreground">
+            <UI.Text className="text-muted-foreground">
               尚未配置告警规则，当前不会发送告警。
-            </p>
+            </UI.Text>
           ) : (
             data.rules.map((rule) => (
-              <section key={rule.id} className="min-w-0">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <h2 className="text-lg font-medium break-words">
+              <UI.Content as="section" key={rule.id} className="min-w-0">
+                <UI.Content className="flex flex-wrap items-start justify-between gap-4">
+                  <UI.Content className="min-w-0">
+                    <UI.Heading
+                      level={2}
+                      className="text-lg font-medium break-words"
+                    >
                       {rule.name}
-                    </h2>
-                    <p className="text-muted-foreground mt-2 text-sm">
+                    </UI.Heading>
+                    <UI.Text className="text-muted-foreground mt-2 text-sm">
                       {rule.enabled ? "已启用" : "已关闭"} ·{" "}
                       {rule.metric === "negative_count"
                         ? "有效负面情感计数"
                         : "同公式热度增量"}{" "}
                       ≥ {rule.threshold} · 冷却 {rule.cooldown_seconds / 60}{" "}
                       分钟
-                    </p>
+                    </UI.Text>
                     {rule.readiness === "blocked" && (
-                      <p className="mt-2 text-sm">{reasonLabel(rule.reason)}</p>
+                      <UI.Text className="mt-2 text-sm">
+                        {reasonLabel(rule.reason)}
+                      </UI.Text>
                     )}
-                  </div>
-                  <div className="flex gap-2">
+                  </UI.Content>
+                  <UI.Content className="flex gap-2">
                     <Button variant="outline" onClick={() => setEditing(rule)}>
                       编辑
                     </Button>
@@ -621,14 +629,14 @@ export function AlertsWorkspace() {
                     >
                       评估历史
                     </Button>
-                  </div>
-                </div>
+                  </UI.Content>
+                </UI.Content>
                 {historyId === rule.id && <History ruleId={rule.id} />}
-              </section>
+              </UI.Content>
             ))
           )}
         </>
       )}
-    </div>
+    </UI.Content>
   );
 }

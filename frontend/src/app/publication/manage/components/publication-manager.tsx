@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import {
   Item,
   ItemContent,
@@ -99,8 +101,8 @@ export function PublicationManager() {
     }
   }
   return (
-    <div className="mt-8 flex flex-col gap-y-12">
-      <form
+    <UI.Content className="mt-8 flex flex-col gap-y-12">
+      <UI.Form
         onSubmit={(event) => {
           event.preventDefault();
           void action(async (current) => {
@@ -137,10 +139,12 @@ export function PublicationManager() {
             清除令牌
           </Button>
         </FieldGroup>
-      </form>
+      </UI.Form>
       {policies.length ? (
-        <section>
-          <h2 className="text-lg font-medium">当前来源策略</h2>
+        <UI.Content as="section">
+          <UI.Heading level={2} className="text-lg font-medium">
+            当前来源策略
+          </UI.Heading>
           <ItemGroup className="mt-4 flex flex-col gap-y-4">
             {policies.map((policy) => (
               <Item
@@ -150,13 +154,13 @@ export function PublicationManager() {
                 className="p-4 leading-7"
               >
                 <ItemContent className="min-w-0 gap-3">
-                  <strong>{policy.source_key}</strong> · 修订 {policy.revision}{" "}
-                  · {policy.participation_mode}
-                  <p>
+                  <UI.Text as="strong">{policy.source_key}</UI.Text> · 修订{" "}
+                  {policy.revision} · {policy.participation_mode}
+                  <UI.Text>
                     站内全文 {policy.site_fulltext ? "允许" : "关闭"} · 再分发{" "}
                     {policy.syndicate_fulltext ? "允许" : "关闭"} · 索引{" "}
                     {policy.indexable ? "允许" : "关闭"}
-                  </p>
+                  </UI.Text>
                   <ItemDescription className="line-clamp-none">
                     {policy.license_name} · 延迟 {policy.release_delay_seconds}{" "}
                     秒
@@ -165,14 +169,16 @@ export function PublicationManager() {
               </Item>
             ))}
           </ItemGroup>
-        </section>
+        </UI.Content>
       ) : null}
-      <section>
-        <h2 className="text-lg font-medium">修订来源策略</h2>
-        <p className="text-muted-foreground mt-3 text-sm">
+      <UI.Content as="section">
+        <UI.Heading level={2} className="text-lg font-medium">
+          修订来源策略
+        </UI.Heading>
+        <UI.Text className="text-muted-foreground mt-3 text-sm">
           正文格式由固定材料记录决定，许可策略只控制公开范围与再分发授权。
-        </p>
-        <form
+        </UI.Text>
+        <UI.Form
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
@@ -307,7 +313,7 @@ export function PublicationManager() {
                 id={`${fieldId}-publication-manager-field-8`}
               />
             </Field>
-            <div className="flex flex-wrap gap-5 text-sm sm:col-span-2">
+            <UI.Content className="flex flex-wrap gap-5 text-sm sm:col-span-2">
               <Field orientation="horizontal" className="w-auto">
                 <Checkbox
                   name="site"
@@ -335,16 +341,18 @@ export function PublicationManager() {
                   允许索引
                 </FieldLabel>
               </Field>
-            </div>
+            </UI.Content>
             <Button disabled={busy || !token} className="justify-self-start">
               保存策略修订
             </Button>
           </FieldGroup>
-        </form>
-      </section>
-      <section>
-        <h2 className="text-lg font-medium">重建来源公开投影</h2>
-        <form
+        </UI.Form>
+      </UI.Content>
+      <UI.Content as="section">
+        <UI.Heading level={2} className="text-lg font-medium">
+          重建来源公开投影
+        </UI.Heading>
+        <UI.Form
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
@@ -388,13 +396,13 @@ export function PublicationManager() {
             </Field>
             <Button disabled={busy || !token}>受理重建</Button>
           </FieldGroup>
-        </form>
+        </UI.Form>
         {run ? (
-          <div className="mt-5 flex flex-col gap-y-3 text-sm">
-            <p>
+          <UI.Content className="mt-5 flex flex-col gap-y-3 text-sm">
+            <UI.Text>
               状态 {run.status} · 已处理 {run.processed_count} 条
               {run.failure_code ? ` · ${run.failure_code}` : ""}
-            </p>
+            </UI.Text>
             <Link href={`/jobs/${run.job_id}`} className="underline">
               查看任务与取消入口
             </Link>
@@ -414,12 +422,14 @@ export function PublicationManager() {
             >
               读取进度
             </Button>
-          </div>
+          </UI.Content>
         ) : null}
-      </section>
-      <section>
-        <h2 className="text-lg font-medium">调整单篇公开范围</h2>
-        <form
+      </UI.Content>
+      <UI.Content as="section">
+        <UI.Heading level={2} className="text-lg font-medium">
+          调整单篇公开范围
+        </UI.Heading>
+        <UI.Form
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
@@ -509,7 +519,7 @@ export function PublicationManager() {
                 id={`${fieldId}-publication-manager-field-17`}
               />
             </Field>
-            <div className="flex flex-wrap gap-5 text-sm sm:col-span-2">
+            <UI.Content className="flex flex-wrap gap-5 text-sm sm:col-span-2">
               <Field orientation="horizontal" className="w-auto">
                 <Checkbox
                   name="indexed"
@@ -528,19 +538,21 @@ export function PublicationManager() {
                   从索引排除
                 </FieldLabel>
               </Field>
-            </div>
+            </UI.Content>
             <Button disabled={busy || !token} className="justify-self-start">
               保存范围修订
             </Button>
           </FieldGroup>
-        </form>
-      </section>
-      <section>
-        <h2 className="text-lg font-medium">保存已许可正文的媒体</h2>
-        <p className="text-muted-foreground mt-3 text-sm leading-7">
+        </UI.Form>
+      </UI.Content>
+      <UI.Content as="section">
+        <UI.Heading level={2} className="text-lg font-medium">
+          保存已许可正文的媒体
+        </UI.Heading>
+        <UI.Text className="text-muted-foreground mt-3 text-sm leading-7">
           只保存当前固定正文中的正式图片或视频。同版本和许可修订复用已有任务；不确定、失败或取消的任务需人工核查，不能重复下载。
-        </p>
-        <form
+        </UI.Text>
+        <UI.Form
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
@@ -602,8 +614,8 @@ export function PublicationManager() {
               受理媒体任务
             </Button>
           </FieldGroup>
-        </form>
-        <form
+        </UI.Form>
+        <UI.Form
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
@@ -631,15 +643,15 @@ export function PublicationManager() {
               读取媒体回执
             </Button>
           </FieldGroup>
-        </form>
+        </UI.Form>
         {mediaRun ? (
-          <div className="mt-5 flex flex-col gap-y-3 text-sm">
-            <p>
+          <UI.Content className="mt-5 flex flex-col gap-y-3 text-sm">
+            <UI.Text>
               状态 {mediaRun.status} · 可用 {mediaRun.available_count}/
               {mediaRun.candidate_count}
               {mediaRun.reason ? ` · ${mediaRun.reason}` : ""}
               {mediaRun.replayed ? " · 已复用同版本任务" : ""}
-            </p>
+            </UI.Text>
             <Link href={`/jobs/${mediaRun.job_id}`} className="underline">
               查看媒体任务与取消入口
             </Link>
@@ -659,9 +671,9 @@ export function PublicationManager() {
             >
               读取媒体进度
             </Button>
-          </div>
+          </UI.Content>
         ) : null}
-      </section>
-    </div>
+      </UI.Content>
+    </UI.Content>
   );
 }

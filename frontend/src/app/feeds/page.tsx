@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
 import type { Metadata } from "next";
 import { connection } from "next/server";
@@ -25,12 +26,14 @@ export default async function FeedsPage() {
   return (
     <>
       <PublicationNavigation />
-      <div>
-        <h1 className="text-3xl font-medium">订阅资讯</h1>
-        <p className="text-muted-foreground mt-5 text-sm leading-7">
+      <UI.Content>
+        <UI.Heading level={1} className="text-3xl font-medium">
+          订阅资讯
+        </UI.Heading>
+        <UI.Text className="text-muted-foreground mt-5 text-sm leading-7">
           复制链接到 RSS
           阅读器。订阅读取服务器明确设置的发布账号，未设置时保持未发布。全文订阅只包含有明确再分发许可的正文，其余条目保留摘要和站内阅读入口。每个订阅最多50项，公开接口共享每60秒120次的访问额度。
-        </p>
+        </UI.Text>
         <ItemGroup className="mt-8 flex flex-col gap-y-5">
           {feeds.map(([href, label]) => (
             <Item
@@ -40,18 +43,22 @@ export default async function FeedsPage() {
               className="flex flex-wrap gap-3"
             >
               <ItemContent className="min-w-0 gap-3">
-                <span className="w-24 text-sm">{label}</span>
-                <a
+                <UI.Text as="span" className="w-24 text-sm">
+                  {label}
+                </UI.Text>
+                <UI.TextLink
                   href={href}
                   className="font-mono text-sm break-all underline"
                 >
                   {href}
-                </a>
+                </UI.TextLink>
               </ItemContent>
             </Item>
           ))}
         </ItemGroup>
-        <h2 className="mt-12 text-lg font-medium">分类精选</h2>
+        <UI.Heading level={2} className="mt-12 text-lg font-medium">
+          分类精选
+        </UI.Heading>
         <ItemGroup className="mt-5 flex flex-col gap-y-4">
           {categories.map(([key, label]) => (
             <Item
@@ -61,33 +68,37 @@ export default async function FeedsPage() {
               className="flex flex-wrap gap-4"
             >
               <ItemContent className="min-w-0 gap-3">
-                <span className="w-16">{label}</span>
-                <a
+                <UI.Text as="span" className="w-16">
+                  {label}
+                </UI.Text>
+                <UI.TextLink
                   href={`/public/feed/category/${key}.xml`}
                   className="underline"
                 >
                   摘要
-                </a>
-                <a
+                </UI.TextLink>
+                <UI.TextLink
                   href={`/public/feed/full/category/${key}.xml`}
                   className="underline"
                 >
                   获准全文
-                </a>
+                </UI.TextLink>
               </ItemContent>
             </Item>
           ))}
         </ItemGroup>
-        <h2 className="mt-12 text-lg font-medium">其他格式</h2>
-        <p className="mt-5 flex flex-wrap gap-5 text-sm">
-          <a href="/public/selected.md" className="underline">
+        <UI.Heading level={2} className="mt-12 text-lg font-medium">
+          其他格式
+        </UI.Heading>
+        <UI.Text className="mt-5 flex flex-wrap gap-5 text-sm">
+          <UI.TextLink href="/public/selected.md" className="underline">
             精选 Markdown
-          </a>
-          <a href="/agent" className="underline">
+          </UI.TextLink>
+          <UI.TextLink href="/agent" className="underline">
             API / MCP 接入
-          </a>
-        </p>
-      </div>
+          </UI.TextLink>
+        </UI.Text>
+      </UI.Content>
     </>
   );
 }

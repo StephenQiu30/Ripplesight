@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import {
   Item,
   ItemContent,
@@ -286,12 +288,14 @@ export function RelationBench({ token }: { token: string }) {
     }
   }
   return (
-    <section className="grid gap-5">
-      <h2 className="text-xl font-semibold">关系评测</h2>
-      <p className="text-muted-foreground text-sm">
+    <UI.Content as="section" className="grid gap-5">
+      <UI.Heading level={2} className="text-xl font-semibold">
+        关系评测
+      </UI.Heading>
+      <UI.Text className="text-muted-foreground text-sm">
         固定报道对区分同一事实、后续进展、无关与综述。失败结果单独保留；导入只复算指标。排队使用生产提示词和当前预算,供应商开关默认关闭。
-      </p>
-      <form onSubmit={submit}>
+      </UI.Text>
+      <UI.Form onSubmit={submit}>
         <FieldGroup className="grid gap-3 sm:grid-cols-2">
           <Field className="min-w-0">
             <FieldLabel htmlFor={`${fieldId}-relation-bench-field-1`}>
@@ -413,27 +417,27 @@ export function RelationBench({ token }: { token: string }) {
               id={`${fieldId}-relation-bench-field-8`}
             />
           </Field>
-          <p className="text-muted-foreground text-xs sm:col-span-2">
+          <UI.Text className="text-muted-foreground text-xs sm:col-span-2">
             样本格式: cases 中每条含 case_id、a / b（title、source、可选 summary
             / frame）和 gold_relation。导入还需要 predictions: 模型名→逐条
             case_id、relation、confidence；失败项用 relation: null 和
             error_code。
-          </p>
+          </UI.Text>
           <Button type="submit" disabled={busy} className="justify-self-start">
             {mode === "run" ? "排队关系评测" : "导入并复算关系评测"}
           </Button>
         </FieldGroup>
-      </form>
+      </UI.Form>
       {jobs.length ? (
-        <div className="flex flex-wrap gap-3">
+        <UI.Content className="flex flex-wrap gap-3">
           {jobs.map((id) => (
             <Link key={id} href={`/jobs/${id}`} className="text-sm underline">
               任务 {id.slice(0, 8)}
             </Link>
           ))}
-        </div>
+        </UI.Content>
       ) : null}
-      <form
+      <UI.Form
         onSubmit={(e) => {
           e.preventDefault();
           void load();
@@ -455,8 +459,8 @@ export function RelationBench({ token }: { token: string }) {
             读取 / 刷新关系评测
           </Button>
         </FieldGroup>
-      </form>
-      <div className="flex flex-wrap gap-2">
+      </UI.Form>
+      <UI.Content className="flex flex-wrap gap-2">
         {runs.map((run) => (
           <Button
             key={run.id}
@@ -467,13 +471,13 @@ export function RelationBench({ token }: { token: string }) {
             {run.label} · {run.sample_size} 对
           </Button>
         ))}
-      </div>
+      </UI.Content>
       {page ? (
         <>
-          <p className="text-muted-foreground text-xs break-all">
+          <UI.Text className="text-muted-foreground text-xs break-all">
             黄金集 {page.run.gold_fingerprint} · {page.run.prompt_version} ·{" "}
             {page.run.split ?? "无分组"} · seed {page.run.seed ?? "未知"}
-          </p>
+          </UI.Text>
           <Collapsible>
             <CollapsibleTrigger asChild>
               <Button
@@ -481,9 +485,9 @@ export function RelationBench({ token }: { token: string }) {
                 variant="ghost"
                 className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
               >
-                <span className="min-w-0 text-left">
+                <UI.Text as="span" className="min-w-0 text-left">
                   指标、混淆矩阵与错误覆盖
-                </span>
+                </UI.Text>
                 <ChevronDownIcon
                   aria-hidden="true"
                   data-icon="inline-end"
@@ -495,12 +499,12 @@ export function RelationBench({ token }: { token: string }) {
               forceMount
               className="data-[state=closed]:hidden"
             >
-              <pre className="bg-muted/40 mt-3 max-h-96 overflow-auto rounded-lg p-4 text-xs">
+              <UI.CodeBlock className="bg-muted/40 mt-3 max-h-96 overflow-auto rounded-lg p-4 text-xs">
                 {JSON.stringify(page.run.summary, null, 2)}
-              </pre>
+              </UI.CodeBlock>
             </CollapsibleContent>
           </Collapsible>
-          <form
+          <UI.Form
             onSubmit={(e) => {
               e.preventDefault();
               void load();
@@ -531,48 +535,50 @@ export function RelationBench({ token }: { token: string }) {
                 应用关系筛选
               </Button>
             </FieldGroup>
-          </form>
-          <div className="grid gap-4">
+          </UI.Form>
+          <UI.Content className="grid gap-4">
             {page.items.map((row) => (
               <Item variant="muted" key={row.case.case_id} asChild>
-                <article className="min-w-0 p-4">
+                <UI.Content as="article" className="min-w-0 p-4">
                   <ItemContent className="min-w-0 gap-3">
                     <ItemTitle className="line-clamp-none w-full">
-                      <h3>
+                      <UI.Heading level={3}>
                         {row.case.case_id} · gold{" "}
                         {relations[row.case.gold_relation]}
-                      </h3>
+                      </UI.Heading>
                     </ItemTitle>
                     <ItemDescription className="line-clamp-none">
                       {row.case.stratum ?? "未分层"} ·{" "}
                       {row.case.split ?? "无分组"}
                     </ItemDescription>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <UI.Content className="mt-3 grid gap-3 sm:grid-cols-2">
                       {(["a", "b"] as const).map((key) => (
-                        <div key={key}>
-                          <p>
+                        <UI.Content key={key}>
+                          <UI.Text>
                             {key.toUpperCase()} · {row.case[key].source}{" "}
                             {row.case[key].first_party ? "· 第一方" : ""}
-                          </p>
-                          <p className="font-medium">{row.case[key].title}</p>
-                          <p className="text-muted-foreground text-sm">
+                          </UI.Text>
+                          <UI.Text className="font-medium">
+                            {row.case[key].title}
+                          </UI.Text>
+                          <UI.Text className="text-muted-foreground text-sm">
                             {row.case[key].summary}
-                          </p>
+                          </UI.Text>
                           {row.case[key].frame ? (
-                            <pre className="mt-2 overflow-auto text-xs">
+                            <UI.CodeBlock className="mt-2 overflow-auto text-xs">
                               {JSON.stringify(row.case[key].frame, null, 2)}
-                            </pre>
+                            </UI.CodeBlock>
                           ) : null}
-                        </div>
+                        </UI.Content>
                       ))}
-                    </div>
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    </UI.Content>
+                    <UI.Content className="mt-4 grid gap-3 sm:grid-cols-2">
                       {Object.entries(row.by_model).map(([model, value]) => {
                         const prediction =
                           value as HotKeyAPI.RelationPredictionInput;
                         return (
-                          <div key={model} className="min-w-0">
-                            <p className="break-all">
+                          <UI.Content key={model} className="min-w-0">
+                            <UI.Text className="break-all">
                               {model} ·{" "}
                               {prediction.relation
                                 ? relations[prediction.relation]
@@ -580,21 +586,21 @@ export function RelationBench({ token }: { token: string }) {
                               {prediction.confidence == null
                                 ? ""
                                 : ` · ${(prediction.confidence * 100).toFixed(1)}%`}
-                            </p>
-                            <p className="text-muted-foreground text-sm">
+                            </UI.Text>
+                            <UI.Text className="text-muted-foreground text-sm">
                               {prediction.error_code ??
                                 prediction.difference ??
                                 "未提供差异说明"}
-                            </p>
-                          </div>
+                            </UI.Text>
+                          </UI.Content>
                         );
                       })}
-                    </div>
+                    </UI.Content>
                   </ItemContent>
-                </article>
+                </UI.Content>
               </Item>
             ))}
-          </div>
+          </UI.Content>
           {page.next_cursor ? (
             <Button
               disabled={busy}
@@ -607,6 +613,6 @@ export function RelationBench({ token }: { token: string }) {
           ) : null}
         </>
       ) : null}
-    </section>
+    </UI.Content>
   );
 }

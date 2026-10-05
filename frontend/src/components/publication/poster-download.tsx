@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import NextImage from "next/image";
 import { useEffect, useState } from "react";
@@ -27,7 +28,7 @@ export function PosterDownload({ target }: { target: PosterTarget }) {
     [preview],
   );
   return (
-    <div>
+    <UI.Content>
       <Button
         variant="outline"
         disabled={busy}
@@ -77,7 +78,7 @@ export function PosterDownload({ target }: { target: PosterTarget }) {
         {busy ? "生成海报…" : "生成海报 PNG"}
       </Button>
       {preview ? (
-        <div className="mt-4 flex flex-col gap-y-3">
+        <UI.Content className="mt-4 flex flex-col gap-y-3">
           <NextImage
             src={preview}
             alt="资讯海报预览"
@@ -87,12 +88,12 @@ export function PosterDownload({ target }: { target: PosterTarget }) {
             className="h-auto max-w-80 rounded-md"
           />
           <Button asChild variant="outline">
-            <a href={preview} download="hotkey-poster.png">
+            <UI.TextLink href={preview} download="hotkey-poster.png">
               下载海报 PNG
-            </a>
+            </UI.TextLink>
           </Button>
-        </div>
+        </UI.Content>
       ) : null}
-    </div>
+    </UI.Content>
   );
 }

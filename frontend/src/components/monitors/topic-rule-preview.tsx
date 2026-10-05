@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Item, ItemContent, ItemDescription } from "@/components/ui/item";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -201,7 +203,7 @@ function TopicRulePreviewDialog({
             检查草稿关键词，或查看已有内容的匹配情况。预览不会保存主题、创建任务或访问外部来源。
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
+        <UI.Content className="flex flex-col gap-3">
           <Button
             type="button"
             variant="secondary"
@@ -217,13 +219,13 @@ function TopicRulePreviewDialog({
               ? "正在读取样本"
               : "预览已采集内容"}
           </Button>
-          <p className="text-muted-foreground text-xs leading-5">
+          <UI.Text className="text-muted-foreground text-xs leading-5">
             读取所选来源最近 7 天的最多 20
             条可读内容；未选择来源时读取全部已有来源。包含未命中与排除样本，只说明本地草稿匹配。
-          </p>
+          </UI.Text>
           {sampleState.status === "ready" ? (
-            <div className="flex flex-col gap-3" aria-live="polite">
-              <p className="text-muted-foreground text-xs leading-5">
+            <UI.Content className="flex flex-col gap-3" aria-live="polite">
+              <UI.Text className="text-muted-foreground text-xs leading-5">
                 {new Date(sampleState.preview.starts_at).toLocaleString(
                   "zh-CN",
                   { timeZone: "Asia/Shanghai" },
@@ -235,14 +237,14 @@ function TopicRulePreviewDialog({
                 （上海时间） · {sampleState.preview.samples.length} 条样本
                 {sampleState.preview.truncated ? "，仅展示最新 20 条" : ""} ·
                 未保存的草稿规则
-              </p>
-              <p className="text-muted-foreground text-xs">
+              </UI.Text>
+              <UI.Text className="text-muted-foreground text-xs">
                 规范化规则：任一{" "}
                 {sampleState.preview.rules.match_any.join("、") || "不限制"}
                 ；全部{" "}
                 {sampleState.preview.rules.match_all.join("、") || "不限制"}
                 ；排除 {sampleState.preview.rules.exclude.join("、") || "无"}
-              </p>
+              </UI.Text>
               {sampleState.preview.sample_status === "insufficient_samples" ? (
                 <Alert role="status" className="p-3">
                   <AlertDescription>
@@ -252,9 +254,12 @@ function TopicRulePreviewDialog({
               ) : (
                 sampleState.preview.samples.map((item) => (
                   <Item variant="muted" key={item.observation_id} asChild>
-                    <article className="flex flex-col gap-2 p-4">
+                    <UI.Content
+                      as="article"
+                      className="flex flex-col gap-2 p-4"
+                    >
                       <ItemContent className="min-w-0 gap-3">
-                        <div className="flex flex-wrap items-center gap-2">
+                        <UI.Content className="flex flex-wrap items-center gap-2">
                           <Badge
                             variant={item.matched ? "secondary" : "outline"}
                           >
@@ -264,7 +269,10 @@ function TopicRulePreviewDialog({
                                 ? "命中"
                                 : "未命中"}
                           </Badge>
-                          <span className="text-muted-foreground text-xs">
+                          <UI.Text
+                            as="span"
+                            className="text-muted-foreground text-xs"
+                          >
                             {item.source_key} · 观察于{" "}
                             {new Date(item.observed_at).toLocaleString(
                               "zh-CN",
@@ -272,8 +280,8 @@ function TopicRulePreviewDialog({
                                 timeZone: "Asia/Shanghai",
                               },
                             )}
-                          </span>
-                        </div>
+                          </UI.Text>
+                        </UI.Content>
                         <Link
                           href={`/content/${item.content_id}`}
                           className="font-medium break-words underline underline-offset-4"
@@ -290,23 +298,23 @@ function TopicRulePreviewDialog({
                             摘录已截断；匹配依据为完整已保存文字。
                           </ItemDescription>
                         ) : null}
-                        <p className="text-xs leading-5">
+                        <UI.Text className="text-xs leading-5">
                           任一命中：{item.matched_any.join("、") || "无"}
                           ；全部命中：{item.matched_all.join("、") || "无"}
                           ；排除命中：{item.excluded_by.join("、") || "无"}
-                        </p>
+                        </UI.Text>
                         <ItemDescription className="line-clamp-none break-all">
                           内容版本：{item.content_version_id}
                         </ItemDescription>
                       </ItemContent>
-                    </article>
+                    </UI.Content>
                   </Item>
                 ))
               )}
-            </div>
+            </UI.Content>
           ) : null}
-        </div>
-        <form onSubmit={handlePreview}>
+        </UI.Content>
+        <UI.Form onSubmit={handlePreview}>
           <FieldGroup>
             <Field data-disabled={state.status === "loading"}>
               <FieldLabel htmlFor="preview-sample-title">标题样本</FieldLabel>
@@ -329,13 +337,13 @@ function TopicRulePreviewDialog({
               {state.status === "loading" ? "正在检查" : "检查标题"}
             </Button>
           </FieldGroup>
-        </form>
+        </UI.Form>
         {state.status === "ready" && sample ? (
-          <div className="flex flex-col gap-4" aria-live="polite">
+          <UI.Content className="flex flex-col gap-4" aria-live="polite">
             <Item variant="muted" asChild>
-              <div className="p-4">
+              <UI.Content className="p-4">
                 <ItemContent className="min-w-0 gap-3">
-                  <div className="flex items-center gap-2">
+                  <UI.Content className="flex items-center gap-2">
                     <Badge variant={sample.matched ? "secondary" : "outline"}>
                       {sample.matched
                         ? "命中"
@@ -344,60 +352,94 @@ function TopicRulePreviewDialog({
                           : "未命中"}
                     </Badge>
                     {sample.excluded_by.length > 0 ? (
-                      <span className="text-muted-foreground text-xs">
+                      <UI.Text
+                        as="span"
+                        className="text-muted-foreground text-xs"
+                      >
                         排除原因：{sample.excluded_by.join("、")}
-                      </span>
+                      </UI.Text>
                     ) : null}
-                  </div>
-                  <dl className="text-muted-foreground mt-4 flex flex-col gap-2 text-xs leading-5">
-                    <div>
-                      <dt className="text-foreground font-medium">
+                  </UI.Content>
+                  <UI.Content
+                    as="dl"
+                    className="text-muted-foreground mt-4 flex flex-col gap-2 text-xs leading-5"
+                  >
+                    <UI.Content>
+                      <UI.Content
+                        as="dt"
+                        className="text-foreground font-medium"
+                      >
                         本次任意命中
-                      </dt>
-                      <dd>{sample.matched_any.join("、") || "无"}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-foreground font-medium">
+                      </UI.Content>
+                      <UI.Content as="dd">
+                        {sample.matched_any.join("、") || "无"}
+                      </UI.Content>
+                    </UI.Content>
+                    <UI.Content>
+                      <UI.Content
+                        as="dt"
+                        className="text-foreground font-medium"
+                      >
                         本次全部包含命中
-                      </dt>
-                      <dd>
+                      </UI.Content>
+                      <UI.Content as="dd">
                         {state.preview.rules.match_all.length === 0
                           ? "未配置（不限制）"
                           : `${sample.matched_all.join("、") || "无"}；命中 ${sample.matched_all.length}/${state.preview.rules.match_all.length} 项`}
-                      </dd>
-                    </div>
-                  </dl>
-                  <dl className="text-muted-foreground mt-4 flex flex-col gap-2 text-xs leading-5">
-                    <div>
-                      <dt className="text-foreground font-medium">任意命中</dt>
-                      <dd>
+                      </UI.Content>
+                    </UI.Content>
+                  </UI.Content>
+                  <UI.Content
+                    as="dl"
+                    className="text-muted-foreground mt-4 flex flex-col gap-2 text-xs leading-5"
+                  >
+                    <UI.Content>
+                      <UI.Content
+                        as="dt"
+                        className="text-foreground font-medium"
+                      >
+                        任意命中
+                      </UI.Content>
+                      <UI.Content as="dd">
                         {state.preview.rules.match_any.join("、") || "不限制"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-foreground font-medium">全部包含</dt>
-                      <dd>
+                      </UI.Content>
+                    </UI.Content>
+                    <UI.Content>
+                      <UI.Content
+                        as="dt"
+                        className="text-foreground font-medium"
+                      >
+                        全部包含
+                      </UI.Content>
+                      <UI.Content as="dd">
                         {state.preview.rules.match_all.join("、") || "不限制"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-foreground font-medium">排除优先</dt>
-                      <dd>{state.preview.rules.exclude.join("、") || "无"}</dd>
-                    </div>
-                  </dl>
+                      </UI.Content>
+                    </UI.Content>
+                    <UI.Content>
+                      <UI.Content
+                        as="dt"
+                        className="text-foreground font-medium"
+                      >
+                        排除优先
+                      </UI.Content>
+                      <UI.Content as="dd">
+                        {state.preview.rules.exclude.join("、") || "无"}
+                      </UI.Content>
+                    </UI.Content>
+                  </UI.Content>
                 </ItemContent>
-              </div>
+              </UI.Content>
             </Item>
-            <div className="p-4 text-sm">
-              <p className="font-medium">查询与预算影响</p>
-              <p className="text-muted-foreground mt-2 leading-6">
+            <UI.Content className="p-4 text-sm">
+              <UI.Text className="font-medium">查询与预算影响</UI.Text>
+              <UI.Text className="text-muted-foreground mt-2 leading-6">
                 本地别名匹配：
                 {state.preview.expansion.local_alias_external_queries}
                 次外部查询，
                 {state.preview.expansion.local_alias_budget_units}
                 预算单位。
-              </p>
-              <p className="text-muted-foreground mt-1 leading-6">
+              </UI.Text>
+              <UI.Text className="text-muted-foreground mt-1 leading-6">
                 上游扩词：
                 {sourceKeys.length === 0 ? "来源尚未选择" : "尚未核实"}
                 ，查询次数
@@ -405,9 +447,9 @@ function TopicRulePreviewDialog({
                 ，预算
                 {state.preview.expansion.upstream_budget_units ?? "未知"}
                 ，当前不能启用。
-              </p>
-            </div>
-          </div>
+              </UI.Text>
+            </UI.Content>
+          </UI.Content>
         ) : null}
         <DialogClose asChild>
           <Button type="button" variant="ghost" className="justify-self-end">

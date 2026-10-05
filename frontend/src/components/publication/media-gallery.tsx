@@ -1,4 +1,5 @@
 "use client";
+import * as UI from "@/components/ui/content";
 
 import Image from "next/image";
 import { useState } from "react";
@@ -57,9 +58,15 @@ export function MediaGallery({
     );
   }
   return (
-    <section aria-label="媒体阅读" className="flex flex-col gap-y-4">
-      <h2 className="text-sm font-medium">媒体</h2>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+    <UI.Content
+      as="section"
+      aria-label="媒体阅读"
+      className="flex flex-col gap-y-4"
+    >
+      <UI.Heading level={2} className="text-sm font-medium">
+        媒体
+      </UI.Heading>
+      <UI.Content className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
         {media.map((entry) => {
           const url =
             entry.state === "available" && !failed.has(entry.key)
@@ -92,7 +99,7 @@ export function MediaGallery({
             );
           if (url && entry.kind === "video")
             return (
-              <video
+              <UI.VideoPlayer
                 key={entry.key}
                 src={url}
                 controls
@@ -105,7 +112,7 @@ export function MediaGallery({
             );
           if (url && entry.kind === "audio")
             return (
-              <audio
+              <UI.AudioPlayer
                 key={entry.key}
                 src={url}
                 controls
@@ -116,23 +123,23 @@ export function MediaGallery({
               />
             );
           return (
-            <p
+            <UI.Text
               key={entry.key}
               className="text-muted-foreground text-xs leading-6"
             >
-              <a
+              <UI.TextLink
                 href={entry.original_url}
                 target="_blank"
                 rel="noreferrer"
                 className="underline"
               >
                 {entry.alt || "媒体"} · 来源链接 ↗
-              </a>
+              </UI.TextLink>
               {failed.has(entry.key) ? " · 当前保存媒体不可读取" : null}
-            </p>
+            </UI.Text>
           );
         })}
-      </div>
+      </UI.Content>
       <Dialog
         open={selected !== null}
         onOpenChange={(open) => {
@@ -162,7 +169,7 @@ export function MediaGallery({
               className="max-h-[70vh] w-full object-contain"
               onError={() => unavailable(selected.key)}
             />
-            <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+            <UI.Content className="flex flex-wrap items-center justify-between gap-3 text-xs">
               <Button
                 size="sm"
                 variant="outline"
@@ -171,9 +178,9 @@ export function MediaGallery({
               >
                 上一张
               </Button>
-              <span>
+              <UI.Text as="span">
                 {(current ?? 0) + 1} / {images.length}
-              </span>
+              </UI.Text>
               <Button
                 size="sm"
                 variant="outline"
@@ -182,18 +189,18 @@ export function MediaGallery({
               >
                 下一张
               </Button>
-              <a
+              <UI.TextLink
                 href={ownedMediaUrl(selected.reading_url)!}
                 target="_blank"
                 rel="noreferrer"
                 className="underline"
               >
                 读取原尺寸图片
-              </a>
-            </div>
+              </UI.TextLink>
+            </UI.Content>
           </DialogContent>
         ) : null}
       </Dialog>
-    </section>
+    </UI.Content>
   );
 }

@@ -1,3 +1,4 @@
+import * as UI from "@/components/ui/content";
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import {
   Item,
@@ -46,28 +47,36 @@ export function ResetTimeline({
   outage: HotKeyAPI.OutageView | null;
 }) {
   return (
-    <section aria-label="公告进展" className="flex flex-col gap-y-8">
+    <UI.Content
+      as="section"
+      aria-label="公告进展"
+      className="flex flex-col gap-y-8"
+    >
       {outage && (
         <Item variant="muted" asChild>
-          <article className="p-5">
+          <UI.Content as="article" className="p-5">
             <ItemContent className="min-w-0 gap-3">
               <ItemTitle className="line-clamp-none w-full">
-                <h3>
+                <UI.Heading level={3}>
                   {outage.recovered_at
                     ? "故障后已发布恢复说明"
                     : "有源帖子报告故障"}
-                </h3>
+                </UI.Heading>
               </ItemTitle>
               <ItemDescription className="mt-2 line-clamp-none leading-6 whitespace-pre-wrap">
                 {outage.translation_zh ?? outage.original_text}
               </ItemDescription>
               <Button asChild variant="link" className="px-0">
-                <a href={outage.url} target="_blank" rel="noopener noreferrer">
+                <UI.TextLink
+                  href={outage.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   阅读故障原帖
-                </a>
+                </UI.TextLink>
               </Button>
             </ItemContent>
-          </article>
+          </UI.Content>
         </Item>
       )}
       {events.length === 0 && (
@@ -78,8 +87,12 @@ export function ResetTimeline({
         </Empty>
       )}
       {events.map((event) => (
-        <article key={event.id} className="flex flex-col gap-y-4">
-          <div className="flex flex-wrap gap-2">
+        <UI.Content
+          as="article"
+          key={event.id}
+          className="flex flex-col gap-y-4"
+        >
+          <UI.Content className="flex flex-wrap gap-2">
             <Badge variant="secondary">
               {event.kind === "reset_credit" ? "重置额度" : "直接重置"}
             </Badge>
@@ -92,41 +105,45 @@ export function ResetTimeline({
             {event.confirmation_basis === "source_post" && (
               <Badge variant="outline">官方源确认</Badge>
             )}
-          </div>
-          <h3 className="text-lg leading-7 font-medium">
+          </UI.Content>
+          <UI.Heading level={3} className="text-lg leading-7 font-medium">
             {event.title || "Codex 重置公告"}
-          </h3>
+          </UI.Heading>
           {event.scope?.audience_zh && (
-            <p className="text-sm">适用范围：{event.scope.audience_zh}</p>
+            <UI.Text className="text-sm">
+              适用范围：{event.scope.audience_zh}
+            </UI.Text>
           )}
           {event.scope?.products_zh && (
-            <p className="text-muted-foreground text-sm">
+            <UI.Text className="text-muted-foreground text-sm">
               产品：{event.scope.products_zh}
-            </p>
+            </UI.Text>
           )}
           {event.scope?.plans?.length ? (
-            <p className="text-muted-foreground text-sm">
+            <UI.Text className="text-muted-foreground text-sm">
               计划：{event.scope.plans.join("、")}
-            </p>
+            </UI.Text>
           ) : null}
           {event.schedule && (
-            <p className="text-sm">原话时间：{event.schedule.label}</p>
+            <UI.Text className="text-sm">
+              原话时间：{event.schedule.label}
+            </UI.Text>
           )}
           {event.estimate && (
-            <div className="text-muted-foreground flex flex-col gap-y-1 text-sm">
-              <p>{event.estimate.label}</p>
-              <p>
+            <UI.Content className="text-muted-foreground flex flex-col gap-y-1 text-sm">
+              <UI.Text>{event.estimate.label}</UI.Text>
+              <UI.Text>
                 {basis[event.estimate.basis]}：{event.estimate.reason}
-              </p>
-            </div>
+              </UI.Text>
+            </UI.Content>
           )}
           {event.status === "confirmed" && (
-            <p className="text-muted-foreground text-sm">
+            <UI.Text className="text-muted-foreground text-sm">
               {event.confirmation_basis === "source_post"
                 ? `确认帖时间：${beijingTime(event.confirmed_at)}`
                 : `人工获证日期：${event.occurred_on || "暂无记录"}`}
               。此时间不是账户精确到账时间。
-            </p>
+            </UI.Text>
           )}
           <ItemGroup className="flex flex-col gap-y-3">
             {(event.posts ?? []).map((post) => (
@@ -148,24 +165,24 @@ export function ResetTimeline({
                             ? "进展"
                             : "公告"}
                   </ItemDescription>
-                  <p className="mt-1 leading-6 whitespace-pre-wrap">
+                  <UI.Text className="mt-1 leading-6 whitespace-pre-wrap">
                     {post.excerpt_zh || post.translation_zh || post.excerpt}
-                  </p>
+                  </UI.Text>
                   <Button asChild variant="link" className="px-0">
-                    <a
+                    <UI.TextLink
                       href={post.url}
                       target="_blank"
                       rel="noopener noreferrer"
                     >
                       阅读公告原帖
-                    </a>
+                    </UI.TextLink>
                   </Button>
                 </ItemContent>
               </Item>
             ))}
           </ItemGroup>
-        </article>
+        </UI.Content>
       ))}
-    </section>
+    </UI.Content>
   );
 }

@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import Image from "next/image";
@@ -235,7 +237,7 @@ export function LoginForm({
       {options && (
         <>
           {method === "password" && options.password && (
-            <form onSubmit={submitPassword} aria-label="账号密码登录">
+            <UI.Form onSubmit={submitPassword} aria-label="账号密码登录">
               <FieldGroup className="gap-6">
                 <Field data-disabled={!ready}>
                   <FieldLabel htmlFor="login-username">邮箱或用户名</FieldLabel>
@@ -300,10 +302,10 @@ export function LoginForm({
                   {busy === "password" ? "正在登录…" : "登录并进入工作区"}
                 </Button>
               </FieldGroup>
-            </form>
+            </UI.Form>
           )}
           {method === "email" && options.email && (
-            <form onSubmit={submitEmail} aria-label="邮箱验证码登录">
+            <UI.Form onSubmit={submitEmail} aria-label="邮箱验证码登录">
               <FieldGroup className="gap-6">
                 <Field data-disabled={!ready}>
                   <FieldLabel htmlFor="login-email">邮箱</FieldLabel>
@@ -382,23 +384,23 @@ export function LoginForm({
                   </Button>
                 )}
               </FieldGroup>
-            </form>
+            </UI.Form>
           )}
           {method === "github" && (
             <Alert role="status" className="leading-6">
               <AlertDescription>请选择下方可用的登录方式。</AlertDescription>
             </Alert>
           )}
-          <div
+          <UI.Content
             className="mt-7 flex flex-col gap-y-3"
             role="group"
             aria-label="其他登录方式"
           >
-            <div className="text-muted-foreground mb-4 flex items-center gap-4 text-xs">
+            <UI.Content className="text-muted-foreground mb-4 flex items-center gap-4 text-xs">
               <Separator className="flex-1" />
-              <span>或使用其他方式</span>
+              <UI.Text as="span">或使用其他方式</UI.Text>
               <Separator className="flex-1" />
-            </div>
+            </UI.Content>
             <Button
               type="button"
               variant="outline"
@@ -420,14 +422,14 @@ export function LoginForm({
               {method === "email" ? "使用账号密码登录" : "使用邮箱验证码登录"}
             </Button>
             {method === "email" && !options.password && (
-              <p className="text-muted-foreground text-xs leading-5">
+              <UI.Text className="text-muted-foreground text-xs leading-5">
                 账号密码登录暂未启用。
-              </p>
+              </UI.Text>
             )}
             {method !== "email" && !options.email && (
-              <p className="text-muted-foreground text-xs leading-5">
+              <UI.Text className="text-muted-foreground text-xs leading-5">
                 邮箱验证码登录尚未配置。
-              </p>
+              </UI.Text>
             )}
             <Button
               type="button"
@@ -448,11 +450,11 @@ export function LoginForm({
               {busy === "github" ? "正在前往 GitHub…" : "使用 GitHub 登录"}
             </Button>
             {!options.github && (
-              <p className="text-muted-foreground text-xs leading-5">
+              <UI.Text className="text-muted-foreground text-xs leading-5">
                 GitHub 登录尚未配置。
-              </p>
+              </UI.Text>
             )}
-          </div>
+          </UI.Content>
         </>
       )}
     </LoginFormLayout>

@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { Spinner } from "@/components/ui/spinner";
 import { Item, ItemContent, ItemDescription } from "@/components/ui/item";
 import { toast } from "sonner";
@@ -85,11 +87,17 @@ export function EditorialSourceMaterials({ token, sourceKey, name }: Props) {
     }
   }
   return (
-    <section className="flex flex-col gap-y-4" aria-label="来源最近材料">
-      <h2 className="text-xl font-medium">{name} · 原材料</h2>
-      <p className="text-muted-foreground text-sm leading-7">
+    <UI.Content
+      as="section"
+      className="flex flex-col gap-y-4"
+      aria-label="来源最近材料"
+    >
+      <UI.Heading level={2} className="text-xl font-medium">
+        {name} · 原材料
+      </UI.Heading>
+      <UI.Text className="text-muted-foreground text-sm leading-7">
         仅读取当前许可的原材料，不按公开精选状态筛选。分析状态表示原监控标注；编辑精选和发布状态请在对应管理页核验。读取不采集、不调用模型。
-      </p>
+      </UI.Text>
       <Button
         variant="outline"
         disabled={!token || busy}
@@ -108,26 +116,26 @@ export function EditorialSourceMaterials({ token, sourceKey, name }: Props) {
         </Item>
       ) : null}
       {rows?.length === 0 ? (
-        <p>此来源暂无当前可读材料；不代表来源历史为空。</p>
+        <UI.Text>此来源暂无当前可读材料；不代表来源历史为空。</UI.Text>
       ) : null}
       {rows ? (
         <>
-          <p className="text-muted-foreground text-sm">
+          <UI.Text className="text-muted-foreground text-sm">
             已加载 {rows.length} 条
             {cursor ? "，还有后页" : "，当前分页已到末尾"}。
-          </p>
+          </UI.Text>
           {rows.map((item) => (
             <Item variant="muted" key={item.id} asChild>
-              <article className="flex flex-col gap-y-3 p-4">
+              <UI.Content as="article" className="flex flex-col gap-y-3 p-4">
                 <ItemContent className="min-w-0 gap-3">
-                  <p className="font-medium break-words">
+                  <UI.Text className="font-medium break-words">
                     {item.latest_observation.content_version?.title ||
                       item.latest_observation.content_version?.body?.slice(
                         0,
                         120,
                       ) ||
                       "可读材料暂无文字"}
-                  </p>
+                  </UI.Text>
                   <ItemDescription className="line-clamp-none">
                     {item.analysis_state
                       ? states[item.analysis_state]
@@ -146,7 +154,7 @@ export function EditorialSourceMaterials({ token, sourceKey, name }: Props) {
                   <ItemDescription className="line-clamp-none break-all">
                     作品编号 {item.id}
                   </ItemDescription>
-                  <div className="flex flex-wrap gap-4 text-sm">
+                  <UI.Content className="flex flex-wrap gap-4 text-sm">
                     <Link
                       href={`/content/${item.id}`}
                       className="underline underline-offset-4"
@@ -159,9 +167,9 @@ export function EditorialSourceMaterials({ token, sourceKey, name }: Props) {
                     >
                       编辑分析与发布 {item.id}
                     </Link>
-                  </div>
+                  </UI.Content>
                 </ItemContent>
-              </article>
+              </UI.Content>
             </Item>
           ))}
           {cursor ? (
@@ -175,8 +183,10 @@ export function EditorialSourceMaterials({ token, sourceKey, name }: Props) {
           ) : null}
         </>
       ) : (
-        <p className="text-muted-foreground text-sm">尚未读取此来源材料。</p>
+        <UI.Text className="text-muted-foreground text-sm">
+          尚未读取此来源材料。
+        </UI.Text>
       )}
-    </section>
+    </UI.Content>
   );
 }

@@ -1,4 +1,6 @@
 "use client";
+import * as UI from "@/components/ui/content";
+
 import { AlertDescription, Alert } from "@/components/ui/alert";
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import {
@@ -144,17 +146,17 @@ function BudgetEditor({
     }
   }
   return (
-    <form onSubmit={submit}>
+    <UI.Form onSubmit={submit}>
       <Item variant="muted" asChild>
         <FieldGroup className="grid gap-3 p-4 sm:grid-cols-2">
-          <p className="break-all sm:col-span-2">
+          <UI.Text className="break-all sm:col-span-2">
             {row.budget_key} · {row.metric} · {row.scope_kind}
             {row.scope_reference ? `:${row.scope_reference}` : ""}
-            <span className="text-muted-foreground block text-sm">
+            <UI.Text as="span" className="text-muted-foreground block text-sm">
               已用 {row.used_units} · 预留 {row.reserved_units} · 剩余{" "}
               {row.remaining_units} · 版本 {row.policy_version}
-            </span>
-          </p>
+            </UI.Text>
+          </UI.Text>
           <Field className="min-w-0">
             <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-1`}>
               上限
@@ -215,7 +217,7 @@ function BudgetEditor({
           </Button>
         </FieldGroup>
       </Item>
-    </form>
+    </UI.Form>
   );
 }
 function BudgetCreator({
@@ -290,7 +292,9 @@ function BudgetCreator({
             variant="ghost"
             className="group h-auto w-full justify-between gap-2 px-0 whitespace-normal"
           >
-            <span className="min-w-0 text-left">创建预算政策</span>
+            <UI.Text as="span" className="min-w-0 text-left">
+              创建预算政策
+            </UI.Text>
             <ChevronDownIcon
               aria-hidden="true"
               data-icon="inline-end"
@@ -299,7 +303,7 @@ function BudgetCreator({
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent forceMount className="data-[state=closed]:hidden">
-          <form onSubmit={submit}>
+          <UI.Form onSubmit={submit}>
             <FieldGroup className="mt-3 grid gap-3 sm:grid-cols-2">
               <Field className="min-w-0">
                 <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-5`}>
@@ -452,7 +456,7 @@ function BudgetCreator({
                 创建硬预算
               </Button>
             </FieldGroup>
-          </form>
+          </UI.Form>
         </CollapsibleContent>
       </Collapsible>
     </Item>
@@ -536,37 +540,39 @@ function FeedbackReview({
   }
   return (
     <Item variant="muted" asChild>
-      <article className="grid gap-3 p-4">
+      <UI.Content as="article" className="grid gap-3 p-4">
         <ItemContent className="min-w-0 gap-3">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <p className="text-sm break-all">
+          <UI.Content className="flex flex-wrap items-start justify-between gap-2">
+            <UI.Text className="text-sm break-all">
               {row.id} · {row.status} · 版本 {row.revision}
-              <span className="text-muted-foreground block">
+              <UI.Text as="span" className="text-muted-foreground block">
                 {row.created_at} · 转发{" "}
                 {row.forwarded_at ?? row.forward_error ?? "未发送"}
-              </span>
-            </p>
+              </UI.Text>
+            </UI.Text>
             {row.attachment_id && (
               <Button variant="ghost" onClick={screenshot}>
                 下载私有截图
               </Button>
             )}
-          </div>
-          <p className="break-words whitespace-pre-wrap">
+          </UI.Content>
+          <UI.Text className="break-words whitespace-pre-wrap">
             {row.content ?? "内容已删除"}
-          </p>
-          {row.email && <p className="text-sm break-all">{row.email}</p>}
+          </UI.Text>
+          {row.email && (
+            <UI.Text className="text-sm break-all">{row.email}</UI.Text>
+          )}
           {row.page_url && (
-            <a
+            <UI.TextLink
               className="text-sm break-all underline"
               href={row.page_url}
               target="_blank"
               rel="noreferrer"
             >
               相关页面
-            </a>
+            </UI.TextLink>
           )}
-          <form onSubmit={submit}>
+          <UI.Form onSubmit={submit}>
             <FieldGroup className="grid gap-3 sm:grid-cols-2">
               <Field className="min-w-0">
                 <FieldLabel
@@ -656,14 +662,14 @@ function FeedbackReview({
                 保存反馈处置
               </Button>
             </FieldGroup>
-          </form>
+          </UI.Form>
           {status === "deleted" && (
             <ItemDescription className="line-clamp-none">
               保存后会清除正文、联系方式和截图。
             </ItemDescription>
           )}
         </ItemContent>
-      </article>
+      </UI.Content>
     </Item>
   );
 }
@@ -731,9 +737,11 @@ function DictionaryEditor({
     }
   }
   return (
-    <section className="grid gap-4">
-      <h2 className="text-xl font-semibold">词典版本</h2>
-      <form onSubmit={submit}>
+    <UI.Content as="section" className="grid gap-4">
+      <UI.Heading level={2} className="text-xl font-semibold">
+        词典版本
+      </UI.Heading>
+      <UI.Form onSubmit={submit}>
         <FieldGroup className="grid gap-3">
           <Field className="min-w-0">
             <FieldLabel htmlFor={`${fieldId}-operations-workspace-field-16`}>
@@ -777,10 +785,10 @@ function DictionaryEditor({
               </SelectContent>
             </Select>
           </Field>
-          <p className="text-sm">
+          <UI.Text className="text-sm">
             当前版本{" "}
             {rows.find((row) => row.kind === kind)?.version ?? "尚未创建"}
-          </p>
+          </UI.Text>
           <Textarea
             aria-label="词典内容"
             rows={8}
@@ -809,8 +817,8 @@ function DictionaryEditor({
             保存词典新版本
           </Button>
         </FieldGroup>
-      </form>
-    </section>
+      </UI.Form>
+    </UI.Content>
   );
 }
 function AuditResolution({
@@ -857,11 +865,11 @@ function AuditResolution({
     }
   }
   return (
-    <form onSubmit={submit}>
+    <UI.Form onSubmit={submit}>
       <FieldGroup className="mt-3 grid gap-3">
-        <p className="text-sm">
+        <UI.Text className="text-sm">
           请先在目的地核对实际投递；核对结果不会自动再次发送。
-        </p>
+        </UI.Text>
         <Select
           value={outcome}
           onValueChange={(selectedValue) =>
@@ -900,7 +908,7 @@ function AuditResolution({
           记录投递核对
         </Button>
       </FieldGroup>
-    </form>
+    </UI.Form>
   );
 }
 
@@ -1073,20 +1081,22 @@ export function OperationsWorkspace() {
   }
   return (
     <>
-      <div className="grid gap-10">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-semibold">运营管理</h1>
-            <p className="text-muted-foreground mt-2 text-sm">
+      <UI.Content className="grid gap-10">
+        <UI.Content className="flex flex-wrap items-center justify-between gap-4">
+          <UI.Content>
+            <UI.Heading level={1} className="text-3xl font-semibold">
+              运营管理
+            </UI.Heading>
+            <UI.Text className="text-muted-foreground mt-2 text-sm">
               独立运营权限 · Token 仅保留在当前页面内存
-            </p>
-          </div>
+            </UI.Text>
+          </UI.Content>
           <Link href="/feedback" className="text-sm underline">
             打开反馈入口
           </Link>
-        </div>
+        </UI.Content>
         {!token ? (
-          <form
+          <UI.Form
             onSubmit={(e) => {
               e.preventDefault();
               enter();
@@ -1118,36 +1128,38 @@ export function OperationsWorkspace() {
                 进入运营工作区
               </Button>
             </FieldGroup>
-          </form>
+          </UI.Form>
         ) : (
-          <div className="flex gap-2">
+          <UI.Content className="flex gap-2">
             <Button disabled={pending} onClick={() => void refresh()}>
               刷新运营状态
             </Button>
             <Button variant="ghost" onClick={() => clearAccess()}>
               退出运营工作区
             </Button>
-          </div>
+          </UI.Content>
         )}
         {token && health && (
           <>
-            <section className="grid gap-5">
-              <h2 className="text-xl font-semibold">进程与预算</h2>
-              <div className="flex flex-wrap gap-4 text-sm">
-                <span>
+            <UI.Content as="section" className="grid gap-5">
+              <UI.Heading level={2} className="text-xl font-semibold">
+                进程与预算
+              </UI.Heading>
+              <UI.Content className="flex flex-wrap gap-4 text-sm">
+                <UI.Text as="span">
                   {health.maintenance_enabled
                     ? "维护调度已开启"
                     : "维护调度已关闭"}
-                </span>
-                <span>
+                </UI.Text>
+                <UI.Text as="span">
                   {health.backup_configured ? "备份已配置" : "备份未配置"}
-                </span>
-                <span>
+                </UI.Text>
+                <UI.Text as="span">
                   {health.feedback_forward_enabled
                     ? "反馈转发已开启"
                     : "反馈外部转发已关闭"}
-                </span>
-              </div>
+                </UI.Text>
+              </UI.Content>
               {health.heartbeats.length === 0 ? (
                 <Empty>
                   <EmptyHeader>
@@ -1155,28 +1167,31 @@ export function OperationsWorkspace() {
                   </EmptyHeader>
                 </Empty>
               ) : (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <UI.Content className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   {health.heartbeats.map((row) => (
                     <Alert role="note" key={row.instance_id} className="p-4">
                       <AlertDescription>
                         {row.role} · {row.state}
-                        <span className="text-muted-foreground block text-sm">
+                        <UI.Text
+                          as="span"
+                          className="text-muted-foreground block text-sm"
+                        >
                           PID {row.pid} · {row.age_seconds} 秒前
-                        </span>
+                        </UI.Text>
                       </AlertDescription>
                     </Alert>
                   ))}
-                </div>
+                </UI.Content>
               )}
               {health.failure_issues.map((row) => (
-                <pre
+                <UI.CodeBlock
                   key={row.latest_failed_job_id}
                   className="bg-muted/40 overflow-auto rounded-lg p-3 text-xs"
                 >
                   {JSON.stringify(row, null, 2)}
-                </pre>
+                </UI.CodeBlock>
               ))}
-              <div className="grid gap-4 lg:grid-cols-2">
+              <UI.Content className="grid gap-4 lg:grid-cols-2">
                 {health.budgets.map((row) => (
                   <BudgetEditor
                     key={`${row.budget_key}:${row.policy_version}`}
@@ -1185,30 +1200,32 @@ export function OperationsWorkspace() {
                     saved={() => refresh()}
                   />
                 ))}
-              </div>
+              </UI.Content>
               <BudgetCreator options={options} saved={() => refresh()} />
-            </section>
+            </UI.Content>
             {maintenance && (
-              <section className="grid gap-5">
-                <h2 className="text-xl font-semibold">维护与恢复</h2>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <UI.Content as="section" className="grid gap-5">
+                <UI.Heading level={2} className="text-xl font-semibold">
+                  维护与恢复
+                </UI.Heading>
+                <UI.Content className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {maintenance.schedules.map((row) => (
                     <Item variant="muted" key={row.action} asChild>
-                      <div className="p-4">
+                      <UI.Content className="p-4">
                         <ItemContent className="min-w-0 gap-3">
-                          <p>
+                          <UI.Text>
                             {labels[row.action] ?? row.action} ·{" "}
                             {row.enabled ? "已启用" : "已关闭"}
-                          </p>
+                          </UI.Text>
                           <ItemDescription className="line-clamp-none">
                             间隔 {row.interval_seconds} 秒 · 最近{" "}
                             {row.latest_audit?.status ?? "无执行记录"}
                           </ItemDescription>
                         </ItemContent>
-                      </div>
+                      </UI.Content>
                     </Item>
                   ))}
-                </div>
+                </UI.Content>
                 {maintenance.schedules.map((row) => {
                   const report =
                     row.latest_audit?.after_state?.source_health_report;
@@ -1219,10 +1236,10 @@ export function OperationsWorkspace() {
                     return null;
                   return (
                     <Item variant="muted" key="source-health-report" asChild>
-                      <section className="p-4">
+                      <UI.Content as="section" className="p-4">
                         <ItemContent className="min-w-0 gap-3">
                           <ItemTitle className="line-clamp-none w-full">
-                            <h3>最近来源周报</h3>
+                            <UI.Heading level={3}>最近来源周报</UI.Heading>
                           </ItemTitle>
                           <ItemDescription className="mt-2 line-clamp-none whitespace-pre-wrap">
                             {report}
@@ -1235,21 +1252,25 @@ export function OperationsWorkspace() {
                                 : "本地报告已保存；请在审计中查看投递状态"}
                           </ItemDescription>
                         </ItemContent>
-                      </section>
+                      </UI.Content>
                     </Item>
                   );
                 })}
                 {maintenance.findings.map((row) => (
                   <Alert role="note" key={row.key} className="p-4">
                     <AlertDescription>
-                      <strong>{row.title}</strong> · {row.severity}
-                      <span className="text-muted-foreground block text-sm">
+                      <UI.Text as="strong">{row.title}</UI.Text> ·{" "}
+                      {row.severity}
+                      <UI.Text
+                        as="span"
+                        className="text-muted-foreground block text-sm"
+                      >
                         {row.detail}
-                      </span>
+                      </UI.Text>
                     </AlertDescription>
                   </Alert>
                 ))}
-                <form onSubmit={run}>
+                <UI.Form onSubmit={run}>
                   <FieldGroup className="grid gap-3 sm:grid-cols-2">
                     <Field className="min-w-0">
                       <FieldLabel
@@ -1327,18 +1348,18 @@ export function OperationsWorkspace() {
                       受理维护任务
                     </Button>
                   </FieldGroup>
-                </form>
-                <div className="grid gap-3">
+                </UI.Form>
+                <UI.Content className="grid gap-3">
                   {maintenance.backups.map((row) => (
                     <Item variant="muted" key={row.id} asChild>
-                      <div className="p-4">
+                      <UI.Content className="p-4">
                         <ItemContent className="min-w-0 gap-3">
-                          <p>
+                          <UI.Text>
                             {row.action} · {row.status}
-                          </p>
-                          <pre className="mt-2 overflow-auto text-xs">
+                          </UI.Text>
+                          <UI.CodeBlock className="mt-2 overflow-auto text-xs">
                             {JSON.stringify(row.after_state, null, 2)}
-                          </pre>
+                          </UI.CodeBlock>
                           {row.job_id && (
                             <Link
                               className="text-sm underline"
@@ -1348,18 +1369,20 @@ export function OperationsWorkspace() {
                             </Link>
                           )}
                         </ItemContent>
-                      </div>
+                      </UI.Content>
                     </Item>
                   ))}
-                </div>
-              </section>
+                </UI.Content>
+              </UI.Content>
             )}
-            <section className="grid gap-5">
-              <h2 className="text-xl font-semibold">反馈处置</h2>
-              <p className="text-muted-foreground text-sm">
+            <UI.Content as="section" className="grid gap-5">
+              <UI.Heading level={2} className="text-xl font-semibold">
+                反馈处置
+              </UI.Heading>
+              <UI.Text className="text-muted-foreground text-sm">
                 新反馈 {health.feedback_new_count} · 处理中{" "}
                 {health.feedback_reviewing_count}
-              </p>
+              </UI.Text>
               {feedback.map((row) => (
                 <FeedbackReview
                   key={`${row.id}:${row.revision}`}
@@ -1385,7 +1408,7 @@ export function OperationsWorkspace() {
                   加载更多反馈
                 </Button>
               )}
-            </section>
+            </UI.Content>
             <DictionaryEditor
               key={dictionaries.map((row) => row.id).join()}
               rows={dictionaries}
@@ -1396,20 +1419,25 @@ export function OperationsWorkspace() {
             <NotificationWorkspace token={token} />
             <SelectBenchReading token={token} />
             <RelationBench token={token} />
-            <section className="grid gap-4">
-              <h2 className="text-xl font-semibold">操作审计</h2>
+            <UI.Content as="section" className="grid gap-4">
+              <UI.Heading level={2} className="text-xl font-semibold">
+                操作审计
+              </UI.Heading>
               {audits.map((row) => (
                 <Item variant="muted" key={row.id} asChild>
-                  <article className="p-4">
+                  <UI.Content as="article" className="p-4">
                     <ItemContent className="min-w-0 gap-3">
-                      <p className="break-all">
+                      <UI.Text className="break-all">
                         {row.action} · {row.status}
-                        <span className="text-muted-foreground block text-sm">
+                        <UI.Text
+                          as="span"
+                          className="text-muted-foreground block text-sm"
+                        >
                           {row.created_at} · {row.reason}
-                        </span>
-                      </p>
+                        </UI.Text>
+                      </UI.Text>
                       {row.error_code && (
-                        <p className="text-sm">{row.error_code}</p>
+                        <UI.Text className="text-sm">{row.error_code}</UI.Text>
                       )}
                       {row.job_id && (
                         <Link
@@ -1427,7 +1455,7 @@ export function OperationsWorkspace() {
                         />
                       )}
                     </ItemContent>
-                  </article>
+                  </UI.Content>
                 </Item>
               ))}
               {auditCursor && (
@@ -1439,10 +1467,10 @@ export function OperationsWorkspace() {
                   加载更多审计
                 </Button>
               )}
-            </section>
+            </UI.Content>
           </>
         )}
-      </div>
+      </UI.Content>
     </>
   );
 }
