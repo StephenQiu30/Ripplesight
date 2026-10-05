@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 from datetime import UTC, datetime
 from pathlib import Path
@@ -11,6 +12,7 @@ from playwright.async_api import Error as PlaywrightError
 from pydantic import ValidationError
 from redis import Redis
 
+from analysis.evaluation_digest import evaluate_event_digests, parse_digest_evaluation_jsonl
 from backups.adapters.minio import (
     MinioEvidenceRestoreVerifier,
     MinioObjectInventory,
@@ -131,6 +133,21 @@ def main() -> None:
 def version() -> None:
     """Print the backend version."""
     typer.echo(get_settings().app_version)
+
+
+@app.command("evaluate-event-digests")
+def evaluate_event_digest_cases(
+    cases: Annotated[Path, typer.Option(exists=True, dir_okay=False, readable=True)],
+) -> None:
+    """Compare old/new prompts and controlled JSONL outputs without model or DB access."""
+    try:
+        if cases.stat().st_size > 80_000_000:
+            raise ValueError("digest cases exceed file size limit")
+        report = evaluate_event_digests(parse_digest_evaluation_jsonl(cases.read_text("utf-8")))
+    except (ValueError, OSError):
+        typer.echo("事件概览离线评测失败:请核对JSONL字段、唯一案例及输入上限。", err=True)
+        raise typer.Exit(code=1) from None
+    typer.echo(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2))
 
 
 @source_preset_app.command("list")

@@ -17,7 +17,7 @@ from content.event_reading import load_event_member_content_in_transaction
 from content.observation_inputs import freeze_observation_inputs_in_transaction
 from content.schemas import EventContentReadReference, EventContentReadView
 from core.errors import ApplicationError
-from events.digest import load_event_digest_input_in_transaction
+from events.digest import load_recorded_event_digest_input_in_transaction
 from events.fact_models import EventDerivedContent, EventFact, EventFactAssignment
 from events.fact_schemas import (
     EventPublicationMemberReference,
@@ -448,8 +448,8 @@ class EventReadService:
         for event_id, derived in valid_derived.items():
             event = self._session.get(Event, event_id)
             assert event is not None
-            current_input = load_event_digest_input_in_transaction(
-                self._session, event=event, now=now
+            current_input = load_recorded_event_digest_input_in_transaction(
+                self._session, event=event, derived=derived, now=now
             )
             derived_available[event_id] = (
                 current_input is not None and current_input.fingerprint == derived.input_fingerprint
