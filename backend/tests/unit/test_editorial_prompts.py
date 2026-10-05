@@ -77,6 +77,7 @@ def test_missing_include_and_include_cycle_fail_closed(
 def test_all_migrated_templates_render_with_the_declared_values() -> None:
     values = {
         "facts": "已验证事实",
+        "eventData": '{"members":[],"facts":[]}',
         "kindName": "月报",
         "span": "个月",
         "sentences": "三句话",
