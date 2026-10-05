@@ -379,10 +379,18 @@ def test_actual_fixed_media_job_budget_evidence_bytes_and_revocation(prepared):
             owner_id=owner, content_id=run.content_id, now=at
         )
         assert detail and detail.body and detail.body.media[0].state == "available"
+        assert detail.category is not None
         assert "<img" in detail.body.original_html and "srcset=" in detail.body.original_html
         assert "https://images.example" not in detail.body.original_html
         file_id = session.execute(text("SELECT id FROM publication_media_files")).scalar_one()
     with sessions() as session:
+        excluded = "opinion" if detail.category != "opinion" else "tip"
+        reads = len(storage.reads)
+        with pytest.raises(ApplicationError, match="resource_not_found"):
+            PublicationMediaReadingService(session, storage, public_categories=(excluded,)).read(
+                owner_id=owner, file_id=file_id, mode="image-720", redistribute=False, now=at
+            )
+        assert len(storage.reads) == reads  # Exclusion is checked before reading cached objects.
         reading = PublicationMediaReadingService(session, storage)
         image = reading.read(
             owner_id=owner, file_id=file_id, mode="image-720", redistribute=False, now=at

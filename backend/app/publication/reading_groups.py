@@ -23,6 +23,7 @@ from publication.group_schemas import (
 from publication.listing import PublicationListingMember, iter_current_publications_in_transaction
 from publication.projection import fingerprint
 from publication.reading import public_item
+from publication.schemas import Category
 
 
 def pick_representative(rows: list[PublicationListingMember]) -> PublicationListingMember:
@@ -183,16 +184,24 @@ def timeline_in_transaction(
     now: datetime,
     limit: int = 20,
     cursor: str | None = None,
+    public_categories: tuple[Category, ...] = (),
 ) -> PublicTimelinePage:
     if now.utcoffset() is None or not 1 <= limit <= 40:
         raise ApplicationError("invalid_publication_input")
-    scope = {"owner": owner_id, "type": "timeline", **filters.model_dump()}
+    scope = {
+        "owner": owner_id,
+        "type": "timeline",
+        **filters.model_dump(),
+        "public_categories": tuple(sorted(set(public_categories))),
+    }
     tags = _topic_tags(filters)
     refresh_at: datetime | None = None
 
     def stream() -> Iterable[PublicationListingMember]:
         nonlocal refresh_at
-        for member in iter_current_publications_in_transaction(session, owner_id=owner_id, now=now):
+        for member in iter_current_publications_in_transaction(
+            session, owner_id=owner_id, now=now, public_categories=public_categories
+        ):
             p = member.projection
             if (
                 matching_member(member, filters, now=now, topic_tags=tags, released=False)
@@ -266,17 +275,24 @@ def fact_reports_in_transaction(
     now: datetime,
     limit: int = 20,
     cursor: str | None = None,
+    public_categories: tuple[Category, ...] = (),
     revision: str | None = None,
 ) -> PublicFactReportsPage:
     if not 1 <= limit <= 100:
         raise ApplicationError("invalid_publication_input")
-    scope = {"owner": owner_id, "type": "fact-reports", "fact": fact_id, **filters.model_dump()}
+    scope = {
+        "owner": owner_id,
+        "type": "fact-reports",
+        "fact": fact_id,
+        **filters.model_dump(),
+        "public_categories": tuple(sorted(set(public_categories))),
+    }
     offset = _requested_offset(cursor=cursor, scope=scope)
     page: list[PublicationListingMember] = []
     total, digest = 0, sha256()
     tags = _topic_tags(filters)
     for row in iter_current_publications_in_transaction(
-        session, owner_id=owner_id, now=now, order="timeline"
+        session, owner_id=owner_id, now=now, order="timeline", public_categories=public_categories
     ):
         if row.projection.fact_id != fact_id or not matching_member(
             row, filters, now=now, topic_tags=tags
@@ -311,6 +327,7 @@ def developments_in_transaction(
     now: datetime,
     limit: int = 20,
     cursor: str | None = None,
+    public_categories: tuple[Category, ...] = (),
     revision: str | None = None,
 ) -> PublicDevelopmentsPage:
     if not 1 <= limit <= 100:
@@ -318,7 +335,9 @@ def developments_in_transaction(
     by_fact: dict[UUID, _FactSummary] = {}
     digest = sha256()
     tags = _topic_tags(filters)
-    for row in iter_current_publications_in_transaction(session, owner_id=owner_id, now=now):
+    for row in iter_current_publications_in_transaction(
+        session, owner_id=owner_id, now=now, public_categories=public_categories
+    ):
         if (
             row.projection.event_id != event_id
             or not row.projection.fact_id
@@ -334,7 +353,13 @@ def developments_in_transaction(
         raise ApplicationError("resource_not_found")
     developments.sort(key=lambda item: (item.anchor_at, str(item.fact_id)), reverse=True)
     current_revision = digest.hexdigest()[:20]
-    scope = {"owner": owner_id, "type": "developments", "event": event_id, **filters.model_dump()}
+    scope = {
+        "owner": owner_id,
+        "type": "developments",
+        "event": event_id,
+        **filters.model_dump(),
+        "public_categories": tuple(sorted(set(public_categories))),
+    }
     offset = _expansion_offset(
         cursor=cursor, expected_revision=revision, scope=scope, revision=current_revision
     )

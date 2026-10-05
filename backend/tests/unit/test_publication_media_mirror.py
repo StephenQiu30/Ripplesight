@@ -30,6 +30,96 @@ def test_real_raster_renditions_do_not_enlarge_and_avatar_crops() -> None:
             assert decoded.width == min(900, IMAGE_WIDTHS[item.mode])
 
 
+@pytest.mark.parametrize("format", ["PNG", "JPEG", "WEBP"])
+def test_static_aliases_encode_once_per_actual_size_and_crop_without_cross_call_cache(
+    monkeypatch, format
+):
+    body = image_bytes(format)
+    calls = []
+    save = Image.Image.save
+
+    def counted(image, *args, **kwargs):
+        calls.append((image.size, kwargs.get("format")))
+        return save(image, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "save", counted)
+    result = {item.mode: item for item in encode_image_renditions(body)}
+    assert len(calls) == 5  # Two square crops and three un-enlarged landscape sizes.
+    assert set(result) == set(IMAGE_WIDTHS)
+    for aliases in (("avatar", "avatar-96"), ("card", "image-336"), ("thumb", "image-720")):
+        assert result[aliases[0]].body is result[aliases[1]].body
+    assert result["full"].body is result["og"].body is result["image-1200"].body
+    assert result["full"].body is result["image-1600"].body
+    for item in result.values():
+        with Image.open(io.BytesIO(item.body)) as decoded:
+            assert decoded.size == (item.width, item.height)
+            assert decoded.format == ("JPEG" if format == "JPEG" else "WEBP")
+    encode_image_renditions(body)
+    assert len(calls) == 10
+
+
+def test_static_reuse_uses_exif_corrected_dimensions_and_separates_square_crop(monkeypatch):
+    output = io.BytesIO()
+    exif = Image.Exif()
+    exif[274] = 6
+    Image.new("RGB", (900, 300), "red").save(output, format="JPEG", exif=exif)
+    calls = []
+    save = Image.Image.save
+
+    def counted(image, *args, **kwargs):
+        calls.append(image.size)
+        return save(image, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "save", counted)
+    result = {item.mode: item for item in encode_image_renditions(output.getvalue())}
+    assert calls == [(96, 96), (300, 900), (48, 48)]
+    assert (result["card"].width, result["card"].height) == (300, 900)
+    assert result["card"].body is result["full"].body
+    calls.clear()
+    square = io.BytesIO()
+    save(Image.new("RGB", (96, 96), "blue"), square, format="PNG")
+    encode_image_renditions(square.getvalue())
+    assert calls == [(96, 96), (96, 96), (48, 48)]
+
+
+def test_svg_size_and_active_resource_bounds_stay_closed():
+    for body in (
+        b'<svg width="200" height="100"><desc>' + b"a" * (128 * 1024) + b"</desc></svg>",
+        b'<svg width="200" height="100">' + b"<g/>" * 2000 + b"</svg>",
+        b'<svg width="200" height="100"><use href="https://example.com/a"/></svg>',
+    ):
+        with pytest.raises(ValueError):
+            encode_image_renditions(body)
+    result = encode_image_renditions(b'<svg width="200" height="100"><rect/></svg>')
+    assert all(
+        item.width == 200 and item.height == 100 for item in result if "avatar" not in item.mode
+    )
+
+
+def test_safe_svg_aliases_serialize_once_per_size_and_crop(monkeypatch):
+    from xml.etree import ElementTree
+
+    calls = []
+    serialize = ElementTree.tostring
+
+    def counted(root, *args, **kwargs):
+        calls.append((root.get("width"), root.get("height"), root.get("preserveAspectRatio")))
+        return serialize(root, *args, **kwargs)
+
+    monkeypatch.setattr(ElementTree, "tostring", counted)
+    result = {
+        item.mode: item
+        for item in encode_image_renditions(b'<svg width="200" height="100"><rect/></svg>')
+    }
+    assert len(calls) == 5  # Two bounded normalization passes, then only three output geometries.
+    assert result["avatar"].body is result["avatar-96"].body
+    assert all(
+        result[mode].body is result["full"].body for mode in IMAGE_WIDTHS if "avatar" not in mode
+    )
+    assert b"xMidYMid slice" in result["avatar"].body
+    assert b"xMidYMid meet" in result["full"].body
+
+
 def test_icon_avatar_codec_only_decodes_first_frame_and_two_square_sizes():
     from publication.media_mirror_codec import encode_avatar_renditions
 
