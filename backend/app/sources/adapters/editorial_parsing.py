@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import quote
@@ -31,6 +33,37 @@ def sanitize_html(value: str, base: str) -> tuple[str, str]:
 def plain(value: str) -> str:
     _, text = sanitize_html(value, "https://example.invalid/")
     return collapse(text)
+
+
+@dataclass
+class EditorialParsingStats:
+    filtered: int = 0
+
+
+def required_terms_match(title: str, summary: str | None, terms: tuple[str, ...]) -> bool:
+    if not terms:
+        return True
+    texts = tuple(
+        collapse(unicodedata.normalize("NFKC", text)).casefold() for text in (title, summary or "")
+    )
+    for term in terms:
+        key = collapse(unicodedata.normalize("NFKC", term)).casefold()
+        before = r"(?<![a-z0-9])" if key[0].isascii() and key[0].isalnum() else ""
+        after = r"(?![a-z0-9])" if key[-1].isascii() and key[-1].isalnum() else ""
+        if any(re.search(before + re.escape(key) + after, text) for text in texts):
+            return True
+    return False
+
+
+def summary_excerpt(
+    summary: str | None, max_chars: int | None, *, default_limit: int
+) -> tuple[str | None, bool]:
+    if summary is None:
+        return None, False
+    if max_chars is None:
+        return summary[:default_limit], False
+    truncated = len(summary) > max_chars
+    return (summary[: max_chars - 1] + "…" if truncated else summary), truncated
 
 
 def get_path(obj: object, path: str) -> Any:
