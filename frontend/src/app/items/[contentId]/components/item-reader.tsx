@@ -12,16 +12,7 @@ import {
   ItemDescription,
 } from "@/components/ui/item";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  Editor,
-  Viewer,
-  textToDocument,
-  documentToText,
-  normalizeDocument,
-  type EditorDocument,
-  type EditorHandle,
-} from "@/components/editor";
-import { FieldLabel } from "@/components/ui/field";
+import { Viewer } from "@/components/editor";
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -34,8 +25,6 @@ import { PosterDownload } from "@/components/publication/poster-download";
 import { publicationTime } from "@/components/publication/reading-parts";
 import { Button } from "@/components/ui/button";
 import { useLayoutScrollContainer } from "@/layout/basic-layout";
-
-const EMPTY_NOTE: EditorDocument = { blocks: [] };
 
 const translationLabels = {
   not_requested: "尚未生成译文",
@@ -50,40 +39,41 @@ const translationLabels = {
 
 export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
   const scrollContainer = useLayoutScrollContainer();
-  const [mode, setMode] = useState<"original" | "translated">("original");
   const key = `hotkey.reading.v1.${item.id}.${item.revision}`;
-  const [noteState, setNoteState] = useState({
+  const [readingState, setReadingState] = useState({
     key,
-    document: EMPTY_NOTE,
+    mode: "original" as "original" | "translated",
     loaded: false,
   });
-  const noteDocument = noteState.key === key ? noteState.document : EMPTY_NOTE;
-  const editorRef = useRef<EditorHandle>(null);
-  const [savingNote, setSavingNote] = useState(false);
-  const readingState = useRef({ noteState, mode });
+  const mode = readingState.key === key ? readingState.mode : "original";
+  const readingRef = useRef(readingState);
   useEffect(() => {
-    readingState.current = { noteState, mode };
-  }, [noteState, mode]);
+    readingRef.current = readingState;
+  }, [readingState]);
   useEffect(() => {
     const scrollElement = scrollContainer?.current;
     let restoreFrame: number | null = null;
     const frame = requestAnimationFrame(() => {
       try {
         const saved = JSON.parse(localStorage.getItem(key) ?? "{}");
-        const document =
-          normalizeDocument(saved.noteDocument) ??
-          textToDocument(
-            typeof saved.note === "string" ? saved.note.slice(0, 2000) : "",
-          );
-        setNoteState({ key, document, loaded: true });
-        if (saved.mode === "translated" && item.body?.translated)
-          setMode("translated");
-        if (typeof saved.scroll === "number" && saved.scroll >= 0)
+        setReadingState({
+          key,
+          mode:
+            saved.mode === "translated" && item.body?.translated
+              ? "translated"
+              : "original",
+          loaded: true,
+        });
+        if (
+          typeof saved.scroll === "number" &&
+          Number.isFinite(saved.scroll) &&
+          saved.scroll >= 0
+        )
           restoreFrame = requestAnimationFrame(() => {
             if (scrollElement) scrollElement.scrollTop = saved.scroll;
           });
       } catch {
-        setNoteState({ key, document: EMPTY_NOTE, loaded: true });
+        setReadingState({ key, mode: "original", loaded: true });
       }
     });
     return () => {
@@ -94,18 +84,13 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
   useEffect(() => {
     const scrollElement = scrollContainer?.current;
     const save = () => {
-      const { noteState: currentNote, mode: currentMode } =
-        readingState.current;
-      if (currentNote.key !== key || !currentNote.loaded) return;
-      const note = documentToText(currentNote.document);
-      if (note.length > 2000) return;
+      const current = readingRef.current;
+      if (current.key !== key || !current.loaded) return;
       try {
         localStorage.setItem(
           key,
           JSON.stringify({
-            note,
-            noteDocument: currentNote.document,
-            mode: currentMode,
+            mode: current.mode,
             scroll: scrollElement?.scrollTop ?? 0,
           }),
         );
@@ -219,14 +204,18 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
           <div className="mb-6 flex flex-wrap items-center gap-3">
             <Button
               variant={mode === "original" ? "secondary" : "ghost"}
-              onClick={() => setMode("original")}
+              onClick={() =>
+                setReadingState((state) => ({ ...state, mode: "original" }))
+              }
             >
               原文
             </Button>
             <Button
               disabled={!item.body.translated}
               variant={mode === "translated" ? "secondary" : "ghost"}
-              onClick={() => setMode("translated")}
+              onClick={() =>
+                setReadingState((state) => ({ ...state, mode: "translated" }))
+              }
             >
               中文译文
             </Button>
@@ -371,55 +360,6 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
           ))}
         </section>
       ) : null}
-      <section className="mt-12 max-w-3xl">
-        <FieldLabel id="reading-note-label">本机阅读笔记</FieldLabel>
-        <Editor
-          key={key}
-          ref={editorRef}
-          id="reading-note"
-          aria-labelledby="reading-note-label"
-          value={noteDocument}
-          onChange={(document) => setNoteState({ key, document, loaded: true })}
-          className="mt-3"
-        />
-        <p className="text-muted-foreground mt-2 text-xs">
-          最多 2000 字，仅保存在本机。
-        </p>
-        <Button
-          variant="outline"
-          className="mt-3"
-          disabled={savingNote}
-          onClick={async () => {
-            setSavingNote(true);
-            try {
-              if (!editorRef.current) throw new Error("编辑器尚未就绪。");
-              const document = await editorRef.current.save();
-              const note = documentToText(document);
-              if (note.length > 2000) {
-                toast.error("笔记最多 2000 字，请缩短后保存。");
-                return;
-              }
-              localStorage.setItem(
-                key,
-                JSON.stringify({
-                  note,
-                  noteDocument: document,
-                  mode,
-                  scroll: scrollContainer?.current?.scrollTop ?? 0,
-                }),
-              );
-              setNoteState({ key, document, loaded: true });
-              toast.success("已保存在本机。");
-            } catch {
-              toast.error("笔记未保存，请确认编辑器和本机存储可用后重试。");
-            } finally {
-              setSavingNote(false);
-            }
-          }}
-        >
-          {savingNote ? "正在保存…" : "保存笔记"}
-        </Button>
-      </section>
     </div>
   );
 }

@@ -10,7 +10,7 @@
 
 ## 组件
 
-- 富文本例外采用 Editor.js 官方块工具，统一封装为 `src/components/editor/Editor` 和 `Viewer`（经目录入口导出），外层表单/按钮仍用 shadcn。Editor 接收 OutputData、异步 onChange 和 ref.save，中文工具菜单、初始化/失败重试、外部内容更新、卸载销毁与深色主题集中处理；Viewer 接收相同 JSON 或显式 markdown/html/text，SSR 可读、空内容为空、无编辑工具栏，所有内容和 URL 白名单清洗。段落/标题/嵌套列表/任务列表/引用/代码/表格/分隔符/图片共用块合同，报告引用只绑定当前报告给定 URL，未知引用保留文字。通用 Viewer 用于私人报告、公开刊期和资讯正文；Editor 用于本机阅读笔记。原笔记存储键保留 note/mode/scroll，增加 noteDocument 块 JSON；旧文字可恢复，保存按钮先 await save，超出 2000 字不覆盖已保存笔记，不新增上传或业务 API。
+- 富文本阅读统一使用 `src/components/editor/Viewer`（经目录入口导出），接收块 JSON 或显式 markdown/html/text，SSR 可读、空内容为空、无编辑工具栏，所有内容和 URL 白名单清洗。段落/标题/嵌套列表/任务列表/引用/代码/表格/分隔符/图片共用块合同，报告引用只绑定当前报告给定 URL，未知引用保留文字。通用 Viewer 用于私人报告、公开刊期和资讯正文；阅读页不提供本机笔记，不装载 Editor.js 编辑器及块工具。原本机阅读状态键只保存 mode/scroll，忽略旧 note/noteDocument，后续保存不携带笔记字段，不新增业务 API。
 
 - shadcn/Radix 基础组件放在 `src/components/ui/`。
 - 全部页面的交互控件只组合官方 shadcn/ui + Radix：选择使用 Select/SelectGroup，布尔选项使用 Checkbox/Switch，折叠内容使用 Collapsible，数据表使用 Table，表单使用 FieldGroup/Field/FieldLabel。业务源码不手写 button、input、select、textarea、details 或表格组件；ESLint 检查此边界。文档标题、段落、列表、页面结构、链接及音视频仍保留必要语义标签，不为它们增加包装组件。
@@ -120,7 +120,7 @@ GitHub 按钮使用官方 GitHub-Mark 栅格素材 `public/brand/github-mark.png
 | AnnotationPanel / CommentRefreshAction / CommentThreadList                       | 内容详情专属                     | src/app/content/[contentId]/components/                                  | 当前内容标注与评论/就绪/运行 API；缺失、部分、失败、读取与受理状态                                                                       |
 | HotlistWorkspace / SnapshotSelector                                              | 热榜页专属                       | src/app/hotlists/components/                                             | listHotlistSources / list/get snapshots；来源选择、历史分页、合法空、错误和快照状态                                                      |
 | JobHistory / JobHealthSummary / JobDetail                                        | 任务列表与详情专属               | src/app/jobs/components/；src/app/jobs/[jobId]/components/               | list/get/cancel/retryCollectionJob / listContinuousFailureIssues；筛选、分页、失败读取、取消重试与终态                                   |
-| ReportList / ReportResults / ReportDetail / ReportDetailContent / ReportMarkdown | 已有报告读取专属，非核心二级入口 | src/app/reports/components/；src/app/reports/[reportId]/components/      | list/getReport；只读分页、空、错误和实际状态，无新生成/投递配置                                                                          |
+| ReportList / ReportResults / ReportDetail / ReportDetailContent                  | 已有报告读取专属，非核心二级入口 | src/app/reports/components/；src/app/reports/[reportId]/components/      | list/getReport；只读分页、空、错误和实际状态，无新生成/投递配置                                                                          |
 | Collapsible / Empty / Item / Spinner                                             | 多页官方基础组件                 | src/components/ui/                                                       | 官方Radix折叠、空态、列表和加载组件；不承载业务状态                                                                                      |
 
 配置第一层只呈现名称、关键词与来源，进阶规则/频率及报告设置按需展开。报告设置提供日报时间、周报与个人邮件发送，未修改的既有偏好及其他目标按原值传回，避免覆盖数据。来源主入口是配置，覆盖/技术字段二级展示。所有页面沿用语义颜色、命名尺度、官方表单/浮层/菜单；不新增数据状态框架。业务入口继续动态渲染、`noindex`，取消请求不显示为业务失败。

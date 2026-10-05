@@ -7,7 +7,6 @@
   "include": [
     "next-env.d.ts",
     "src/api/typings.d.ts",
-    "src/components/editor/vendor.d.ts",
     "tests/**/*.ts",
     "tests/**/*.tsx"
   ],
