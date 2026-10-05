@@ -114,13 +114,14 @@ def test_categories_agree_for_page_api_rss_mcp_markdown_and_scope_bound_sync(edi
     categories = ["ai-models", "ai-products", "industry", "paper", "tip", "opinion", None, "tip"]
     owner, posts = _publish(client, len(categories))  # Shared fixture seeds dated=True, now=NOW.
     for post, category in zip(posts, categories, strict=True):
-        _correct(
-            client,
-            owner,
-            post.id,
-            **({"category": category} if category else {"clear_fields": ["category"]}),
-        )
-    assert len(client.get("/public/api/items").json()["items"]) == len(categories)
+        # The manual-only fixture is already uncategorized and has no automatic result to restore.
+        if category is not None:
+            _correct(client, owner, post.id, category=category)
+    unfiltered = client.get("/public/api/items").json()["items"]
+    assert len(unfiltered) == len(categories)
+    assert {item["id"]: item["category"] for item in unfiltered} == {
+        str(post.id): category for post, category in zip(posts, categories, strict=True)
+    }
     client.app.state.settings.public_publication_categories = ("tip", "tip")
     expected = {str(posts[i].id) for i, category in enumerate(categories) if category == "tip"}
     before = _counts(client)
