@@ -21,7 +21,6 @@ import {
   PublicItemCards,
   PublicSourceStatus,
   PublicationFailure,
-  PublicationNavigation,
 } from "@/components/publication/reading-parts";
 import { PublicTimelineCards } from "@/components/publication/reading-groups";
 import { SavedItems } from "@/components/publication/local-reading";
@@ -113,7 +112,6 @@ export default async function DiscoverPage({
   } catch (error) {
     return (
       <>
-        <PublicationNavigation />
         <PublicationFailure error={error} href="/discover" />
       </>
     );
@@ -131,7 +129,6 @@ export default async function DiscoverPage({
   if (page.next_cursor) next.set("cursor", page.next_cursor);
   return (
     <>
-      <PublicationNavigation />
       <UI.Content>
         <UI.Heading level={1} className="text-3xl font-medium tracking-tight">
           值得关注的资讯

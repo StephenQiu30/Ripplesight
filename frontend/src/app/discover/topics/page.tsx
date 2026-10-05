@@ -9,10 +9,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
 import { getPublicTopicDirectory } from "@/api/gongkaifabu";
-import {
-  PublicationFailure,
-  PublicationNavigation,
-} from "@/components/publication/reading-parts";
+import { PublicationFailure } from "@/components/publication/reading-parts";
 
 export const metadata: Metadata = {
   title: "行业专题",
@@ -31,14 +28,12 @@ export default async function PublicTopicsPage() {
   } catch (error) {
     return (
       <>
-        <PublicationNavigation />
         <PublicationFailure error={error} href="/discover/topics" />
       </>
     );
   }
   return (
     <>
-      <PublicationNavigation />
       <UI.Content className="flex flex-col gap-y-10">
         <UI.Content as="header">
           <UI.Heading level={1} className="text-3xl font-medium">

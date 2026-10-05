@@ -9,10 +9,7 @@ import {
   getPublicEditionNavigation,
   listPublicEditionCatalogue,
 } from "@/api/gongkaikanwumulu";
-import {
-  PublicationFailure,
-  PublicationNavigation,
-} from "@/components/publication/reading-parts";
+import { PublicationFailure } from "@/components/publication/reading-parts";
 import { PublicEditionReader } from "./[key]/components/public-edition-reader";
 const labels = { daily: "日报", weekly: "周报", monthly: "月报" } as const;
 type Parameters = { params: Promise<{ reportId: string }> };
@@ -79,7 +76,6 @@ export default async function ReportDetailPage({ params }: Parameters) {
   } catch (error) {
     return (
       <>
-        <PublicationNavigation />
         <PublicationFailure error={error} href={`/reports/${kind}`} />
       </>
     );
@@ -87,7 +83,6 @@ export default async function ReportDetailPage({ params }: Parameters) {
   if (!edition)
     return (
       <>
-        <PublicationNavigation />
         <UI.Content className="flex flex-col gap-y-5">
           <UI.Heading level={1} className="text-3xl font-medium">
             最新{labels[kind]}
@@ -107,7 +102,6 @@ export default async function ReportDetailPage({ params }: Parameters) {
     );
   return (
     <>
-      <PublicationNavigation />
       <PublicEditionReader edition={edition} navigation={navigation} />
     </>
   );

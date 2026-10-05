@@ -23,6 +23,7 @@ export function BasicFooter() {
     <>
       <UI.Content
         as="footer"
+        role="contentinfo"
         className="layout-region bg-background shrink-0 overflow-hidden print:hidden"
       >
         <LayoutContainer className="text-muted-foreground flex min-h-16 flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3 text-xs">

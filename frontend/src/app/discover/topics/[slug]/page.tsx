@@ -15,7 +15,6 @@ import { ApiRequestError } from "@/request";
 import {
   PublicItemCards,
   PublicationFailure,
-  PublicationNavigation,
 } from "@/components/publication/reading-parts";
 export async function generateMetadata({
   params,
@@ -69,7 +68,6 @@ export default async function TopicPage({
     if (error instanceof ApiRequestError && error.status === 404) notFound();
     return (
       <>
-        <PublicationNavigation />
         <PublicationFailure
           error={error}
           href={`/discover/topics/${encodeURIComponent(slug)}`}
@@ -79,7 +77,6 @@ export default async function TopicPage({
   }
   return (
     <>
-      <PublicationNavigation />
       <UI.Content>
         <Link href="/discover/topics" className="text-muted-foreground text-sm">
           ← 全部专题

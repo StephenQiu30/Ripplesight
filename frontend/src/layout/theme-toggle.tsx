@@ -85,10 +85,39 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   );
 }
 
+export function ThemeMenuItems() {
+  const context = useContext(ThemeContext);
+  if (!context) throw new Error("ThemeMenuItems requires ThemeProvider");
+  const { theme, changeTheme } = context;
+  return (
+    <DropdownMenuGroup>
+      <DropdownMenuLabel>主题</DropdownMenuLabel>
+      <DropdownMenuRadioGroup
+        value={theme}
+        onValueChange={(value) => {
+          if (value === "light" || value === "dark" || value === "auto")
+            changeTheme(value);
+        }}
+      >
+        {themes.map(({ value, label, icon: OptionIcon }) => (
+          <DropdownMenuRadioItem
+            key={value}
+            value={value}
+            className="min-h-11 md:min-h-8"
+          >
+            <OptionIcon aria-hidden="true" />
+            {label}
+          </DropdownMenuRadioItem>
+        ))}
+      </DropdownMenuRadioGroup>
+    </DropdownMenuGroup>
+  );
+}
+
 export function ThemeToggle() {
   const context = useContext(ThemeContext);
   if (!context) throw new Error("ThemeToggle requires ThemeProvider");
-  const { theme, changeTheme } = context;
+  const { theme } = context;
   const current = themes.find((option) => option.value === theme)!;
   const Icon = current.icon;
 
@@ -105,27 +134,7 @@ export function ThemeToggle() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40" aria-label="主题">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>主题</DropdownMenuLabel>
-          <DropdownMenuRadioGroup
-            value={theme}
-            onValueChange={(value) => {
-              if (value === "light" || value === "dark" || value === "auto")
-                changeTheme(value);
-            }}
-          >
-            {themes.map(({ value, label, icon: OptionIcon }) => (
-              <DropdownMenuRadioItem
-                key={value}
-                value={value}
-                className="min-h-11 md:min-h-8"
-              >
-                <OptionIcon aria-hidden="true" />
-                {label}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuGroup>
+        <ThemeMenuItems />
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -38,7 +38,7 @@ it("keeps original access and identifies discovery time without inventing an abs
   expect(screen.getByText(/发现于/)).toBeTruthy();
   expect(screen.getByText("来源未提供摘要，可前往原文阅读。")).toBeTruthy();
   expect(
-    screen.getByRole("link", { name: "来源原文 ↗" }).getAttribute("href"),
+    screen.getByRole("link", { name: "来源原文" }).getAttribute("href"),
   ).toBe(item.original_url);
   expect(screen.queryByText("精选")).toBeNull();
 });

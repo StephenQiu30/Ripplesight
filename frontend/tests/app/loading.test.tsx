@@ -22,7 +22,10 @@ describe("route loading", () => {
       </BasicLayout>,
     );
     expect(screen.getAllByRole("main")).toHaveLength(1);
-    expect(screen.getByRole("banner")).toBeTruthy();
+    expect(screen.queryByRole("banner")).toBeNull();
+    expect(
+      screen.getByRole("complementary", { name: "站点侧边栏" }),
+    ).toBeTruthy();
     expect(screen.getByRole("contentinfo")).toBeTruthy();
     expect(
       screen
@@ -45,7 +48,7 @@ describe("route loading", () => {
     ).toBeTruthy();
     expect(
       within(screen.getByRole("main"))
-        .getByRole("link", { name: "使用条款" })
+        .getAllByRole("link", { name: "使用条款" })[0]
         .getAttribute("href"),
     ).toBe("/terms");
     expect(
@@ -55,7 +58,11 @@ describe("route loading", () => {
     ).toBe("true");
     const main = within(screen.getByRole("main"));
     expect(main.queryByRole("textbox")).toBeNull();
-    expect(main.queryByRole("button")).toBeNull();
+    expect(
+      within(
+        screen.getByRole("status", { name: "正在读取登录方式" }).parentElement!,
+      ).queryByRole("button"),
+    ).toBeNull();
     expect(
       within(screen.getByRole("contentinfo")).getByRole("button", {
         name: "使用指南",

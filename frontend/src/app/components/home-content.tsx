@@ -3,16 +3,7 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  ArrowRightIcon,
-  BookmarkIcon,
-  BookOpenIcon,
-  ChartNoAxesColumnIcon,
-  CompassIcon,
-  HomeIcon,
-  SearchIcon,
-  RssIcon,
-} from "lucide-react";
+import { ArrowRightIcon, SearchIcon } from "lucide-react";
 import { useIdentitySession } from "@/components/auth/session-context";
 import {
   categories,
@@ -49,16 +40,10 @@ import {
   ItemGroup,
   ItemTitle,
 } from "@/components/ui/item";
-import {
-  NavigationMenu,
-  NavigationMenuList,
-  NavigationMenuItem,
-  NavigationMenuLink,
-} from "@/components/ui/navigation-menu";
 import { Separator } from "@/components/ui/separator";
 import { useLayoutScrollContainer } from "@/layout/basic-layout";
 import { ReadingLayout } from "@/layout/reading-layout";
-import { HomePosts } from "./home-posts";
+import { PublicItemFeed } from "@/components/publication/item-feed";
 
 export type HomeReading = {
   items: HotKeyAPI.PublicItemView[];
@@ -81,14 +66,6 @@ const emptyReading: HomeReading = {
   editions: [],
   unavailable: [],
 };
-const destinations = [
-  { href: "/", label: "首页", icon: HomeIcon },
-  { href: "/discover?mode=all", label: "全部资讯", icon: RssIcon },
-  { href: "/discover/topics", label: "探索专题", icon: CompassIcon },
-  { href: "/discover/starred", label: "本机收藏", icon: BookmarkIcon },
-  { href: "/reports/weekly", label: "日周月刊", icon: BookOpenIcon },
-  { href: "/leaderboard", label: "模型榜", icon: ChartNoAxesColumnIcon },
-];
 function homeHref(
   mode: "all" | "selected",
   category?: HotKeyAPI.PublicItemView["category"],
@@ -149,12 +126,12 @@ function HomeSearch({ className }: { className?: string }) {
         <FieldLabel htmlFor={id} className="sr-only">
           搜索公开资讯
         </FieldLabel>
-        <InputGroup>
+        <InputGroup className="h-12 rounded-full">
           <InputGroupInput
             ref={input}
             id={id}
             type="search"
-            placeholder="搜索公开资讯"
+            placeholder="搜索资讯、话题或关键词"
             maxLength={200}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -165,7 +142,7 @@ function HomeSearch({ className }: { className?: string }) {
               }
             }}
           />
-          <InputGroupAddon align="inline-end">
+          <InputGroupAddon align="inline-start">
             <InputGroupButton
               size="icon-xs"
               aria-label="搜索公开资讯"
@@ -199,7 +176,7 @@ export function HomeContent({
     <>
       <PublicSourceStatus sources={reading.sourceStatus ?? []} />
       {reading.items.length ? (
-        <HomePosts items={reading.items} />
+        <PublicItemFeed items={reading.items} />
       ) : (
         <ReadingEmpty
           failed={reading.unavailable.includes("items")}
@@ -240,69 +217,42 @@ export function HomeContent({
   return (
     <ReadingLayout
       title="公开资讯"
-      navigation={
-        <Card className="min-w-0 p-0">
-          <CardHeader className="sr-only">
-            <CardTitle>阅读导航</CardTitle>
-          </CardHeader>
-          <CardContent className="flex max-w-48 flex-col gap-5 px-0">
-            <NavigationMenu
-              viewport={false}
-              aria-label="首页阅读导航"
-              className="w-full max-w-none items-start"
-            >
-              <NavigationMenuList className="w-full flex-col items-stretch gap-1">
-                {destinations.map(({ href, label, icon: Icon }) => (
-                  <NavigationMenuItem key={href}>
-                    <NavigationMenuLink
-                      asChild
-                      active={href === "/"}
-                      className="flex-row gap-3 px-3 py-3"
-                    >
-                      <Link
-                        href={href}
-                        aria-current={href === "/" ? "page" : undefined}
-                      >
-                        <Icon aria-hidden="true" />
-                        {label}
-                      </Link>
-                    </NavigationMenuLink>
-                  </NavigationMenuItem>
-                ))}
-              </NavigationMenuList>
-            </NavigationMenu>
-            <Button asChild>
-              <Link href={personalHref}>
-                {session ? "管理个人关注" : "定制我的关注"}
-              </Link>
-            </Button>
-            <CardDescription>
-              配置关键词，让重要的信息持续来到你的工作台。
-            </CardDescription>
-          </CardContent>
-        </Card>
-      }
       aside={
         <Card className="min-w-0 p-0">
-          <CardHeader className="hidden px-0 lg:grid">
+          <CardHeader className="sticky top-0 hidden px-0 pb-3 lg:grid">
             <CardTitle className="sr-only">发现更多</CardTitle>
             <HomeSearch />
           </CardHeader>
-          <CardContent className="flex flex-col gap-6 px-0">
-            <Card
-              role="region"
-              aria-labelledby="home-topics"
-              size="sm"
-              className="p-0"
-            >
-              <CardHeader className="px-0">
-                <CardTitle id="home-topics" role="heading" aria-level={2}>
+          <CardContent className="flex flex-col gap-4 px-0">
+            <Card variant="muted">
+              <CardHeader>
+                <CardTitle size="section">让信息围绕你</CardTitle>
+                <CardDescription>
+                  关注你在意的话题，回到自己的工作台。
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button asChild size="lg" className="rounded-full">
+                  <Link href={personalHref}>
+                    {session ? "管理个人关注" : "登录设置关注"}
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+            <Card role="region" aria-labelledby="home-topics" variant="muted">
+              <CardHeader>
+                <CardTitle
+                  size="section"
+                  id="home-topics"
+                  role="heading"
+                  aria-level={2}
+                >
                   探索专题
                 </CardTitle>
               </CardHeader>
-              <CardContent className="px-0">
+              <CardContent>
                 {reading.topics.length ? (
-                  <ItemGroup className="gap-1">
+                  <ItemGroup className="gap-3">
                     {reading.topics.slice(0, 4).map((topic) => (
                       <Item
                         key={topic.slug}
@@ -328,7 +278,7 @@ export function HomeContent({
                       : "公开专题发布后在这里展示。"}
                   </CardDescription>
                 )}
-                <Button asChild variant="ghost" size="sm" className="mt-2">
+                <Button asChild variant="ghost" size="sm" className="mt-3">
                   <Link href="/discover/topics">
                     全部专题
                     <ArrowRightIcon data-icon="inline-end" />
@@ -336,20 +286,20 @@ export function HomeContent({
                 </Button>
               </CardContent>
             </Card>
-            <Card
-              role="region"
-              aria-labelledby="home-stories"
-              size="sm"
-              className="p-0"
-            >
-              <CardHeader className="px-0">
-                <CardTitle id="home-stories" role="heading" aria-level={2}>
+            <Card role="region" aria-labelledby="home-stories" variant="muted">
+              <CardHeader>
+                <CardTitle
+                  size="section"
+                  id="home-stories"
+                  role="heading"
+                  aria-level={2}
+                >
                   值得关注的事件
                 </CardTitle>
               </CardHeader>
-              <CardContent className="px-0">
+              <CardContent>
                 {reading.stories.length ? (
-                  <ItemGroup className="gap-1">
+                  <ItemGroup className="gap-3">
                     {reading.stories.map((story) => (
                       <Item
                         key={story.id}
@@ -358,7 +308,7 @@ export function HomeContent({
                         className="px-0"
                       >
                         <ItemContent>
-                          <ItemTitle className="line-clamp-none">
+                          <ItemTitle className="line-clamp-none break-words">
                             <Link href={`/discover/stories/${story.id}`}>
                               {story.title}
                             </Link>
@@ -379,20 +329,20 @@ export function HomeContent({
                 )}
               </CardContent>
             </Card>
-            <Card
-              role="region"
-              aria-labelledby="home-weekly"
-              size="sm"
-              className="p-0"
-            >
-              <CardHeader className="px-0">
-                <CardTitle id="home-weekly" role="heading" aria-level={2}>
+            <Card role="region" aria-labelledby="home-weekly" variant="muted">
+              <CardHeader>
+                <CardTitle
+                  size="section"
+                  id="home-weekly"
+                  role="heading"
+                  aria-level={2}
+                >
                   本周阅读
                 </CardTitle>
               </CardHeader>
-              <CardContent className="px-0">
+              <CardContent>
                 {reading.editions.length ? (
-                  <ItemGroup className="gap-1">
+                  <ItemGroup className="gap-3">
                     {reading.editions.map((edition) => (
                       <Item
                         key={edition.key}
@@ -401,7 +351,7 @@ export function HomeContent({
                         className="px-0"
                       >
                         <ItemContent>
-                          <ItemTitle className="line-clamp-none">
+                          <ItemTitle className="line-clamp-none break-words">
                             <Link href={edition.reading_url}>
                               {edition.title}
                             </Link>
@@ -418,7 +368,7 @@ export function HomeContent({
                       : "最新公开周报发布后将在这里展示。"}
                   </CardDescription>
                 )}
-                <Button asChild variant="ghost" size="sm" className="mt-2">
+                <Button asChild variant="ghost" size="sm" className="mt-3">
                   <Link href="/reports/weekly">
                     阅读公开周报
                     <ArrowRightIcon data-icon="inline-end" />
@@ -426,16 +376,15 @@ export function HomeContent({
                 </Button>
               </CardContent>
             </Card>
-            <Button asChild variant="outline">
-              <Link href={personalHref}>
-                {session ? "管理个人关注" : "登录设置关注"}
-              </Link>
-            </Button>
           </CardContent>
         </Card>
       }
     >
-      <Card role="region" aria-label="公开资讯" className="min-w-0 p-0">
+      <Card
+        role="region"
+        aria-label="公开资讯"
+        className="min-w-0 overflow-visible rounded-none p-0"
+      >
         <Tabs
           value={mode}
           activationMode="manual"
@@ -445,11 +394,11 @@ export function HomeContent({
             )
           }
         >
-          <CardHeader className="gap-3 px-0">
+          <CardHeader className="bg-background/95 sticky top-0 z-10 gap-0 rounded-none px-0 backdrop-blur-sm">
             <CardTitle className="sr-only">资讯流</CardTitle>
-            <HomeSearch className="lg:hidden" />
+            <HomeSearch className="px-4 py-3 lg:hidden" />
             <TabsList
-              variant="line"
+              variant="timeline"
               aria-label="首页内容范围"
               className="w-full"
             >
@@ -461,7 +410,7 @@ export function HomeContent({
               value={category ?? "all"}
               size="sm"
               aria-label="资讯分类"
-              className="max-w-full flex-wrap justify-start"
+              className="hide-scrollbar max-w-full justify-start gap-1 overflow-x-auto px-4 py-3"
               onValueChange={(value) => {
                 if (value)
                   router.push(
@@ -481,14 +430,18 @@ export function HomeContent({
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
-            <CardDescription>
+            <CardDescription className="sr-only">
               最近 7 天 · 发布时间未知时展示发现时间
             </CardDescription>
+            <Separator />
           </CardHeader>
-          <Separator />
           <CardContent className="px-0">
-            <TabsContent value="all">{feed}</TabsContent>
-            <TabsContent value="selected">{feed}</TabsContent>
+            <TabsContent value="all" className="mt-0">
+              {feed}
+            </TabsContent>
+            <TabsContent value="selected" className="mt-0">
+              {feed}
+            </TabsContent>
           </CardContent>
         </Tabs>
       </Card>

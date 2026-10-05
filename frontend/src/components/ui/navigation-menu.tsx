@@ -121,13 +121,21 @@ function NavigationMenuViewport({
 
 function NavigationMenuLink({
   className,
+  size = "default",
   ...props
-}: React.ComponentProps<typeof NavigationMenuPrimitive.Link>) {
+}: React.ComponentProps<typeof NavigationMenuPrimitive.Link> & {
+  size?: "default" | "rail" | "mobile";
+}) {
   return (
     <NavigationMenuPrimitive.Link
       data-slot="navigation-menu-link"
+      data-size={size}
       className={cn(
         "hover:bg-muted focus:bg-muted focus-visible:ring-ring/50 data-active:bg-muted/50 data-active:hover:bg-muted data-active:focus:bg-muted flex items-center gap-2 rounded-lg p-2 text-sm transition-all outline-none focus-visible:ring-3 focus-visible:outline-1 in-data-[slot=navigation-menu-content]:rounded-md [&_svg:not([class*='size-'])]:size-4",
+        size === "rail" &&
+          "min-h-14 flex-row gap-4 rounded-full px-4 text-xl data-active:font-semibold [&_svg:not([class*='size-'])]:size-6",
+        size === "mobile" &&
+          "min-h-12 justify-center rounded-full [&_svg:not([class*='size-'])]:size-6",
         className,
       )}
       {...props}

@@ -89,7 +89,7 @@ FastAPI 路由装饰器、类型注解和 Pydantic 是唯一可编辑契约。�
 
 生成链为运行 OpenAPI → `@umijs/openapi` → `src/api/` → Axios `src/request.ts`。业务只调用生成函数，不导入 Axios/传输函数、不用 fetch/XHR 或手写下载 URL；可导入错误类和请求选项类型。请求选项不能覆盖生成方法、URL、数据或参数。浏览器同源 `/api/*`；SSR origin 统一由传输层解析，逐请求携带限定身份 Cookie，不在全局默认值保存凭据。透明代理只转发通用协议和 HotKey Cookie/Set-Cookie，拒绝伪造身份/转发头及任意 Authorization。
 
-页面只组合正文与路由专属组件，稳定跨页复用后归 `components/<feature>`，基础组件归 `components/ui`；不建 features/common/patterns/shared 或 frontend/scripts。根布局装配独立 `src/layout/` 的 BasicLayout/BasicHeader/BasicFooter，头尾固定在动态视口两端，中间唯一 main 滚动；LayoutContainer 统一 `max-w-7xl`、`px-5 sm:px-8` 与正文 `py-10 sm:py-12`。内部表单/阅读尺度保留，加载/错误/404/全局恢复与打印一致，阅读进度使用 `useLayoutScrollContainer`。登录路由 `/login` 在同一外壳内省略顶部 Header，包含加载与恢复状态；保留唯一正文滚动区、页脚和全局通知。唯一视觉规范见 [Web DESIGN](frontend/DESIGN.md)。
+页面只组合正文与路由专属组件，稳定跨页复用后归 `components/<feature>`，基础组件归 `components/ui`；不建 features/common/patterns/shared 或 frontend/scripts。根布局装配独立 `src/layout/` 的 BasicLayout/BasicSidebar/BasicFooter，全站使用固定侧栏并移除顶部 Header；唯一 main 滚动，阅读进度继续使用 `useLayoutScrollContainer`。LayoutContainer 统一 `max-w-7xl`，md 图标侧栏、lg/xl 文本侧栏，手机固定底部导航；首页信息流与发现区 2:1，普通正文使用 `px-5 sm:px-8`、`py-8 sm:py-10`，Footer 随正文显示。`/login` 的正常、加载和恢复态均不显示侧栏/底部导航，保留正文、Footer 和通知。唯一视觉规范见 [Web DESIGN](frontend/DESIGN.md)。
 
 CSP nonce 由 proxy 每请求生成，交互 HTML 按请求渲染，创建页使用 `connection()`；脚本 nonce 与响应一致且跨请求不复用，HTML private/no-store。生产 standalone、非 root、只读文件系统。测试统一 `frontend/tests`，Vitest 只发现此目录，生产类型和 Docker 上下文排除测试，独立测试类型仍检查。
 
