@@ -2,7 +2,7 @@
 
 HotKey 是 ToC 信息监控产品，覆盖主题与来源配置、信息获取与阅读、分析、事件、报告、分发、模型榜、公告和运营维护。本仓库维护 Python 后端与 Next.js Web；同级 `hotkey-app` 是尚未初始化的 Flutter 客户端。
 
-产品要求见 [PRD001](docs/prd/001-热点舆情监控平台需求.md) 及 [完整业务需求](docs/prd/008-完整业务需求.md)；领域合同见 [Design001](docs/design/001-热点舆情监控平台总体设计.md) 及 [完整业务设计](docs/design/008-完整业务设计.md)。本文维护技术、目录、API 和数据库边界，[AGENTS](AGENTS.md) 维护工程检查，[BACKLOG](BACKLOG.md) 是总体进度入口，[PLAN007](docs/plan/007-公开信息免费采集执行计划.md) 维护本轮详细工作包和checklist，[Acceptance](docs/README.md) 记录证据。
+产品要求见 [PRD001](docs/prd/001-热点舆情监控平台需求.md) 及 [完整业务需求](docs/prd/008-完整业务需求.md)；领域合同见 [Design001](docs/design/001-热点舆情监控平台总体设计.md) 及 [完整业务设计](docs/design/008-完整业务设计.md)。本文维护技术、目录、API 和数据库边界，[AGENTS](AGENTS.md) 维护工程检查，[BACKLOG](BACKLOG.md) 是总体进度入口，[PLAN007-01](docs/plan/007-01-公开信息免费采集执行计划.md) 维护本轮详细工作包和checklist，[Acceptance](docs/README.md) 记录证据。
 
 ## 技术与运行
 
