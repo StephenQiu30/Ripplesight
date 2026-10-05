@@ -77,15 +77,14 @@ def test_structure_fields_and_diagnostics_are_persisted_without_stage_failure(
         items = list_editorial_event_inputs_in_transaction(
             session, since=at - timedelta(hours=1), now=at
         )
-        if scope == "composite":
-            assert items.items == ()
+        assert len(items.items) == 1 and items.items[0].scope == scope
+        if scope in {"composite", "unknown"}:
             assert (
                 EventCandidateService(session).enqueue_due_in_transaction(now=at, ai_enabled=True)
                 == 0
             )
             assert session.scalar(select(EventCandidate)) is None
-        else:
-            assert len(items.items) == 1
+        if scope != "composite":
             assert items.items[0].fact_frame["conditions"] == structure["fact"]["conditions"]
 
 

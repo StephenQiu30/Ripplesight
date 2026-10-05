@@ -94,9 +94,6 @@ def list_editorial_event_inputs_in_transaction(
                 ):
                     continue
                 result_view = run.result
-                # Composite material stays in analysis for later mention/edition handling.
-                if result_view.structure is not None and result_view.structure.scope == "composite":
-                    continue
                 writing = result_view.writing
                 title = writing.title_zh.strip() if writing else ""
                 if not title:
@@ -128,6 +125,7 @@ def list_editorial_event_inputs_in_transaction(
                         first_seen_at=item.timeline_at,
                         first_seen_basis="published" if material.published_at else "discovered",
                         selected=result_view.selected,
+                        scope=result_view.structure.scope if result_view.structure else "unknown",
                         fact_frame=frame,
                         provenance_fingerprint=_fingerprint(
                             {
@@ -173,3 +171,34 @@ def load_frozen_editorial_event_input_in_transaction(
         ),
         None,
     )
+
+
+def load_editorial_event_inputs_for_versions_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    version_ids: tuple[UUID, ...],
+    since: datetime,
+    now: datetime,
+) -> dict[UUID, EditorialEventInput]:
+    """Read current fixed-version identities through the same ALL permission gate."""
+    result = {}
+    unique = sorted(set(version_ids), key=str)
+    for offset in range(0, len(unique), 2000):
+        after = None
+        while True:
+            page = list_editorial_event_inputs_in_transaction(
+                session,
+                since=since,
+                now=now,
+                version_ids=tuple(unique[offset : offset + 2000]),
+                after=after,
+                limit=2000,
+            )
+            result.update(
+                {item.content_version_id: item for item in page.items if item.owner_id == owner_id}
+            )
+            if page.next_after is None:
+                break
+            after = page.next_after
+    return result
