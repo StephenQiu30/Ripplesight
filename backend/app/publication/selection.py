@@ -184,7 +184,9 @@ def load_publication_selection_in_transaction(
             policy
             and result
             and writing
-            and visibility == "public"
+            # Summary-only retains selection for permitted weekly counts; outlets
+            # independently require public visibility before distributing it.
+            and visibility in ("public", "summary-only")
             and item.material.published_at is not None
             and is_selectable(
                 is_pool_eligible(
