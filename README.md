@@ -82,7 +82,8 @@ RSSHub/SearXNG、Firecrawl、MinIO 和 MediaCrawler 继续使用既有独立环�
 | [项目约束](PROJECT.md) | 架构、目录与运行边界 |
 | [文档索引](docs/README.md) | 需求、设计与验收记录 |
 | [进度看板](BACKLOG.md) | 当前任务和真实验收状态 |
-| [公开信息执行计划](docs/plan/007-公开信息免费采集执行计划.md) | 七平台免费路线、功能/非功能需求、工作包、验收与checklist |
+| [公开信息执行计划](docs/plan/007-公开信息免费采集执行计划.md) | 七平台免费路线的工作包与 checklist |
+| [AIHOT 对齐计划](docs/plan/009-AIHOT参考对齐偏差计划.md) | 与参考项目 AIHOT 的偏差与修正工作包 |
 | [贡献指南](CONTRIBUTING.md) | 开发、验证与 PR 要求 |
 | [安全策略](SECURITY.md) | 私密报告漏洞及敏感信息处理 |
 
