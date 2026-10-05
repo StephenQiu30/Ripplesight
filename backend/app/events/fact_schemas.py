@@ -134,6 +134,10 @@ class EventFactMemberView(OutputModel):
     availability: Literal["readable", "unavailable"]
 
 
+class EventFactConditionView(OutputModel):
+    quote: str = Field(min_length=1, max_length=400)
+
+
 class EventFactView(OutputModel):
     id: UUID
     revision: int
@@ -141,6 +145,8 @@ class EventFactView(OutputModel):
     root_fact_id: UUID | None
     title: str | None
     summary: str | None
+    evidence: str | None = Field(default=None, max_length=600)
+    conditions: list[EventFactConditionView] = Field(default_factory=list, max_length=4)
     first_seen_at: datetime
     first_seen_basis: Literal["published", "discovered"]
     evidence_state: Literal["complete", "partial"]

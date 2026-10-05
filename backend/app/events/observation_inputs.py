@@ -36,7 +36,7 @@ class _InputReference(BaseModel):
     first_seen_basis: str
     matched_keywords: tuple[str, ...] = Field(max_length=200)
     native_target_content_ids: tuple[UUID, ...] = Field(max_length=200)
-    editorial_frame: dict[str, str | None] | None = None
+    editorial_frame: dict[str, object] | None = None
     provenance_fingerprint: str | None = None
 
 

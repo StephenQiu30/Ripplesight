@@ -139,7 +139,7 @@ def record_candidate_facts_in_transaction(
     now: datetime,
     input_times: dict[UUID, tuple[datetime, str]],
     signal_version_ids: frozenset[UUID] = frozenset(),
-    input_frames: dict[UUID, dict[str, str | None] | None] | None = None,
+    input_frames: dict[UUID, dict[str, object] | None] | None = None,
 ) -> None:
     if not session.in_transaction():
         raise RuntimeError("fact writer requires caller transaction")

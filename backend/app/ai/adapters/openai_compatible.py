@@ -10,7 +10,14 @@ from typing import Any
 import httpx
 
 from ai.capability_schemas import AiModelServerSpec
-from ai.schemas import AiCallError, AiCompletion, AiFailureCode, AiImageInput, AiTokenUsage
+from ai.schemas import (
+    AiCallError,
+    AiCompletion,
+    AiFailureCode,
+    AiImageInput,
+    AiTokenUsage,
+    output_truncated_error,
+)
 
 
 class OpenAiCompatibleClient:
@@ -21,8 +28,10 @@ class OpenAiCompatibleClient:
         enabled: bool,
         transport: httpx.BaseTransport | None = None,
         before_request: Callable[[], None] | None = None,
+        reasoning_config: str = "HOTKEY_AI_MODEL_CATALOG.<selected model>.reasoning_tokens",
     ) -> None:
         self.spec, self.enabled, self.before_request = spec, enabled, before_request
+        self.reasoning_config = reasoning_config
         self.provider, self.model, self.component_key = (
             spec.provider_key,
             spec.model,
@@ -69,7 +78,7 @@ class OpenAiCompatibleClient:
         payload = {
             "model": self.model,
             "messages": messages,
-            "max_tokens": self.spec.max_output_tokens,
+            "max_tokens": self.spec.output_tokens_limit,
             **self.spec.extra,
         }
         if self.spec.json_mode:
@@ -121,7 +130,14 @@ class OpenAiCompatibleClient:
             ) from None
         try:
             value = json.loads(raw)
-            answer = value["choices"][0]["message"]["content"]
+            choice = value["choices"][0]
+            if choice.get("finish_reason") == "length":
+                try:
+                    receipt = self._receipt(value, started)
+                except (KeyError, TypeError, ValueError):
+                    receipt = None
+                raise output_truncated_error(self.reasoning_config, receipt=receipt)
+            answer = choice["message"]["content"]
             if not isinstance(answer, str) or len(answer) > 5_000_000:
                 raise ValueError
             text = answer.strip()
@@ -130,29 +146,36 @@ class OpenAiCompatibleClient:
             output = json.loads(text)
             if not isinstance(output, dict):
                 raise ValueError
-            usage = value.get("usage")
-            usage_reported = isinstance(usage, dict) and all(
-                type(usage.get(name)) is int for name in ("prompt_tokens", "completion_tokens")
-            )
-            if not isinstance(usage, dict):
-                usage = {}
-            details = usage.get("prompt_tokens_details") or {}
-            result = AiCompletion(
-                provider=self.provider,
-                model=self.model,
-                output=output,
-                usage=AiTokenUsage(
-                    input_tokens=usage.get("prompt_tokens", 0),
-                    cached_input_tokens=details.get("cached_tokens", 0)
-                    if isinstance(details, dict)
-                    else 0,
-                    output_tokens=usage.get("completion_tokens", 0),
-                ),
-                duration_ms=int((time.monotonic() - started) * 1000),
-                usage_reported=usage_reported,
-            )
+            result = self._receipt(value, started).model_copy(update={"output": output})
         except (KeyError, TypeError, ValueError, IndexError):
             raise AiCallError(
                 AiFailureCode.INVALID_OUTPUT, "compatible response is not usable structured JSON"
             ) from None
         return result
+
+    def _receipt(self, value: Mapping[str, Any], started: float) -> AiCompletion:
+        usage = value.get("usage")
+        usage_reported = isinstance(usage, dict) and all(
+            type(usage.get(name)) is int for name in ("prompt_tokens", "completion_tokens")
+        )
+        if not isinstance(usage, dict):
+            usage = {}
+        details = usage.get("prompt_tokens_details") or {}
+        output_details = usage.get("completion_tokens_details") or {}
+        return AiCompletion(
+            provider=self.provider,
+            model=self.model,
+            output={},
+            usage=AiTokenUsage(
+                input_tokens=usage.get("prompt_tokens", 0),
+                cached_input_tokens=details.get("cached_tokens", 0)
+                if isinstance(details, dict)
+                else 0,
+                output_tokens=usage.get("completion_tokens", 0),
+                reasoning_output_tokens=output_details.get("reasoning_tokens", 0)
+                if isinstance(output_details, dict)
+                else 0,
+            ),
+            duration_ms=int((time.monotonic() - started) * 1000),
+            usage_reported=usage_reported,
+        )

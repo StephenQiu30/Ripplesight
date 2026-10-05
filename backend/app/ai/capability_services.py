@@ -49,6 +49,7 @@ def protected_model_catalog(settings: Settings) -> dict[str, AiModelServerSpec]:
             transport="codex",
             provider_key="codex_app_server",
             model=settings.ai_model,
+            reasoning_tokens=settings.ai_reasoning_tokens,
             vision=True,
             timeout_seconds=min(600, int(settings.ai_timeout_seconds)),
         )
@@ -57,7 +58,10 @@ def protected_model_catalog(settings: Settings) -> dict[str, AiModelServerSpec]:
         for key, raw in settings.ai_model_catalog.items():
             if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", key):
                 raise ValueError("invalid protected model catalog key")
-            catalog[key] = AiModelServerSpec.model_validate(raw)
+            defaults = (
+                {"reasoning_tokens": settings.ai_reasoning_tokens} if key == "default" else {}
+            )
+            catalog[key] = AiModelServerSpec.model_validate({**defaults, **raw})
     except (ValidationError, ValueError):
         raise ApplicationError("invalid_ai_input") from None
     return catalog
