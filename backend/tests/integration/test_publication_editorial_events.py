@@ -31,6 +31,7 @@ from publication.stories import hot_stories_in_transaction, public_stories_in_tr
 def test_automatic_editorial_story_updates_publication_and_sync_without_operator_republish(
     editorial_client, monkeypatch, dated
 ):
+    editorial_client.app.state.settings.events_cluster_enabled = True
     owner, run, message, lease = _run(editorial_client, dated=dated)
     _budget(editorial_client, owner)
     _execute(editorial_client, owner, message, lease, EditorialWithFact())
@@ -52,7 +53,7 @@ def test_automatic_editorial_story_updates_publication_and_sync_without_operator
             ),
         )
         first = service.publish_in_transaction(owner_id=owner, content_id=run.content_id, now=NOW)
-        assert first and first.revision == 1
+        assert first and first.revision == 1 and not first.selected and first.ledger is None
         stored = session.execute(text("SELECT projection FROM publication_records")).scalar_one()
         assert stored["event_id"] is None
 
@@ -121,7 +122,7 @@ def test_automatic_editorial_story_updates_publication_and_sync_without_operator
             owner_id=owner, epoch=epoch, since=0, now=reconcile_at
         )
         if dated:
-            assert sequence == 2 and len(changes.changes) == 2
+            assert sequence == 1 and len(changes.changes) == 1
             assert changes.changes[-1].item and changes.changes[-1].item.event_id == event_id
         else:
             assert sequence == 0 and not changes.changes

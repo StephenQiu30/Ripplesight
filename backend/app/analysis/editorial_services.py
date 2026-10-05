@@ -846,6 +846,10 @@ class EditorialExecutor:
                         None,
                         self.clock(),
                     )
+                    if plan["selected"] and run.stages == "all":
+                        # Scoring completes independently of grouping; retain a visible
+                        # pending state even when no public source policy exists yet.
+                        run.failure_code = "editorial_selection_requires_review"
                     from publication.services import PublicationService
 
                     session.flush()

@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
+from analysis.editorial_selection import representative_order
 from core.errors import ApplicationError
 from publication.cursors import decode_cursor, encode_cursor
 from publication.group_schemas import (
@@ -31,12 +32,12 @@ def pick_representative(rows: list[PublicationListingMember]) -> PublicationList
         raise ValueError("a representative requires at least one permitted member")
     return min(
         rows,
-        key=lambda row: (
-            not row.projection.first_party,
-            row.projection.body_mode != "full",
-            -(row.projection.score or 0),
-            row.projection.timeline_at,
-            str(row.projection.content_id),
+        key=lambda row: representative_order(
+            first_party=row.projection.first_party,
+            body_complete=row.projection.body_mode == "full",
+            score=row.projection.score,
+            at=row.projection.timeline_at,
+            identity=row.projection.content_id,
         ),
     )
 

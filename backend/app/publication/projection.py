@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any, cast
 
 from analysis.editorial_schemas import EditorialPublicationInputView
+from analysis.editorial_selection import EditorialSelectionGate
 from events.fact_schemas import EventPublicationGrouping
 from publication.rules import (
     body_mode_of,
@@ -38,6 +39,7 @@ def derive_projection(
     previous: ProjectionView | None = None,
     override: dict[str, Any] | None = None,
     grouping: EventPublicationGrouping | None = None,
+    selection: EditorialSelectionGate | None = None,
     released_at: datetime | None = None,
     indexing_enabled: bool = False,
 ) -> ProjectionView:
@@ -69,9 +71,10 @@ def derive_projection(
         else policy.participation_mode == "editorial"
         and bool(title and material.url and (summary or body_mode == "full"))
     )
-    selected = material.published_at is not None and is_selectable(
+    candidate = material.published_at is not None and is_selectable(
         eligible, result.selected if result else None, source.tier
     )
+    selected = candidate and selection is not None and selection.selected
     visibility = cast(
         Visibility,
         "withdrawn"
@@ -98,11 +101,14 @@ def derive_projection(
     )
     digest = fingerprint(
         {
-            "run": run.model_dump(mode="json") if run else None,
+            # Derived review diagnostics are refreshed in the same publishing transaction;
+            # they do not change the fixed editorial evidence or cause another revision.
+            "run": run.model_dump(mode="json", exclude={"failure_code"}) if run else None,
             "material": material.model_dump(mode="json"),
             "source": source.model_dump(mode="json"),
             "policy": policy.model_dump(mode="json"),
             "grouping": asdict(grouping) if grouping else None,
+            "selection": asdict(selection) if selection else None,
             "override": manual,
             "timeline": snapshot.timeline_at,
             "backfill": snapshot.backfill,

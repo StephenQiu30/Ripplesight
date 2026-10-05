@@ -30,7 +30,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         engine = create_db_engine(resolved_settings)
-        app.state.session_factory = create_session_factory(engine)
+        app.state.session_factory = create_session_factory(engine, settings=resolved_settings)
         media_storage = create_media_storage(resolved_settings)
         app.state.media_storage = media_storage
         heartbeat = ProcessHeartbeatReporter(

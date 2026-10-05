@@ -58,6 +58,9 @@ class EventPublicationGrouping:
     fact_revision: int
     grouped_at: datetime
     role: Literal["primary", "report"]
+    relation: FactRelation = "unreviewed"
+    frame: dict[str, object] | None = None
+    assignment_origin: Literal["model", "manual", "legacy"] = "legacy"
 
 
 @dataclass(frozen=True, slots=True)

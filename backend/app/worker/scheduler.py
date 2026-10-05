@@ -1019,7 +1019,7 @@ def run_scheduler() -> None:
     signal.signal(signal.SIGTERM, request_stop)
 
     engine = create_db_engine(settings)
-    sessions = create_session_factory(engine)
+    sessions = create_session_factory(engine, settings=settings)
     heartbeat = ProcessHeartbeatReporter(
         sessions, role="scheduler", enabled=settings.environment != "test"
     )
