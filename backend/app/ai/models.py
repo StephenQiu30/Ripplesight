@@ -32,7 +32,8 @@ class AiCall(Base):
         ),
         CheckConstraint(
             "failure_code IS NULL OR failure_code IN "
-            "('rate_limited', 'unavailable', 'timeout', 'invalid_output', 'failed')",
+            "('rate_limited', 'unavailable', 'timeout', 'invalid_output', "
+            "'output_truncated', 'failed')",
             name="ai_calls_failure_code_check",
         ),
         CheckConstraint(

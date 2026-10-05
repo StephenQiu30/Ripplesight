@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -18,7 +19,7 @@ from ai.capability_services import (
     freeze_ai_job_scope_in_transaction,
     load_frozen_ai_routing_in_transaction,
 )
-from ai.schemas import AiCallError, AiCallStatus
+from ai.schemas import AiCallError, AiCallStatus, AiFailureCode
 from ai.services import (
     AiService,
     load_saved_ai_call_in_transaction,
@@ -283,6 +284,108 @@ def test_paid_call_running_before_http_original_currency_and_no_fake_actual_cost
         )
         # Supplier token usage supports an estimate; absent explicit fees keep both original caps.
         assert used == [row.cost_cap_micros, row.cost_cap_micros]
+
+
+def test_paid_output_truncation_preserves_original_budget_usage_and_blocks_resend(engine):
+    owner, now, settings = uuid4(), datetime.now(UTC), _settings()
+    settings.ai_model_catalog["named"].update(max_output_tokens=512, reasoning_tokens=4000)
+    job = _job(engine, owner, settings, now)
+    _budgets(engine, owner, now, "USD")
+    sessions = sessionmaker(engine)
+    with sessions() as session:
+        lease = JobExecutionService(session, lease_seconds=30, clock=lambda: now).acquire(
+            job_id=job.id, worker_id="test"
+        )
+    requests = []
+
+    def request(req):
+        requests.append(json.loads(req.content))
+        with engine.connect() as connection:
+            assert connection.scalar(text("SELECT status FROM ai_calls")) == "running"
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"finish_reason": "length", "message": {"content": "private material"}}
+                ],
+                "usage": {
+                    "prompt_tokens": 100,
+                    "completion_tokens": 4512,
+                    "completion_tokens_details": {"reasoning_tokens": 4000},
+                },
+            },
+        )
+
+    with sessions() as session, session.begin():
+        frozen = load_frozen_ai_routing_in_transaction(session, owner_id=owner, job_id=job.id)
+    client = create_ai_client_for_frozen_model(
+        settings, frozen.for_purpose("editorial.understand"), transport=httpx.MockTransport(request)
+    )
+    try:
+        with sessions() as session:
+
+            def guard(current):
+                JobExecutionService(
+                    current, lease_seconds=30, clock=lambda: now
+                ).require_current_operation_in_transaction(
+                    lease, owner_id=owner, operation_id=job.operation_id
+                )
+
+            service = AiService(
+                session,
+                client,
+                settings=settings,
+                guard=guard,
+                execution_epoch=lease.epoch,
+                clock=lambda: now,
+            )
+            arguments = {
+                "owner_id": owner,
+                "job_id": job.id,
+                "purpose": "editorial.understand",
+                "prompt_version": "controlled-v1",
+                "prompt": "private material",
+                "output_schema": {"type": "object"},
+            }
+            with pytest.raises(AiCallError) as caught:
+                service.complete(**arguments)
+            assert caught.value.code is AiFailureCode.OUTPUT_TRUNCATED
+            assert caught.value.call_id is not None and caught.value.outcome_unknown
+            assert "HOTKEY_AI_MODEL_CATALOG.named.reasoning_tokens" in caught.value.detail
+            with pytest.raises(AiCallError) as replay:
+                service.complete(**arguments)
+            assert replay.value.outcome_unknown
+    finally:
+        client.close()
+    assert len(requests) == 1 and requests[0]["max_tokens"] == 4512
+    with engine.connect() as connection:
+        row = connection.execute(
+            text(
+                "SELECT status,failure_code,input_tokens,output_tokens,reasoning_output_tokens,"
+                "cost_estimate_micros,cost_cap_micros FROM ai_calls"
+            )
+        ).one()
+        assert tuple(row)[:6] == ("unknown", "output_truncated", 100, 4512, 4000, 9124)
+        assert row.cost_cap_micros >= 9124
+        assert connection.scalar(text("SELECT count(*) FROM ai_calls")) == 1
+        assert connection.scalar(text("SELECT count(*) FROM resource_usage_attempts")) == 1
+        assert all(
+            "private material" not in value and "controlled-test-key" not in value
+            for value in connection.execute(text("SELECT ai_calls::text FROM ai_calls")).scalars()
+        )
+        for metric, expected in (
+            ("network_request", 1),
+            ("provider_usd_micros", row.cost_cap_micros),
+        ):
+            used = connection.execute(
+                text(
+                    "SELECT w.used_units,w.reserved_units FROM resource_budget_windows w "
+                    "JOIN resource_budget_policies p ON p.id=w.budget_policy_id "
+                    "WHERE p.metric=:metric"
+                ),
+                {"metric": metric},
+            ).all()
+            assert [tuple(item) for item in used] == [(expected, 0), (expected, 0)]
 
 
 def test_missing_component_spend_budget_denies_before_any_http_or_running_call(engine):

@@ -11,6 +11,7 @@ from sqlalchemy.engine import Dialect
 from sqlalchemy.sql.type_api import TypeEngine
 from tests.conftest import validate_test_database_url
 
+from ai.schemas import AiFailureCode
 from db.metadata import metadata
 
 
@@ -67,6 +68,12 @@ def test_canonical_schema_matches_all_runtime_tables(schema_engine: Engine) -> N
         assert database_primary_keys[("public", table_name)]["constrained_columns"] == [
             column.name for column in table.primary_key.columns
         ], f"{table_name}: primary key differs from its runtime mapping"
+
+
+def test_ai_failure_constraint_covers_stable_output_truncation(schema_engine: Engine) -> None:
+    checks = inspect(schema_engine).get_check_constraints("ai_calls")
+    failure_check = next(check["sqltext"] for check in checks if "rate_limited" in check["sqltext"])
+    assert set(re.findall(r"'([a-z_]+)'", failure_check)) == {code.value for code in AiFailureCode}
 
 
 def test_editorial_topic_matches_have_frozen_owner_scoped_structure(schema_engine: Engine) -> None:
