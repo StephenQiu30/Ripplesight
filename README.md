@@ -5,7 +5,7 @@ HotKey 是一个**公开资讯阅读站 + 个人舆情监控**工具，个人非
 - 不登录：阅读有出处、经过去重的公开资讯、事件、日报周报，以及 AI 模型榜。
 - 登录后：为关心的主题设置关键词，每小时获取各平台的热点与评论，每天看到社交媒体上最热的事件，查看情感走向，接收报告和告警。
 
-每项能力现在到哪一步，见 [产品总览](docs/README.md)；下一步做什么，见 [BACKLOG](BACKLOG.md)。
+产品目标与规划见 [PRD](docs/01-产品/01-PRD.md)，每项能力现在到哪一步见 [docs](docs/index.md)；下一步做什么，见 [BACKLOG](BACKLOG.md)。
 
 ## 快速开始
 
@@ -60,7 +60,8 @@ API 和 Web 只绑定 localhost，需要通过反向代理对外提供访问。
 
 | 文档 | 内容 |
 |---|---|
-| [docs](docs/README.md) | 产品定位、能力、现状与验收标准 |
+| [PRD](docs/01-产品/01-PRD.md) | 为什么做、为谁做、目标与发布规划 |
+| [docs](docs/index.md) | 各能力的现状与验收标准 |
 | [BACKLOG](BACKLOG.md) | 优先级与进度 |
 | [PROJECT](PROJECT.md) | 技术架构与约定 |
 | [AGENTS](AGENTS.md) | 工程规范与检查 |

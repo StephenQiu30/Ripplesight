@@ -48,3 +48,9 @@ dogfood-output/
 product-design-output/
 *.log
 npm-debug.log*
+
+# Obsidian：只提交共享的模板与链接设置
+docs/.obsidian/*
+!docs/.obsidian/app.json
+!docs/.obsidian/templates.json
+!docs/.obsidian/core-plugins.json
