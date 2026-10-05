@@ -48,17 +48,26 @@ def derive_projection(
     manual = override or {}
     writing = result.writing if result else None
     title = writing.title_zh.strip() if writing else material.title.strip()
+    body_mode = body_mode_of(
+        policy.site_fulltext,
+        material.body_complete and not material.body_pending,
+        bool(material.body),
+    )
+    source_summary = material.excerpt.strip() or (
+        material.body.strip()[:2000] if body_mode == "full" else ""
+    )
     summary = (
         writing.summary_zh.strip()
         if writing and writing.summary_zh.strip()
-        else material.excerpt.strip() or None
+        else source_summary or None
         if result is None
         else None
     )
     eligible = (
         is_pool_eligible(policy.participation_mode, result.relevance, title, summary)
         if result is not None
-        else policy.participation_mode == "editorial" and bool(title and material.url)
+        else policy.participation_mode == "editorial"
+        and bool(title and material.url and (summary or body_mode == "full"))
     )
     selected = is_selectable(eligible, result.selected if result else None, source.tier)
     visibility = cast(
@@ -66,11 +75,6 @@ def derive_projection(
         "withdrawn"
         if policy.participation_mode == "isolated"
         else manual.get("visibility", "public"),
-    )
-    body_mode = body_mode_of(
-        policy.site_fulltext,
-        material.body_complete and not material.body_pending,
-        bool(material.body),
     )
     ready, visible = release_times(
         selected,

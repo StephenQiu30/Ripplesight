@@ -87,10 +87,10 @@ def parse_feed(
         html, body_text = sanitize_html(body, url) if body else (None, None)
         teaser = bool(body_text and is_teaser(body_text))
         excerpt = (
-            collapse(plain(summary))[:2000]
+            sanitize_html(summary, url)[1][:4000]
             if summary
-            else collapse(body_text)[:2000]
-            if teaser and body_text
+            else body_text[:4000]
+            if body_text
             else None
         )
         complete = bool(body_text and len(body_text) > 280 and not teaser)

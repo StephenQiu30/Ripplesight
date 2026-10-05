@@ -282,6 +282,17 @@ class PublicationReadingService:
             )
             # Rights can shrink immediately. Increasing them requires an audited republish.
             stored = ProjectionView.model_validate(row.data)
+            if (
+                stored.body_mode != "full"
+                and projection.body_mode == "full"
+                and snapshot.run is None
+                and not snapshot.material.excerpt.strip()
+            ):
+                # A newly granted body preview must wait for the same audited
+                # republish as the newly granted full text.
+                projection = projection.model_copy(
+                    update={"summary": None, "summary_origin": "none", "eligible": False}
+                )
             projection = projection.model_copy(
                 update={
                     "sort_at": stored.sort_at,
