@@ -12,10 +12,11 @@ from sqlalchemy.orm import Session
 
 from analysis.editorial_reading import (
     load_editorial_publication_inputs_in_transaction,
+    record_editorial_selection_in_transaction,
     scan_current_editorial_publication_ids_in_transaction,
 )
+from analysis.editorial_schemas import EditorialPublicationInputView
 from core.errors import ApplicationError
-from events.facts import load_publication_groupings_in_transaction
 from publication.projection import derive_projection, fingerprint
 from publication.publication_models import (
     PublicationPolicyVersion,
@@ -32,6 +33,10 @@ from publication.schemas import (
     PublishResultView,
     SourcePolicyInput,
     SourcePolicyView,
+)
+from publication.selection import (
+    PublicationSelectionContext,
+    load_publication_selection_in_transaction,
 )
 
 
@@ -260,6 +265,103 @@ class PublicationService:
             reduced=reduced,
         )
 
+    def _derive_selected(
+        self,
+        *,
+        owner_id: UUID,
+        snapshot: EditorialPublicationInputView,
+        policy: PublicationSourcePolicy,
+        previous: PublicationRecord | None,
+        selection: PublicationSelectionContext,
+        now: datetime,
+        override: dict[str, Any] | None = None,
+        released_at: datetime | None = None,
+    ) -> ProjectionView:
+        identity = snapshot.material.content_id
+        projected = derive_projection(
+            snapshot,
+            policy_view(policy),
+            now=now,
+            previous=ProjectionView.model_validate(previous.data) if previous else None,
+            override=override if override is not None else previous.override if previous else None,
+            grouping=selection.groupings.get(identity),
+            selection=selection.gates.get(identity),
+            released_at=released_at,
+            indexing_enabled=self.indexing_enabled,
+        )
+        # Persist a discovery hint so a large plain-text archive cannot hide older
+        # media behind the bounded scheduler page. Acceptance still checks live grants.
+        from publication.media import body_presentation
+        from publication.reading import _fixed_body_in_transaction
+
+        media_count, body_sha256 = 0, None
+        if projected.body_mode == "full" and projected.visibility == "public":
+            body, body_format, body_sha256, attached = _fixed_body_in_transaction(
+                self.session, owner_id=owner_id, snapshot=snapshot, now=now
+            )
+            media_count = sum(
+                item.kind in {"image", "video"}
+                for item in body_presentation(body, body_format=body_format, media=attached)[2]
+            )
+        projected = projected.model_copy(
+            update={
+                "media_candidate_count": media_count,
+                "input_fingerprint": fingerprint(
+                    {
+                        "projection": projected.input_fingerprint,
+                        "body_sha256": body_sha256,
+                        "media_candidate_count": media_count,
+                    }
+                ),
+            }
+        )
+        if projected.selected and projected.fact_id:
+            # Keep the original news anchor when a later, preferred report replaces it.
+            anchors = self.session.scalars(
+                select(PublicationRecord).where(
+                    PublicationRecord.owner_id == owner_id,
+                    PublicationRecord.data["fact_id"].as_string() == str(projected.fact_id),
+                )
+            )
+            times = [row.sort_at for row in anchors if row.data.get("selected_ready_at")]
+            if times:
+                projected = projected.model_copy(update={"sort_at": min(projected.sort_at, *times)})
+        return projected
+
+    def _reconcile_selection_peers(
+        self,
+        *,
+        owner_id: UUID,
+        content_id: UUID,
+        selection: PublicationSelectionContext,
+        now: datetime,
+    ) -> None:
+        # Withdraw losers before admitting a replacement, in the same owner transaction.
+        for identity, gate in sorted(selection.gates.items(), key=lambda pair: pair[1].selected):
+            snapshot = selection.snapshots[identity]
+            record_editorial_selection_in_transaction(
+                self.session, owner_id=owner_id, snapshot=snapshot, gate=gate
+            )
+            if identity == content_id:
+                continue
+            previous = self.session.get(PublicationRecord, (owner_id, identity))
+            if previous is None or previous.selected == gate.selected:
+                continue
+            policy = self.session.get(
+                PublicationSourcePolicy, (owner_id, snapshot.material.source_key)
+            )
+            if policy is None:
+                continue
+            projected = self._derive_selected(
+                owner_id=owner_id,
+                snapshot=snapshot,
+                policy=policy,
+                previous=previous,
+                selection=selection,
+                now=now,
+            )
+            self._persist(owner_id, projected, previous=previous, now=now)
+
     def publish_in_transaction(
         self,
         *,
@@ -297,66 +399,21 @@ class PublicationService:
             )
             if policy is None:
                 return None
-            grouping = load_publication_groupings_in_transaction(
-                self.session,
+            selection = load_publication_selection_in_transaction(
+                self.session, owner_id=owner_id, snapshots={content_id: snapshot}, now=at
+            )
+            self._reconcile_selection_peers(
+                owner_id=owner_id, content_id=content_id, selection=selection, now=at
+            )
+            projected = self._derive_selected(
                 owner_id=owner_id,
-                content_versions={content_id: snapshot.material.content_version_id},
-                selected_observations={content_id: snapshot.observation_id},
+                snapshot=snapshot,
+                policy=policy,
+                previous=previous,
+                selection=selection,
                 now=at,
-            ).get(content_id)
-            projected = derive_projection(
-                snapshot,
-                policy_view(policy),
-                now=at,
-                previous=ProjectionView.model_validate(previous.data) if previous else None,
-                override=previous.override if previous else None,
-                grouping=grouping,
                 released_at=released_at,
-                indexing_enabled=self.indexing_enabled,
             )
-            # Persist a discovery hint so a large plain-text archive cannot hide older
-            # media behind the bounded scheduler page. Acceptance still checks live grants.
-            from publication.media import body_presentation
-            from publication.reading import _fixed_body_in_transaction
-
-            media_count, body_sha256 = 0, None
-            if projected.body_mode == "full" and projected.visibility == "public":
-                body, body_format, body_sha256, attached = _fixed_body_in_transaction(
-                    self.session, owner_id=owner_id, snapshot=snapshot, now=at
-                )
-                media_count = sum(
-                    item.kind in {"image", "video"}
-                    for item in body_presentation(body, body_format=body_format, media=attached)[2]
-                )
-            projected = projected.model_copy(
-                update={
-                    "media_candidate_count": media_count,
-                    "input_fingerprint": fingerprint(
-                        {
-                            "projection": projected.input_fingerprint,
-                            "body_sha256": body_sha256,
-                            "media_candidate_count": media_count,
-                        }
-                    ),
-                }
-            )
-            if projected.selected and projected.fact_id:
-                anchors = self.session.scalars(
-                    select(PublicationRecord).where(
-                        PublicationRecord.owner_id == owner_id,
-                        PublicationRecord.selected.is_(True),
-                        PublicationRecord.visibility == "public",
-                    )
-                )
-                times = [
-                    item.sort_at
-                    for item in anchors
-                    if item.data.get("fact_id") == str(projected.fact_id)
-                ]
-                if times:
-                    projected = projected.model_copy(
-                        update={"sort_at": min(projected.sort_at, *times)}
-                    )
         return self._persist(owner_id, projected, previous=previous, now=at)
 
     def override_in_transaction(
@@ -410,21 +467,24 @@ class PublicationService:
         ).get(content_id)
         policy = self.session.get(PublicationSourcePolicy, (owner_id, previous.source_key))
         if snapshot is not None and policy is not None:
-            grouping = load_publication_groupings_in_transaction(
+            selection = load_publication_selection_in_transaction(
                 self.session,
                 owner_id=owner_id,
-                content_versions={content_id: snapshot.material.content_version_id},
-                selected_observations={content_id: snapshot.observation_id},
+                snapshots={content_id: snapshot},
                 now=at,
-            ).get(content_id)
-            projected = derive_projection(
-                snapshot,
-                policy_view(policy),
+                visibility_overrides={content_id: command.visibility},
+            )
+            self._reconcile_selection_peers(
+                owner_id=owner_id, content_id=content_id, selection=selection, now=at
+            )
+            projected = self._derive_selected(
+                owner_id=owner_id,
+                snapshot=snapshot,
+                policy=policy,
+                previous=previous,
+                selection=selection,
                 now=at,
-                previous=old,
                 override=override,
-                grouping=grouping,
-                indexing_enabled=self.indexing_enabled,
             )
         elif command.visibility == "withdrawn":
             projected = old.model_copy(

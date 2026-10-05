@@ -87,7 +87,7 @@ def main() -> None:
         print("HotKey watchdog disabled by configuration")
         return
     engine = create_db_engine(settings)
-    sessions = create_session_factory(engine)
+    sessions = create_session_factory(engine, settings=settings)
     stopped = Event()
     for signum in (signal.SIGINT, signal.SIGTERM):
         signal.signal(signum, lambda _signum, _frame: stopped.set())

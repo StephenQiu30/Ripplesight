@@ -16,6 +16,7 @@ from analysis.editorial_schemas import (
     EditorialRunView,
     EditorialSourceView,
 )
+from analysis.editorial_selection import EditorialSelectionGate
 from analysis.editorial_services import EditorialService
 from content.editorial_reading import (
     editorial_discovery_in_transaction,
@@ -26,6 +27,50 @@ from content.editorial_reading import (
 from content.observation_inputs import freeze_observation_inputs_in_transaction
 from content.schemas import EventContentReadReference
 from core.errors import ApplicationError
+
+
+def record_editorial_selection_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    snapshot: EditorialPublicationInputView,
+    gate: EditorialSelectionGate,
+) -> None:
+    """Keep the scoring/manual result intact; expose review through the existing run code.
+
+    Publication owns its lock first. Never wait for a run locked by a concurrent editor
+    who may be waiting for that publication lock; the next republish refreshes diagnostics.
+    """
+    if not session.in_transaction():
+        raise RuntimeError("selection diagnostics require caller transaction")
+    if snapshot.run is None:
+        return
+    row = session.scalar(
+        select(EditorialRun)
+        .join(EditorialContentState, EditorialContentState.current_run_id == EditorialRun.id)
+        .where(
+            EditorialRun.owner_id == owner_id,
+            EditorialRun.id == snapshot.run.id,
+            EditorialRun.status == "complete",
+            EditorialRun.manual_version == snapshot.run.manual_version,
+            EditorialContentState.manual_version == EditorialRun.manual_version,
+        )
+        .with_for_update(of=EditorialRun, skip_locked=True)
+    )
+    if row is None or row.result is None:
+        return
+    diagnostic = {
+        "version": "selection-gate-v1",
+        "state": gate.state,
+        "reason": gate.reason,
+        "representative_id": str(gate.representative_id) if gate.representative_id else None,
+    }
+    if row.result.get("selection_gate") != diagnostic:
+        row.result = {**row.result, "selection_gate": diagnostic}
+    if gate.state == "requires_review":
+        row.failure_code = "editorial_selection_requires_review"
+    elif row.failure_code == "editorial_selection_requires_review":
+        row.failure_code = None
 
 
 def load_editorial_publication_inputs_in_transaction(

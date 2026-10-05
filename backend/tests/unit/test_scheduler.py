@@ -46,7 +46,7 @@ def test_prompt_runtime_heartbeat_failure_stops_scheduler_without_closing_gap(
     monkeypatch.setattr(scheduler, "configure_logging", lambda _level: None)
     monkeypatch.setattr(scheduler.signal, "signal", lambda _signal, _handler: None)
     monkeypatch.setattr(scheduler, "create_db_engine", lambda _settings: engine)
-    monkeypatch.setattr(scheduler, "create_session_factory", lambda _engine: object())
+    monkeypatch.setattr(scheduler, "create_session_factory", lambda _engine, **_kwargs: object())
     monkeypatch.setattr(scheduler, "_registered_scheduler_scans", lambda: ())
     monkeypatch.setattr(
         scheduler,

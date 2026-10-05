@@ -19,7 +19,6 @@ from analysis.editorial_schemas import EditorialPublicationInputView
 from content.editorial_rendered import read_editorial_rendered_in_transaction
 from content.version_inputs import observations_readable_in_transaction
 from core.errors import ApplicationError
-from events.facts import load_publication_groupings_in_transaction
 from publication.cursors import decode_cursor, encode_cursor
 from publication.exports import safe_link
 from publication.media import body_presentation
@@ -51,6 +50,7 @@ from publication.schemas import (
     SelectedChangeView,
     SelectedSnapshotView,
 )
+from publication.selection import load_publication_selection_in_transaction
 from publication.services import PublicationService, policy_view, require_transaction
 
 
@@ -248,16 +248,8 @@ class PublicationReadingService:
             if row.data.get("manual_version") != (run.manual_version if run else 0):
                 continue
             accepted[row.content_id] = item
-        groupings = load_publication_groupings_in_transaction(
-            self.session,
-            owner_id=owner_id,
-            content_versions={
-                identity: item.material.content_version_id for identity, item in accepted.items()
-            },
-            now=now,
-            selected_observations={
-                identity: item.observation_id for identity, item in accepted.items()
-            },
+        selection = load_publication_selection_in_transaction(
+            self.session, owner_id=owner_id, snapshots=accepted, now=now
         )
         policies = {
             row.source_key: row
@@ -284,7 +276,8 @@ class PublicationReadingService:
                 now=now,
                 previous=ProjectionView.model_validate(row.data),
                 override=row.override,
-                grouping=groupings.get(row.content_id),
+                grouping=selection.groupings.get(row.content_id),
+                selection=selection.gates.get(row.content_id),
                 indexing_enabled=self.indexing_enabled,
             )
             # Rights can shrink immediately. Increasing them requires an audited republish.
@@ -303,6 +296,11 @@ class PublicationReadingService:
             projection = projection.model_copy(
                 update={
                     "sort_at": stored.sort_at,
+                    # Admission must enter the audited projection and ledger first.
+                    "selected": stored.selected and projection.selected,
+                    "reason": projection.reason if stored.selected else None,
+                    "selected_ready_at": stored.selected_ready_at,
+                    "visible_after": stored.visible_after,
                     "media_candidate_count": stored.media_candidate_count,
                     "body_mode": "full"
                     if stored.body_mode == "full" and projection.body_mode == "full"

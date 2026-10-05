@@ -18,5 +18,12 @@ def create_db_engine(settings: Settings) -> Engine:
     )
 
 
-def create_session_factory(engine: Engine) -> sessionmaker[Session]:
-    return sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+def create_session_factory(
+    engine: Engine, *, settings: Settings | None = None
+) -> sessionmaker[Session]:
+    return sessionmaker(
+        bind=engine,
+        autoflush=False,
+        expire_on_commit=False,
+        info={"settings": settings} if settings is not None else {},
+    )
