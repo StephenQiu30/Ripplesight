@@ -41,6 +41,14 @@ for line in sys.stdin:
                 "id": "u1", "status": "failed",
                 "error": {"message": "429 usage limit reached"}}}})
             continue
+        if mode == "length":
+            send({"method": "thread/tokenUsage/updated", "params": {"threadId": "t1",
+                "tokenUsage": {"last": {"inputTokens": 100, "outputTokens": 4096,
+                                        "reasoningOutputTokens": 4000}}}})
+            send({"method": "turn/completed", "params": {"threadId": "t1", "turn": {
+                "id": "u1", "status": "failed", "error": {
+                    "message": "incomplete response: max_output_tokens; private source secret"}}}})
+            continue
         answer = "not json" if mode == "badjson" else json.dumps({"sentiment": "negative"})
         send({"method": "item/completed", "params": {"threadId": "other", "item": {
             "type": "agentMessage", "text": "{\"sentiment\": \"positive\"}"}}})
@@ -75,6 +83,31 @@ def _client(tmp_path: Path, mode: str, timeout: float = 10) -> tuple[CodexAppSer
 
 def _requests(log: Path) -> list[dict[str, object]]:
     return [json.loads(line) for line in log.read_text().splitlines()]
+
+
+def test_codex_output_length_failure_is_sanitized_and_retains_usage_without_retry(tmp_path):
+    client, log = _client(tmp_path, "length")
+    with client, pytest.raises(AiCallError) as caught:
+        client.complete(prompt="private source secret", output_schema=_SCHEMA)
+    error = caught.value
+    assert error.code is AiFailureCode.OUTPUT_TRUNCATED
+    assert "HOTKEY_AI_REASONING_TOKENS" in error.detail
+    assert "private source secret" not in error.detail + str(error)
+    assert error.receipt.output == {}
+    assert error.receipt.usage.output_tokens == 4096
+    assert error.receipt.usage.reasoning_output_tokens == 4000
+    assert [r.get("method") for r in _requests(log)].count("turn/start") == 1
+
+
+def test_codex_nonzero_allowance_is_refused_before_starting_a_process(monkeypatch):
+    with CodexAppServerClient(model="controlled", reasoning_tokens=4000) as client:
+        start = []
+        monkeypatch.setattr(client, "_ensure_started", lambda deadline: start.append(deadline))
+        with pytest.raises(AiCallError) as caught:
+            client.complete(prompt="private source", output_schema=_SCHEMA)
+    assert caught.value.code is AiFailureCode.UNAVAILABLE
+    assert "HOTKEY_AI_REASONING_TOKENS" in caught.value.detail
+    assert not start
 
 
 def test_complete_returns_structured_output_usage_and_safe_thread_settings(

@@ -25,7 +25,7 @@ class EventInput:
     matched_keywords: frozenset[str]
     representative_comment_id: UUID | None = None
     native_target_content_ids: frozenset[UUID] = frozenset()
-    editorial_frame: dict[str, str | None] | None = None
+    editorial_frame: dict[str, object] | None = None
     provenance_fingerprint: str | None = None
     observation_id: UUID | None = None
     observation_source_key: str | None = None

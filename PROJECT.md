@@ -49,6 +49,8 @@ hotkey-server/
 
 领域按实际使用创建，不预建空包。领域持久化使用 `models.py`，契约使用 `schemas.py`，业务用例使用服务函数或类；复杂、复用查询才拆 Repository，外部系统差异才定义 Adapter/Protocol。禁止通用 BaseService/BaseRepository、全局 models/utils、无职责包装层或第二套后端/队列。
 
+AI 推理额度复用保护的模型目录与原预算账本，输出截断码 `output_truncated` 同步 `ai_calls` 的 DDL/ORM 约束；现有库升级仍遵守 Design001 §6.3，不直接运行完整 DDL。
+
 | 领域 | 唯一责任 |
 |---|---|
 | identity | 账户与基本资料、规范化用户头像、Argon2 密码、数据库会话、邮箱验证码、GitHub 状态与适配器 |
