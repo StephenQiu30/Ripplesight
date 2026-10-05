@@ -12,7 +12,14 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from ai.schemas import AiCallError, AiCompletion, AiFailureCode, AiImageInput, AiTokenUsage
+from ai.schemas import (
+    AiCallError,
+    AiCompletion,
+    AiFailureCode,
+    AiImageInput,
+    AiTokenUsage,
+    output_truncated_error,
+)
 from core.config import Settings
 
 _EOF = object()
@@ -77,6 +84,8 @@ class CodexAppServerClient:
         command: Sequence[str] = ("codex", "app-server"),
         effort: str = "low",
         timeout_seconds: float = 180,
+        reasoning_tokens: int = 0,
+        reasoning_config: str = "HOTKEY_AI_REASONING_TOKENS",
     ) -> None:
         if not model or not command:
             raise ValueError("model and command are required")
@@ -86,6 +95,7 @@ class CodexAppServerClient:
         self._command = tuple(command)
         self._effort = effort
         self._timeout = timeout_seconds
+        self._reasoning_tokens, self._reasoning_config = reasoning_tokens, reasoning_config
         self._process_workdir = tempfile.mkdtemp(prefix="hotkey-ai-process-")
         self._process: subprocess.Popen[str] | None = None
         self._messages: queue.Queue[object] = queue.Queue()
@@ -135,6 +145,13 @@ class CodexAppServerClient:
         instructions: str = "",
         images: Sequence[AiImageInput] = (),
     ) -> AiCompletion:
+        # Current app-server has no supported output-limit field. Never send an ignored override.
+        if self._reasoning_tokens:
+            raise AiCallError(
+                AiFailureCode.UNAVAILABLE,
+                "Codex app-server cannot set an output token limit; "
+                f"{self._reasoning_config} requires an openai_compatible model",
+            )
         with self._lock:
             with tempfile.TemporaryDirectory(prefix="hotkey-ai-call-") as workdir:
                 started = time.monotonic()
@@ -294,7 +311,7 @@ class CodexAppServerClient:
             if message.get("id") != request_id:
                 continue
             if "error" in message:
-                raise _failure(str(message["error"].get("message", "")))
+                raise _failure(str(message["error"].get("message", "")), self._reasoning_config)
             result = message.get("result")
             if not isinstance(result, dict):
                 raise AiCallError(AiFailureCode.FAILED, f"{method} returned no result")
@@ -305,6 +322,7 @@ class CodexAppServerClient:
     ) -> tuple[str, AiTokenUsage]:
         text: str | None = None
         usage = AiTokenUsage()
+        usage_reported = False
         while True:
             message = self._next_message(deadline)
             params = message.get("params")
@@ -323,13 +341,29 @@ class CodexAppServerClient:
                     output_tokens=int(last.get("outputTokens") or 0),
                     reasoning_output_tokens=int(last.get("reasoningOutputTokens") or 0),
                 )
+                usage_reported = True
             elif method == "turn/completed":
                 turn = params.get("turn") or {}
                 if turn.get("id") != turn_id:
                     continue
                 if turn.get("status") != "completed":
                     error = turn.get("error") or {}
-                    raise _failure(str(error.get("message", turn.get("status", ""))))
+                    failure = _failure(
+                        str(error.get("message", turn.get("status", ""))),
+                        self._reasoning_config,
+                    )
+                    if failure.code is AiFailureCode.OUTPUT_TRUNCATED:
+                        failure.receipt = AiCompletion(
+                            provider=self.provider,
+                            model=self.model,
+                            output={},
+                            usage=usage,
+                            usage_reported=usage_reported,
+                            duration_ms=max(
+                                0, int((time.monotonic() - (deadline - self._timeout)) * 1000)
+                            ),
+                        )
+                    raise failure
                 if text is None:
                     raise AiCallError(AiFailureCode.INVALID_OUTPUT, "turn produced no answer")
                 return text, usage
@@ -341,8 +375,13 @@ class CodexAppServerClient:
             process.wait(timeout=5)
 
 
-def _failure(message: str) -> AiCallError:
+def _failure(message: str, reasoning_config: str = "HOTKEY_AI_REASONING_TOKENS") -> AiCallError:
     lowered = message.lower()
+    if any(
+        marker in lowered
+        for marker in ("max_output_tokens", "finish_reason=length", "output token limit reached")
+    ):
+        return output_truncated_error(reasoning_config)
     if any(marker in lowered for marker in _RATE_LIMIT_MARKERS):
         return AiCallError(AiFailureCode.RATE_LIMITED, message)
     return AiCallError(AiFailureCode.FAILED, message)

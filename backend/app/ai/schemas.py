@@ -55,6 +55,7 @@ class AiFailureCode(StrEnum):
     UNAVAILABLE = "unavailable"
     TIMEOUT = "timeout"
     INVALID_OUTPUT = "invalid_output"
+    OUTPUT_TRUNCATED = "output_truncated"
     FAILED = "failed"
 
 
@@ -114,11 +115,23 @@ class AiCallError(Exception):
         call_id: UUID | None = None,
         retry_at: datetime | None = None,
         outcome_unknown: bool = False,
+        receipt: AiCompletion | None = None,
     ) -> None:
         super().__init__(code.value)
         self.code = code
         self.call_id = call_id
         self.retry_at = retry_at
         self.outcome_unknown = outcome_unknown
+        self.receipt = receipt
         # Upstream text may echo prompt content; keep it short and out of logs by default.
         self.detail = detail[:500]
+
+
+def output_truncated_error(
+    reasoning_config: str, *, receipt: AiCompletion | None = None
+) -> AiCallError:
+    return AiCallError(
+        AiFailureCode.OUTPUT_TRUNCATED,
+        f"output token limit reached; increase {reasoning_config} after reviewing the model budget",
+        receipt=receipt,
+    )
