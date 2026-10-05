@@ -86,7 +86,7 @@ pnpm build
 
 契约变更先启动同提交API，顺序生成/检查客户端，再跑前端，避免并行改写生成目录。数据库/消息改动验证事务回滚、重复消费、旧租约及进程重启；必要真实PostgreSQL/Redis/Kafka/MinIO集成不由mock替代。页面验证桌面/窄屏、键盘、焦点、空/加载/错误/权限及无障碍。纯文档检查本地链接、规则一致性与git diff --check。
 
-文档分工与编号规则唯一见 [docs/README](docs/README.md#3-写在哪里)：PRD 写需求/AC，Design 写现行合同，BACKLOG 写总体进度，Acceptance 写实际证据；PLAN 只在用户明确要求时建立（现有 [PLAN007](docs/plan/007-公开信息免费采集执行计划.md)、[PLAN009](docs/plan/009-AIHOT参考对齐偏差计划.md)），其 WP 状态只在 PLAN 维护。普通整理不新建计划、审计流水或验收文件，不以删除文档关闭需求。编号不复用，EV 证据编号永不重编号；其余重编号须用户明确要求并在 docs/README 留对照表。许可证与署名完整保留。
+文档分工、编号与 PLAN 结构唯一见 [docs/README](docs/README.md#3-写在哪里)：PRD 写需求/AC 与执行目标摘要，Design 写现行合同，PLAN 写目标、可度量结果与工作包状态（一个 PRD 可有多个 PLAN，`plan/NNN-MM-主题.md`），BACKLOG 汇总总体进度，Acceptance 写实际证据。普通整理不新建审计流水或验收文件，不以删除文档关闭需求。编号不复用，EV 证据编号永不重编号；其余重编号须用户明确要求并在 docs/README 留对照表。许可证与署名完整保留。
 
 未经用户明确授权，不提交、推送、创建/合并PR或删除远端引用。授权后检查差异、秘密和远端状态；标题唯一格式 `type(scope):中文动宾描述`，冒号后无空格，≤72字符。type限feat/fix/test/refactor/docs/chore/perf/build/ci/revert，scope用稳定小写英文。正文/脚注中文，说明变更、原因、实际验证；不兼容用!及BREAKING CHANGE中文说明，一个提交一个可独立验收目的，生成物与源同提交。
 

@@ -19,7 +19,7 @@ HotKey 面向关注 AI 等专业方向的用户，是 ToC 信息监控产品；�
 
 首页 `/` 是公开信息入口，关于、隐私、条款、联系和变更说明保持公开。`/discover` 及专题/故事、`/items/[contentId]`、`/reports/daily`、`/reports/weekly`、`/reports/monthly` 与合法刊期、已发布模型榜均可公开阅读；资讯与刊物只读取显式配置的 `HOTKEY_PUBLIC_PUBLICATION_OWNER_ID` 分区及当前有效许可，未配置时保持未发布。获准原始资讯可在模型关闭时公开阅读，精选、事件与公共刊物分别遵守编选合同。
 
-`/feeds` 与 `/agent` 说明匿名发布方出口：`/public/` 下的 RSS、只读 API、MCP 与 Markdown 使用同一公开许可投影及限流。撤权、到期与删除会阻断关联派生内容、历史导出下载和旧缓存。实现与受控验证进度见 [PLAN007](docs/plan/007-公开信息免费采集执行计划.md) 和 [EV-002-061](docs/acceptance/002-信息获取主链路验收.md#ev-002-061七平台免费路线的共享实现与隔离验收)；七平台真实采集、稳定窗口及生产数据库升级仍按独立验收推进。
+`/feeds` 与 `/agent` 说明匿名发布方出口：`/public/` 下的 RSS、只读 API、MCP 与 Markdown 使用同一公开许可投影及限流。撤权、到期与删除会阻断关联派生内容、历史导出下载和旧缓存。实现与受控验证进度见 [PLAN007-01](docs/plan/007-01-公开信息免费采集执行计划.md) 和 [EV-002-061](docs/acceptance/002-信息获取主链路验收.md#ev-002-061七平台免费路线的共享实现与隔离验收)；七平台真实采集、稳定窗口及生产数据库升级仍按独立验收推进。
 
 个人关注、报告生成/发送、来源与管理页面验证真实会话并保持 noindex。`/login` 提供账号密码、GitHub OAuth App 和邮箱验证码；通用登录默认进入 `/topics`，首页个人关注入口显式回跳 `/workspace`，安全站内原目标可恢复。公共周刊与个人主题周报分别验收。访问、会话、数据隔离和历史分区合同见 [Design001 §9.2](docs/design/001-热点舆情监控平台总体设计.md#92-公开欢迎页登录与个人数据访问)。
 
@@ -82,8 +82,7 @@ RSSHub/SearXNG、Firecrawl、MinIO 和 MediaCrawler 继续使用既有独立环�
 | [项目约束](PROJECT.md) | 架构、目录与运行边界 |
 | [文档索引](docs/README.md) | 需求、设计与验收记录 |
 | [进度看板](BACKLOG.md) | 当前任务和真实验收状态 |
-| [公开信息执行计划](docs/plan/007-公开信息免费采集执行计划.md) | 七平台免费路线的工作包与 checklist |
-| [AIHOT 对齐计划](docs/plan/009-AIHOT参考对齐偏差计划.md) | 与参考项目 AIHOT 的偏差与修正工作包 |
+| [执行计划](docs/README.md#2-文档索引) | 各 PRD 的目标、可度量结果与工作包（PLAN） |
 | [贡献指南](CONTRIBUTING.md) | 开发、验证与 PR 要求 |
 | [安全策略](SECURITY.md) | 私密报告漏洞及敏感信息处理 |
 
