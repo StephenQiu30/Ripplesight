@@ -18,7 +18,7 @@ class EditorialEventInput:
     first_seen_at: datetime
     first_seen_basis: str
     selected: bool
-    fact_frame: dict[str, str | None] | None
+    fact_frame: dict[str, object] | None
     provenance_fingerprint: str
     observation_id: UUID | None = None
     input_observation_ids: tuple[UUID, ...] = ()

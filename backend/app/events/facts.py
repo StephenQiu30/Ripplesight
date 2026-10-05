@@ -319,6 +319,14 @@ class EventFactReadService:
             )
             if not readings:
                 raise ApplicationError("resource_not_found")
+            # A frame can originate from another assignment of the same fact.
+            # Reuse its ALL-member gate, including original quoted-post inputs.
+            fact_inputs = load_fact_observation_inputs_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                fact_ids=tuple(assignment.fact_id for assignment in assignments),
+                now=now,
+            )
             result = []
             for assignment in assignments:
                 fact = self._session.get(EventFact, assignment.fact_id)
@@ -326,7 +334,7 @@ class EventFactReadService:
                     raise RuntimeError("scoped fact foreign key missing")
                 rows = [(fm, member) for fm, member in member_rows if fm.fact_id == fact.id]
                 fact_references = [event_content_reference(member) for _, member in rows]
-                complete = all(
+                complete = fact.id in fact_inputs and all(
                     reference in readings
                     and readings[reference].representative_comment_state != "unavailable"
                     for reference in fact_references
@@ -340,6 +348,8 @@ class EventFactReadService:
                         root_fact_id=assignment.root_fact_id,
                         title=fact.title if available else None,
                         summary=fact.summary if available else None,
+                        evidence=(fact.frame or {}).get("evidence") if available else None,
+                        conditions=(fact.frame or {}).get("conditions", []) if available else [],
                         first_seen_at=fact.first_seen_at,
                         first_seen_basis=cast("object", fact.first_seen_basis),
                         evidence_state="complete" if complete else "partial",

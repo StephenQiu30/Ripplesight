@@ -280,11 +280,8 @@ class EditorialService:
             )
             if quoted is None or quoted.observation.content_version is None:
                 raise ApplicationError("editorial_material_unavailable")
-            quoted_text = (
-                quoted.observation.content_version.body
-                or quoted.observation.content_version.title
-                or ""
-            )
+            # A quote title cannot stand in for the original post body or ground evidence.
+            quoted_text = quoted.observation.content_version.body or ""
             quoted_author = quoted.observation.author_external_id or ""
         return EditorialMaterial.model_validate(
             {
@@ -524,6 +521,25 @@ class EditorialService:
                     current = self.session.get(EditorialRun, state.current_run_id)
                     if current is not None and (current.result or {}).get("manual"):
                         continue
+                # Hashes version new jobs, but never make a completed fixed input due again.
+                # Search history: an explicit later evaluation may have replaced current_run_id.
+                if (
+                    self.session.scalar(
+                        select(EditorialRun.id)
+                        .where(
+                            EditorialRun.owner_id == source.owner_id,
+                            EditorialRun.content_id == reference.content_id,
+                            EditorialRun.content_version_id == reference.content_version_id,
+                            EditorialRun.source_key == source.source_key,
+                            EditorialRun.source_revision == source.revision,
+                            EditorialRun.stages == "all",
+                            EditorialRun.status.in_(("complete", "blocked")),
+                        )
+                        .limit(1)
+                    )
+                    is not None
+                ):
+                    continue
                 try:
                     with self.session.begin_nested():
                         self.request_run_in_transaction(
@@ -974,9 +990,14 @@ class EditorialExecutor:
                 if call_id is None:
                     failure = "editorial_call_evidence_missing"
                 else:
-                    output = plan.output_type.model_validate(response.output).model_dump(
-                        mode="json", by_alias=True
+                    from analysis.editorial_structure import normalize_structure
+
+                    validated = (
+                        normalize_structure(response.output, material)
+                        if plan.key == "structure"
+                        else plan.output_type.model_validate(response.output)
                     )
+                    output = validated.model_dump(mode="json", by_alias=True)
             except AiCallError as error:
                 call_id = error.call_id
                 failure = (

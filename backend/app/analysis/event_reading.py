@@ -94,6 +94,9 @@ def list_editorial_event_inputs_in_transaction(
                 ):
                     continue
                 result_view = run.result
+                # Composite material stays in analysis for later mention/edition handling.
+                if result_view.structure is not None and result_view.structure.scope == "composite":
+                    continue
                 writing = result_view.writing
                 title = writing.title_zh.strip() if writing else ""
                 if not title:
