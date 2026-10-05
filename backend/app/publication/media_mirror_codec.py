@@ -241,24 +241,24 @@ def encode_image_renditions(body: bytes) -> tuple[EncodedRendition, ...]:
     if mime == "image/svg+xml":
         safe, width, height = _svg(body)
         result = []
+        svg_variants: dict[tuple[bool, int, int], bytes] = {}
         for mode, target in IMAGE_WIDTHS.items():
-            root = ElementTree.fromstring(safe)
-            root.set("viewBox", root.get("viewBox") or f"0 0 {width} {height}")
             actual = target if mode.startswith("avatar") else min(width, target)
             out_height = (
                 actual if mode.startswith("avatar") else max(1, round(height * actual / width))
             )
-            root.set("width", str(actual))
-            root.set("height", str(out_height))
-            root.set(
-                "preserveAspectRatio",
-                "xMidYMid slice" if mode.startswith("avatar") else "xMidYMid meet",
-            )
-            result.append(
-                EncodedRendition(
-                    mode, ElementTree.tostring(root, encoding="utf-8"), mime, actual, out_height
+            svg_key = (mode.startswith("avatar"), actual, out_height)
+            if svg_key not in svg_variants:
+                root = ElementTree.fromstring(safe)
+                root.set("viewBox", root.get("viewBox") or f"0 0 {width} {height}")
+                root.set("width", str(actual))
+                root.set("height", str(out_height))
+                root.set(
+                    "preserveAspectRatio",
+                    "xMidYMid slice" if mode.startswith("avatar") else "xMidYMid meet",
                 )
-            )
+                svg_variants[svg_key] = ElementTree.tostring(root, encoding="utf-8")
+            result.append(EncodedRendition(mode, svg_variants[svg_key], mime, actual, out_height))
         return tuple(result)
     try:
         with warnings.catch_warnings():
@@ -320,6 +320,7 @@ def encode_image_renditions(body: bytes) -> tuple[EncodedRendition, ...]:
             image.load()
             oriented = ImageOps.exif_transpose(image)
             results = []
+            still_variants: dict[tuple[bool, tuple[int, int]], bytes] = {}
             for mode, target in IMAGE_WIDTHS.items():
                 resized = (
                     ImageOps.fit(oriented, (target, target), Image.Resampling.LANCZOS)
@@ -328,19 +329,22 @@ def encode_image_renditions(body: bytes) -> tuple[EncodedRendition, ...]:
                 )
                 if not mode.startswith("avatar"):
                     resized.thumbnail((target, 50000), Image.Resampling.LANCZOS)
-                output = io.BytesIO()
                 webp = mime in {"image/png", "image/webp", "image/x-icon"}
-                resized = resized.convert("RGBA" if webp else "RGB")
-                resized.save(
-                    output,
-                    format="WEBP" if webp else "JPEG",
-                    quality=88 if webp and mime != "image/webp" else 82,
-                    method=4 if webp else 0,
-                )
+                key = (mode.startswith("avatar"), resized.size)
+                if key not in still_variants:
+                    output = io.BytesIO()
+                    resized = resized.convert("RGBA" if webp else "RGB")
+                    resized.save(
+                        output,
+                        format="WEBP" if webp else "JPEG",
+                        quality=88 if webp and mime != "image/webp" else 82,
+                        method=4 if webp else 0,
+                    )
+                    still_variants[key] = output.getvalue()
                 results.append(
                     EncodedRendition(
                         mode,
-                        output.getvalue(),
+                        still_variants[key],
                         "image/webp" if webp else "image/jpeg",
                         resized.width,
                         resized.height,
