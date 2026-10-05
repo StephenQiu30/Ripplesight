@@ -34,6 +34,12 @@ def create_ai_client_for_frozen_model(
     ):
         raise AiCallError(AiFailureCode.UNAVAILABLE, "frozen model catalog is no longer approved")
     client: Any
+    reasoning_config = (
+        "HOTKEY_AI_REASONING_TOKENS"
+        if model.key == "default"
+        and "reasoning_tokens" not in settings.ai_model_catalog.get("default", {})
+        else f"HOTKEY_AI_MODEL_CATALOG.{model.key}.reasoning_tokens"
+    )
     if spec.transport == "codex":
         command = shlex.split(settings.ai_command)
         if len(command) != 2 or Path(command[0]).name != "codex" or command[1] != "app-server":
@@ -43,6 +49,8 @@ def create_ai_client_for_frozen_model(
             command=command,
             effort=settings.ai_effort,
             timeout_seconds=spec.timeout_seconds,
+            reasoning_tokens=spec.reasoning_tokens,
+            reasoning_config=reasoning_config,
         )
     else:
         if not settings.ai_openai_compatible_requests_enabled or not spec.configured:
@@ -55,7 +63,11 @@ def create_ai_client_for_frozen_model(
         ):
             raise AiCallError(AiFailureCode.UNAVAILABLE, "paid model requests are disabled")
         client = OpenAiCompatibleClient(
-            spec, enabled=True, transport=transport, before_request=before_request
+            spec,
+            enabled=True,
+            transport=transport,
+            before_request=before_request,
+            reasoning_config=reasoning_config,
         )
     client.component_key = spec.component_key
     client.capability_settings = settings
