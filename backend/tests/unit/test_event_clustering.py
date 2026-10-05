@@ -41,6 +41,138 @@ def test_candidate_fingerprint_and_prompt_are_order_independent() -> None:
     assert build_event_prompt((first, second)) == build_event_prompt((second, first))
 
 
+def test_scope_changes_fingerprint_and_is_in_the_real_cluster_prompt() -> None:
+    member = replace(_member("Acme launches a model"), editorial_scope="single")
+    composite = replace(member, editorial_scope="composite")
+    assert candidate_fingerprint(
+        topic_id=member.topic_id, members=(member,)
+    ) != candidate_fingerprint(topic_id=member.topic_id, members=(composite,))
+    prompt = build_event_prompt((composite,))
+    assert '"scope":"composite"' in prompt
+    assert "具体发布对象或具体发生" in prompt
+    assert "多个演讲者的会议综述" in prompt
+
+
+def test_fixed_editorial_context_keeps_scope_provenance_and_actual_observation(monkeypatch):
+    from events.models import EventMember
+    from events.services import _fixed_context_inputs
+    from monitors.editorial_events import editorial_event_topic_id
+
+    item, observation = _member("raw title"), uuid4()
+    member = EventMember(
+        owner_id=item.owner_id,
+        content_id=item.content_id,
+        content_version_id=item.content_version_id,
+        source_key="rss",
+        observation_id=observation,
+        observation_source_key="rss",
+        input_manifest={
+            "basis": "observations_v1",
+            "observation_source_key": "rss",
+            "input_observation_ids": [str(observation)],
+        },
+    )
+    reading = SimpleNamespace(
+        id=item.content_id,
+        source_key="rss",
+        observation=SimpleNamespace(
+            id=observation,
+            content_version=SimpleNamespace(
+                id=item.content_version_id, title=item.title, body="raw body"
+            ),
+        ),
+        current_visibility=SimpleNamespace(status="visible"),
+        representative_comment_state="none",
+        representative_comment=None,
+    )
+    editorial = SimpleNamespace(
+        scope="single",
+        title="编辑标题",
+        summary="编辑摘要",
+        raw_body="raw body",
+        fact_frame={"object": "Atlas"},
+        observation_id=observation,
+        provenance_fingerprint="fixed-editorial-result",
+    )
+    monkeypatch.setattr(
+        "events.services.load_event_member_content_in_transaction",
+        lambda _s, **kw: {kw["references"][0]: reading},
+    )
+    monkeypatch.setattr(
+        "events.services.load_event_content_original_times_in_transaction",
+        lambda *_a, **_kw: {
+            item.content_version_id: SimpleNamespace(
+                source_time=item.first_seen_at, basis="published"
+            )
+        },
+    )
+    monkeypatch.setattr(
+        "events.services.load_editorial_event_inputs_for_versions_in_transaction",
+        lambda *_a, **_kw: {item.content_version_id: editorial},
+    )
+
+    def load():
+        return _fixed_context_inputs(
+            SimpleNamespace(),
+            owner_id=item.owner_id,
+            topic_id=editorial_event_topic_id(item.owner_id),
+            members=(member,),
+            since=item.first_seen_at,
+            now=item.first_seen_at,
+        )
+
+    context = load()[0]
+    assert context.editorial_scope == "single" and context.editorial_frame == {"object": "Atlas"}
+    assert context.provenance_fingerprint == "fixed-editorial-result"
+    assert context.title == "编辑标题" and context.body == "编辑摘要"
+    editorial.observation_id = uuid4()
+    assert load() == ()
+
+
+def test_composite_and_unknown_do_not_found_a_story_or_supply_recall_context():
+    from events.clustering import append_candidates, plan_event_candidates
+    from events.schemas import EventTarget
+
+    member = _member("Acme launch")
+    composite = replace(
+        member, content_id=uuid4(), content_version_id=uuid4(), editorial_scope="composite"
+    )
+    unknown = replace(composite, editorial_scope="unknown")
+    session = SimpleNamespace(
+        execute=lambda *_args: pytest.fail("unsupported new candidate recall")
+    )
+    assert plan_event_candidates(session, (composite, unknown), ()) == ()
+    target = EventTarget(uuid4(), 1, (composite, unknown))
+    assert append_candidates(session, (member,), (target,)) == ()
+    session.execute = lambda *_args: [(0, 0, 0.9)]
+    target = EventTarget(uuid4(), 1, (member,))
+    assert plan_event_candidates(session, (composite,), (target,)) == (
+        ((member, composite), {str(target.event_id): 1}),
+    )
+
+
+@pytest.mark.parametrize("mode", ["manual", "standalone"])
+def test_manual_assignment_and_exclusion_stay_out_of_automatic_inputs(mode):
+    from events.services import _protected_event_input
+
+    item = _member("Acme")
+    statements = []
+
+    def scalar(statement):
+        statements.append(str(statement))
+        assert mode in statement.compile().params["mode_1"]
+        return item.content_id  # Matching protected override of either mode.
+
+    assert _protected_event_input(
+        SimpleNamespace(scalar=scalar),
+        owner_id=item.owner_id,
+        topic_id=item.topic_id,
+        content_id=item.content_id,
+        exclude_assigned=False,
+    )
+    assert len(statements) == 1 and "event_grouping_overrides.mode IN" in statements[0]
+
+
 def test_candidate_batches_keep_all_21_members_without_singleton() -> None:
     members = tuple(_member("Acme launches a model") for _ in range(21))
     session = cast(

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ai.capability_schemas import FrozenAiRouting
 from ai.schemas import AiCallError, AiCompletion, AiFailureCode
 from ai.services import AiService, create_ai_client
+from analysis.event_reading import load_editorial_event_inputs_for_versions_in_transaction
 from content.event_reading import load_event_member_content_in_transaction
 from content.observation_inputs import freeze_observation_inputs_in_transaction
 from core.config import Settings
@@ -40,7 +41,13 @@ from events.observation_inputs import (
     event_content_reference,
     load_fact_observation_inputs_in_transaction,
 )
-from events.relations import RelationPairOutput, RelationReportInput, relation_pair_request
+from events.relations import (
+    RelationPairOutput,
+    RelationReportInput,
+    frames_conflict,
+    relation_frame,
+    relation_pair_request,
+)
 from events.story_models import EventStoryLink
 from jobs.execution import ExecutionLease, JobCompletion, JobExecutionFailure, JobExecutionService
 from jobs.schemas import (
@@ -87,8 +94,24 @@ class StoryRoot(BaseModel):
 
 
 def consolidation_decision(
-    first: RelationPairOutput, second: RelationPairOutput | None
+    first: RelationPairOutput,
+    second: RelationPairOutput | None,
+    *,
+    reports: tuple[RelationReportInput, RelationReportInput] | None = None,
 ) -> Literal["separate", "review", "merge"]:
+    if reports is not None and (
+        frames_conflict(reports[0].frame, reports[1].frame, independent_updates_only=True)
+        or (
+            first.relation == "SAME_OCCURRENCE"
+            and frames_conflict(reports[0].frame, reports[1].frame)
+        )
+        or (
+            second is not None
+            and second.relation == "SAME_OCCURRENCE"
+            and frames_conflict(reports[0].frame, reports[1].frame)
+        )
+    ):
+        return "separate"
     if first.relation not in _POSITIVE or first.confidence < 0.8:
         return "separate"
     if second is None:
@@ -170,12 +193,29 @@ def load_story_roots_in_transaction(
             now=now,
         )
         reports = []
+        editorial = load_editorial_event_inputs_for_versions_in_transaction(
+            session,
+            owner_id=owner_id,
+            since=datetime.min.replace(tzinfo=now.tzinfo),
+            now=now,
+            version_ids=tuple(member.content_version_id for member in members),
+        )
         fact_inputs = load_fact_observation_inputs_in_transaction(
             session, owner_id=owner_id, fact_ids=tuple({row.fact_id for row in members}), now=now
         )
         for member in members:
+            if (
+                member.content_version_id in editorial
+                and editorial[member.content_version_id].scope != "single"
+            ):
+                continue
             event_member = event_members.get(member.event_member_id)
             if event_member is None:
+                continue
+            if (event_member.input_manifest or {}).get("editorial_scope") in {
+                "composite",
+                "unknown",
+            }:
                 continue
             member_fact = session.get(EventFact, member.fact_id)
             if (
@@ -221,7 +261,7 @@ def load_story_roots_in_transaction(
                         first_party=source.first_party,
                         published_at=reading.observation.published_at,
                         summary=(version.body or "")[:4000] or None,
-                        frame=cast(dict[str, str | None] | None, member_fact.frame),
+                        frame=relation_frame(member_fact.frame),
                     ),
                     observation_id=reading.observation.id,
                     input_observation_ids=freeze_observation_inputs_in_transaction(
@@ -647,7 +687,14 @@ class EventConsolidationExecutor:
                         if "review" in outputs
                         else None
                     )
-                    decision = consolidation_decision(first, second)
+                    decision = consolidation_decision(
+                        first,
+                        second,
+                        reports=(
+                            roots[0].reports[0].input,
+                            roots[1].reports[0].input,
+                        ),
+                    )
                     if decision == "review":
                         step = ("review", roots[1].reports[0].input, roots[0].reports[0].input)
                     elif decision == "merge":

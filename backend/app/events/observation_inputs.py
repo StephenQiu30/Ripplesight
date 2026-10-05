@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 from datetime import datetime
-from typing import cast
+from typing import Literal, cast
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -37,6 +37,7 @@ class _InputReference(BaseModel):
     matched_keywords: tuple[str, ...] = Field(max_length=200)
     native_target_content_ids: tuple[UUID, ...] = Field(max_length=200)
     editorial_frame: dict[str, object] | None = None
+    editorial_scope: Literal["single", "composite", "unknown"] | None = None
     provenance_fingerprint: str | None = None
 
 
@@ -96,6 +97,8 @@ def event_member_input_manifest(item: EventInput) -> dict[str, object] | None:
         "basis": "observations_v1",
         "observation_source_key": item.observation_source_key,
         "input_observation_ids": [str(value) for value in item.input_observation_ids],
+        "editorial_scope": item.editorial_scope,
+        "editorial_frame": item.editorial_frame,
     }
 
 
@@ -236,6 +239,7 @@ def freeze_event_inputs_in_transaction(
                 matched_keywords=tuple(sorted(item.matched_keywords)),
                 native_target_content_ids=tuple(sorted(item.native_target_content_ids, key=str)),
                 editorial_frame=item.editorial_frame,
+                editorial_scope=item.editorial_scope,
                 provenance_fingerprint=item.provenance_fingerprint,
             )
             for item in frozen
@@ -334,6 +338,7 @@ def load_frozen_event_inputs_in_transaction(
                 representative_comment_id=item.representative_comment_id,
                 native_target_content_ids=frozenset(item.native_target_content_ids),
                 editorial_frame=item.editorial_frame,
+                editorial_scope=item.editorial_scope,
                 provenance_fingerprint=item.provenance_fingerprint,
                 observation_id=item.observation_id,
                 observation_source_key=item.observation_source_key,
@@ -354,7 +359,7 @@ def load_frozen_event_inputs_in_transaction(
                 provenance_fingerprint=item.provenance_fingerprint,
                 now=now,
             )
-            if editorial is None:
+            if editorial is None or editorial.scope != item.editorial_scope:
                 return ()
             inputs[-1] = replace(
                 inputs[-1], title=editorial.title, body=editorial.summary or editorial.raw_body
