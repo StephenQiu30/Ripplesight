@@ -1,6 +1,7 @@
 """Real isolated PostgreSQL: fixed approved source Jobs and independent alias inputs."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta
+from email.utils import format_datetime
 from uuid import uuid4
 
 import pytest
@@ -73,6 +74,7 @@ def collect(
     url="https://www.threads.com/t/AbC_012-",
     weak=False,
     barrier=None,
+    published_at: datetime | None = None,
 ):
     accepted, op = job(session, owner, p)
     # Real original Job row authority. No worker/source requests in this controlled test.
@@ -84,7 +86,15 @@ def collect(
     prepared = begin(service, owner, p, accepted, op)
     description = f"<p><strong>@sample</strong>:</p><p>{body}</p>"
     material = parse_feed(
-        feed(url=url, description=description), p.configuration.feed_url, p.configuration
+        feed(
+            url=url,
+            description=description,
+            extra_item=f"<pubDate>{format_datetime(published_at)}</pubDate>"
+            if published_at
+            else "",
+        ),
+        p.configuration.feed_url,
+        p.configuration,
     )[0]
     if weak:
         material = material.model_copy(update={"native_identity": None})

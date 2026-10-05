@@ -84,6 +84,7 @@ def _grant(session: Session, record: ContentTranslationRun, now: datetime) -> Fu
         content_version_id=record.content_version_id,
         policy_revision=record.policy_revision,
         now=now,
+        for_translation=True,
     )
 
 
@@ -278,6 +279,7 @@ class ContentTranslationService:
                 content_version_id=command.content_version_id,
                 policy_revision=command.policy_revision,
                 now=self.clock(),
+                for_translation=True,
             )
             plan = _plan(grant)
             prior = self._latest(

@@ -30,7 +30,7 @@ from publication.publication_models import (
     PublicationSourcePolicy,
     PublicationSyncState,
 )
-from publication.rules import has_item_page
+from publication.rules import has_item_page, is_selectable
 from publication.schemas import (
     Category,
     FrozenPublicationReference,
@@ -909,6 +909,7 @@ def full_text_grant_in_transaction(
     content_version_id: UUID,
     policy_revision: int,
     now: datetime,
+    for_translation: bool = False,
 ) -> FullTextGrantView:
     require_transaction(session)
     reader = PublicationReadingService(session)
@@ -923,12 +924,22 @@ def full_text_grant_in_transaction(
             granted=False, reference=None, body=None, reason="version_or_permission_changed"
         )
     projection, snapshot = value
+    selected = projection.selected
+    released = bool(projection.visible_after and projection.visible_after <= now)
+    if for_translation and projection.published_at is None:
+        # The trusted-date gate applies to public selection, not translation.
+        # _live has already rechecked the exact run, manual version and rights.
+        result = snapshot.run.result if snapshot.run else None
+        selected = is_selectable(
+            projection.eligible, result.selected if result else None, snapshot.source.tier
+        )
+        released = projection.visible_after is None or projection.visible_after <= now
     granted = (
         projection.visibility == "public"
-        and projection.selected
+        and selected
         and projection.eligible
         and projection.body_mode == "full"
-        and bool(projection.visible_after and projection.visible_after <= now)
+        and released
     )
     policy = session.get(PublicationSourcePolicy, (owner_id, projection.source_key))
     assert policy is not None
