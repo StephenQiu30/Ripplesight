@@ -1,6 +1,6 @@
 # HotKey 技术架构
 
-本文说明 HotKey 由哪些部分组成、各部分负责什么、必须遵守哪些技术约定。产品能力与验收标准见 [docs](docs/README.md)，工程流程见 [AGENTS](AGENTS.md)，进度见 [BACKLOG](BACKLOG.md)。
+本文说明 HotKey 由哪些部分组成、各部分负责什么、必须遵守哪些技术约定。产品能力与验收标准见 [docs](docs/index.md)，工程流程见 [AGENTS](AGENTS.md)，进度见 [BACKLOG](BACKLOG.md)。
 
 ## 1. 技术栈
 
@@ -47,7 +47,7 @@ hotkey-server/
 │   ├── src/request.ts         # 唯一的 HTTP 传输层
 │   ├── src/proxy.ts           # 会话门禁与 CSP
 │   └── tests/                 # 前端测试
-└── docs/                      # 产品能力文档
+└── docs/                      # 产品知识库（Obsidian 仓库 + VitePress 网站）
 ```
 
 ## 4. 业务领域
@@ -106,7 +106,7 @@ hotkey-server/
 - 来源采集只走本机服务：RSSHub/SearXNG 的主机只能是 `127.0.0.1`（宿主机）或 `host.docker.internal`（Compose）。HTTP 适配器强制主机白名单，并校验每一次重定向。
 - MediaCrawler 作为宿主机子进程运行，使用独立的浏览器和本人账号；浏览器资料目录权限为 700、文件权限为 600；遇到验证码、登录失效或限流就停用。
 - 模型只走本机 Codex app-server：每个分析任务启动一个子进程，只读、不需要审批、只传最小环境变量、使用空的工作目录。模型输入一律视为不可信文本，输出必须是结构化结果并经过校验；数字、排序和引用由程序计算。
-- 费用、账号、许可等产品边界见 [docs/07](docs/07-边界与决策.md)。
+- 费用、账号、许可等产品边界见 [决策](docs/index.md#决策)。
 
 ## 9. API 与身份
 

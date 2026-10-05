@@ -1,0 +1,16 @@
+filters:
+  and:
+    - type == "capability"
+views:
+  - type: table
+    name: 能力状态
+    order:
+      - file.name
+      - title
+      - status
+      - release
+      - kr
+      - updated
+    sort:
+      - property: file.name
+        direction: ASC

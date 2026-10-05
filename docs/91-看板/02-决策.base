@@ -1,0 +1,19 @@
+filters:
+  and:
+    - type == "decision"
+views:
+  - type: table
+    name: 生效中的决策
+    filters:
+      and:
+        - status == "生效"
+    order:
+      - title
+      - summary
+      - decided
+  - type: table
+    name: 全部决策
+    order:
+      - title
+      - status
+      - decided
