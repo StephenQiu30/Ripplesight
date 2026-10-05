@@ -10,9 +10,13 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from analysis.prompts import editorial_prompt_version, render_editorial_prompt
 from events.schemas import EventFactDecision, EventInput, EventTarget
 
-EVENT_PROMPT_VERSION = "events-cluster-v3-editorial-facts"
+EVENT_PROMPT_VERSION = (
+    "events-cluster-v4-scope@"
+    + editorial_prompt_version("group-definitions", "group-method").split("@")[-1]
+)
 EVENT_WINDOW = timedelta(hours=72)
 NATIVE_SIGNAL_WINDOW = timedelta(hours=48)
 MAX_CANDIDATE_MEMBERS = 20
@@ -64,6 +68,7 @@ def candidate_fingerprint(
                 "body": item.body,
                 "provenance": item.provenance_fingerprint,
                 "editorial_frame": item.editorial_frame,
+                "editorial_scope": item.editorial_scope,
                 **(
                     {
                         "observation_id": str(item.observation_id),
@@ -107,6 +112,7 @@ def build_event_prompt(
             "body_excerpt": (item.body or "")[:400],
             "matched_keywords": sorted(item.matched_keywords),
             "editorial_frame": item.editorial_frame,
+            "scope": item.editorial_scope,
         }
         for item in sorted(members, key=lambda member: member.content_version_id.hex)
     ]
@@ -129,12 +135,21 @@ def build_event_prompt(
             + prompt
         )
     prompt += (
+        "\n"
+        + render_editorial_prompt("group-definitions")
+        + "\n"
+        + render_editorial_prompt("group-method")
+        + "\n"
         "\n确认时返回facts,完整且不重叠地划分所有输入版本。"
         "同一次真实发生是同事实;发布后的评测、回应是直接development;"
         "背景为background;同公司不同发生不能并为同事实。"
         "新事件只含一个root,development/background直接指向该root的root_member_version_id;"
         "既有同事实用same_occurrence+existing_fact_id,新进展用root_fact_id指向既有root;"
-        "上下文事实不可重新划分。盘点roundup独立且不能混入普通事件。"
+        "上下文事实不可重新划分。scope=composite 仅表示提及已有事实,"
+        "用same_occurrence+existing_fact_id提供挂靠目标,程序只保存mention成员;"
+        "它不能创建root/roundup/development或为其他内容提供合并证据。"
+        "scope=unknown 保持待复核,same_event=false。"
+        "盘点roundup不是综合资料创建事件的许可。"
         "无法给出可靠事实关系用unreviewed,不得编造。facts每项需标题、摘要和关系。"
     )
     if fact_context is not None:
@@ -228,7 +243,11 @@ def plan_event_candidates(
     native_only_version_ids: frozenset[UUID] = frozenset(),
 ) -> tuple[tuple[tuple[EventInput, ...], dict[str, int]], ...]:
     """Pending regroup is only a query; it cannot be another query's evidence."""
-    normal = [item for item in inputs if item.content_id not in regroup_content_ids]
+    normal = [
+        item
+        for item in inputs
+        if item.content_id not in regroup_content_ids and item.editorial_scope != "unknown"
+    ]
     appends = append_candidates(
         session, normal, targets, native_only_version_ids=native_only_version_ids
     )
@@ -242,6 +261,7 @@ def plan_event_candidates(
                 item
                 for item in normal
                 if item.content_version_id not in matched | native_only_version_ids
+                and item.editorial_scope != "composite"
             ],
         )
     )
@@ -250,15 +270,20 @@ def plan_event_candidates(
         ((item,), {})
         for item in normal
         if item.content_version_id not in grouped | native_only_version_ids
+        and item.editorial_scope != "composite"
     )
     for item in inputs:
-        if item.content_id not in regroup_content_ids:
+        if item.content_id not in regroup_content_ids or item.editorial_scope == "unknown":
             continue
         own = append_candidates(
             session, (item,), targets, native_only_version_ids=native_only_version_ids
         )
         groups.extend((members, {str(target.event_id): target.revision}) for members, target in own)
-        if not own and item.content_version_id not in native_only_version_ids:
+        if (
+            not own
+            and item.content_version_id not in native_only_version_ids
+            and item.editorial_scope != "composite"
+        ):
             groups.append(((item,), {}))
     return tuple(groups)
 
@@ -271,6 +296,18 @@ def append_candidates(
     native_only_version_ids: frozenset[UUID] = frozenset(),
 ) -> tuple[tuple[tuple[EventInput, ...], EventTarget], ...]:
     """Choose the highest-scoring eligible event with one similarity round trip."""
+    targets = tuple(
+        EventTarget(
+            target.event_id,
+            target.revision,
+            tuple(
+                member
+                for member in target.members
+                if member.editorial_scope not in {"composite", "unknown"}
+            ),
+        )
+        for target in targets
+    )
     contexts = [(target, member) for target in targets for member in target.members]
     if not inputs or not contexts:
         return ()

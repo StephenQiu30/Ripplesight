@@ -32,6 +32,8 @@ class EventInput:
     representative_comment_observation_id: UUID | None = None
     input_observation_ids: tuple[UUID, ...] = ()
     annotation_id: UUID | None = None
+    # None is a legacy topic annotation, never an inferred editorial single.
+    editorial_scope: Literal["single", "composite", "unknown"] | None = None
 
 
 @dataclass(frozen=True, slots=True)
