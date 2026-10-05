@@ -5,6 +5,7 @@ from datetime import datetime
 from time import monotonic
 
 from sources.adapters.editorial_json import parse_json_list
+from sources.adapters.editorial_parsing import EditorialParsingStats
 from sources.adapters.editorial_rss import parse_feed
 from sources.adapters.editorial_web import parse_web_list
 from sources.editorial_preview_schemas import (
@@ -33,19 +34,22 @@ def preview_sample(
 ) -> EditorialSourcePreviewView:
     started = monotonic()
     config = command.configuration
+    stats = EditorialParsingStats()
     rows = (
-        parse_feed(command.sample, config.feed_url or "", config)
+        parse_feed(command.sample, config.feed_url or "", config, stats=stats)
         if config.kind == "rss"
-        else parse_json_list(command.sample, config)
+        else parse_json_list(command.sample, config, stats=stats)
         if config.kind == "json_list"
         else parse_web_list(command.sample, config.url or "", config)
     )
+    parsed_count = len(rows)
     rows = filter_materials(rows, config, EditorialCursor(initialized_at=now), now)
     return EditorialSourcePreviewView(
         mode="sample",
         status="complete",
         kind=config.kind,
         count=len(rows),
+        filtered=stats.filtered + parsed_count - len(rows),
         ms=int((monotonic() - started) * 1000),
         requests=0,
         items=preview_items(rows),

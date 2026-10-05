@@ -255,6 +255,7 @@ class EditorialSourcePreviewExecutor:
             status="complete" if page.status in {"complete", "unchanged"} else page.status,
             kind=profile.configuration.kind,
             count=len(page.materials),
+            filtered=page.filtered,
             requests=page.request_count,
             ms=min(600000, int((monotonic() - started) * 1000)),
             items=preview_items(page.materials),

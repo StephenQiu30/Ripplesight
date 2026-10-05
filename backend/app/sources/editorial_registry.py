@@ -14,6 +14,7 @@ from typing import Protocol
 from sources.adapters.editorial_http import EditorialHttpClient, EditorialSourceError
 from sources.adapters.editorial_jina import EditorialJinaReader
 from sources.adapters.editorial_json import parse_json_list
+from sources.adapters.editorial_parsing import EditorialParsingStats
 from sources.adapters.editorial_rss import parse_feed
 from sources.adapters.editorial_web import allowed, parse_detail, parse_web_list
 from sources.editorial_schemas import (
@@ -186,8 +187,9 @@ class EditorialSourceRegistry:
                 observed_at=now,
             )
         try:
+            stats = EditorialParsingStats()
             if c.kind == "rss":
-                rows, next_cursor, unchanged = self._rss(c, cursor)
+                rows, next_cursor, unchanged = self._rss(c, cursor, stats)
             elif c.kind == "json_list":
                 response = self._http.request(
                     c.url or "",
@@ -198,7 +200,7 @@ class EditorialSourceRegistry:
                     else None,
                     same_origin_redirects=True,
                 )
-                rows = parse_json_list(response.text, c)
+                rows = parse_json_list(response.text, c, stats=stats)
                 next_cursor, unchanged = cursor, False
             else:
                 http = self._http
@@ -219,18 +221,21 @@ class EditorialSourceRegistry:
                     script_fetcher=lambda url: http.request(url).text,
                 )
                 next_cursor, unchanged = cursor, False
+            parsed_count = len(rows)
             rows = filter_materials(rows, c, cursor, now, source_added_at=self._source_added_at)
             if not self._preview:
                 rows = self._details(rows, c, known)
                 if cursor.initialized_at is None:
                     # An undated listing may reveal an archive date on the article page.
                     rows = _initial_materials(rows, c, now, self._source_added_at)
+            stats.filtered += parsed_count - len(rows)
             updated = next_cursor.model_copy(
                 update={"initialized_at": cursor.initialized_at or now, "last_ok_at": now}
             )
             return EditorialPage(
                 status="unchanged" if unchanged else "complete",
                 materials=rows,
+                filtered=stats.filtered,
                 cursor=updated,
                 request_count=self._http.request_count,
                 observed_at=now,
@@ -257,7 +262,10 @@ class EditorialSourceRegistry:
             self._http.close()
 
     def _rss(
-        self, c: EditorialSourceConfiguration, cursor: EditorialCursor
+        self,
+        c: EditorialSourceConfiguration,
+        cursor: EditorialCursor,
+        stats: EditorialParsingStats,
     ) -> tuple[tuple[EditorialMaterial, ...], EditorialCursor, bool]:
         assert self._http is not None
         digest = fingerprint(c.model_dump(mode="json")).hex()
@@ -279,7 +287,7 @@ class EditorialSourceRegistry:
             response = self._http.request(c.feed_url or "")
         if response.status == 304:
             return (), cursor, True
-        rows = parse_feed(response.text, response.url, c)
+        rows = parse_feed(response.text, response.url, c, stats=stats)
         updated = cursor.model_copy(
             update={
                 "rss": RssValidator(

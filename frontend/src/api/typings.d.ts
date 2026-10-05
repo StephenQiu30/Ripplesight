@@ -2067,6 +2067,8 @@ declare namespace HotKeyAPI {
     configuration_version: number;
     /** Found */
     found?: number;
+    /** Filtered */
+    filtered?: number;
     /** Created */
     created?: number;
     /** Revised */
@@ -2142,6 +2144,10 @@ declare namespace HotKeyAPI {
     /** Deny Url Prefixes */
     deny_url_prefixes?: string[];
     ingest_noise_filter?: NoiseFilter | null;
+    /** Require Any Terms */
+    require_any_terms?: string[];
+    /** Summary Max Chars */
+    summary_max_chars?: number | null;
     item_url_prefix_rewrite?: PrefixRewrite | null;
     /** Sort By Published At */
     sort_by_published_at?: boolean;
@@ -2283,6 +2289,8 @@ declare namespace HotKeyAPI {
     kind: EditorialSourceKind;
     /** Count */
     count: number;
+    /** Filtered */
+    filtered?: number;
     /** Ms */
     ms: number;
     /** Requests */
