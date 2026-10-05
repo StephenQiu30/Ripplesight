@@ -11,7 +11,6 @@ from pydantic import BaseModel
 
 from analysis.editorial_rules import (
     CATEGORY_BY_ITEM_TYPE,
-    ENTITIES,
     THRESHOLDS,
     decide_selection,
     finalize_copy,
@@ -33,6 +32,7 @@ from analysis.editorial_schemas import (
     SummarizeOutput,
     UnderstandOutput,
 )
+from analysis.editorial_structure import normalize_structure
 from analysis.prompts import editorial_prompt_version, render_editorial_prompt
 
 
@@ -102,15 +102,7 @@ def next_editorial_step(
             render_material(material),
             StructureOutput,
         )
-    structure = StructureOutput.model_validate(outputs["structure"])
-    structure.tags = normalize_tags(structure.tags)
-    structure.subjects = list(
-        dict.fromkeys(
-            subject.strip().lower()
-            for subject in structure.subjects
-            if subject.strip().lower() in ENTITIES
-        )
-    )
+    structure = normalize_structure(StructureOutput.model_validate(outputs["structure"]), material)
     base["structure"] = structure.model_dump(mode="json", by_alias=True)
     writing: dict[str, Any]
     if decision.understand:
