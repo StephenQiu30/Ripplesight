@@ -10,6 +10,8 @@
 
 ## 组件
 
+- 富文本例外采用 Editor.js 官方块工具，统一封装为 `src/components/editor/Editor` 和 `Viewer`（经目录入口导出），外层表单/按钮仍用 shadcn。Editor 接收 OutputData、异步 onChange 和 ref.save，中文工具菜单、初始化/失败重试、外部内容更新、卸载销毁与深色主题集中处理；Viewer 接收相同 JSON 或显式 markdown/html/text，SSR 可读、空内容为空、无编辑工具栏，所有内容和 URL 白名单清洗。段落/标题/嵌套列表/任务列表/引用/代码/表格/分隔符/图片共用块合同，报告引用只绑定当前报告给定 URL，未知引用保留文字。通用 Viewer 用于私人报告、公开刊期和资讯正文；Editor 用于本机阅读笔记。原笔记存储键保留 note/mode/scroll，增加 noteDocument 块 JSON；旧文字可恢复，保存按钮先 await save，超出 2000 字不覆盖已保存笔记，不新增上传或业务 API。
+
 - shadcn/Radix 基础组件放在 `src/components/ui/`。
 - 全部页面的交互控件只组合官方 shadcn/ui + Radix：选择使用 Select/SelectGroup，布尔选项使用 Checkbox/Switch，折叠内容使用 Collapsible，数据表使用 Table，表单使用 FieldGroup/Field/FieldLabel。业务源码不手写 button、input、select、textarea、details 或表格组件；ESLint 检查此边界。文档标题、段落、列表、页面结构、链接及音视频仍保留必要语义标签，不为它们增加包装组件。
 - 信息面板和数据列表组合 Item/ItemContent/ItemTitle/ItemDescription/ItemGroup，持久提示使用 Alert，空状态使用 Empty，分隔线使用 Separator，导航使用 NavigationMenu。业务页面不再用原生容器绘制圆角面板、提示和分隔线；ESLint 对手写控件及这些视觉容器统一检查。

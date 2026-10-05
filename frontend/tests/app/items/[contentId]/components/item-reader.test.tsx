@@ -10,6 +10,37 @@ import { afterEach, expect, it, vi } from "vitest";
 const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
 vi.mock("sonner", () => ({ toast: notifications, Toaster: () => null }));
 
+const editorState = vi.hoisted(() => ({
+  saved: null as import("@/components/editor").EditorDocument | null,
+}));
+vi.mock("@/components/editor/editor", async () => {
+  const { useImperativeHandle } = await import("react");
+  const { documentToText, textToDocument } =
+    await import("@/components/editor/content");
+  return {
+    Editor: ({
+      value,
+      onChange,
+      ref,
+      ...props
+    }: import("@/components/editor").EditorProps) => {
+      useImperativeHandle(
+        ref,
+        () => ({ save: async () => editorState.saved ?? value }),
+        [value],
+      );
+      return (
+        <textarea
+          id={props.id}
+          aria-labelledby={props["aria-labelledby"]}
+          value={documentToText(value)}
+          onChange={(event) => onChange?.(textToDocument(event.target.value))}
+        />
+      );
+    },
+  };
+});
+
 vi.mock("next/navigation", () => ({
   usePathname: () => "/items/00000000-0000-4000-8000-000000000001",
 }));
@@ -23,6 +54,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.clearAllMocks();
   localStorage.clear();
+  editorState.saved = null;
   window.scrollTo(0, 0);
 });
 
@@ -167,14 +199,16 @@ it("restores the saved reading position, note and translation inside the layout 
 
   screen.getByRole("main").scrollTop = 360;
   fireEvent.click(screen.getByRole("button", { name: "保存笔记" }));
-  expect(JSON.parse(localStorage.getItem(readingKey)!)).toEqual({
-    note: "继续阅读这篇资讯",
-    mode: "translated",
-    scroll: 360,
-  });
+  await waitFor(() =>
+    expect(JSON.parse(localStorage.getItem(readingKey)!)).toMatchObject({
+      note: "继续阅读这篇资讯",
+      mode: "translated",
+      scroll: 360,
+    }),
+  );
 });
 
-it("saves the current main reading position with the note in the existing local storage format", () => {
+it("saves the current main reading position with the note and block document", async () => {
   render(
     <BasicLayout>
       <ItemReader item={item} />
@@ -186,18 +220,23 @@ it("saves the current main reading position with the note in the existing local 
   });
   fireEvent.click(screen.getByRole("button", { name: "保存笔记" }));
 
-  expect(JSON.parse(localStorage.getItem(readingKey)!)).toEqual({
-    note: "记下当前进展",
-    mode: "original",
-    scroll: 360,
-  });
+  await waitFor(() =>
+    expect(JSON.parse(localStorage.getItem(readingKey)!)).toMatchObject({
+      note: "记下当前进展",
+      mode: "original",
+      scroll: 360,
+    }),
+  );
 });
 
-it("preserves the main reading position on pagehide and when the reader unmounts", () => {
+it("preserves the main reading position on pagehide and when the reader unmounts", async () => {
   const view = render(
     <BasicLayout>
       <ItemReader item={item} />
     </BasicLayout>,
+  );
+  await new Promise((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(resolve)),
   );
   const main = screen.getByRole("main");
   main.scrollTop = 360;
@@ -206,7 +245,7 @@ it("preserves the main reading position on pagehide and when the reader unmounts
   });
   fireEvent(window, new Event("pagehide"));
 
-  expect(JSON.parse(localStorage.getItem(readingKey)!)).toEqual({
+  expect(JSON.parse(localStorage.getItem(readingKey)!)).toMatchObject({
     note: "下次继续",
     mode: "original",
     scroll: 360,
@@ -215,9 +254,59 @@ it("preserves the main reading position on pagehide and when the reader unmounts
   main.scrollTop = 520;
   view.unmount();
 
-  expect(JSON.parse(localStorage.getItem(readingKey)!)).toEqual({
+  expect(JSON.parse(localStorage.getItem(readingKey)!)).toMatchObject({
     note: "下次继续",
     mode: "original",
     scroll: 520,
   });
+});
+
+it("stores the latest ref.save result even before onChange publishes it", async () => {
+  localStorage.setItem(
+    readingKey,
+    JSON.stringify({ note: "旧笔记", mode: "original", scroll: 0 }),
+  );
+  render(<ItemReader item={item} />);
+  await waitFor(() =>
+    expect(
+      (
+        screen.getByRole("textbox", {
+          name: "本机阅读笔记",
+        }) as HTMLTextAreaElement
+      ).value,
+    ).toBe("旧笔记"),
+  );
+  editorState.saved = {
+    blocks: [{ type: "header", data: { text: "刚刚输入", level: 2 } }],
+  };
+  fireEvent.click(screen.getByRole("button", { name: "保存笔记" }));
+  await waitFor(() =>
+    expect(JSON.parse(localStorage.getItem(readingKey)!).note).toBe("刚刚输入"),
+  );
+  fireEvent(window, new Event("pagehide"));
+  expect(
+    JSON.parse(localStorage.getItem(readingKey)!).noteDocument.blocks[0].type,
+  ).toBe("header");
+});
+
+it("does not overwrite a saved note with content over the limit on save or pagehide", async () => {
+  localStorage.setItem(
+    readingKey,
+    JSON.stringify({ note: "已保存", mode: "original", scroll: 0 }),
+  );
+  const view = render(<ItemReader item={item} />);
+  const textbox = screen.getByRole("textbox", { name: "本机阅读笔记" });
+  await waitFor(() =>
+    expect((textbox as HTMLTextAreaElement).value).toBe("已保存"),
+  );
+  fireEvent.change(textbox, { target: { value: "长".repeat(2001) } });
+  fireEvent.click(screen.getByRole("button", { name: "保存笔记" }));
+  await waitFor(() =>
+    expect(notifications.error).toHaveBeenCalledWith(
+      "笔记最多 2000 字，请缩短后保存。",
+    ),
+  );
+  fireEvent(window, new Event("pagehide"));
+  view.unmount();
+  expect(JSON.parse(localStorage.getItem(readingKey)!).note).toBe("已保存");
 });
