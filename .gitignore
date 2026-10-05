@@ -50,7 +50,7 @@ product-design-output/
 npm-debug.log*
 
 # Obsidian：只提交共享的模板与链接设置
-docs/.obsidian/*
-!docs/.obsidian/app.json
-!docs/.obsidian/templates.json
-!docs/.obsidian/core-plugins.json
+workspace/content/.obsidian/*
+!workspace/content/.obsidian/app.json
+!workspace/content/.obsidian/templates.json
+!workspace/content/.obsidian/core-plugins.json
