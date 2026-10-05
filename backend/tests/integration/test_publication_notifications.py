@@ -19,6 +19,7 @@ from publication.notification_reading import (
     load_selected_notification_candidate_in_transaction,
     weekly_selected_source_counts_in_transaction,
 )
+from publication.reading import PublicationReadingService
 from publication.schemas import PublicationOverrideInput, SourcePolicyInput
 from publication.services import PublicationService
 
@@ -98,7 +99,7 @@ def test_selected_notification_rechecks_fixed_revision_and_does_not_replay_histo
         )
         assert session.execute(text("SELECT count(*) FROM ai_calls")).scalar_one() == 5
     with sessions.begin() as session:
-        PublicationService(session).override_in_transaction(
+        restricted = PublicationService(session).override_in_transaction(
             owner_id=owner,
             actor_id=owner,
             content_id=run.content_id,
@@ -110,6 +111,7 @@ def test_selected_notification_rechecks_fixed_revision_and_does_not_replay_histo
             ),
             now=later,
         )
+        assert restricted.selected and restricted.visibility == "summary-only"
     with sessions.begin() as session:
         assert (
             load_selected_notification_candidate_in_transaction(
@@ -126,6 +128,19 @@ def test_selected_notification_rechecks_fixed_revision_and_does_not_replay_histo
         ).candidates
         weekly = weekly_selected_source_counts_in_transaction(session, owner_id=owner, now=later)
         assert [(entry.current_count, entry.previous_count) for entry in weekly] == [(1, 0)]
+        reader = PublicationReadingService(session)
+        projection = reader.projection_in_transaction(
+            owner_id=owner, content_id=run.content_id, now=later
+        )
+        assert projection and projection.selected and projection.manual_version == 0
+        assert not reader.selected_snapshot_in_transaction(owner_id=owner, now=later).items
+        epoch, _ = reader.effective_sequence_in_transaction(owner_id=owner, now=later)
+        changes = reader.selected_changes_in_transaction(
+            owner_id=owner, epoch=epoch, since=0, now=later
+        )
+        assert changes.changes and all(
+            change.operation == "remove" and change.item is None for change in changes.changes
+        )
         assert not weekly_selected_source_counts_in_transaction(
             session, owner_id=uuid4(), now=later
         )

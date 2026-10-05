@@ -199,12 +199,15 @@ def _counts(client):
         )
 
 
+@pytest.mark.parametrize("categories", [(), ("ai-models",)])
 def test_unresolved_stays_in_all_then_confirmed_selection_is_persisted_once_everywhere(
     editorial_client: TestClient,
     monkeypatch,
+    categories,
 ):
     client = editorial_client
     owner, topic, posts = _seed(client)
+    client.app.state.settings.public_publication_categories = categories
     for at in (NOW, NOW + timedelta(hours=1)):
         with client.app.state.session_factory.begin() as session:
             reader = PublicationReadingService(session)
@@ -266,8 +269,19 @@ def test_unresolved_stays_in_all_then_confirmed_selection_is_persisted_once_ever
     assert {item.findtext("guid") for item in rss.findall("./channel/item")} == {
         f"hotkey:item:{identity}" for identity in expected
     }
-    sync = client.get("/public/api/selected/snapshot").json()
+    response = client.get("/api/publication/selected/snapshot")
+    assert response.status_code == 200, response.text
+    sync = response.json()
     assert {item["id"] for item in sync["items"]} == expected
+    response = client.get(
+        "/api/publication/selected/changes", params={"epoch": sync["epoch"], "since": 0}
+    )
+    assert response.status_code == 200, response.text
+    changes = response.json()
+    assert changes["epoch"] == sync["epoch"] and changes["sequence"] == sync["sequence"]
+    assert {
+        change["item"]["id"] for change in changes["changes"] if change["item"] is not None
+    } == expected
     timeline = client.get("/api/publication/timeline").json()
     assert len(timeline["cards"]) == 1
     assert timeline["cards"][0]["item"]["id"] == str(posts[0].id)

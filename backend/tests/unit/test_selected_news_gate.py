@@ -303,10 +303,12 @@ def test_unselected_reports_do_not_suppress_information_missing_from_the_represe
 
 @pytest.mark.parametrize("readable", [True, False])
 @pytest.mark.parametrize("grouping_enabled", [True, False])
+@pytest.mark.parametrize("visibility", ["public", "summary-only", "withdrawn"])
 def test_gate_recalls_a_preferred_peer_outside_the_requested_page_and_rechecks_permission(
     monkeypatch,
     readable,
     grouping_enabled,
+    visibility,
 ):
     import publication.selection as module
 
@@ -316,7 +318,7 @@ def test_gate_recalls_a_preferred_peer_outside_the_requested_page_and_rechecks_p
             content_id=item.snapshot.material.content_id,
             content_version_id=item.snapshot.material.content_version_id,
             source_key=item.snapshot.material.source_key,
-            override={},
+            override={"visibility": visibility} if item is official else {},
             data={"editorial_run_id": str(item.snapshot.run.id), "manual_version": 0},
         )
         for item in (requested, official)
@@ -364,9 +366,26 @@ def test_gate_recalls_a_preferred_peer_outside_the_requested_page_and_rechecks_p
     context = module.load_publication_selection_in_transaction(
         session, owner_id=uuid4(), snapshots={UUID(int=1): requested.snapshot}, now=NOW
     )
-    assert context.gates[UUID(int=1)].selected is not readable
-    if readable:
+    preferred_eligible = readable and visibility != "withdrawn"
+    assert context.gates[UUID(int=1)].selected is not preferred_eligible
+    if preferred_eligible:
         assert context.gates[UUID(int=1)].representative_id == UUID(int=2)
+        assert context.gates[UUID(int=2)].selected
+
+    # A pending visibility correction must use the same gate as subsequent reads.
+    corrected = module.load_publication_selection_in_transaction(
+        session,
+        owner_id=uuid4(),
+        snapshots={UUID(int=1): requested.snapshot},
+        now=NOW,
+        visibility_overrides={
+            UUID(int=2): "summary-only" if visibility == "withdrawn" else "withdrawn"
+        },
+    )
+    preferred_eligible = readable and visibility == "withdrawn"
+    assert corrected.gates[UUID(int=1)].selected is not preferred_eligible
+    if preferred_eligible:
+        assert corrected.gates[UUID(int=2)].selected
 
 
 def test_an_unverifiable_previous_manual_fact_does_not_manufacture_incremental_information():
