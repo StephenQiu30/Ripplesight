@@ -78,6 +78,19 @@ def test_rss_teaser_atom_xml_base_and_script_sanitization() -> None:
     assert "alert" not in (page[0].excerpt or "")
 
 
+def test_rss_short_content_without_summary_is_kept_for_site_reading() -> None:
+    page = parse_feed(
+        '<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>short</id>'
+        '<title>Update</title><link href="https://example.com/post"/>'
+        '<content type="html">&lt;p&gt;First paragraph.&lt;/p&gt;'
+        "&lt;p&gt;Second paragraph.&lt;/p&gt;</content></entry></feed>",
+        "https://example.com/feed",
+        config("rss", feed_url="https://example.com/feed"),
+    )
+    assert page[0].excerpt == "First paragraph.\nSecond paragraph."
+    assert page[0].body_status == "pending"
+
+
 def test_web_html_dates_markdown_navigation_and_docusaurus_sections() -> None:
     html = (
         '<article><a href="/post">Specific model update</a><time datetime='
