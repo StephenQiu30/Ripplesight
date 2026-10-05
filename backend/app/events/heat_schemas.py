@@ -48,6 +48,13 @@ class AttentionEvidence:
     fact_id: UUID | None = None
 
 
+@dataclass(frozen=True)
+class EditionAttentionInputs:
+    participants: dict[UUID, str]
+    fact_sources: dict[UUID, frozenset[str]]
+    event_participants: dict[UUID, frozenset[str]]
+
+
 class AttentionRosterView(BaseModel):
     participant_key: str
     source_id: UUID

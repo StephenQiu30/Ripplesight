@@ -272,12 +272,12 @@ def _manual_posts(client: TestClient, count: int):
     from analysis.editorial_schemas import EditorialOverrideInput, EditorialRunInput
     from analysis.editorial_services import EditorialService
 
-    owner, _, posts = _seed_posts(client, [(f"条目{i}", f"条目{i} 原始正文") for i in range(count)])
-    with client.app.state.session_factory.begin() as session:
-        session.execute(
-            text("UPDATE content_observations SET published_at=:at WHERE owner_id=:owner"),
-            {"at": NOW - timedelta(minutes=3), "owner": owner},
-        )
+    owner, _, posts = _seed_posts(
+        client,
+        [(f"条目{i}", f"条目{i} 原始正文") for i in range(count)],
+        now=NOW,
+        dated=True,
+    )
     _source(client, owner)
     for index, post in enumerate(posts):
         version = post.latest_observation.content_version

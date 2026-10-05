@@ -32,11 +32,17 @@ def search_client() -> Iterator[TestClient]:
 
 
 def _seed_posts(
-    client: TestClient, texts: list[tuple[str | None, str | None]]
+    client: TestClient,
+    texts: list[tuple[str | None, str | None]],
+    *,
+    now: datetime | None = None,
+    dated: bool = False,
 ) -> tuple[UUID, UUID, list[ContentRecordSummaryView]]:
+    """Keep search/personal fixtures undated; public selection fixtures opt into source dates."""
     owner = _user_scope(client)
-    connection, policy, retention, first_job, second_job = _seed_context(client, owner)
-    now = datetime.now(UTC) - timedelta(minutes=3)
+    connection, policy, retention, first_job, second_job = _seed_context(client, owner, now=now)
+    received_at = now
+    now = (now or datetime.now(UTC)) - timedelta(minutes=3)
     topic = uuid4()
     factory = client.app.state.session_factory
     with factory.begin() as session:
@@ -63,7 +69,9 @@ def _seed_posts(
         )
     posts = []
     with factory() as session:
-        service = ContentService(session)
+        service = ContentService(
+            session, clock=(lambda: received_at) if received_at is not None else None
+        )
         for index, (title, body) in enumerate(texts):
             posts.append(
                 service.persist_post(
@@ -82,7 +90,9 @@ def _seed_posts(
                             "text_origin": "source",
                             "title": title,
                             "body": body,
-                            "published_at": None,
+                            "published_at": (now + timedelta(seconds=index)).isoformat()
+                            if dated
+                            else None,
                         },
                     ),
                 )

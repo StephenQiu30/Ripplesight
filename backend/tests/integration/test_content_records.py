@@ -68,12 +68,14 @@ def _user_scope(client: TestClient) -> UUID:
         return authenticated_owner_id(session)
 
 
-def _seed_context(client: TestClient, owner_id: UUID) -> tuple[UUID, UUID, UUID, UUID, UUID]:
+def _seed_context(
+    client: TestClient, owner_id: UUID, *, now: datetime | None = None
+) -> tuple[UUID, UUID, UUID, UUID, UUID]:
     connection_id = uuid4()
     policy_id = uuid4()
     retention_id = uuid4()
     job_ids = (uuid4(), uuid4())
-    now = datetime.now(UTC)
+    now = now or datetime.now(UTC)
     factory = client.app.state.session_factory
     with factory() as session, session.begin():
         session.execute(text("SET CONSTRAINTS ALL DEFERRED"))

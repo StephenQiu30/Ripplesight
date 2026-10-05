@@ -285,6 +285,8 @@ def test_real_redis_one_window_all_protocols_ignores_spoofed_forwarded_peer(
 
 
 def test_story_json_and_mcp_revalidate_all_fixed_members_even_before_304(editorial_client):
+    from tests.integration.test_event_reading import _fixed_member_fields
+
     from events.fact_models import EventFact, EventFactAssignment, EventFactMember
     from events.models import Event, EventMember
 
@@ -355,6 +357,7 @@ def test_story_json_and_mcp_revalidate_all_fixed_members_even_before_304(editori
                     event_id=event,
                     content_id=post.id,
                     content_version_id=version,
+                    **_fixed_member_fields(session, owner, post),
                     source_key="x",
                     representative_comment_id=None,
                     added_revision=1,
