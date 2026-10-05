@@ -109,7 +109,7 @@ def list_markdown(items: list[PublicItemView], *, title: str, origin: str) -> st
 
 
 def render_rss(
-    items: list[PublicItemDetailView],
+    items: list[PublicItemView | PublicItemDetailView],
     *,
     origin: str,
     self_path: str,
@@ -157,7 +157,12 @@ def render_rss(
             parts.append(f"<pubDate>{format_datetime(item.published_at)}</pubDate>")
         if item.category:
             parts.append(f"<category>{esc(item.category)}</category>")
-        if include_content and item.syndicate_fulltext and item.body:
+        if (
+            include_content
+            and isinstance(item, PublicItemDetailView)
+            and item.syndicate_fulltext
+            and item.body
+        ):
             body = (
                 item.body.translated
                 if item.body.translation_complete and item.body.translated

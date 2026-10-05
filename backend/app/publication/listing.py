@@ -15,7 +15,7 @@ from publication.reading import (
     _fixed_body_in_transaction,
     editorial_subject_tags,
 )
-from publication.schemas import ProjectionView
+from publication.schemas import Category, ProjectionView
 from publication.services import require_transaction
 
 
@@ -39,6 +39,7 @@ def iter_current_publications_in_transaction(
     source_key: str | None = None,
     include_body: bool = False,
     indexing_enabled: bool = False,
+    public_categories: tuple[Category, ...] = (),
 ) -> Iterator[PublicationListingMember]:
     require_transaction(session)
     if now.utcoffset() is None:
@@ -63,7 +64,12 @@ def iter_current_publications_in_transaction(
         )
     if source_key is not None:
         query = query.where(PublicationRecord.source_key == source_key)
-    reader, after = PublicationReadingService(session, indexing_enabled=indexing_enabled), None
+    reader, after = (
+        PublicationReadingService(
+            session, indexing_enabled=indexing_enabled, public_categories=public_categories
+        ),
+        None,
+    )
     after_timeline: datetime | None = None
     while True:
         page_query = query

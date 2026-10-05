@@ -113,6 +113,7 @@ def search_in_transaction(
         "source_key": source_key,
         "tag": tag,
         "topic": topic,
+        "public_categories": reader.public_categories,
     }
     if redistribute:
         scope["redistribute"] = True
@@ -146,6 +147,7 @@ def search_in_transaction(
             ends_at=as_of,
             source_key=source_key,
             include_body=True,
+            public_categories=reader.public_categories,
         ):
             projection = member.projection
             if (

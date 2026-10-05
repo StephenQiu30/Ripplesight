@@ -48,6 +48,8 @@ date/Atom text parsing are adapted from AIHOT commits `50b562b`, `309e32e` and
 `6560d7f` (reference snapshot `9acad0c`), including their source/publication date tests;
 HotKey retains undated raw reading and personal reports under its own contracts.
 
+Public outlet consistency, category filtering and bounded image rendition reuse are adapted from AIHOT commits `ec42ff7`, `1d48ec1`, `50b562b` and `36604b9` (reference snapshot `9acad0c`); HotKey retains ALL live permission checks and its restricted SVG codec, while MCP subscription capacity/retirement (`dd12db1`, `36604b9`) and oversized SVG conversion (`9acad0c`) are not ported.
+
 Edition selection/memory and daily-to-period compilation are adapted from AIHOT
 `9acad0c` (`reports/edition.ts`, `reports/compose.ts`, `docs/selection.md` step 7);
 the three `report-period*.md` templates use that version, while the unused

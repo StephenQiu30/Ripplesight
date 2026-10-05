@@ -21,7 +21,11 @@ def _search(monkeypatch, rows, **kwargs):
         source_key="hackernews", name="Hacker News", enabled=True, health="ok", last_success_at=NOW
     )
     result = module.search_in_transaction(
-        SimpleNamespace(session=None, source_status_in_transaction=lambda **kwargs: [status]),
+        SimpleNamespace(
+            session=None,
+            public_categories=(),
+            source_status_in_transaction=lambda **kwargs: [status],
+        ),
         owner_id=uuid4(),
         now=NOW,
         query="needle",
@@ -91,3 +95,30 @@ def test_search_capacity_is_explicit_busy_not_partial_success(monkeypatch):
     ]
     with pytest.raises(ApplicationError, match="publication_search_busy"):
         _search(monkeypatch, rows, limit=40)
+
+
+def test_search_cursor_requires_same_normalized_public_categories(monkeypatch):
+    from publication.reading import PublicationReadingService
+
+    projections = [
+        member(at=NOW).projection.model_copy(update={"title": "needle"}) for _ in range(2)
+    ]
+    categories_seen = []
+
+    def stream(*args, **kwargs):
+        categories_seen.append(kwargs["public_categories"])
+        return iter(PublicationListingMember(p, ()) for p in projections)
+
+    monkeypatch.setattr(module, "iter_current_publications_in_transaction", stream)
+    reader = PublicationReadingService(None, public_categories=("ai-models", "ai-models"))
+    monkeypatch.setattr(reader, "source_status_in_transaction", lambda **_: [])
+    options = {"owner_id": uuid4(), "now": NOW, "query": "needle", "limit": 1}
+    page = module.search_in_transaction(reader, **options)
+    assert page.next_cursor and len(page.items) == 1
+    continued = module.search_in_transaction(reader, **options, cursor=page.next_cursor)
+    assert continued.items[0].id != page.items[0].id
+    assert categories_seen == [("ai-models",), ("ai-models",)]
+    reader.public_categories = ("tip",)
+    with pytest.raises(ApplicationError, match="invalid_publication_cursor"):
+        module.search_in_transaction(reader, **options, cursor=page.next_cursor)
+    assert len(categories_seen) == 2

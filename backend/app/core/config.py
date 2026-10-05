@@ -53,6 +53,14 @@ class Settings(BaseSettings):
     email_code_hmac_key: SecretStr | None = None
     public_contact_owner_id: UUID | None = None
     public_publication_owner_id: UUID | None = None
+    public_publication_categories: tuple[
+        Literal["ai-models", "ai-products", "industry", "paper", "tip", "opinion"], ...
+    ] = ()
+
+    @field_validator("public_publication_categories")
+    @classmethod
+    def normalize_public_categories(cls, value: tuple[Any, ...]) -> tuple[Any, ...]:
+        return tuple(sorted(set(value)))
 
     @field_validator(
         "github_client_id",
