@@ -4,12 +4,15 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import select, text
+from tests.integration.test_content_search import _seed_posts
 from tests.integration.test_editorial_execution import (
     NOW,
     ControlledClient,
     _budget,
     _execute,
+    _request_run,
     _run,
+    _source,
     editorial_client,  # noqa: F401
 )
 
@@ -18,7 +21,7 @@ from analysis.event_reading import list_editorial_event_inputs_in_transaction
 from content.schemas import RecordContentVisibilityInput
 from content.services import ContentService
 from core.errors import ApplicationError
-from events.fact_models import EventFact, EventFactMember
+from events.fact_models import EventFact, EventFactAssignment, EventFactMember
 from events.facts import EventFactReadService
 from events.models import Event, EventCandidate
 from events.services import EventCandidateService, EventClusterExecutor
@@ -30,6 +33,14 @@ from monitors.schemas import MonitorTopicUpdateInput
 from monitors.services import MonitorTopicService
 
 AT = NOW + timedelta(minutes=1)
+
+
+class EditorialComposite(ControlledClient):
+    def complete(self, **kwargs):
+        result = super().complete(**kwargs)
+        if kwargs["output_schema"]["title"] == "StructureOutput":
+            result.output["scope"] = "composite"
+        return result
 
 
 class EditorialWithFact(ControlledClient):
@@ -80,6 +91,117 @@ class ClusterClient:
 
     def close(self):
         pass
+
+
+def test_composite_positive_grouping_persists_only_a_mention_of_existing_fact(
+    editorial_client, monkeypatch
+):
+    now = datetime.now(UTC)
+    owner, _, posts = _seed_posts(
+        editorial_client,
+        [
+            ("OpenAI 发布新模型", "OpenAI 发布新模型,公开 API。"),
+            (
+                "OpenAI 发布新模型大会回顾",
+                "OpenAI 发布新模型。另有独立芯片发布与多位演讲者。",
+            ),
+        ],
+        dated=True,
+        now=now,
+    )
+    _source(editorial_client, owner, now=now)
+    _budget(editorial_client, owner, now=now)
+    _, single, message, lease = _request_run(editorial_client, owner, posts[0], now=now)
+    _execute(editorial_client, owner, message, lease, EditorialWithFact(), now=now)
+    factory = editorial_client.app.state.session_factory
+    at = now + timedelta(seconds=10)
+    _, candidate = _candidate(factory, owner, at=at)
+    monkeypatch.setattr(
+        "events.services.create_ai_client", lambda _: ClusterClient(single.content_version_id)
+    )
+    settings = editorial_client.app.state.settings.model_copy(
+        update={"events_cluster_enabled": True, "ai_enabled": True}
+    )
+    cluster_message, cluster_lease = _cluster_message(factory, candidate)
+    EventClusterExecutor(factory, settings, clock=lambda: at).execute(
+        cluster_message, cluster_lease
+    )
+    with factory() as session:
+        event = session.scalar(select(Event))
+        event_id = event.id
+        fact = session.scalar(select(EventFact))
+        fact_id, original_frame = fact.id, fact.frame
+    _, composite, message, lease = _request_run(
+        editorial_client, owner, posts[1], now=now + timedelta(seconds=20)
+    )
+    _execute(
+        editorial_client,
+        owner,
+        message,
+        lease,
+        EditorialComposite(),
+        now=now + timedelta(seconds=20),
+    )
+    at = now + timedelta(seconds=30)
+    with factory() as session, session.begin():
+        assert (
+            EventCandidateService(session).enqueue_due_in_transaction(now=at, ai_enabled=True) == 1
+        )
+        append = session.scalar(select(EventCandidate).where(EventCandidate.status == "pending"))
+        assert append.expected_event_revisions == {str(event_id): 1}
+        assert {item["editorial_scope"] for item in append.input_manifest["items"]} == {
+            "single",
+            "composite",
+        }
+
+    class WrongCompositeRoot(ClusterClient):
+        def complete(self, **kwargs):
+            result = super().complete(**kwargs)
+            result.output["member_version_ids"] = [
+                str(single.content_version_id),
+                str(composite.content_version_id),
+            ]
+            result.output["facts"] = [
+                {
+                    "member_version_ids": [str(single.content_version_id)],
+                    "title": "已有事实",
+                    "summary": "已有发布",
+                    "relation": "same_occurrence",
+                    "existing_fact_id": str(fact_id),
+                },
+                {
+                    "member_version_ids": [str(composite.content_version_id)],
+                    "title": "错误综合根",
+                    "summary": "错误的根事实",
+                    "relation": "root",
+                },
+            ]
+            return result
+
+    provider = WrongCompositeRoot(composite.content_version_id)
+    monkeypatch.setattr("events.services.create_ai_client", lambda _: provider)
+    cluster_message, cluster_lease = _cluster_message(factory, append)
+    executor = EventClusterExecutor(factory, settings, clock=lambda: at)
+    executor.execute(cluster_message, cluster_lease)
+    executor.execute(cluster_message, cluster_lease)
+    assert len(provider.calls) == 1
+    with factory() as session:
+        assert len(session.scalars(select(Event)).all()) == 1
+        assert len(session.scalars(select(EventFact)).all()) == 1
+        assert session.get(EventFact, fact_id).frame == original_frame
+        assert session.get(Event, event_id).revision == 2
+        assert session.scalar(select(EventFactAssignment)).relation == "root"
+        members = list(session.scalars(select(EventFactMember)))
+        assert {member.role for member in members} == {"primary", "mention"}
+        assert (
+            next(
+                member
+                for member in members
+                if member.content_version_id == composite.content_version_id
+            ).role
+            == "mention"
+        )
+    assert _candidate(factory, owner, at=at + timedelta(seconds=1))[0] == 0
 
 
 def _selected(client):

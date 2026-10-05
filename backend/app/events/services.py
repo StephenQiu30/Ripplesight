@@ -13,7 +13,10 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ai.schemas import AiCallError, AiCompletion, AiFailureCode, AiTokenUsage
 from ai.services import AiService, create_ai_client
-from analysis.event_reading import list_editorial_event_inputs_in_transaction
+from analysis.event_reading import (
+    list_editorial_event_inputs_in_transaction,
+    load_editorial_event_inputs_for_versions_in_transaction,
+)
 from analysis.schemas import EventAnnotationRef
 from analysis.services import list_relevant_event_annotation_refs_in_transaction
 from content.event_reading import (
@@ -38,7 +41,7 @@ from events.clustering import (
     candidate_fingerprint,
     plan_event_candidates,
 )
-from events.fact_models import EventGroupingAssessment, EventGroupingOverride
+from events.fact_models import EventFactAssignment, EventGroupingAssessment, EventGroupingOverride
 from events.fact_writer import (
     FactGroupingConflictError,
     freeze_fact_context_in_transaction,
@@ -54,6 +57,7 @@ from events.observation_inputs import (
     freeze_event_inputs_in_transaction,
     load_frozen_event_inputs_in_transaction,
 )
+from events.relations import constrain_event_decision
 from events.schemas import EventDecision, EventInput, EventTarget
 from jobs.execution import ExecutionLease, JobCompletion, JobExecutionFailure, JobExecutionService
 from jobs.schemas import (
@@ -155,6 +159,7 @@ def load_relevant_event_inputs_in_transaction(
                     matched_keywords=frozenset({"editorial-input"}),
                     native_target_content_ids=native.get(item.content_version_id, frozenset()),
                     editorial_frame=item.fact_frame,
+                    editorial_scope=item.scope,
                     provenance_fingerprint=item.provenance_fingerprint,
                     observation_id=item.observation_id,
                     input_observation_ids=item.input_observation_ids,
@@ -386,7 +391,9 @@ def _load_event_targets(
     }
     recent_members: dict[UUID, list[EventInput]] = {}
     for member in members:
-        if member.content_version_id in by_version:
+        if member.content_version_id in by_version and by_version[
+            member.content_version_id
+        ].editorial_scope not in {"composite", "unknown"}:
             recent_members.setdefault(member.event_id, []).append(
                 by_version[member.content_version_id]
             )
@@ -448,6 +455,17 @@ def _fixed_context_inputs(
         session, owner_id=owner_id, references=references
     )
     internal = topic_id == editorial_event_topic_id(owner_id)
+    editorial_by_version = (
+        load_editorial_event_inputs_for_versions_in_transaction(
+            session,
+            owner_id=owner_id,
+            since=since,
+            now=now,
+            version_ids=tuple(reference.content_version_id for reference in references),
+        )
+        if internal
+        else {}
+    )
     rules = None
     if not internal and apply_topic_rules:
         _, rules, _ = MonitorTopicService(
@@ -469,6 +487,9 @@ def _fixed_context_inputs(
         version = reading.observation.content_version
         if version is None or not version.title:
             continue
+        editorial = editorial_by_version.get(version.id)
+        if internal and (editorial is None or editorial.observation_id != reading.observation.id):
+            continue
         if rules is not None:
             match = evaluate_monitor_rules(rules, f"{version.title} {version.body or ''}")
             keywords = frozenset(match.matched_any + match.matched_all)
@@ -483,8 +504,8 @@ def _fixed_context_inputs(
                 content_id=reading.id,
                 content_version_id=version.id,
                 source_key=reading.source_key,
-                title=version.title,
-                body=version.body,
+                title=editorial.title if editorial else version.title,
+                body=(editorial.summary or editorial.raw_body) if editorial else version.body,
                 first_seen_at=original.source_time,
                 first_seen_basis=original.basis,
                 matched_keywords=keywords,
@@ -496,6 +517,19 @@ def _fixed_context_inputs(
                     else None
                 ),
                 input_observation_ids=reference.input_observation_ids,
+                editorial_scope=(
+                    editorial_by_version[version.id].scope
+                    if version.id in editorial_by_version
+                    else "unknown"
+                    if internal
+                    else None
+                ),
+                editorial_frame=(
+                    editorial_by_version[version.id].fact_frame
+                    if version.id in editorial_by_version
+                    else None
+                ),
+                provenance_fingerprint=editorial.provenance_fingerprint if editorial else None,
             )
         )
     return tuple(result)
@@ -882,6 +916,18 @@ class EventCandidateService:
         )
         if assigned is not None:
             raise EventCandidateConflictError("manual_revision_conflict")
+        protected = self._session.scalar(
+            select(EventGroupingOverride.content_id)
+            .where(
+                EventGroupingOverride.owner_id == owner_id,
+                EventGroupingOverride.topic_id == candidate.topic_id,
+                EventGroupingOverride.content_id.in_([item.content_id for item in additions]),
+                EventGroupingOverride.mode.in_(("manual", "standalone")),
+            )
+            .limit(1)
+        )
+        if protected is not None:
+            raise EventCandidateConflictError("manual_revision_conflict")
         source_modes = load_event_input_source_modes_in_transaction(
             self._session, owner_id=owner_id, inputs=current, now=now
         )
@@ -893,12 +939,32 @@ class EventCandidateService:
             raise EventCandidateConflictError("signal_only")
         candidate.ai_call_id = ai_call_id
         candidate.updated_at = now
+        if target is not None and decision.same_event:
+            ensure_legacy_facts_in_transaction(self._session, event=target, now=now)
+        root_fact_id = (
+            self._session.scalar(
+                select(EventFactAssignment.fact_id).where(
+                    EventFactAssignment.owner_id == owner_id,
+                    EventFactAssignment.event_id == target.id,
+                    EventFactAssignment.relation == "root",
+                    EventFactAssignment.removed_revision.is_(None),
+                )
+            )
+            if target is not None
+            else None
+        )
+        try:
+            decision = constrain_event_decision(decision, current, root_fact_id=root_fact_id)
+        except ValueError as error:
+            raise EventCandidateConflictError(str(error)) from error
         if not decision.same_event:
             candidate.status = "rejected"
             return None
-        first = min(current, key=lambda item: item.first_seen_at)
+        first = min(
+            (item for item in current if item.editorial_scope != "composite"),
+            key=lambda item: item.first_seen_at,
+        )
         if target is not None:
-            ensure_legacy_facts_in_transaction(self._session, event=target, now=now)
             event_id = target.id
             target.revision += 1
             added_revision = target.revision
@@ -965,6 +1031,7 @@ class EventCandidateService:
                     identity for identity, mode in source_modes.items() if mode == "signal"
                 ),
                 input_frames={item.content_version_id: item.editorial_frame for item in current},
+                input_scopes={item.content_version_id: item.editorial_scope for item in current},
                 input_times={
                     item.content_version_id: (item.first_seen_at, item.first_seen_basis)
                     for item in current

@@ -42,6 +42,7 @@ class FactRelationChoice:
         "unreviewed",
         "signal",
         "signal_unmatched",
+        "mention",
     ]
     target_fact_id: UUID | None = None
     target_event_id: UUID | None = None
