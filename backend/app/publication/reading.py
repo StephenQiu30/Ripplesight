@@ -51,7 +51,7 @@ from publication.schemas import (
     SelectedChangeView,
     SelectedSnapshotView,
 )
-from publication.services import policy_view, require_transaction
+from publication.services import PublicationService, policy_view, require_transaction
 
 
 def frozen_reference(projection: ProjectionView) -> FrozenPublicationReference:
@@ -805,14 +805,20 @@ def list_report_candidates_in_transaction(
         or end - start > timedelta(days=32)
     ):
         raise ApplicationError("invalid_publication_input")
+    # Same lock as publication writes: wait for pre-cutoff confirmations to commit.
+    PublicationService(session)._lock(owner_id)
     reader = PublicationReadingService(session)
+    assigned_at = func.greatest(
+        PublicationRecord.data["discovered_at"].astext.cast(DateTime(timezone=True)),
+        PublicationRecord.visible_after,
+    )
     query = (
         select(PublicationRecord)
         .where(
             PublicationRecord.owner_id == owner_id,
             PublicationRecord.selected.is_(True),
-            PublicationRecord.timeline_at >= start,
-            PublicationRecord.timeline_at < end,
+            assigned_at >= start,
+            assigned_at < end,
         )
         .order_by(PublicationRecord.content_id)
     )
@@ -836,6 +842,7 @@ def list_report_candidates_in_transaction(
                     and projection.summary
                     and projection.visible_after
                     and projection.visible_after <= now
+                    and start <= max(value[1].first_received_at, projection.visible_after) < end
                 ):
                     result.append(
                         ReportPublicationCandidate(
@@ -857,6 +864,45 @@ def list_report_candidates_in_transaction(
         if len(rows) < 500:
             break
         after = rows[-1].content_id
+    return result
+
+
+def report_candidate_authorities_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    entries: tuple[ReportPublicationCandidate, ...],
+    now: datetime,
+) -> dict[UUID, tuple[int, bool, str]]:
+    """Existing editorial identity evidence, kept internal to edition admission."""
+    require_transaction(session)
+    result = {}
+    for offset in range(0, len(entries), 500):
+        ids = {e.content_id for e in entries[offset : offset + 500]}
+        rows = list(
+            session.scalars(
+                select(PublicationRecord).where(
+                    PublicationRecord.owner_id == owner_id, PublicationRecord.content_id.in_(ids)
+                )
+            )
+        )
+        for identity, (_, snapshot) in (
+            PublicationReadingService(session)._live(owner_id=owner_id, rows=rows, now=now).items()
+        ):
+            source = snapshot.source
+            writing = snapshot.run.result.writing if snapshot.run and snapshot.run.result else None
+            principal = source.first_party or bool(writing and writing.author_role == "principal")
+            priority = (
+                0
+                if source.tier == "T1" or source.first_party
+                else (1 if source.tier == "T1_5" and principal else 3)
+            )
+            participant = (
+                "owner:" + source.owner_entity_id
+                if source.owner_entity_id
+                else ("source:" + source.source_key)
+            )
+            result[identity] = priority, principal and priority < 3, participant
     return result
 
 

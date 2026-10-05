@@ -24,22 +24,14 @@ class EditionRequestInput(InputModel):
         return self
 
 
-class EditionLeadOutput(InputModel):
-    title: str = Field(min_length=1, max_length=120)
-    lead_paragraph: str = Field(alias="leadParagraph", min_length=1, max_length=600)
-    highlights: list[StrictInt] = Field(max_length=6)
-
-
-class EditionThemeOutput(InputModel):
-    heading: str = Field(min_length=1, max_length=60)
-    summary: str = Field(min_length=1, max_length=800)
-    refs: list[StrictInt] = Field(min_length=1, max_length=8)
+class EditionSectionOutput(InputModel):
+    summary: str = Field(max_length=600)
+    refs: list[StrictInt] = Field(min_length=3, max_length=30)
 
 
 class EditionPeriodOutput(InputModel):
-    headline: str = Field(default="", max_length=60)
-    overview: str = Field(min_length=1, max_length=1500)
-    themes: list[EditionThemeOutput] = Field(min_length=1, max_length=6)
+    overview: str = Field(max_length=1500)
+    sections: dict[str, EditionSectionOutput]
 
 
 class EditionSectionView(OutputModel):
