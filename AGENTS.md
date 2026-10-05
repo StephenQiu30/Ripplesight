@@ -1,6 +1,6 @@
 # HotKey 工程规范
 
-适用于整个仓库，对人和 AI 代理都有效。`CLAUDE.md` 通过导入加载本文件，规则只在这里修改。技术架构见 [PROJECT](PROJECT.md)，产品能力见 [docs](docs/index.md)，进度见 [BACKLOG](BACKLOG.md)。
+适用于整个仓库，对人和 AI 代理都有效。`CLAUDE.md` 通过导入加载本文件，规则只在这里修改。技术架构见 [PROJECT](PROJECT.md)，产品能力见[文档工作区](workspace/content/index.md)，进度见 [BACKLOG](BACKLOG.md)。
 
 ## 1. 分工
 
@@ -12,7 +12,7 @@
 
 ## 2. 开始改动前
 
-1. 先读 [docs/index.md](docs/index.md)，按其中的阅读顺序读 [PRD](docs/product/01-PRD.md)、对应的能力文档（`docs/capabilities/`）、相关决策（`docs/decisions/`）和相关代码、测试。
+1. 先读 [workspace/content/index.md](workspace/content/index.md)，按其中的阅读顺序读 [PRD](workspace/content/product/01-PRD.md)、对应的能力文档（`workspace/content/capabilities/`）、相关决策（`workspace/content/decisions/`）和相关代码、测试。
 2. 确认这次改动对应哪一条验收标准。如果对应不上，先改文档，再动代码。
 3. 架构、目录或数据库有变化时，先更新 PROJECT。
 4. 工作区里不属于本次任务的修改原样保留，不要覆盖或回退。
@@ -23,7 +23,7 @@
 - 遵守 PROJECT §5 的分层规则，以及 §6 的数据库规则。
 - 按真实的业务切片建文件；没有使用方就不建模块，不预留空包。
 - 外部系统的差异才定义 Adapter；复杂且需要复用的查询才拆出 Repository。
-- 优先使用官方客户端和标准库；开源项目的复用按 [优先复用开源项目](docs/decisions/08-优先复用开源项目.md) 处理，改编代码要在 THIRD_PARTY_NOTICES 署名。
+- 优先使用官方客户端和标准库；开源项目的复用按 [优先复用开源项目](workspace/content/decisions/08-优先复用开源项目.md) 处理，改编代码要在 THIRD_PARTY_NOTICES 署名。
 
 **Web**
 - 业务请求只调用 `src/api` 里生成的函数，经由 `src/request.ts`；业务代码不直接导入 Axios，也不用 fetch / XHR。（ESLint 强制）
@@ -40,7 +40,7 @@
 
 - 测试只用独立的 `hotkey_test_<后缀>` 库，成功或失败后都要删除；绝不能连业务库 `hotkey` 跑测试。
 - Token、Cookie、密码、连接字符串不进代码、日志、数据库明文、测试快照或提交；只放在本机 `.env` 或独立的浏览器配置目录里。
-- 只采公开内容或本人账号能看到的内容；遇到验证码或风控就停下，不绕过。不调用任何收费接口。（完整边界见 [决策](docs/index.md#决策)）
+- 只采公开内容或本人账号能看到的内容；遇到验证码或风控就停下，不绕过。不调用任何收费接口。（完整边界见 [决策](workspace/content/index.md#决策)）
 - 测试中的外部请求一律用固定样本代替；真实请求只在验收时由本人授权后进行。
 
 ## 5. 完成前必须通过的检查
@@ -59,7 +59,7 @@
 ## 6. 什么算“完成”
 
 - **代码完成**：§5 的检查全部通过，并经 Claude 审查。
-- **能力可用**：用本机真实数据跑通对应的验收标准，并在 `docs/records/` 新建一份验收记录（用 `docs/templates/03-验收记录.md`），同步更新能力文档的 `status`。
+- **能力可用**：用本机真实数据跑通对应的验收标准，并在 `workspace/content/records/` 新建一份验收记录（用 `workspace/content/templates/03-验收记录.md`），同步更新能力文档的 `status`。
 - 单元测试、模拟数据或健康检查通过，只能算代码完成，不能算可用。
 
 ## 7. 提交与推送
