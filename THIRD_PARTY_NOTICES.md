@@ -43,6 +43,12 @@ Evidence, model usage, Job/Outbox, Kafka and notification ownership. Business UI
 under the corresponding `frontend/src/app/` routes implements these contracts;
 no upstream brand assets or private source material are included.
 
+Edition selection/memory and daily-to-period compilation are adapted from AIHOT
+`9acad0c` (`reports/edition.ts`, `reports/compose.ts`, `docs/selection.md` step 7);
+the three `report-period*.md` templates use that version, while the unused
+`report-daily-lead.md` template is removed. HotKey retains Beijing calendar
+windows, ALL permission checks and the existing immutable version/call ledger.
+
 Source avatar selection/cache and native/embedding event rematching are adapted
 from upstream `sources/icons.ts`, `providers/embeddings.ts` and `events/group.ts`.
 Industry topic definitions and canonical share layouts/QR behavior are adapted

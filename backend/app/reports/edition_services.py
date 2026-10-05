@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID, uuid4, uuid5
 
@@ -37,12 +37,15 @@ from reports.edition_compose import (
 )
 from reports.edition_models import ReportEdition, ReportEditionSchedule
 from reports.edition_rules import (
+    DailyIssue,
     EditionKind,
-    compile_entries,
+    compile_daily,
+    compile_period,
+    daily_memory,
     due_period_key,
-    fact_key,
     next_period_key,
     period_window,
+    selection_from_snapshot,
 )
 from reports.edition_schemas import (
     EditionContentView,
@@ -82,6 +85,26 @@ def _valid(
 ) -> bool:
     from publication.reading import validate_report_candidates_in_transaction
 
+    if record.kind != "daily" and record.input_snapshot:
+        for dependency in record.input_snapshot[0].get("_daily_issues", []):
+            daily = session.get(ReportEdition, UUID(dependency["id"]))
+            latest = session.scalar(
+                select(func.max(ReportEdition.revision)).where(
+                    ReportEdition.owner_id == record.owner_id,
+                    ReportEdition.kind == "daily",
+                    ReportEdition.period_key == dependency["key"],
+                )
+            )
+            if (
+                daily is None
+                or daily.owner_id != record.owner_id
+                or daily.kind != "daily"
+                or daily.revision != dependency["revision"]
+                or daily.revision != latest
+                or daily.status != "complete"
+                or not _valid(session, daily, now, lock_permissions=lock_permissions)
+            ):
+                return False
     references = _references(record)
     try:
         for reference in references:
@@ -128,6 +151,64 @@ class EditionService:
             .order_by(ReportEdition.revision.desc())
             .limit(1)
         )
+
+    def _daily_issues(
+        self,
+        owner: UUID,
+        *,
+        start: datetime | None,
+        end: datetime,
+        now: datetime,
+    ) -> tuple[tuple[DailyIssue, ...], list[dict[str, Any]]]:
+        latest = select(ReportEdition.period_key, func.max(ReportEdition.revision).label("rev"))
+        latest = latest.where(ReportEdition.owner_id == owner, ReportEdition.kind == "daily")
+        versions = latest.group_by(ReportEdition.period_key).subquery()
+        query = (
+            select(ReportEdition)
+            .join(
+                versions,
+                (ReportEdition.period_key == versions.c.period_key)
+                & (ReportEdition.revision == versions.c.rev),
+            )
+            .where(
+                ReportEdition.owner_id == owner,
+                ReportEdition.kind == "daily",
+                ReportEdition.status == "complete",
+                ReportEdition.window_start < end,
+            )
+        )
+        if start is not None:
+            query = query.where(ReportEdition.window_start >= start)
+        else:
+            query = query.limit(7)
+        rows = self.session.scalars(query.order_by(ReportEdition.period_key.desc()))
+        issues, dependencies = [], []
+        for row in rows:
+            if row.status != "complete" or (
+                start is not None and not _valid(self.session, row, now)
+            ):
+                continue
+            content = EditionContentView.model_validate(row.content)
+            selection = selection_from_snapshot(row.input_snapshot)
+            carried = {id for section in content.sections for id in section.content_ids}
+            issues.append(
+                DailyIssue(
+                    row.period_key,
+                    selection,
+                    tuple(
+                        s.primary.content_id
+                        for s in selection.main
+                        if s.primary.content_id in carried
+                    ),
+                    tuple(content.highlights),
+                )
+            )
+            dependencies.append(
+                {"id": str(row.id), "key": row.period_key, "revision": row.revision}
+            )
+            if start is None and len(issues) == 7:
+                break
+        return tuple(issues), dependencies
 
     def _record(self, owner: UUID, id: UUID, *, lock: bool = False) -> ReportEdition:
         query = select(ReportEdition).where(ReportEdition.owner_id == owner, ReportEdition.id == id)
@@ -254,7 +335,11 @@ class EditionService:
     def request_in_transaction(
         self, *, owner_id: UUID, actor_id: UUID, command: EditionRequestInput
     ) -> EditionDetailView:
-        from publication.reading import list_report_candidates_in_transaction
+        from events.heat import load_edition_attention_inputs_in_transaction
+        from publication.reading import (
+            list_report_candidates_in_transaction,
+            report_candidate_authorities_in_transaction,
+        )
 
         if not self.session.in_transaction():
             raise RuntimeError("edition admission requires caller transaction")
@@ -278,34 +363,53 @@ class EditionService:
         start, end = period_window(command.kind, command.key)
         if end > now:
             raise ApplicationError("invalid_edition_input")
-        candidates = tuple(
-            list_report_candidates_in_transaction(
-                self.session, owner_id=owner_id, start=start, end=end, now=now
-            )
-        )
-        covered: set[str] = set()
         daily_count = 0
-        prior_daily = self.session.scalars(
-            select(ReportEdition).where(
-                ReportEdition.owner_id == owner_id,
-                ReportEdition.kind == "daily",
-                ReportEdition.status == "complete",
-                ReportEdition.window_start >= start - timedelta(days=7),
-                ReportEdition.window_start < (start if command.kind == "daily" else end),
+        dependencies: list[dict[str, Any]] = []
+        if command.kind == "daily":
+            candidates = tuple(
+                list_report_candidates_in_transaction(
+                    self.session, owner_id=owner_id, start=start, end=end, now=now
+                )
             )
-        )
-        seen_days: set[str] = set()
-        for edition in prior_daily:
-            if not _valid(self.session, edition, now):
-                continue
-            if edition.window_start >= start:
-                seen_days.add(edition.period_key)
-            elif command.kind == "daily":
-                covered.update(fact_key(entry) for entry in _entries(edition))
-                covered.update(f"a:{entry.content_id}" for entry in _entries(edition))
-        daily_count = len(seen_days)
-        entries = compile_entries(command.kind, candidates, covered=covered)
-        if not entries:
+            issues, _ = self._daily_issues(owner_id, start=None, end=start, now=now)
+            covered, previous_events = daily_memory(issues, command.key)
+            authorities = report_candidate_authorities_in_transaction(
+                self.session, owner_id=owner_id, entries=candidates, now=now
+            )
+            attention = load_edition_attention_inputs_in_transaction(
+                self.session,
+                owner_id=owner_id,
+                references=tuple(
+                    EventContentReadReference(
+                        content_id=e.content_id,
+                        content_version_id=e.content_version_id,
+                        observation_id=e.observation_id,
+                        input_observation_ids=e.input_observation_ids,
+                    )
+                    for e in candidates
+                ),
+                event_ids=tuple({e.event_id for e in candidates if e.event_id}),
+                start=start,
+                end=end,
+                now=now,
+            )
+            selection = compile_daily(
+                candidates,
+                covered=covered,
+                previous_events=previous_events,
+                authorities={id: (rank, action) for id, (rank, action, _) in authorities.items()},
+                participants={
+                    **{id: p for id, (_, _, p) in authorities.items()},
+                    **attention.participants,
+                },
+                fact_sources=attention.fact_sources,
+                event_participants=attention.event_participants,
+            )
+        else:
+            issues, dependencies = self._daily_issues(owner_id, start=start, end=end, now=now)
+            daily_count = len(issues)
+            selection = compile_period(command.kind, issues)
+        if not selection.entries:
             raise ApplicationError("edition_input_unavailable")
         id, revision = uuid4(), command.expected_revision + 1
         job = JobService(self.session, clock=self.clock).accept_in_transaction(
@@ -326,7 +430,9 @@ class EditionService:
                 },
             ),
         )
-        snapshot = [entry.model_dump(mode="json") for entry in entries]
+        snapshot = selection.snapshot()
+        if dependencies:
+            snapshot[0]["_daily_issues"] = dependencies
         record = ReportEdition(
             id=id,
             owner_id=owner_id,
@@ -343,7 +449,7 @@ class EditionService:
             input_fingerprint=_hash(snapshot),
             request_fingerprint=request_hash,
             input_snapshot=snapshot,
-            repeats_suppressed=max(0, len(candidates) - len(entries)),
+            repeats_suppressed=selection.repeats_suppressed,
             daily_editions_covered=daily_count,
             status="queued",
             generator="template",
@@ -357,6 +463,8 @@ class EditionService:
         )
         self.session.add(record)
         self.session.flush()
+        if not _valid(self.session, record, now):
+            raise ApplicationError("edition_input_unavailable")
         return self._view(record)
 
     def correct(
@@ -422,7 +530,9 @@ class EditionService:
                 status="complete",
                 generator="manual",
                 content=content.model_dump(mode="json"),
-                body_markdown=render_edition(content),
+                body_markdown=render_edition(
+                    content, selection_from_snapshot(prior.input_snapshot)
+                ),
                 ai_call_id=None,
                 failure_code=None,
                 reason=command.reason,
@@ -582,7 +692,7 @@ class EditionExecutor:
                 raise self._failure("edition_scope_invalid")
             id = UUID(str(configuration.scope["edition_id"]))
         client = None
-        if ai is None and self.settings.ai_enabled:
+        if ai is None and self.settings.ai_enabled and configuration.scope["kind"] != "daily":
             client = create_ai_client(self.settings)
         try:
             with self.sessions.begin() as session:
@@ -593,18 +703,17 @@ class EditionExecutor:
                 )
                 service = EditionService(session, settings=self.settings, clock=self.clock)
                 record = service._record(message.owner_id, id, lock=True)
-                if (
-                    record.job_id != message.job_id
-                    or record.prompt_version != edition_prompt_version()
-                ):
+                if record.job_id != message.job_id:
                     raise self._failure("edition_stale_scope")
                 if record.status == "complete":
                     if not _valid(session, record, self.clock()):
                         raise self._failure("edition_input_withdrawn")
                     return JobCompletion(status=JobStatus.SUCCEEDED)
+                if record.prompt_version != edition_prompt_version():
+                    raise self._failure("edition_stale_scope")
                 if record.status in {"unknown", "failed", "stale"}:
                     raise self._failure(record.failure_code or "edition_requires_review")
-                use_model = (
+                use_model = record.kind != "daily" and (
                     record.generator == "model"
                     if record.status == "running"
                     else ai is not None or client is not None
@@ -618,7 +727,7 @@ class EditionExecutor:
                         raise self._failure("edition_input_withdrawn")
                     record.status, record.updated_at = "running", self.clock()
                     record.generator = "model" if use_model else "template"
-                entries = _entries(record)
+                selection = selection_from_snapshot(record.input_snapshot)
                 kind, key = cast(EditionKind, record.kind), record.period_key
                 repeats, covered = record.repeats_suppressed, record.daily_editions_covered
             if unknown:
@@ -627,7 +736,7 @@ class EditionExecutor:
             failure = None
             try:
                 if use_model:
-                    system, prompt, output_type = edition_prompt(kind, key, entries)
+                    system, prompt, output_type = edition_prompt(kind, key, selection)
                     with self.sessions() as session:
                         caller = ai
                         if caller is None:
@@ -667,7 +776,7 @@ class EditionExecutor:
                 content = compose_edition(
                     kind,
                     key,
-                    entries,
+                    selection,
                     model_output=output,
                     repeats_suppressed=repeats,
                     daily_editions_covered=covered,
@@ -709,7 +818,7 @@ class EditionExecutor:
                         assert content is not None
                         record.content, record.body_markdown = (
                             content.model_dump(mode="json"),
-                            render_edition(content),
+                            render_edition(content, selection),
                         )
                         record.status, record.failure_code, record.updated_at = (
                             "complete",
