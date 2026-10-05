@@ -153,3 +153,34 @@ def test_oversized_mcp_input_and_cursor_never_execute_reader() -> None:
         result = service.handle(owner_id=uuid4(), payload=payload)
         assert result and result.error and result.error.code in {-32600, -32602}
     assert controlled.calls == []
+
+
+def test_unsupported_subscription_methods_do_not_change_five_tool_reading():
+    controlled = ControlledReading()
+    service = PublicationMcpService(cast(PublicationApplicationService, controlled))
+    owner = uuid4()
+    for method in ("resources/subscribe", "resources/unsubscribe", "subscriptions/listen"):
+        response = service.handle(
+            owner_id=owner, payload={"jsonrpc": "2.0", "id": 1, "method": method}
+        )
+        assert response.error.code == -32601 and controlled.calls == []
+    initialized = service.handle(
+        owner_id=owner,
+        payload={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"protocolVersion": "2025-06-18"},
+        },
+    )
+    assert initialized.result["capabilities"] == {"tools": {"listChanged": False}}
+    response = service.handle(
+        owner_id=owner,
+        payload={
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": "hotkey_get_latest", "arguments": {}},
+        },
+    )
+    assert not response.result["isError"] and len(controlled.calls) == 1

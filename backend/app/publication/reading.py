@@ -6,7 +6,7 @@ import hashlib
 from datetime import datetime, timedelta
 from typing import Literal
 from urllib.parse import quote
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from sqlalchemy import DateTime, and_, func, or_, select
 from sqlalchemy.orm import Session
@@ -23,7 +23,7 @@ from events.facts import load_publication_groupings_in_transaction
 from publication.cursors import decode_cursor, encode_cursor
 from publication.exports import safe_link
 from publication.media import body_presentation
-from publication.projection import derive_projection
+from publication.projection import derive_projection, fingerprint
 from publication.publication_models import (
     PublicationRecord,
     PublicationSelectedChange,
@@ -149,8 +149,15 @@ def _fixed_body_in_transaction(
 
 
 class PublicationReadingService:
-    def __init__(self, session: Session, *, indexing_enabled: bool = False) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        indexing_enabled: bool = False,
+        public_categories: tuple[Category, ...] = (),
+    ) -> None:
         self.session, self.indexing_enabled = session, indexing_enabled
+        self.public_categories = tuple(sorted(set(public_categories)))
         self._source_icons: dict[str, str] = {}
 
     def source_icon_url(self, source_key: str) -> str | None:
@@ -304,7 +311,9 @@ class PublicationReadingService:
                     "indexable": stored.indexable and projection.indexable,
                 }
             )
-            if has_item_page(projection.visibility, policy.configuration["participation_mode"]):
+            if has_item_page(
+                projection.visibility, policy.configuration["participation_mode"]
+            ) and (not self.public_categories or projection.category in self.public_categories):
                 result[row.content_id] = (projection, snapshot)
         return result
 
@@ -535,6 +544,7 @@ class PublicationReadingService:
             "tag": tag,
             "topic": topic,
             "snapshot_sequence": snapshot_sequence,
+            "public_categories": self.public_categories,
         }
         snapshot = now
         after: tuple[datetime, UUID] | None = None
@@ -671,7 +681,12 @@ class PublicationReadingService:
         self, *, owner_id: UUID, now: datetime, limit: int = 100, cursor: str | None = None
     ) -> SelectedSnapshotView:
         epoch, watermark = self.effective_sequence_in_transaction(owner_id=owner_id, now=now)
-        scope = {"owner": owner_id, "type": "selected_snapshot"}
+        epoch = self._selected_read_epoch(epoch)
+        scope = {
+            "owner": owner_id,
+            "type": "selected_snapshot",
+            "public_categories": self.public_categories,
+        }
         after: UUID | None = None
         anchor = watermark
         if cursor:
@@ -729,11 +744,19 @@ class PublicationReadingService:
             else None,
         )
 
+    def _selected_read_epoch(self, epoch: UUID) -> UUID:
+        # Keep the persistent ledger untouched; changed public scope requires a new snapshot.
+        return (
+            uuid5(epoch, fingerprint({"public_categories": self.public_categories}))
+            if self.public_categories
+            else epoch
+        )
+
     def selected_changes_in_transaction(
         self, *, owner_id: UUID, epoch: UUID, since: int, now: datetime, limit: int = 100
     ) -> SelectedChangesPage:
         current, watermark = self.effective_sequence_in_transaction(owner_id=owner_id, now=now)
-        if current != epoch:
+        if self._selected_read_epoch(current) != epoch:
             raise ApplicationError("publication_epoch_conflict")
         if not 0 <= since <= watermark or not 1 <= limit <= 100:
             raise ApplicationError("invalid_publication_cursor")
@@ -742,7 +765,7 @@ class PublicationReadingService:
                 select(PublicationSelectedChange)
                 .where(
                     PublicationSelectedChange.owner_id == owner_id,
-                    PublicationSelectedChange.epoch == epoch,
+                    PublicationSelectedChange.epoch == current,
                     PublicationSelectedChange.sequence > since,
                     PublicationSelectedChange.sequence <= watermark,
                 )
@@ -788,7 +811,12 @@ class PublicationReadingService:
             sequence=delivered,
             changes=changes,
             next_cursor=encode_cursor(
-                {"owner": owner_id, "type": "changes"}, {"epoch": epoch, "since": delivered}
+                {
+                    "owner": owner_id,
+                    "type": "changes",
+                    "public_categories": self.public_categories,
+                },
+                {"epoch": epoch, "since": delivered},
             )
             if len(rows) > limit
             else None,

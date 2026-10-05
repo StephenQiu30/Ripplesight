@@ -2,7 +2,7 @@
 
 from collections.abc import Iterator
 from datetime import datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 from xml.etree import ElementTree
 
 import pytest
@@ -14,6 +14,7 @@ from tests.integration.test_publication import NOW, _manual_posts
 from tests.integration.test_publication import editorial_client as _editorial_client
 
 from publication.distribution_limits import PublicDistributionLimiter
+from publication.publication_models import PublicationRecord
 from publication.schemas import PublicationOverrideInput, SourcePolicyInput
 from publication.services import PublicationService
 
@@ -83,6 +84,218 @@ def _counts(client: TestClient):
             session.scalar(text(f"SELECT count(*) FROM {table}"))
             for table in ("jobs", "ai_calls", "outbox_messages", "publication_revisions")
         )
+
+
+def _correct(client, owner, content_id, **fields):
+    from analysis.editorial_schemas import EditorialOverrideInput
+    from analysis.editorial_services import EditorialService
+
+    with client.app.state.session_factory() as session:
+        row = session.get(PublicationRecord, (owner, content_id))
+        run_id, manual_version = UUID(row.data["editorial_run_id"]), row.data["manual_version"]
+        EditorialService(
+            session,
+            clock=lambda: NOW + timedelta(minutes=1),
+            indexing_enabled=client.app.state.settings.publication_indexing_enabled,
+        ).override(
+            owner_id=owner,
+            run_id=run_id,
+            command=EditorialOverrideInput(
+                operation_id=uuid4(),
+                expected_manual_version=manual_version,
+                reason="公开出口一致回归",
+                **fields,
+            ),
+        )
+
+
+def test_categories_agree_for_page_api_rss_mcp_markdown_and_scope_bound_sync(editorial_client):
+    client = editorial_client
+    categories = ["ai-models", "ai-products", "industry", "paper", "tip", "opinion", None, "tip"]
+    owner, posts = _publish(client, len(categories))  # Shared fixture seeds dated=True, now=NOW.
+    for post, category in zip(posts, categories, strict=True):
+        # The manual-only fixture is already uncategorized and has no automatic result to restore.
+        if category is not None:
+            _correct(client, owner, post.id, category=category)
+    unfiltered = client.get("/public/api/items").json()["items"]
+    assert len(unfiltered) == len(categories)
+    assert {item["id"]: item["category"] for item in unfiltered} == {
+        str(post.id): category for post, category in zip(posts, categories, strict=True)
+    }
+    client.app.state.settings.public_publication_categories = ("tip", "tip")
+    expected = {str(posts[i].id) for i, category in enumerate(categories) if category == "tip"}
+    before = _counts(client)
+    page = client.get("/public/api/items").json()
+    assert {item["id"] for item in page["items"]} == expected
+    timeline = client.get("/api/publication/timeline").json()
+    assert {card["item"]["id"] for card in timeline["cards"]} == expected
+    assert _call(client, "hotkey_get_latest", {})["structuredContent"] == page
+    assert {
+        item["id"]
+        for item in _call(client, "hotkey_search", {"q": "人工摘要"})["structuredContent"]["items"]
+    } == expected
+    assert client.get("/public/api/items", params={"category": "opinion"}).json()["items"] == []
+    for path in ("/public/feed.xml", "/public/feed/full.xml", "/public/feed/all.xml"):
+        response = client.get(path)
+        assert response.status_code == 200
+        titles = {
+            item.findtext("title")
+            for item in ElementTree.fromstring(response.text).findall("./channel/item")
+        }
+        assert titles == {"条目4", "条目7"}
+    assert not ElementTree.fromstring(client.get("/public/feed/category/opinion.xml").text).findall(
+        "./channel/item"
+    )
+    markdown = client.get("/public/selected.md")
+    assert all(
+        (f"条目{i}" in markdown.text) == (str(post.id) in expected) for i, post in enumerate(posts)
+    )
+    for path in (
+        f"/public/api/items/{posts[5].id}",
+        f"/public/items/{posts[5].id}.md",
+        f"/og/items/{posts[5].id}.png",
+    ):
+        assert client.get(path).status_code == 404
+    snapshot = client.get("/api/publication/selected/snapshot", params={"limit": 1}).json()
+    assert snapshot["next_cursor"] and snapshot["items"][0]["id"] in expected
+    list_page = client.get("/public/api/items", params={"limit": 1}).json()
+    search_page = client.get("/public/api/items", params={"q": "人工摘要", "limit": 1}).json()
+    for options in ({"limit": 1}, {"q": "人工摘要", "limit": 1}):
+        assert client.get("/public/api/items", params=options).json()["next_cursor"]
+    changes = client.get(
+        "/api/publication/selected/changes", params={"epoch": snapshot["epoch"], "since": 0}
+    ).json()
+    assert changes["changes"] and all(
+        change["item"] is None or change["item"]["id"] in expected for change in changes["changes"]
+    )
+    client.app.state.settings.public_publication_categories = ("tip",)
+    assert (
+        client.get(
+            "/api/publication/selected/snapshot", params={"cursor": snapshot["next_cursor"]}
+        ).status_code
+        == 200
+    )
+    client.app.state.settings.public_publication_categories = ("opinion",)
+    for path, params in (
+        ("/public/api/items", {"limit": 1, "cursor": list_page["next_cursor"]}),
+        ("/public/api/items", {"q": "人工摘要", "limit": 1, "cursor": search_page["next_cursor"]}),
+        ("/api/publication/selected/snapshot", {"cursor": snapshot["next_cursor"]}),
+    ):
+        response = client.get(path, params=params)
+        assert (
+            response.status_code == 422 and response.json()["code"] == "invalid_publication_cursor"
+        )
+    stale = client.get(
+        "/api/publication/selected/changes",
+        params={"epoch": snapshot["epoch"], "since": changes["sequence"]},
+    )
+    assert stale.status_code == 409 and stale.json()["code"] == "publication_epoch_conflict"
+    rebuilt = client.get("/api/publication/selected/snapshot").json()
+    assert rebuilt["epoch"] != snapshot["epoch"]
+    assert [item["id"] for item in rebuilt["items"]] == [str(posts[5].id)]
+    assert _counts(client) == before
+
+
+def test_correction_and_withdrawal_invalidate_all_outlets_and_old_etags_without_get_writes(
+    editorial_client,
+):
+    client = editorial_client
+    owner, posts = _publish(client)
+    identity = posts[0].id
+    sessions = client.app.state.session_factory
+    client.app.state.settings.publication_indexing_enabled = True
+    with sessions.begin() as session:
+        service = PublicationService(session, indexing_enabled=True)
+        service.save_source_policy_in_transaction(
+            owner_id=owner,
+            actor_id=owner,
+            source_key="x",
+            now=NOW + timedelta(minutes=1),
+            command=SourcePolicyInput(
+                operation_id=uuid4(),
+                expected_revision=1,
+                participation_mode="editorial",
+                site_fulltext=True,
+                indexable=True,
+                license_name="受控索引许可",
+                reason="跨出口验证",
+            ),
+        )
+        service.publish_in_transaction(
+            owner_id=owner, content_id=identity, now=NOW + timedelta(minutes=1)
+        )
+    detail_paths = [
+        f"/public/api/items/{identity}",
+        f"/public/items/{identity}.md",
+        f"/og/items/{identity}.png",
+        f"/og/posters/{identity}.png",
+    ]
+    collection_paths = [
+        "/public/api/items",
+        "/public/feed.xml",
+        "/public/feed/full.xml",
+        "/public/selected.md",
+    ]
+    paths = detail_paths + collection_paths
+    original = {path: client.get(path) for path in paths}
+    assert all(
+        response.status_code == 200 and response.headers["cache-control"] == "no-store"
+        for response in original.values()
+    )
+    assert str(identity) in client.get("/sitemaps/items-0.xml").text
+    for path, response in original.items():
+        assert (
+            client.get(path, headers={"If-None-Match": response.headers["etag"]}).status_code == 304
+        )
+    _correct(client, owner, identity, title_zh="更正标题", summary_zh="更正摘要")
+    before = _counts(client)
+    corrected = {}
+    for path, old in original.items():
+        corrected[path] = response = client.get(
+            path, headers={"If-None-Match": old.headers["etag"]}
+        )
+        assert response.status_code == 200 and response.headers["etag"] != old.headers["etag"]
+        assert response.headers["cache-control"] == "no-store"
+        if not path.endswith(".png"):
+            assert "更正标题" in response.text and "条目0 人工摘要" not in response.text
+    assert (
+        _call(client, "hotkey_get_latest", {})["structuredContent"]["items"][0]["title"]
+        == "更正标题"
+    )
+    assert (
+        _call(client, "hotkey_search", {"q": "条目0 人工摘要"})["structuredContent"]["items"] == []
+    )
+    assert client.get("/api/publication/timeline").json()["cards"][0]["item"]["title"] == "更正标题"
+    assert _counts(client) == before
+    with sessions.begin() as session:
+        row = session.get(PublicationRecord, (owner, identity))
+        PublicationService(session, indexing_enabled=True).override_in_transaction(
+            owner_id=owner,
+            actor_id=owner,
+            content_id=identity,
+            now=NOW + timedelta(minutes=1),
+            command=PublicationOverrideInput(
+                operation_id=uuid4(),
+                expected_revision=row.revision,
+                visibility="withdrawn",
+                reason="撤回跨出口回归",
+            ),
+        )
+    before = _counts(client)
+    for path in detail_paths:
+        assert (
+            client.get(path, headers={"If-None-Match": corrected[path].headers["etag"]}).status_code
+            == 404
+        )
+    for path in collection_paths:
+        response = client.get(path, headers={"If-None-Match": corrected[path].headers["etag"]})
+        assert response.status_code == 200 and response.headers["cache-control"] == "no-store"
+        assert "更正标题" not in response.text
+    assert client.get("/api/publication/timeline").json()["cards"] == []
+    assert str(identity) not in client.get("/sitemaps/items-0.xml").text
+    assert _call(client, "hotkey_get_latest", {})["structuredContent"]["items"] == []
+    assert _call(client, "hotkey_search", {"q": "更正"})["structuredContent"]["items"] == []
+    assert _counts(client) == before
 
 
 def test_fixed_publisher_is_anonymous_and_cookie_cannot_select_another_owner(editorial_client):
