@@ -83,7 +83,7 @@ FastAPI 路由装饰器、类型注解和 Pydantic 是唯一可编辑契约。�
 
 ## Web 合同
 
-富文本统一在 `frontend/src/components/editor/`：`Editor` 使用 Editor.js，`Viewer` 在服务端和浏览器渲染同一块结构；Markdown 通过适配层转为 Editor.js OutputData，HTML 阅读经白名单清洗。报告存档/API/导出继续使用既有 Markdown 合同；本机阅读笔记在原存储键保存块 JSON 和兼容文字，不增加正文库或上传接口。组件接口与状态见 Web DESIGN。
+富文本统一在 `frontend/src/components/editor/`：`Viewer` 在服务端和浏览器渲染同一块结构，阅读页不装载 Editor.js 编辑器；Markdown 通过适配层转为 Editor.js OutputData，HTML 阅读经白名单清洗。报告存档/API/导出继续使用既有 Markdown 合同；本机阅读状态在原存储键仅保存阅读位置和原文/译文模式，不提供笔记编辑与上传接口；Editor.js仅作为块结构的开发期类型依赖。组件接口与状态见 Web DESIGN。
 
 生成链为运行 OpenAPI → `@umijs/openapi` → `src/api/` → Axios `src/request.ts`。业务只调用生成函数，不导入 Axios/传输函数、不用 fetch/XHR 或手写下载 URL；可导入错误类和请求选项类型。请求选项不能覆盖生成方法、URL、数据或参数。浏览器同源 `/api/*`；SSR origin 统一由传输层解析，逐请求携带限定身份 Cookie，不在全局默认值保存凭据。透明代理只转发通用协议和 HotKey Cookie/Set-Cookie，拒绝伪造身份/转发头及任意 Authorization。
 

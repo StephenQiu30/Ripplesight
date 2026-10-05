@@ -96,12 +96,10 @@ to them; by default the site shows only a summary and a link to the original.
 
 ## Editor.js and content rendering
 
-The Web editor uses [Editor.js](https://github.com/codex-team/editor.js)
-2.31.7 (Apache-2.0) via its published package. Official editor-js block/inline
-tools (header 2.8.9, list 2.0.9, quote 2.7.6, code 2.9.4, table 2.4.6,
-delimiter 1.4.2, inline-code 1.5.2 and simple-image 1.6.0) use MIT licenses.
-Markdown parsing uses [marked](https://github.com/markedjs/marked) 18.0.14
-(MIT); HTML cleaning uses [sanitize-html](https://github.com/apostrophecms/sanitize-html)
-2.18.0 (MIT). Package licenses remain in the dependency distributions;
-resolved versions are recorded in frontend/pnpm-lock.yaml. Simple Image only
-accepts pasted image URLs; this integration adds no uploader or third-party service.
+The Web content viewer uses [Editor.js](https://github.com/codex-team/editor.js)
+2.31.7 (Apache-2.0) OutputData types as a development dependency; it does not
+bundle the editor runtime or block/inline tool packages. Markdown parsing uses
+[marked](https://github.com/markedjs/marked) 18.0.14 (MIT); HTML cleaning uses
+[sanitize-html](https://github.com/apostrophecms/sanitize-html) 2.18.0 (MIT).
+Package licenses remain in the dependency distributions; resolved versions are
+recorded in frontend/pnpm-lock.yaml.

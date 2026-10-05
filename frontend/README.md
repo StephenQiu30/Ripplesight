@@ -73,45 +73,29 @@ pnpm openapi:generate
 
 来源配置 API 仅支持已有连接的状态更新；来源预设由维护者使用后端 CLI 应用。网页不会模拟预设设置或将任务受理显示为采集完成。API 不可用时就地显示错误和重试，创建页保留可填写的草稿。
 
-## 富文本 Editor / Viewer
+## Editor.js 内容阅读
 
-通用组件统一从 `@/components/editor` 导入。`Editor` 只在浏览器动态加载 Editor.js，
-受控 `value` 和 `onChange` 使用官方 OutputData；提交时等待 `ref.save()`，
-避免依赖尚未完成的 onChange。`Viewer` 在服务端也可读取相同 JSON，
-支持显式 `format="markdown" | "html" | "text"` 的旧字符串，统一清洗后展示。
-默认字符串格式为 Markdown，`citations` 可绑定报告冻结引用，`headingOffset` 避免重复页面主标题。
+跨页正文统一从 `@/components/editor` 导入 `Viewer`，使用 Editor.js OutputData 块结构，
+服务端渲染不实例化编辑器。当前页面只读，Editor.js 仅提供开发期类型。
+既有 Markdown/HTML/text 由同一组件适配并清洗，不保留页面专用 Markdown 阅读器。
+默认字符串格式为 Markdown，`citations` 绑定报告冻结引用，`headingOffset` 调整正文标题层级。
 
 ```tsx
-import { useRef, useState } from "react";
-import {
-  Editor,
-  Viewer,
-  type EditorDocument,
-  type EditorHandle,
-} from "@/components/editor";
+import { Viewer, type EditorDocument } from "@/components/editor";
 
-function ContentEditor() {
-  const [document, setDocument] = useState<EditorDocument>({ blocks: [] });
-  const editorRef = useRef<EditorHandle>(null);
-  // 在提交处理函数中：const current = await editorRef.current!.save();
-  return (
-    <>
-      <Editor
-        ref={editorRef}
-        value={document}
-        onChange={setDocument}
-        aria-label="正文"
-      />
-      <Viewer value={document} />
-    </>
-  );
-}
+const document: EditorDocument = {
+  blocks: [{ type: "paragraph", data: { text: "正文" } }],
+};
+
+<Viewer value={document} />;
+<Viewer value="# 报告正文" format="markdown" headingOffset={1} />;
+<Viewer value="<p>资讯正文</p>" format="html" />;
+<Viewer value="纯文本正文" format="text" />;
 ```
 
-支持段落、标题、嵌套/任务列表、引用、代码、表格、分隔线及粘贴图片 URL。
-图片不上传。报告/API/导出继续使用原 Markdown；阅读笔记在原本机存储键增加
-`noteDocument`，保留兼容的 `note`、阅读模式和位置，旧文字自动恢复。
-组件状态、主题和安全边界见 [DESIGN](DESIGN.md)。
+支持段落、标题、嵌套/任务列表、引用、代码、表格、分隔线和图片块。
+报告/API/导出沿用原 Markdown；阅读状态只保存原文/译文模式及位置，不提供笔记编辑或上传。
+组件主题和安全边界见 [DESIGN](DESIGN.md)。
 
 ## 检查
 

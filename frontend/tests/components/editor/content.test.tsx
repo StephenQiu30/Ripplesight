@@ -1,17 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { Viewer, type EditorDocument } from "@/components/editor";
 import {
-  Viewer,
   markdownToDocument,
-  normalizeDocument,
-  documentToText,
   textToDocument,
-} from "@/components/editor";
-import { documentToHtml } from "@/components/editor/content";
+  documentToHtml,
+} from "@/components/editor/content";
 
 describe("Editor.js content compatibility", () => {
   it("preserves the official ordered-list counter and nested metadata", () => {
-    const document = normalizeDocument({
+    const document: EditorDocument = {
       blocks: [
         {
           type: "list",
@@ -28,10 +26,9 @@ describe("Editor.js content compatibility", () => {
           },
         },
       ],
-    });
-    expect(document!.blocks[0].data.meta.counterType).toBe("upper-roman");
-    expect(documentToHtml(document!)).toContain('<ol start="3" type="I">');
-    expect(documentToHtml(document!)).toContain('<ol start="2" type="a">');
+    };
+    expect(documentToHtml(document)).toContain('<ol start="3" type="I">');
+    expect(documentToHtml(document)).toContain('<ol start="2" type="a">');
   });
   it("renders Markdown as semantic blocks including nested/check lists, code and tables", () => {
     const document = markdownToDocument(
@@ -58,7 +55,6 @@ describe("Editor.js content compatibility", () => {
     expect(html).toContain("&lt;script&gt;bad()&lt;/script&gt;");
     expect(html).toContain("<th>名称</th>");
     expect(html).toContain('alt="配图"');
-    expect(normalizeDocument(document)).toBeTruthy();
   });
 
   it("resolves frozen citations only in prose and preserves missing/unsafe citations", () => {
@@ -78,7 +74,7 @@ describe("Editor.js content compatibility", () => {
     expect(html).not.toContain("javascript:");
   });
 
-  it("sanitizes legacy HTML and stored JSON before rendering or editing", () => {
+  it("sanitizes HTML and Editor.js blocks before rendering", () => {
     const value =
       '<h2 id="section">正文</h2><script>alert(1)</script><img src="javascript:alert(1)" onerror="alert(2)"><a href="data:text/html,bad">链接</a><iframe src="https://evil.example"></iframe>';
     const html = renderToStaticMarkup(<Viewer value={value} format="html" />);
@@ -92,37 +88,28 @@ describe("Editor.js content compatibility", () => {
         />,
       ),
     ).toContain('<video controls src="/media/video.mp4">');
-    const document = normalizeDocument({
-      blocks: [
-        {
-          type: "paragraph",
-          data: {
-            text: "<img src=x onerror=alert(1)><b onclick=bad()>保留</b>",
-          },
-        },
-      ],
-    });
-    expect(document?.blocks[0].data.text).toBe("<b>保留</b>");
-    expect(
-      normalizeDocument({
-        blocks: [{ type: "list", data: { items: [null] } }],
-      }),
-    ).toBeNull();
-    expect(
-      normalizeDocument({
-        blocks: [{ type: "table", data: { content: ["bad"] } }],
-      }),
-    ).toBeNull();
-    expect(
-      normalizeDocument({ blocks: [{ type: "unknown", data: {} }] }),
-    ).toBeNull();
+    const htmlBlocks = renderToStaticMarkup(
+      <Viewer
+        value={{
+          blocks: [
+            {
+              type: "paragraph",
+              data: {
+                text: "<img src=x onerror=alert(1)><b onclick=bad()>保留</b>",
+              },
+            },
+          ],
+        }}
+      />,
+    );
+    expect(htmlBlocks).toContain("<b>保留</b>");
+    expect(htmlBlocks).not.toMatch(/onerror|onclick|<img/);
   });
 
-  it("renders on the server without a browser and keeps plain text notes readable", () => {
-    const value = "旧笔记 <tag> & 继续\n第二行";
-    expect(documentToText(textToDocument(value))).toBe(value);
+  it("renders blocks and plain text on the server without a browser", () => {
+    const value = "正文 <tag> & 继续\n第二行";
     const html = renderToStaticMarkup(<Viewer value={textToDocument(value)} />);
-    expect(html).toContain("旧笔记 &lt;tag&gt; &amp; 继续<br />");
+    expect(html).toContain("正文 &lt;tag&gt; &amp; 继续<br />");
     expect(html).not.toContain("contenteditable");
     expect(renderToStaticMarkup(<Viewer value="" />)).not.toContain(
       "undefined",
