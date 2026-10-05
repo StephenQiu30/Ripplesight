@@ -240,7 +240,9 @@ def test_historical_private_narrative_requires_removed_a_public_permission(engin
             route="/threads/search/sample/serpType=recent",
             mode="platform_keyword",
         )
-        _, fa = collect(s, a, owner, pa)
+        # This scenario later selects B publicly and publishes the whole story.
+        # Both fixed members need source RSS dates so permission is the only blocker.
+        _, fa = collect(s, a, owner, pa, published_at=NOW)
         _, fb = collect(
             s,
             b,
@@ -248,6 +250,7 @@ def test_historical_private_narrative_requires_removed_a_public_permission(engin
             pb,
             url="https://www.threads.com/t/CbC_012-",
             body="OpenAI independent B model release",
+            published_at=NOW,
         )
         with s.begin():
             topic = ensure_editorial_event_topic_in_transaction(s, owner_id=owner, now=NOW)
