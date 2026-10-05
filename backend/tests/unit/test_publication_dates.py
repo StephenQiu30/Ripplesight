@@ -13,6 +13,7 @@ from analysis.editorial_schemas import (
     EditorialSourceView,
     EditorialWritingView,
 )
+from analysis.editorial_selection import EditorialSelectionCandidate, decide_editorial_selection
 from publication.projection import derive_projection
 from publication.reading import public_item
 from publication.schemas import SourcePolicyView
@@ -93,11 +94,18 @@ def test_undated_selected_result_keeps_raw_reading_and_requires_a_new_dated_inpu
     assert public_item(projection).published_at is None
     raw = derive_projection(snapshot.model_copy(update={"run": None}), policy, now=NOW)
     assert raw.eligible and raw.summary == "原始来源摘要" and not raw.selected
+    dated_input = snapshot.model_copy(
+        update={"material": original.model_copy(update={"published_at": NOW})}
+    )
+    selection = decide_editorial_selection(
+        [EditorialSelectionCandidate(dated_input, None, True, grouping_enabled=False)]
+    )[original.content_id]
     dated = derive_projection(
-        snapshot.model_copy(update={"material": original.model_copy(update={"published_at": NOW})}),
+        dated_input,
         policy,
         now=NOW,
         previous=projection,
+        selection=selection,
     )
     assert dated.selected and dated.visible_after == NOW
 

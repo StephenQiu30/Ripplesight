@@ -222,7 +222,7 @@ def _run_job_in_child(
 ) -> ChildJobResult:
     settings = get_settings()
     engine = create_db_engine(settings)
-    sessions = create_session_factory(engine)
+    sessions = create_session_factory(engine, settings=settings)
     media_storage = create_media_storage(settings)
     try:
         handler = _registered_job_handlers(sessions, settings, media_storage=media_storage).get(
@@ -1062,7 +1062,7 @@ def run_worker() -> None:
     signal.signal(signal.SIGTERM, request_stop)
 
     engine = create_db_engine(settings)
-    sessions = create_session_factory(engine)
+    sessions = create_session_factory(engine, settings=settings)
     heartbeat = ProcessHeartbeatReporter(
         sessions, role="worker", enabled=settings.environment != "test"
     )

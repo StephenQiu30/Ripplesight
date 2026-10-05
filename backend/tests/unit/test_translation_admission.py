@@ -13,6 +13,7 @@ from analysis.editorial_schemas import (
     EditorialSourceView,
     EditorialWritingView,
 )
+from analysis.editorial_selection import EditorialSelectionCandidate, decide_editorial_selection
 from analysis.translation_services import _grant
 from publication.projection import derive_projection
 from publication.reading import full_text_grant_in_transaction
@@ -83,7 +84,22 @@ def translation_input(*, dated=False, selected=True, relevance="pass", tier="T1"
         license_url=None,
         updated_at=NOW,
     )
-    return snapshot, derive_projection(snapshot, policy, now=NOW)
+    selection = decide_editorial_selection(
+        [
+            EditorialSelectionCandidate(
+                snapshot,
+                None,
+                selected and relevance == "pass" and tier != "T4" and not raw,
+                grouping_enabled=False,
+            )
+        ]
+    )[original.content_id]
+    return snapshot, derive_projection(
+        snapshot,
+        policy,
+        now=NOW,
+        selection=selection,
+    )
 
 
 def grant_context(monkeypatch, snapshot, projection):
