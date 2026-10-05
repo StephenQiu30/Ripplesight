@@ -18,7 +18,15 @@ def test_editorial_prompt_uses_hotkey_brand_and_requires_all_inputs() -> None:
     with pytest.raises(ValueError, match="missing prompt value"):
         prompts.render_editorial_prompt("report-period")
     rendered = prompts.render_editorial_prompt(
-        "report-period", {"kindName": "月报", "overviewLength": "200"}
+        "report-period",
+        {
+            "kindName": "月报",
+            "span": "个月",
+            "sentences": "三句话",
+            "chars": "200",
+            "sections": "sections 留空。",
+            "sectionsExample": "{}",
+        },
     )
     assert "月报" in rendered
     assert "{{" not in rendered
@@ -70,7 +78,12 @@ def test_all_migrated_templates_render_with_the_declared_values() -> None:
     values = {
         "facts": "已验证事实",
         "kindName": "月报",
-        "overviewLength": "200",
+        "span": "个月",
+        "sentences": "三句话",
+        "chars": "200",
+        "sections": "sections 留空。",
+        "sectionsExample": "{}",
+        "columns": "模型",
         "categoryCount": "2",
         "categoryGuide": "模型与研究",
         "categoryTags": "model,research",
@@ -88,7 +101,7 @@ def test_all_migrated_templates_render_with_the_declared_values() -> None:
         "post": "source post",
     }
     names = sorted(p.stem for p in prompts._EDITORIAL_PROMPT_DIR.glob("*.md"))
-    assert len(names) == 27
+    assert len(names) == 28
     for name in names:
         assert "{{" not in prompts.render_editorial_prompt(name, values)
         assert prompts.editorial_prompt_version(name).startswith(f"{name}@")

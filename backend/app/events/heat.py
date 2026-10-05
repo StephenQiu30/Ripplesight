@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import defaultdict
 from collections.abc import Callable, Iterator, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Literal, cast
@@ -30,6 +31,7 @@ from events.heat_schemas import (
     AttentionSource,
     AttentionSourceInput,
     AttentionSourceView,
+    EditionAttentionInputs,
     EventAttentionHistoryView,
     EventAttentionView,
     EventHotPageView,
@@ -413,6 +415,67 @@ def load_event_attention_in_transaction(
     interaction, _ = _live_interaction(session, event=event, now=now)
     return result.model_copy(
         update={"event_id": event.id, "event_revision": event.revision, "interaction": interaction}
+    )
+
+
+def load_edition_attention_inputs_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    references: tuple[EventContentReadReference, ...],
+    event_ids: tuple[UUID, ...],
+    start: datetime,
+    end: datetime,
+    now: datetime,
+) -> EditionAttentionInputs:
+    """Exact daily participants, without the heat roster's 48h/per-participant reduction."""
+    if not session.in_transaction() or not start < end <= now:
+        raise RuntimeError("edition attention requires a caller transaction and complete window")
+    sources = list(
+        session.scalars(
+            select(EventAttentionSource).where(EventAttentionSource.owner_id == owner_id)
+        )
+    )
+    participants = {}
+    for offset in range(0, len(references), 500):
+        readings = load_event_member_content_in_transaction(
+            session, owner_id=owner_id, references=references[offset : offset + 500], now=now
+        )
+        for ref, reading in readings.items():
+            source = resolve_attention_source(sources, reading)
+            if source is not None:
+                participants[ref.content_id] = _source(source).participant_key
+    fact_sources: dict[UUID, set[str]] = defaultdict(set)
+    event_participants: dict[UUID, frozenset[str]] = {}
+    for event_id in event_ids:
+        event = session.scalar(
+            select(Event).where(
+                Event.owner_id == owner_id, Event.id == event_id, Event.status == "active"
+            )
+        )
+        if event is None:
+            continue
+        evidence, _ = _live_inputs(session, event=event, now=now)
+        reported_facts = {
+            row.content_version_id: row.fact_id
+            for row in session.scalars(
+                select(EventFactMember).where(
+                    EventFactMember.owner_id == owner_id,
+                    EventFactMember.event_id == event_id,
+                    EventFactMember.removed_revision.is_(None),
+                    EventFactMember.role.in_(("primary", "report")),
+                )
+            )
+        }
+        event_participants[event_id] = frozenset(
+            e.source.participant_key for e in evidence if start <= e.source_time < end
+        )
+        for e in evidence:
+            fact = reported_facts.get(e.content_version_id)
+            if fact and e.source.mode == "editorial" and e.source_time < end:
+                fact_sources[fact].add(e.source.participant_key)
+    return EditionAttentionInputs(
+        participants, {id: frozenset(p) for id, p in fact_sources.items()}, event_participants
     )
 
 

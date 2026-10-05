@@ -48,6 +48,12 @@ date/Atom text parsing are adapted from AIHOT commits `50b562b`, `309e32e` and
 `6560d7f` (reference snapshot `9acad0c`), including their source/publication date tests;
 HotKey retains undated raw reading and personal reports under its own contracts.
 
+Edition selection/memory and daily-to-period compilation are adapted from AIHOT
+`9acad0c` (`reports/edition.ts`, `reports/compose.ts`, `docs/selection.md` step 7);
+the three `report-period*.md` templates use that version, while the unused
+`report-daily-lead.md` template is removed. HotKey retains Beijing calendar
+windows, ALL permission checks and the existing immutable version/call ledger.
+
 Source avatar selection/cache and native/embedding event rematching are adapted
 from upstream `sources/icons.ts`, `providers/embeddings.ts` and `events/group.ts`.
 Industry topic definitions and canonical share layouts/QR behavior are adapted
