@@ -1,4 +1,4 @@
-# ruff: noqa: F811
+# ruff: noqa: F811, RUF001
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
@@ -12,7 +12,12 @@ from tests.integration.test_event_reading import _seed_reading, event_read_clien
 from ai.models import AiCall
 from ai.schemas import AiCompletion, AiTokenUsage
 from events.corrections import EventCorrectionService
-from events.digest import EventDigestExecutor, EventDigestService
+from events.digest import (
+    EventDigestExecutor,
+    EventDigestService,
+    load_event_digest_input_in_transaction,
+)
+from events.digest_prompts import LEGACY_DIGEST_PROMPT_VERSION, event_digest_prompt_version
 from events.fact_models import EventDerivedContent
 from events.fact_schemas import EventCorrectionInput
 from events.models import Event
@@ -87,12 +92,24 @@ class _DigestClient:
     provider = "fake"
     model = "controlled"
 
-    def __init__(self, before_return=None):
+    def __init__(self, before_return=None, summary=None):
         self.calls = 0
         self.before_return = before_return
+        self.requests = []
+        self.summary = (
+            summary
+            if summary is not None
+            else (
+                "固定证据支持当前事件的核心变化，归并结果保留原正文与来源的版本关系。"
+                "新标题对应同一组已读取材料，概览只用于受控持久化测试，不代表真实模型质量。\n\n"
+                "事件成员在提交之前再次复核，许可或人工修订变化会使旧结果失效。"
+                "读取继续沿用固定版本，撤回后不再展示由旧材料派生的标题和概览。"
+            )
+        )
 
     def complete(self, **_kwargs):
         self.calls += 1
+        self.requests.append(_kwargs)
         if self.before_return:
             self.before_return()
         return AiCompletion(
@@ -100,7 +117,7 @@ class _DigestClient:
             model=self.model,
             output={
                 "title": "固定证据新标题",
-                "summary": "固定正文的真实摘要",
+                "summary": self.summary,
                 "latest_progress": None,
             },
             usage=AiTokenUsage(input_tokens=12, output_tokens=8),
@@ -152,6 +169,13 @@ def test_digest_executor_uses_real_ai_budget_ledger_and_withdrawal_hides_valid_t
     with factory() as session:
         call = session.scalar(select(AiCall))
         assert call.purpose == "events.digest" and call.job_id == message.job_id
+        assert call.prompt_version == event_digest_prompt_version()
+        derived = session.get(EventDerivedContent, (owner, event_id))
+        assert derived.ai_call_id == call.id and derived.summary == fake.summary
+        job = session.get(Job, message.job_id)
+        assert job.scope["prompt_version"] == call.prompt_version
+        assert '"prompt_version"' in job.scope["input_manifest"]
+        assert "事件概览" in fake.requests[0]["prompt"]
         assert call.input_tokens == 12
         assert session.execute(
             text("SELECT sum(used_units),sum(reserved_units) FROM resource_budget_windows")
@@ -295,3 +319,96 @@ def test_digest_lost_response_does_not_call_paid_model_again(event_read_client, 
         derived = session.get(EventDerivedContent, (owner, event_id))
         assert derived.status == "failed" and derived.error_code == "result_unknown"
         assert derived.title is None
+
+
+@pytest.mark.parametrize(
+    "summary",
+    [
+        "过短",
+        "甲" * 151 + "\n\n" + "乙" * 150,
+        "甲" * 150,
+        "首先，" + "甲" * 60 + "\n\n" + "乙" * 60,
+    ],
+    ids=["short", "long", "unsegmented", "timeline-first"],
+)
+def test_digest_invalid_output_keeps_receipt_and_clears_derived_text(
+    event_read_client, monkeypatch, summary
+):
+    owner, _, event_id, _, _ = _seed_reading(event_read_client)
+    factory = event_read_client.app.state.session_factory
+    with factory() as session:
+        _enable_ai_budget(session.get_bind(), owner)
+    message = _enqueue_message(event_read_client, owner, event_id)
+    fake = _DigestClient(summary=summary)
+    monkeypatch.setattr("events.digest.create_ai_client", lambda _settings: fake)
+    executor = EventDigestExecutor(
+        factory,
+        event_read_client.app.state.settings.model_copy(
+            update={"events_cluster_enabled": True, "ai_enabled": True}
+        ),
+    )
+    with pytest.raises(JobExecutionFailure, match="event_digest_invalid_model_output"):
+        executor.execute(message)
+    with factory() as session:
+        derived = session.get(EventDerivedContent, (owner, event_id))
+        assert derived.status == "failed" and derived.error_code == "invalid_model_output"
+        assert derived.title is derived.summary is derived.latest_progress is None
+        call = session.get(AiCall, derived.ai_call_id)
+        assert call.job_id == message.job_id
+        assert call.prompt_version == event_digest_prompt_version()
+    assert not event_read_client.get(f"/api/events/{event_id}").json()["derived_text_available"]
+
+
+def test_legacy_digest_is_readable_without_new_length_or_template_rules(
+    event_read_client, monkeypatch
+):
+    owner, _, event_id, _, _ = _seed_reading(event_read_client)
+    factory = event_read_client.app.state.session_factory
+    with factory() as session:
+        _enable_ai_budget(session.get_bind(), owner)
+    message = _enqueue_message(event_read_client, owner, event_id)
+    monkeypatch.setattr("events.digest.create_ai_client", lambda _settings: _DigestClient())
+    EventDigestExecutor(
+        factory,
+        event_read_client.app.state.settings.model_copy(
+            update={"events_cluster_enabled": True, "ai_enabled": True}
+        ),
+    ).execute(message)
+    with factory() as session, session.begin():
+        event = session.get(Event, event_id)
+        inputs = load_event_digest_input_in_transaction(
+            session,
+            event=event,
+            now=datetime.now(UTC),
+            prompt_version=LEGACY_DIGEST_PROMPT_VERSION,
+            render_prompt=False,
+        )
+        assert inputs is not None
+        derived = session.get(EventDerivedContent, (owner, event_id))
+        derived.input_fingerprint = inputs.fingerprint
+        derived.summary = event.summary = "旧版短摘要保持可读"
+        call = session.get(AiCall, derived.ai_call_id)
+        call.prompt_version = LEGACY_DIGEST_PROMPT_VERSION
+        job = session.get(Job, message.job_id)
+        scope = dict(job.scope)
+        scope.pop("prompt_version")
+        scope["input_fingerprint"] = inputs.fingerprint.hex()
+        job.scope = scope
+    detail = event_read_client.get(f"/api/events/{event_id}").json()
+    assert detail["derived_text_available"] and detail["summary"] == "旧版短摘要保持可读"
+
+
+def test_digest_template_change_after_enqueue_is_rejected_before_ai(event_read_client, monkeypatch):
+    owner, _, event_id, _, _ = _seed_reading(event_read_client)
+    message = _enqueue_message(event_read_client, owner, event_id)
+    fake = _DigestClient()
+    monkeypatch.setattr("events.digest.create_ai_client", lambda _settings: fake)
+    monkeypatch.setattr("events.digest.event_digest_prompt_version", lambda: "story-digest@changed")
+    with pytest.raises(JobExecutionFailure, match="event_digest_input_changed"):
+        EventDigestExecutor(
+            event_read_client.app.state.session_factory,
+            event_read_client.app.state.settings.model_copy(
+                update={"events_cluster_enabled": True}
+            ),
+        ).execute(message)
+    assert fake.calls == 0
