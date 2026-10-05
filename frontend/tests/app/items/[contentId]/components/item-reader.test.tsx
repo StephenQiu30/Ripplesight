@@ -105,6 +105,40 @@ it("summary-only renders no old body/export and stores only an ID when saved", (
   );
 });
 
+it("renders collected source content as the reading article without an outbound-only placeholder", () => {
+  const { container } = render(
+    <ItemReader
+      item={{
+        ...item,
+        body: null,
+        summary: "第一段来源内容。\n\n第二段来源内容。",
+        summary_origin: "source",
+        analysis_state: "not_analyzed",
+        reading_mode: "summary-only",
+        site_fulltext: false,
+        markdown_available: false,
+      }}
+    />,
+  );
+  const article = screen.getByRole("article", { name: "来源内容" });
+  expect(article.textContent).toContain("第一段来源内容。");
+  expect(article.textContent).toContain("第二段来源内容。");
+  expect(container.querySelectorAll("article p").length).toBeGreaterThanOrEqual(
+    3,
+  );
+  expect(screen.queryByText(/全文可前往来源原文/)).toBeNull();
+});
+
+it("does not claim missing source content when the full collected body exists", () => {
+  render(
+    <ItemReader
+      item={{ ...item, summary: null, analysis_state: "not_analyzed" }}
+    />,
+  );
+  expect(screen.getByText("Original text")).toBeTruthy();
+  expect(screen.queryByText(/来源未提供摘要/)).toBeNull();
+});
+
 it("rejects invalid local saved material instead of trusting it as public content", () => {
   expect(
     savedIds({

@@ -127,14 +127,10 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
           {item.original_title}
         </p>
       ) : null}
-      {item.summary ? (
+      {item.body && item.summary ? (
         <p className="text-muted-foreground my-7 max-w-3xl text-base leading-8">
           {item.summary_origin === "source" ? <span>来源摘要： </span> : null}
           {item.summary}
-        </p>
-      ) : item.analysis_state === "not_analyzed" ? (
-        <p className="text-muted-foreground my-7 text-sm">
-          来源未提供摘要，可前往原文阅读。
         </p>
       ) : null}
       <div className="my-7 flex flex-wrap items-start gap-3">
@@ -267,10 +263,20 @@ export function ItemReader({ item }: { item: HotKeyAPI.PublicItemDetailView }) {
             </aside>
           </div>
         </>
+      ) : item.summary ? (
+        <article
+          aria-label="来源内容"
+          className="max-w-3xl text-base leading-8 break-words [&_p]:my-4"
+        >
+          <p className="text-muted-foreground text-xs">
+            {item.summary_origin === "source" ? "来源摘要" : "资讯摘要"}
+          </p>
+          <Viewer value={item.summary} format="text" />
+        </article>
       ) : (
         <Alert role="note" className="p-5 leading-7">
           <AlertDescription>
-            当前以摘要阅读。全文可前往来源原文查看。
+            此条记录仅包含标题和来源信息，尚未获取可在站内展示的内容。
           </AlertDescription>
         </Alert>
       )}

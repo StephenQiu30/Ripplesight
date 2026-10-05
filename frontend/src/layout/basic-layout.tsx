@@ -58,7 +58,13 @@ export function BasicLayout({
               tabIndex={-1}
               className="layout-region min-h-0 flex-1 overflow-y-auto overscroll-y-contain scroll-smooth focus-visible:outline-none motion-reduce:scroll-auto print:overflow-visible"
             >
-              <LayoutContainer className="flex min-h-full flex-col py-10 sm:py-12 print:block print:py-0">
+              <LayoutContainer
+                className={
+                  pathname === "/"
+                    ? "flex min-h-full flex-col py-4 sm:py-5 print:block print:py-0"
+                    : "flex min-h-full flex-col py-10 sm:py-12 print:block print:py-0"
+                }
+              >
                 {children}
               </LayoutContainer>
             </main>
