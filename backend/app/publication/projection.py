@@ -69,7 +69,9 @@ def derive_projection(
         else policy.participation_mode == "editorial"
         and bool(title and material.url and (summary or body_mode == "full"))
     )
-    selected = is_selectable(eligible, result.selected if result else None, source.tier)
+    selected = material.published_at is not None and is_selectable(
+        eligible, result.selected if result else None, source.tier
+    )
     visibility = cast(
         Visibility,
         "withdrawn"

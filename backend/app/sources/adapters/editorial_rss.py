@@ -1,9 +1,8 @@
 """RSS/Atom/RDF semantic port of AIHOT sources/rss.ts; MIT attribution at repository root."""
 
-import calendar
 import contextlib
 import re
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 from urllib.parse import urljoin, urlsplit
 
@@ -11,7 +10,13 @@ import feedparser
 from bs4 import BeautifulSoup
 
 from sources.adapters.editorial_http import EditorialSourceError
-from sources.adapters.editorial_parsing import collapse, material, plain, sanitize_html
+from sources.adapters.editorial_parsing import (
+    collapse,
+    material,
+    parse_loose_date,
+    plain,
+    sanitize_html,
+)
 from sources.editorial_identity import rsshub_native_identity_proofs
 from sources.editorial_schemas import EditorialMaterial, EditorialSourceConfiguration, public_url
 
@@ -84,16 +89,30 @@ def parse_feed(
             else ""
         )
         summary = entry.get("summary", "")
-        html, body_text = sanitize_html(body, url) if body else (None, None)
+        atom = doc.version.startswith("atom")
+        body_is_text = atom and (
+            contents[0].get("type") == "text/plain"
+            if contents
+            else entry.get("summary_detail", {}).get("type") == "text/plain"
+        )
+        summary_is_text = atom and entry.get("summary_detail", {}).get("type") == "text/plain"
+        if body_is_text:
+            if len(body) > 100_000:
+                raise ValueError("source body exceeds its limit")
+            html, body_text = None, body.strip() or None
+        else:
+            html, body_text = sanitize_html(body, url) if body else (None, None)
         teaser = bool(body_text and is_teaser(body_text))
         excerpt = (
-            sanitize_html(summary, url)[1][:4000]
+            (summary.strip() if summary_is_text else sanitize_html(summary, url)[1])[:4000]
             if summary
             else body_text[:4000]
             if body_text
             else None
         )
-        complete = bool(body_text and len(body_text) > 280 and not teaser)
+        complete = bool(
+            body_text and (config.summary_is_body or len(body_text) > 280) and not teaser
+        )
         if rsshub:
             # RSS route descriptions are an observed text scope, not a proven
             # article, transcript or platform-native ID. Keep the original URL.
@@ -105,21 +124,29 @@ def parse_feed(
             if str(enclosure.get("type", "")).startswith("image/") and enclosure.get("href"):
                 with contextlib.suppress(ValueError):
                     media.append(public_url(urljoin(url, enclosure["href"])))
-        for image in BeautifulSoup(body, "html.parser").find_all("img", src=True):
+        for image in BeautifulSoup("" if body_is_text else body, "html.parser").find_all(
+            "img", src=True
+        ):
             with contextlib.suppress(ValueError):
                 media.append(public_url(urljoin(url, str(image["src"]))))
 
         def date(name: str, current: Any = entry) -> datetime | None:
-            # FeedParserDict.get aliases a missing updated_parsed to published;
-            # check actual keys so an observation never invents a second date.
-            parsed: Any = current.get(f"{name}_parsed") if f"{name}_parsed" in current else None
-            return datetime.fromtimestamp(calendar.timegm(parsed), UTC) if parsed else None
+            # Feedparser assumes UTC for naive Atom dates and aliases missing updated
+            # to published. Use actual raw keys and the frozen source offset instead.
+            raw: Any = current.get(name) if name in current else None
+            return (
+                parse_loose_date(raw, config.published_at_utc_offset)
+                if isinstance(raw, str)
+                else None
+            )
 
         try:
             out.append(
                 material(
                     url,
                     title,
+                    title_is_text=atom
+                    and entry.get("title_detail", {}).get("type") == "text/plain",
                     preserve_fragment=config.preserve_url_fragment,
                     external_id=None if rsshub else str(entry.get("id", ""))[:512] or None,
                     native_identity=native_proofs[index],

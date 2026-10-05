@@ -123,6 +123,27 @@ def test_due_reports_freeze_before_execution_without_readiness_or_daily_success(
         assert session.scalar(text("SELECT count(*) FROM ai_calls")) == 0
 
 
+def test_personal_report_retains_undated_material_and_discovery_time_basis(
+    editorial_client: TestClient,
+) -> None:
+    owner, topic, posts = _seed_posts(editorial_client, [("Undated", "Original source material")])
+    now = datetime.now(UTC)
+    with editorial_client.app.state.session_factory.begin() as session:
+        report = ReportService(session, clock=lambda: now).generate_daily_in_transaction(
+            owner_id=owner,
+            topic_id=topic,
+            window_start=now - timedelta(days=1),
+            window_end=now,
+            cutoff_at=now,
+        )
+        assert report.data.coverage.discovered_at_count == 1
+        assert len(report.data.pending_contents) == 1
+        pending = report.data.pending_contents[0]
+        assert pending.content_id == posts[0].id and pending.time_basis == "discovered"
+        assert "发现时间" in report.body_markdown
+        assert session.scalar(text("SELECT count(*) FROM ai_calls")) == 0
+
+
 def test_weekly_pins_daily_versions_and_rechecks_reference_permissions(
     editorial_client: TestClient,
 ) -> None:

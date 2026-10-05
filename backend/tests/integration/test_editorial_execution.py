@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from collections.abc import Callable, Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -114,8 +114,16 @@ def _source(client: TestClient, owner: UUID, *, operation_id: UUID | None = None
         )
 
 
-def _run(client: TestClient) -> tuple[UUID, EditorialRunView, JobAcceptedMessage, ExecutionLease]:
+def _run(
+    client: TestClient, *, dated: bool = True
+) -> tuple[UUID, EditorialRunView, JobAcceptedMessage, ExecutionLease]:
     owner, _, posts = _seed_posts(client, [("OpenAI new model", "OpenAI 发布新模型,公开 API。")])
+    if dated:
+        with client.app.state.session_factory.begin() as session:
+            session.execute(
+                text("UPDATE content_observations SET published_at=:at WHERE content_id=:id"),
+                {"at": NOW - timedelta(minutes=3), "id": posts[0].id},
+            )
     _source(client, owner)
     version = posts[0].latest_observation.content_version
     assert version is not None

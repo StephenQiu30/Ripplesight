@@ -71,7 +71,9 @@ class EditorialSourceExecutor:
                     )
                     if prepared.should_collect:
                         collector = (
-                            self._factory(prepared) if self._factory else EditorialSourceRegistry()
+                            self._factory(prepared)
+                            if self._factory
+                            else EditorialSourceRegistry(source_added_at=prepared.source_added_at)
                         )
                         try:
                             page = collector.collect(

@@ -69,11 +69,30 @@ def noise_keep(item: EditorialMaterial, config: EditorialSourceConfiguration) ->
     return not any(marker.casefold() in f"{title}\n{body}" for marker in noise.drop_markers)
 
 
+def _initial_materials(
+    items: tuple[EditorialMaterial, ...],
+    config: EditorialSourceConfiguration,
+    now: datetime,
+    source_added_at: datetime | None,
+) -> tuple[EditorialMaterial, ...]:
+    if config.kind in {"rss", "web_list", "json_list"}:
+        if source_added_at is None or source_added_at.utcoffset() is None:
+            raise ValueError("first import requires the persisted source creation time")
+        cutoff = source_added_at - timedelta(hours=48)
+    else:
+        cutoff = now - timedelta(days=config.initial_backfill_months * 30)
+    return tuple(row for row in items if row.published_at is None or row.published_at >= cutoff)[
+        : config.initial_backfill_limit
+    ]
+
+
 def filter_materials(
     items: tuple[EditorialMaterial, ...],
     config: EditorialSourceConfiguration,
     cursor: EditorialCursor,
     now: datetime,
+    *,
+    source_added_at: datetime | None = None,
 ) -> tuple[EditorialMaterial, ...]:
     unique: dict[str, EditorialMaterial] = {}
     for item in items:
@@ -107,10 +126,7 @@ def filter_materials(
     if config.sort_by_published_at:
         out.sort(key=lambda row: row.published_at or datetime.min.replace(tzinfo=UTC), reverse=True)
     if cursor.initialized_at is None:
-        cutoff = now - timedelta(days=config.initial_backfill_months * 30)
-        out = [row for row in out if row.published_at is None or row.published_at >= cutoff][
-            : config.initial_backfill_limit
-        ]
+        return _initial_materials(tuple(out), config, now, source_added_at)
     return tuple(out)
 
 
@@ -125,10 +141,12 @@ class EditorialSourceRegistry:
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         preview: bool = False,
         blocked_reason: str | None = None,
+        source_added_at: datetime | None = None,
     ) -> None:
         self._http, self._x, self._mp, self._clock, self._jina = http, x, mp, clock, jina
         self._preview = preview
         self._blocked_reason = blocked_reason
+        self._source_added_at = source_added_at
 
     def collect(
         self,
@@ -201,9 +219,12 @@ class EditorialSourceRegistry:
                     script_fetcher=lambda url: http.request(url).text,
                 )
                 next_cursor, unchanged = cursor, False
-            rows = filter_materials(rows, c, cursor, now)
+            rows = filter_materials(rows, c, cursor, now, source_added_at=self._source_added_at)
             if not self._preview:
                 rows = self._details(rows, c, known)
+                if cursor.initialized_at is None:
+                    # An undated listing may reveal an archive date on the article page.
+                    rows = _initial_materials(rows, c, now, self._source_added_at)
             updated = next_cursor.model_copy(
                 update={"initialized_at": cursor.initialized_at or now, "last_ok_at": now}
             )

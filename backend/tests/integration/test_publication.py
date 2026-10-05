@@ -177,6 +177,94 @@ def test_publication_gates_fixed_reports_and_permission_revocation_without_rewri
         assert repeat and not repeat.changed
 
 
+def test_undated_analysis_keeps_raw_reading_but_blocks_selected_and_edition_references(
+    editorial_client: TestClient,
+) -> None:
+    from publication.exports import item_markdown, render_rss
+    from publication.publication_models import PublicationRecord
+    from publication.schemas import ProjectionView
+
+    owner, run, message, lease = _run(editorial_client, dated=False)
+    _budget(editorial_client, owner)
+    _execute(editorial_client, owner, message, lease, ControlledClient())
+    # Undated timeline_at uses ContentService's real receipt clock, which is later
+    # than the fixture's frozen NOW. Publish and read only after that receipt.
+    now = datetime.now(UTC)
+    sessions = editorial_client.app.state.session_factory
+    with sessions.begin() as session:
+        publisher = PublicationService(session)
+        publisher.save_source_policy_in_transaction(
+            owner_id=owner,
+            actor_id=owner,
+            source_key="x",
+            now=now,
+            command=SourcePolicyInput(
+                operation_id=uuid4(),
+                expected_revision=0,
+                participation_mode="editorial",
+                license_name="受控日期测试",
+                reason="保留无日期原文",
+                release_delay_seconds=0,
+            ),
+        )
+        result = publisher.publish_in_transaction(
+            owner_id=owner, content_id=run.content_id, now=now
+        )
+        assert result and result.ledger is None
+        row = session.get(PublicationRecord, (owner, run.content_id))
+        assert row.eligible and row.data["summary"]
+        assert row.timeline_at <= now
+        assert not row.selected and row.data["published_at"] is None
+        # Simulate an old projection whose selected flag predated the date gate.
+        row.selected = True
+        row.data = {
+            **row.data,
+            "selected": True,
+            "selected_ready_at": now.isoformat(),
+            "visible_after": now.isoformat(),
+        }
+        reference = FrozenPublicationReference.model_validate(
+            {
+                field: getattr(ProjectionView.model_validate(row.data), field)
+                for field in FrozenPublicationReference.model_fields
+            }
+        )
+    with sessions.begin() as session:
+        before = session.scalar(text("SELECT count(*) FROM jobs"))
+        reader = PublicationReadingService(session)
+        raw = reader.items_in_transaction(owner_id=owner, now=now)
+        assert len(raw.items) == 1 and raw.items[0].published_at is None
+        assert raw.items[0].discovered_at is not None and not raw.items[0].selected
+        assert raw.items[0].discovered_at <= now
+        assert not reader.items_in_transaction(owner_id=owner, now=now, selected=True).items
+        assert not list_report_candidates_in_transaction(
+            session,
+            owner_id=owner,
+            start=now - timedelta(days=1),
+            end=now + timedelta(days=1),
+            now=now,
+        )
+        assert not validate_report_candidates_in_transaction(
+            session,
+            owner_id=owner,
+            references=(reference,),
+            now=now,
+        ).valid
+        detail = reader.detail_in_transaction(owner_id=owner, content_id=run.content_id, now=now)
+        assert detail and "收录时间" in item_markdown(detail, origin="https://hotkey.example")
+        feed = render_rss(
+            raw.items,
+            origin="https://hotkey.example",
+            self_path="/feed.xml",
+            title="原始资讯",
+            now=now,
+        )
+        assert "收录时间" in feed and "<pubDate>" not in feed
+        assert session.get(PublicationRecord, (owner, run.content_id)).selected
+        assert session.scalar(text("SELECT count(*) FROM jobs")) == before
+        assert session.scalar(text("SELECT count(*) FROM ai_calls")) == 5
+
+
 def _manual_posts(client: TestClient, count: int):
     from tests.integration.test_content_search import _seed_posts
     from tests.integration.test_editorial_execution import _source
@@ -185,6 +273,11 @@ def _manual_posts(client: TestClient, count: int):
     from analysis.editorial_services import EditorialService
 
     owner, _, posts = _seed_posts(client, [(f"条目{i}", f"条目{i} 原始正文") for i in range(count)])
+    with client.app.state.session_factory.begin() as session:
+        session.execute(
+            text("UPDATE content_observations SET published_at=:at WHERE owner_id=:owner"),
+            {"at": NOW - timedelta(minutes=3), "owner": owner},
+        )
     _source(client, owner)
     for index, post in enumerate(posts):
         version = post.latest_observation.content_version

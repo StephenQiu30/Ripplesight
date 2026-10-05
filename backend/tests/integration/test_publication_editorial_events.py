@@ -3,6 +3,7 @@
 from datetime import timedelta
 from uuid import uuid4
 
+import pytest
 from sqlalchemy import text
 from tests.integration.test_editorial_events import (
     ClusterClient,
@@ -23,12 +24,14 @@ from publication.reading import PublicationReadingService
 from publication.schedule import enqueue_due_publication_in_transaction
 from publication.schemas import SourcePolicyInput
 from publication.services import PublicationService
+from publication.stories import hot_stories_in_transaction, public_stories_in_transaction
 
 
+@pytest.mark.parametrize("dated", [True, False])
 def test_automatic_editorial_story_updates_publication_and_sync_without_operator_republish(
-    editorial_client, monkeypatch
+    editorial_client, monkeypatch, dated
 ):
-    owner, run, message, lease = _run(editorial_client)
+    owner, run, message, lease = _run(editorial_client, dated=dated)
     _budget(editorial_client, owner)
     _execute(editorial_client, owner, message, lease, EditorialWithFact())
     sessions = editorial_client.app.state.session_factory
@@ -73,6 +76,14 @@ def test_automatic_editorial_story_updates_publication_and_sync_without_operator
         )
         assert detail and detail.event_id and detail.fact_id
         event_id = detail.event_id
+        stories = public_stories_in_transaction(
+            reader, owner_id=owner, event_ids=(event_id,), now=cluster_at
+        )
+        assert bool(stories) is dated
+        if not dated:
+            assert detail.published_at is None and not detail.selected
+            assert reader.items_in_transaction(owner_id=owner, now=cluster_at).items
+            assert not hot_stories_in_transaction(reader, owner_id=owner, now=cluster_at).stories
         # A GET exposes the current grouping, but never mutates the synchronization ledger.
         stored = session.execute(
             text("SELECT revision,projection AS data FROM publication_records")
@@ -109,7 +120,14 @@ def test_automatic_editorial_story_updates_publication_and_sync_without_operator
         changes = reader.selected_changes_in_transaction(
             owner_id=owner, epoch=epoch, since=0, now=reconcile_at
         )
-        assert sequence == 2 and len(changes.changes) == 2
-        assert changes.changes[-1].item and changes.changes[-1].item.event_id == event_id
+        if dated:
+            assert sequence == 2 and len(changes.changes) == 2
+            assert changes.changes[-1].item and changes.changes[-1].item.event_id == event_id
+        else:
+            assert sequence == 0 and not changes.changes
+            assert not public_stories_in_transaction(
+                reader, owner_id=owner, event_ids=(event_id,), now=reconcile_at
+            )
+            assert not hot_stories_in_transaction(reader, owner_id=owner, now=reconcile_at).stories
         assert session.execute(text("SELECT count(*) FROM ai_calls")).scalar_one() == calls
         assert enqueue_due_publication_in_transaction(session, now=reconcile_at) == 0

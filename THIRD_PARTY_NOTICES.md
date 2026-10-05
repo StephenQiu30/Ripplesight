@@ -43,6 +43,11 @@ Evidence, model usage, Job/Outbox, Kafka and notification ownership. Business UI
 under the corresponding `frontend/src/app/` routes implements these contracts;
 no upstream brand assets or private source material are included.
 
+Initial-import archive admission, undated derived-publication gates and robust source
+date/Atom text parsing are adapted from AIHOT commits `50b562b`, `309e32e` and
+`6560d7f` (reference snapshot `9acad0c`), including their source/publication date tests;
+HotKey retains undated raw reading and personal reports under its own contracts.
+
 Source avatar selection/cache and native/embedding event rematching are adapted
 from upstream `sources/icons.ts`, `providers/embeddings.ts` and `events/group.ts`.
 Industry topic definitions and canonical share layouts/QR behavior are adapted

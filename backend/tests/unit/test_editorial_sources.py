@@ -264,7 +264,7 @@ def test_rss_etag_304_redirect_and_changed_configuration_never_false_empty():
         return httpx.Response(200, text=feed, headers={"etag": "version-one"})
 
     http, _ = admitted_http(handler)
-    registry = EditorialSourceRegistry(http=http, clock=lambda: NOW)
+    registry = EditorialSourceRegistry(http=http, clock=lambda: NOW, source_added_at=NOW)
     p = profile(config("rss", feed_url="https://example.com/feed", allowed_hosts=("example.com",)))
     first = registry.collect(p, EditorialCursor(), {})
     assert first.status == "complete" and len(first.materials) == 1

@@ -242,6 +242,7 @@ class EditorialSourceConfiguration(EditorialContract):
                 "preserve_url_fragment",
                 "allow_categories",
                 "deny_categories",
+                "published_at_utc_offset",
             },
             "web_list": collected
             | {
@@ -276,6 +277,7 @@ class EditorialSourceConfiguration(EditorialContract):
                 "author_paths",
                 "published_at_path",
                 "published_at_unit",
+                "published_at_utc_offset",
                 "external_id_path",
                 "url_template",
                 "url_template_fallback",

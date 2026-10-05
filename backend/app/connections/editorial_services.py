@@ -167,6 +167,7 @@ class PreparedEditorialRun:
     known: Mapping[str, EditorialKnownMaterial]
     prepared_page: EditorialPage | None
     should_collect: bool
+    source_added_at: datetime | None = None
 
 
 @dataclass
@@ -963,6 +964,7 @@ class EditorialSourceService:
                 cast(Mapping[str, EditorialKnownMaterial], known),
                 page,
                 False,
+                p.created_at,
             )
         if not p.enabled:
             raise ApplicationError("editorial_source_disabled")
@@ -1016,6 +1018,7 @@ class EditorialSourceService:
             cast(Mapping[str, EditorialKnownMaterial], known),
             None,
             v.kind != "external",
+            p.created_at,
         )
 
     def stage_page(

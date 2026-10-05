@@ -430,6 +430,7 @@ class ConfiguredEditorialCollectorFactory:
             jina=jina,
             clock=self._clock,
             preview=self._preview,
+            source_added_at=prepared.source_added_at,
         )
 
     def _require_rsshub_admission(self, prepared: PreparedEditorialRun) -> EditorialRsshubAdmission:

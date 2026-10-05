@@ -11,10 +11,10 @@ def test_story_index_requires_every_fixed_member_even_outside_report_subset(monk
     now = datetime(2026, 10, 2, tzinfo=UTC)
     event_id, fact_id = uuid4(), uuid4()
     displayed = member(at=now, event=event_id, fact=fact_id).projection.model_copy(
-        update={"indexable": True, "observation_id": uuid4()}
+        update={"indexable": True, "observation_id": uuid4(), "published_at": now}
     )
     undisplayed = member(at=now).projection.model_copy(
-        update={"indexable": False, "observation_id": uuid4()}
+        update={"indexable": False, "observation_id": uuid4(), "published_at": now}
     )
     story = SimpleNamespace(
         event_id=event_id,
@@ -46,7 +46,7 @@ def test_story_index_requires_every_fixed_member_even_outside_report_subset(monk
         module,
         "load_observation_context_in_transaction",
         lambda *a, observation_id, **k: SimpleNamespace(
-            source_key=source_by_observation[observation_id]
+            source_key=source_by_observation[observation_id], published_at=now
         ),
     )
     reader = PublicationReadingService(

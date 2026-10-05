@@ -234,7 +234,7 @@ def test_instagram_anonymous_declaration_and_review_cannot_certify_shared_cache(
     http, sent, settled, _checked = client(
         config, lambda request: httpx.Response(200, content=FEED)
     )
-    registry = EditorialSourceRegistry(http=http, clock=lambda: NOW)
+    registry = EditorialSourceRegistry(http=http, clock=lambda: NOW, source_added_at=NOW)
     page = registry.collect(profile(config), EditorialCursor(), {})
     registry.close()
     assert page.status == "blocked"
@@ -245,7 +245,7 @@ def test_instagram_anonymous_declaration_and_review_cannot_certify_shared_cache(
 def test_approved_feed_retains_observed_dates_url_and_unknown_downstream_count():
     config = rsshub_config()
     http, sent, settled, checked = client(config, lambda request: httpx.Response(200, content=FEED))
-    registry = EditorialSourceRegistry(http=http, clock=lambda: NOW)
+    registry = EditorialSourceRegistry(http=http, clock=lambda: NOW, source_added_at=NOW)
     page = registry.collect(profile(config), EditorialCursor(), {})
     registry.close()
     assert page.status == "complete" and page.request_count == 1
@@ -295,7 +295,7 @@ def test_bad_or_empty_feeds_stop_without_success_cursor_or_detail_fallback(body,
         initialized_at=NOW - timedelta(days=1), last_ok_at=NOW - timedelta(days=1)
     )
     http, sent, _, _ = client(config, lambda request: httpx.Response(200, content=body))
-    registry = EditorialSourceRegistry(http=http, clock=lambda: NOW)
+    registry = EditorialSourceRegistry(http=http, clock=lambda: NOW, source_added_at=NOW)
     page = registry.collect(profile(config), original, {})
     registry.close()
     assert (page.status, page.reason, page.cursor) == (status, reason, original)
@@ -353,7 +353,7 @@ def test_missing_server_approval_is_denied_before_network():
 def test_unexpected_304_has_no_implicit_second_request():
     config = rsshub_config()
     http, sent, _, _ = client(config, lambda request: httpx.Response(304))
-    registry = EditorialSourceRegistry(http=http, clock=lambda: NOW)
+    registry = EditorialSourceRegistry(http=http, clock=lambda: NOW, source_added_at=NOW)
     page = registry.collect(profile(config), EditorialCursor(), {})
     registry.close()
     assert page.status == "partial" and page.reason == "rsshub_unexpected_not_modified"
@@ -371,7 +371,7 @@ def test_matching_304_is_only_a_feed_cache_observation():
         ),
     )
     http, sent, _, _ = client(config, lambda request: httpx.Response(304))
-    registry = EditorialSourceRegistry(http=http, clock=lambda: NOW)
+    registry = EditorialSourceRegistry(http=http, clock=lambda: NOW, source_added_at=NOW)
     page = registry.collect(profile(config), cursor, {})
     registry.close()
     assert page.status == "unchanged" and page.request_count == 1
