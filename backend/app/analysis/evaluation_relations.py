@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import random
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from typing import Any, cast
 from uuid import UUID, uuid4, uuid5
@@ -132,6 +133,90 @@ def relation_prompt_version() -> str:
     from analysis.prompts import editorial_prompt_version
 
     return "relationbench@" + editorial_prompt_version("group-pair").split("@")[-1]
+
+
+def compare_relation_versions(
+    cases: Sequence[RelationGoldCaseInput],
+    predictions_by_version: Mapping[str, Sequence[RelationPredictionInput]],
+    *,
+    baseline_version: str,
+) -> dict[str, Any]:
+    """Compare frozen old/new outputs on identical gold, without storage or model calls.
+
+    Keys are the actual receipt prompt versions, not model names. A failed case must
+    have an explicit error prediction; silently dropping cases would bias the metrics.
+    """
+    expected = {case.case_id for case in cases}
+    if not 1 <= len(cases) <= 5000 or len(expected) != len(cases):
+        raise ValueError("comparison requires unique nonempty gold cases")
+    if (
+        not 2 <= len(predictions_by_version) <= 5
+        or baseline_version not in predictions_by_version
+        or any(not version.strip() or len(version) > 200 for version in predictions_by_version)
+    ):
+        raise ValueError("comparison requires explicit baseline and prompt versions")
+    ordered = sorted(cases, key=lambda case: case.case_id)
+    by_version = {}
+    by_case: dict[str, dict[str, RelationPredictionInput]] = {}
+    for version, predictions in predictions_by_version.items():
+        if len(predictions) != len(expected) or {row.case_id for row in predictions} != expected:
+            raise ValueError("prompt versions must compare the same unique cases")
+        indexed = {row.case_id: row for row in predictions}
+        by_case[version] = indexed
+        by_version[version] = relation_metrics(
+            [
+                {
+                    "gold": case.gold_relation,
+                    "relation": indexed[case.case_id].relation,
+                    "confidence": indexed[case.case_id].confidence,
+                }
+                for case in ordered
+            ]
+        )
+    baseline = by_version[baseline_version]
+    deltas = {}
+    for version, metrics in by_version.items():
+        deltas[version] = {
+            key: metrics[key] - baseline[key]
+            if metrics[key] is not None and baseline[key] is not None
+            else None
+            for key in ("accuracy", "macro_f1", "errors", "evaluated")
+        }
+        deltas[version]["story_ties"] = [
+            {
+                "threshold": candidate["threshold"],
+                **{
+                    key: candidate[key] - base[key]
+                    for key in ("tp", "fp", "tn", "fn", "errors", "precision", "recall", "f1")
+                },
+            }
+            for candidate, base in zip(metrics["story_ties"], baseline["story_ties"], strict=True)
+        ]
+    return {
+        "gold_fingerprint": hashlib.sha256(
+            json.dumps(
+                [case.model_dump(mode="json") for case in ordered],
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest(),
+        "case_ids": [case.case_id for case in ordered],
+        "baseline_version": baseline_version,
+        "by_version": by_version,
+        "delta_from_baseline": deltas,
+        "changed_cases": [
+            case.case_id
+            for case in ordered
+            if len(
+                {
+                    (indexed[case.case_id].relation, indexed[case.case_id].error_code)
+                    for indexed in by_case.values()
+                }
+            )
+            > 1
+        ],
+    }
 
 
 class RelationBenchService:

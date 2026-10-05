@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 
@@ -20,6 +21,7 @@ class EditorialEventInput:
     selected: bool
     fact_frame: dict[str, object] | None
     provenance_fingerprint: str
+    scope: Literal["single", "composite", "unknown"] = "unknown"
     observation_id: UUID | None = None
     input_observation_ids: tuple[UUID, ...] = ()
 

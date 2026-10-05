@@ -6,11 +6,15 @@ from analysis import prompts
 
 
 def test_migrated_group_rules_include_occurrences_developments_and_roundups() -> None:
-    rendered = prompts.render_editorial_prompt("group-batch")
+    rendered = prompts.render_editorial_prompt("group-pair")
     assert "SAME_OCCURRENCE" in rendered
     assert "SAME_STORY" in rendered
     assert "ROUNDUP" in rendered
     assert "{{>" not in rendered
+    assert "具体发布对象或具体发生" in rendered
+    assert "两个各自独立的产品更新" in rendered
+    assert "多个演讲者的会议综述" in rendered
+    assert "不能只抽取两篇共同提到的一个产品" in rendered
 
 
 def test_editorial_prompt_uses_hotkey_brand_and_requires_all_inputs() -> None:
@@ -101,7 +105,8 @@ def test_all_migrated_templates_render_with_the_declared_values() -> None:
         "post": "source post",
     }
     names = sorted(p.stem for p in prompts._EDITORIAL_PROMPT_DIR.glob("*.md"))
-    assert len(names) == 28
+    assert len(names) == 26
+    assert "group-batch" not in names and "group-signal" not in names
     for name in names:
         assert "{{" not in prompts.render_editorial_prompt(name, values)
         assert prompts.editorial_prompt_version(name).startswith(f"{name}@")

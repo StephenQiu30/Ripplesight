@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import cast
+from typing import Literal, cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -140,6 +140,7 @@ def record_candidate_facts_in_transaction(
     input_times: dict[UUID, tuple[datetime, str]],
     signal_version_ids: frozenset[UUID] = frozenset(),
     input_frames: dict[UUID, dict[str, object] | None] | None = None,
+    input_scopes: dict[UUID, Literal["single", "composite", "unknown"] | None] | None = None,
 ) -> None:
     if not session.in_transaction():
         raise RuntimeError("fact writer requires caller transaction")
@@ -211,9 +212,25 @@ def record_candidate_facts_in_transaction(
                 existing_fact_id=root.fact_id if root else None,
             )
         ]
+    input_scopes = dict(input_scopes or {})
+    for member in members:
+        if member.content_version_id not in input_scopes and member.input_manifest is not None:
+            raw_scope = member.input_manifest.get("editorial_scope")
+            input_scopes[member.content_version_id] = (
+                cast(Literal["single", "composite", "unknown"], raw_scope)
+                if isinstance(raw_scope, str) and raw_scope in {"single", "composite", "unknown"}
+                else None
+                if raw_scope is None
+                else "unknown"
+            )
     created_by_version: dict[UUID, UUID] = {}
     new_fact_groups: list[tuple[EventFact, EventFactDecision]] = []
     for group in groups:
+        scopes = {input_scopes.get(identity) for identity in group.member_version_ids}
+        if "unknown" in scopes:
+            raise FactGroupingConflictError("scope_unknown")
+        if "composite" in scopes and (group.existing_fact_id is None or scopes != {"composite"}):
+            raise FactGroupingConflictError("composite_without_fact")
         if group.existing_fact_id is not None:
             existing = next(
                 (row for row in assignments if row.fact_id == group.existing_fact_id), None
@@ -222,6 +239,11 @@ def record_candidate_facts_in_transaction(
                 raise FactGroupingConflictError("fact_target_changed")
             target_fact = session.get(EventFact, existing.fact_id)
             assert target_fact is not None
+            if "composite" in scopes and (
+                target_fact.status != "confirmed"
+                or existing.relation not in {"root", "development", "background"}
+            ):
+                raise FactGroupingConflictError("composite_without_fact")
         else:
             if set(group.member_version_ids) <= signal_version_ids:
                 raise FactGroupingConflictError("signal_only_fact")
@@ -308,6 +330,7 @@ def record_candidate_facts_in_transaction(
                     content_version_id=member.content_version_id,
                     role="mention"
                     if member.content_version_id in signal_version_ids
+                    or (input_scopes or {}).get(member.content_version_id) == "composite"
                     else "primary"
                     if not has_primary and index == 0
                     else "report",
