@@ -147,7 +147,6 @@ def test_rss_continuous_stream_reaches_licensed_selected_matches_after_2000_nonm
 
     now = datetime(2026, 10, 2, tzinfo=UTC)
     sample = member(at=now)
-    final = detail()
     seen = []
 
     def stream(*_args, **kwargs):
@@ -163,9 +162,13 @@ def test_rss_continuous_stream_reaches_licensed_selected_matches_after_2000_nonm
             yield PublicationListingMember(projection, ())
 
     class Reader:
+        def item(self, projection):
+            from publication.reading import public_item
+
+            return public_item(projection)
+
         def detail_in_transaction(self, **kwargs):
-            assert kwargs["redistribute"] is True
-            return final
+            raise AssertionError("摘要 RSS 不读取正文")
 
     @contextmanager
     def read(_self):

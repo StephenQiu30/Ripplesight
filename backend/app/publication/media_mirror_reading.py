@@ -24,7 +24,7 @@ from publication.media_mirror_services import (
 )
 from publication.publication_models import PublicationRecord
 from publication.reading import PublicationReadingService
-from publication.schemas import FrozenPublicationReference, PublicMediaView
+from publication.schemas import Category, FrozenPublicationReference, PublicMediaView
 
 
 def load_available_media_in_transaction(
@@ -137,8 +137,15 @@ class MediaBytes:
 
 
 class PublicationMediaReadingService:
-    def __init__(self, session: Session, storage: MediaObjectStorage | None) -> None:
+    def __init__(
+        self,
+        session: Session,
+        storage: MediaObjectStorage | None,
+        *,
+        public_categories: tuple[Category, ...] = (),
+    ) -> None:
         self.session, self.storage = session, storage
+        self.public_categories = public_categories
 
     def _guard(
         self, *, owner_id: UUID, file_id: UUID, mode: str, now: datetime, redistribute: bool
@@ -180,14 +187,14 @@ class PublicationMediaReadingService:
             for item in candidates
         ):
             raise ApplicationError("resource_not_found")
-        if redistribute:
+        if redistribute or self.public_categories:
             row = self.session.get(PublicationRecord, (owner_id, run.content_id))
             live = (
-                PublicationReadingService(self.session)
+                PublicationReadingService(self.session, public_categories=self.public_categories)
                 ._live(owner_id=owner_id, rows=[row] if row else [], now=now)
                 .get(run.content_id)
             )
-            if live is None or not live[0].syndicate:
+            if live is None or (redistribute and not live[0].syndicate):
                 raise ApplicationError("resource_not_found")
         if file_id not in load_readable_resource_ids(
             self.session,

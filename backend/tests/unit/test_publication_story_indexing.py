@@ -71,6 +71,24 @@ def test_story_index_requires_every_fixed_member_even_outside_report_subset(monk
     assert not module.public_stories_in_transaction(
         reader, owner_id=uuid4(), event_ids=(event_id,), now=now
     )[0].indexable
+    # Exclusion/withdrawal of a hidden fixed member invalidates the whole old narrative.
+    values.pop(undisplayed.content_id)
+    assert (
+        module.public_stories_in_transaction(
+            reader, owner_id=uuid4(), event_ids=(event_id,), now=now
+        )
+        == []
+    )
+    values[undisplayed.content_id] = (
+        undisplayed.model_copy(update={"content_version_id": uuid4()}),
+        None,
+    )
+    assert (
+        module.public_stories_in_transaction(
+            reader, owner_id=uuid4(), event_ids=(event_id,), now=now
+        )
+        == []
+    )
 
 
 def test_hot_ranking_considers_story_after_two_thousand_raw_records(monkeypatch):

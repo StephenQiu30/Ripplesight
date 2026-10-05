@@ -251,6 +251,7 @@ def get_publication_service(
         session,
         origin=settings.web_base_url,
         indexing_enabled=settings.publication_indexing_enabled,
+        public_categories=settings.public_publication_categories,
     )
 
 
@@ -287,7 +288,9 @@ def get_publication_media_reading_service(
     session: SessionDependency,
 ) -> PublicationMediaReadingService:
     storage = cast(MediaObjectStorage | None, getattr(request.app.state, "media_storage", None))
-    return PublicationMediaReadingService(session, storage)
+    return PublicationMediaReadingService(
+        session, storage, public_categories=request.app.state.settings.public_publication_categories
+    )
 
 
 PublicationMediaReadingServiceDependency = Annotated[
