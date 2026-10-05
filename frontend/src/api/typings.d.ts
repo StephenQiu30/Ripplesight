@@ -2534,6 +2534,11 @@ declare namespace HotKeyAPI {
     replayed?: boolean;
   };
 
+  type EventFactConditionView = {
+    /** Quote */
+    quote: string;
+  };
+
   type EventFactMemberView = {
     /** Content Id */
     content_id: string;
@@ -2570,6 +2575,10 @@ declare namespace HotKeyAPI {
     title: string | null;
     /** Summary */
     summary: string | null;
+    /** Evidence */
+    evidence?: string | null;
+    /** Conditions */
+    conditions?: EventFactConditionView[];
     /** First Seen At */
     first_seen_at: string;
     /** First Seen Basis */
@@ -2840,6 +2849,11 @@ declare namespace HotKeyAPI {
     items: ExternalIngressItem[];
   };
 
+  type FactCondition = {
+    /** Quote */
+    quote: string;
+  };
+
   type FactOutput = {
     /** Title */
     title: string;
@@ -2851,6 +2865,10 @@ declare namespace HotKeyAPI {
     object?: string | null;
     /** Occurredat */
     occurredAt?: string | null;
+    /** Evidence */
+    evidence?: string | null;
+    /** Conditions */
+    conditions?: FactCondition[];
   };
 
   type FactRelation =
@@ -6646,6 +6664,24 @@ declare namespace HotKeyAPI {
     unavailable: number;
   };
 
+  type StructureDiscard = {
+    /** Field */
+    field: string;
+    /** Reason */
+    reason:
+      | "invalid_type"
+      | "too_long"
+      | "empty"
+      | "ellipsis"
+      | "cross_paragraph"
+      | "not_in_original"
+      | "not_in_model_input"
+      | "too_many"
+      | "composite"
+      | "no_original"
+      | "invalid_scope";
+  };
+
   type StructureOutput = {
     /** Category */
     category:
@@ -6661,6 +6697,10 @@ declare namespace HotKeyAPI {
     /** Subjects */
     subjects: string[];
     fact: FactOutput | null;
+    /** Scope */
+    scope?: "single" | "composite" | "unknown";
+    /** Discards */
+    discards?: StructureDiscard[];
   };
 
   type TargetInput = {

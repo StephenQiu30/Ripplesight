@@ -21,6 +21,7 @@ The prefilter, independent scoring, structure, writing and identity rules under
 `backend/app/analysis/editorial_*` are adapted from upstream `editorial/analyze.ts`,
 `editorial/input.ts`, `editorial/writing.ts`, `industry/selection.ts` and
 `industry/taxonomy.ts`; HotKey retains its own persistence, topic relevance and jobs.
+WP-008-002 updates the structure template, category guides and original-quote validation from AIHOT commit `9acad0c3d7687d9210c2b7774f83799dfd36734b`, preserving HotKey JSONB persistence and adding field-level discard diagnostics.
 
 Codex announcement logic under `backend/app/monitors/codex_*` is adapted from
 upstream `monitor/{time,recognize,assemble,scan,read}.ts` and the monitor administration
