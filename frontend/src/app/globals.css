@@ -139,3 +139,167 @@
     scroll-behavior: auto;
   }
 }
+
+@layer components {
+  .rich-content {
+    @apply text-sm leading-8;
+    & p {
+      @apply my-4 whitespace-pre-wrap;
+    }
+    & h1 {
+      @apply mt-10 mb-5 text-3xl font-medium;
+    }
+    & h2 {
+      @apply mt-8 mb-4 text-2xl font-medium;
+    }
+    & h3 {
+      @apply mt-7 mb-3 text-xl font-medium;
+    }
+    & :is(h4, h5, h6) {
+      @apply mt-5 mb-3 text-lg font-medium;
+    }
+    & a {
+      @apply break-words underline underline-offset-4;
+    }
+    & :is(ul, ol) {
+      @apply my-4 pl-6;
+    }
+    & ul {
+      @apply list-disc;
+    }
+    & ol {
+      @apply list-decimal;
+    }
+    & ol[type="I"] {
+      list-style-type: upper-roman;
+    }
+    & ol[type="i"] {
+      list-style-type: lower-roman;
+    }
+    & ol[type="A"] {
+      list-style-type: upper-alpha;
+    }
+    & ol[type="a"] {
+      list-style-type: lower-alpha;
+    }
+    & li {
+      @apply my-1;
+    }
+    & blockquote {
+      @apply text-muted-foreground my-5 border-l-2 pl-5;
+    }
+    & pre {
+      @apply bg-muted my-5 overflow-x-auto rounded-md p-4 font-mono text-sm leading-6;
+    }
+    & :not(pre) > code {
+      @apply bg-muted rounded px-1 py-0.5 font-mono text-sm;
+    }
+    & table {
+      @apply my-5 block max-w-full overflow-x-auto;
+    }
+    & :is(th, td) {
+      @apply border-border border p-3 text-left;
+    }
+    & :is(img, video) {
+      @apply my-4 h-auto max-w-full;
+    }
+    & figcaption {
+      @apply text-muted-foreground text-sm;
+    }
+    & hr {
+      @apply border-border my-7 border-t;
+    }
+  }
+}
+
+/* Editor.js injects unlayered styles; keep scoped overrides at the same cascade level. */
+.rich-editor {
+  @apply border-input bg-background rounded-md border px-5 py-4 text-sm leading-8;
+  & .ce-block__content,
+  & .ce-toolbar__content {
+    @apply max-w-full;
+  }
+  & .codex-editor__redactor {
+    padding-bottom: 0 !important;
+  }
+  & .ce-toolbar__actions {
+    @apply left-0;
+    right: auto;
+  }
+  & .ce-block__content {
+    @apply ml-12;
+  }
+  &
+    :is(
+      .ce-popover,
+      .ce-popover__container,
+      .ce-inline-toolbar,
+      .ce-conversion-toolbar
+    ) {
+    --color-background: var(--popover);
+    --color-text-primary: var(--popover-foreground);
+    --color-border: var(--border);
+    --color-background-item-hover: var(--accent);
+    --color-background-item-focus: var(--accent);
+    @apply bg-popover text-popover-foreground border-border;
+  }
+  &
+    :is(
+      .ce-toolbar__plus,
+      .ce-toolbar__settings-btn,
+      .ce-inline-tool,
+      .ce-popover-item
+    ) {
+    @apply text-foreground;
+  }
+  &
+    :is(
+      .ce-toolbar__plus,
+      .ce-toolbar__settings-btn,
+      .ce-inline-tool,
+      .ce-popover-item
+    ):hover {
+    @apply bg-accent;
+  }
+  & :is(.ce-block--selected .ce-block__content, .ce-popover-item--focused) {
+    @apply bg-accent;
+  }
+  & :is(.cdx-search-field, .ce-popover__search) {
+    @apply bg-muted text-foreground border-input;
+  }
+  & :is(.ce-code__textarea, .tc-cell, .tc-toolbox, .tc-popover) {
+    @apply bg-background text-foreground border-input;
+  }
+  & :is(.ce-header, .cdx-quote__text, .cdx-quote__caption) {
+    @apply text-foreground;
+  }
+  &
+    :is(
+      .ce-popover-item__icon,
+      .ce-popover-item__title,
+      .ce-popover-item__secondary-label
+    ) {
+    @apply text-foreground;
+  }
+  & .ce-popover-item__icon {
+    @apply bg-popover shadow-none;
+  }
+  & h1.ce-header {
+    @apply text-3xl font-medium;
+  }
+  & h2.ce-header {
+    @apply text-2xl font-medium;
+  }
+  & h3.ce-header {
+    @apply text-xl font-medium;
+  }
+  & :is(h4, h5, h6).ce-header {
+    @apply text-lg font-medium;
+  }
+  & .cdx-input {
+    @apply border-input;
+  }
+  & [contenteditable]:focus-visible {
+    @apply outline-ring outline-2 outline-offset-2;
+  }
+}

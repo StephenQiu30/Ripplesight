@@ -28,6 +28,8 @@
 
 ## Web 目录与页面门禁
 
+- 富文本使用 `components/editor` 的 Editor/Viewer；Editor.js 只在客户端动态加载，页面不直接实例化。Viewer 支持块 JSON 与既有 Markdown/HTML/text，统一清洗正文与链接，不能执行原始 HTML。编辑器自带工具是官方 shadcn 控件规则的富文本例外，外层操作仍用 shadcn；保留 SSR 阅读、报告引用及旧本机笔记。
+
 - 业务请求只用 `frontend/src/api` Umi生成函数，接 `src/request.ts` 唯一Axios；业务不直接导入Axios/传输函数，不用fetch/XHR或手写下载URL。只允许导入错误类和请求选项类型，选项不能覆盖生成方法/地址/参数。
 - SSR origin 在传输层统一解析，限定Cookie逐请求传递，不保存在全局defaults；透明同源代理只做基础设施转发。ESLint检查业务边界，生成漂移检查API，基础设施例外只按确切路径处理。
 - 页面专属组件在app路由components，跨页稳定复用才迁components/<feature>，官方基础组件在ui。根布局装配独立layout目录的BasicLayout/Header/Footer/Container/UsageGuide；不建features/common/patterns/shared或scripts。

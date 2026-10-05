@@ -1,3 +1,4 @@
+import { Viewer } from "@/components/editor";
 import {
   NavigationMenu,
   NavigationMenuList,
@@ -43,9 +44,7 @@ export function PublicEditionReader({
         </time>
       </div>
       <h1 className="text-3xl leading-tight font-medium">{edition.title}</h1>
-      <p className="text-muted-foreground leading-8 whitespace-pre-wrap">
-        {edition.lead}
-      </p>
+      <Viewer value={edition.lead} className="text-muted-foreground" />
       <div className="text-muted-foreground flex flex-wrap gap-4 text-sm">
         <span>
           {edition.metrics.selected_count ?? edition.entries.length} 条精选
@@ -70,9 +69,7 @@ export function PublicEditionReader({
       {edition.themes.map((theme) => (
         <section key={theme.heading} className="flex flex-col gap-y-4">
           <h2 className="text-xl font-medium">{theme.heading}</h2>
-          <p className="text-muted-foreground leading-7 whitespace-pre-wrap">
-            {theme.summary}
-          </p>
+          <Viewer value={theme.summary} className="text-muted-foreground" />
           <PublicItemCards items={references(theme.content_ids)} />
         </section>
       ))}

@@ -25,7 +25,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiRequestError } from "@/request";
 import { PrivateExport } from "@/components/reports/private-export";
-import { ReportMarkdown } from "./report-markdown";
+import { Viewer } from "@/components/editor";
 import { safeHttpUrl } from "./report-links";
 
 type DetailState =
@@ -143,7 +143,13 @@ function ReportDetailContent({ reportId }: { reportId: string }) {
           <p className="text-muted-foreground mt-4 text-sm leading-6">
             {reportTime(report.window_start)} 至 {reportTime(report.window_end)}
           </p>
-          <ReportMarkdown report={report} />
+          <article className="mt-10">
+            <Viewer
+              value={report.body_markdown}
+              citations={report.citations}
+              headingOffset={1}
+            />
+          </article>
           <section className="mt-8 space-y-3" aria-label="私人报告导出">
             <h2 className="text-lg font-medium">导出这版报告</h2>
             <p className="text-muted-foreground text-sm">
