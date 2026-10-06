@@ -26,7 +26,7 @@ describe("unavailable selected source", () => {
       );
     }
     render(<ExistingSelection />);
-    const checkbox = screen.getByRole("checkbox", { name: "已失效来源" });
+    const checkbox = screen.getByRole("switch", { name: "已失效来源" });
     expect((checkbox as HTMLButtonElement).disabled).toBe(false);
     expect(checkbox.getAttribute("aria-checked")).toBe("true");
     fireEvent.click(checkbox);

@@ -48,6 +48,13 @@ import {
   tryBeginTopicSubmission,
   type TopicFieldErrors,
 } from "@/components/monitors/topic-validation";
+import {
+  readMonitorFailure,
+  topicStatusLabel,
+  type MonitorFailure,
+} from "@/components/monitors/monitor-presenters";
+import { TopicAlerts } from "@/components/monitors/topic-alerts";
+import { Separator } from "@/components/ui/separator";
 import { PageState } from "@/components/system/page-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -63,13 +70,17 @@ import { ApiRequestError } from "@/request";
 
 import { TopicRunActions } from "./topic-run-actions";
 
-type TopicEditorProps = { topicId: string };
+type TopicEditorProps = {
+  topicId: string;
+  embedded?: boolean;
+  onTopicChange?: (topic: HotKeyAPI.MonitorTopicView) => void;
+};
 
 type EditorState =
   | { status: "loading" }
   | { status: "ready"; topic: HotKeyAPI.MonitorTopicView }
   | { status: "not-found" }
-  | { status: "error"; message: string; requestId?: string };
+  | ({ status: "error" } & MonitorFailure);
 
 type ActionFeedback = {
   kind: "error" | "conflict" | "success";
@@ -120,7 +131,11 @@ function toActionFeedback(error: unknown): ActionFeedback {
   return { kind: "error", message: "主题操作失败，请稍后重试。" };
 }
 
-export function TopicEditor({ topicId }: TopicEditorProps) {
+export function TopicEditor({
+  topicId,
+  embedded = false,
+  onTopicChange,
+}: TopicEditorProps) {
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -130,6 +145,10 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
   }, []);
   const router = useRouter();
   const [state, setState] = useState<EditorState>({ status: "loading" });
+  const [reloadFailure, setReloadFailure] = useState<MonitorFailure | null>(
+    null,
+  );
+  const [refreshing, setRefreshing] = useState(false);
   const [name, setName] = useState("");
   const [matchAny, setMatchAny] = useState("");
   const [matchAll, setMatchAll] = useState("");
@@ -155,21 +174,28 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
   }, [fieldErrors]);
   const isBusy = pendingAction !== null;
 
-  const applyTopic = useCallback((value: HotKeyAPI.MonitorTopicView) => {
-    setState({ status: "ready", topic: value });
-    setName(value.name);
-    setMatchAny(value.rules.match_any.join("\n"));
-    setMatchAll(value.rules.match_all.join("\n"));
-    setExclude(value.rules.exclude.join("\n"));
-    setSourceKeys(value.source_keys);
-    setEditorialProfileIds(value.editorial_profile_ids ?? []);
-    setCollectionIntervalSeconds(value.collection_interval_seconds);
-    setReportTime(value.report_time);
-    setWeeklyReportEnabled(value.weekly_report_enabled);
-    setNotificationTargetNames(value.notification_target_names);
-  }, []);
+  const applyTopic = useCallback(
+    (value: HotKeyAPI.MonitorTopicView) => {
+      setState({ status: "ready", topic: value });
+      setReloadFailure(null);
+      onTopicChange?.(value);
+      setName(value.name);
+      setMatchAny(value.rules.match_any.join("\n"));
+      setMatchAll(value.rules.match_all.join("\n"));
+      setExclude(value.rules.exclude.join("\n"));
+      setSourceKeys(value.source_keys);
+      setEditorialProfileIds(value.editorial_profile_ids ?? []);
+      setCollectionIntervalSeconds(value.collection_interval_seconds);
+      setReportTime(value.report_time);
+      setWeeklyReportEnabled(value.weekly_report_enabled);
+      setNotificationTargetNames(value.notification_target_names);
+    },
+    [onTopicChange],
+  );
 
   const loadTopic = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
     setFieldErrors({});
     try {
       const [topic, sourcePage] = await Promise.all([
@@ -196,17 +222,20 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
             ? `请求编号：${error.requestId}`
             : undefined,
         });
-        setState({
-          status: "error",
-          message: error.message,
-          requestId: error.requestId,
-        });
+        const failure = readMonitorFailure(error, "主题加载失败，请稍后重试。");
+        if (state.status === "ready" && !failure.forbidden)
+          setReloadFailure(failure);
+        else setState({ status: "error", ...failure });
       } else {
         toast.error("主题加载失败，请稍后重试。");
-        setState({ status: "error", message: "主题加载失败，请稍后重试。" });
+        const failure = readMonitorFailure(error, "主题加载失败，请稍后重试。");
+        if (state.status === "ready") setReloadFailure(failure);
+        else setState({ status: "error", ...failure });
       }
+    } finally {
+      if (mounted.current) setRefreshing(false);
     }
-  }, [applyTopic, topicId]);
+  }, [applyTopic, topicId, state, refreshing]);
 
   useEffect(() => {
     let isCurrent = true;
@@ -241,14 +270,13 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
           });
           setState({
             status: "error",
-            message: error.message,
-            requestId: error.requestId,
+            ...readMonitorFailure(error, "主题加载失败，请稍后重试。"),
           });
         } else {
           toast.error("主题加载失败，请稍后重试。");
           setState({
             status: "error",
-            message: "主题加载失败，请稍后重试。",
+            ...readMonitorFailure(error, "主题加载失败，请稍后重试。"),
           });
         }
       });
@@ -431,15 +459,28 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
   if (state.status === "error") {
     return (
       <PageState
-        state="error"
+        state={state.forbidden ? "forbidden" : "error"}
         eyebrow="加载失败"
-        title="暂时无法读取主题"
-        description="请重新加载主题。"
+        title={state.forbidden ? "无权读取监控主题" : "暂时无法读取主题"}
+        description={
+          state.forbidden
+            ? "请登录有权访问这个主题的账户。"
+            : "请重新加载主题。"
+        }
+        errorCode={state.code}
+        httpStatus={state.httpStatus}
         action={
-          <Button type="button" onClick={() => void loadTopic()}>
-            <RotateCcwIcon data-icon="inline-start" />
-            重新加载
-          </Button>
+          state.forbidden ? undefined : (
+            <Button
+              type="button"
+              disabled={refreshing}
+              aria-busy={refreshing}
+              onClick={() => void loadTopic()}
+            >
+              <RotateCcwIcon data-icon="inline-start" />
+              重新加载
+            </Button>
+          )
         }
       />
     );
@@ -448,43 +489,90 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
   const { topic } = state;
   const formDisabled = isBusy || topic.status === "archived";
   return (
-    <UI.Content>
-      <Button asChild variant="ghost" size="navigation" className="mb-10">
-        <Link href="/topics">返回我的关注</Link>
-      </Button>
-      <UI.Content className="grid gap-12 md:grid-cols-2 md:gap-16">
-        <UI.Content as="section">
+    <UI.Content className="flex min-w-0 flex-col gap-8">
+      {reloadFailure && (
+        <PageState
+          state="stale"
+          eyebrow="监控主题"
+          title="主题刷新失败"
+          description="已显示的规则已过期；当前草稿会保留，请重新读取后再保存。"
+          errorCode={reloadFailure.code}
+          httpStatus={reloadFailure.httpStatus}
+          staleAt={topic.updated_at}
+          action={
+            <Button
+              type="button"
+              variant="outline"
+              disabled={refreshing}
+              onClick={() => void loadTopic()}
+            >
+              重新读取
+            </Button>
+          }
+        />
+      )}
+      {!embedded && (
+        <Button
+          asChild
+          variant="ghost"
+          size="navigation"
+          className="self-start"
+        >
+          <Link href="/topics">返回我的关注</Link>
+        </Button>
+      )}
+      <UI.Content className="flex min-w-0 flex-col gap-8">
+        <UI.Content
+          as="section"
+          aria-label="主题详情"
+          className="flex flex-col gap-5"
+        >
           <UI.Content className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">
-              {topic.status === "archived"
-                ? "已归档"
-                : topic.status === "active"
-                  ? "运行中"
-                  : "已暂停"}
-            </Badge>
-            <UI.Text as="span" className="text-muted-foreground text-sm">
-              版本 v{topic.current_version}
+            <Badge variant="secondary">{topicStatusLabel(topic.status)}</Badge>
+            <UI.Text as="span" tone="muted" size="sm">
+              版本 <UI.InlineCode>v{topic.current_version}</UI.InlineCode>
             </UI.Text>
           </UI.Content>
-          <UI.Heading
-            level={1}
-            className="mt-5 text-4xl leading-tight font-normal tracking-tight sm:text-5xl"
+          <UI.Heading level={embedded ? 2 : 1}>{topic.name}</UI.Heading>
+          <UI.Content
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+            aria-label="已保存关键词"
           >
-            编辑关注
-          </UI.Heading>
-          <UI.Text className="text-muted-foreground mt-6 max-w-sm text-sm leading-7">
-            调整关键词和来源，让关注更贴近你在意的事情。保存不会立即开始采集。
+            {(
+              [
+                ["任一关键词", topic.rules.match_any],
+                ["全部关键词", topic.rules.match_all],
+                ["排除关键词", topic.rules.exclude],
+              ] as const
+            ).map(([label, words]) => (
+              <UI.Content key={label} className="flex min-w-0 flex-col gap-2">
+                <UI.Text tone="muted" size="xs">
+                  {label}
+                </UI.Text>
+                <UI.Text size="sm" className="break-words">
+                  {words.join(" · ") || "未设置"}
+                </UI.Text>
+              </UI.Content>
+            ))}
+          </UI.Content>
+          <UI.Text tone="muted" size="sm">
+            调整后保存才会生效，保存不会立即开始采集。
           </UI.Text>
-          <UI.Content className="mt-8 flex flex-wrap gap-2">
+          <UI.Content className="flex flex-wrap gap-2">
             {topic.status === "active" ? (
               <Button
                 type="button"
                 variant="outline"
                 size="navigation"
                 disabled={isBusy}
+                aria-busy={pendingAction === "pause"}
                 onClick={() => void runLifecycleAction("pause")}
               >
-                <PauseIcon data-icon="inline-start" />
+                {pendingAction === "pause" ? (
+                  <Spinner aria-hidden="true" data-icon="inline-start" />
+                ) : (
+                  <PauseIcon data-icon="inline-start" />
+                )}
                 暂停关注
               </Button>
             ) : topic.status === "paused" ? (
@@ -492,10 +580,15 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
                 type="button"
                 size="navigation"
                 disabled={isBusy}
+                aria-busy={pendingAction === "resume"}
                 onClick={() => void runLifecycleAction("resume")}
               >
-                <PlayIcon data-icon="inline-start" />
-                开始关注
+                {pendingAction === "resume" ? (
+                  <Spinner aria-hidden="true" data-icon="inline-start" />
+                ) : (
+                  <PlayIcon data-icon="inline-start" />
+                )}
+                恢复关注
               </Button>
             ) : null}
             <Button
@@ -503,9 +596,14 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
               variant="ghost"
               size="navigation"
               disabled={isBusy}
+              aria-busy={pendingAction === "clone"}
               onClick={() => void runLifecycleAction("clone")}
             >
-              <CopyIcon data-icon="inline-start" />
+              {pendingAction === "clone" ? (
+                <Spinner aria-hidden="true" data-icon="inline-start" />
+              ) : (
+                <CopyIcon data-icon="inline-start" />
+              )}
               复制
             </Button>
             {topic.status !== "archived" ? (
@@ -514,14 +612,19 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
                 variant="ghost"
                 size="navigation"
                 disabled={isBusy}
+                aria-busy={pendingAction === "archive"}
                 onClick={() => void runLifecycleAction("archive")}
               >
-                <ArchiveIcon data-icon="inline-start" />
+                {pendingAction === "archive" ? (
+                  <Spinner aria-hidden="true" data-icon="inline-start" />
+                ) : (
+                  <ArchiveIcon data-icon="inline-start" />
+                )}
                 归档
               </Button>
             ) : null}
           </UI.Content>
-          <UI.Content className="mt-10">
+          <UI.Content>
             <TopicRunActions
               key={`${topic.id}:${topic.current_version}:${topic.source_keys.join(",")}`}
               topic={topic}
@@ -535,13 +638,15 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
             />
           </UI.Content>
         </UI.Content>
+        <Separator />
         <UI.Form
+          aria-label="编辑主题设置"
           ref={formRef}
           onSubmit={handleSubmit}
           noValidate
-          aria-busy={isBusy}
         >
-          <FieldGroup className="gap-8">
+          <FieldGroup className="gap-6">
+            <UI.Heading level={3}>主题设置</UI.Heading>
             <Field
               data-disabled={formDisabled}
               data-invalid={Boolean(fieldErrors.name)}
@@ -612,7 +717,12 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
                 sourceKeys={sourceKeys}
                 disabled={isBusy}
               />
-              <Button type="submit" size="hero" disabled={formDisabled}>
+              <Button
+                type="submit"
+                size="navigation"
+                disabled={formDisabled}
+                aria-busy={pendingAction === "save"}
+              >
                 {pendingAction === "save" ? (
                   <Spinner data-icon="inline-start" aria-hidden="true" />
                 ) : (
@@ -630,6 +740,8 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
             </FieldDescription>
           </FieldGroup>
         </UI.Form>
+        <Separator />
+        <TopicAlerts topicId={topic.id} />
       </UI.Content>
     </UI.Content>
   );

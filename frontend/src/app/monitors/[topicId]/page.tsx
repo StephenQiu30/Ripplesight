@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 
-import { TopicEditor } from "@/app/monitors/[topicId]/components/topic-editor";
+import { TopicsWorkspace } from "@/app/topics/components/topics-workspace";
 
 export const metadata: Metadata = {
-  title: "编辑监控主题",
+  title: "监控主题详情",
   robots: { index: false, follow: false },
 };
 
@@ -15,5 +15,5 @@ export default async function MonitorTopicPage({
   params,
 }: MonitorTopicPageProps) {
   const { topicId } = await params;
-  return <TopicEditor topicId={topicId} />;
+  return <TopicsWorkspace topicId={topicId} />;
 }
