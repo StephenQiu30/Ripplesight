@@ -17,6 +17,9 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
 }));
 
+vi.mock("@/api/xitongzhuangtai", () => ({ getReadiness: vi.fn() }));
+
+import { getReadiness } from "@/api/xitongzhuangtai";
 import { BasicLayout } from "@/layout/basic-layout";
 
 const page = <h1>页面正文</h1>;
@@ -34,17 +37,107 @@ const session: HotKeyAPI.IdentitySessionView = {
 
 beforeEach(() => {
   route.pathname = "/";
+  vi.mocked(getReadiness).mockReset();
+  vi.mocked(getReadiness).mockRejectedValue(new Error("service unavailable"));
 });
 
 afterEach(cleanup);
 
 describe("BasicLayout", () => {
+  it.each([
+    ["ready", "服务就绪"],
+    ["ok", "服务在线"],
+  ] as const)("renders only the actual readiness %s", async (status, label) => {
+    vi.mocked(getReadiness).mockResolvedValue({ status });
+    render(<BasicLayout>{page}</BasicLayout>);
+    const indicator = await screen.findByRole("status", { name: "服务状态" });
+    expect(within(indicator).getByText(label)).toBeTruthy();
+    expect(getReadiness).toHaveBeenCalledWith({
+      signal: expect.any(AbortSignal),
+    });
+    expect(screen.queryByText(/采集正常|个平台|未读/)).toBeNull();
+  });
+
+  it.each([undefined, null, {}, { status: "unexpected" }])(
+    "hides the entire readiness block for missing or invalid data %s",
+    async (data) => {
+      vi.mocked(getReadiness).mockResolvedValue(data as HotKeyAPI.HealthView);
+      render(<BasicLayout>{page}</BasicLayout>);
+      await waitFor(() => expect(getReadiness).toHaveBeenCalled());
+      expect(screen.queryByRole("status", { name: "服务状态" })).toBeNull();
+      expect(screen.getByRole("main")).toBeTruthy();
+    },
+  );
+
+  it("hides readiness on request failure without changing the session", async () => {
+    render(<BasicLayout session={session}>{page}</BasicLayout>);
+    await waitFor(() => expect(getReadiness).toHaveBeenCalled());
+    expect(screen.queryByRole("status", { name: "服务状态" })).toBeNull();
+    expect(screen.getByRole("button", { name: "账户菜单" })).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: "工作台导航" })).toBeTruthy();
+  });
+
+  it("aborts readiness when leaving the shell", () => {
+    vi.mocked(getReadiness).mockImplementation(() => new Promise(() => {}));
+    const view = render(<BasicLayout>{page}</BasicLayout>);
+    const signal = vi.mocked(getReadiness).mock.calls[0][0]?.signal;
+    expect(signal?.aborted).toBe(false);
+    view.unmount();
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it("keeps every public destination and the anonymous mobile workspace login link", () => {
+    render(<BasicLayout>{page}</BasicLayout>);
+    const reading = screen.getByRole("navigation", { name: "站点导航" });
+    expect(
+      within(reading)
+        .getAllByRole("link")
+        .map((link) => link.getAttribute("href")),
+    ).toEqual([
+      "/",
+      "/discover?mode=all",
+      "/discover/topics",
+      "/discover/starred",
+      "/reports/weekly",
+      "/leaderboard",
+    ]);
+    const mobile = screen.getByRole("navigation", { name: "手机导航" });
+    expect(
+      within(mobile)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual(["首页", "探索", "收藏", "工作台"]);
+    expect(
+      within(mobile)
+        .getByRole("link", { name: "个人工作台" })
+        .getAttribute("href"),
+    ).toBe("/login?returnTo=%2Fworkspace");
+    expect(
+      within(mobile).getByRole("button", { name: "更多导航" }).textContent,
+    ).toBe("更多");
+  });
+
+  it("adds and removes the workspace group when session changes", () => {
+    const view = render(<BasicLayout>{page}</BasicLayout>);
+    expect(screen.queryByRole("navigation", { name: "工作台导航" })).toBeNull();
+    view.rerender(<BasicLayout session={session}>{page}</BasicLayout>);
+    expect(screen.getByRole("navigation", { name: "工作台导航" })).toBeTruthy();
+    view.rerender(<BasicLayout>{page}</BasicLayout>);
+    expect(screen.queryByRole("navigation", { name: "工作台导航" })).toBeNull();
+    expect(screen.getByRole("navigation", { name: "站点导航" })).toBeTruthy();
+  });
+
   it("omits the login header and restores navigation when leaving login", () => {
     route.pathname = "/login";
     const view = render(<BasicLayout>{page}</BasicLayout>);
     const main = screen.getByRole("main");
     expect(screen.queryByRole("banner")).toBeNull();
     expect(screen.queryByRole("navigation", { name: "站点导航" })).toBeNull();
+    expect(
+      screen.queryByRole("complementary", { name: "站点侧边栏" }),
+    ).toBeNull();
+    expect(screen.queryByRole("navigation", { name: "手机导航" })).toBeNull();
+    expect(getReadiness).not.toHaveBeenCalled();
     expect(screen.getByRole("contentinfo")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "跳到正文" }).getAttribute("href"),
@@ -52,7 +145,7 @@ describe("BasicLayout", () => {
     main.scrollTop = 100;
     route.pathname = "/";
     view.rerender(<BasicLayout>{page}</BasicLayout>);
-    expect(screen.queryByRole("banner")).toBeNull();
+    expect(screen.getByRole("banner", { name: "移动站点导航" })).toBeTruthy();
     expect(
       screen.getByRole("complementary", { name: "站点侧边栏" }),
     ).toBeTruthy();
@@ -68,6 +161,10 @@ describe("BasicLayout", () => {
     ).toBe("/login");
     expect(screen.queryByRole("button", { name: "全部导航" })).toBeNull();
     expect(screen.queryByRole("button", { name: "账户菜单" })).toBeNull();
+    expect(screen.getByRole("navigation", { name: "站点导航" })).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "工作台导航" })).toBeNull();
+    expect(screen.queryByRole("navigation", { name: "工作台导航" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "工作台" })).toBeNull();
   });
 
   it("keeps welcome navigation public after login while offering the real workspace entry", () => {
@@ -77,6 +174,15 @@ describe("BasicLayout", () => {
     ).toBe("/workspace");
     expect(screen.getByRole("button", { name: "账户菜单" })).toBeTruthy();
     expect(screen.queryByRole("navigation", { name: "工作区导航" })).toBeNull();
+    expect(screen.getByRole("navigation", { name: "站点导航" })).toBeTruthy();
+    expect(
+      within(screen.getByRole("navigation", { name: "工作台导航" })).getByRole(
+        "link",
+        {
+          name: "工作台",
+        },
+      ),
+    ).toBeTruthy();
   });
 
   it("provides a single accessible main beside the sidebar with site information in the reading flow", () => {
@@ -114,16 +220,42 @@ describe("BasicLayout", () => {
   });
 
   it.each([
-    "/monitors/topic-1",
+    ["/topics/topic-1", "我的关注", "/topics"],
+    ["/monitors/topic-1", "我的关注", "/topics"],
+    ["/alerts", "突发告警", "/alerts"],
+    ["/reports", "我的报告", "/reports"],
+    ["/reports/report-1", "我的报告", "/reports"],
+  ])("selects the workspace sub-entry for %s", (pathname, label, href) => {
+    route.pathname = pathname;
+    render(<BasicLayout session={session}>{page}</BasicLayout>);
+    expect(
+      within(screen.getByRole("navigation", { name: "工作台导航" }))
+        .getByRole("link", { name: label, current: "page" })
+        .getAttribute("href"),
+    ).toBe(href);
+  });
+
+  it.each([
+    "/workspace",
+    "/jobs/job-1",
     "/events/event-1",
     "/content/content-1",
+    "/sources/source-1",
     "/operations/models",
+    "/publication/manage",
+    "/editorial-sources/source-1",
+    "/feeds",
+    "/hotlists",
+    "/account",
+    "/site/manage",
+    "/editions",
+    "/agent",
   ])("keeps private route %s under the workspace entry", (pathname) => {
     route.pathname = pathname;
     render(<BasicLayout session={session}>{page}</BasicLayout>);
     const navigation = screen.getByRole("navigation", { name: "站点导航" });
     expect(
-      within(navigation)
+      within(screen.getByRole("navigation", { name: "工作台导航" }))
         .getByRole("link", { name: "工作台", current: "page" })
         .getAttribute("href"),
     ).toBe("/workspace");
@@ -132,6 +264,32 @@ describe("BasicLayout", () => {
     ).toBeNull();
     expect(screen.queryByRole("button", { name: "全部导航" })).toBeNull();
   });
+
+  it.each([
+    ["/items/item-1", "探索"],
+    ["/reports/daily/2026-10-06", "日周月刊"],
+    ["/reports/weekly", "日周月刊"],
+    ["/reports/monthly", "日周月刊"],
+    ["/discover/starred", "本机收藏"],
+    ["/leaderboard", "模型榜"],
+  ])(
+    "keeps the public route %s selected ahead of a broader workspace match",
+    (pathname, label) => {
+      route.pathname = pathname;
+      render(<BasicLayout session={session}>{page}</BasicLayout>);
+      expect(
+        within(screen.getByRole("navigation", { name: "站点导航" })).getByRole(
+          "link",
+          { name: label, current: "page" },
+        ),
+      ).toBeTruthy();
+      expect(
+        within(
+          screen.getByRole("navigation", { name: "工作台导航" }),
+        ).queryByRole("link", { current: "page" }),
+      ).toBeNull();
+    },
+  );
 
   it("selects the specific public topic route and restores mobile menu focus", async () => {
     route.pathname = "/discover/topics/topic-1";
@@ -221,7 +379,7 @@ describe("BasicLayout", () => {
   it("keeps the shell usable while the router pathname is unavailable and recovers its active navigation", () => {
     route.pathname = null;
     const view = render(<BasicLayout session={session}>{page}</BasicLayout>);
-    expect(screen.queryByRole("banner")).toBeNull();
+    expect(screen.getByRole("banner", { name: "移动站点导航" })).toBeTruthy();
     expect(
       screen.getByRole("complementary", { name: "站点侧边栏" }),
     ).toBeTruthy();
@@ -233,7 +391,7 @@ describe("BasicLayout", () => {
     view.rerender(<BasicLayout session={session}>{page}</BasicLayout>);
 
     expect(
-      within(screen.getByRole("navigation", { name: "站点导航" })).getByRole(
+      within(screen.getByRole("navigation", { name: "工作台导航" })).getByRole(
         "link",
         { name: "工作台", current: "page" },
       ),

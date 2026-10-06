@@ -527,6 +527,7 @@ export function HotlistWorkspace() {
   if (sources.status === "loading")
     return (
       <PageState
+        state="loading"
         eyebrow="热榜历史"
         title="正在加载来源"
         description="正在读取已应用的热榜来源。"
@@ -535,6 +536,7 @@ export function HotlistWorkspace() {
   if (sources.status === "error")
     return (
       <PageState
+        state="error"
         eyebrow="加载失败"
         title="暂时无法打开热榜"
         description="请重新加载以读取已应用的热榜来源。"

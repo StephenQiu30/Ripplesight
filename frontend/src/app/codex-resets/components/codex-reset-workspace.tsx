@@ -164,6 +164,7 @@ export function CodexResetWorkspace() {
   if (state.status === "error")
     return (
       <PageState
+        state="error"
         eyebrow="公告读取"
         title="暂时无法读取公告"
         description="可以重新读取公告与日历。"
@@ -173,6 +174,7 @@ export function CodexResetWorkspace() {
   if (state.status === "unconfigured")
     return (
       <PageState
+        state="empty"
         eyebrow="Codex 重置公告"
         title="尚未配置公告监控"
         description="公告监控需要维护者配置官方 X 来源并确认凭据、本人授权与预算。当前没有公告记录。"

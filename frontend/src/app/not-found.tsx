@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 export default function NotFound() {
   return (
     <PageState
+      state="empty"
       eyebrow="页面不存在"
       title="没有找到这个页面。"
       description="链接可能已经失效，或对应功能还没有进入当前实现范围。"

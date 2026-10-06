@@ -416,6 +416,8 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
   if (state.status === "loading") {
     return (
       <PageState
+        state="loading"
+        loadingLayout="detail"
         eyebrow="作品资料"
         title="正在读取作品"
         description="正在读取已保存的作品身份、最近观察与发现依据。"
@@ -426,6 +428,7 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
   if (state.status === "not-found") {
     return (
       <PageState
+        state="empty"
         eyebrow="作品不可用"
         title="没有找到这个作品"
         description="作品不存在或已不可读。"
@@ -444,6 +447,7 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
   if (state.status === "error") {
     return (
       <PageState
+        state="error"
         eyebrow="加载失败"
         title="暂时无法读取作品"
         description="请重新加载作品资料。"

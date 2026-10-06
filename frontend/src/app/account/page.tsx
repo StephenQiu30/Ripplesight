@@ -31,6 +31,7 @@ export default async function AccountPage({
   if (!session)
     return (
       <PageState
+        state="forbidden"
         eyebrow="登录"
         title="请重新登录"
         description="验证当前会话后可以修改账户设置。"

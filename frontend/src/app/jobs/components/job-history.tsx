@@ -247,6 +247,7 @@ export function JobHistory() {
   if (state.status === "loading") {
     return (
       <PageState
+        state="loading"
         eyebrow="任务记录"
         title="正在读取任务"
         description="正在读取已保存的任务记录。"
@@ -257,6 +258,7 @@ export function JobHistory() {
   if (state.status === "error") {
     return (
       <PageState
+        state="error"
         eyebrow="加载失败"
         title="暂时无法读取任务记录"
         description="请重新加载任务记录。"

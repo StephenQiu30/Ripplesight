@@ -33,6 +33,7 @@ export default async function LoginPage({
   if ((await headers()).get("x-hotkey-session-error") === "1")
     return (
       <PageState
+        state="error"
         eyebrow="服务暂时不可用"
         title="暂时无法验证登录状态"
         description="登录服务暂时无法响应。你的会话没有被退出，请稍后重新加载。"

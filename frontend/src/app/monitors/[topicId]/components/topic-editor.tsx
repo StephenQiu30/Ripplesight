@@ -405,6 +405,8 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
   if (state.status === "loading") {
     return (
       <PageState
+        state="loading"
+        loadingLayout="detail"
         eyebrow="监控主题"
         title="正在读取主题"
         description="正在读取当前规则版本与持久状态。"
@@ -414,6 +416,7 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
   if (state.status === "not-found") {
     return (
       <PageState
+        state="empty"
         eyebrow="主题不可用"
         title="没有找到这个主题"
         description="主题不存在，或当前使用者无权查看。"
@@ -428,6 +431,7 @@ export function TopicEditor({ topicId }: TopicEditorProps) {
   if (state.status === "error") {
     return (
       <PageState
+        state="error"
         eyebrow="加载失败"
         title="暂时无法读取主题"
         description="请重新加载主题。"

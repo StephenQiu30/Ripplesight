@@ -12,6 +12,8 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { BrandLockup } from "@/components/brand/brand-lockup";
+import { Separator } from "@/components/ui/separator";
 import { LayoutContainer } from "./layout-container";
 import { UsageGuide } from "./usage-guide";
 
@@ -24,10 +26,11 @@ export function BasicFooter() {
       <UI.Content
         as="footer"
         role="contentinfo"
-        className="layout-region bg-background shrink-0 overflow-hidden print:hidden"
+        className="layout-region shrink-0 overflow-hidden print:hidden"
       >
-        <LayoutContainer className="text-muted-foreground flex min-h-16 flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3 text-xs">
-          <UI.Text>知微见澜 · Ripplesight</UI.Text>
+        <Separator />
+        <LayoutContainer className="flex min-h-16 flex-wrap items-center justify-between gap-x-6 gap-y-2 py-4">
+          <BrandLockup href="/" showEnglish />
           <NavigationMenu
             viewport={false}
             className="max-w-full justify-start"

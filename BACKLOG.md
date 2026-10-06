@@ -100,3 +100,18 @@
 | 实际 Obsidian vault | Stephen；Claude 验收 | 工程文件校验不代表离线操作与双端往返已验收 |
 
 当前检查点：`286e4dbe` 的分类与编号、`8d562ced` 的文档工具已推送 main。接入方案是可审查的草案，尚未创建服务端接口或 frontend 页面；下一步先核对审查意见和环境回答，再按计划准入，不绕过读取与权限门槛。
+
+## 8. 前端重新设计（独立排期）
+
+依据 2026-10 高保真稿（[Claude 画布](https://claude.ai/artifact/ERFs389e9sFhhp11U5cviY)、[Figma](https://www.figma.com/design/DfWRfnw965ocH6lmlSYGgs)）与 [DESIGN](frontend/DESIGN.md) 重做 Web 外壳和主要页面，只用现有接口与真实数据。任务卡、数据缺口与验收见[执行计划](workspace/content/product/plan/02-PLAN-前端重新设计.md)。一次只派一张卡，与其他 frontend 写入任务串行。
+
+| 顺序 | 工作与任务卡 | 完成条件 | 状态 |
+|---|---|---|---|
+| 1 | [外壳与公共状态](workspace/content/product/plan/02-PLAN-前端重新设计.md#1-外壳与公共状态) | 新侧栏、底部导航、PageState；全部一级路由在新外壳下正常 | 2026-10-06 本人改为由 Claude 实现：已在 worktree `../hotkey-redesign`（分支 `redesign/frontend`）完成，shadcn Sidebar；lint、typecheck、test（633）、build 通过，format:check 仅 `frontend/README.md` 既有问题；1440/390、登录页、匿名工作台、真实 503 错误态与键盘已在浏览器检查。未提交，待本人确认与提交授权 |
+| 2 | [首页](workspace/content/product/plan/02-PLAN-前端重新设计.md#2-首页) | 真实数据下各块正确，单块失败不影响整页 | 2026-10-06 已派发 Codex（同一 worktree，不得改外壳文件） |
+| 3 | [事件详情](workspace/content/product/plan/02-PLAN-前端重新设计.md#3-事件详情) | 公开与工作台入口、有无代表评论两类事件均正确 | 待派发（卡 1 已完成） |
+| 4 | [探索与收藏](workspace/content/product/plan/02-PLAN-前端重新设计.md#4-探索与收藏) | 筛选可分享，本机收藏刷新后保持 | 待派发（卡 1 已完成） |
+| 5 | [日周月刊阅读](workspace/content/product/plan/02-PLAN-前端重新设计.md#5-日周月刊阅读) | 最新与归档各一期、打印预览正确 | 待派发（卡 1 已完成） |
+| 6 | [工作台：监控主题与告警](workspace/content/product/plan/02-PLAN-前端重新设计.md#6-工作台监控主题与告警) | 真实会话下主题与告警增改停复各一次 | 待派发；需本人登录 |
+| 7 | [模型榜](workspace/content/product/plan/02-PLAN-前端重新设计.md#7-模型榜) | 各维度与子页可用，空数据有空状态 | 待派发（卡 1 已完成） |
+| 8 | [登录页](workspace/content/product/plan/02-PLAN-前端重新设计.md#8-登录页) | 三种方式在已配置与未配置下显示正确 | 待派发（卡 1 已完成） |
