@@ -7,7 +7,6 @@ import os
 from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
@@ -54,29 +53,25 @@ def storage():
         name: os.getenv(f"HOTKEY_TEST_MINIO_{name}")
         for name in ("ENDPOINT", "ACCESS_KEY", "SECRET_KEY", "BUCKET", "SECURE")
     }
-    if any(value is not None for value in test_minio.values()):
-        assert all(test_minio.values()), (
-            "test MinIO namespace must be complete, without .env mixing"
+    if not any(value is not None for value in test_minio.values()):
+        pytest.skip(
+            "HOTKEY_TEST_MINIO_* is required for real MinIO private export tests; "
+            "the repository .env is never used"
         )
-        assert test_minio["SECURE"] in {"true", "false"}, "test MinIO SECURE must be explicit"
-        database_url = os.getenv("HOTKEY_TEST_DATABASE_URL")
-        assert database_url is not None, "an isolated PostgreSQL test database is required"
-        settings = Settings(
-            _env_file=None,
-            environment="test",
-            database_url=database_url,
-            minio_endpoint=test_minio["ENDPOINT"],
-            minio_access_key=test_minio["ACCESS_KEY"],
-            minio_secret_key=test_minio["SECRET_KEY"],
-            minio_bucket=test_minio["BUCKET"],
-            minio_secure=test_minio["SECURE"] == "true",
-        )
-    else:
-        settings = Settings(_env_file=Path(__file__).resolve().parents[3] / ".env")
-    if settings.minio_endpoint and settings.minio_endpoint.startswith("host.docker.internal:"):
-        settings.minio_endpoint = settings.minio_endpoint.replace(
-            "host.docker.internal:", "127.0.0.1:", 1
-        )
+    assert all(test_minio.values()), "test MinIO namespace must be complete, without .env mixing"
+    assert test_minio["SECURE"] in {"true", "false"}, "test MinIO SECURE must be explicit"
+    database_url = os.getenv("HOTKEY_TEST_DATABASE_URL")
+    assert database_url is not None, "an isolated PostgreSQL test database is required"
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        database_url=database_url,
+        minio_endpoint=test_minio["ENDPOINT"],
+        minio_access_key=test_minio["ACCESS_KEY"],
+        minio_secret_key=test_minio["SECRET_KEY"],
+        minio_bucket=test_minio["BUCKET"],
+        minio_secure=test_minio["SECURE"] == "true",
+    )
     delegate = create_media_storage(settings)
     assert delegate is not None, "real local MinIO configuration is required"
     delegate.check_bucket()
