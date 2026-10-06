@@ -21,6 +21,7 @@ export default function GlobalError({ reset }: GlobalErrorProps) {
       <UI.DocumentBody className="overflow-hidden print:overflow-visible">
         <BasicLayout>
           <PageState
+            state="error"
             eyebrow="应用恢复"
             title="知微见澜暂时无法显示。"
             description="请重新加载应用。错误详情不会显示在公开页面中。"

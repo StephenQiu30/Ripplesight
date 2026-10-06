@@ -64,6 +64,7 @@ export function EventDetail({ eventId }: { eventId: string }) {
   if (state.status === "not-found" || state.status === "error")
     return (
       <PageState
+        state={state.status === "not-found" ? "empty" : "error"}
         eyebrow="事件读取"
         title={
           state.status === "not-found" ? "事件不存在或暂不可读" : "无法读取事件"

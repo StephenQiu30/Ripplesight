@@ -13,6 +13,7 @@ type ErrorBoundaryProps = {
 export default function ErrorBoundary({ reset }: ErrorBoundaryProps) {
   return (
     <PageState
+      state="error"
       eyebrow="暂时不可用"
       title="页面没有正常完成加载。"
       description="请重新尝试；如果问题持续存在，再检查服务状态。"

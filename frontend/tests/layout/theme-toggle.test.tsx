@@ -19,6 +19,10 @@ vi.mock("sonner", () => ({
   Toaster: () => null,
 }));
 
+vi.mock("@/api/xitongzhuangtai", () => ({
+  getReadiness: vi.fn(async () => undefined),
+}));
+
 import { BasicLayout } from "@/layout/basic-layout";
 import {
   exportLocalBundle,
@@ -30,9 +34,12 @@ let media: EventTarget & { matches: boolean };
 beforeEach(() => {
   route.pathname = "/discover";
   media = Object.assign(new EventTarget(), { matches: false });
+  const viewport = Object.assign(new EventTarget(), { matches: false });
   vi.stubGlobal(
     "matchMedia",
-    vi.fn(() => media),
+    vi.fn((query: string) =>
+      query.includes("prefers-color-scheme") ? media : viewport,
+    ),
   );
 });
 

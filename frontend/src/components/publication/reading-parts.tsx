@@ -26,6 +26,9 @@ export function PublicationFailure({
   const known = error instanceof ApiRequestError ? error : null;
   return (
     <PageState
+      state="error"
+      errorCode={known?.code}
+      httpStatus={known?.status}
       eyebrow="读取未完成"
       title={
         known?.code === "publication_not_configured"

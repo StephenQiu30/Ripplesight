@@ -16,6 +16,10 @@ vi.mock("next/navigation", () => ({
 
 import { ItemReader } from "@/app/items/[contentId]/components/item-reader";
 import { savedIds } from "@/components/publication/local-reading";
+vi.mock("@/api/xitongzhuangtai", () => ({
+  getReadiness: vi.fn(async () => undefined),
+}));
+
 import { BasicLayout } from "@/layout/basic-layout";
 
 afterEach(() => {

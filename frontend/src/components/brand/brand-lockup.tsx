@@ -5,7 +5,7 @@ import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 
-export function BrandMark() {
+export function BrandMark({ className }: { className?: string }) {
   return (
     <Image
       src="/icon.png?v=2"
@@ -15,7 +15,10 @@ export function BrandMark() {
       height={44}
       loading="eager"
       unoptimized
-      className="size-11 shrink-0 mix-blend-multiply dark:mix-blend-screen dark:invert"
+      className={cn(
+        "size-11 shrink-0 mix-blend-multiply dark:mix-blend-screen dark:invert",
+        className,
+      )}
     />
   );
 }
@@ -25,6 +28,8 @@ type BrandLockupProps = {
   compactOnMobile?: boolean;
   showEnglish?: boolean;
   rail?: boolean;
+  /** 放在可折叠侧栏里：折叠为图标栏时只保留标识。 */
+  collapsible?: boolean;
 };
 
 export function BrandLockup({
@@ -32,24 +37,33 @@ export function BrandLockup({
   compactOnMobile = false,
   showEnglish = false,
   rail = false,
+  collapsible = false,
 }: BrandLockupProps) {
   return (
     <Button
       asChild
       variant="ghost"
-      className="h-auto min-h-11 gap-3 px-0 hover:bg-transparent"
+      className={cn(
+        "h-auto min-h-11 gap-3 px-0 hover:bg-transparent",
+        collapsible && "group-data-[collapsible=icon]:min-h-8",
+      )}
     >
       <Link
         href={href}
         aria-label={href === "/" ? "知微见澜首页" : "知微见澜工作台"}
       >
-        <BrandMark />
+        <BrandMark
+          className={
+            collapsible ? "group-data-[collapsible=icon]:size-8" : undefined
+          }
+        />
         <UI.Text
           as="span"
           className={cn(
             "text-base font-semibold tracking-tight sm:text-lg",
             compactOnMobile && "hidden sm:inline",
             rail && "hidden lg:inline",
+            collapsible && "group-data-[collapsible=icon]:hidden",
           )}
         >
           知微见澜
@@ -57,7 +71,10 @@ export function BrandLockup({
         {showEnglish ? (
           <UI.Text
             as="span"
-            className="text-muted-foreground hidden text-sm sm:inline"
+            className={cn(
+              "text-muted-foreground hidden text-sm sm:inline",
+              collapsible && "group-data-[collapsible=icon]:hidden",
+            )}
           >
             / Ripplesight
           </UI.Text>

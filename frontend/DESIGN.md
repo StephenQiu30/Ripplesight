@@ -2,19 +2,25 @@
 
 本文规定 Web 端的视觉、组件、布局和状态处理。数据请求与目录约定见 [README](README.md) 和 [AGENTS](../AGENTS.md)。
 
+2026-10 重新设计的高保真稿见 [Claude 画布](https://claude.ai/artifact/ERFs389e9sFhhp11U5cviY) 与 [Figma](https://www.figma.com/design/DfWRfnw965ocH6lmlSYGgs)，任务拆分见[前端重新设计计划](../workspace/content/product/plan/02-PLAN-前端重新设计.md)。设计稿只定视觉与结构，其中的示例数据不进代码；与本文冲突时以本文为准。
+
 ## 1. 视觉
 
 - 风格：黑白、留白、克制。层级靠排版、间距和表面明度区分，不靠装饰边框、阴影或卡片堆叠。
-- 字体：Geist；Geist Mono 只用于数据和技术标识。字体集中在 `src/layout/layout-fonts.ts` 中装配。
+- 品牌：界面上的产品名是「知微见澜」（英文 Ripplesight），标识只用 `components/brand` 的 `BrandLockup` / `BrandMark`（`src/app/icon.png`）。“HotKey”只是仓库代号，不出现在界面文案里。
+- 字体：Geist；Geist Mono 只用于数据和技术标识（计数、热度、时间、百分比、错误码），数字用等宽数字。字体集中在 `src/layout/layout-fonts.ts` 中装配。
 - 颜色、字体、圆角统一定义在 `src/app/globals.css` 的语义令牌中，业务组件只使用这些令牌。
 - 输入框、选择器、错误提示、键盘焦点和浮层保留必要的轮廓；信息流允许使用结构分隔线。
+- 概览指标排成一行“标签 + 等宽数字”，上下用分隔线收边，不做成卡片。需要强调的提醒或侧栏分组用 `muted` 表面区分，不加阴影。
+- `destructive` 只表示错误、负面情感和负面突增，不用作装饰或品牌色。情感三分类固定为正面 `foreground`、中性 `muted-foreground` 一档的浅灰、负面 `destructive`；图形旁必须同时给出文字或数值，不能只靠颜色区分。
 - 尺寸只用 Tailwind 的命名尺度，断点只用 `sm`、`md`、`lg`、`xl`、`2xl`；不写像素值，也不用任意值尺寸。间距用 flex/grid 配合 gap，不用 `space-x` / `space-y`。
 - 动效遵循 `prefers-reduced-motion`。
 
 ## 2. 组件
 
 - 基础组件用官方 shadcn CLI 引入到 `src/components/ui/`，不另写包装层来替代它们。
-- 交互控件只用 shadcn/Radix 组件：Button、Select、Checkbox、Switch、ToggleGroup、Collapsible、Table、Calendar、表单（FieldGroup / Field / FieldLabel）。
+- 交互控件只用 shadcn/Radix 组件：Button、Select、Checkbox、Switch、ToggleGroup、Collapsible、Table、Calendar、Tooltip、表单（FieldGroup / Field / FieldLabel）。站点外壳用 Sidebar 系列组件。
+- 缺少的组件先用 `pnpm exec shadcn add <组件>` 引入；CLI 要覆盖 `components/ui` 中已有文件时一律拒绝，保留项目定制的版本。不得用原生 HTML 标签自行拼组件。
 - 标题、段落、列表、链接、原生表单、音视频，统一使用 `ui/content.tsx` 中的 Heading / Text / ContentList / TextLink / Form / AudioPlayer / VideoPlayer。
 - 信息列表使用 Item 系列组件；持久提示用 Alert，空状态用 Empty，分隔用 Separator，导航用 NavigationMenu。
 - 业务代码中不出现小写的原生 JSX 标签，这类标签只能写在 `components/ui` 中（由 ESLint 检查）。
@@ -23,21 +29,23 @@
 
 ## 3. 组件放在哪里
 
-| 类型 | 位置 |
-|---|---|
-| 只有一个页面用 | `src/app/<路由>/components/`（首页的放在 `src/app/components/`） |
-| 至少两个页面稳定复用 | `src/components/<功能>/` |
-| 全站外壳 | `src/layout/` |
-| shadcn 基础组件与语义组件 | `src/components/ui/` |
+| 类型                      | 位置                                                             |
+| ------------------------- | ---------------------------------------------------------------- |
+| 只有一个页面用            | `src/app/<路由>/components/`（首页的放在 `src/app/components/`） |
+| 至少两个页面稳定复用      | `src/components/<功能>/`                                         |
+| 全站外壳                  | `src/layout/`                                                    |
+| shadcn 基础组件与语义组件 | `src/components/ui/`                                             |
 
 `page.tsx` 只负责页面入口、数据边界和组件组合。
 
 ## 4. 布局
 
 - 全站外壳是 `BasicLayout`：固定侧栏 + 唯一的 `main` 滚动区 + 跟在正文后面的页脚。页面只写正文，不要重复写导航、`main`、全屏高度或外侧边距。
-- 宽度由 `LayoutContainer`（`max-w-7xl`）统一控制。侧栏宽度：md 为图标栏 `w-20`，lg 为 `w-60`，xl 为 `w-64`。
+- 正文宽度由 `LayoutContainer`（`max-w-7xl`）统一控制。md 及以上的站点侧栏用 shadcn `Sidebar`（`collapsible="icon"`）：展开 16rem，收起为 3rem 图标栏，收起时用 Tooltip 显示入口名；用侧栏顶部按钮或 Ctrl/⌘ + B 切换，状态记在 `sidebar_state` cookie，根布局读出后首屏不闪动。
+- 侧栏分“阅读”和“工作台”两组：阅读组公开可见；工作台组只在有会话时显示；接口能给出待处理告警数时才用 Badge 标在告警入口上。侧栏底部放服务状态（取自 `getReadiness`，取不到时整块不显示，不显示假状态）和账号菜单。
 - md 以下改用固定底部导航（首页、探索、收藏、工作台、更多），正文底部预留 `pb-16`。
-- 首页使用 `ReadingLayout`：lg 及以上为“信息流 2 : 发现区 1”，窄屏时发现区排到后面。首屏直接是内容，不放宣传 Hero。
+- 首页使用 `ReadingLayout`：lg 及以上为“信息流 2 : 发现区 1”，窄屏时发现区排到后面。首屏直接是内容，不放宣传 Hero。详情页沿用同样的 2 : 1 分栏：左侧正文、时间线和来源，右侧舆情与关联信息。
+- 页内类别、立场、维度等单选筛选用 ToggleGroup，状态写进 URL 查询参数，刷新和分享后保持；窄屏时横向滚动，不换成下拉。
 - `/login` 不显示侧栏和底部导航，其他部分仍沿用 BasicLayout。
 - 打印时隐藏侧栏，恢复正常文档流。
 

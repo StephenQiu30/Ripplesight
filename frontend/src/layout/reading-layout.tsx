@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { Content } from "@/components/ui/content";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Content, Heading } from "@/components/ui/content";
+import { Separator } from "@/components/ui/separator";
 
 type ReadingLayoutProps = {
   title: string;
@@ -12,22 +12,17 @@ type ReadingLayoutProps = {
 // This layout arranges the reading feed and discovery sidebar.
 export function ReadingLayout({ title, children, aside }: ReadingLayoutProps) {
   return (
-    <Card
-      data-reading-layout=""
-      className="min-h-full overflow-visible rounded-none p-0"
-    >
-      <CardHeader className="sr-only">
-        <CardTitle role="heading" aria-level={1}>
-          {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent
+    <Content data-reading-layout="" className="min-h-full">
+      <Heading level={1} className="sr-only">
+        {title}
+      </Heading>
+      <Content
         data-reading-columns=""
-        className="grid min-h-full grid-cols-1 items-start gap-6 px-0 lg:grid-cols-3 lg:gap-0"
+        className="grid min-h-full grid-cols-1 items-start lg:grid-cols-3"
       >
         <Content
           data-reading-feed=""
-          className="min-h-full min-w-0 border-x lg:col-span-2"
+          className="min-h-full min-w-0 lg:col-span-2"
         >
           {children}
         </Content>
@@ -35,11 +30,16 @@ export function ReadingLayout({ title, children, aside }: ReadingLayoutProps) {
           as="aside"
           aria-label="发现更多"
           data-reading-aside=""
-          className="min-w-0 px-4 pb-6 lg:pt-3 xl:px-6"
+          className="relative min-w-0 self-stretch px-5 py-6 sm:px-8"
         >
+          <Separator className="absolute inset-x-0 top-0 lg:hidden" />
+          <Separator
+            orientation="vertical"
+            className="absolute inset-y-0 left-0 hidden lg:block"
+          />
           {aside}
         </Content>
-      </CardContent>
-    </Card>
+      </Content>
+    </Content>
   );
 }

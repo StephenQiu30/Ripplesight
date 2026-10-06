@@ -5,6 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Loading from "@/app/loading";
 import LoginLoading from "@/app/login/loading";
+vi.mock("@/api/xitongzhuangtai", () => ({
+  getReadiness: vi.fn(async () => undefined),
+}));
+
 import { BasicLayout } from "@/layout/basic-layout";
 const route = vi.hoisted(() => ({ pathname: "/" }));
 vi.mock("next/navigation", () => ({ usePathname: () => route.pathname }));
@@ -22,7 +26,7 @@ describe("route loading", () => {
       </BasicLayout>,
     );
     expect(screen.getAllByRole("main")).toHaveLength(1);
-    expect(screen.queryByRole("banner")).toBeNull();
+    expect(screen.getByRole("banner", { name: "移动站点导航" })).toBeTruthy();
     expect(
       screen.getByRole("complementary", { name: "站点侧边栏" }),
     ).toBeTruthy();

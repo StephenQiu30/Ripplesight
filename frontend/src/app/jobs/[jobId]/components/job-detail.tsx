@@ -550,6 +550,8 @@ export function JobDetail({ jobId }: JobDetailProps) {
   if (state.status === "loading") {
     return (
       <PageState
+        state="loading"
+        loadingLayout="detail"
         eyebrow="任务详情"
         title="正在读取任务"
         description="正在读取持久状态与已保存的结果范围。"
@@ -560,6 +562,7 @@ export function JobDetail({ jobId }: JobDetailProps) {
   if (state.status === "not-found") {
     return (
       <PageState
+        state="empty"
         eyebrow="任务不可用"
         title="没有找到这个任务"
         description="任务不存在或已不可读。"
@@ -578,6 +581,7 @@ export function JobDetail({ jobId }: JobDetailProps) {
   if (state.status === "error") {
     return (
       <PageState
+        state="error"
         eyebrow="加载失败"
         title="暂时无法读取任务"
         description="请重新加载任务状态。"

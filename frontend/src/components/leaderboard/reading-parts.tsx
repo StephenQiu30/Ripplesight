@@ -156,6 +156,9 @@ export function LeaderboardFailure({
             : "本次读取未完成，请重新加载。已有发布结果由服务端保留。";
   return (
     <PageState
+      state={absent ? "empty" : "error"}
+      errorCode={known?.code}
+      httpStatus={known?.status}
       eyebrow={absent ? "未找到" : "读取未完成"}
       title={absent ? "没有这条公开记录" : "暂时无法读取模型榜"}
       description={description}
