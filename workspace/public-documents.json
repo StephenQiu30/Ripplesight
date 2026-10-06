@@ -8,6 +8,7 @@
     "capabilities/04-评论舆情.md",
     "capabilities/05-报告推送与知识库.md",
     "capabilities/06-模型榜与Codex公告.md",
+    "capabilities/07-项目文档知识库.md",
     "decisions/01-个人非商业使用.md",
     "decisions/02-第三方费用为零.md",
     "decisions/03-模型只用本机Codex.md",
