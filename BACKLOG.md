@@ -109,11 +109,11 @@
 
 | 顺序 | 工作与任务卡 | 完成条件 | 状态 |
 |---|---|---|---|
-| 1 | [外壳与公共状态](workspace/content/product/plan/02-PLAN-前端重新设计.md#1-外壳与公共状态) | 新侧栏、底部导航、PageState；全部一级路由在新外壳下正常 | 完成：Claude 实现（本人指定）（已合入 `redesign/frontend`，待最终验收后合入 main） |
-| 2 | [首页](workspace/content/product/plan/02-PLAN-前端重新设计.md#2-首页) | 真实数据下各块正确，单块失败不影响整页 | 完成（已合入 `redesign/frontend`，待最终验收后合入 main） |
-| 3 | [事件详情](workspace/content/product/plan/02-PLAN-前端重新设计.md#3-事件详情) | 公开与工作台入口、有无代表评论两类事件均正确 | 完成（已合入 `redesign/frontend`，待最终验收后合入 main） |
-| 4 | [探索与收藏](workspace/content/product/plan/02-PLAN-前端重新设计.md#4-探索与收藏) | 筛选可分享，本机收藏刷新后保持 | 完成（已合入 `redesign/frontend`，待最终验收后合入 main） |
-| 5 | [日周月刊阅读](workspace/content/product/plan/02-PLAN-前端重新设计.md#5-日周月刊阅读) | 最新与归档各一期、打印预览正确 | 完成（已合入 `redesign/frontend`，待最终验收后合入 main） |
-| 6 | [工作台：监控主题与告警](workspace/content/product/plan/02-PLAN-前端重新设计.md#6-工作台监控主题与告警) | 真实会话下主题与告警增改停复各一次 | 完成；写入流程待部署到 8666 后验收（已合入 `redesign/frontend`，待最终验收后合入 main） |
-| 7 | [模型榜](workspace/content/product/plan/02-PLAN-前端重新设计.md#7-模型榜) | 各维度与子页可用，空数据有空状态 | 完成（已合入 `redesign/frontend`，待最终验收后合入 main） |
-| 8 | [登录页](workspace/content/product/plan/02-PLAN-前端重新设计.md#8-登录页) | 三种方式在已配置与未配置下显示正确 | 完成（已合入 `redesign/frontend`，待最终验收后合入 main） |
+| 1 | [外壳与公共状态](workspace/content/product/plan/02-PLAN-前端重新设计.md#1-外壳与公共状态) | 新侧栏、底部导航、PageState；全部一级路由在新外壳下正常 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md) |
+| 2 | [首页](workspace/content/product/plan/02-PLAN-前端重新设计.md#2-首页) | 真实数据下各块正确，单块失败不影响整页 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md) |
+| 3 | [事件详情](workspace/content/product/plan/02-PLAN-前端重新设计.md#3-事件详情) | 公开与工作台入口、有无代表评论两类事件均正确 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md)；真实事件数据待有后复核 |
+| 4 | [探索与收藏](workspace/content/product/plan/02-PLAN-前端重新设计.md#4-探索与收藏) | 筛选可分享，本机收藏刷新后保持 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md) |
+| 5 | [日周月刊阅读](workspace/content/product/plan/02-PLAN-前端重新设计.md#5-日周月刊阅读) | 最新与归档各一期、打印预览正确 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md) |
+| 6 | [工作台：监控主题与告警](workspace/content/product/plan/02-PLAN-前端重新设计.md#6-工作台监控主题与告警) | 真实会话下主题与告警增改停复各一次 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md)；告警创建待通知目标配置 |
+| 7 | [模型榜](workspace/content/product/plan/02-PLAN-前端重新设计.md#7-模型榜) | 各维度与子页可用，空数据有空状态 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md) |
+| 8 | [登录页](workspace/content/product/plan/02-PLAN-前端重新设计.md#8-登录页) | 三种方式在已配置与未配置下显示正确 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md) |

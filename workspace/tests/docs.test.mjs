@@ -111,11 +111,11 @@ test('根文档链接分流到站内或 GitHub，并保留中文路径和锚点'
   assert.ok(tree.children.some(node => node.type === 'heading' && node.children[0].value === 'HotKey BACKLOG'))
 })
 
-test('导航保留 frontmatter 中文标题、五个链接，并隐藏空验收组', () => {
+test('导航保留 frontmatter 中文标题、五个链接，有验收记录时显示验收组', () => {
   const normalized = normalizePages({ list: pageMap(), route: '/' })
   assert.deepEqual(normalized.topLevelNavbarItems.map(item => item.title), ['PRD', 'PLAN', '进度', '技术架构', 'GitHub'])
   const docs = normalized.docsDirectories.filter(item => item.type === 'doc')
-  assert.deepEqual(docs.map(item => item.title), ['术语表', '产品', '能力', '决策', '调研'])
+  assert.deepEqual(docs.map(item => item.title), ['术语表', '产品', '能力', '决策', '验收记录', '调研'])
   assert.equal(docs.find(item => item.title === '能力').children[3].title, '评论舆情')
   const product = docs.find(item => item.title === '产品')
   assert.deepEqual(product.children.filter(item => item.children).map(item => item.title), ['产品需求（PRD）', '执行计划（PLAN）'])
