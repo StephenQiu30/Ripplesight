@@ -58,6 +58,8 @@ API 和 Web 只绑定 localhost，需要通过反向代理对外提供访问。
 
 ## 文档
 
+文档预览与构建说明见 [workspace/README](workspace/README.md)，本地预览为 <http://127.0.0.1:8668/hotkey-server/>。frontend 内的统一知识库入口按专项 PRD 实现，当前尚未接入。
+
 | 文档 | 内容 |
 |---|---|
 | [PRD](workspace/content/product/prd/01-PRD.md) | 为什么做、为谁做、目标与发布规划 |

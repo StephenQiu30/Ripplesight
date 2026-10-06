@@ -1,0 +1,74 @@
+diff --git a/dist/components/navbar/index.client.js b/dist/components/navbar/index.client.js
+index 85988436aecac2a9073aef7cef392cbd84e28818..1a9da122d91d1a6ef30d2f620fe8bc175f908baf 100644
+--- a/dist/components/navbar/index.client.js
++++ b/dist/components/navbar/index.client.js
+@@ -183,7 +183,7 @@ const ClientNavbar = (t0) => {
+   }
+   let t6;
+   if ($[14] !== t5) {
+-    t6 = /* @__PURE__ */ jsx(Button, { "aria-label": "Menu", className: _temp4, onClick: _temp6, children: /* @__PURE__ */ jsx(MenuIcon, { height: "24", className: t5 }) });
++    t6 = /* @__PURE__ */ jsx(Button, { "aria-label": "菜单", className: _temp4, onClick: _temp6, children: /* @__PURE__ */ jsx(MenuIcon, { height: "24", className: t5 }) });
+     $[14] = t5;
+     $[15] = t6;
+   } else {
+diff --git a/dist/components/navbar/index.js b/dist/components/navbar/index.js
+index 35cb5c5e64c95a8bb54984ef408f69b638339c55..6ec511314f1529e1ee5c5224777539990e427295 100644
+--- a/dist/components/navbar/index.js
++++ b/dist/components/navbar/index.js
+@@ -53,7 +53,7 @@ const Navbar = (t0) => {
+     } else {
+       t7 = $[13];
+     }
+-    t8 = logoLink ? /* @__PURE__ */ jsx(NextLink, { href: typeof logoLink === "string" ? logoLink : "/", className: cn(logoClass, "x:transition-opacity x:focus-visible:nextra-focus x:hover:opacity-75"), "aria-label": "Home page", children: logo }) : /* @__PURE__ */ jsx("div", { className: logoClass, children: logo });
++    t8 = logoLink ? /* @__PURE__ */ jsx(NextLink, { href: typeof logoLink === "string" ? logoLink : "/", className: cn(logoClass, "x:transition-opacity x:focus-visible:nextra-focus x:hover:opacity-75"), "aria-label": "文档首页", children: logo }) : /* @__PURE__ */ jsx("div", { className: logoClass, children: logo });
+     $[0] = className;
+     $[1] = logo;
+     $[2] = logoLink;
+diff --git a/dist/components/theme-switch.js b/dist/components/theme-switch.js
+index 2e730eb7a4db6ab35fca6abe847d3e98839fad32..64bf1f28e527afe1c62ca80c102d17acdbc5b945 100644
+--- a/dist/components/theme-switch.js
++++ b/dist/components/theme-switch.js
+@@ -102,7 +102,7 @@ const ThemeSwitch = (t0) => {
+   }
+   let t9;
+   if ($[17] !== id || $[18] !== setTheme || $[19] !== t1 || $[20] !== t5 || $[21] !== t8) {
+-    t9 = /* @__PURE__ */ jsx(Select, { className: t1, title: "Change theme", options: t5, onChange: setTheme, value: id, selectedOption: t8 });
++    t9 = /* @__PURE__ */ jsx(Select, { className: t1, title: "切换主题", options: t5, onChange: setTheme, value: id, selectedOption: t8 });
+     $[17] = id;
+     $[18] = setTheme;
+     $[19] = t1;
+diff --git a/dist/layout.js b/dist/layout.js
+index 57a511faacf75820f822be305d66c61494ca998a..edfb2b7bdd6916be4a7be0b43cc324d5ffe1f7e4 100644
+--- a/dist/layout.js
++++ b/dist/layout.js
+@@ -27,7 +27,7 @@ const Layout = (t0) => {
+     const {
+       data: t12,
+       error
+-    } = LayoutPropsSchema.safeParse(themeConfig);
++    } = LayoutPropsSchema.safeParse({ children, ...themeConfig });
+     data = t12;
+     if (error) {
+       throw z.prettifyError(error);
+@@ -69,7 +69,7 @@ const Layout = (t0) => {
+   }
+   let t1;
+   if ($[12] === Symbol.for("react.memo_cache_sentinel")) {
+-    t1 = /* @__PURE__ */ jsx(SkipNavLink, {});
++    t1 = /* @__PURE__ */ jsx(SkipNavLink, { children: "跳至正文" });
+     $[12] = t1;
+   } else {
+     t1 = $[12];
+diff --git a/dist/mdx-components/wrapper.client.js b/dist/mdx-components/wrapper.client.js
+index 2805d8bc2499ddaca5df9848e5d6809faf847c5d..6cc27400a10149b01f6404a0b16719708b2d1ba1 100644
+--- a/dist/mdx-components/wrapper.client.js
++++ b/dist/mdx-components/wrapper.client.js
+@@ -22,7 +22,7 @@ const ClientWrapper = (t0) => {
+   const date = themeContext.timestamp && metadata.timestamp;
+   let t1;
+   if ($[0] !== metadata || $[1] !== themeContext.layout || $[2] !== themeContext.toc) {
+-    t1 = (themeContext.layout === "default" || themeContext.toc) && /* @__PURE__ */ jsx("nav", { className: "nextra-toc x:order-last x:max-xl:hidden x:w-64 x:shrink-0 x:print:hidden", "aria-label": "table of contents", children: themeContext.toc && /* @__PURE__ */ jsx(TOC, { filePath: metadata.filePath, pageTitle: metadata.title }) });
++    t1 = (themeContext.layout === "default" || themeContext.toc) && /* @__PURE__ */ jsx("nav", { className: "nextra-toc x:order-last x:max-xl:hidden x:w-64 x:shrink-0 x:print:hidden", "aria-label": "本页目录", children: themeContext.toc && /* @__PURE__ */ jsx(TOC, { filePath: metadata.filePath, pageTitle: metadata.title }) });
+     $[0] = metadata;
+     $[1] = themeContext.layout;
+     $[2] = themeContext.toc;

@@ -1,0 +1,11 @@
+.page-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--tw-prose-body, currentColor);
+  opacity: 0.8;
+}
+
+.page-metadata + h1 { margin-top: 1rem; }
