@@ -206,6 +206,7 @@ describe("authenticated navigation and CSP", () => {
     "/topics",
     "/events",
     "/reports",
+    "/reports/private-report-id",
     "/monitors/new",
     "/workspace",
     "/publication/manage",
@@ -263,6 +264,13 @@ describe("authenticated navigation and CSP", () => {
     "/leaderboard",
     "/reports/weekly",
     "/reports/weekly/2026-W40",
+    "/reports/daily",
+    "/reports/daily/2026-10-06",
+    "/reports/daily/archive",
+    "/reports/weekly/archive",
+    "/reports/monthly",
+    "/reports/monthly/2026-10",
+    "/reports/monthly/archive",
   ])("keeps %s public", async (path) => {
     const response = await proxy(new NextRequest(`https://hotkey.test${path}`));
     expect(response.status).toBe(200);
