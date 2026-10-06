@@ -9,6 +9,14 @@ function Progress({
   value,
   ...props
 }: React.ComponentProps<typeof ProgressPrimitive.Root>) {
+  // 生产环境 CSP 不允许服务端渲染的 style 属性，位移在客户端经 CSSOM 设置。
+  const indicator = React.useRef<HTMLDivElement>(null);
+  React.useLayoutEffect(() => {
+    indicator.current?.style.setProperty(
+      "translate",
+      `-${100 - (value || 0)}% 0`,
+    );
+  }, [value]);
   return (
     <ProgressPrimitive.Root
       data-slot="progress"
@@ -21,8 +29,8 @@ function Progress({
     >
       <ProgressPrimitive.Indicator
         data-slot="progress-indicator"
-        className="bg-primary size-full flex-1 transition-all motion-reduce:transition-none"
-        style={{ transform: `translateX(-${100 - (value || 0)}%)` }}
+        ref={indicator}
+        className="bg-primary size-full flex-1 -translate-x-full transition-all motion-reduce:transition-none"
       />
     </ProgressPrimitive.Root>
   );
