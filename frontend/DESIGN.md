@@ -61,5 +61,6 @@
 
 - 公开页面（首页、`/discover`、`/items`、`/events`、`/leaderboard`、公开日报/周报/月报）不需要登录；个人页面和管理页面需要会话，并设置 `noindex`。
 - 每个请求生成独立的 CSP nonce（`src/proxy.ts`）；需要交互的 HTML 按请求渲染，不使用共享缓存。
+- 生产环境 CSP 的 `style-src` 只放行 nonce 与哈希，服务端渲染出的 `style` 属性会被丢弃：组件不得依赖 `style` 设置布局或 CSS 变量，静态值写成类名（如 `[--sidebar-width:16rem]`），动态值在客户端经 CSSOM 设置；图表等依赖内联样式的第三方组件只在客户端渲染。开发环境放行 `unsafe-inline`，这类问题只会在生产构建中暴露，由 `tests/layout/csp-inline-style.test.tsx` 把关。
 - 交互元素可以用键盘访问；装饰图形加 `aria-hidden`；状态区域有语义名称。
 - 每次改动 UI，都要在桌面和 390px 宽的窄屏下分别用浏览器检查。
