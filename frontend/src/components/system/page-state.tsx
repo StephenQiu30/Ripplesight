@@ -58,8 +58,8 @@ function LoadingContent({ layout }: { layout: "list" | "detail" }) {
         <Skeleton className="h-4 w-1/2 motion-reduce:animate-none" />
       </UI.Content>
       {layout === "detail" ? (
-        <UI.Content className="grid grid-cols-1 gap-8 md:grid-cols-2">
-          {rows}
+        <UI.Content className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+          <UI.Content className="lg:col-span-2">{rows}</UI.Content>
           <UI.Content className="flex flex-col gap-6">
             <Skeleton className="h-5 w-1/3 motion-reduce:animate-none" />
             <Skeleton className="h-40 w-full motion-reduce:animate-none" />
