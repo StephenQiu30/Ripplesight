@@ -133,4 +133,16 @@ describe("PageState", () => {
     fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
     expect(retry).toHaveBeenCalledTimes(1);
   });
+
+  it("uses a level-2 heading when nested under an existing page title", () => {
+    const view = render(<PageState {...copy} state="error" headingLevel={2} />);
+    expect(
+      screen.getByRole("heading", { level: 2, name: copy.title }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+    view.rerender(<PageState {...copy} state="empty" headingLevel={2} />);
+    expect(
+      screen.getByRole("heading", { level: 2, name: copy.title }),
+    ).toBeTruthy();
+  });
 });
