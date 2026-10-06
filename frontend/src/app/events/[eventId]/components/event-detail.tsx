@@ -72,13 +72,18 @@ export function EventDetail({ eventId }: { eventId: string }) {
 
   if (state.status === "loading")
     return (
-      <PageState
-        state="loading"
-        eyebrow="事件读取"
-        title="正在读取事件详情"
-        description="正在读取当前修订和固定版本证据。"
-        loadingLayout="detail"
-      />
+      <>
+        <UI.Heading level={1} className="sr-only">
+          正在读取事件详情
+        </UI.Heading>
+        <PageState
+          state="loading"
+          eyebrow="事件读取"
+          title="正在读取事件详情"
+          description="正在读取当前修订和固定版本证据。"
+          loadingLayout="detail"
+        />
+      </>
     );
   if (state.status === "forbidden")
     return (

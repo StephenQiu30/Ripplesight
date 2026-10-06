@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { expectOnePageHeading } from "../../page-heading";
 import {
   cleanup,
   fireEvent,
@@ -17,6 +18,7 @@ import { edition, editionEntry } from "./edition-fixtures";
 const notifications = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("sonner", () => ({ toast: notifications }));
 afterEach(() => {
+  if (screen.queryAllByRole("article").length) expectOnePageHeading();
   cleanup();
   vi.restoreAllMocks();
   vi.clearAllMocks();
@@ -119,6 +121,36 @@ it("keeps the body readable when past editions fail and transports safe error co
   expect(screen.queryByText("private upstream details")).toBeNull();
   expect(screen.queryByText("暂无更早的公开刊物。")).toBeNull();
 });
+
+it.each(
+  (["daily", "weekly", "monthly"] as const).flatMap((kind) =>
+    [401, 403, 503].map((status) => ({ kind, status })),
+  ),
+)(
+  "keeps $kind catalogue and navigation HTTP $status states below the issue heading",
+  ({ kind, status }) => {
+    const error = new ApiRequestError({
+      kind: "http",
+      status,
+      code: "edition_read_failed",
+      message: "failed",
+    });
+    render(
+      <PublicEditionReader
+        edition={{ ...edition, kind }}
+        catalogueError={error}
+        navigationError={error}
+      />,
+    );
+    expectOnePageHeading();
+    expect(
+      screen.getAllByRole("heading", {
+        level: 2,
+        name: status === 503 ? "暂时无法读取刊物" : "这份刊物目前不可公开阅读",
+      }),
+    ).toHaveLength(2);
+  },
+);
 
 it("omits empty chapters and keeps a real empty issue readable", () => {
   render(

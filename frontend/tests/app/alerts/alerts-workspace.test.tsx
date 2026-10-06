@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { expectOnePageHeading } from "../../page-heading";
 import {
   cleanup,
   fireEvent,
@@ -75,9 +76,20 @@ beforeEach(() => {
   });
   api.events.mockResolvedValue({ items: [], next_cursor: null });
 });
-afterEach(cleanup);
+afterEach(() => {
+  expectOnePageHeading();
+  cleanup();
+});
 
 describe("alert rules", () => {
+  it("keeps one page heading while reading configuration", () => {
+    api.list.mockReturnValue(new Promise(() => {}));
+    render(<AlertsWorkspace />);
+    expect(
+      screen.getByRole("status", { name: "正在读取告警配置" }),
+    ).toBeTruthy();
+    expectOnePageHeading();
+  });
   it("uses the bounded topic API and follows the fixed cursor for more choices", async () => {
     api.topics
       .mockResolvedValueOnce({ items: [], next_cursor: "next-page" })
@@ -165,6 +177,7 @@ describe("alert rules", () => {
       .mockResolvedValueOnce([]);
     fireEvent.click(screen.getByRole("button", { name: "评估历史" }));
     await screen.findByRole("button", { name: "重试历史" });
+    expectOnePageHeading();
     fireEvent.click(screen.getByRole("button", { name: "重试历史" }));
     await screen.findByText(/尚无评估记录/);
     expect((screen.getByLabelText("规则名称") as HTMLInputElement).value).toBe(

@@ -87,6 +87,7 @@ export function EditorialTopicSources({
         <Spinner aria-label="正在读取订阅流" />
       ) : state.status === "error" ? (
         <PageState
+          headingLevel={2}
           state={state.forbidden ? "forbidden" : "error"}
           eyebrow="订阅流"
           title="订阅流暂时不可用"

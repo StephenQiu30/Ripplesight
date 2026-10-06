@@ -181,6 +181,7 @@ export function PublicEditionCatalogue({
           )}
           {pageFailure ? (
             <PageState
+              headingLevel={2}
               state="stale"
               eyebrow="刊物历史"
               title="刊物历史未能更新"
@@ -247,6 +248,7 @@ export function PublicEditionCatalogue({
               </UI.Content>
               {busy === "month" ? (
                 <PageState
+                  headingLevel={2}
                   state="loading"
                   eyebrow="月份日历"
                   title="正在读取月份日历"

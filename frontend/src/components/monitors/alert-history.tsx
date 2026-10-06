@@ -61,6 +61,7 @@ export function AlertHistory({ ruleId }: { ruleId: string }) {
   if (error?.forbidden)
     return (
       <PageState
+        headingLevel={2}
         state="forbidden"
         eyebrow="告警历史"
         title="无权读取告警历史"
@@ -74,6 +75,7 @@ export function AlertHistory({ ruleId }: { ruleId: string }) {
     >
       {error && (
         <PageState
+          headingLevel={2}
           state={rows ? "stale" : "error"}
           eyebrow="告警历史"
           title="暂时无法读取告警历史"
@@ -85,6 +87,7 @@ export function AlertHistory({ ruleId }: { ruleId: string }) {
       )}
       {!rows && !error && (
         <PageState
+          headingLevel={2}
           state="loading"
           eyebrow="告警历史"
           title="正在读取评估历史"
@@ -93,6 +96,7 @@ export function AlertHistory({ ruleId }: { ruleId: string }) {
       )}
       {rows && !rows.length && (
         <PageState
+          headingLevel={2}
           state="empty"
           eyebrow="告警历史"
           title="尚无评估记录"

@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { expectOnePageHeading } from "../../../page-heading";
 import {
   cleanup,
   fireEvent,
@@ -67,7 +68,10 @@ beforeEach(() => {
   api.get.mockResolvedValue(topic);
   api.sources.mockResolvedValue({ items: [], next_cursor: null });
 });
-afterEach(cleanup);
+afterEach(() => {
+  expectOnePageHeading();
+  cleanup();
+});
 it("selects the first real topic, keeps old detail links, and reflects pause and resume in both panes", async () => {
   api.pause.mockResolvedValue({ ...topic, status: "paused" });
   api.resume.mockResolvedValue(topic);
@@ -143,4 +147,63 @@ it("keeps a network failure retryable without showing login or pretending the li
   fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
   await screen.findByRole("heading", { name: "主题一" });
   await waitFor(() => expect(api.get).toHaveBeenCalledTimes(1));
+});
+
+it("retains one page heading while the topic list is loading", () => {
+  api.list.mockReturnValue(new Promise(() => {}));
+  render(<TopicsWorkspace workspace />);
+  expect(screen.getByRole("status", { name: "正在读取关注" })).toBeTruthy();
+  expectOnePageHeading();
+});
+
+it.each([
+  [404, "没有找到这个主题"],
+  [401, "无权读取监控主题"],
+  [403, "无权读取监控主题"],
+  [503, "暂时无法读取主题"],
+] as const)(
+  "keeps embedded HTTP %s states below the workspace h1",
+  async (status, title) => {
+    api.get.mockRejectedValue(
+      new ApiRequestError({
+        kind: "http",
+        status,
+        code: status === 404 ? "resource_not_found" : "topic_read_failed",
+        message: "failed",
+      }),
+    );
+    render(<TopicsWorkspace topicId="topic-a" />);
+    await screen.findByRole("heading", { level: 2, name: title });
+    expectOnePageHeading();
+  },
+);
+
+it("retains one page heading while the embedded topic is loading", async () => {
+  api.get.mockReturnValue(new Promise(() => {}));
+  render(<TopicsWorkspace topicId="topic-a" />);
+  await screen.findByRole("link", { name: /主题一/ });
+  expect(screen.getByRole("status", { name: "正在读取主题" })).toBeTruthy();
+  expectOnePageHeading();
+});
+
+it("keeps a failed embedded refresh below the workspace heading", async () => {
+  render(<TopicsWorkspace topicId="topic-a" />);
+  const name = await screen.findByLabelText("主题名称");
+  fireEvent.change(name, { target: { value: "未保存的草稿" } });
+  api.update.mockRejectedValueOnce(
+    new ApiRequestError({
+      kind: "http",
+      status: 409,
+      code: "topic_version_conflict",
+      message: "conflict",
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+  await waitFor(() => expect(api.error).toHaveBeenCalled());
+  api.get.mockRejectedValueOnce(
+    new ApiRequestError({ kind: "network", message: "offline" }),
+  );
+  api.error.mock.calls.at(-1)?.[1].action.onClick();
+  await screen.findByRole("heading", { level: 2, name: /主题刷新失败/ });
+  expectOnePageHeading();
 });

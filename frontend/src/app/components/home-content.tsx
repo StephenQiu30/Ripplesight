@@ -422,25 +422,27 @@ export function HomeContent({
           ) : null}
           <Content className="flex flex-col gap-4 pb-4">
             <Heading level={2}>资讯流</Heading>
-            <ToggleGroup
-              type="single"
-              value={mode}
-              size="sm"
-              aria-label="首页内容范围"
-              onValueChange={(value) => {
-                if (value)
-                  router.push(
-                    homeHref(
-                      value === "selected" ? "selected" : "all",
-                      category,
-                    ),
-                  );
-              }}
-            >
-              <ToggleGroupItem value="all">最新发现</ToggleGroupItem>
-              <ToggleGroupItem value="selected">精选</ToggleGroupItem>
-            </ToggleGroup>
-            <Content className="min-w-0 overflow-x-auto py-1">
+            <Content className="hide-scrollbar min-w-0 overflow-x-auto py-1">
+              <ToggleGroup
+                type="single"
+                value={mode}
+                size="sm"
+                aria-label="首页内容范围"
+                onValueChange={(value) => {
+                  if (value)
+                    router.push(
+                      homeHref(
+                        value === "selected" ? "selected" : "all",
+                        category,
+                      ),
+                    );
+                }}
+              >
+                <ToggleGroupItem value="all">最新发现</ToggleGroupItem>
+                <ToggleGroupItem value="selected">精选</ToggleGroupItem>
+              </ToggleGroup>
+            </Content>
+            <Content className="hide-scrollbar min-w-0 overflow-x-auto py-1">
               <ToggleGroup
                 type="single"
                 value={category ?? "all"}

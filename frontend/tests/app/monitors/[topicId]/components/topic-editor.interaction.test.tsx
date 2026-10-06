@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { expectOnePageHeading } from "../../../../page-heading";
 
 import {
   cleanup,
@@ -78,6 +79,7 @@ beforeEach(() => {
   api.sources.mockResolvedValue({ items: [], next_cursor: null });
 });
 afterEach(() => {
+  if (document.body.textContent) expectOnePageHeading();
   cleanup();
   vi.clearAllMocks();
 });
@@ -289,6 +291,7 @@ it("retains the draft and marks saved rules stale when a conflict reload fails",
   );
   toasts.error.mock.calls.at(-1)?.[1].action.onClick();
   await screen.findByText("已过期");
+  expectOnePageHeading();
   expect((screen.getByLabelText("主题名称") as HTMLInputElement).value).toBe(
     "尚未保存的草稿",
   );

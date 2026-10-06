@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { expectOnePageHeading } from "../../page-heading";
 import { type ReactElement } from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -53,6 +54,7 @@ beforeEach(() => {
   });
 });
 afterEach(() => {
+  if (document.body.textContent) expectOnePageHeading();
   cleanup();
   localStorage.clear();
 });
@@ -83,10 +85,10 @@ it("keeps discovery anonymous, preserves every filter/cursor, and provides a lis
     cursor: "current",
   };
   const { shell, content } = await read(params);
-  expect(shell.props.fallback.props).toMatchObject({
-    state: "loading",
-    title: "正在检索公开资讯",
-  });
+  const loading = render(shell.props.fallback);
+  expect(screen.getByRole("status", { name: "正在检索公开资讯" })).toBeTruthy();
+  expectOnePageHeading();
+  loading.unmount();
   expect(api.items).toHaveBeenCalledWith({ ...params, limit: 40 });
   expect(api.timeline).not.toHaveBeenCalled();
   expect(api.connection).toHaveBeenCalledOnce();
@@ -222,6 +224,27 @@ it("shows separate empty results and topic states with a next step", async () =>
   expect(screen.getByRole("link", { name: "清除筛选" })).toBeTruthy();
   expect(screen.queryByRole("link", { name: "下一页" })).toBeNull();
 });
+
+it.each([403, 503])(
+  "keeps simultaneous HTTP %s failures below the discovery h1",
+  async (status) => {
+    const error = new ApiRequestError({
+      kind: "http",
+      status,
+      code: "public_read_failed",
+      message: "failed",
+    });
+    api.items.mockRejectedValue(error);
+    api.topics.mockRejectedValue(error);
+    const { content } = await read();
+    render(content);
+    expect(screen.getAllByRole("alert")).toHaveLength(2);
+    expectOnePageHeading();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "专题暂不可读" }),
+    ).toBeTruthy();
+  },
+);
 
 it("preserves discovery indexing gates and the local favorites noindex metadata", async () => {
   expect(

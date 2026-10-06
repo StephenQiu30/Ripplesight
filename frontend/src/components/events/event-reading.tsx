@@ -170,6 +170,7 @@ export function EventSectionFailure({
   const known = error instanceof ApiRequestError ? error : null;
   return (
     <PageState
+      headingLevel={2}
       state="error"
       eyebrow="事件读取"
       title={title}

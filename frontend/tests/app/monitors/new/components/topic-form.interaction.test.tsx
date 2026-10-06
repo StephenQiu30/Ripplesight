@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { expectOnePageHeading } from "../../../../page-heading";
 import {
   cleanup,
   fireEvent,
@@ -31,7 +32,10 @@ vi.mock("@/components/monitors/topic-rule-preview", () => ({
 import { ApiRequestError } from "@/request";
 import { TopicForm } from "@/app/monitors/new/components/topic-form";
 beforeEach(() => vi.resetAllMocks());
-afterEach(cleanup);
+afterEach(() => {
+  if (document.body.textContent) expectOnePageHeading();
+  cleanup();
+});
 
 describe("core topic creation", () => {
   it("keeps the draft editable when sources fail and retries without erasing inputs", async () => {

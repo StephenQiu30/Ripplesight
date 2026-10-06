@@ -301,6 +301,7 @@ export function TopicForm() {
               </Field>
             ) : (
               <PageState
+                headingLevel={2}
                 state={sourcesState.forbidden ? "forbidden" : "error"}
                 eyebrow="信息来源"
                 title={

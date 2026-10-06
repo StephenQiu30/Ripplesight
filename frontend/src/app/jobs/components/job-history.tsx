@@ -246,12 +246,17 @@ export function JobHistory() {
 
   if (state.status === "loading") {
     return (
-      <PageState
-        state="loading"
-        eyebrow="任务记录"
-        title="正在读取任务"
-        description="正在读取已保存的任务记录。"
-      />
+      <>
+        <UI.Heading level={1} className="sr-only">
+          正在读取任务
+        </UI.Heading>
+        <PageState
+          state="loading"
+          eyebrow="任务记录"
+          title="正在读取任务"
+          description="正在读取已保存的任务记录。"
+        />
+      </>
     );
   }
 

@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { expectOnePageHeading } from "../../page-heading";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import ReportPage, { generateMetadata } from "@/app/reports/[reportId]/page";
@@ -56,7 +57,10 @@ beforeEach(() => {
     entries: [editionEntry(edition.key)],
   });
 });
-afterEach(cleanup);
+afterEach(() => {
+  if (document.body.textContent) expectOnePageHeading();
+  cleanup();
+});
 
 it("reads the latest true edition and catalogue without a session dependency", async () => {
   render(await ReportPage(params()));

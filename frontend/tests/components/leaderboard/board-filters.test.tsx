@@ -16,6 +16,11 @@ beforeEach(() => push.mockReset());
 
 it("uses the existing dimension URL and preserves both applied filters", () => {
   render(<BoardFilters board="overall" domestic openWeights />);
+  const container = screen.getByRole("radiogroup", {
+    name: "榜单维度",
+  }).parentElement!;
+  expect(container.classList.contains("overflow-x-auto")).toBe(true);
+  expect(container.classList.contains("hide-scrollbar")).toBe(true);
   fireEvent.click(screen.getByRole("radio", { name: "编程" }));
   expect(push).toHaveBeenCalledWith(
     "/leaderboard/category/coding?domestic=true&open_weights=true",

@@ -415,13 +415,18 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
 
   if (state.status === "loading") {
     return (
-      <PageState
-        state="loading"
-        loadingLayout="detail"
-        eyebrow="作品资料"
-        title="正在读取作品"
-        description="正在读取已保存的作品身份、最近观察与发现依据。"
-      />
+      <>
+        <UI.Heading level={1} className="sr-only">
+          正在读取作品
+        </UI.Heading>
+        <PageState
+          state="loading"
+          loadingLayout="detail"
+          eyebrow="作品资料"
+          title="正在读取作品"
+          description="正在读取已保存的作品身份、最近观察与发现依据。"
+        />
+      </>
     );
   }
 

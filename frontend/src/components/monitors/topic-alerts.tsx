@@ -50,6 +50,7 @@ export function TopicAlerts({ topicId }: { topicId: string }) {
       </UI.Content>
       {error ? (
         <PageState
+          headingLevel={2}
           state={error.forbidden ? "forbidden" : rules ? "stale" : "error"}
           eyebrow="主题告警"
           title={error.forbidden ? "无权读取主题告警" : "暂时无法读取告警规则"}
@@ -70,6 +71,7 @@ export function TopicAlerts({ topicId }: { topicId: string }) {
       ) : null}
       {!rules && !error && (
         <PageState
+          headingLevel={2}
           state="loading"
           eyebrow="主题告警"
           title="正在读取告警规则"
@@ -116,6 +118,7 @@ export function TopicAlerts({ topicId }: { topicId: string }) {
           </ItemGroup>
         ) : (
           <PageState
+            headingLevel={2}
             state="empty"
             eyebrow="主题告警"
             title="这个主题尚无告警规则"

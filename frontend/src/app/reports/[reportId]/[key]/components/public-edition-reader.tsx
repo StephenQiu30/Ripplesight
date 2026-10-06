@@ -260,7 +260,11 @@ export function PublicEditionReader({
         >
           <UI.Heading level={2}>往期{labels[edition.kind]}</UI.Heading>
           {catalogueError ? (
-            <EditionFailure error={catalogueError} href={readingUrl} />
+            <EditionFailure
+              headingLevel={2}
+              error={catalogueError}
+              href={readingUrl}
+            />
           ) : past.length ? (
             <ItemGroup className="gap-0">
               {past.map((entry) => (
@@ -290,7 +294,11 @@ export function PublicEditionReader({
           </Button>
         </UI.Content>
         {navigationError ? (
-          <EditionFailure error={navigationError} href={readingUrl} />
+          <EditionFailure
+            headingLevel={2}
+            error={navigationError}
+            href={readingUrl}
+          />
         ) : null}
       </UI.Content>
     </UI.Content>

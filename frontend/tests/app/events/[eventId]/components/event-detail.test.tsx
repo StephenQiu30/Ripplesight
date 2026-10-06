@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { expectOnePageHeading } from "../../../../page-heading";
 
 import {
   cleanup,
@@ -37,6 +38,7 @@ import { ApiRequestError } from "@/request";
 import { fact, member } from "../../../../components/events/fixtures";
 
 afterEach(() => {
+  expectOnePageHeading();
   cleanup();
   vi.resetAllMocks();
 });
@@ -47,6 +49,29 @@ beforeEach(() => {
 });
 
 describe("fixed event member reading", () => {
+  it("keeps simultaneous section failures below the event heading", async () => {
+    api.detail.mockResolvedValue({
+      id: "event",
+      topic_id: "topic",
+      revision: 1,
+      title: "可读事件",
+      summary: "摘要",
+      first_seen_at: "2026-10-02T00:00:00Z",
+      source_counts: {},
+      member_count: 0,
+      readable_member_count: 0,
+      evidence_state: "complete",
+    });
+    api.facts.mockRejectedValue(new Error("offline"));
+    api.members.mockRejectedValue(new Error("offline"));
+    api.related.mockRejectedValue(new Error("offline"));
+    render(<EventDetail eventId="event" />);
+    await waitFor(() => expect(screen.getAllByRole("alert")).toHaveLength(3));
+    expectOnePageHeading();
+    expect(
+      screen.getAllByRole("heading", { level: 2 }).length,
+    ).toBeGreaterThanOrEqual(3);
+  });
   it("shows the detail loading state before any dependent reads", () => {
     api.detail.mockReturnValue(new Promise(() => {}));
     render(<EventDetail eventId="loading" />);
@@ -55,6 +80,7 @@ describe("fixed event member reading", () => {
         .getByRole("status", { name: "正在读取事件详情" })
         .getAttribute("aria-busy"),
     ).toBe("true");
+    expectOnePageHeading();
     expect(api.members).not.toHaveBeenCalled();
     expect(api.related).not.toHaveBeenCalled();
   });

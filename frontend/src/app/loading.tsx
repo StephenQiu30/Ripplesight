@@ -9,9 +9,9 @@ export default function Loading() {
       aria-label="页面加载中"
       aria-busy="true"
     >
-      <UI.Text as="span" className="sr-only">
+      <UI.Heading level={1} className="sr-only">
         页面加载中…
-      </UI.Text>
+      </UI.Heading>
       <UI.Content
         className="mx-auto flex max-w-3xl flex-col items-center"
         aria-hidden="true"
