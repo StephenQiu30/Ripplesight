@@ -54,6 +54,7 @@ describe("personal topic subscription sources", () => {
       />,
     );
     await screen.findByLabelText("公开产品动态");
+    expect(screen.getByRole("switch", { name: "公开产品动态" })).toBeTruthy();
     expect(
       (screen.getByLabelText("待验证来源") as HTMLInputElement).disabled,
     ).toBe(true);

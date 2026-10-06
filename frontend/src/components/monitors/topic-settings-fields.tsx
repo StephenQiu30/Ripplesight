@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Item } from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Separator } from "@/components/ui/separator";
 import {
   Collapsible,
   CollapsibleContent,
@@ -112,7 +112,7 @@ export function TopicSettingsFields({
     <FieldSet disabled={disabled}>
       <FieldLegend variant="label">信息来源</FieldLegend>
       <FieldDescription>
-        选择你想持续关注的来源。也可以先保存，之后再配置。
+        选择你想持续关注的来源，保存后生效。也可以先保存，之后再配置。
       </FieldDescription>
       {sourceOptions.length > 0 ? (
         <FieldGroup className="gap-5">
@@ -120,33 +120,35 @@ export function TopicSettingsFields({
             const unavailable =
               !source.selectable && !sourceKeys.includes(source.sourceKey);
             return (
-              <Field
-                key={source.sourceKey}
-                orientation="horizontal"
-                data-disabled={disabled || unavailable}
-                data-invalid={Boolean(fieldErrors.source_keys)}
-              >
-                <Checkbox
-                  id={`source-${source.sourceKey}`}
-                  checked={sourceKeys.includes(source.sourceKey)}
-                  onCheckedChange={(checked) =>
-                    toggleSource(source.sourceKey, checked === true)
-                  }
-                  disabled={disabled || unavailable}
-                  aria-invalid={Boolean(fieldErrors.source_keys)}
-                  aria-describedby={`source-${source.sourceKey}-description`}
-                />
-                <FieldContent>
-                  <FieldLabel htmlFor={`source-${source.sourceKey}`}>
-                    {source.displayName}
-                  </FieldLabel>
-                  <FieldDescription
-                    id={`source-${source.sourceKey}-description`}
-                  >
-                    {source.reason}
-                  </FieldDescription>
-                </FieldContent>
-              </Field>
+              <FieldGroup key={source.sourceKey} className="gap-3">
+                <Separator />
+                <Field
+                  orientation="horizontal"
+                  data-disabled={disabled || unavailable}
+                  data-invalid={Boolean(fieldErrors.source_keys)}
+                >
+                  <FieldContent>
+                    <FieldLabel htmlFor={`source-${source.sourceKey}`}>
+                      {source.displayName}
+                    </FieldLabel>
+                    <FieldDescription
+                      id={`source-${source.sourceKey}-description`}
+                    >
+                      {source.reason}
+                    </FieldDescription>
+                  </FieldContent>
+                  <Switch
+                    id={`source-${source.sourceKey}`}
+                    checked={sourceKeys.includes(source.sourceKey)}
+                    onCheckedChange={(checked) =>
+                      toggleSource(source.sourceKey, checked)
+                    }
+                    disabled={disabled || unavailable}
+                    aria-invalid={Boolean(fieldErrors.source_keys)}
+                    aria-describedby={`source-${source.sourceKey}-description`}
+                  />
+                </Field>
+              </FieldGroup>
             );
           })}
         </FieldGroup>

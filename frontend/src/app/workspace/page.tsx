@@ -2,7 +2,14 @@ import * as UI from "@/components/ui/content";
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import Link from "next/link";
-import { ArrowUpRightIcon } from "lucide-react";
+import { TopicsWorkspace } from "@/app/topics/components/topics-workspace";
+import { Separator } from "@/components/ui/separator";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { ChevronDownIcon, ArrowUpRightIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -64,44 +71,43 @@ export default async function WorkspacePage() {
   await connection();
   return (
     <UI.Content className="flex flex-col gap-10">
-      <UI.Content className="flex flex-wrap items-start justify-between gap-5">
-        <UI.Content>
-          <UI.Heading level={1} className="text-3xl font-medium tracking-tight">
-            我的工作台
-          </UI.Heading>
-          <UI.Text className="text-muted-foreground mt-4 leading-7">
-            个人关注、报告与管理功能，从这里继续。
-          </UI.Text>
-        </UI.Content>
-        <Button asChild variant="outline">
-          <Link href="/">返回信息首页</Link>
-        </Button>
-      </UI.Content>
+      <TopicsWorkspace workspace />
+      <Separator />
+      <UI.Heading level={2}>更多工作台入口</UI.Heading>
       {groups.map((group) => (
-        <UI.Content as="section" key={group.title} aria-label={group.title}>
-          <UI.Heading level={2} className="text-xl font-medium">
-            {group.title}
-          </UI.Heading>
-          <UI.Text className="text-muted-foreground mt-2 text-sm leading-6">
-            {group.description}
-          </UI.Text>
-          <ItemGroup className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {group.links.map(([href, title, description]) => (
-              <Item role="listitem" key={href} variant="muted">
-                <Link
-                  href={href}
-                  className="flex w-full min-w-0 items-start justify-between gap-4"
-                >
-                  <ItemContent>
-                    <ItemTitle>{title}</ItemTitle>
-                    <ItemDescription>{description}</ItemDescription>
-                  </ItemContent>
-                  <ArrowUpRightIcon aria-hidden="true" />
-                </Link>
-              </Item>
-            ))}
-          </ItemGroup>
-        </UI.Content>
+        <Collapsible key={group.title}>
+          <CollapsibleTrigger asChild>
+            <Button
+              variant="ghost"
+              className="w-full justify-between"
+              size="navigation"
+            >
+              {group.title}
+              <ChevronDownIcon aria-hidden="true" />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-4">
+            <UI.Text tone="muted" size="sm">
+              {group.description}
+            </UI.Text>
+            <ItemGroup className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {group.links.map(([href, title, description]) => (
+                <Item role="listitem" key={href}>
+                  <Link
+                    href={href}
+                    className="flex w-full min-w-0 items-start justify-between gap-4"
+                  >
+                    <ItemContent>
+                      <ItemTitle>{title}</ItemTitle>
+                      <ItemDescription>{description}</ItemDescription>
+                    </ItemContent>
+                    <ArrowUpRightIcon aria-hidden="true" />
+                  </Link>
+                </Item>
+              ))}
+            </ItemGroup>
+          </CollapsibleContent>
+        </Collapsible>
       ))}
     </UI.Content>
   );
