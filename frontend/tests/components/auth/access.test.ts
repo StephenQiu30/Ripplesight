@@ -15,6 +15,7 @@ describe("welcome and workspace access", () => {
     "/feeds",
     "/agent",
     "/discover",
+    "/discover/starred",
     "/discover/topics/ai",
     "/items/content-1",
     "/leaderboard/models/model-1",

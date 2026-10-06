@@ -29,7 +29,7 @@ it("submits the existing query fields and returns category/channel to empty valu
   const form = screen.getByRole("button", { name: "查看" }).closest("form")!;
   expect(new FormData(form).get("category")).toBe("paper");
   expect(new FormData(form).get("channel")).toBe("news");
-  await selectOption(screen.getByLabelText("分类"), "全部分类");
+  fireEvent.click(screen.getByRole("radio", { name: "全部分类" }));
   await selectOption(screen.getByLabelText("频道"), "全部频道");
   await waitFor(() => {
     const query = new FormData(form);
@@ -42,6 +42,45 @@ it("submits the existing query fields and returns category/channel to empty valu
     expect(query.get("source_key")).toBe("rss");
     expect(query.get("cursor")).toBeNull();
   });
+});
+
+it("keeps a single selection, submits the scope/time toggles, and removes an old cursor", () => {
+  render(
+    <DiscoveryFilters
+      mode="all"
+      window="24h"
+      by="timeline"
+      params={{
+        q: "研究",
+        cursor: "old-page",
+        tag: "研究",
+        topic: "research",
+        search_order: "time",
+      }}
+      categories={[["paper", "论文"]]}
+    />,
+  );
+  const form = screen.getByRole("search", {
+    name: "公开资讯检索",
+  }) as HTMLFormElement;
+  fireEvent.click(screen.getByRole("radio", { name: "论文" }));
+  fireEvent.click(screen.getByRole("radio", { name: "论文" }));
+  fireEvent.click(screen.getByRole("radio", { name: "精选" }));
+  fireEvent.click(screen.getByRole("radio", { name: "7 天" }));
+  const query = new FormData(form);
+  expect(form.getAttribute("action")).toBe("/discover");
+  expect(form.getAttribute("method")).toBe("get");
+  expect(query.get("category")).toBe("paper");
+  expect(query.get("mode")).toBe("selected");
+  expect(query.get("window")).toBe("7d");
+  expect(query.get("q")).toBe("研究");
+  expect(query.get("tag")).toBe("研究");
+  expect(query.get("topic")).toBe("research");
+  expect(query.get("search_order")).toBe("time");
+  expect(query.get("cursor")).toBeNull();
+  expect(
+    screen.getByRole("radiogroup", { name: "分类" }).parentElement?.className,
+  ).toContain("hide-scrollbar");
 });
 
 it("shows readable source names while submitting stable keys and supports all sources", async () => {
