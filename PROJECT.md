@@ -47,7 +47,17 @@ hotkey-server/
 │   ├── src/request.ts         # 唯一的 HTTP 传输层
 │   ├── src/proxy.ts           # 会话门禁与 CSP
 │   └── tests/                 # 前端测试
-└── workspace/                 # 文档工作区：content/ 为 Obsidian 知识库，外层为 Nextra 网站
+└── workspace/                 # 文档工作区，外层为 Nextra 网站
+    └── content/               # Obsidian 知识库
+        ├── product/           # 产品文档，根层保留进度与架构指针
+        │   ├── prd/           # 产品需求：目标、范围与验收要求
+        │   └── plan/          # 执行计划：任务、容量与依赖
+        ├── capabilities/      # 各项能力规格与可用状态
+        ├── decisions/         # 生效与历史决策
+        ├── records/           # 真实验收记录
+        ├── research/          # 调研依据
+        ├── templates/         # 文档模板，不发布
+        └── views/             # Obsidian 看板，不发布
 ```
 
 ## 4. 业务领域
@@ -118,6 +128,7 @@ hotkey-server/
 
 ## 10. 配置与部署
 
+- **项目知识库（规划，尚未接入）**：按[专项 PRD](workspace/content/product/prd/02-PRD-workspace项目知识库.md)，frontend 的 `/workspace/docs` 将提供正式阅读与编辑入口，复用现有布局和身份；backend 负责文档清单、正文、检索、访问校验与草稿。Markdown/Git 保持内容来源，部署快照显式打包或挂载，Obsidian 使用文档工作副本。现有 Nextra 工程保留作预览；本次 PRD 不代表统一入口、权限或发布已实现。
 - 环境文件只放在仓库根目录：本机用 `.env`，生产用 `.env.prod`，模板是 `.env.example`。所有进程都读这一份，进程注入的环境变量优先。
 - `docker-compose.yml` 定义应用（API、Web，以及按需启用的 Worker / Scheduler / CLI）；`docker-compose-env.yml` 只在需要全新的 PostgreSQL/Redis/Kafka 时使用；`docker-compose-prod.yml` 通过 include 复用应用定义。
 - Web 生产构建为 standalone，以非 root 用户和只读文件系统运行；每个请求生成独立的 CSP nonce。

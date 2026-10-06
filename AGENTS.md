@@ -12,7 +12,7 @@
 
 ## 2. 开始改动前
 
-1. 先读 [workspace/content/index.md](workspace/content/index.md)，按其中的阅读顺序读 [PRD](workspace/content/product/01-PRD.md)、对应的能力文档（`workspace/content/capabilities/`）、相关决策（`workspace/content/decisions/`）和相关代码、测试。
+1. 先读 [workspace/content/index.md](workspace/content/index.md)，按其中的阅读顺序读 [PRD](workspace/content/product/prd/01-PRD.md)、对应的能力文档（`workspace/content/capabilities/`）、相关决策（`workspace/content/decisions/`）和相关代码、测试。
 2. 确认这次改动对应哪一条验收标准。如果对应不上，先改文档，再动代码。
 3. 架构、目录或数据库有变化时，先更新 PROJECT。
 4. 工作区里不属于本次任务的修改原样保留，不要覆盖或回退。
