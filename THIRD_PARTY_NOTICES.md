@@ -121,8 +121,10 @@ to them; by default the site shows only a summary and a link to the original.
 ## Editor.js and content rendering
 
 The Web content viewer uses [Editor.js](https://github.com/codex-team/editor.js)
-2.31.7 (Apache-2.0) OutputData types as a development dependency; it does not
-bundle the editor runtime or block/inline tool packages. Markdown parsing uses
+2.31.7 (Apache-2.0) OutputData types. The project document editor dynamically
+loads the Editor.js runtime and uses an original source-preserving block tool;
+it does not copy third-party block/inline tools. HTML-to-Markdown conversion
+uses [Turndown](https://github.com/mixmark-io/turndown) 7.2.4 (MIT). Markdown parsing uses
 [marked](https://github.com/markedjs/marked) 18.0.14 (MIT); HTML cleaning uses
 [sanitize-html](https://github.com/apostrophecms/sanitize-html) 2.18.0 (MIT).
 Package licenses remain in the dependency distributions; resolved versions are
@@ -130,7 +132,7 @@ recorded in frontend/pnpm-lock.yaml.
 
 ## Nextra documentation site
 
-The documentation site uses [Nextra](https://github.com/shuding/nextra) and
+The application document reader and the public documentation preview use [Nextra](https://github.com/shuding/nextra) and
 `nextra-theme-docs` 4.6.1 (MIT). The pnpm patch in
 `workspace/patches/nextra-theme-docs@4.6.1.patch` preserves `children` when
 validating Layout props and translates five hardcoded UI/accessibility labels
