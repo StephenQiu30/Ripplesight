@@ -4,6 +4,8 @@ import { publicSiteMetadata } from "@/components/publication/site-metadata";
 import { listLeaderboardSources } from "@/api/moxingbang";
 import { SourcesReading } from "@/app/leaderboard/sources/components/sources-reading";
 import { LeaderboardFailure } from "@/components/leaderboard/reading-parts";
+import { LeaderboardPageHeader } from "@/components/leaderboard/page-header";
+import { Content } from "@/components/ui/content";
 
 export async function generateMetadata(): Promise<Metadata> {
   let indexable = false;
@@ -27,7 +29,15 @@ export default async function LeaderboardSourcesPage() {
   try {
     data = await listLeaderboardSources();
   } catch (error) {
-    return <LeaderboardFailure error={error} href="/leaderboard/sources" />;
+    return (
+      <Content className="flex min-w-0 flex-col gap-6">
+        <LeaderboardPageHeader
+          title="评测来源与覆盖"
+          description="查看评测来源的运营方、用途与证据覆盖。"
+        />
+        <LeaderboardFailure error={error} href="/leaderboard/sources" />
+      </Content>
+    );
   }
   return <SourcesReading data={data} />;
 }
