@@ -15,6 +15,7 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import {
   SelectLabel,
@@ -47,6 +48,8 @@ export function DiscoveryFilters({
 }) {
   const fieldId = useId();
 
+  const [selectedMode, setSelectedMode] = useState(mode);
+  const [selectedWindow, setSelectedWindow] = useState(window);
   const [selectedCategory, setSelectedCategory] = useState(category ?? "");
   const [selectedChannel, setSelectedChannel] = useState(channel ?? "");
   const [selectedSource, setSelectedSource] = useState(params.source_key ?? "");
@@ -61,125 +64,107 @@ export function DiscoveryFilters({
     ),
   );
   return (
-    <UI.Form method="get" className="my-6 flex flex-col gap-4">
+    <UI.Form
+      action="/discover"
+      method="get"
+      role="search"
+      aria-label="公开资讯检索"
+      className="flex flex-col gap-4"
+    >
       <FieldGroup className="flex-row items-center gap-2">
         <Field className="min-w-0 flex-1">
           <FieldLabel htmlFor={`${fieldId}-page-field-10`} className="sr-only">
             检索
           </FieldLabel>
-          <InputGroup className="h-12 rounded-full">
+          <InputGroup className="h-14">
             <InputGroupAddon className="pl-4">
               <SearchIcon aria-hidden="true" />
             </InputGroupAddon>
             <InputGroupInput
+              type="search"
               name="q"
               defaultValue={params.q}
               maxLength={200}
               placeholder="搜索公开资讯"
               id={`${fieldId}-page-field-10`}
-              className="text-base"
             />
           </InputGroup>
         </Field>
-        <Button type="submit" className="h-12 rounded-full px-5">
+        <Button type="submit" size="xl">
           查看
         </Button>
       </FieldGroup>
-      <FieldGroup className="grid grid-cols-3 gap-3">
-        <Field className="min-w-0">
-          <FieldLabel htmlFor={`${fieldId}-page-field-1`}>范围</FieldLabel>
-          <Select name="mode" defaultValue={mode}>
-            <SelectTrigger
-              size="lg"
-              id={`${fieldId}-page-field-1`}
-              className="w-full min-w-0"
+      <Input type="hidden" name="mode" value={selectedMode} />
+      <Input type="hidden" name="window" value={selectedWindow} />
+      <Input type="hidden" name="category" value={selectedCategory} />
+      <FieldGroup className="gap-4">
+        <Field>
+          <FieldLabel id={`${fieldId}-category-label`}>分类</FieldLabel>
+          <UI.Content className="hide-scrollbar max-w-full overflow-x-auto py-1">
+            <ToggleGroup
+              type="single"
+              value={selectedCategory || "__all__"}
+              onValueChange={(value) => {
+                if (value)
+                  setSelectedCategory(value === "__all__" ? "" : value);
+              }}
+              aria-labelledby={`${fieldId}-category-label`}
+              className="min-w-max"
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectGroup>
-                <SelectLabel className="sr-only">范围</SelectLabel>
-                <SelectItem value="selected" className="whitespace-normal">
-                  精选
-                </SelectItem>
-                <SelectItem value="all" className="whitespace-normal">
-                  全部
-                </SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+              <ToggleGroupItem value="__all__">全部分类</ToggleGroupItem>
+              {categories.map(([key, label]) => (
+                <ToggleGroupItem key={key} value={key}>
+                  {label}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          </UI.Content>
         </Field>
-        <Field className="min-w-0">
-          <FieldLabel htmlFor={`${fieldId}-page-field-2`}>时间</FieldLabel>
-          <Select name="window" defaultValue={window}>
-            <SelectTrigger
-              size="lg"
-              id={`${fieldId}-page-field-2`}
-              className="w-full min-w-0"
+        <UI.Content className="flex flex-wrap gap-4">
+          <Field className="w-auto">
+            <FieldLabel id={`${fieldId}-mode-label`}>范围</FieldLabel>
+            <ToggleGroup
+              type="single"
+              value={selectedMode}
+              onValueChange={(value) => {
+                if (value === "all" || value === "selected")
+                  setSelectedMode(value);
+              }}
+              aria-labelledby={`${fieldId}-mode-label`}
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectGroup>
-                <SelectLabel className="sr-only">时间</SelectLabel>
-                <SelectItem value="24h" className="whitespace-normal">
-                  24 小时
-                </SelectItem>
-                <SelectItem value="7d" className="whitespace-normal">
-                  7 天
-                </SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field className="min-w-0">
-          <FieldLabel htmlFor={`${fieldId}-page-field-3`}>分类</FieldLabel>
-          <Select
-            name="category"
-            value={selectedCategory}
-            onValueChange={(value) =>
-              setSelectedCategory(value === "__none__" ? "" : value)
-            }
-          >
-            <SelectTrigger
-              size="lg"
-              id={`${fieldId}-page-field-3`}
-              className="w-full min-w-0"
+              <ToggleGroupItem value="all">全部资讯</ToggleGroupItem>
+              <ToggleGroupItem value="selected">精选</ToggleGroupItem>
+            </ToggleGroup>
+          </Field>
+          <Field className="w-auto">
+            <FieldLabel id={`${fieldId}-window-label`}>时间</FieldLabel>
+            <ToggleGroup
+              type="single"
+              value={selectedWindow}
+              onValueChange={(value) => {
+                if (value === "24h" || value === "7d") setSelectedWindow(value);
+              }}
+              aria-labelledby={`${fieldId}-window-label`}
             >
-              <SelectValue placeholder="全部分类" />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectGroup>
-                <SelectLabel className="sr-only">分类</SelectLabel>
-                <SelectItem value="__none__" className="whitespace-normal">
-                  全部分类
-                </SelectItem>
-                {categories.map(([key, label]) => (
-                  <SelectItem
-                    key={key}
-                    value={key}
-                    className="whitespace-normal"
-                  >
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </Field>
+              <ToggleGroupItem value="24h">24 小时</ToggleGroupItem>
+              <ToggleGroupItem value="7d">7 天</ToggleGroupItem>
+            </ToggleGroup>
+          </Field>
+        </UI.Content>
       </FieldGroup>
+      <UI.Text tone="muted" size="xs">
+        选择筛选后点击「查看」，查询条件会保存在地址中。
+      </UI.Text>
       <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
         <CollapsibleTrigger asChild>
           <Button
             type="button"
             variant="ghost"
-            className="group h-11 gap-2 px-0 hover:bg-transparent"
+            size="navigation"
+            className="gap-2"
           >
             高级筛选
-            <ChevronDownIcon
-              className="transition-transform group-data-[state=open]:rotate-180"
-              aria-hidden="true"
-            />
+            <ChevronDownIcon aria-hidden="true" />
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent
@@ -290,7 +275,6 @@ export function DiscoveryFilters({
             <Field className="min-w-0">
               <FieldLabel htmlFor={`${fieldId}-page-field-7`}>标签</FieldLabel>
               <Input
-                className="h-11"
                 name="tag"
                 defaultValue={params.tag}
                 maxLength={128}
@@ -301,7 +285,6 @@ export function DiscoveryFilters({
             <Field className="min-w-0">
               <FieldLabel htmlFor={`${fieldId}-page-field-8`}>专题</FieldLabel>
               <Input
-                className="h-11"
                 name="topic"
                 defaultValue={params.topic}
                 maxLength={64}
