@@ -1,0 +1,53 @@
+@media print {
+  .reader {
+    display: block;
+  }
+
+  .reader [data-edition-sidebar] {
+    display: none;
+  }
+
+  .reader [data-edition-references] {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .reader [data-slot="table-container"] {
+    overflow: visible;
+  }
+
+  .reader [data-slot="table"] {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  .reader [data-slot="viewer"] table {
+    display: table;
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+    overflow: visible;
+  }
+
+  .reader pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    overflow: visible;
+  }
+
+  .reader :is(th, td) {
+    width: auto;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .reader :is(h1, h2, h3) {
+    break-after: avoid;
+  }
+
+  .reader tr {
+    break-inside: avoid;
+  }
+}
