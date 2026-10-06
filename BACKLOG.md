@@ -56,14 +56,14 @@
 
 需求见[workspace 项目知识库专项 PRD](workspace/content/product/prd/02-PRD-workspace项目知识库.md)，任务验收、负责人、估算与依赖见[执行计划](workspace/content/product/plan/01-PLAN-workspace项目知识库.md)。当前聊天已启用全天每两小时推进一次的 heartbeat（`hotkey`）；业务 V1/V2 的优先级保持现有顺序。
 
-首个 Sprint 的启动包为工具修复与方案收敛，共 16 理想小时，已开始工具修复；其余是待前置完成后滚动准入的候选。按计划初值，首个 Sprint 全部候选合计 128 小时，后续编辑 Sprint 116 小时。真实容量在前 12 个窗口后校准。
+首个 Sprint 的启动包为工具修复与方案收敛，共 16 理想小时，已开始工具修复与方案收敛；其余是待前置完成后滚动准入的候选。按计划初值，首个 Sprint 全部候选合计 128 小时，后续编辑 Sprint 116 小时。真实容量在前 12 个窗口后校准。
 
 ### 首个 Sprint：阅读与 AI
 
 | 顺序 | 工作与任务卡 | 完成条件 | 状态 |
 |---|---|---|---|
 | 1 | [文档工具修复](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#文档工具修复) | 当前文档校验与构建可重复通过，支持 plan 元数据 | 工程检查与本地浏览器复核通过，待 Claude 审查；证据见 [VERIFICATION](workspace/VERIFICATION.md#本轮工具修复与编号复核) |
-| 2 | [方案收敛](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#方案收敛) | 技术方案、能力归属、环境与身份缺口明确 | 待派发；启动包 |
+| 2 | [方案收敛](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#方案收敛) | 技术方案、能力归属、环境与身份缺口明确 | 源码核对与方案草案已整理至 [PROJECT §11](PROJECT.md#11-项目文档知识库接入方案待审查)，已建立 [07 能力](workspace/content/capabilities/07-项目文档知识库.md)；待 Claude 审查及本人确认环境、账号 |
 | 3 | [来源清单与版本快照](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#来源清单与版本快照) | 唯一原文、文件 hash、可重建的同版本快照 | 待前两项完成；候选 |
 | 4 | [统一权限与读取接口](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#统一权限与读取接口) | 全读取出口授权与路径校验，生成契约通过 | 待来源快照与本人身份确认；候选 |
 | 5 | [工作台阅读界面](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#工作台阅读界面) | 同布局文档显示、链接与五种页面状态正确 | 待读取契约；候选 |
@@ -87,3 +87,16 @@
 | 8 | [编辑验收](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#编辑验收) | KR5、KR6 真实双端往返与全部异常恢复 | 待写入任务、真实环境及验收时间；候选 |
 
 远程只读 MCP 按具体客户端需求单独估算与派发，不作为首期前提；不恢复业务公开分发范围。更新任务状态时同时记录证据与阻塞条件，不将候选任务、受控测试或周期运行次数当作已完成。
+
+
+### 外部条件与下一检查点
+
+| 条件 | 负责人 | 当前影响与检查点 |
+|---|---|---|
+| 工具与接入方案审查 | Claude | 工具工程验证和 §11 方案已可复核；完成审查后才能将前两项标记完成并放行来源快照任务 |
+| 正式验收环境及允许的本人账号 | Stephen | 已请求确认环境和用户名；真实 UUID 在身份服务核对后写本机/部署配置，不记入公开文档。无配置时读取关闭 |
+| 私密作者目录与文档专用 Git 工作副本 | Stephen 确认；Codex 配置 | 现有公开资料可准备本地样本；新增私密资料的存储位置、Git 权限和后续写入宿主尚未确定 |
+| 目标快照挂载与持久草稿存储 | Stephen 确认；Codex 实现 | §11 提供只读快照挂载方案；冷启动、恢复和真实写入需在确认的目标环境验证 |
+| 实际 Obsidian vault | Stephen；Claude 验收 | 工程文件校验不代表离线操作与双端往返已验收 |
+
+当前检查点：`286e4dbe` 的分类与编号、`8d562ced` 的文档工具已推送 main。接入方案是可审查的草案，尚未创建服务端接口或 frontend 页面；下一步先核对审查意见和环境回答，再按计划准入，不绕过读取与权限门槛。
