@@ -3,9 +3,8 @@ import * as UI from "@/components/ui/content";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { EyeIcon, EyeOffIcon, KeyRoundIcon, MailIcon } from "lucide-react";
+import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -33,6 +32,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Separator } from "@/components/ui/separator";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   InputGroup,
   InputGroupAddon,
@@ -40,8 +40,10 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { LoginFormLayout, LoginFormSkeleton } from "./login-form-layout";
+import { ApiRequestError } from "@/request";
 
 type LoginMethod = "password" | "email" | "github";
+type LoginField = "username" | "password" | "email" | "code";
 
 export function LoginForm({
   returnTo,
@@ -67,10 +69,16 @@ export function LoginForm({
   const [resendAt, setResendAt] = useState(0);
   const [now, setNow] = useState(0);
   const [busy, setBusy] = useState<LoginMethod | "email-code" | null>(null);
+  const [invalidFields, setInvalidFields] = useState<
+    Partial<Record<LoginField, boolean>>
+  >({});
   const feedbackId = useId();
   const oauthNoticeShown = useRef(false);
   const operation = useRef<AbortController | null>(null);
   const credentialInput = useRef<HTMLInputElement | null>(null);
+  const passwordInput = useRef<HTMLInputElement | null>(null);
+  const codeInput = useRef<HTMLInputElement | null>(null);
+  const correctionField = useRef<LoginField | null>(null);
   const focusNextMethod = useRef(false);
 
   useEffect(() => {
@@ -116,6 +124,70 @@ export function LoginForm({
     credentialInput.current?.focus();
   }, [method]);
 
+  useEffect(() => {
+    if (busy || !correctionField.current) return;
+    const field = correctionField.current;
+    correctionField.current = null;
+    const input =
+      field === "password"
+        ? passwordInput.current
+        : field === "code"
+          ? codeInput.current
+          : credentialInput.current;
+    input?.focus();
+  }, [busy, invalidFields]);
+
+  function clearFieldError(field: LoginField) {
+    setInvalidFields((current) => ({ ...current, [field]: false }));
+  }
+
+  function markInvalidFields(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const inputs = Array.from(event.currentTarget.elements).filter(
+      (element): element is HTMLInputElement =>
+        element instanceof HTMLInputElement && !element.validity.valid,
+    );
+    setInvalidFields(
+      Object.fromEntries(inputs.map((input) => [input.name, true])),
+    );
+    const first = inputs[0];
+    first?.focus();
+    toast.error(first?.validationMessage || "请检查输入内容。", {
+      id: feedbackId,
+    });
+  }
+
+  function markRequestFields(failure: unknown, kind: NonNullable<typeof busy>) {
+    if (!(failure instanceof ApiRequestError) || failure.kind !== "http")
+      return;
+    let fields: LoginField[] = [];
+    if (failure.status === 422) {
+      fields = (failure.details ?? []).flatMap((detail) => {
+        const field = detail.location.at(-1);
+        return field === "username" ||
+          field === "password" ||
+          field === "email" ||
+          field === "code"
+          ? [field]
+          : [];
+      });
+    } else if (failure.status === 401) {
+      if (
+        kind === "password" &&
+        (!failure.code || failure.code === "invalid_credentials")
+      )
+        fields = ["username", "password"];
+      if (
+        kind === "email" &&
+        (!failure.code || failure.code === "invalid_email_code")
+      )
+        fields = ["code"];
+    }
+    if (!fields.length) return;
+    setInvalidFields(Object.fromEntries(fields.map((field) => [field, true])));
+    correctionField.current = fields[0];
+  }
+
   function enterWorkspace() {
     router.replace(safeReturnTo(returnTo));
     router.refresh();
@@ -129,14 +201,17 @@ export function LoginForm({
     const controller = new AbortController();
     operation.current = controller;
     setBusy(kind);
+    setInvalidFields({});
     toast.dismiss(feedbackId);
     try {
       await action(controller.signal);
     } catch (failure) {
-      if (!controller.signal.aborted)
+      if (!controller.signal.aborted) {
+        markRequestFields(failure, kind);
         toast.error(authErrorMessage(failure, "登录未完成，请重试。"), {
           id: feedbackId,
         });
+      }
     } finally {
       if (operation.current === controller) {
         operation.current = null;
@@ -209,6 +284,7 @@ export function LoginForm({
     focusNextMethod.current = true;
     setMethod(next);
     setShowPassword(false);
+    setInvalidFields({});
     toast.dismiss(feedbackId);
   }
 
@@ -236,10 +312,68 @@ export function LoginForm({
       )}
       {options && (
         <>
+          <ToggleGroup
+            // Keep pressed-button semantics; the controlled value allows one method.
+            type="multiple"
+            variant="outline"
+            size="lg"
+            aria-label="登录方式"
+            className="mb-5 w-full"
+            value={method === "github" ? [] : [method]}
+            disabled={!ready}
+            onValueChange={(values) => {
+              const next = values.at(-1);
+              if (
+                ready &&
+                (next === "password" || next === "email") &&
+                next !== method &&
+                options[next]
+              )
+                changeMethod(next);
+            }}
+          >
+            <ToggleGroupItem
+              value="password"
+              aria-label="使用账号密码登录"
+              className="min-w-0 flex-1"
+              disabled={!ready || !options.password}
+            >
+              账号密码
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="email"
+              aria-label="使用邮箱验证码登录"
+              className="min-w-0 flex-1"
+              disabled={!ready || !options.email}
+            >
+              邮箱验证码
+            </ToggleGroupItem>
+          </ToggleGroup>
+          {(!options.password || !options.email) && (
+            <UI.Content className="mb-5 flex flex-col gap-2">
+              {!options.password && (
+                <UI.Text tone="muted" size="xs">
+                  账号密码登录暂未启用。
+                </UI.Text>
+              )}
+              {!options.email && (
+                <UI.Text tone="muted" size="xs">
+                  邮箱验证码登录尚未配置。
+                </UI.Text>
+              )}
+            </UI.Content>
+          )}
           {method === "password" && options.password && (
-            <UI.Form onSubmit={submitPassword} aria-label="账号密码登录">
-              <FieldGroup className="gap-6">
-                <Field data-disabled={!ready}>
+            <UI.Form
+              onSubmit={submitPassword}
+              onInvalidCapture={markInvalidFields}
+              aria-label="账号密码登录"
+            >
+              <FieldGroup>
+                <Field
+                  data-disabled={!ready}
+                  data-invalid={invalidFields.username}
+                >
                   <FieldLabel htmlFor="login-username">邮箱或用户名</FieldLabel>
                   <Input
                     ref={credentialInput}
@@ -252,16 +386,20 @@ export function LoginForm({
                     minLength={3}
                     maxLength={254}
                     placeholder="输入邮箱或用户名"
-                    className="h-12 px-4"
+                    aria-invalid={!!invalidFields.username}
                     value={username}
-                    onChange={(event) => setUsername(event.target.value)}
+                    onChange={(event) => {
+                      setUsername(event.target.value);
+                      clearFieldError("username");
+                    }}
                     disabled={!ready}
                   />
                 </Field>
-                <Field>
+                <Field data-invalid={invalidFields.password}>
                   <FieldLabel htmlFor="login-password">密码</FieldLabel>
-                  <InputGroup className="h-12">
+                  <InputGroup>
                     <InputGroupInput
+                      ref={passwordInput}
                       id="login-password"
                       name="password"
                       type={showPassword ? "text" : "password"}
@@ -269,9 +407,12 @@ export function LoginForm({
                       required
                       maxLength={128}
                       placeholder="输入密码"
-                      className="h-full pl-4"
+                      aria-invalid={!!invalidFields.password}
                       value={password}
-                      onChange={(event) => setPassword(event.target.value)}
+                      onChange={(event) => {
+                        setPassword(event.target.value);
+                        clearFieldError("password");
+                      }}
                       disabled={!ready}
                     />
                     <InputGroupAddon align="inline-end">
@@ -280,7 +421,6 @@ export function LoginForm({
                         aria-pressed={showPassword}
                         aria-controls="login-password"
                         size="icon-sm"
-                        className="size-10"
                         disabled={!ready}
                         onClick={() => setShowPassword((value) => !value)}
                       >
@@ -296,7 +436,8 @@ export function LoginForm({
                 <Button
                   type="submit"
                   size="lg"
-                  className="h-12 w-full"
+                  className="w-full"
+                  aria-busy={busy === "password"}
                   disabled={!ready}
                 >
                   {busy === "password" ? "正在登录…" : "登录并进入工作区"}
@@ -305,9 +446,16 @@ export function LoginForm({
             </UI.Form>
           )}
           {method === "email" && options.email && (
-            <UI.Form onSubmit={submitEmail} aria-label="邮箱验证码登录">
-              <FieldGroup className="gap-6">
-                <Field data-disabled={!ready}>
+            <UI.Form
+              onSubmit={submitEmail}
+              onInvalidCapture={markInvalidFields}
+              aria-label="邮箱验证码登录"
+            >
+              <FieldGroup>
+                <Field
+                  data-disabled={!ready}
+                  data-invalid={invalidFields.email}
+                >
                   <FieldLabel htmlFor="login-email">邮箱</FieldLabel>
                   <Input
                     ref={credentialInput}
@@ -319,12 +467,14 @@ export function LoginForm({
                     required
                     maxLength={254}
                     placeholder="输入邮箱地址"
-                    className="h-12 px-4"
+                    aria-invalid={!!invalidFields.email}
                     value={email}
                     onChange={(event) => {
                       setEmail(event.target.value);
                       setChallenge(null);
                       setCode("");
+                      clearFieldError("email");
+                      clearFieldError("code");
                       toast.dismiss(feedbackId);
                     }}
                     disabled={!ready}
@@ -334,9 +484,13 @@ export function LoginForm({
                   </FieldDescription>
                 </Field>
                 {challenge && (
-                  <Field data-disabled={!ready || expired}>
+                  <Field
+                    data-disabled={!ready || expired}
+                    data-invalid={invalidFields.code}
+                  >
                     <FieldLabel htmlFor="login-code">验证码</FieldLabel>
                     <Input
+                      ref={codeInput}
                       id="login-code"
                       name="code"
                       inputMode="numeric"
@@ -346,9 +500,12 @@ export function LoginForm({
                       minLength={6}
                       maxLength={6}
                       placeholder="输入 6 位验证码"
-                      className="h-12 px-4"
+                      aria-invalid={!!invalidFields.code}
                       value={code}
-                      onChange={(event) => setCode(event.target.value)}
+                      onChange={(event) => {
+                        setCode(event.target.value);
+                        clearFieldError("code");
+                      }}
                       disabled={!ready || expired}
                     />
                     <FieldDescription role="status">
@@ -361,7 +518,8 @@ export function LoginForm({
                 <Button
                   type="submit"
                   size="lg"
-                  className="h-12 w-full"
+                  className="w-full"
+                  aria-busy={busy === "email-code" || busy === "email"}
                   disabled={!ready || (expired && wait > 0)}
                 >
                   {busy === "email-code"
@@ -376,7 +534,7 @@ export function LoginForm({
                   <Button
                     type="button"
                     variant="ghost"
-                    className="min-h-11"
+                    size="lg"
                     disabled={!ready || wait > 0}
                     onClick={sendCode}
                   >
@@ -387,70 +545,35 @@ export function LoginForm({
             </UI.Form>
           )}
           {method === "github" && (
-            <Alert role="status" className="leading-6">
+            <Alert role="status">
               <AlertDescription>请选择下方可用的登录方式。</AlertDescription>
             </Alert>
           )}
           <UI.Content
-            className="mt-7 flex flex-col gap-y-3"
+            className="mt-5 flex flex-col gap-4"
             role="group"
             aria-label="其他登录方式"
           >
-            <UI.Content className="text-muted-foreground mb-4 flex items-center gap-4 text-xs">
+            <UI.Content className="flex items-center gap-3">
               <Separator className="flex-1" />
-              <UI.Text as="span">或使用其他方式</UI.Text>
+              <UI.Text as="span" tone="muted" size="xs">
+                或使用其他方式
+              </UI.Text>
               <Separator className="flex-1" />
             </UI.Content>
             <Button
               type="button"
               variant="outline"
               size="lg"
-              className="h-12 w-full gap-3"
-              disabled={
-                !ready ||
-                !(method === "email" ? options.password : options.email)
-              }
-              onClick={() =>
-                changeMethod(method === "email" ? "password" : "email")
-              }
-            >
-              {method === "email" ? (
-                <KeyRoundIcon aria-hidden="true" className="size-5" />
-              ) : (
-                <MailIcon aria-hidden="true" className="size-5" />
-              )}
-              {method === "email" ? "使用账号密码登录" : "使用邮箱验证码登录"}
-            </Button>
-            {method === "email" && !options.password && (
-              <UI.Text className="text-muted-foreground text-xs leading-5">
-                账号密码登录暂未启用。
-              </UI.Text>
-            )}
-            {method !== "email" && !options.email && (
-              <UI.Text className="text-muted-foreground text-xs leading-5">
-                邮箱验证码登录尚未配置。
-              </UI.Text>
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              size="lg"
-              className="h-12 w-full gap-3"
+              className="w-full gap-3"
+              aria-busy={busy === "github"}
               disabled={!ready || !options.github}
               onClick={githubLogin}
             >
-              <Image
-                src="/brand/github-mark.png"
-                alt=""
-                aria-hidden="true"
-                width={28}
-                height={28}
-                className="size-7 dark:invert"
-              />
               {busy === "github" ? "正在前往 GitHub…" : "使用 GitHub 登录"}
             </Button>
             {!options.github && (
-              <UI.Text className="text-muted-foreground text-xs leading-5">
+              <UI.Text tone="muted" size="xs">
                 GitHub 登录尚未配置。
               </UI.Text>
             )}

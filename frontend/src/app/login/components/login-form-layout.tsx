@@ -1,7 +1,7 @@
 import * as UI from "@/components/ui/content";
-import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -16,40 +16,29 @@ export function LoginFormLayout({
     <UI.Content
       as="section"
       aria-labelledby="login-title"
-      className="mx-auto w-full max-w-104 lg:mr-0 lg:translate-y-6"
+      className="mx-auto w-full max-w-md min-w-0 lg:mr-0"
     >
-      <UI.Content className="mb-9 flex flex-col gap-y-3">
-        <UI.Heading
-          level={1}
-          id="login-title"
-          className="text-3xl font-medium tracking-tight"
-        >
-          登录知微见澜
-        </UI.Heading>
-        <UI.Text className="text-muted-foreground text-sm leading-6">
-          继续关注你在意的，沿着来源看见变化。
-        </UI.Text>
-      </UI.Content>
-      <UI.Content className="min-h-124" aria-busy={loading}>
-        {children}
-      </UI.Content>
-      <UI.Text className="text-muted-foreground mt-8 text-xs leading-6">
-        登录即表示你已阅读
-        <Link
-          href="/terms"
-          className="text-foreground underline underline-offset-4"
-        >
-          使用条款
-        </Link>
-        与
-        <Link
-          href="/privacy"
-          className="text-foreground underline underline-offset-4"
-        >
-          隐私说明
-        </Link>
-        。
-      </UI.Text>
+      <Card variant="muted" className="gap-5 py-5 sm:gap-6 sm:py-8">
+        <CardHeader className="gap-2 px-5 sm:px-8">
+          <UI.Heading level={1} id="login-title">
+            登录知微见澜
+          </UI.Heading>
+          <UI.Text tone="muted" size="sm">
+            继续关注你在意的，沿着来源看见变化。
+          </UI.Text>
+        </CardHeader>
+        <CardContent className="px-5 sm:px-8">
+          <UI.Content aria-busy={loading}>{children}</UI.Content>
+        </CardContent>
+        <CardContent className="px-5 sm:px-8">
+          <UI.Text tone="muted" size="xs">
+            登录即表示你已阅读
+            <UI.TextLink href="/terms">使用条款</UI.TextLink>与
+            <UI.TextLink href="/privacy">隐私说明</UI.TextLink>
+            。本站仅供个人非商业使用。
+          </UI.Text>
+        </CardContent>
+      </Card>
     </UI.Content>
   );
 }
@@ -61,20 +50,22 @@ export function LoginFormSkeleton() {
         正在读取登录方式…
       </UI.Text>
       <UI.Content aria-hidden="true">
-        <FieldGroup className="gap-6">
+        <UI.Content className="mb-5 flex gap-2">
+          <Skeleton className="h-9 flex-1 motion-reduce:animate-none" />
+          <Skeleton className="h-9 flex-1 motion-reduce:animate-none" />
+        </UI.Content>
+        <FieldGroup>
           {["username", "password"].map((field) => (
             <Field key={field}>
               <Skeleton className="h-5 max-w-24 motion-reduce:animate-none" />
-              <Skeleton className="h-12 motion-reduce:animate-none" />
+              <Skeleton className="h-8 motion-reduce:animate-none" />
             </Field>
           ))}
-          <Skeleton className="h-12 motion-reduce:animate-none" />
+          <Skeleton className="h-9 motion-reduce:animate-none" />
         </FieldGroup>
-        <UI.Content className="mt-7 flex flex-col gap-3">
-          <Skeleton className="mb-4 h-4 motion-reduce:animate-none" />
-          <Skeleton className="h-12 motion-reduce:animate-none" />
-          <Skeleton className="h-12 motion-reduce:animate-none" />
-          <Skeleton className="h-5 w-36 motion-reduce:animate-none" />
+        <UI.Content className="mt-5 flex flex-col gap-4">
+          <Skeleton className="h-4 motion-reduce:animate-none" />
+          <Skeleton className="h-9 motion-reduce:animate-none" />
         </UI.Content>
       </UI.Content>
     </UI.Content>
