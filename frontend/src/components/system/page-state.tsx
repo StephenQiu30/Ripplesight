@@ -27,6 +27,8 @@ type PageStateProps = {
   httpStatus?: number;
   staleAt?: string;
   loadingLayout?: "list" | "detail";
+  /** 整页状态用 1；放在已有页面标题之下的区块状态用 2。 */
+  headingLevel?: 1 | 2;
 };
 
 function LoadingContent({ layout }: { layout: "list" | "detail" }) {
@@ -82,6 +84,7 @@ export function PageState({
   httpStatus,
   staleAt,
   loadingLayout = "list",
+  headingLevel = 1,
 }: PageStateProps) {
   const retry = action ?? <RetryButton />;
   const errorDetails =
@@ -117,7 +120,7 @@ export function PageState({
           aria-label={title}
         >
           <CircleAlertIcon aria-hidden="true" />
-          <AlertTitle role="heading" aria-level={1}>
+          <AlertTitle role="heading" aria-level={headingLevel}>
             <UI.Content className="flex flex-wrap items-center gap-2">
               {state === "stale" && <Badge variant="secondary">已过期</Badge>}
               <UI.Text as="span">{title}</UI.Text>
@@ -153,7 +156,7 @@ export function PageState({
           <Badge variant="secondary">{eyebrow}</Badge>
           <Icon aria-hidden="true" className="size-6" />
           <EmptyTitle>
-            <UI.Heading level={1}>{title}</UI.Heading>
+            <UI.Heading level={headingLevel}>{title}</UI.Heading>
           </EmptyTitle>
           <EmptyDescription>{description}</EmptyDescription>
         </EmptyHeader>
