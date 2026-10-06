@@ -190,6 +190,7 @@ export function TopicList({
       </UI.Content>
       {state.status === "loading" && (
         <PageState
+          headingLevel={2}
           state="loading"
           eyebrow="监控主题"
           title="正在读取关注"
@@ -198,6 +199,7 @@ export function TopicList({
       )}
       {state.status === "error" && (
         <PageState
+          headingLevel={2}
           state={state.forbidden ? "forbidden" : "error"}
           eyebrow="监控主题"
           title={state.forbidden ? "无权读取监控主题" : "暂时无法读取关注"}
@@ -225,6 +227,7 @@ export function TopicList({
       )}
       {state.status === "ready" && topics.length === 0 && (
         <PageState
+          headingLevel={2}
           state="empty"
           eyebrow="监控主题"
           title="还没有关注的话题"

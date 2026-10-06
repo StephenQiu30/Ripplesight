@@ -32,6 +32,7 @@ export function DiscoveryResults({
   if (!page.items.length)
     return (
       <PageState
+        headingLevel={2}
         state="empty"
         eyebrow="公开资讯"
         title="没有找到资讯"

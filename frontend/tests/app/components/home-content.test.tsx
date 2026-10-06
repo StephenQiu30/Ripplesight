@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { expectOnePageHeading } from "../../page-heading";
 
 import {
   cleanup,
@@ -17,6 +18,7 @@ import { HomeContent, type HomeReading } from "@/app/components/home-content";
 import { IdentitySessionProvider } from "@/components/auth/session-context";
 
 afterEach(() => {
+  expectOnePageHeading();
   cleanup();
   vi.clearAllMocks();
 });
@@ -119,6 +121,11 @@ it("keeps filters on the homepage, resets cursors on changes and preserves the s
       }}
     />,
   );
+  for (const name of ["首页内容范围", "资讯分类"]) {
+    const container = screen.getByRole("radiogroup", { name }).parentElement!;
+    expect(container.classList.contains("overflow-x-auto")).toBe(true);
+    expect(container.classList.contains("hide-scrollbar")).toBe(true);
+  }
   const categories = screen.getByRole("radiogroup", { name: "资讯分类" });
   fireEvent.click(within(categories).getByRole("radio", { name: "模型" }));
   expect(navigation.push).toHaveBeenLastCalledWith(

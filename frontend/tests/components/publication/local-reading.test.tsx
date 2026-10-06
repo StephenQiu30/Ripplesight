@@ -7,6 +7,9 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import type { ComponentProps } from "react";
+import { Heading } from "@/components/ui/content";
+import { expectOnePageHeading } from "../../page-heading";
 const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
 vi.mock("sonner", () => ({ toast: notifications }));
 import {
@@ -25,6 +28,8 @@ import { ApiRequestError } from "@/request";
 const api = vi.hoisted(() => ({ read: vi.fn() }));
 vi.mock("@/api/gongkaifabu", () => ({ getSitePublicationItem: api.read }));
 afterEach(() => {
+  if (screen.queryByRole("region", { name: "本机收藏" }))
+    expectOnePageHeading();
   cleanup();
   vi.resetAllMocks();
   vi.restoreAllMocks();
@@ -32,6 +37,18 @@ afterEach(() => {
   localStorage.clear();
   window.history.replaceState(null, "", "/discover/starred");
 });
+
+function renderSavedPage(props: ComponentProps<typeof SavedItems>) {
+  const view = render(
+    <>
+      <Heading level={1}>本机收藏</Heading>
+      <SavedItems {...props} />
+    </>,
+  );
+  expectOnePageHeading();
+  return view;
+}
+
 const id = (i: number) =>
   `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
 it("keeps unreadable saved IDs removable and clamps pagination after cross-tab removal", async () => {
@@ -40,7 +57,7 @@ it("keeps unreadable saved IDs removable and clamps pagination after cross-tab r
     JSON.stringify(Array.from({ length: 21 }, (_, i) => id(i + 1))),
   );
   api.read.mockRejectedValue(new Error("withdrawn"));
-  render(<SavedItems full />);
+  renderSavedPage({ full: true });
   await screen.findByText(`暂时不可读取 · ${id(1)}`);
   fireEvent.click(screen.getByRole("button", { name: "下一页" }));
   await screen.findByText(`暂时不可读取 · ${id(21)}`);
@@ -52,11 +69,12 @@ it("keeps unreadable saved IDs removable and clamps pagination after cross-tab r
     screen.getByRole("button", { name: `移除不可读收藏：${id(1)}` }),
   );
   await screen.findByText("还没有收藏。");
+  expectOnePageHeading();
   expect(JSON.parse(localStorage.getItem(SAVED_KEY)!)).toEqual([]);
 });
 it("reports corrupted stored JSON, preserves the raw bytes, and offers a retry without export", async () => {
   localStorage.setItem(SAVED_KEY, "broken JSON");
-  render(<SavedItems full />);
+  renderSavedPage({ full: true });
   await waitFor(() =>
     expect(notifications.error).toHaveBeenCalledWith(
       expect.stringContaining("原始数据保留"),
@@ -113,7 +131,7 @@ it("filters the current page and restores category/view/page from the URL on ref
   api.read.mockImplementation(({ content_id }: { content_id: string }) =>
     Promise.resolve(content_id === id(1) ? detail(1) : detail(2, "industry")),
   );
-  const mounted = render(<SavedItems full />);
+  const mounted = renderSavedPage({ full: true });
   await screen.findByRole("link", { name: "本机资讯 1" });
   fireEvent.click(screen.getByRole("radio", { name: "行业" }));
   expect(screen.queryByRole("link", { name: "本机资讯 1" })).toBeNull();
@@ -122,7 +140,7 @@ it("filters the current page and restores category/view/page from the URL on ref
     "industry",
   );
   mounted.unmount();
-  render(<SavedItems full initialCategory="industry" />);
+  renderSavedPage({ full: true, initialCategory: "industry" });
   await screen.findByRole("link", { name: "本机资讯 2" });
   expect(screen.queryByRole("link", { name: "本机资讯 1" })).toBeNull();
   expect(api.read).toHaveBeenCalledTimes(4);
@@ -134,7 +152,7 @@ it("shows independent reading history, persists its URL, and does not offer remo
   api.read.mockImplementation(({ content_id }: { content_id: string }) =>
     Promise.resolve(content_id === id(1) ? detail(1) : detail(2)),
   );
-  render(<SavedItems full />);
+  renderSavedPage({ full: true });
   await screen.findByRole("link", { name: "本机资讯 1" });
   fireEvent.click(screen.getByRole("radio", { name: "阅读记录" }));
   await screen.findByRole("link", { name: "本机资讯 2" });
@@ -160,14 +178,16 @@ it("keeps save/remove and reading marks after remount and rejects duplicate in-f
   expect(JSON.parse(localStorage.getItem(READ_KEY)!)).toEqual([id(1)]);
   mounted.unmount();
   api.read.mockResolvedValue(detail(1));
-  const list = render(<SavedItems full />);
+  const list = renderSavedPage({ full: true });
   await screen.findByText("已读");
   fireEvent.click(screen.getByRole("button", { name: "取消收藏：本机资讯 1" }));
   await screen.findByText("还没有收藏。");
+  expectOnePageHeading();
   expect(savedIds(localStorage)).toEqual([]);
   list.unmount();
-  render(<SavedItems full />);
+  renderSavedPage({ full: true });
   await screen.findByText("还没有收藏。");
+  expectOnePageHeading();
   expect(JSON.parse(localStorage.getItem(READ_KEY)!)).toEqual([id(1)]);
 });
 
@@ -178,12 +198,13 @@ it("handles a privacy-mode storage getter failure without API calls and recovers
       throw new Error("SecurityError");
     },
   });
-  render(<SavedItems full />);
+  renderSavedPage({ full: true });
   await screen.findByRole("alert", { name: "本机收藏暂不可读" });
   expect(api.read).not.toHaveBeenCalled();
   vi.stubGlobal("localStorage", actual);
   fireEvent.click(screen.getByRole("button", { name: "重新读取" }));
   await screen.findByText("还没有收藏。");
+  expectOnePageHeading();
   expect(screen.queryByRole("alert")).toBeNull();
 });
 
@@ -197,7 +218,7 @@ it("does not change a saved record after a quota failure and reports the failed 
       throw new Error("QuotaExceededError");
     },
   });
-  render(<SavedItems full />);
+  renderSavedPage({ full: true });
   await screen.findByRole("link", { name: "本机资讯 1" });
   fireEvent.click(screen.getByRole("button", { name: "取消收藏：本机资讯 1" }));
   await waitFor(() =>
@@ -221,8 +242,9 @@ it("shows safe API error code/status beside unreadable IDs and keeps other items
           }),
         ),
   );
-  render(<SavedItems full />);
+  renderSavedPage({ full: true });
   await screen.findByRole("link", { name: "本机资讯 1" });
+  expectOnePageHeading();
   expect(screen.getAllByText("publication_withdrawn · 404")).toHaveLength(2);
   expect(screen.getByText(`暂时不可读取 · ${id(2)}`)).toBeTruthy();
   expect(screen.queryByText("private internal details")).toBeNull();

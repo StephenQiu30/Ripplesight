@@ -33,6 +33,7 @@ export function DiscoveryTopics({
       <UI.Heading level={2}>按专题浏览</UI.Heading>
       {!directory ? (
         <PageState
+          headingLevel={2}
           state="error"
           eyebrow="专题目录"
           title="专题暂不可读"
@@ -71,6 +72,7 @@ export function DiscoveryTopics({
         </ItemGroup>
       ) : (
         <PageState
+          headingLevel={2}
           state="empty"
           eyebrow="专题目录"
           title="暂无公开专题"

@@ -1,5 +1,5 @@
 import { PageState } from "@/components/system/page-state";
-import { Content } from "@/components/ui/content";
+import { Content, Heading } from "@/components/ui/content";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -11,6 +11,9 @@ export function HomeLoading() {
       aria-label="首页加载中"
       aria-busy="true"
     >
+      <Heading level={1} className="sr-only">
+        正在读取首页资讯
+      </Heading>
       <Content aria-hidden="true" layout="stack" className="pb-6">
         <Skeleton className="h-8 w-48 motion-reduce:animate-none" />
         <Skeleton className="h-4 w-64 motion-reduce:animate-none" />
@@ -21,6 +24,7 @@ export function HomeLoading() {
       <Content className="grid gap-8 lg:grid-cols-3">
         <Content className="lg:col-span-2">
           <PageState
+            headingLevel={2}
             state="loading"
             eyebrow="公开阅读"
             title="正在读取首页资讯"

@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { expectOnePageHeading } from "../page-heading";
 
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,7 +17,10 @@ beforeEach(() => {
   route.pathname = "/";
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  if (document.body.textContent) expectOnePageHeading();
+  cleanup();
+});
 
 describe("route loading", () => {
   it("announces global loading inside the existing shell", () => {

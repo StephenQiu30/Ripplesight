@@ -6,14 +6,17 @@ import { ApiRequestError } from "@/request";
 export function EditionFailure({
   error,
   href,
+  headingLevel = 1,
 }: {
   error: unknown;
   href: string;
+  headingLevel?: 1 | 2;
 }) {
   const known = error instanceof ApiRequestError ? error : null;
   const forbidden = known?.status === 401 || known?.status === 403;
   return (
     <PageState
+      headingLevel={headingLevel}
       state={forbidden ? "forbidden" : "error"}
       eyebrow="公开刊物"
       title={

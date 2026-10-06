@@ -475,6 +475,7 @@ export function AlertsWorkspace() {
       <Separator />
       {error && (
         <PageState
+          headingLevel={2}
           state={error.forbidden ? "forbidden" : data ? "stale" : "error"}
           eyebrow="突发告警"
           title={error.forbidden ? "无权读取告警配置" : "暂时无法读取告警配置"}
@@ -497,6 +498,7 @@ export function AlertsWorkspace() {
       {!data
         ? !error && (
             <PageState
+              headingLevel={2}
               state="loading"
               loadingLayout="detail"
               eyebrow="突发告警"
@@ -558,6 +560,7 @@ export function AlertsWorkspace() {
               )}
               {!data.rules.length ? (
                 <PageState
+                  headingLevel={2}
                   state="empty"
                   eyebrow="突发告警"
                   title="尚未配置告警规则"

@@ -549,13 +549,18 @@ export function JobDetail({ jobId }: JobDetailProps) {
 
   if (state.status === "loading") {
     return (
-      <PageState
-        state="loading"
-        loadingLayout="detail"
-        eyebrow="任务详情"
-        title="正在读取任务"
-        description="正在读取持久状态与已保存的结果范围。"
-      />
+      <>
+        <UI.Heading level={1} className="sr-only">
+          正在读取任务
+        </UI.Heading>
+        <PageState
+          state="loading"
+          loadingLayout="detail"
+          eyebrow="任务详情"
+          title="正在读取任务"
+          description="正在读取持久状态与已保存的结果范围。"
+        />
+      </>
     );
   }
 

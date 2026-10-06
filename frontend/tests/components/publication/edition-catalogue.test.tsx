@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { expectOnePageHeading } from "../../page-heading";
 import {
   cleanup,
   fireEvent,
@@ -17,6 +18,7 @@ vi.mock("@/api/gongkaikanwumulu", () => ({
   getPublicDailyCalendar: api.calendar,
 }));
 afterEach(() => {
+  expectOnePageHeading();
   cleanup();
   vi.resetAllMocks();
 });
@@ -130,6 +132,7 @@ it("preserves the existing list and cursor after a failed page, marks it stale a
   );
   fireEvent.click(screen.getByRole("button", { name: "更早刊期" }));
   await screen.findByText("已过期");
+  expectOnePageHeading();
   expect(screen.getByRole("link", { name: "日报 2026-W40" })).toBeTruthy();
   expect(screen.getByRole("status").textContent).toContain(
     "catalogue_busy · 503",
@@ -160,6 +163,7 @@ it("shows month loading, prevents duplicate actions, and only links returned day
   );
   fireEvent.click(screen.getByRole("button", { name: "读取月份" }));
   expect(screen.getByRole("status", { name: "正在读取月份日历" })).toBeTruthy();
+  expectOnePageHeading();
   expect(
     (screen.getByRole("button", { name: "正在读取月份…" }) as HTMLButtonElement)
       .disabled,

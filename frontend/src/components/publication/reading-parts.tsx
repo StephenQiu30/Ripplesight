@@ -19,13 +19,16 @@ export { categories, publicationTime } from "./reading-format";
 export function PublicationFailure({
   error,
   href,
+  headingLevel = 1,
 }: {
   error: unknown;
   href: string;
+  headingLevel?: 1 | 2;
 }) {
   const known = error instanceof ApiRequestError ? error : null;
   return (
     <PageState
+      headingLevel={headingLevel}
       state="error"
       errorCode={known?.code}
       httpStatus={known?.status}

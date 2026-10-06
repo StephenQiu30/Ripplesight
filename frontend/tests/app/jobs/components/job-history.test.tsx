@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { expectOnePageHeading } from "../../../page-heading";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
@@ -17,6 +18,7 @@ vi.mock("@/app/jobs/components/job-health-summary", () => ({
   JobHealthSummary: () => null,
 }));
 afterEach(() => {
+  if (document.body.textContent) expectOnePageHeading();
   cleanup();
   vi.clearAllMocks();
 });

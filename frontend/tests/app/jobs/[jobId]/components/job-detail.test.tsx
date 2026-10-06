@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { expectOnePageHeading } from "../../../../page-heading";
 
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -271,6 +272,7 @@ describe("job coverage windows", () => {
 });
 
 afterEach(() => {
+  if (document.body.textContent) expectOnePageHeading();
   cleanup();
   vi.resetAllMocks();
 });

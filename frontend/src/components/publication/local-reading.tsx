@@ -348,6 +348,7 @@ export function SavedItems({
       )}
       {busy ? (
         <PageState
+          headingLevel={2}
           state="loading"
           eyebrow={label}
           title="正在读取当前公开材料…"
@@ -364,6 +365,7 @@ export function SavedItems({
         <>
           {failures.length > 0 && (
             <PageState
+              headingLevel={2}
               state="error"
               eyebrow={label}
               title="部分材料暂不可读"
@@ -446,6 +448,7 @@ export function SavedItems({
           ) : (
             failures.length === 0 && (
               <PageState
+                headingLevel={2}
                 state="empty"
                 eyebrow={label}
                 title={

@@ -66,12 +66,17 @@ export default async function DiscoverPage({
   return (
     <Suspense
       fallback={
-        <PageState
-          state="loading"
-          eyebrow="探索"
-          title="正在检索公开资讯"
-          description="正在读取结果与专题目录。"
-        />
+        <>
+          <UI.Heading level={1} className="sr-only">
+            正在检索公开资讯
+          </UI.Heading>
+          <PageState
+            state="loading"
+            eyebrow="探索"
+            title="正在检索公开资讯"
+            description="正在读取结果与专题目录。"
+          />
+        </>
       }
     >
       <DiscoveryReadingPage params={params} />
@@ -180,6 +185,7 @@ async function DiscoveryReadingPage({ params }: { params: DiscoveryParams }) {
             </>
           ) : (
             <PublicationFailure
+              headingLevel={2}
               error={discoveryFailure(
                 reading.status === "rejected" ? reading.reason : undefined,
               )}

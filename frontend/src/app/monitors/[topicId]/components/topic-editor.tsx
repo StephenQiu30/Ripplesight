@@ -432,18 +432,27 @@ export function TopicEditor({
 
   if (state.status === "loading") {
     return (
-      <PageState
-        state="loading"
-        loadingLayout="detail"
-        eyebrow="监控主题"
-        title="正在读取主题"
-        description="正在读取当前规则版本与持久状态。"
-      />
+      <>
+        {!embedded && (
+          <UI.Heading level={1} className="sr-only">
+            正在读取主题
+          </UI.Heading>
+        )}
+        <PageState
+          headingLevel={embedded ? 2 : 1}
+          state="loading"
+          loadingLayout="detail"
+          eyebrow="监控主题"
+          title="正在读取主题"
+          description="正在读取当前规则版本与持久状态。"
+        />
+      </>
     );
   }
   if (state.status === "not-found") {
     return (
       <PageState
+        headingLevel={embedded ? 2 : 1}
         state="empty"
         eyebrow="主题不可用"
         title="没有找到这个主题"
@@ -459,6 +468,7 @@ export function TopicEditor({
   if (state.status === "error") {
     return (
       <PageState
+        headingLevel={embedded ? 2 : 1}
         state={state.forbidden ? "forbidden" : "error"}
         eyebrow="加载失败"
         title={state.forbidden ? "无权读取监控主题" : "暂时无法读取主题"}
@@ -492,6 +502,7 @@ export function TopicEditor({
     <UI.Content className="flex min-w-0 flex-col gap-8">
       {reloadFailure && (
         <PageState
+          headingLevel={2}
           state="stale"
           eyebrow="监控主题"
           title="主题刷新失败"
