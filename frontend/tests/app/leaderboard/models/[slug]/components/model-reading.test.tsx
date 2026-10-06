@@ -72,7 +72,11 @@ it("labels historical evidence and separates excluded and unmeasured sources", (
     unmeasured: [{ key: "unmeasured", name: "未测评的来源" }],
     comparisons: [],
   };
-  render(<ModelReading data={data} />);
+  const { rerender } = render(<ModelReading data={data} />);
+  expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  expect(
+    screen.getByRole("heading", { level: 1, name: "Fixed Model" }),
+  ).toBeTruthy();
   expect(screen.getByText(/历史发布轮次/)).toBeTruthy();
   expect(screen.getByText("同协议沿用")).toBeTruthy();
   expect(screen.getByText("非基础模型配置")).toBeTruthy();
@@ -81,4 +85,26 @@ it("labels historical evidence and separates excluded and unmeasured sources", (
   expect(
     screen.getByRole("link", { name: "LiveBench" }).getAttribute("href"),
   ).toBe("/leaderboard/sources/livebench");
+  expect(screen.queryByText(/上下文/)).toBeNull();
+  expect(
+    screen
+      .getByRole("progressbar", { name: "综合榜支持指数" })
+      .getAttribute("aria-valuenow"),
+  ).toBe("69.4");
+  rerender(
+    <ModelReading
+      data={{ ...data, evidence: [], context_window_tokens: 128000 }}
+    />,
+  );
+  expect(
+    screen.getByRole("status", { name: "当前轮次没有可展示的逐项证据" }),
+  ).toBeTruthy();
+  expect(screen.getByText(/上下文 128,000 token/)).toBeTruthy();
+  expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  expect(
+    screen.getByRole("heading", {
+      level: 2,
+      name: "当前轮次没有可展示的逐项证据",
+    }),
+  ).toBeTruthy();
 });

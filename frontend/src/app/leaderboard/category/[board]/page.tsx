@@ -6,6 +6,8 @@ import { getLeaderboardBoard } from "@/api/moxingbang";
 import { publicSiteMetadata } from "@/components/publication/site-metadata";
 import { BoardReading } from "@/components/leaderboard/board-reading";
 import { LeaderboardFailure } from "@/components/leaderboard/reading-parts";
+import { BoardPageFrame } from "@/components/leaderboard/page-header";
+import { boardHref } from "@/components/leaderboard/board-navigation";
 
 export async function generateMetadata({
   params,
@@ -65,10 +67,16 @@ export default async function CategoryBoardPage({
     });
   } catch (error) {
     return (
-      <LeaderboardFailure
-        error={error}
-        href={`/leaderboard/category/${board}`}
-      />
+      <BoardPageFrame
+        board={board}
+        domestic={domestic}
+        openWeights={openWeights}
+      >
+        <LeaderboardFailure
+          error={error}
+          href={boardHref(board, domestic, openWeights)}
+        />
+      </BoardPageFrame>
     );
   }
   return (
