@@ -4,9 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { listMonitorEditorialSources } from "@/api/jiankongzhuti";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { PageState } from "@/components/system/page-state";
+import { readMonitorFailure, type MonitorFailure } from "./monitor-presenters";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   Field,
   FieldContent,
@@ -27,7 +28,7 @@ type Props = {
 type SourcesState =
   | { status: "loading" }
   | { status: "ready"; items: HotKeyAPI.EditorialTopicSourceView[] }
-  | { status: "error"; message: string };
+  | ({ status: "error" } & MonitorFailure);
 
 export function EditorialTopicSources({
   selectedProfileIds,
@@ -51,7 +52,7 @@ export function EditorialTopicSources({
           error instanceof ApiRequestError
             ? error.message
             : "订阅流暂时无法读取，请稍后重试。";
-        setState({ status: "error", message });
+        setState({ status: "error", ...readMonitorFailure(error, message) });
         toast.error(message);
       });
   }, []);
@@ -85,35 +86,41 @@ export function EditorialTopicSources({
       {state.status === "loading" ? (
         <Spinner aria-label="正在读取订阅流" />
       ) : state.status === "error" ? (
-        <Alert variant="destructive">
-          <AlertTitle>订阅流暂时不可用</AlertTitle>
-          <AlertDescription>
-            已选订阅流会保留。重新读取后可继续修改。
-          </AlertDescription>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled}
-            onClick={() => {
-              setState({ status: "loading" });
-              void loadSources();
-            }}
-          >
-            重新读取订阅流
-          </Button>
-        </Alert>
+        <PageState
+          state={state.forbidden ? "forbidden" : "error"}
+          eyebrow="订阅流"
+          title="订阅流暂时不可用"
+          description="已选订阅流会保留。重新读取后可继续修改。"
+          errorCode={state.code}
+          httpStatus={state.httpStatus}
+          action={
+            state.forbidden ? undefined : (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={disabled}
+                onClick={() => {
+                  setState({ status: "loading" });
+                  void loadSources();
+                }}
+              >
+                重新读取订阅流
+              </Button>
+            )
+          }
+        />
       ) : (
         <FieldGroup className="gap-5">
           {items.map((item) => {
             const selected = selectedProfileIds.includes(item.profile_id);
             return (
               <Field key={item.profile_id} orientation="horizontal">
-                <Checkbox
+                <Switch
                   id={`editorial-profile-${item.profile_id}`}
                   checked={selected}
                   disabled={disabled || (!item.selectable && !selected)}
                   onCheckedChange={(checked) =>
-                    toggle(item.profile_id, checked === true)
+                    toggle(item.profile_id, checked)
                   }
                   aria-describedby={`editorial-profile-${item.profile_id}-reason`}
                 />
@@ -143,7 +150,7 @@ export function EditorialTopicSources({
           })}
           {unavailable.map((id) => (
             <Field key={id} orientation="horizontal">
-              <Checkbox
+              <Switch
                 id={`editorial-profile-${id}`}
                 checked
                 disabled={disabled}

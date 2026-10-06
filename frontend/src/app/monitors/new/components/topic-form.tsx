@@ -28,7 +28,12 @@ import {
   tryBeginTopicSubmission,
   type TopicFieldErrors,
 } from "@/components/monitors/topic-validation";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { PageState } from "@/components/system/page-state";
+import {
+  readMonitorFailure,
+  type MonitorFailure,
+} from "@/components/monitors/monitor-presenters";
+import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -48,7 +53,7 @@ type SubmissionError = {
 type SourcesState =
   | { status: "loading" }
   | { status: "ready"; sourceOptions: TopicSourceOption[] }
-  | { status: "error"; message: string; requestId?: string };
+  | ({ status: "error" } & MonitorFailure);
 
 function toSubmissionError(error: unknown): SubmissionError {
   if (!(error instanceof ApiRequestError))
@@ -71,11 +76,7 @@ function toSubmissionError(error: unknown): SubmissionError {
 function toSourcesError(error: unknown): SourcesState {
   return {
     status: "error",
-    message:
-      error instanceof ApiRequestError
-        ? error.message
-        : "来源配置加载失败，请稍后重试。",
-    requestId: error instanceof ApiRequestError ? error.requestId : undefined,
+    ...readMonitorFailure(error, "来源配置加载失败，请稍后重试。"),
   };
 }
 
@@ -204,6 +205,7 @@ export function TopicForm() {
       };
       const topic = await createMonitorTopic(payload);
       if (!mounted.current) return;
+      toast.success("监控主题已创建，当前保持暂停。");
       router.replace(`/monitors/${topic.id}`);
       router.refresh();
     } catch (error) {
@@ -228,30 +230,27 @@ export function TopicForm() {
   }
 
   return (
-    <UI.Content>
-      <Button asChild variant="ghost" size="navigation" className="mb-10">
+    <UI.Content className="flex min-w-0 flex-col gap-8">
+      <Button asChild variant="ghost" size="navigation" className="self-start">
         <Link href="/topics">返回我的关注</Link>
       </Button>
-      <UI.Content className="grid gap-12 md:grid-cols-2 md:gap-16">
-        <UI.Content as="section">
-          <UI.Text className="text-muted-foreground text-sm">创建关注</UI.Text>
-          <UI.Heading
-            level={1}
-            className="mt-5 text-4xl leading-tight font-normal tracking-tight sm:text-5xl"
-          >
-            从你关心的
-            <UI.TextBreak />
-            事情开始。
-          </UI.Heading>
-          <UI.Text className="text-muted-foreground mt-6 max-w-sm text-sm leading-7">
-            选好关键词和信息来源，以适合自己的节奏了解新的变化。
+      <UI.Content className="grid min-w-0 grid-cols-1 items-start gap-8 xl:grid-cols-3 xl:gap-12">
+        <UI.Content as="section" className="flex flex-col gap-4">
+          <UI.Heading level={1}>新建监控主题</UI.Heading>
+          <UI.Text tone="muted" size="sm">
+            选好关键词、排除词和来源，持续跟踪你关心的变化。新主题保持暂停，保存后可以恢复运行。
+          </UI.Text>
+          <Separator />
+          <UI.Text tone="muted" size="sm">
+            关键词可在保存前预览。采集频率和报告偏好可在进阶设置与报告设置中调整。
           </UI.Text>
         </UI.Content>
         <UI.Form
           ref={formRef}
+          className="min-w-0 xl:col-span-2"
+          aria-label="新建主题设置"
           onSubmit={handleSubmit}
           noValidate
-          aria-busy={isSubmitting}
         >
           <FieldGroup className="gap-8">
             <Field
@@ -301,22 +300,36 @@ export function TopicForm() {
                 <Spinner aria-label="正在读取来源" />
               </Field>
             ) : (
-              <Alert variant="destructive">
-                <AlertTitle>信息来源暂时不可用</AlertTitle>
-                <AlertDescription>
-                  <UI.Text>可以先保存关注，之后再配置来源。</UI.Text>
-                </AlertDescription>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="navigation"
-                  disabled={isSubmitting}
-                  onClick={() => void reloadSources()}
-                >
-                  <RotateCcwIcon data-icon="inline-start" />
-                  重新读取来源
-                </Button>
-              </Alert>
+              <PageState
+                state={sourcesState.forbidden ? "forbidden" : "error"}
+                eyebrow="信息来源"
+                title={
+                  sourcesState.forbidden
+                    ? "无权读取信息来源"
+                    : "信息来源暂时不可用"
+                }
+                description={
+                  sourcesState.forbidden
+                    ? "请登录有权访问来源的账户。"
+                    : "可以先保存关注，之后再配置来源。"
+                }
+                errorCode={sourcesState.code}
+                httpStatus={sourcesState.httpStatus}
+                action={
+                  sourcesState.forbidden ? undefined : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="navigation"
+                      disabled={isSubmitting}
+                      onClick={() => void reloadSources()}
+                    >
+                      <RotateCcwIcon data-icon="inline-start" />
+                      重新读取来源
+                    </Button>
+                  )
+                }
+              />
             )}
             <EditorialTopicSources
               selectedProfileIds={editorialProfileIds}
@@ -354,7 +367,7 @@ export function TopicForm() {
                 sourceKeys={sourceKeys}
                 disabled={isSubmitting}
               />
-              <Button type="submit" size="hero" disabled={isSubmitting}>
+              <Button type="submit" size="navigation" disabled={isSubmitting}>
                 {isSubmitting ? (
                   <Spinner data-icon="inline-start" aria-hidden="true" />
                 ) : null}
