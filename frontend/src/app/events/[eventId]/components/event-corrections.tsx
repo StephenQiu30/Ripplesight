@@ -180,14 +180,10 @@ export function EventCorrections({
       className="mt-12"
       aria-labelledby="event-correction-heading"
     >
-      <UI.Heading
-        level={2}
-        id="event-correction-heading"
-        className="text-2xl font-medium"
-      >
+      <UI.Heading level={2} id="event-correction-heading">
         人工修订
       </UI.Heading>
-      <UI.Text className="text-muted-foreground mt-3 leading-7">
+      <UI.Text tone="muted" size="sm" className="mt-3">
         已选择 {selectedContentIds.length} 个成员、{selectedFactIds.length}{" "}
         个事实。修订保留历史证据，摘要会重新生成。
       </UI.Text>

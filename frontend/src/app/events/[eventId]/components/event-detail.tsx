@@ -1,28 +1,41 @@
 "use client";
-import * as UI from "@/components/ui/content";
 
-import Link from "next/link";
 import { type FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getEvent } from "@/api/shijian";
-import { EventHeat } from "./event-heat";
-import { EventMemberList } from "@/app/events/[eventId]/components/event-member-list";
-import { EventFacts } from "@/app/events/[eventId]/components/event-facts";
-import { EventCorrections } from "@/app/events/[eventId]/components/event-corrections";
-import { PageState } from "@/components/system/page-state";
+import * as UI from "@/components/ui/content";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
+import { PageState } from "@/components/system/page-state";
+import {
+  EventColumns,
+  EventHeader,
+  EventSources,
+  RepresentativeComments,
+} from "@/components/events/event-reading";
+import {
+  memberComments,
+  workbenchSources,
+} from "@/components/events/reading-model";
 import { ApiRequestError } from "@/request";
+import { EventHeat } from "./event-heat";
+import { EventFacts } from "./event-facts";
+import { EventMemberList } from "./event-member-list";
+import { EventCorrections } from "./event-corrections";
+import { EventRelated } from "./event-related";
 
 type DetailState =
   | { status: "loading" }
   | { status: "ready"; event: HotKeyAPI.EventReadView }
-  | { status: "not-found" }
-  | { status: "error" };
+  | { status: "not-found" | "error" | "forbidden"; error: unknown };
 
 export function EventDetail({ eventId }: { eventId: string }) {
   const [state, setState] = useState<DetailState>({ status: "loading" });
@@ -31,7 +44,6 @@ export function EventDetail({ eventId }: { eventId: string }) {
     setState({ status: "loading" });
     setRetry((value) => value + 1);
   }
-
   useEffect(() => {
     const controller = new AbortController();
     void getEvent({ event_id: eventId }, { signal: controller.signal })
@@ -44,24 +56,50 @@ export function EventDetail({ eventId }: { eventId: string }) {
           (error instanceof ApiRequestError && error.kind === "cancelled")
         )
           return;
-        if (
-          error instanceof ApiRequestError &&
-          error.code === "resource_not_found"
-        ) {
-          setState({ status: "not-found" });
-        } else {
-          setState({ status: "error" });
-          toast.error(
-            error instanceof ApiRequestError
-              ? `${error.message}${error.requestId ? ` 请求编号：${error.requestId}` : ""}`
-              : "事件详情读取失败，请稍后重试。",
-          );
-        }
+        const known = error instanceof ApiRequestError ? error : null;
+        const status =
+          known?.status === 401 || known?.status === 403
+            ? "forbidden"
+            : known?.code === "resource_not_found" || known?.status === 404
+              ? "not-found"
+              : "error";
+        setState({ status, error });
+        if (status === "error")
+          toast.error(known?.message ?? "事件详情读取失败，请稍后重试。");
       });
     return () => controller.abort();
   }, [eventId, retry]);
 
-  if (state.status === "not-found" || state.status === "error")
+  if (state.status === "loading")
+    return (
+      <PageState
+        state="loading"
+        eyebrow="事件读取"
+        title="正在读取事件详情"
+        description="正在读取当前修订和固定版本证据。"
+        loadingLayout="detail"
+      />
+    );
+  if (state.status === "forbidden")
+    return (
+      <PageState
+        state="forbidden"
+        eyebrow="工作台"
+        title="需要登录后阅读事件"
+        description="个人事件和固定成员证据需要工作台会话。"
+        action={
+          <Button asChild>
+            <UI.TextLink
+              href={`/login?returnTo=${encodeURIComponent(`/events/${eventId}`)}`}
+            >
+              登录
+            </UI.TextLink>
+          </Button>
+        }
+      />
+    );
+  if (state.status !== "ready") {
+    const known = state.error instanceof ApiRequestError ? state.error : null;
     return (
       <PageState
         state={state.status === "not-found" ? "empty" : "error"}
@@ -74,43 +112,25 @@ export function EventDetail({ eventId }: { eventId: string }) {
             ? "此事件不存在于当前工作区，或其固定成员证据已经不可读。"
             : "可以重试详情读取，或返回事件列表。"
         }
+        errorCode={known?.code}
+        httpStatus={known?.status}
         action={
           <UI.Content className="flex flex-wrap gap-3">
             <Button onClick={refresh}>重试事件详情</Button>
             <Button asChild variant="outline">
-              <Link href="/events">返回事件列表</Link>
+              <UI.TextLink href="/events">返回事件列表</UI.TextLink>
             </Button>
           </UI.Content>
         }
       />
     );
-
+  }
   return (
-    <UI.Content>
-      <UI.Content className="mb-8 flex flex-wrap justify-between gap-4">
-        <Button asChild variant="ghost">
-          <Link href="/events">返回事件列表</Link>
-        </Button>
-        <Button variant="outline" onClick={refresh}>
-          刷新事件详情
-        </Button>
-      </UI.Content>
-      {state.status === "loading" ? (
-        <UI.Content
-          aria-label="正在读取事件详情"
-          className="flex flex-col gap-y-6"
-        >
-          <Skeleton className="h-12 w-3/4" />
-          <Skeleton className="h-32 w-full" />
-        </UI.Content>
-      ) : (
-        <EventReading
-          key={`${state.event.id}:${state.event.revision}`}
-          event={state.event}
-          onChanged={refresh}
-        />
-      )}
-    </UI.Content>
+    <EventReading
+      key={`${state.event.id}:${state.event.revision}`}
+      event={state.event}
+      onChanged={refresh}
+    />
   );
 }
 
@@ -126,6 +146,10 @@ function EventReading({
   const [selectedContentIds, setSelectedContentIds] = useState<string[]>([]);
   const [selectedFactIds, setSelectedFactIds] = useState<string[]>([]);
   const [facts, setFacts] = useState<HotKeyAPI.EventFactView[]>([]);
+  const [members, setMembers] = useState<HotKeyAPI.EventMemberReadView[]>([]);
+  const [heat, setHeat] = useState<HotKeyAPI.EventAttentionView | null>(null);
+  const [correctionsOpen, setCorrectionsOpen] = useState(false);
+  const sources = workbenchSources(members, facts);
   function selectRevision(form: FormEvent<HTMLFormElement>) {
     form.preventDefault();
     const selected = Number(revisionInput);
@@ -137,157 +161,157 @@ function EventReading({
       toast.error(`请选择 1 至 ${event.revision} 的事件修订。`);
       return;
     }
+    if (revision === selected) return;
     setRevision(selected);
     setSelectedContentIds([]);
     setSelectedFactIds([]);
+    setMembers([]);
+    setFacts([]);
   }
-
+  const toggle = (id: string, setter: typeof setSelectedContentIds) =>
+    setter((current) =>
+      current.includes(id)
+        ? current.filter((value) => value !== id)
+        : [...current, id],
+    );
   return (
-    <>
+    <UI.Content className="flex min-w-0 flex-col gap-8">
       {event.redirected_from_event_id ? (
-        <Alert className="mb-8">
+        <Alert>
           <AlertTitle>已合并到当前事件</AlertTitle>
           <AlertDescription>
             此链接原来的事件已合并。当前展示规范事件及其成员。
-            <Link
-              href={`/events/${event.id}`}
-              className="underline underline-offset-4"
-            >
+            <UI.TextLink href={`/events/${event.id}`}>
               打开规范事件链接
-            </Link>
+            </UI.TextLink>
           </AlertDescription>
         </Alert>
       ) : null}
-      <UI.Content className="flex flex-wrap gap-3">
-        <Badge variant="secondary">修订 {event.revision}</Badge>
-        <Badge variant="secondary">
-          {
-            { active: "活跃", watching: "关注中", settled: "暂时平稳" }[
-              event.phase ?? "active"
-            ]
-          }
-        </Badge>
-        <Badge variant="secondary">
-          {event.readable_member_count} / {event.member_count} 条成员可读
-        </Badge>
-      </UI.Content>
-      <UI.Heading
-        level={1}
-        className="mt-5 text-3xl font-medium tracking-tight sm:text-4xl"
-      >
-        {event.title ?? "摘要待更新或暂不可读的事件"}
-      </UI.Heading>
-      {event.summary ? (
-        <UI.Text className="text-muted-foreground mt-5 max-w-3xl leading-8 whitespace-pre-wrap">
-          {event.summary}
-        </UI.Text>
-      ) : (
-        <Alert className="mt-6">
-          <AlertTitle>派生摘要暂不可读</AlertTitle>
-          <AlertDescription>
-            摘要需要重新生成，或其引用证据不可读。仍可阅读下方可用成员。
-          </AlertDescription>
-        </Alert>
-      )}
-      <UI.Text className="text-muted-foreground mt-6 text-sm">
-        来源分布：
-        {Object.entries(event.source_counts)
-          .map(([source, count]) => `${source} ${count} 条`)
-          .join(" · ")}
-      </UI.Text>
-      <UI.Text className="text-muted-foreground mt-2 text-sm">
-        首次{event.first_seen_basis === "published" ? "发布" : "发现"}：
-        {new Date(event.first_seen_at).toLocaleString("zh-CN")}
-      </UI.Text>
-      {event.latest_progress ? (
-        <UI.Content as="section" className="mt-6">
-          <UI.Heading level={2} className="text-xl font-medium">
-            最新直接进展
-          </UI.Heading>
-          <UI.Text className="text-muted-foreground mt-3 leading-7 whitespace-pre-wrap">
-            {event.latest_progress}
-          </UI.Text>
-        </UI.Content>
-      ) : null}
-      <EventHeat eventId={event.id} />
-      <EventFacts
-        key={`facts:${revision}`}
-        eventId={event.id}
-        revision={revision}
-        selectedFactIds={selectedFactIds}
-        onFactsLoaded={setFacts}
-        onToggleFact={
-          revision === event.revision
-            ? (identity) =>
-                setSelectedFactIds((current) =>
-                  current.includes(identity)
-                    ? current.filter((value) => value !== identity)
-                    : [...current, identity],
-                )
-            : undefined
+      <EventHeader
+        title={event.title ?? "摘要待更新或暂不可读的事件"}
+        firstSeenAt={event.first_seen_at}
+        firstSeenBasis={event.first_seen_basis}
+        updatedAt={event.updated_at}
+        sourceCount={Object.keys(event.source_counts).length}
+        heat={heat?.participant_count ? heat.heat : null}
+        revision={event.revision}
+        phase={event.phase}
+        href="/events"
+        actions={
+          <Button variant="outline" onClick={onChanged}>
+            刷新事件详情
+          </Button>
         }
       />
-      <UI.Content
-        as="section"
-        className="mt-12"
-        aria-labelledby="event-members-heading"
+      <UI.Text size="sm" tone="muted">
+        <UI.InlineCode>
+          {event.readable_member_count} / {event.member_count}
+        </UI.InlineCode>{" "}
+        条成员可读。来源分布：
+        {Object.entries(event.source_counts)
+          .map(([source, count]) => `${source} ${count} 条`)
+          .join(" · ") || "尚无来源"}
+      </UI.Text>
+      {event.revision > 1 ? (
+        <UI.Form onSubmit={selectRevision}>
+          <FieldGroup className="flex flex-row flex-wrap items-end gap-4">
+            <Field className="w-40">
+              <FieldLabel htmlFor="event-revision">事件修订</FieldLabel>
+              <Input
+                id="event-revision"
+                type="number"
+                min={1}
+                max={event.revision}
+                value={revisionInput}
+                onChange={(input) => setRevisionInput(input.target.value)}
+              />
+            </Field>
+            <Button variant="outline" type="submit">
+              读取该修订成员
+            </Button>
+          </FieldGroup>
+        </UI.Form>
+      ) : null}
+      <EventColumns
+        aside={
+          <>
+            <RepresentativeComments comments={memberComments(members)} />
+            <EventRelated eventId={event.id} />
+          </>
+        }
       >
-        <UI.Heading
-          level={2}
-          id="event-members-heading"
-          className="text-2xl font-medium"
-        >
-          事件成员与固定版本证据
-        </UI.Heading>
-        <UI.Text className="text-muted-foreground mt-3 leading-7">
-          正文对应事件归并时选定的版本；观察指标和可见性分别标明时间。
-        </UI.Text>
-        {event.revision > 1 ? (
-          <UI.Form onSubmit={selectRevision}>
-            <FieldGroup className="mt-6 flex flex-row flex-wrap items-end gap-4">
-              <Field className="w-40">
-                <FieldLabel htmlFor="event-revision">事件修订</FieldLabel>
-                <Input
-                  id="event-revision"
-                  type="number"
-                  min={1}
-                  max={event.revision}
-                  value={revisionInput}
-                  onChange={(input) => setRevisionInput(input.target.value)}
-                />
-              </Field>
-              <Button variant="outline" type="submit">
-                读取该修订成员
-              </Button>
-            </FieldGroup>
-          </UI.Form>
-        ) : null}
+        <UI.Content as="section" className="flex flex-col gap-4">
+          <UI.Heading>发生了什么</UI.Heading>
+          {event.summary ? (
+            <UI.Text className="whitespace-pre-wrap">{event.summary}</UI.Text>
+          ) : (
+            <Alert>
+              <AlertTitle>派生摘要暂不可读</AlertTitle>
+              <AlertDescription>
+                摘要需要重新生成，或其引用证据不可读。仍可阅读下方可用成员。
+              </AlertDescription>
+            </Alert>
+          )}
+          {event.latest_progress ? (
+            <>
+              <UI.Heading level={3}>最新直接进展</UI.Heading>
+              <UI.Text className="whitespace-pre-wrap">
+                {event.latest_progress}
+              </UI.Text>
+            </>
+          ) : null}
+        </UI.Content>
+        <EventFacts
+          key={`facts:${revision}`}
+          eventId={event.id}
+          revision={revision}
+          sources={sources}
+          selectedFactIds={selectedFactIds}
+          onFactsLoaded={setFacts}
+          onToggleFact={
+            revision === event.revision
+              ? (id) => toggle(id, setSelectedFactIds)
+              : undefined
+          }
+        />
+        <EventHeat
+          eventId={event.id}
+          eventRevision={event.revision}
+          onHeatLoaded={setHeat}
+        />
         <EventMemberList
           key={`${event.id}:${revision}`}
           eventId={event.id}
           revision={revision}
+          onMembersLoaded={setMembers}
           selectedContentIds={selectedContentIds}
           onToggleContent={
             revision === event.revision
-              ? (identity) =>
-                  setSelectedContentIds((current) =>
-                    current.includes(identity)
-                      ? current.filter((value) => value !== identity)
-                      : [...current, identity],
-                  )
+              ? (id) => toggle(id, setSelectedContentIds)
               : undefined
           }
         />
-      </UI.Content>
+        <EventSources sources={sources} />
+      </EventColumns>
       {revision === event.revision ? (
-        <EventCorrections
-          event={event}
-          facts={facts}
-          selectedContentIds={selectedContentIds}
-          selectedFactIds={selectedFactIds}
-          onChanged={onChanged}
-        />
+        <>
+          <Separator />
+          <Collapsible open={correctionsOpen} onOpenChange={setCorrectionsOpen}>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost">人工修订与纠错</Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent forceMount hidden={!correctionsOpen}>
+              <EventCorrections
+                event={event}
+                facts={facts}
+                selectedContentIds={selectedContentIds}
+                selectedFactIds={selectedFactIds}
+                onChanged={onChanged}
+              />
+            </CollapsibleContent>
+          </Collapsible>
+        </>
       ) : null}
-    </>
+    </UI.Content>
   );
 }

@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({
   correct: vi.fn(),
   events: vi.fn(),
   push: vi.fn(),
+  related: vi.fn(),
 }));
 vi.mock("@/api/shijian", () => ({
   getEvent: api.detail,
@@ -23,6 +24,7 @@ vi.mock("@/api/shijian", () => ({
   listEventFacts: api.facts,
   correctEvent: api.correct,
   listEvents: api.events,
+  listRelatedEvents: api.related,
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: api.push }) }));
 
@@ -32,6 +34,7 @@ vi.mock("@/app/events/[eventId]/components/event-heat", () => ({
 
 import { EventDetail } from "@/app/events/[eventId]/components/event-detail";
 import { ApiRequestError } from "@/request";
+import { fact, member } from "../../../../components/events/fixtures";
 
 afterEach(() => {
   cleanup();
@@ -39,10 +42,119 @@ afterEach(() => {
 });
 beforeEach(() => {
   api.facts.mockResolvedValue({ facts: [] });
+  api.related.mockResolvedValue({ items: [] });
   api.events.mockResolvedValue({ items: [], next_cursor: null });
 });
 
 describe("fixed event member reading", () => {
+  it("shows the detail loading state before any dependent reads", () => {
+    api.detail.mockReturnValue(new Promise(() => {}));
+    render(<EventDetail eventId="loading" />);
+    expect(
+      screen
+        .getByRole("status", { name: "正在读取事件详情" })
+        .getAttribute("aria-busy"),
+    ).toBe("true");
+    expect(api.members).not.toHaveBeenCalled();
+    expect(api.related).not.toHaveBeenCalled();
+  });
+
+  it.each([401, 403])(
+    "keeps HTTP %s behind a login state with returnTo",
+    async (status) => {
+      api.detail.mockRejectedValue(
+        new ApiRequestError({
+          kind: "http",
+          code: "authentication_required",
+          status,
+          message: "login",
+        }),
+      );
+      render(<EventDetail eventId="private-event" />);
+      expect(
+        await screen.findByRole("heading", { name: "需要登录后阅读事件" }),
+      ).toBeTruthy();
+      expect(
+        screen.getByRole("link", { name: "登录" }).getAttribute("href"),
+      ).toBe("/login?returnTo=%2Fevents%2Fprivate-event");
+      expect(screen.getByRole("link", { name: "返回首页" })).toBeTruthy();
+      expect(api.members).not.toHaveBeenCalled();
+      expect(api.facts).not.toHaveBeenCalled();
+      expect(api.related).not.toHaveBeenCalled();
+    },
+  );
+
+  it("shows the structured error code and retries without hiding it as empty", async () => {
+    api.detail.mockRejectedValue(
+      new ApiRequestError({
+        kind: "http",
+        code: "event_read_unavailable",
+        status: 503,
+        message: "unavailable",
+      }),
+    );
+    render(<EventDetail eventId="failed" />);
+    await screen.findByRole("heading", { name: "无法读取事件" });
+    expect(screen.getByText("event_read_unavailable · 503")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "重试事件详情" }));
+    await waitFor(() => expect(api.detail).toHaveBeenCalledTimes(2));
+  });
+
+  it("gives every fixed fact reference a source target and keeps correction fields behind the footer control", async () => {
+    api.detail.mockResolvedValue({
+      id: "event",
+      topic_id: "topic",
+      revision: 1,
+      title: "有事实的事件",
+      summary: "摘要",
+      first_seen_at: "2026-10-02T00:00:00Z",
+      updated_at: "2026-10-03T00:00:00Z",
+      source_counts: { controlled: 2 },
+      member_count: 2,
+      readable_member_count: 2,
+      evidence_state: "complete",
+    });
+    api.facts.mockResolvedValue({
+      facts: [fact("loaded-fact", "loaded"), fact("pending-fact", "pending")],
+    });
+    api.members.mockResolvedValue({
+      event_id: "event",
+      revision: 1,
+      current_revision: 1,
+      evidence_state: "complete",
+      next_cursor: "more",
+      items: [member("loaded")],
+    });
+    render(<EventDetail eventId="event" />);
+    const reference = await screen.findByRole("link", { name: "来源 2" });
+    expect(
+      document.getElementById(reference.getAttribute("href")!.slice(1))
+        ?.textContent,
+    ).toContain("此来源尚未加载");
+    const first = screen.getByRole("link", { name: "来源 1" });
+    expect(
+      document.getElementById(first.getAttribute("href")!.slice(1))
+        ?.textContent,
+    ).toContain("固定标题 loaded");
+    expect(screen.queryByRole("textbox", { name: "修订原因" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "人工修订与纠错" }));
+    expect(screen.getByLabelText("修订原因")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("修订原因"), {
+      target: { value: "保留纠错草稿" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "人工修订与纠错" }));
+    expect(screen.queryByRole("textbox", { name: "修订原因" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "人工修订与纠错" }));
+    expect(
+      (screen.getByLabelText("修订原因") as HTMLTextAreaElement).value,
+    ).toBe("保留纠错草稿");
+    expect(screen.getByText("此来源尚无代表评论。")).toBeTruthy();
+    expect(api.related).toHaveBeenCalledWith(
+      { event_id: "event" },
+      expect.anything(),
+    );
+  });
+
   it("uses the canonical identity and fixed revision, renders real body and keeps unknown counts", async () => {
     api.detail.mockResolvedValue({
       id: "canonical-event",
@@ -126,9 +238,24 @@ describe("fixed event member reading", () => {
       ),
     );
     expect(screen.getByText("已合并到当前事件")).toBeTruthy();
-    expect(screen.getByText("评论：未知")).toBeTruthy();
-    expect(screen.getByText("点赞：0")).toBeTruthy();
-    expect(screen.getByText("该成员证据暂不可读")).toBeTruthy();
+    expect(
+      screen.getByText(
+        (_, node) =>
+          node?.tagName === "P" && !!node.textContent?.startsWith("首次发布"),
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        (_, node) =>
+          node?.tagName === "SPAN" && node.textContent === "评论：未知",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        (_, node) => node?.tagName === "SPAN" && node.textContent === "点赞：0",
+      ),
+    ).toBeTruthy();
+    expect(screen.getAllByText("该成员证据暂不可读").length).toBeGreaterThan(0);
     expect(screen.queryByRole("link", { name: "阅读原文" })).toBeNull();
     expect(document.querySelector("script")).toBeNull();
   });
