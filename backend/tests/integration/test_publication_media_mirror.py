@@ -131,32 +131,38 @@ def prepared(request, monkeypatch):
     )
     if browser:
         rendered_body += '<video src="https://images.example/owned.mp4"></video>'
-    private = Settings(
-        _env_file=Path(__file__).resolve().parents[3] / ".env",
-        environment="test",
-        database_url=os.environ["HOTKEY_TEST_DATABASE_URL"],
-        ai_enabled=False,
-        media_mirror_allow_external_requests=False,
-    )
-    # This fixture runs on the host; the shared Compose endpoint uses its
-    # container-only host alias. Keep the configured local port and credentials.
-    if private.minio_endpoint and private.minio_endpoint.startswith("host.docker.internal:"):
-        private.minio_endpoint = private.minio_endpoint.replace(
-            "host.docker.internal:", "127.0.0.1:", 1
+    test_minio = {
+        name: os.getenv(f"HOTKEY_TEST_MINIO_{name}")
+        for name in ("ENDPOINT", "ACCESS_KEY", "SECRET_KEY", "BUCKET", "SECURE")
+    }
+    if any(value is not None for value in test_minio.values()):
+        assert all(test_minio.values()), (
+            "test MinIO namespace must be complete, without .env mixing"
         )
+        assert test_minio["SECURE"] in {"true", "false"}, "test MinIO SECURE must be explicit"
+    elif getattr(request, "param", None) == "minio":
+        pytest.skip(
+            "HOTKEY_TEST_MINIO_* is required for real MinIO media mirror tests; "
+            "the repository .env is never used"
+        )
+    database_url = os.getenv("HOTKEY_TEST_DATABASE_URL")
+    assert database_url is not None, "an isolated PostgreSQL test database is required"
     with TestClient(
         create_app(
             Settings(
+                _env_file=None,
                 environment="test",
-                database_url=os.environ["HOTKEY_TEST_DATABASE_URL"],
+                database_url=database_url,
                 log_level="WARNING",
                 media_mirror_enabled=True,
+                media_mirror_allow_external_requests=False,
                 ai_enabled=False,
-                minio_endpoint=private.minio_endpoint,
-                minio_access_key=private.minio_access_key,
-                minio_secret_key=private.minio_secret_key,
-                minio_bucket=private.minio_bucket,
-                minio_secure=private.minio_secure,
+                # MemoryStorage cases need no MinIO; explicit blanks also block ambient settings.
+                minio_endpoint=test_minio["ENDPOINT"] or "",
+                minio_access_key=test_minio["ACCESS_KEY"] or "",
+                minio_secret_key=test_minio["SECRET_KEY"] or "",
+                minio_bucket=test_minio["BUCKET"] or "",
+                minio_secure=test_minio["SECURE"] == "true",
             )
         )
     ) as client:
@@ -724,6 +730,7 @@ def test_completed_object_write_before_receipt_is_recovered_without_new_http(pre
         )
 
 
+@pytest.mark.parametrize("prepared", ["minio"], indirect=True)
 def test_real_existing_minio_owned_objects_read_and_lifecycle_cleanup(prepared, monkeypatch):
     from evidence.adapters.minio import MinioObjectCleanup
     from evidence.schemas import CleanupTargetKind, DeletionReason
@@ -742,8 +749,7 @@ def test_real_existing_minio_owned_objects_read_and_lifecycle_cleanup(prepared, 
     monkeypatch.setattr(media_reading, "datetime", FixtureReadDateTime)
     sessions = client.app.state.session_factory
     storage = client.app.state.media_storage
-    if storage is None:
-        pytest.skip("existing configured MinIO is required")
+    assert storage is not None, "real test MinIO configuration is required"
     names = []
     calls = []
     try:
