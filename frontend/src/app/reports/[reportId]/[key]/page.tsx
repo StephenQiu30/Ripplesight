@@ -2,9 +2,12 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 
-import { getPublicEditionNavigation } from "@/api/gongkaikanwumulu";
+import {
+  getPublicEditionNavigation,
+  listPublicEditionCatalogue,
+} from "@/api/gongkaikanwumulu";
 import { getPublicEdition } from "@/api/gongkaifabu";
-import { PublicationFailure } from "@/components/publication/reading-parts";
+import { EditionFailure } from "../components/edition-state";
 import { ApiRequestError } from "@/request";
 import { PublicEditionReader } from "./components/public-edition-reader";
 
@@ -57,17 +60,27 @@ export default async function PublicEditionPage({ params }: Parameters) {
   const { reportId: rawKind, key } = await params;
   const kind = editionKind(rawKind);
   let edition: HotKeyAPI.PublicEditionView;
-  let navigation: HotKeyAPI.PublicEditionNavigationView;
+  let navigation: HotKeyAPI.PublicEditionNavigationView | undefined;
+  let catalogue: HotKeyAPI.PublicEditionCatalogueView | undefined;
+  let catalogueError: unknown;
+  let navigationError: unknown;
   try {
-    [edition, navigation] = await Promise.all([
+    const [content, neighbours, history] = await Promise.allSettled([
       getPublicEdition({ kind, key }),
       getPublicEditionNavigation({ kind, key }),
+      listPublicEditionCatalogue({ kind, before_key: key, limit: 5 }),
     ]);
+    if (content.status === "rejected") throw content.reason;
+    edition = content.value;
+    if (neighbours.status === "fulfilled") navigation = neighbours.value;
+    else navigationError = neighbours.reason;
+    if (history.status === "fulfilled") catalogue = history.value;
+    else catalogueError = history.reason;
   } catch (error) {
     if (error instanceof ApiRequestError && error.status === 404) notFound();
     return (
       <>
-        <PublicationFailure
+        <EditionFailure
           error={error}
           href={`/reports/${kind}/${encodeURIComponent(key)}`}
         />
@@ -76,7 +89,13 @@ export default async function PublicEditionPage({ params }: Parameters) {
   }
   return (
     <>
-      <PublicEditionReader edition={edition} navigation={navigation} />
+      <PublicEditionReader
+        edition={edition}
+        navigation={navigation}
+        catalogue={catalogue}
+        catalogueError={catalogueError}
+        navigationError={navigationError}
+      />
     </>
   );
 }
