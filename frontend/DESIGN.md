@@ -23,12 +23,12 @@
 
 ## 3. 组件放在哪里
 
-| 类型 | 位置 |
-|---|---|
-| 只有一个页面用 | `src/app/<路由>/components/`（首页的放在 `src/app/components/`） |
-| 至少两个页面稳定复用 | `src/components/<功能>/` |
-| 全站外壳 | `src/layout/` |
-| shadcn 基础组件与语义组件 | `src/components/ui/` |
+| 类型                      | 位置                                                             |
+| ------------------------- | ---------------------------------------------------------------- |
+| 只有一个页面用            | `src/app/<路由>/components/`（首页的放在 `src/app/components/`） |
+| 至少两个页面稳定复用      | `src/components/<功能>/`                                         |
+| 全站外壳                  | `src/layout/`                                                    |
+| shadcn 基础组件与语义组件 | `src/components/ui/`                                             |
 
 `page.tsx` 只负责页面入口、数据边界和组件组合。
 

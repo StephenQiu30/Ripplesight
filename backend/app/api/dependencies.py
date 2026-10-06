@@ -33,6 +33,7 @@ from identity.services import AuthenticatedIdentity, IdentityService
 from identity.services import CreatedIdentitySession as CreatedIdentitySession
 from jobs.coverage import CollectionCoverageQueryService
 from jobs.services import JobService
+from knowledge.document_services import WorkspaceDocumentService
 from leaderboard.reads import LeaderboardReadService
 from monitors.codex_services import CodexResetService
 from monitors.runs import MonitorTopicRunService
@@ -612,3 +613,12 @@ def get_operator_write_scope(
 
 
 OperatorWriteScopeDependency = Annotated[UUID, Depends(get_operator_write_scope)]
+
+
+def get_workspace_document_service(request: Request) -> WorkspaceDocumentService:
+    return WorkspaceDocumentService(request.app.state.settings)
+
+
+WorkspaceDocumentServiceDependency = Annotated[
+    WorkspaceDocumentService, Depends(get_workspace_document_service)
+]

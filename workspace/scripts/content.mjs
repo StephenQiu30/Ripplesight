@@ -114,12 +114,12 @@ export function encodedPath(value) {
   return value.split('/').map(segment => encodeURIComponent(segment)).join('/')
 }
 
-export function sourceFile(document) {
+export function sourceFile(document, sourceRepoRoot = repoRoot) {
   const source = document.frontmatter.source
   if (!source) return undefined
   if (typeof source !== 'string') throw new Error('source 必须是相对路径')
   const file = path.resolve(path.dirname(document.file), source)
-  if (!['BACKLOG.md', 'PROJECT.md', 'AGENTS.md'].some(name => file === path.join(repoRoot, name)) ||
+  if (!['BACKLOG.md', 'PROJECT.md', 'AGENTS.md'].some(name => file === path.join(sourceRepoRoot, name)) ||
     fs.realpathSync(file) !== file) {
     throw new Error('source 只允许嵌入仓库根目录的 BACKLOG.md、PROJECT.md 或 AGENTS.md 原文')
   }

@@ -58,32 +58,34 @@
 
 首个 Sprint 的启动包为工具修复与方案收敛，共 16 理想小时，已开始工具修复与方案收敛；其余是待前置完成后滚动准入的候选。按计划初值，首个 Sprint 全部候选合计 128 小时，后续编辑 Sprint 116 小时。真实容量在前 12 个窗口后校准。
 
+本次范围为开发过程的内部知识库：现有 frontend 内接入 Nextra，网页编辑采用 Editor.js 与 Markdown 原文视图，管理 PRD、决策、计划及关联；不采用 GitBook。内部调研记录 `workspace/content/research/2026-10-06-workspace成熟方案调研.md` 包含作者 workspace 范式与 Notion 替代路线，Notion 尚未采用。目标环境已确认只在本机运行，框架与格式适配复用现有实现；不安装 Fumadocs，不删除现有 Nextra。
+
 ### 首个 Sprint：阅读与 AI
 
 | 顺序 | 工作与任务卡 | 完成条件 | 状态 |
 |---|---|---|---|
 | 1 | [文档工具修复](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#文档工具修复) | 当前文档校验与构建可重复通过，支持 plan 元数据 | 工程检查与本地浏览器复核通过，待 Claude 审查；证据见 [VERIFICATION](workspace/VERIFICATION.md#本轮工具修复与编号复核) |
-| 2 | [方案收敛](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#方案收敛) | 技术方案、能力归属、环境与身份缺口明确 | 源码核对与方案草案已整理至 [PROJECT §11](PROJECT.md#11-项目文档知识库接入方案待审查)，已建立 [07 能力](workspace/content/capabilities/07-项目文档知识库.md)；待 Claude 审查及本人确认环境、账号 |
-| 3 | [来源清单与版本快照](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#来源清单与版本快照) | 唯一原文、文件 hash、可重建的同版本快照 | 待前两项完成；候选 |
-| 4 | [统一权限与读取接口](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#统一权限与读取接口) | 全读取出口授权与路径校验，生成契约通过 | 待来源快照与本人身份确认；候选 |
-| 5 | [工作台阅读界面](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#工作台阅读界面) | 同布局文档显示、链接与五种页面状态正确 | 待读取契约；候选 |
-| 6 | [Obsidian 离线阅读](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#obsidian-离线阅读) | 实际 vault 离线阅读，根文件定位正确 | 待来源快照及 vault 验收；候选 |
-| 7 | [目标环境读取验证](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#目标环境读取验证) | KR1、KR2 真实验收与冷启动、恢复记录 | 待接口、页面及目标环境；候选 |
-| 8 | [中文检索](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#中文检索) | KR3 固定 20 条至少 18 条在前 5 命中 | 待阅读门槛通过；候选 |
-| 9 | [AI 原文读取与引用](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#ai-原文读取与引用) | 授权逐页或章节读取，同版本引用可打开 | 待检索与本机 Codex 可用；候选 |
+| 2 | [方案收敛](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#方案收敛) | 技术方案、能力归属、环境与身份缺口明确 | 源码核对与方案草案已整理至 [PROJECT §11](PROJECT.md#11-项目文档知识库接入方案待审查)，已建立 [07 能力](workspace/content/capabilities/07-项目文档知识库.md)；仅本机环境已确认；待 Claude 审查及本人账号配置 |
+| 3 | [来源清单与版本快照](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#来源清单与版本快照) | 唯一原文、文件 hash、可重建的同版本快照 | 本机工具已实现，确定性与完整性测试通过；待审查与真实初始化 |
+| 4 | [统一权限与读取接口](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#统一权限与读取接口) | 全读取出口授权与路径校验，生成契约通过 | 接口与生成客户端已实现，受控权限检查通过；待本人 UUID 与真实身份验收 |
+| 5 | [工作台阅读界面](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#工作台阅读界面) | 同布局文档显示、链接与五种页面状态正确；Nextra 保留且内部快照隔离 | Nextra 入口已实现；桌面、390px 五种状态与键盘受控验证通过；待审查与真实验收 |
+| 6 | [Obsidian 离线阅读](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#obsidian-离线阅读) | 实际 vault 离线阅读，根文件定位正确 | 专用副本、根文件映射与使用说明已准备；实际 Obsidian 尚未验收 |
+| 7 | [目标环境读取验证](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#目标环境读取验证) | KR1、KR2 真实验收与冷启动、恢复记录 | 本机隔离样本已验证；真实账号配置、冷启动及正式 KR 验收待完成 |
+| 8 | [中文检索](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#中文检索) | KR3 固定 20 条至少 18 条在前 5 命中 | 同快照关键词检索与浏览器冒烟已实现；固定 20 条查询尚未验收 |
+| 9 | [AI 原文读取与引用](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#ai-原文读取与引用) | 授权逐页或章节读取，同版本引用可打开 | 授权 API、本机只读 CLI 与章节定位已实现；真实本机 Codex 问题集尚未验收 |
 | 10 | [阅读与 AI 验收](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#阅读与-ai-验收) | KR1—KR4；真实 Codex、查询和边界问题记录 | 待前述产物及验收时间；候选 |
 
 ### 后续 Sprint：双端编辑
 
 | 顺序 | 工作与任务卡 | 完成条件 | 状态 |
 |---|---|---|---|
-| 1 | [编辑与同步设计](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#编辑与同步设计) | 草稿、Git 副本、写入位置、确认与恢复明确 | 待阅读与 AI 门槛；候选 |
-| 2 | [草稿接口](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#草稿接口) | 原文保存、CSRF、版本校验与重启恢复 | 待设计及可写存储；候选 |
-| 3 | [Markdown 编辑界面](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#markdown-编辑界面) | 原文编辑、差异、草稿与发布状态清楚 | 待草稿契约；候选 |
-| 4 | [确认发布](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#确认发布) | 限定路径发布，同版本切换与未知结果核对 | 待草稿、界面、Git 副本与发布授权；候选 |
-| 5 | [版本冲突处理](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#版本冲突处理) | 双方差异保留，无静默覆盖 | 待草稿与发布操作；候选 |
-| 6 | [Obsidian 双端同步](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#obsidian-双端同步) | 五类样本十条往返，原文与元数据不丢失 | 待冲突处理及真实 vault；候选 |
-| 7 | [历史恢复](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#历史恢复) | 确认后恢复已知版本，历史与草稿保留 | 待发布历史；候选 |
+| 1 | [编辑与同步设计](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#编辑与同步设计) | 草稿、Git 副本、写入位置、确认与恢复明确 | 本机方案与实现见 PROJECT §11、LOCAL；待 Claude 审查 |
+| 2 | [草稿接口](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#草稿接口) | 原文保存、CSRF、版本校验与重启恢复 | 已实现，受控版本、CSRF 与持久恢复检查通过；待真实账号验收 |
+| 3 | [Markdown 编辑界面](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#markdown-编辑界面) | 富文本与原文共用草稿，差异与发布状态清楚，格式保留 | Editor.js、原文、预览与对比已实现，真实编辑器保存及格式测试通过；待实际双端与输入法验收 |
+| 4 | [确认发布](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#确认发布) | 限定路径发布，同版本切换与未知结果核对 | 独立 Git 发布、决策替代与结果核对已实现；隔离副本浏览器发布通过，待审查与真实授权验收 |
+| 5 | [版本冲突处理](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#版本冲突处理) | 双方差异保留，无静默覆盖 | 隔离样本验证保存冲突、保留双方、显式合并后发布；待真实验收 |
+| 6 | [Obsidian 双端同步](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#obsidian-双端同步) | 五类样本十条往返，原文与元数据不丢失 | 文件同步工具已实现；实际 Obsidian 的五类十条往返尚未验收 |
+| 7 | [历史恢复](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#历史恢复) | 确认后恢复已知版本，历史与草稿保留 | 版本历史、加载新草稿与历史只读入口已实现；待完整恢复场景验收 |
 | 8 | [编辑验收](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#编辑验收) | KR5、KR6 真实双端往返与全部异常恢复 | 待写入任务、真实环境及验收时间；候选 |
 
 远程只读 MCP 按具体客户端需求单独估算与派发，不作为首期前提；不恢复业务公开分发范围。更新任务状态时同时记录证据与阻塞条件，不将候选任务、受控测试或周期运行次数当作已完成。
@@ -93,10 +95,10 @@
 
 | 条件 | 负责人 | 当前影响与检查点 |
 |---|---|---|
-| 工具与接入方案审查 | Claude | 工具工程验证和 §11 方案已可复核；完成审查后才能将前两项标记完成并放行来源快照任务 |
-| 正式验收环境及允许的本人账号 | Stephen | 已请求确认环境和用户名；真实 UUID 在身份服务核对后写本机/部署配置，不记入公开文档。无配置时读取关闭 |
-| 私密作者目录与文档专用 Git 工作副本 | Stephen 确认；Codex 配置 | 现有公开资料可准备本地样本；新增私密资料的存储位置、Git 权限和后续写入宿主尚未确定 |
-| 目标快照挂载与持久草稿存储 | Stephen 确认；Codex 实现 | §11 提供只读快照挂载方案；冷启动、恢复和真实写入需在确认的目标环境验证 |
+| 工具与接入方案审查 | Claude | 已尝试本机只读审查，Claude 登录过期，审查未执行；重新登录后复核当前修改，不能将工程通过记为代码完成 |
+| 正式验收环境及允许的本人账号 | Stephen | 本机环境已确认；已请求现有账号 UUID，核对后只写本机配置，不记入公开文档。无配置时读取关闭 |
+| 私密作者目录与文档专用 Git 工作副本 | Stephen 确认；Codex 配置 | 现有公开资料可准备本地样本；初始化在 .tools/workspace/source 建立独立来源，移除远端；待本人配置账号与实际使用验收 |
+| 目标快照挂载与持久草稿存储 | Stephen 确认；Codex 实现 | §11 提供本机持久快照和草稿方案；冷启动、恢复和真实写入需在确认的目标环境验证 |
 | 实际 Obsidian vault | Stephen；Claude 验收 | 工程文件校验不代表离线操作与双端往返已验收 |
 
-当前检查点：`286e4dbe` 的分类与编号、`8d562ced` 的文档工具已推送 main。接入方案是可审查的草案，尚未创建服务端接口或 frontend 页面；下一步先核对审查意见和环境回答，再按计划准入，不绕过读取与权限门槛。
+当前检查点：`286e4dbe` 的分类与编号、`8d562ced` 的文档工具已推送 main。本轮新增本机授权接口、Nextra 阅读入口、Editor.js 与原文草稿、隔离 Git 发布、决策替代及操作核对。启动说明见 [本机知识库](workspace/LOCAL.md)，工程证据见 [本机接入验证](workspace/VERIFICATION.md#本机知识库接入验证)。工程与受控浏览器检查通过；真实账号、Obsidian、本机 Codex 和 Claude 审查未完成，不将实现记为能力可用。
