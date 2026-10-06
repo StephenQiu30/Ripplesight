@@ -58,3 +58,6 @@ def attach_export_cleanup_targets_in_transaction(
     for resource in rows:
         if value not in resource.cleanup_targets:
             resource.cleanup_targets = [*resource.cleanup_targets, value]
+    # Autoflush is disabled; later populate_existing reads would otherwise
+    # discard these cleanup targets before the caller commits.
+    session.flush()
