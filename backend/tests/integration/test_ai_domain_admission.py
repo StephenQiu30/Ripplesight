@@ -535,6 +535,7 @@ def test_classic_daily_report_rechecks_all_source_input_at_final_admission(
 
     from tests.integration.test_content_search import _seed_posts
 
+    from content.analysis_inputs import freeze_analysis_observation_inputs_in_transaction
     from jobs.execution import JobExecutionService
     from jobs.schemas import JobAcceptanceInput, JobAcceptedMessage, JobObservationContext
     from jobs.services import JobService
@@ -546,6 +547,13 @@ def test_classic_daily_report_rechecks_all_source_input_at_final_admission(
     now = editorial_fixture.NOW
     version = posts[0].latest_observation.content_version.id
     with sessions.begin() as session:
+        manifest = freeze_analysis_observation_inputs_in_transaction(
+            session,
+            owner_id=owner,
+            post_observations={version: posts[0].latest_observation.id},
+            comment_observations={},
+            now=now,
+        )
         session.execute(
             text(
                 "UPDATE monitor_topic_versions SET match_any='[\"OpenAI\"]'::jsonb "
@@ -569,10 +577,12 @@ def test_classic_daily_report_rechecks_all_source_input_at_final_admission(
                 "INSERT INTO content_annotations (id,owner_id,content_id,content_version_id,"
                 "topic_id,topic_rule_version,prompt_version,relevant,relevance_reason,"
                 "sentiment,summary,ai_call_id,status,"
-                "result_state,first_valid_at,created_at,updated_at) VALUES "
+                "result_state,first_valid_at,created_at,updated_at,"
+                "input_manifest,input_signature) VALUES "
                 "(:id,:owner,:content,:version,:topic,1,'analysis.annotate.v1',"
                 "true,'controlled reason','neutral',"
-                "'Original summary',:call,'annotated','valid',:at,:at,:at)"
+                "'Original summary',:call,'annotated','valid',:at,:at,:at,"
+                "CAST(:manifest AS jsonb),:signature)"
             ),
             {
                 "id": uuid4(),
@@ -582,6 +592,8 @@ def test_classic_daily_report_rechecks_all_source_input_at_final_admission(
                 "topic": topic,
                 "call": call,
                 "at": now - timedelta(seconds=1),
+                "manifest": manifest.model_dump_json(),
+                "signature": manifest.signature,
             },
         )
         job = JobService(session, clock=lambda: now).accept_in_transaction(
