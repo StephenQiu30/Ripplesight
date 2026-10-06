@@ -5,6 +5,8 @@ import { getLeaderboardSource } from "@/api/moxingbang";
 import { publicSiteMetadata } from "@/components/publication/site-metadata";
 import { SourceReading } from "@/app/leaderboard/sources/[sourceKey]/components/source-reading";
 import { LeaderboardFailure } from "@/components/leaderboard/reading-parts";
+import { LeaderboardPageHeader } from "@/components/leaderboard/page-header";
+import { Content } from "@/components/ui/content";
 
 export async function generateMetadata({
   params,
@@ -37,11 +39,17 @@ export default async function LeaderboardSourcePage({
     data = await getLeaderboardSource({ source_key: sourceKey });
   } catch (error) {
     return (
-      <LeaderboardFailure
-        error={error}
-        href={`/leaderboard/sources/${encodeURIComponent(sourceKey)}`}
-        resource
-      />
+      <Content className="flex min-w-0 flex-col gap-6">
+        <LeaderboardPageHeader
+          title="评测来源明细"
+          description="查看评测来源的原始成绩、配置取舍与许可。"
+        />
+        <LeaderboardFailure
+          error={error}
+          href={`/leaderboard/sources/${encodeURIComponent(sourceKey)}`}
+          resource
+        />
+      </Content>
     );
   }
   return <SourceReading data={data} />;

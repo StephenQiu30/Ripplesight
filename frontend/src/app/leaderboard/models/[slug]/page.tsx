@@ -5,6 +5,8 @@ import { getLeaderboardModel } from "@/api/moxingbang";
 import { publicSiteMetadata } from "@/components/publication/site-metadata";
 import { ModelReading } from "@/app/leaderboard/models/[slug]/components/model-reading";
 import { LeaderboardFailure } from "@/components/leaderboard/reading-parts";
+import { LeaderboardPageHeader } from "@/components/leaderboard/page-header";
+import { Content } from "@/components/ui/content";
 
 export async function generateMetadata({
   params,
@@ -38,11 +40,17 @@ export default async function ModelPage({
     data = await getLeaderboardModel({ slug });
   } catch (error) {
     return (
-      <LeaderboardFailure
-        error={error}
-        href={`/leaderboard/models/${encodeURIComponent(slug)}`}
-        resource
-      />
+      <Content className="flex min-w-0 flex-col gap-6">
+        <LeaderboardPageHeader
+          title="模型证据"
+          description="查看公开评测证据、模型排名与官方价格。"
+        />
+        <LeaderboardFailure
+          error={error}
+          href={`/leaderboard/models/${encodeURIComponent(slug)}`}
+          resource
+        />
+      </Content>
     );
   }
   return <ModelReading data={data} />;

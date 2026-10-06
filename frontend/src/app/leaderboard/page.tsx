@@ -5,6 +5,8 @@ import { getLeaderboardBoard } from "@/api/moxingbang";
 import { publicSiteMetadata } from "@/components/publication/site-metadata";
 import { BoardReading } from "@/components/leaderboard/board-reading";
 import { LeaderboardFailure } from "@/components/leaderboard/reading-parts";
+import { BoardPageFrame } from "@/components/leaderboard/page-header";
+import { boardHref } from "@/components/leaderboard/board-navigation";
 
 export async function generateMetadata({
   searchParams,
@@ -43,7 +45,18 @@ export default async function LeaderboardPage({
       open_weights: openWeights,
     });
   } catch (error) {
-    return <LeaderboardFailure error={error} href="/leaderboard" />;
+    return (
+      <BoardPageFrame
+        board="overall"
+        domestic={domestic}
+        openWeights={openWeights}
+      >
+        <LeaderboardFailure
+          error={error}
+          href={boardHref("overall", domestic, openWeights)}
+        />
+      </BoardPageFrame>
+    );
   }
   return (
     <BoardReading data={data} domestic={domestic} openWeights={openWeights} />
