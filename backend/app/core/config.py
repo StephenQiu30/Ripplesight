@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     environment: Literal["development", "test", "staging", "production"] = "development"
     log_level: str = "INFO"
 
+    workspace_document_tool_root: Path | None = None
+    workspace_document_source_root: Path | None = None
+    workspace_document_snapshot_root: Path | None = None
+    workspace_document_read_user_ids: tuple[UUID, ...] = ()
+    workspace_document_write_user_ids: tuple[UUID, ...] = ()
+    workspace_document_publish_user_ids: tuple[UUID, ...] = ()
+
     web_origin: str = "http://127.0.0.1:8666"
     session_ttl_seconds: int = Field(default=43_200, ge=300, le=43_200)
     github_client_id: str | None = None

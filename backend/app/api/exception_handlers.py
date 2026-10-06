@@ -43,6 +43,20 @@ HTTP_ERRORS: Mapping[int, PublicError] = {
     504: PublicError(504, "upstream_timeout", "上游服务响应超时"),
 }
 APPLICATION_ERRORS: Mapping[str, PublicError] = {
+    "workspace_forbidden": PublicError(403, "workspace_forbidden", "没有项目文档访问权限"),
+    "workspace_unavailable": PublicError(
+        503, "workspace_unavailable", "本机项目文档尚未配置或暂不可用"
+    ),
+    "workspace_busy": PublicError(409, "workspace_busy", "文档操作正在进行, 请先核对操作结果"),
+    "workspace_version_conflict": PublicError(
+        409, "workspace_version_conflict", "来源或草稿已更新, 请保留修改并对比合并"
+    ),
+    "workspace_decision_requires_replacement": PublicError(
+        409, "workspace_decision_requires_replacement", "生效决策需保留旧记录并新建替代记录"
+    ),
+    "workspace_invalid_input": PublicError(
+        422, "workspace_invalid_input", "文档路径、元数据、链接或内容校验失败"
+    ),
     "invalid_alert_input": PublicError(422, "invalid_alert_input", "告警参数不符合要求"),
     "alert_configuration_conflict": PublicError(
         409, "alert_configuration_conflict", "主题或告警目标版本已变化,请重新读取"

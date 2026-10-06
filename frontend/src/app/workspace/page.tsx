@@ -27,6 +27,13 @@ export const metadata: Metadata = {
 
 const groups = [
   {
+    title: "项目资料",
+    description: "阅读需求、技术决策、计划与验收，并管理文档草稿。",
+    links: [
+      ["/workspace/docs", "项目知识库", "与 AI 和 Obsidian 共用项目文档"],
+    ],
+  },
+  {
     title: "我的关注与报告",
     description: "设置关注方向，阅读个人资料，生成与管理报告。",
     links: [
