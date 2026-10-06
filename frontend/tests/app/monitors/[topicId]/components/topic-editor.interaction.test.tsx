@@ -42,6 +42,10 @@ vi.mock("@/app/monitors/[topicId]/components/topic-run-actions", () => ({
 }));
 
 import { ApiRequestError } from "@/request";
+vi.mock("@/components/monitors/topic-alerts", () => ({
+  TopicAlerts: () => null,
+}));
+
 import { TopicEditor } from "@/app/monitors/[topicId]/components/topic-editor";
 
 const topic: HotKeyAPI.MonitorTopicView = {
@@ -257,4 +261,55 @@ describe("Demo topic editing", () => {
       ),
     );
   });
+});
+
+it("retains the draft and marks saved rules stale when a conflict reload fails", async () => {
+  api.update.mockRejectedValueOnce(
+    new ApiRequestError({
+      kind: "http",
+      status: 409,
+      code: "topic_version_conflict",
+      message: "版本冲突",
+    }),
+  );
+  render(<TopicEditor topicId={topic.id} />);
+  const name = await screen.findByLabelText("主题名称");
+  fireEvent.change(name, { target: { value: "尚未保存的草稿" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+  await waitFor(() =>
+    expect(toasts.error).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        action: expect.objectContaining({ label: "重新读取" }),
+      }),
+    ),
+  );
+  api.get.mockRejectedValueOnce(
+    new ApiRequestError({ kind: "network", message: "offline" }),
+  );
+  toasts.error.mock.calls.at(-1)?.[1].action.onClick();
+  await screen.findByText("已过期");
+  expect((screen.getByLabelText("主题名称") as HTMLInputElement).value).toBe(
+    "尚未保存的草稿",
+  );
+  expect(screen.getByText("network")).toBeTruthy();
+  expect(screen.queryByRole("link", { name: "登录" })).toBeNull();
+  expect(api.push).not.toHaveBeenCalled();
+  api.get.mockResolvedValueOnce({ ...topic, current_version: 2 });
+  fireEvent.click(screen.getByRole("button", { name: "重新读取" }));
+  await waitFor(() => expect(screen.queryByText("已过期")).toBeNull());
+});
+it.each([401, 403])("renders a forbidden topic for %s", async (status) => {
+  api.get.mockRejectedValueOnce(
+    new ApiRequestError({
+      kind: "http",
+      status,
+      code: "access_denied",
+      message: "无权限",
+    }),
+  );
+  render(<TopicEditor topicId={topic.id} />);
+  await screen.findByRole("status", { name: "无权读取监控主题" });
+  expect(screen.getByRole("link", { name: "登录" })).toBeTruthy();
+  expect(screen.queryByLabelText("主题名称")).toBeNull();
 });

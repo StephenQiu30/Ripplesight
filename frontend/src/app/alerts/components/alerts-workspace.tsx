@@ -14,15 +14,25 @@ import {
   createAlert,
   listAlerts,
   listAlertTargets,
-  listAlertHistory,
   updateAlert,
 } from "@/api/gerentufagaojing";
 import { listMonitorTopics } from "@/api/jiankongzhuti";
 import { listEvents } from "@/api/shijian";
+import { toast } from "sonner";
 import { ApiRequestError } from "@/request";
+import { PageState } from "@/components/system/page-state";
+import { AlertHistory } from "@/components/monitors/alert-history";
+import { AlertRuleSummary } from "@/components/monitors/alert-rule-summary";
+import { alertReasonLabel } from "@/components/monitors/alert-presenters";
+import {
+  readMonitorFailure,
+  type MonitorFailure,
+} from "@/components/monitors/monitor-presenters";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Field,
   FieldDescription,
@@ -30,7 +40,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Item, ItemContent } from "@/components/ui/item";
+import { ItemGroup } from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
 import {
   Select,
@@ -71,35 +81,14 @@ function failure(error: unknown) {
     : "告警操作失败，请保留输入后重试。";
 }
 
-function reasonLabel(reason: string | null) {
-  if (!reason) return "";
-  const labels: Record<string, string> = {
-    notification_disabled: "通知发送尚未启用。",
-    alert_target_unavailable: "通知目标当前不可用。",
-    alert_target_stale: "通知目标的版本、订阅或验证条件尚未满足。",
-    alert_target_unverified: "当前通知目标尚无已确认的送达回执。",
-    alert_topic_stale: "关注规则已变更，请重新保存告警。",
-    alert_delivery_unknown: "上次送达结果未知，需人工核查；不会自动重发。",
-    alert_cooldown: "规则处于冷却期。",
-    alert_delivery_not_admitted: "投递准入条件尚未满足。",
-    alert_input_deleted: "固定输入已删除，该结果已撤回。",
-    notifications_disabled: "通知发送尚未启用。",
-    target_unavailable: "通知目标未就绪。",
-    target_not_verified: "通知目标尚未验证。",
-    target_revision_changed: "通知目标已变更，请重新选择。",
-    topic_version_changed: "关注规则已变更，请重新保存告警。",
-    insufficient_inputs: "缺少可用的固定输入，无法判定。",
-    source_withdrawn: "输入许可已失效。",
-  };
-  return labels[reason] ?? "条件尚未满足，请核对关注规则、有效输入与通知目标。";
-}
-
 function Choice({
   id,
   value,
   onChange,
   children,
+  invalid = false,
 }: {
+  invalid?: boolean;
   id: string;
   value: string;
   onChange: (value: string) => void;
@@ -107,7 +96,7 @@ function Choice({
 }) {
   return (
     <Select value={value || undefined} onValueChange={onChange}>
-      <SelectTrigger id={id} className="w-full min-w-0">
+      <SelectTrigger id={id} className="w-full min-w-0" aria-invalid={invalid}>
         <SelectValue placeholder="请选择" />
       </SelectTrigger>
       <SelectContent position="popper">{children}</SelectContent>
@@ -143,7 +132,11 @@ function RuleEditor({
   const [targetId, setTargetId] = useState(row?.target_id ?? "");
   const [enabled, setEnabled] = useState(row?.enabled ?? false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [invalidFields, setInvalidFields] = useState<string[]>([]);
+  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    formRef.current?.querySelector<HTMLElement>("[aria-invalid=true]")?.focus();
+  }, [invalidFields]);
   const topic = sources.topics.find((item) => item.id === topicId);
   const target = sources.targets.find((item) => item.id === targetId);
   const events = sources.events.filter(
@@ -167,27 +160,40 @@ function RuleEditor({
     if (busyRef.current) return;
     const value = Number(threshold);
     const seconds = Number(cooldown) * 60;
+    const invalid: string[] = [];
+    if (!name.trim() || name.trim().length > 80) invalid.push("name");
+    if (!topic) invalid.push("topic_id");
     if (
-      !topic ||
-      !target ||
-      !name.trim() ||
       !Number.isFinite(value) ||
       value <= 0 ||
       value > 1_000_000_000 ||
-      (metric === "negative_count" && !Number.isInteger(value)) ||
+      (metric === "heat_increment" && value < 0.000001) ||
+      (metric === "negative_count" && !Number.isInteger(value))
+    )
+      invalid.push("threshold");
+    if (
+      !Number.isInteger(Number(cooldown)) ||
       !Number.isInteger(seconds) ||
       seconds < 300 ||
-      seconds > 86400 ||
-      (metric === "heat_increment" &&
-        !events.some((item) => item.id === eventId))
-    ) {
-      setError(
+      seconds > 86400
+    )
+      invalid.push("cooldown_seconds");
+    if (!target) invalid.push("target_id");
+    if (
+      metric === "heat_increment" &&
+      !events.some((item) => item.id === eventId)
+    )
+      invalid.push("event_id");
+    if (invalid.length || !topic || !target) {
+      setInvalidFields(invalid);
+      toast.error(
         "请填写名称、关注、有效阈值、5—1440 分钟冷却时间和通知目标；热度规则还需选择该关注下的事件。",
       );
       return;
     }
     if (enabled && !canEnable) {
-      setError("通知目标尚未就绪，请先关闭规则再保存。");
+      setInvalidFields(["enabled"]);
+      toast.error("通知目标尚未就绪，请先关闭规则再保存。");
       return;
     }
     const input = {
@@ -208,16 +214,33 @@ function RuleEditor({
       operation.current = { payload, id: crypto.randomUUID() };
     busyRef.current = true;
     setBusy(true);
-    setError(null);
+    setInvalidFields([]);
     try {
       const body = { ...input, operation_id: operation.current.id };
       const result = row
         ? await updateAlert({ rule_id: row.id }, body)
         : await createAlert(body);
       operation.current = null;
-      if (mounted.current) saved(result);
+      if (mounted.current) {
+        toast.success("告警规则已保存。");
+        saved(result);
+      }
     } catch (caught) {
-      if (mounted.current) setError(failure(caught));
+      if (
+        !mounted.current ||
+        (caught instanceof ApiRequestError && caught.kind === "cancelled")
+      )
+        return;
+      setInvalidFields(
+        caught instanceof ApiRequestError && caught.status === 422
+          ? (caught.details ?? []).flatMap((detail) =>
+              typeof detail.location[1] === "string"
+                ? [detail.location[1]]
+                : [],
+            )
+          : [],
+      );
+      toast.error(failure(caught));
     } finally {
       busyRef.current = false;
       if (mounted.current) setBusy(false);
@@ -226,18 +249,19 @@ function RuleEditor({
 
   return (
     <UI.Form
+      ref={formRef}
       onSubmit={submit}
-      className="rounded-xl border p-5"
+      noValidate
+      className="flex min-w-0 flex-col gap-5"
       aria-label={row ? "编辑告警规则" : "新建告警规则"}
     >
-      <UI.Heading level={2} className="mb-5 text-lg font-medium">
-        {row ? "编辑告警规则" : "新建告警规则"}
-      </UI.Heading>
+      <UI.Heading level={2}>{row ? "编辑告警规则" : "新建告警规则"}</UI.Heading>
       <FieldGroup className="grid gap-5 sm:grid-cols-2">
         <Field>
           <FieldLabel htmlFor={`${id}-name`}>规则名称</FieldLabel>
           <Input
             id={`${id}-name`}
+            aria-invalid={invalidFields.includes("name")}
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
@@ -248,6 +272,7 @@ function RuleEditor({
           <FieldLabel htmlFor={`${id}-topic`}>关注方向</FieldLabel>
           <Choice
             id={`${id}-topic`}
+            invalid={invalidFields.includes("topic_id")}
             value={topicId}
             onChange={(value) => {
               setTopicId(value);
@@ -265,6 +290,7 @@ function RuleEditor({
           <FieldLabel htmlFor={`${id}-metric`}>判断指标</FieldLabel>
           <Choice
             id={`${id}-metric`}
+            invalid={invalidFields.includes("metric")}
             value={metric}
             onChange={(value) =>
               setMetric(value as HotKeyAPI.AlertRuleInput["metric"])
@@ -284,7 +310,12 @@ function RuleEditor({
         {metric === "heat_increment" && (
           <Field>
             <FieldLabel htmlFor={`${id}-event`}>关注下的事件</FieldLabel>
-            <Choice id={`${id}-event`} value={eventId} onChange={setEventId}>
+            <Choice
+              id={`${id}-event`}
+              invalid={invalidFields.includes("event_id")}
+              value={eventId}
+              onChange={setEventId}
+            >
               {events.map((item) => (
                 <SelectItem key={item.id} value={item.id}>
                   {item.title ?? "未命名事件"}
@@ -300,6 +331,7 @@ function RuleEditor({
           <FieldLabel htmlFor={`${id}-threshold`}>触发阈值</FieldLabel>
           <Input
             id={`${id}-threshold`}
+            aria-invalid={invalidFields.includes("threshold")}
             type="number"
             min={metric === "negative_count" ? 1 : 0.000001}
             max={1_000_000_000}
@@ -313,6 +345,7 @@ function RuleEditor({
           <FieldLabel htmlFor={`${id}-cooldown`}>冷却时间（分钟）</FieldLabel>
           <Input
             id={`${id}-cooldown`}
+            aria-invalid={invalidFields.includes("cooldown_seconds")}
             type="number"
             min={5}
             max={1440}
@@ -324,7 +357,12 @@ function RuleEditor({
         </Field>
         <Field>
           <FieldLabel htmlFor={`${id}-target`}>通知目标</FieldLabel>
-          <Choice id={`${id}-target`} value={targetId} onChange={setTargetId}>
+          <Choice
+            id={`${id}-target`}
+            invalid={invalidFields.includes("target_id")}
+            value={targetId}
+            onChange={setTargetId}
+          >
             {sources.targets.map((item) => (
               <SelectItem key={item.id} value={item.id}>
                 {item.name}
@@ -333,16 +371,19 @@ function RuleEditor({
             ))}
           </Choice>
           {target && !target.eligible && (
-            <FieldDescription>{reasonLabel(target.reason)}</FieldDescription>
+            <FieldDescription>
+              {alertReasonLabel(target.reason)}
+            </FieldDescription>
           )}
         </Field>
         <Field className="sm:col-span-2">
           <UI.Content className="flex items-center gap-3">
-            <Checkbox
+            <Switch
+              aria-invalid={invalidFields.includes("enabled")}
               id={`${id}-enabled`}
               checked={enabled}
               disabled={!canEnable && !enabled}
-              onCheckedChange={(value) => setEnabled(value === true)}
+              onCheckedChange={setEnabled}
             />
             <FieldLabel htmlFor={`${id}-enabled`}>启用规则</FieldLabel>
           </UI.Content>
@@ -351,22 +392,22 @@ function RuleEditor({
           </FieldDescription>
         </Field>
       </FieldGroup>
-      {error && (
-        <Alert variant="destructive" className="mt-5">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      <UI.Content className="mt-5 flex gap-3">
+      <UI.Content className="flex gap-3">
         <Button
           type="submit"
           disabled={busy || !sources.topics.length || !sources.targets.length}
+          aria-busy={busy}
         >
+          {busy && <Spinner aria-hidden="true" data-icon="inline-start" />}
           {busy ? "正在保存…" : "保存规则"}
         </Button>
         <Button
           type="button"
           variant="outline"
-          onClick={cancel}
+          onClick={() => {
+            toast.info("已取消编辑。");
+            cancel();
+          }}
           disabled={busy}
         >
           取消
@@ -376,97 +417,11 @@ function RuleEditor({
   );
 }
 
-function History({ ruleId }: { ruleId: string }) {
-  const [rows, setRows] = useState<HotKeyAPI.AlertEvaluationView[] | null>(
-    null,
-  );
-  const [error, setError] = useState<string | null>(null);
-  const generation = useRef(0);
-  const load = useCallback(() => {
-    const request = ++generation.current;
-    return listAlertHistory({ rule_id: ruleId, limit: 50 })
-      .then((page) => {
-        if (generation.current === request) {
-          setRows(page);
-          setError(null);
-        }
-      })
-      .catch((caught: unknown) => {
-        if (generation.current === request) setError(failure(caught));
-      });
-  }, [ruleId]);
-  useEffect(() => {
-    void load();
-    return () => {
-      generation.current += 1;
-    };
-  }, [load]);
-  const labels: Record<HotKeyAPI.AlertEvaluationView["status"], string> = {
-    blocked: "条件未满足",
-    unknown: "无法判定",
-    below_threshold: "未达阈值",
-    cooldown: "冷却中",
-    triggered: "已触发",
-    withdrawn: "输入已撤回",
-  };
-  return (
-    <UI.Content className="mt-4 space-y-3" aria-label="告警评估历史">
-      {error ? (
-        <Alert variant="destructive">
-          <AlertDescription>
-            {error}
-            <Button
-              variant="outline"
-              onClick={() => {
-                void load();
-              }}
-            >
-              重试历史
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ) : !rows ? (
-        <Item role="status">
-          <Spinner />
-          <ItemContent>正在读取评估历史…</ItemContent>
-        </Item>
-      ) : !rows.length ? (
-        <UI.Text className="text-muted-foreground text-sm">
-          尚无评估记录。启用后每五分钟评估一次；条件不足会保留原因。
-        </UI.Text>
-      ) : (
-        rows.map((item) => (
-          <Item key={item.id} variant="outline">
-            <ItemContent>
-              <UI.Text>
-                {labels[item.status]} ·{" "}
-                {new Date(item.window_end).toLocaleString("zh-CN")}
-              </UI.Text>
-              <UI.Text className="text-muted-foreground mt-1">
-                指标：{item.value === null ? "未知" : item.value} · 规则版本{" "}
-                {item.rule_version}
-              </UI.Text>
-              {item.reason && (
-                <UI.Text className="mt-1">{reasonLabel(item.reason)}</UI.Text>
-              )}
-              {item.cooldown_until && (
-                <UI.Text className="mt-1">
-                  冷却至 {new Date(item.cooldown_until).toLocaleString("zh-CN")}
-                </UI.Text>
-              )}
-            </ItemContent>
-          </Item>
-        ))
-      )}
-    </UI.Content>
-  );
-}
-
 export function AlertsWorkspace() {
   const [data, setData] = useState<
     (Sources & { rules: HotKeyAPI.AlertRuleView[] }) | null
   >(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<MonitorFailure | null>(null);
   const [editing, setEditing] = useState<
     HotKeyAPI.AlertRuleView | "new" | null
   >(null);
@@ -492,7 +447,10 @@ export function AlertsWorkspace() {
         }
       })
       .catch((caught: unknown) => {
-        if (generation.current === request) setError(failure(caught));
+        if (caught instanceof ApiRequestError && caught.kind === "cancelled")
+          return;
+        if (generation.current === request)
+          setError(readMonitorFailure(caught, "告警配置读取失败，请重试。"));
       });
   }, []);
   useEffect(() => {
@@ -502,141 +460,182 @@ export function AlertsWorkspace() {
     };
   }, [load]);
   return (
-    <UI.Content className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-      <UI.Content>
-        <UI.Heading level={1} className="text-3xl font-medium tracking-tight">
-          突发告警
-        </UI.Heading>
-        <UI.Text className="text-muted-foreground mt-3 leading-7">
+    <UI.Content className="flex min-w-0 flex-col gap-8">
+      <UI.Content className="flex flex-col gap-3">
+        <UI.Heading level={1}>突发告警</UI.Heading>
+        <UI.Text tone="muted" size="sm">
           使用已取得且许可有效的材料评估规则，查看触发与冷却记录。无法判定和送达未知分别记录；未知送达不会自动重发。
         </UI.Text>
       </UI.Content>
+      <Alert role="status">
+        <AlertDescription>
+          每五分钟评估已启用规则：最近一小时有效负面计数，或指定事件的同公式可比热度增量达到阈值后，进入规则设定的冷却期。缺少分析或可比快照时保留“无法判定”，送达未知不会自动重发。
+        </AlertDescription>
+      </Alert>
+      <Separator />
       {error && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            {error}
-            <Button
-              variant="outline"
-              onClick={() => {
-                void load();
-              }}
-            >
-              重试加载
-            </Button>
-          </AlertDescription>
-        </Alert>
+        <PageState
+          state={error.forbidden ? "forbidden" : data ? "stale" : "error"}
+          eyebrow="突发告警"
+          title={error.forbidden ? "无权读取告警配置" : "暂时无法读取告警配置"}
+          description={
+            error.forbidden
+              ? "请登录有权访问告警的账户。"
+              : "请重试加载，当前编辑内容会保留。"
+          }
+          errorCode={error.code}
+          httpStatus={error.httpStatus}
+          action={
+            error.forbidden ? undefined : (
+              <Button variant="outline" onClick={() => void load()}>
+                重试加载
+              </Button>
+            )
+          }
+        />
       )}
-      {!data ? (
-        !error && (
-          <Item role="status">
-            <Spinner />
-            <ItemContent>正在读取告警配置…</ItemContent>
-          </Item>
-        )
-      ) : (
-        <>
-          {!data.topics.length && (
-            <UI.Text>
-              先
-              <Link href="/monitors/new" className="underline">
-                创建关注方向
-              </Link>
-              ，再配置告警规则。
-            </UI.Text>
-          )}
-          {!data.targets.length && (
-            <UI.Text>
-              尚无通知目标。请在
-              <Link href="/operations" className="underline">
-                运营与通知
-              </Link>
-              中配置获准的目标，完成验证后再启用规则。
-            </UI.Text>
-          )}
-          {editing !== null ? (
-            <RuleEditor
-              key={editing === "new" ? "new" : editing.id}
-              row={editing === "new" ? undefined : editing}
-              sources={data}
-              cancel={() => setEditing(null)}
-              saved={(rule) => {
-                setData((previous) =>
-                  previous
-                    ? {
-                        ...previous,
-                        rules: [
-                          rule,
-                          ...previous.rules.filter(
-                            (item) => item.id !== rule.id,
-                          ),
-                        ],
-                      }
-                    : previous,
-                );
-                setEditing(null);
-              }}
+      {!data
+        ? !error && (
+            <PageState
+              state="loading"
+              loadingLayout="detail"
+              eyebrow="突发告警"
+              title="正在读取告警配置"
+              description="正在读取规则、主题和通知目标。"
             />
-          ) : (
-            <Button
-              className="self-start"
-              onClick={() => setEditing("new")}
-              disabled={!data.topics.length || !data.targets.length}
-            >
-              新建规则
-            </Button>
-          )}
-          {!data.rules.length ? (
-            <UI.Text className="text-muted-foreground">
-              尚未配置告警规则，当前不会发送告警。
-            </UI.Text>
-          ) : (
-            data.rules.map((rule) => (
-              <UI.Content as="section" key={rule.id} className="min-w-0">
-                <UI.Content className="flex flex-wrap items-start justify-between gap-4">
-                  <UI.Content className="min-w-0">
-                    <UI.Heading
-                      level={2}
-                      className="text-lg font-medium break-words"
-                    >
-                      {rule.name}
-                    </UI.Heading>
-                    <UI.Text className="text-muted-foreground mt-2 text-sm">
-                      {rule.enabled ? "已启用" : "已关闭"} ·{" "}
-                      {rule.metric === "negative_count"
-                        ? "有效负面情感计数"
-                        : "同公式热度增量"}{" "}
-                      ≥ {rule.threshold} · 冷却 {rule.cooldown_seconds / 60}{" "}
-                      分钟
-                    </UI.Text>
-                    {rule.readiness === "blocked" && (
-                      <UI.Text className="mt-2 text-sm">
-                        {reasonLabel(rule.reason)}
-                      </UI.Text>
-                    )}
-                  </UI.Content>
-                  <UI.Content className="flex gap-2">
-                    <Button variant="outline" onClick={() => setEditing(rule)}>
-                      编辑
-                    </Button>
+          )
+        : !error?.forbidden && (
+            <>
+              {!data.topics.length && (
+                <UI.Text>
+                  先
+                  <Button asChild variant="link">
+                    <Link href="/monitors/new">创建关注方向</Link>
+                  </Button>
+                  ，再配置告警规则。
+                </UI.Text>
+              )}
+              {!data.targets.length && (
+                <UI.Text>
+                  尚无通知目标。请在
+                  <Button asChild variant="link">
+                    <Link href="/operations">运营与通知</Link>
+                  </Button>
+                  中配置获准的目标，完成验证后再启用规则。
+                </UI.Text>
+              )}
+              {editing !== null ? (
+                <RuleEditor
+                  key={editing === "new" ? "new" : editing.id}
+                  row={editing === "new" ? undefined : editing}
+                  sources={data}
+                  cancel={() => setEditing(null)}
+                  saved={(rule) => {
+                    setData((previous) =>
+                      previous
+                        ? {
+                            ...previous,
+                            rules: [
+                              rule,
+                              ...previous.rules.filter(
+                                (item) => item.id !== rule.id,
+                              ),
+                            ],
+                          }
+                        : previous,
+                    );
+                    setEditing(null);
+                  }}
+                />
+              ) : (
+                <Button
+                  className="self-start"
+                  onClick={() => setEditing("new")}
+                  disabled={!data.topics.length || !data.targets.length}
+                >
+                  新建规则
+                </Button>
+              )}
+              {!data.rules.length ? (
+                <PageState
+                  state="empty"
+                  eyebrow="突发告警"
+                  title="尚未配置告警规则"
+                  description="当前不会发送告警。先准备监控主题与获准的通知目标，再新建规则。"
+                  action={
                     <Button
+                      type="button"
                       variant="outline"
-                      aria-expanded={historyId === rule.id}
-                      onClick={() =>
-                        setHistoryId((current) =>
-                          current === rule.id ? null : rule.id,
-                        )
+                      disabled={
+                        editing !== null ||
+                        !data.topics.length ||
+                        !data.targets.length
                       }
+                      onClick={() => setEditing("new")}
                     >
-                      评估历史
+                      配置第一条规则
                     </Button>
-                  </UI.Content>
-                </UI.Content>
-                {historyId === rule.id && <History ruleId={rule.id} />}
-              </UI.Content>
-            ))
+                  }
+                />
+              ) : (
+                <ItemGroup>
+                  {data.rules.map((rule) => (
+                    <UI.Content
+                      as="section"
+                      role="listitem"
+                      key={rule.id}
+                      className="flex min-w-0 flex-col gap-4"
+                    >
+                      <Separator />
+                      <UI.Content className="flex flex-wrap items-start justify-between gap-4">
+                        <UI.Content className="flex min-w-0 flex-col gap-3">
+                          <UI.Content className="flex flex-wrap items-center gap-3">
+                            <UI.Heading level={2}>{rule.name}</UI.Heading>
+                            <Badge variant="secondary">
+                              {rule.enabled ? "已启用" : "已关闭"}
+                            </Badge>
+                          </UI.Content>
+                          <UI.Text tone="muted" size="sm">
+                            {data.topics.find(
+                              (topic) => topic.id === rule.topic_id,
+                            )?.name ?? "主题不可用"}
+                          </UI.Text>
+                          <AlertRuleSummary rule={rule} />
+                          {rule.readiness === "blocked" && (
+                            <UI.Text tone="muted" size="sm">
+                              {alertReasonLabel(rule.reason)}
+                            </UI.Text>
+                          )}
+                        </UI.Content>
+                        <UI.Content className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => setEditing(rule)}
+                          >
+                            编辑
+                          </Button>
+                          <Button
+                            variant="outline"
+                            aria-expanded={historyId === rule.id}
+                            onClick={() =>
+                              setHistoryId((current) =>
+                                current === rule.id ? null : rule.id,
+                              )
+                            }
+                          >
+                            评估历史
+                          </Button>
+                        </UI.Content>
+                      </UI.Content>
+                      {historyId === rule.id && (
+                        <AlertHistory key={rule.id} ruleId={rule.id} />
+                      )}
+                    </UI.Content>
+                  ))}
+                </ItemGroup>
+              )}
+            </>
           )}
-        </>
-      )}
     </UI.Content>
   );
 }
