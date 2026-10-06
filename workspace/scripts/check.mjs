@@ -31,7 +31,7 @@ function anchors(body) {
   return ids
 }
 
-export function checkDocuments(root = contentRoot) {
+export function checkDocuments(root = contentRoot, sourceRepoRoot = repoRoot) {
   const errors = []
   const fail = (file, message) => errors.push(`${path.relative(root, file) || 'content/'}：${message}`)
   const published = []
@@ -82,7 +82,7 @@ export function checkDocuments(root = contentRoot) {
       try { [target, suffix] = splitLink(node.url) }
       catch { fail(origin, `链接编码无效：${node.url}`); return }
       const file = target ? path.resolve(path.dirname(origin), target) : origin
-      if (!inside(repoRoot, file) && !inside(root, file)) { fail(origin, `链接超出仓库：${node.url}`); return }
+      if (!inside(sourceRepoRoot, file) && !inside(root, file)) { fail(origin, `链接超出仓库：${node.url}`); return }
       if (!fs.existsSync(file)) { fail(origin, `本地链接不存在：${node.url}`); return }
       const hash = suffix.indexOf('#')
       if (hash < 0 || !file.endsWith('.md')) return
@@ -93,7 +93,7 @@ export function checkDocuments(root = contentRoot) {
       const linked = byFile.get(file)
       let linkedBody = linked?.body ?? fs.readFileSync(file, 'utf8')
       if (linked?.frontmatter.source) {
-        try { linkedBody += '\n' + fs.readFileSync(sourceFile(linked), 'utf8') } catch { /* reported below */ }
+        try { linkedBody += '\n' + fs.readFileSync(sourceFile(linked, sourceRepoRoot), 'utf8') } catch { /* reported below */ }
       }
       if (!anchors(linkedBody).has(anchor)) fail(origin, `本地锚点不存在：${node.url}`)
     })
@@ -139,7 +139,7 @@ export function checkDocuments(root = contentRoot) {
     if (limits[fm.type] && [...body].length > limits[fm.type]) fail(file, `正文超过 ${limits[fm.type]} 字符（当前 ${[...body].length}）`)
     localLinks(body, file)
     if (fm.source) {
-      try { localLinks(fs.readFileSync(sourceFile(document), 'utf8'), sourceFile(document)) }
+      try { localLinks(fs.readFileSync(sourceFile(document, sourceRepoRoot), 'utf8'), sourceFile(document, sourceRepoRoot)) }
       catch (error) { fail(file, `嵌入源无效：${error.message}`) }
     }
   }

@@ -58,7 +58,7 @@ API 和 Web 只绑定 localhost，需要通过反向代理对外提供访问。
 
 ## 文档
 
-文档预览与构建说明见 [workspace/README](workspace/README.md)，本地预览为 <http://127.0.0.1:8668/hotkey-server/>。frontend 内的统一知识库入口按专项 PRD 实现，当前尚未接入。
+文档与校验工具说明见 [workspace/README](workspace/README.md)。项目知识库用于内部开发，本机内部入口为 frontend 的 `/workspace/docs`，使用 Nextra 与 Editor.js，共用身份和样式。初始化与启动见 [本机知识库](workspace/LOCAL.md)。现有 Nextra 公开预览 <http://127.0.0.1:8668/hotkey-server/> 与公开清单继续保留；内部资料走授权 API。真实账号与 Obsidian 验收仍需完成。
 
 | 文档 | 内容 |
 |---|---|

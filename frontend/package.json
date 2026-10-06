@@ -12,7 +12,7 @@
     "format": "prettier --plugin prettier-plugin-tailwindcss --write .",
     "format:check": "prettier --plugin prettier-plugin-tailwindcss --check .",
     "openapi:generate": "openapi2ts && prettier --plugin prettier-plugin-tailwindcss --write src/api",
-    "openapi:check": "pnpm openapi:generate && git diff --exit-code -- src/api"
+    "openapi:check": "node scripts/check-openapi.mjs"
   },
   "dependencies": {
     "axios": "^1.20.0",
@@ -22,6 +22,7 @@
     "lucide-react": "^1.46.0",
     "marked": "^18.0.14",
     "next": "16.3.5",
+    "nextra": "4.6.1",
     "radix-ui": "^1.6.7",
     "react": "19.2.8",
     "react-day-picker": "^10.0.2",
@@ -29,6 +30,7 @@
     "sanitize-html": "^2.18.0",
     "shadcn": "^4.21.0",
     "sonner": "^2.0.8",
+    "turndown": "^7.2.4",
     "tw-animate-css": "^1.4.0"
   },
   "devDependencies": {
@@ -40,6 +42,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/sanitize-html": "^2.16.2",
+    "@types/turndown": "^5.0.6",
     "@umijs/openapi": "^1.14.1",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",

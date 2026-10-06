@@ -28,9 +28,11 @@ from api.routers.site import router as site_router
 from api.routers.source_capabilities import router as source_capabilities_router
 from api.routers.source_connections import router as source_connections_router
 from api.routers.translations import router as translations_router
+from api.routers.workspace_documents import router as workspace_documents_router
 from core.schemas import ErrorView
 
 api_router = APIRouter(prefix="/api")
+api_router.include_router(workspace_documents_router)
 api_router.include_router(alerts_router)
 api_router.include_router(notifications_router)
 api_router.include_router(identity_router)

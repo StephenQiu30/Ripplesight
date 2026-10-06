@@ -13,8 +13,11 @@
     "start": "node scripts/preview.mjs",
     "preview": "node scripts/preview.mjs",
     "index": "node scripts/index.mjs",
-    "check": "node scripts/check.mjs && node --test tests/docs.test.mjs && tsc --noEmit",
-    "verify": "node scripts/verify.mjs"
+    "check": "node scripts/check.mjs && node --test tests/*.test.mjs && tsc --noEmit",
+    "verify": "node scripts/verify.mjs",
+    "local:init": "node scripts/local.mjs init",
+    "local:start": "node scripts/local.mjs start",
+    "local:read": "node scripts/local.mjs read"
   },
   "dependencies": {
     "github-slugger": "2.0.0",

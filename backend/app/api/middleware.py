@@ -35,6 +35,11 @@ class RequestContextMiddleware:
                     for name, value in message.get("headers", [])
                     if name.lower() != b"x-request-id"
                 ]
+                if scope.get("path", "").startswith("/api/workspace/documents"):
+                    headers = [
+                        (name, value) for name, value in headers if name.lower() != b"cache-control"
+                    ]
+                    headers.append((b"cache-control", b"private, no-store"))
                 headers.append((b"x-request-id", request_id.encode("ascii")))
                 message["headers"] = headers
             await send(message)

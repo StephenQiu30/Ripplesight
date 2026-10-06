@@ -18,16 +18,16 @@ pnpm dev
 
 ## 目录
 
-| 路径 | 内容 |
-|---|---|
-| `src/app/` | 路由；页面专属组件放在路由下的 `components/`，首页的放在 `src/app/components/` |
-| `src/components/ui/` | shadcn/Radix 基础组件，以及语义排版、表单、媒体组件（`content.tsx`） |
-| `src/components/<功能>/` | 至少被两个页面复用的组件 |
-| `src/layout/` | 全站外壳：BasicLayout、侧栏、页脚、容器、阅读布局 |
-| `src/api/` | 由 OpenAPI 生成的客户端，不要手改 |
-| `src/request.ts` | 唯一的 HTTP 传输层 |
-| `src/proxy.ts` | 会话门禁与 CSP |
-| `tests/` | 全部前端测试 |
+| 路径                     | 内容                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------ |
+| `src/app/`               | 路由；页面专属组件放在路由下的 `components/`，首页的放在 `src/app/components/` |
+| `src/components/ui/`     | shadcn/Radix 基础组件，以及语义排版、表单、媒体组件（`content.tsx`）           |
+| `src/components/<功能>/` | 至少被两个页面复用的组件                                                       |
+| `src/layout/`            | 全站外壳：BasicLayout、侧栏、页脚、容器、阅读布局                              |
+| `src/api/`               | 由 OpenAPI 生成的客户端，不要手改                                              |
+| `src/request.ts`         | 唯一的 HTTP 传输层                                                             |
+| `src/proxy.ts`           | 会话门禁与 CSP                                                                 |
+| `tests/`                 | 全部前端测试                                                                   |
 
 ## 生成 API 客户端
 
