@@ -127,3 +127,36 @@ bundle the editor runtime or block/inline tool packages. Markdown parsing uses
 [sanitize-html](https://github.com/apostrophecms/sanitize-html) 2.18.0 (MIT).
 Package licenses remain in the dependency distributions; resolved versions are
 recorded in frontend/pnpm-lock.yaml.
+
+## Nextra documentation site
+
+The documentation site uses [Nextra](https://github.com/shuding/nextra) and
+`nextra-theme-docs` 4.6.1 (MIT). The pnpm patch in
+`workspace/patches/nextra-theme-docs@4.6.1.patch` preserves `children` when
+validating Layout props and translates five hardcoded UI/accessibility labels
+to Simplified Chinese. The validation fix is described in upstream issue
+<https://github.com/shuding/nextra/issues/5036>. Dependency licenses remain in
+their distributions; resolved versions and the patch hash are recorded in
+`workspace/pnpm-lock.yaml`.
+
+MIT License
+
+Copyright (c) 2020 Shu Ding
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

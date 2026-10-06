@@ -35,6 +35,12 @@ playwright-report/
 out/
 tsconfig.tsbuildinfo
 
+# Standalone documentation site
+/workspace/node_modules/
+/workspace/.next/
+/workspace/out/
+/workspace/next-env.d.ts
+
 # Temporary and local tool state
 tmp/
 temp/

@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "documents": [
+    "01-术语表.md",
+    "capabilities/01-公开资讯阅读.md",
+    "capabilities/02-关键词热点.md",
+    "capabilities/03-每日社媒热点.md",
+    "capabilities/04-评论舆情.md",
+    "capabilities/05-报告推送与知识库.md",
+    "capabilities/06-模型榜与Codex公告.md",
+    "decisions/01-个人非商业使用.md",
+    "decisions/02-第三方费用为零.md",
+    "decisions/03-模型只用本机Codex.md",
+    "decisions/04-只采公开或本人可见内容.md",
+    "decisions/05-登录平台用本人单账号.md",
+    "decisions/06-X不用官方API.md",
+    "decisions/07-Reddit只走官方API.md",
+    "decisions/08-优先复用开源项目.md",
+    "decisions/09-凭据只留在本机.md",
+    "decisions/10-数据库结构只有一个来源.md",
+    "decisions/11-冻结范围.md",
+    "decisions/12-可用的定义.md",
+    "index.md",
+    "product/01-进度与优先级.md",
+    "product/02-技术架构.md",
+    "product/03-工程规范.md",
+    "product/plan/01-PLAN-workspace项目知识库.md",
+    "product/prd/01-PRD.md",
+    "product/prd/02-PRD-workspace项目知识库.md",
+    "research/2026-10-06-开源方案调研.md"
+  ],
+  "references": [
+    "templates/03-验收记录.md",
+    "templates/05-执行计划.md"
+  ]
+}

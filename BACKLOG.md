@@ -54,15 +54,15 @@
 
 ## 7. 项目文档知识库（独立排期）
 
-需求见[workspace 项目知识库专项 PRD](workspace/content/product/prd/02-PRD-workspace项目知识库.md)，任务验收、负责人、估算与依赖见[执行计划](workspace/content/product/plan/01-PLAN-workspace项目知识库.md)。专项按全天每两小时推进一轮规划，周期任务尚未配置；业务 V1/V2 的优先级保持现有顺序。
+需求见[workspace 项目知识库专项 PRD](workspace/content/product/prd/02-PRD-workspace项目知识库.md)，任务验收、负责人、估算与依赖见[执行计划](workspace/content/product/plan/01-PLAN-workspace项目知识库.md)。当前聊天已启用全天每两小时推进一次的 heartbeat（`hotkey`）；业务 V1/V2 的优先级保持现有顺序。
 
-首个 Sprint 的启动包为工具修复与方案收敛，共 16 理想小时，均尚未派发；其余是待前置完成后滚动准入的候选。按计划初值，首个 Sprint 全部候选合计 128 小时，后续编辑 Sprint 116 小时。真实容量在前 12 个窗口后校准。
+首个 Sprint 的启动包为工具修复与方案收敛，共 16 理想小时，已开始工具修复；其余是待前置完成后滚动准入的候选。按计划初值，首个 Sprint 全部候选合计 128 小时，后续编辑 Sprint 116 小时。真实容量在前 12 个窗口后校准。
 
 ### 首个 Sprint：阅读与 AI
 
 | 顺序 | 工作与任务卡 | 完成条件 | 状态 |
 |---|---|---|---|
-| 1 | [文档工具修复](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#文档工具修复) | 当前文档校验与构建可重复通过，支持 plan 元数据 | 待派发；启动包 |
+| 1 | [文档工具修复](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#文档工具修复) | 当前文档校验与构建可重复通过，支持 plan 元数据 | 工程检查与本地浏览器复核通过，待 Claude 审查；证据见 [VERIFICATION](workspace/VERIFICATION.md#本轮工具修复与编号复核) |
 | 2 | [方案收敛](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#方案收敛) | 技术方案、能力归属、环境与身份缺口明确 | 待派发；启动包 |
 | 3 | [来源清单与版本快照](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#来源清单与版本快照) | 唯一原文、文件 hash、可重建的同版本快照 | 待前两项完成；候选 |
 | 4 | [统一权限与读取接口](workspace/content/product/plan/01-PLAN-workspace项目知识库.md#统一权限与读取接口) | 全读取出口授权与路径校验，生成契约通过 | 待来源快照与本人身份确认；候选 |
