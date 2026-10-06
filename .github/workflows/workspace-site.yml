@@ -1,0 +1,62 @@
+name: Workspace site
+
+on:
+  pull_request:
+    paths:
+      - 'workspace/**'
+      - 'BACKLOG.md'
+      - 'PROJECT.md'
+      - '.github/workflows/workspace-site.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'workspace/**'
+      - 'BACKLOG.md'
+      - 'PROJECT.md'
+      - '.github/workflows/workspace-site.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'push' && 'pages' || format('workspace-site-pr-{0}', github.event.pull_request.number) }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workspace
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: workspace/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm build
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name == 'push'
+        with:
+          path: workspace/out
+
+  deploy:
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
