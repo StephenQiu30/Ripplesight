@@ -28,6 +28,12 @@ import { BrandLockup } from "@/components/brand/brand-lockup";
 import { Button } from "@/components/ui/button";
 import { Content, Text } from "@/components/ui/content";
 import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+} from "@/components/ui/breadcrumb";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
@@ -398,6 +404,20 @@ export function BasicMobileHeader() {
         </Link>
       </Button>
     </Content>
+  );
+}
+
+export function BasicPageLocation() {
+  const { destinations, current } = useNavigation();
+  const label = destinations.find((item) => item.href === current)?.label;
+  return (
+    <Breadcrumb aria-label="当前位置">
+      <BreadcrumbList>
+        <BreadcrumbItem>
+          <BreadcrumbPage>{label ?? "Ripplesight"}</BreadcrumbPage>
+        </BreadcrumbItem>
+      </BreadcrumbList>
+    </Breadcrumb>
   );
 }
 

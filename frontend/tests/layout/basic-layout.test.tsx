@@ -20,7 +20,8 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/api/xitongzhuangtai", () => ({ getReadiness: vi.fn() }));
 
 import { getReadiness } from "@/api/xitongzhuangtai";
-import { BasicLayout } from "@/layout/basic-layout";
+import { BasicLayout, useLayoutScrollContainer } from "@/layout/basic-layout";
+import { PageState } from "@/components/system/page-state";
 
 const page = <h1>页面正文</h1>;
 const session: HotKeyAPI.IdentitySessionView = {
@@ -44,6 +45,62 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("BasicLayout", () => {
+  it("shares the content scroller with readers while keeping location and mobile navigation outside it", () => {
+    route.pathname = "/topics";
+    function Reader() {
+      const scroller = useLayoutScrollContainer();
+      return (
+        <button onClick={() => scroller?.current?.focus()}>定位正文</button>
+      );
+    }
+    render(
+      <BasicLayout session={session}>
+        <Reader />
+      </BasicLayout>,
+    );
+    const content = screen.getByRole("region", { name: "页面内容" });
+    fireEvent.click(screen.getByRole("button", { name: "定位正文" }));
+    expect(document.activeElement).toBe(content);
+    expect(content.id).toBe("page-content");
+    expect(
+      content.contains(screen.getByRole("navigation", { name: "当前位置" })),
+    ).toBe(false);
+    expect(
+      content.contains(screen.getByRole("navigation", { name: "手机导航" })),
+    ).toBe(false);
+    expect(content.contains(screen.getByRole("contentinfo"))).toBe(true);
+    expect(screen.getAllByRole("main")).toHaveLength(1);
+  });
+
+  it.each(["loading", "empty", "error", "forbidden"] as const)(
+    "retains the shell and its single content boundary in the %s state",
+    (state) => {
+      route.pathname = "/topics";
+      render(
+        <BasicLayout session={session}>
+          <PageState
+            eyebrow="验证"
+            state={state}
+            title="页面状态"
+            description="状态说明"
+          />
+        </BasicLayout>,
+      );
+      expect(screen.getAllByRole("region", { name: "页面内容" })).toHaveLength(
+        1,
+      );
+      expect(
+        within(screen.getByRole("region", { name: "页面内容" })).getByText(
+          /状态说明/,
+        ),
+      ).toBeTruthy();
+      expect(
+        within(screen.getByRole("navigation", { name: "当前位置" })).getByText(
+          "我的关注",
+        ),
+      ).toBeTruthy();
+    },
+  );
   it.each([
     ["ready", "服务就绪"],
     ["ok", "服务在线"],
@@ -141,8 +198,9 @@ describe("BasicLayout", () => {
     expect(screen.getByRole("contentinfo")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "跳到正文" }).getAttribute("href"),
-    ).toBe("#main-content");
-    main.scrollTop = 100;
+    ).toBe("#page-content");
+    const content = screen.getByRole("region", { name: "页面内容" });
+    content.scrollTop = 100;
     route.pathname = "/";
     view.rerender(<BasicLayout>{page}</BasicLayout>);
     expect(screen.getByRole("banner", { name: "移动站点导航" })).toBeTruthy();
@@ -150,7 +208,7 @@ describe("BasicLayout", () => {
       screen.getByRole("complementary", { name: "站点侧边栏" }),
     ).toBeTruthy();
     expect(screen.getByRole("main")).toBe(main);
-    expect(main.scrollTop).toBe(0);
+    expect(content.scrollTop).toBe(0);
   });
 
   it("shows public navigation and login without exposing the workspace menu", () => {
@@ -319,8 +377,8 @@ describe("BasicLayout", () => {
   it("resets the body scroll position when a different route renders", async () => {
     route.pathname = "/events";
     const view = render(<BasicLayout session={session}>{page}</BasicLayout>);
-    const main = screen.getByRole("main");
-    main.scrollTop = 480;
+    const content = screen.getByRole("region", { name: "页面内容" });
+    content.scrollTop = 480;
 
     route.pathname = "/content/content-1";
     view.rerender(
@@ -329,17 +387,17 @@ describe("BasicLayout", () => {
       </BasicLayout>,
     );
 
-    await waitFor(() => expect(main.scrollTop).toBe(0));
+    await waitFor(() => expect(content.scrollTop).toBe(0));
     expect(
-      within(main).getByRole("heading", { name: "另一页面" }),
+      within(content).getByRole("heading", { name: "另一页面" }),
     ).toBeTruthy();
   });
 
   it("retains reading position for a rerender within the same route", () => {
     route.pathname = "/events/event-1";
     const view = render(<BasicLayout session={session}>{page}</BasicLayout>);
-    const main = screen.getByRole("main");
-    main.scrollTop = 480;
+    const content = screen.getByRole("region", { name: "页面内容" });
+    content.scrollTop = 480;
 
     view.rerender(
       <BasicLayout session={session}>
@@ -347,7 +405,7 @@ describe("BasicLayout", () => {
       </BasicLayout>,
     );
 
-    expect(main.scrollTop).toBe(480);
+    expect(content.scrollTop).toBe(480);
   });
 
   it("opens the guide from the footer and restores focus on close", async () => {
