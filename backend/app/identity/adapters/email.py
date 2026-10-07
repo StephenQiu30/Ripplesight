@@ -48,7 +48,7 @@ class SmtpEmailAdapter:
             message = EmailMessage()
             message["From"] = self._from_email
             message["To"] = email
-            message["Subject"] = "知微见澜登录验证码"
+            message["Subject"] = "Ripplesight登录验证码"
             message.set_content(
                 f"你的登录验证码是 {code}。5 分钟内有效且只能使用一次。\n"
                 "如果不是你发起的登录。请忽略这封邮件。\n"

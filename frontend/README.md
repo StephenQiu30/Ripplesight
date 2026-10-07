@@ -1,4 +1,4 @@
-# HotKey Web
+# Ripplesight Web
 
 架构见 [PROJECT](../PROJECT.md)，视觉与组件规范见 [DESIGN](DESIGN.md)，工程规范见 [AGENTS](../AGENTS.md)。
 

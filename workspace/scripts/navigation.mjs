@@ -18,9 +18,9 @@ export function pageMap() {
   const navigation = [
     ['prd', 'PRD', '/product/prd/01-PRD/'],
     ['plan', 'PLAN', '/product/plan/01-PLAN-workspace项目知识库/'],
-    ['progress', '进度', '/product/01-进度与优先级/'],
-    ['architecture', '技术架构', '/product/02-技术架构/'],
-    ['github', 'GitHub', 'https://github.com/StephenQiu30/hotkey-server']
+    ['progress', '进度', '/product/reference/01-进度与优先级/'],
+    ['architecture', '技术架构', '/product/reference/02-技术架构/'],
+    ['github', 'GitHub', 'https://github.com/StephenQiu30/Ripplesight']
   ]
   for (const [key, title, href] of navigation) {
     metadata[key] = { title, type: 'page', href }

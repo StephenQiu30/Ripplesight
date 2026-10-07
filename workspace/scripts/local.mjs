@@ -75,7 +75,7 @@ try {
       child.once('error', () => { console.error('本机启动失败，请核对 uv、pnpm 和已安装依赖。'); stop(); process.exitCode = 1 })
       child.once('exit', code => { stop(); if (code) process.exitCode = code })
     }
-    console.log('项目知识库：http://127.0.0.1:8666/workspace/docs（沿用 HotKey 登录）')
+    console.log('项目知识库：http://127.0.0.1:8666/workspace/docs（沿用 Ripplesight 登录）')
   } else throw new Error('支持 init --user <UUID> 和 start。')
 } catch (error) {
   console.error(error.message)

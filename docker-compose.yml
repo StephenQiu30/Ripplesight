@@ -105,7 +105,7 @@ x-backend-environment: &backend-environment
 x-backend-service: &backend-service
   build:
     context: ./backend
-  image: ${HOTKEY_BACKEND_IMAGE:-hotkey-backend:local}
+  image: ${HOTKEY_BACKEND_IMAGE:-ripplesight-backend:local}
   environment: *backend-environment
   extra_hosts:
     - host.docker.internal:host-gateway
@@ -141,7 +141,7 @@ services:
   frontend:
     build:
       context: ./frontend
-    image: ${HOTKEY_FRONTEND_IMAGE:-hotkey-frontend:local}
+    image: ${HOTKEY_FRONTEND_IMAGE:-ripplesight-frontend:local}
     environment:
       HOTKEY_API_ORIGIN: http://backend:8080
       HOTKEY_WEB_ORIGIN: ${HOTKEY_WEB_ORIGIN:-http://127.0.0.1:8666}
@@ -191,7 +191,7 @@ services:
     build:
       context: ./backend
       target: browser
-    image: ${HOTKEY_BROWSER_IMAGE:-hotkey-browser:local}
+    image: ${HOTKEY_BROWSER_IMAGE:-ripplesight-browser:local}
     environment:
       HOTKEY_BROWSER_WS_URL: ${HOTKEY_BROWSER_WS_URL:-}
     init: true

@@ -4,7 +4,7 @@ const withNextra = nextra({ mdxOptions: { format: 'md' } })
 
 export default withNextra({
   output: 'export',
-  basePath: '/hotkey-server',
+  basePath: '/Ripplesight',
   trailingSlash: true,
   images: { unoptimized: true },
   poweredByHeader: false,

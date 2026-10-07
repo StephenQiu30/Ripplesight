@@ -126,7 +126,7 @@ def list_notification_targets(
 
 @app.callback()
 def main() -> None:
-    """HotKey backend administration."""
+    """Ripplesight backend administration."""
 
 
 @app.command()

@@ -78,13 +78,15 @@ def _run_owner_watchdog(sessions: sessionmaker[Session], settings: Settings, own
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Independent HotKey process heartbeat watchdog")
+    parser = argparse.ArgumentParser(
+        description="Independent Ripplesight process heartbeat watchdog"
+    )
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
     settings = get_settings()
     configure_logging(settings.log_level)
     if not settings.operations_maintenance_enabled:
-        print("HotKey watchdog disabled by configuration")
+        print("Ripplesight watchdog disabled by configuration")
         return
     engine = create_db_engine(settings)
     sessions = create_session_factory(engine, settings=settings)

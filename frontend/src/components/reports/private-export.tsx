@@ -218,7 +218,7 @@ function PrivateExportControl({ target }: { target: ExportTarget }) {
               const url = URL.createObjectURL(data);
               const link = document.createElement("a");
               link.href = url;
-              link.download = `hotkey-${view.kind}-${view.id}.${view.format === "markdown" ? "md" : view.format}`;
+              link.download = `ripplesight-${view.kind}-${view.id}.${view.format === "markdown" ? "md" : view.format}`;
               link.click();
               window.setTimeout(() => URL.revokeObjectURL(url), 1000);
               toast.success("文件已下载。");

@@ -98,7 +98,7 @@ describe("LoginForm", () => {
         }),
       );
       render(<LoginForm returnTo="/topics" />);
-      const heading = screen.getByRole("heading", { name: "登录知微见澜" });
+      const heading = screen.getByRole("heading", { name: "登录Ripplesight" });
       const terms = screen.getByRole("link", { name: "使用条款" });
       const loading = screen.getByRole("status", { name: "正在读取登录方式" });
       const region = loading.parentElement!;
@@ -110,7 +110,7 @@ describe("LoginForm", () => {
         screen.queryByRole("status", { name: "正在读取登录方式" }),
       ).toBeNull();
       expect(region.getAttribute("aria-busy")).toBe("false");
-      expect(screen.getByRole("heading", { name: "登录知微见澜" })).toBe(
+      expect(screen.getByRole("heading", { name: "登录Ripplesight" })).toBe(
         heading,
       );
       expect(screen.getByRole("link", { name: "使用条款" })).toBe(terms);
@@ -535,7 +535,7 @@ describe("LoginForm", () => {
     render(<LoginForm returnTo="/topics" />);
     await waitFor(() => expect(mocks.toastError).toHaveBeenCalled());
     expect(screen.queryByRole("alert")).toBeNull();
-    const heading = screen.getByRole("heading", { name: "登录知微见澜" });
+    const heading = screen.getByRole("heading", { name: "登录Ripplesight" });
     fireEvent.click(screen.getByRole("button", { name: "重新读取" }));
     expect(
       screen.getByRole("status", { name: "正在读取登录方式" }),
@@ -545,7 +545,9 @@ describe("LoginForm", () => {
       finishOptions({ password: true, email: true, github: true }),
     );
     await screen.findByLabelText("邮箱或用户名");
-    expect(screen.getByRole("heading", { name: "登录知微见澜" })).toBe(heading);
+    expect(screen.getByRole("heading", { name: "登录Ripplesight" })).toBe(
+      heading,
+    );
     expect(mocks.options).toHaveBeenCalledTimes(2);
   });
 });

@@ -158,7 +158,7 @@ def compose_edition(
     for story in selection.main:
         groups[story.section].append(story.primary.content_id)
     label = {"daily": "日报", "weekly": "周报", "monthly": "月报"}[kind]
-    title = f"HotKey {label} · {key}"
+    title = f"Ripplesight {label} · {key}"
     lead = (
         f"本期由 {daily_editions_covered} 期日报汇编 {len(selection.main)} 件事件, "
         "以下内容保留原文依据。"

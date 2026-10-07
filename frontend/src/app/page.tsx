@@ -17,10 +17,10 @@ import { categories } from "@/components/publication/reading-parts";
 export const metadata = {
   ...welcomeMetadata(
     "/",
-    "知微见澜 Ripplesight",
-    "公开阅读最新资讯、事件脉络、行业专题与模型评测，登录后配置个人关注、查看已有报告。",
+    "Ripplesight",
+    "Ripplesight：公开资讯阅读与个人舆情监控，沿着来源、讨论与事件进展追踪变化。个人非商业使用。",
   ),
-  title: { absolute: "知微见澜 Ripplesight · 开放的信息平台" },
+  title: { absolute: "Ripplesight · 公开资讯阅读与个人舆情监控" },
 };
 
 export default async function Home({

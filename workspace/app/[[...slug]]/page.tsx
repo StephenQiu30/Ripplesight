@@ -48,7 +48,7 @@ export default async function Page(props: Props) {
   const Wrapper = components.wrapper
   return (
     <Wrapper toc={toc} metadata={{ ...metadata, ...document.frontmatter, filePath: document.relative }} sourceCode={sourceCode}
-      bottomContent={<a href={`/hotkey-server/raw/${document.relative}`}>原始 Markdown</a>}>
+      bottomContent={<a href={`/Ripplesight/raw/${document.relative}`}>原始 Markdown</a>}>
       <Content />
     </Wrapper>
   )

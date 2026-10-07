@@ -42,7 +42,7 @@ export function SelectedSnapshotDownload() {
       download.current = { url, timer: null };
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = "hotkey-selected-snapshot.json";
+      anchor.download = "ripplesight-selected-snapshot.json";
       document.body.append(anchor);
       try {
         anchor.click();

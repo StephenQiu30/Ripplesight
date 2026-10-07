@@ -91,7 +91,7 @@ def _target(vault: Path, root: str, relative_path: Path) -> Path:
     if target.is_symlink():
         raise OSError("Obsidian target is a symbolic link")
     if not target.resolve(strict=False).is_relative_to(root_path.resolve(strict=True)):
-        raise ValueError("Obsidian path escapes HotKey root")
+        raise ValueError("Obsidian path escapes Ripplesight root")
     return target
 
 

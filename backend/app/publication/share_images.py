@@ -112,7 +112,7 @@ def render_share_png(card: ShareCard, *, poster: bool = False) -> bytes:
     margin = 84 if poster else 72
     _text(
         draw,
-        "HotKey",
+        "Ripplesight",
         x=margin,
         y=70 if poster else 46,
         width=400,

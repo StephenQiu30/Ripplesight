@@ -4,7 +4,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { documents, encodedPath, routeFor, workspaceRoot, groups } from './content.mjs'
 
-const address = process.env.DOCS_PREVIEW_URL || 'http://127.0.0.1:8668/hotkey-server'
+const address = process.env.DOCS_PREVIEW_URL || 'http://127.0.0.1:8668/Ripplesight'
 const out = path.join(workspaceRoot, 'out')
 const published = documents()
 async function get(relative) {
@@ -26,21 +26,21 @@ const home = await get('/')
 for (const title of ['产品', '产品需求（PRD）', '执行计划（PLAN）', '能力', '决策', '调研', '术语表', '跳至正文']) assert.ok(home.includes(title), `首页缺少 ${title}`)
 for (const title of ['PRD', 'PLAN', '进度', '技术架构', 'GitHub']) assert.ok(links(home).some(link => link.text === title), `导航缺少 ${title}`)
 for (const [folder] of groups) {
-  if (!published.some(item => item.relative.startsWith(folder + '/'))) assert.ok(!links(home).some(link => link.href === '/hotkey-server/' + folder + '/'), `空目录 ${folder} 进入导航`)
+  if (!published.some(item => item.relative.startsWith(folder + '/'))) assert.ok(!links(home).some(link => link.href === '/Ripplesight/' + folder + '/'), `空目录 ${folder} 进入导航`)
 }
 const capability = await get('/capabilities/04-评论舆情/')
 for (const value of ['部分可用', 'V1, V2', 'KR2, KR3, KR4', '2026-10-06']) assert.ok(capability.includes(value), `缺少元数据 ${value}`)
 assert.ok(links(capability).some(link => link.text === '评论舆情'), '侧栏没有 frontmatter 标题')
-const progress = await get('/product/01-进度与优先级/')
-assert.ok(progress.includes('HotKey BACKLOG') && progress.includes('由 Claude 写任务卡并派给 Codex 开发'), 'BACKLOG 首尾正文未嵌入')
+const progress = await get('/product/reference/01-进度与优先级/')
+assert.ok(progress.includes('Ripplesight BACKLOG') && progress.includes('由 Claude 写任务卡并派给 Codex 开发'), 'BACKLOG 首尾正文未嵌入')
 const progressLinks = links(progress)
-assert.ok(progressLinks.some(link => decodeURIComponent(link.href) === '/hotkey-server/capabilities/04-评论舆情/'), 'BACKLOG 能力链接未改写')
-assert.ok(progressLinks.some(link => link.href === 'https://github.com/StephenQiu30/hotkey-server/blob/main/AGENTS.md'), 'BACKLOG 工程规范链接未改写')
-const architecture = await get('/product/02-技术架构/')
+assert.ok(progressLinks.some(link => decodeURIComponent(link.href) === '/Ripplesight/capabilities/04-评论舆情/'), 'BACKLOG 能力链接未改写')
+assert.ok(progressLinks.some(link => link.href === 'https://github.com/StephenQiu30/Ripplesight/blob/main/AGENTS.md'), 'BACKLOG 工程规范链接未改写')
+const architecture = await get('/product/reference/02-技术架构/')
 for (const heading of ['1. 技术栈', '6. 数据库', '10. 配置与部署', '文档预览']) assert.ok(architecture.includes(heading), `PROJECT 缺少 ${heading}`)
-const engineering = await get('/product/03-工程规范/')
-for (const heading of ['HotKey 工程规范', '6. 什么算', '7. 提交与推送']) assert.ok(engineering.includes(heading), `AGENTS 原文缺少 ${heading}`)
-const engineeringRaw = await get('/raw/product/03-工程规范.md')
+const engineering = await get('/product/reference/03-工程规范/')
+for (const heading of ['Ripplesight 工程规范', '6. 什么算', '7. 提交与推送']) assert.ok(engineering.includes(heading), `AGENTS 原文缺少 ${heading}`)
+const engineeringRaw = await get('/raw/product/reference/03-工程规范.md')
 assert.ok(engineeringRaw.endsWith(fs.readFileSync(path.join(workspaceRoot, '../AGENTS.md'), 'utf8')), '工程规范原文导出不完整')
 const plan = await get('/product/plan/01-PLAN-workspace项目知识库/')
 const planMetadata = [...plan.matchAll(/<p\b[^>]*aria-label="文档元数据"[^>]*>([\s\S]*?)<\/p>/g)]
@@ -64,5 +64,5 @@ for (const query of ['舆情', '评论', '情感']) {
   assert.ok(result.results.length > 0, `中文搜索无结果：${query}`)
   const top = await result.results[0].data()
   await get(top.url.split('#')[0])
-  console.log(`${query}：${result.results.length} 条；首条 ${top.meta.title} → /hotkey-server${top.url}`)
+  console.log(`${query}：${result.results.length} 条；首条 ${top.meta.title} → /Ripplesight${top.url}`)
 }

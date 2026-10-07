@@ -47,10 +47,10 @@ function documentPaths(source) {
   }).sort()
 }
 function sourcePath(document) {
-  const pointer = { 'product/01-进度与优先级.md': 'BACKLOG.md', 'product/02-技术架构.md': 'PROJECT.md', 'product/03-工程规范.md': 'AGENTS.md' }
+  const pointer = { 'product/reference/01-进度与优先级.md': 'BACKLOG.md', 'product/reference/02-技术架构.md': 'PROJECT.md', 'product/reference/03-工程规范.md': 'AGENTS.md' }
   if (document.frontmatter.source) {
     const candidate = pointer[document.relative]
-    if (!candidate || document.frontmatter.source !== '../../../' + candidate) fail('workspace_invalid_input')
+    if (!candidate || document.frontmatter.source !== '../../../../' + candidate) fail('workspace_invalid_input')
     return candidate
   }
   return 'workspace/content/' + document.relative
@@ -77,7 +77,7 @@ function renderBody(source, origin, body, bySource, assets) {
       assets[id] = { filename: path.basename(target), body: bytes.toString('base64'), sha256: id, mime: ({ png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', pdf: 'application/pdf', txt: 'text/plain' })[ext] }
       url = 'workspace-attachment:' + id + suffix
     } else if (target.startsWith('workspace/content/') && !target.startsWith('workspace/content/templates/')) url = '#unregistered-document'
-    else if (!target.startsWith('../') && fs.existsSync(resolved) && (fs.realpathSync(resolved) === fs.realpathSync(source) || fs.realpathSync(resolved).startsWith(fs.realpathSync(source) + path.sep))) url = 'https://github.com/StephenQiu30/hotkey-server/blob/main/' + target.split('/').map(encodeURIComponent).join('/') + suffix
+    else if (!target.startsWith('../') && fs.existsSync(resolved) && (fs.realpathSync(resolved) === fs.realpathSync(source) || fs.realpathSync(resolved).startsWith(fs.realpathSync(source) + path.sep))) url = 'https://github.com/StephenQiu30/Ripplesight/blob/main/' + target.split('/').map(encodeURIComponent).join('/') + suffix
     else fail('workspace_invalid_input')
     const start = node.position.start.offset, end = node.position.end.offset
     const chunk = body.slice(start, end), index = chunk.indexOf(node.url)

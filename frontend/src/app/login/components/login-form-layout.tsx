@@ -21,7 +21,7 @@ export function LoginFormLayout({
       <Card variant="muted" className="gap-5 py-5 sm:gap-6 sm:py-8">
         <CardHeader className="gap-2 px-5 sm:px-8">
           <UI.Heading level={1} id="login-title">
-            登录知微见澜
+            登录Ripplesight
           </UI.Heading>
           <UI.Text tone="muted" size="sm">
             继续关注你在意的，沿着来源看见变化。

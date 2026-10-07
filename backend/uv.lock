@@ -382,77 +382,6 @@ wheels = [
 ]
 
 [[package]]
-name = "hotkey-backend"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "apscheduler" },
-    { name = "beautifulsoup4" },
-    { name = "confluent-kafka" },
-    { name = "fastapi", extra = ["standard"] },
-    { name = "feedparser" },
-    { name = "highspy" },
-    { name = "httpx" },
-    { name = "markdown-it-py" },
-    { name = "minio" },
-    { name = "pillow" },
-    { name = "playwright" },
-    { name = "psycopg", extra = ["binary", "pool"] },
-    { name = "pwdlib", extra = ["argon2"] },
-    { name = "pyarrow" },
-    { name = "pydantic-settings" },
-    { name = "qrcode" },
-    { name = "redis" },
-    { name = "scalar-fastapi" },
-    { name = "sqlalchemy" },
-    { name = "structlog" },
-    { name = "typer" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "types-qrcode" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "apscheduler", specifier = ">=3.11,<4" },
-    { name = "beautifulsoup4", specifier = ">=4.15,<5" },
-    { name = "confluent-kafka", specifier = ">=2.11,<3" },
-    { name = "fastapi", extras = ["standard"], specifier = ">=0.116,<1" },
-    { name = "feedparser", specifier = ">=6.0,<7" },
-    { name = "highspy", specifier = "==1.15.1" },
-    { name = "httpx", specifier = ">=0.28,<1" },
-    { name = "markdown-it-py", specifier = "==4.2.0" },
-    { name = "minio", specifier = ">=7.2,<8" },
-    { name = "pillow", specifier = "==12.3.0" },
-    { name = "playwright", specifier = "==1.63.0" },
-    { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2,<4" },
-    { name = "pwdlib", extras = ["argon2"], specifier = ">=0.3,<1" },
-    { name = "pyarrow", specifier = "==25.0.1" },
-    { name = "pydantic-settings", specifier = ">=2.10,<3" },
-    { name = "qrcode", specifier = "==8.2" },
-    { name = "redis", specifier = ">=6.2,<7" },
-    { name = "scalar-fastapi", specifier = ">=1.4,<2" },
-    { name = "sqlalchemy", specifier = ">=2.0,<3" },
-    { name = "structlog", specifier = ">=25.4,<26" },
-    { name = "typer", specifier = ">=0.16,<1" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "mypy", specifier = ">=1.17,<2" },
-    { name = "pytest", specifier = ">=8.4,<9" },
-    { name = "pytest-cov", specifier = ">=6.2,<7" },
-    { name = "ruff", specifier = ">=0.12,<1" },
-    { name = "types-qrcode", specifier = "==8.2.0.20260518" },
-]
-
-[[package]]
 name = "httpcore"
 version = "1.0.9"
 source = { registry = "https://pypi.org/simple" }
@@ -1059,6 +988,77 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/42/33/a1de70bc925d072250371abfdfbeeebda463aca9c049dedd78180f2ead08/rignore-0.8.1-cp312-cp312-win32.whl", hash = "sha256:39b300b82e90f7a6ad102544b777f2aa8a26e9260ebb021399ee5a0a708a7c2d", size = 639566, upload-time = "2026-08-04T22:23:50.2Z" },
     { url = "https://files.pythonhosted.org/packages/2b/65/db4fd0b4b8daff0f9810e2142ec2375122bd756a45cb4f163e1ca3aea905/rignore-0.8.1-cp312-cp312-win_amd64.whl", hash = "sha256:562055b620844654f0afff4df0a9c83f3679452c276cfa76cc5e49c14ddba481", size = 728384, upload-time = "2026-08-04T22:23:51.733Z" },
     { url = "https://files.pythonhosted.org/packages/78/13/bee47064ef6225ddb15333ec846b8e518b3e83d8654c8496734f8f3eb3c4/rignore-0.8.1-cp312-cp312-win_arm64.whl", hash = "sha256:19606039e35dea7c1a8360f76fe39c5df6715d593a4f2e0c0c712b1b50985d10", size = 666363, upload-time = "2026-08-04T22:23:52.969Z" },
+]
+
+[[package]]
+name = "ripplesight-backend"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "apscheduler" },
+    { name = "beautifulsoup4" },
+    { name = "confluent-kafka" },
+    { name = "fastapi", extra = ["standard"] },
+    { name = "feedparser" },
+    { name = "highspy" },
+    { name = "httpx" },
+    { name = "markdown-it-py" },
+    { name = "minio" },
+    { name = "pillow" },
+    { name = "playwright" },
+    { name = "psycopg", extra = ["binary", "pool"] },
+    { name = "pwdlib", extra = ["argon2"] },
+    { name = "pyarrow" },
+    { name = "pydantic-settings" },
+    { name = "qrcode" },
+    { name = "redis" },
+    { name = "scalar-fastapi" },
+    { name = "sqlalchemy" },
+    { name = "structlog" },
+    { name = "typer" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+    { name = "types-qrcode" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "apscheduler", specifier = ">=3.11,<4" },
+    { name = "beautifulsoup4", specifier = ">=4.15,<5" },
+    { name = "confluent-kafka", specifier = ">=2.11,<3" },
+    { name = "fastapi", extras = ["standard"], specifier = ">=0.116,<1" },
+    { name = "feedparser", specifier = ">=6.0,<7" },
+    { name = "highspy", specifier = "==1.15.1" },
+    { name = "httpx", specifier = ">=0.28,<1" },
+    { name = "markdown-it-py", specifier = "==4.2.0" },
+    { name = "minio", specifier = ">=7.2,<8" },
+    { name = "pillow", specifier = "==12.3.0" },
+    { name = "playwright", specifier = "==1.63.0" },
+    { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2,<4" },
+    { name = "pwdlib", extras = ["argon2"], specifier = ">=0.3,<1" },
+    { name = "pyarrow", specifier = "==25.0.1" },
+    { name = "pydantic-settings", specifier = ">=2.10,<3" },
+    { name = "qrcode", specifier = "==8.2" },
+    { name = "redis", specifier = ">=6.2,<7" },
+    { name = "scalar-fastapi", specifier = ">=1.4,<2" },
+    { name = "sqlalchemy", specifier = ">=2.0,<3" },
+    { name = "structlog", specifier = ">=25.4,<26" },
+    { name = "typer", specifier = ">=0.16,<1" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.17,<2" },
+    { name = "pytest", specifier = ">=8.4,<9" },
+    { name = "pytest-cov", specifier = ">=6.2,<7" },
+    { name = "ruff", specifier = ">=0.12,<1" },
+    { name = "types-qrcode", specifier = "==8.2.0.20260518" },
 ]
 
 [[package]]

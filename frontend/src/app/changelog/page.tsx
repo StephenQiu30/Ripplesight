@@ -6,7 +6,7 @@ import { welcomeMetadata } from "@/components/site/welcome-metadata";
 export const metadata = welcomeMetadata(
   "/changelog",
   "变更记录",
-  "查看知微见澜公开欢迎页、登录和信息监控工作区的更新记录。",
+  "查看Ripplesight公开欢迎页、登录和信息监控工作区的更新记录。",
 );
 export default async function ChangelogPage() {
   await connection();

@@ -1,4 +1,4 @@
-# 参与 HotKey
+# 参与 Ripplesight
 
 1. 从 [BACKLOG](BACKLOG.md) 中找到要做的事，再读对应的[能力文档](workspace/content/index.md)，确认这次改动对应哪一条验收标准。
 2. 按 [AGENTS](AGENTS.md) 的规则实现，并通过其中 §5 列出的全部检查。

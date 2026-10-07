@@ -1,6 +1,8 @@
-# HotKey · 知微见澜
+# Ripplesight
 
-HotKey 是一个**公开资讯阅读站 + 个人舆情监控**工具，个人非商业使用。
+Ripplesight 是面向个人非商业使用的**公开资讯阅读与舆情监控项目**。围绕关键词连接来源材料、讨论与事件进展，让正在发生的变化有依据、可追溯。
+
+GitHub 仓库：[StephenQiu30/Ripplesight](https://github.com/StephenQiu30/Ripplesight)。本机工作区为 `Ripplesight/`，当前仓库为其中的 `ripplesight-server/`，冻结的客户端为 `ripplesight-app/`。既有 `HOTKEY_*` 环境变量、数据库、Compose 项目与数据卷、登录协议、MCP 工具名及 Obsidian 导出目录继续兼容现有部署；改名不迁移这些数据。
 
 - 不登录：阅读有出处、经过去重的公开资讯、事件、日报周报，以及 AI 模型榜。
 - 登录后：为关心的主题设置关键词，每小时获取各平台的热点与评论，每天看到社交媒体上最热的事件，查看情感走向，接收报告和告警。
@@ -58,7 +60,7 @@ API 和 Web 只绑定 localhost，需要通过反向代理对外提供访问。
 
 ## 文档
 
-文档与校验工具说明见 [workspace/README](workspace/README.md)。项目知识库用于内部开发，本机内部入口为 frontend 的 `/workspace/docs`，使用 Nextra 与 Editor.js，共用身份和样式。初始化与启动见 [本机知识库](workspace/LOCAL.md)。现有 Nextra 公开预览 <http://127.0.0.1:8668/hotkey-server/> 与公开清单继续保留；内部资料走授权 API。真实账号与 Obsidian 验收仍需完成。
+文档与校验工具说明见 [workspace/README](workspace/README.md)。项目知识库用于内部开发，本机内部入口为 frontend 的 `/workspace/docs`，使用 Nextra 与 Editor.js，共用身份和样式。初始化与启动见 [本机知识库](workspace/LOCAL.md)。现有 Nextra 公开预览 <http://127.0.0.1:8668/Ripplesight/> 与公开清单继续保留；内部资料走授权 API。真实账号与 Obsidian 验收仍需完成。
 
 | 文档 | 内容 |
 |---|---|

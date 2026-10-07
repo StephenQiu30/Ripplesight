@@ -1,7 +1,7 @@
 [project]
-name = "hotkey-backend"
+name = "ripplesight-backend"
 version = "0.1.0"
-description = "HotKey API, worker, and management commands"
+description = "Ripplesight API and background services for public news reading and personal sentiment monitoring"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "beautifulsoup4>=4.15,<5",

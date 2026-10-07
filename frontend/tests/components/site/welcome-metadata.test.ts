@@ -9,12 +9,12 @@ afterEach(() => vi.unstubAllEnvs());
 
 it("generates canonical and sharing metadata for the configured welcome site", () => {
   vi.stubEnv("NEXT_PUBLIC_SITE_ORIGIN", "https://welcome.example");
-  const data = welcomeMetadata("/", "知微见澜", "从关键词开始持续关注。");
+  const data = welcomeMetadata("/", "Ripplesight", "从关键词开始持续关注。");
   expect(data.robots).toEqual({ index: true, follow: true });
   expect(data.alternates?.canonical).toBe("https://welcome.example/");
   expect(data.openGraph).toMatchObject({
     url: "https://welcome.example/",
-    siteName: "知微见澜 Ripplesight",
+    siteName: "Ripplesight",
     type: "website",
   });
 });

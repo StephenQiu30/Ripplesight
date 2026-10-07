@@ -36,7 +36,7 @@ def test_digest_template_renders_rules_brand_evidence_and_isolates_untrusted_dat
         [{"frame": {"evidence": "原文证据", "conditions": [{"quote": "仅限受邀账户"}]}}],
     )
     rendered = render_event_digest_prompt(data)
-    assert "HotKey" in rendered and "防幻觉规则" in rendered
+    assert "Ripplesight" in rendered and "防幻觉规则" in rendered
     assert "核心变化和目前的结论" in rendered and "100–300" in rendered
     assert "原文证据" in rendered and "仅限受邀账户" in rendered
     assert "{{> rules-anti-hallucination}}" not in rendered

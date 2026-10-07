@@ -33,7 +33,7 @@ def _poster(*, title: str, summary: str, source: str, url: str, badge: str) -> s
         f"<title>{html.escape(title)}</title>",
         '<rect width="1080" height="1440" fill="#101f2c"/>',
         '<rect x="56" y="56" width="968" height="1328" rx="28" fill="#f6f4eb"/>',
-        _text(154, "HotKey", 32, "#2264a8"),
+        _text(154, "Ripplesight", 32, "#2264a8"),
         _text(214, badge, 24, "#526579"),
     ]
     y = 320

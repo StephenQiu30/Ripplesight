@@ -88,7 +88,7 @@ export function PosterDownload({ target }: { target: PosterTarget }) {
             className="h-auto max-w-80 rounded-md"
           />
           <Button asChild variant="outline">
-            <UI.TextLink href={preview} download="hotkey-poster.png">
+            <UI.TextLink href={preview} download="ripplesight-poster.png">
               下载海报 PNG
             </UI.TextLink>
           </Button>

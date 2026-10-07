@@ -10,4 +10,4 @@
 
 <!-- 说明 OpenAPI、配置、数据库结构、部署影响及仍需验证的内容；如无可写“无”。 -->
 
-提交前请阅读 [贡献指南](https://github.com/StephenQiu30/hotkey-server/blob/main/CONTRIBUTING.md)，并确认差异中没有密钥、会话、真实用户数据或本地产物。
+提交前请阅读 [贡献指南](https://github.com/StephenQiu30/Ripplesight/blob/main/CONTRIBUTING.md)，并确认差异中没有密钥、会话、真实用户数据或本地产物。

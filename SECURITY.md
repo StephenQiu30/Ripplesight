@@ -1,10 +1,10 @@
 # 安全策略
 
-HotKey 仍在开发中，只维护 `main` 分支。
+Ripplesight 仍在开发中，只维护 `main` 分支。
 
 ## 报告漏洞
 
-请使用 GitHub 的 [Private Vulnerability Reporting](https://github.com/StephenQiu30/hotkey-server/security/advisories/new) 私下报告。如果该入口不可用，可以创建一个**不含漏洞细节**的 Issue，请维护者提供私密联系方式。
+请使用 GitHub 的 [Private Vulnerability Reporting](https://github.com/StephenQiu30/Ripplesight/security/advisories/new) 私下报告。如果该入口不可用，可以创建一个**不含漏洞细节**的 Issue，请维护者提供私密联系方式。
 
 报告时请提供：受影响的提交、影响范围、复现条件、已脱敏的最小复现步骤。不要附上真实的密码、Token、Cookie、连接字符串或用户内容。
 
