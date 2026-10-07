@@ -212,3 +212,16 @@ Python 虚拟环境的 36 个启动/激活文件迁到新绝对路径，prompt �
 未完成的应用设置项：Codex `list_projects` 仍返回项目标签 `HotKey` 与旧路径，没有自动迁移。自动审批拒绝通过 `com.openai.codex` 界面改项目设置，理由是应用安全限制；当前没有可用的专用项目改名工具，未绕过限制编辑应用内部状态。需在 Codex 中将保存的项目目录切换为新父目录；兼容链接保证现有聊天仍能访问文件。源码尚未获明确提交/推送授权，GitHub README、Pages 与正式运行版本仍待发布。
 
 浏览器复核补充：新目录 8686 临时预览的首页标题为 `Ripplesight · 公开资讯阅读与个人舆情监控`，PWA name/short_name 均为 Ripplesight，description 为当前项目定位；关于页的标题、品牌与正文说明正确。默认 1280px 与 390px 视口无整页横向溢出，测试后恢复默认视口并关闭临时应用预览；截图为 `.tools/requirements-workspace/2026-10-07-ripplesight-description.jpg`。新目录的 8668 文档预览继续保留。
+
+## 2026-10-07 授权提交与推送
+
+本人随后明确要求“将代码提交到main并推送”。两个仓库提交前均在 main，与各自 origin/main 一致；本轮待提交内容均为上述 workspace、品牌、目录关联与描述调整，未包含本机凭据、截图或构建产物。锁文件中的 87 项依赖名称及版本与改名前一致；提交前 workspace 的 19 项测试、TypeScript、34 页文档校验和 App 公共文档/模板校验再次通过。
+
+- 主仓库 [002c6206](https://github.com/StephenQiu30/Ripplesight/commit/002c620657fb4573e9374a7451b0677b0f49b6ca)：统一 Ripplesight 命名与需求工作区入口，已推送 main。
+- 冻结 App [b9447bf](https://github.com/StephenQiu30/Ripplesight-app/commit/b9447bf159a25700995cbf84648bfbe122128194)：统一客户端命名与说明，已推送 main；[远端文档 CI](https://github.com/StephenQiu30/Ripplesight-app/actions/runs/37564613455) 成功。
+- 推送后 git ls-remote 确认两个远端 main 与对应本机提交一致；主仓库 [Workspace site](https://github.com/StephenQiu30/Ripplesight/actions/runs/37564606103) 构建与部署成功。该提交的 backend/frontend/contract/runtime 工作流在此记录时仍运行中，不将本机结果代替远端结果。
+- 线上 <https://stephenqiu30.github.io/Ripplesight/> 返回 200，标题为 `Ripplesight 需求 workspace · Ripplesight 文档`；两份样式资源均返回 200，HTML 不再引用旧 `/hotkey-server/_next/` 路径，且无全局 footer。此前仓库改名导致的旧资源 404 已由新构建修复。
+- 更新提交状态后，workspace check、build 通过；首次 verify 因 8668 预览进程未运行而失败，重新启动已有预览后复验通过：34 页正文/原文与 AI 导出有效，舆情/评论/情感搜索命中分别为 13/16/10 条。未改验证脚本。
+- Codex 项目清单现已有 Ripplesight，路径为新父目录；旧 HotKey 项目仍保留。此前界面安全限制是历史记录，不再阻碍从新目录工作。
+
+本次授权用于提交、推送及其既有 CI 流程；没有重启或重新部署本机 8666/8667 业务服务，没有选择或执行业务 POC。父目录 README/AGENTS 属于两个仓库之外的本机入口，未据此建立第三个 Git 仓库。
