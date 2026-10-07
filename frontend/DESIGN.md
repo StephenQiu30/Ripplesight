@@ -40,7 +40,8 @@
 
 ## 4. 布局
 
-- 全站外壳是 `BasicLayout`：固定侧栏 + 唯一的 `main` 滚动区 + 跟在正文后面的页脚。页面只写正文，不要重复写导航、`main`、全屏高度或外侧边距。
+- 全站外壳是 `BasicLayout`：固定侧栏与移动导航，内部统一挂载 `PageContainer`。后者提供固定位置栏、占满剩余高度的唯一正文滚动区，以及跟在正文后的页脚。`main` 是整体内容地标，`#page-content` 是键盘与阅读定位的滚动节点；页面不重复写导航、`main`、全屏高度或外侧边距。
+- `PageContainer` 使用 header / children / footer 插槽；正文自动约束宽度、最小尺寸及响应式留白。位置栏和正文共用 `LayoutContainer` 对齐，正文变化不推动位置栏；加载、空、错误与无权限仍由页面原有 `PageState` 表达。打印恢复自然文档流。
 - 正文宽度由 `LayoutContainer`（`max-w-7xl`）统一控制。md 及以上的站点侧栏用 shadcn `Sidebar`（`collapsible="icon"`）：展开 16rem，收起为 3rem 图标栏，收起时用 Tooltip 显示入口名；用侧栏顶部按钮或 Ctrl/⌘ + B 切换，状态记在 `sidebar_state` cookie，根布局读出后首屏不闪动。
 - 侧栏分“阅读”和“工作台”两组：阅读组公开可见；工作台组只在有会话时显示；接口能给出待处理告警数时才用 Badge 标在告警入口上。侧栏底部放服务状态（取自 `getReadiness`，取不到时整块不显示，不显示假状态）和账号菜单。
 - md 以下改用固定底部导航（首页、探索、收藏、工作台、更多），正文底部预留 `pb-16`。

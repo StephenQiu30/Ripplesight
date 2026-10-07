@@ -19,9 +19,10 @@ import { BasicFooter } from "./basic-footer";
 import {
   BasicMobileHeader,
   BasicMobileNavigation,
+  BasicPageLocation,
   BasicSidebar,
 } from "./basic-sidebar";
-import { LayoutContainer } from "./layout-container";
+import { PageContainer } from "./page-container";
 import { IdentitySessionProvider } from "@/components/auth/session-context";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "./theme-toggle";
@@ -65,27 +66,24 @@ export function BasicLayout({
                 asChild
                 className="sr-only focus-within:not-sr-only focus-within:fixed focus-within:top-3 focus-within:left-5 focus-within:z-50"
               >
-                <UI.TextLink href="#main-content">跳到正文</UI.TextLink>
+                <UI.TextLink href="#page-content">跳到正文</UI.TextLink>
               </Button>
               {isLogin ? null : <BasicSidebar />}
               <SidebarInset
                 id="main-content"
-                ref={mainRef}
                 tabIndex={-1}
                 data-login={isLogin || undefined}
-                className="min-h-0 min-w-0 overflow-y-auto overscroll-y-contain scroll-smooth pb-16 focus-visible:outline-none data-[login=true]:pb-0 motion-reduce:scroll-auto md:pb-0 print:overflow-visible print:pb-0"
+                className="min-h-0 min-w-0 overflow-clip pb-16 focus-visible:outline-none data-[login=true]:pb-0 md:pb-0 print:overflow-visible print:pb-0"
               >
                 {isLogin ? null : <BasicMobileHeader />}
-                <LayoutContainer
-                  className={
-                    pathname === "/"
-                      ? "flex min-h-full flex-col px-0 py-0 sm:px-0 print:block"
-                      : "flex min-h-full flex-col py-8 sm:py-10 print:block print:py-0"
-                  }
+                <PageContainer
+                  scrollRef={mainRef}
+                  edgeToEdge={pathname === "/"}
+                  header={isLogin ? undefined : <BasicPageLocation />}
+                  footer={<BasicFooter />}
                 >
                   {children}
-                </LayoutContainer>
-                <BasicFooter />
+                </PageContainer>
               </SidebarInset>
               {isLogin ? null : <BasicMobileNavigation />}
             </SidebarProvider>

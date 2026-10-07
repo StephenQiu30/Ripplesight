@@ -194,13 +194,15 @@ it("restores reading position and translation while ignoring legacy notes", asyn
     </BasicLayout>,
   );
   await waitFor(() => {
-    expect(screen.getByRole("main").scrollTop).toBe(480);
+    expect(screen.getByRole("region", { name: "页面内容" }).scrollTop).toBe(
+      480,
+    );
     expect(screen.getByText("部分中文")).toBeTruthy();
   });
   expect(screen.queryByText("本机阅读笔记")).toBeNull();
   expect(screen.queryByRole("button", { name: "保存笔记" })).toBeNull();
   expect(screen.queryByRole("textbox")).toBeNull();
-  screen.getByRole("main").scrollTop = 360;
+  screen.getByRole("region", { name: "页面内容" }).scrollTop = 360;
   fireEvent(window, new Event("pagehide"));
   expect(JSON.parse(localStorage.getItem(readingKey)!)).toEqual({
     mode: "translated",
@@ -217,7 +219,7 @@ it("preserves reading position on pagehide and unmount without storing notes", a
   await new Promise((resolve) =>
     requestAnimationFrame(() => requestAnimationFrame(resolve)),
   );
-  const main = screen.getByRole("main");
+  const main = screen.getByRole("region", { name: "页面内容" });
   main.scrollTop = 360;
   fireEvent(window, new Event("pagehide"));
   expect(JSON.parse(localStorage.getItem(readingKey)!)).toEqual({
