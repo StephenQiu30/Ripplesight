@@ -25,10 +25,10 @@ RUN uv sync --frozen --no-dev
 COPY database ./database
 COPY app ./app
 
-RUN useradd --create-home --uid 10001 hotkey \
-    && chown -R hotkey:hotkey /srv/backend
+RUN useradd --create-home --uid 10001 ripplesight \
+    && chown -R ripplesight:ripplesight /srv/backend
 
-USER hotkey
+USER ripplesight
 WORKDIR /srv/backend/app
 EXPOSE 8080
 

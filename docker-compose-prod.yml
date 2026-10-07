@@ -1,6 +1,6 @@
 # Use: docker compose --env-file .env.prod -f docker-compose-prod.yml up --detach --build --wait
 # Keep all application services in one source; no production-only overrides.
-name: hotkey-prod
+name: ripplesight-prod
 
 include:
   - path: ./docker-compose.yml

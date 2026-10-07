@@ -1,4 +1,4 @@
-name: hotkey
+name: ripplesight
 
 x-backend-environment: &backend-environment
   HOTKEY_ENVIRONMENT: ${HOTKEY_ENVIRONMENT:-development}
@@ -116,6 +116,7 @@ x-backend-service: &backend-service
 
 services:
   backend:
+    container_name: ${COMPOSE_PROJECT_NAME}-backend
     <<: *backend-service
     ports:
       - 127.0.0.1:${HOTKEY_API_PORT:-8667}:8080
@@ -139,6 +140,7 @@ services:
           memory: 1G
 
   frontend:
+    container_name: ${COMPOSE_PROJECT_NAME}-frontend
     build:
       context: ./frontend
     image: ${HOTKEY_FRONTEND_IMAGE:-ripplesight-frontend:local}
@@ -162,7 +164,34 @@ services:
           cpus: "0.50"
           memory: 768M
 
+  workspace:
+    container_name: ${COMPOSE_PROJECT_NAME}-workspace
+    build:
+      context: .
+      dockerfile: workspace/Dockerfile
+    image: ${HOTKEY_WORKSPACE_IMAGE:-ripplesight-workspace:local}
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    ports:
+      - 127.0.0.1:${HOTKEY_WORKSPACE_PORT:-8668}:8080
+    healthcheck:
+      test:
+        ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8080/Ripplesight/"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
   worker:
+    container_name: ${COMPOSE_PROJECT_NAME}-worker
     <<: *backend-service
     command: ["/srv/backend/.venv/bin/python", "-m", "worker"]
     restart: unless-stopped
@@ -177,6 +206,7 @@ services:
           memory: 512M
 
   scheduler:
+    container_name: ${COMPOSE_PROJECT_NAME}-scheduler
     <<: *backend-service
     command: ["/srv/backend/.venv/bin/python", "-m", "worker.scheduler"]
     restart: unless-stopped
@@ -188,6 +218,7 @@ services:
           memory: 512M
 
   browser:
+    container_name: ${COMPOSE_PROJECT_NAME}-browser
     build:
       context: ./backend
       target: browser
@@ -234,6 +265,7 @@ services:
           pids: 256
 
   browser-egress:
+    container_name: ${COMPOSE_PROJECT_NAME}-browser-egress
     image: ubuntu/squid:6.6-24.04_edge@sha256:8a3baed477e2c282ab8aa5edad442f69873246964f225c5c2ae8364b6610963c
     user: "13:13"
     read_only: true
@@ -272,6 +304,7 @@ services:
           pids: 64
 
   cli:
+    container_name: ${COMPOSE_PROJECT_NAME}-cli
     <<: *backend-service
     entrypoint: ["/srv/backend/.venv/bin/python", "-m", "cli"]
     command: ["--help"]
