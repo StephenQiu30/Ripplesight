@@ -49,3 +49,16 @@ export async function updateSourceConnection(
     },
   );
 }
+
+/** 启用本机 Chrome B站采集 POST /api/source-connections/bilibili/chrome */
+export async function connectBilibiliChrome(
+  options?: import("@/request").RequestOptions,
+) {
+  return request<HotKeyAPI.SourcePresetApplyView>(
+    "/api/source-connections/bilibili/chrome",
+    {
+      method: "POST",
+      ...(options || {}),
+    },
+  );
+}

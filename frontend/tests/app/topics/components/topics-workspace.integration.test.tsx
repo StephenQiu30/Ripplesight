@@ -207,3 +207,7 @@ it("keeps a failed embedded refresh below the workspace heading", async () => {
   await screen.findByRole("heading", { level: 2, name: /主题刷新失败/ });
   expectOnePageHeading();
 });
+
+vi.mock("@/app/monitors/[topicId]/components/topic-results", () => ({
+  TopicResults: () => null,
+}));

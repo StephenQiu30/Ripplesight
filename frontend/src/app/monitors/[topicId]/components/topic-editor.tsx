@@ -68,6 +68,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { ApiRequestError } from "@/request";
 
+import { TopicResults } from "./topic-results";
 import { TopicRunActions } from "./topic-run-actions";
 
 type TopicEditorProps = {
@@ -649,6 +650,8 @@ export function TopicEditor({
             />
           </UI.Content>
         </UI.Content>
+        <Separator />
+        <TopicResults topicId={topic.id} />
         <Separator />
         <UI.Form
           aria-label="编辑主题设置"

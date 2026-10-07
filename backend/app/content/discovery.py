@@ -350,7 +350,13 @@ def plan_single_keyword_discovery(run: KeywordDiscoveryRunInput) -> JobAcceptanc
             "query": query,
             "query_role": "primary",
             "sort_key": (
-                SourceSort.TOP.value if run.source_key == "bilibili" else SourceSort.LATEST.value
+                run.search_sort.value
+                if run.search_sort is not None
+                else (
+                    SourceSort.TOP.value
+                    if run.source_key == "bilibili"
+                    else SourceSort.LATEST.value
+                )
             ),
             "target_hash": _target_hash(run.configuration_ref, query).hex(),
             "rule_version": run.configuration_version,

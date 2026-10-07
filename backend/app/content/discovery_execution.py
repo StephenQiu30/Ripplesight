@@ -34,6 +34,8 @@ from jobs.services import (
     JobExecutionConfiguration,
     load_job_execution_configuration,
 )
+from sources.adapters.bilibili_chrome import VERSION as CHROME_VERSION
+from sources.adapters.bilibili_chrome import BilibiliChromeAdapter
 from sources.adapters.hackernews import HackerNewsAdapter
 from sources.adapters.mediacrawler import (
     MediaCrawlerAdapter,
@@ -73,6 +75,18 @@ def build_search_adapter_factory(
         raise ValueError("search adapter requires allowed_hosts")
     if source_key == "bilibili":
         settings = get_settings()
+        if config.bilibili_transport == "chrome":
+            if owner_id is None or settings.bilibili_chrome_owner_id != owner_id:
+                raise ValueError("Chrome requires the configured local account")
+            return lambda before_request, cancelled, max_requests, max_seconds: (
+                BilibiliChromeAdapter(
+                    identity_env=settings.bilibili_chrome_identity_env,
+                    before_request=before_request,
+                    cancelled=cancelled,
+                    max_requests=max_requests,
+                    max_seconds=max_seconds,
+                )
+            )
         if not settings.mediacrawler_enabled or owner_id is None:
             raise ValueError("MediaCrawler requires enabled host configuration and owner")
         return lambda before_request, cancelled, max_requests, max_seconds: MediaCrawlerAdapter(
@@ -164,7 +178,11 @@ class KeywordDiscoveryExecutor:
         self, message: JobMessage, lease: ExecutionLease
     ) -> tuple[ExecutionLease, JobCompletion]:
         configuration = self._configuration(message)
-        scope = configuration.scope
+        scope = {
+            key: value
+            for key, value in configuration.scope.items()
+            if key != "source_adapter_version"
+        }
         try:
             source_key = configuration.observation.source_key
             if source_key is None:
@@ -277,18 +295,17 @@ class KeywordDiscoveryExecutor:
 
         if source_key == "bilibili":
             try:
-                validate_job_version_evidence(
-                    upstream_revision=configuration.upstream_revision,
-                    patched_revision=configuration.patched_revision,
-                    adapter_version=configuration.adapter_version,
-                )
+                if configuration.adapter_version != CHROME_VERSION:
+                    validate_job_version_evidence(
+                        upstream_revision=configuration.upstream_revision,
+                        patched_revision=configuration.patched_revision,
+                        adapter_version=configuration.adapter_version,
+                    )
             except MediaCrawlerPreflightError as error:
                 raise self._adapter_failure(error) from error
-            # A completed old checkpoint must not become a successful Job after
-            # this connection has been safety-paused by another execution.
             try:
                 with self._sessions() as session, session.begin():
-                    require_source_connection_version(
+                    accepted_config = require_source_connection_version(
                         session,
                         owner_id=configuration.owner_id,
                         source_key=source_key,
@@ -297,6 +314,14 @@ class KeywordDiscoveryExecutor:
                     )
             except ApplicationError as error:
                 raise self._adapter_failure(error) from error
+            if (accepted_config.bilibili_transport == "chrome") != (
+                configuration.adapter_version == CHROME_VERSION
+            ):
+                raise self._failure(
+                    "source_adapter_version_mismatch",
+                    JobFailureCategory.CONFIGURATION_UNAVAILABLE,
+                    "重新应用来源预设并提交任务",
+                )
 
         if lease.checkpoint.get("cursor.done") is True:
             with self._sessions() as session, session.begin():

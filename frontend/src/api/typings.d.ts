@@ -6632,6 +6632,17 @@ declare namespace HotKeyAPI {
     updated_at: string;
   };
 
+  type SourcePresetApplyView = {
+    /** Source Key */
+    source_key: string;
+    /** Connection Id */
+    connection_id: string;
+    /** Connection Version */
+    connection_version: number;
+    /** Capabilities */
+    capabilities: SourceCapability[];
+  };
+
   type SourceRolloutRole = "required" | "candidate";
 
   type SourceRowView = {

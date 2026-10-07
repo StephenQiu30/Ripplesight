@@ -15,7 +15,7 @@ from core.schemas import InputModel, OutputModel
 from evidence.schemas import AdmittedSourcePayload, DataClass
 from jobs.schemas import CollectionScanKind
 from monitors.schemas import MonitorRuleSetInput, MonitorRuleSetView, SourceKeyInput
-from sources.contracts import CommentsRequest, SearchRequest, SourceCapability
+from sources.contracts import CommentsRequest, SearchRequest, SourceCapability, SourceSort
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,6 +201,7 @@ class CommentCollectionRunInput(InputModel):
 
 
 class KeywordDiscoveryRunInput(InputModel):
+    search_sort: SourceSort | None = None
     """Internal search snapshot; it does not authorize or submit a source request."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True, str_strip_whitespace=False)
@@ -245,7 +246,8 @@ class KeywordDiscoveryRunInput(InputModel):
             len(queries) > 3
             or self.page_size > 5
             or self.latest_max_pages != 1
-            or self.latest_max_requests < 6 + 4 * self.page_size
+            or self.latest_max_requests
+            < (2 if self.search_sort is SourceSort.LATEST else 6 + 4 * self.page_size)
             or self.max_seconds > 220
         ):
             raise ValueError("Bilibili search must stay within the source risk limits")

@@ -33,7 +33,7 @@ from monitors.schemas import (
     MonitorTopicStatus,
 )
 from monitors.services import normalize_monitor_rules, scheduled_collection_queries
-from sources.contracts import SourceCapability
+from sources.contracts import SourceCapability, SourceSort
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,7 +119,14 @@ class MonitorTopicRunService:
                     preset is None
                     or SourceCapability.SEARCH not in preset.capabilities
                     or not readiness.get((source_key, SourceCapability.SEARCH), False)
-                    or (source_key == "bilibili" and not self._settings.mediacrawler_enabled)
+                    or (
+                        source_key == "bilibili"
+                        and not (
+                            self._settings.bilibili_chrome_owner_id == owner_id
+                            if preset.bilibili_transport == "chrome"
+                            else self._settings.mediacrawler_enabled
+                        )
+                    )
                 ):
                     skipped[source_key] = "source_unavailable"
                     continue
@@ -168,6 +175,9 @@ class MonitorTopicRunService:
                         source_key=source_key,
                         connection_id=preset.connection_id,
                         connection_version=preset.connection_version,
+                        search_sort=SourceSort.LATEST
+                        if preset.bilibili_transport == "chrome"
+                        else None,
                         primary_query=query,
                         starts_at=starts_at,
                         ends_at=now,

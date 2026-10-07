@@ -2720,13 +2720,13 @@ class CommentScanPost:
     title: str | None
     body: str | None
     like_count: int | None
-    comment_count: int
+    comment_count: int | None
     repost_count: int | None
     last_observed_at: datetime | None = None
 
     @property
     def interaction_score(self) -> int:
-        return (self.like_count or 0) + 2 * self.comment_count + 3 * (self.repost_count or 0)
+        return (self.like_count or 0) + 2 * (self.comment_count or 0) + 3 * (self.repost_count or 0)
 
     @property
     def searchable_text(self) -> str:
@@ -2818,7 +2818,11 @@ def _rank_comment_posts_for_topic(
         if (
             post.owner_id != topic.owner_id
             or post.source_key not in topic.source_keys
-            or post.comment_count <= 0
+            or (
+                post.comment_count is None
+                and (preset is None or preset.bilibili_transport != "chrome")
+            )
+            or (post.comment_count is not None and post.comment_count <= 0)
             or preset is None
             or (
                 now is not None
@@ -2862,7 +2866,12 @@ class CommentScanService:
         self._session = session
 
     def enqueue_due_comments_in_transaction(
-        self, *, now: datetime, skip_bilibili: bool = False
+        self,
+        *,
+        now: datetime,
+        skip_bilibili: bool = False,
+        owner_id: UUID | None = None,
+        source_key: str | None = None,
     ) -> int:
         if not self._session.in_transaction():
             raise RuntimeError("comment scanning requires the caller's transaction")
@@ -2872,7 +2881,10 @@ class CommentScanService:
         topics = MonitorScheduleService(
             self._session
         ).list_active_topics_for_scanning_in_transaction()
+        topics = tuple(topic for topic in topics if owner_id is None or topic.owner_id == owner_id)
         presets = self._comment_presets(topics)
+        if source_key is not None:
+            presets = {key: value for key, value in presets.items() if key[1] == source_key}
         if skip_bilibili:
             presets = {key: preset for key, preset in presets.items() if key[1] != "bilibili"}
         max_candidate_age = max(
@@ -2912,7 +2924,11 @@ class CommentScanService:
         # Only a newer Bilibili search refreshes the cached comments. A standalone
         # comment scan must not replay the same JSONL as a fresh platform read.
         for post in posts:
-            if post.source_key != "bilibili" or post.last_observed_at is None:
+            if (
+                post.source_key != "bilibili"
+                or post.last_observed_at is None
+                or presets[(post.owner_id, post.source_key)].bilibili_transport == "chrome"
+            ):
                 continue
             target = RecentCommentJobTarget(
                 owner_id=post.owner_id,
@@ -3071,7 +3087,13 @@ class CommentScanService:
                     ),
                 ),
                 ContentRecord.created_at <= until,
-                latest_observations.c.comment_count > 0,
+                or_(
+                    latest_observations.c.comment_count > 0,
+                    and_(
+                        ContentRecord.source_key == "bilibili",
+                        latest_observations.c.comment_count.is_(None),
+                    ),
+                ),
             )
             .order_by(ContentRecord.owner_id, ContentRecord.id)
         ).all()

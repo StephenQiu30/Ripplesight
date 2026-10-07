@@ -316,3 +316,7 @@ it.each([401, 403])("renders a forbidden topic for %s", async (status) => {
   expect(screen.getByRole("link", { name: "登录" })).toBeTruthy();
   expect(screen.queryByLabelText("主题名称")).toBeNull();
 });
+
+vi.mock("@/app/monitors/[topicId]/components/topic-results", () => ({
+  TopicResults: () => null,
+}));

@@ -280,8 +280,36 @@ def create_job_message_handler(
     stopping: Event | None = None,
     job_execution_timeout_seconds: Callable[[str, str | None], float] | None = None,
 ) -> MessageHandler:
+    dispatch = create_job_dispatcher(
+        sessions,
+        handlers,
+        worker_id=worker_id,
+        lease_seconds=lease_seconds,
+        clock=clock,
+        supervisor=supervisor,
+        stopping=stopping,
+        job_execution_timeout_seconds=job_execution_timeout_seconds,
+    )
+
     def handle(message: Message) -> None:
         body, reference = decode_job_message(message)
+        dispatch(body, reference)
+
+    return handle
+
+
+def create_job_dispatcher(
+    sessions: sessionmaker[Session],
+    handlers: Mapping[str, JobHandler],
+    *,
+    worker_id: str,
+    lease_seconds: int,
+    clock: Clock | None = None,
+    supervisor: JobProcessSupervisor | None = None,
+    stopping: Event | None = None,
+    job_execution_timeout_seconds: Callable[[str, str | None], float] | None = None,
+) -> Callable[[JobMessage, MessageReference], None]:
+    def handle(body: JobMessage, reference: MessageReference) -> None:
         log_context: dict[str, str | int] = {
             "operation_id": str(body.operation_id),
             "job_id": str(body.job_id),
