@@ -1,6 +1,6 @@
 # Ripplesight 文档工作区
 
-当前工作方式从 [需求与验证入口](content/product/reference/04-需求与验证入口.md)开始：先核对用户场景，再用一张卡组织最小 POC 与 demo。2026-10-07 本轮只搭阅读 workspace、整理需求，不实现业务代码。已有 PRD、决策与计划保留，不把它们当成一次全部开工的任务。
+当前工作方式从 [需求与验证入口](content/product/reference/04-需求与验证入口.md)开始：先核对用户场景，再用一张卡组织最小 POC 与 demo。2026-10-07 用户明确关键词帖子与评论监控，并要求基于免费 GitHub 项目使用 pm-execution 统一需求、架构、数据库及验收设计；POC 先验证国内。本轮只整理设计，不实现业务代码。已有决策与后续目标保留，不把它们当成一次全部开工的任务。
 
 本轮直接维护仓库中的 `workspace/content/`，可在 Codex 或 Obsidian 打开 [首页](content/index.md)，也可使用下方现有工具启动本机网页。尚未初始化正式内部知识库作者副本；不要同时编辑两个目录。将来启用 LOCAL 所述专用来源时，再明确切换。
 
@@ -8,7 +8,9 @@
 |---|---|
 | 人 | `content/index.md` 或本机 <http://127.0.0.1:8668/Ripplesight/> |
 | AI | `AGENTS.md` → `content/product/reference/04-需求与验证入口.md` → `content/product/reference/05-AI任务协议.md` → 当前任务相关文档 |
-| 验证设计 | [POC 验证卡](content/product/reference/06-POC验证卡.md)；当前 [热点候选](content/research/2026-10-07-热点事件需求核对.md)仍待核对 |
+| 验证设计 | 当前[需求分析](content/research/2026-10-07-热点事件需求核对.md)与[国内平台验证卡](content/research/2026-10-07-国内平台关键词监控POC验证.md)供执行前核对；继续复用既有[模板](content/product/reference/06-POC验证卡.md) |
+| 当前方案研究 | [GitHub 免费热点与评论采集调研](content/research/2026-10-07-GitHub免费热点与评论采集调研.md)：零付费 API 为前提，比较 star、许可、维护和复用边界 |
+| 当前工程设计 | [总 PRD](content/product/prd/01-PRD.md) → [架构](content/product/reference/02-技术架构.md#12-关键词监控工程设计提案) → [数据库](content/product/reference/07-关键词监控数据库设计.md) → [验证与交付](content/research/2026-10-07-关键词监控验证与交付设计.md)；各文档维护各自职责 |
 | AI 原文 | 构建后的 `out/llms.txt`、`out/llms-full.txt` 和 `out/raw/`；需要时读单页，不必一次加载全文 |
 
 本机预览只监听 `127.0.0.1`，无需登录。它读取现有非敏感阅读清单；清单中的“可读”不表示提案已确认。本轮不推送或对外部署。正式工作台 `/workspace/docs` 的账号权限和双端编辑仍按 LOCAL 管理，不作为本轮阅读的前提。
