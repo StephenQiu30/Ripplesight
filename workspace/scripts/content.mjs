@@ -22,6 +22,7 @@ export const excluded = new Set(['templates', 'views', '.obsidian'])
 export const productGroups = [
   ['product/prd', '产品需求（PRD）'],
   ['product/plan', '执行计划（PLAN）'],
+  ['product/pages', '页面需求'],
   ['product/reference', '产品参考']
 ]
 export const markdown = unified().use(remarkParse).use(remarkGfm)
