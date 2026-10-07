@@ -2,7 +2,7 @@
 
 继承根目录 [AGENTS](../AGENTS.md)。本文件只规定文档工作区的阅读和维护方式。
 
-项目、GitHub 主仓库与显示名称统一使用 `Ripplesight`，本机父目录为 `Ripplesight/`，仓库目录为 `ripplesight-server/` 与 `ripplesight-app/`；新包和镜像名称使用小写 `ripplesight-` 前缀，Pages 路径为 `/Ripplesight`。已有 `HOTKEY_*` 配置、数据库、Compose 数据命名空间、登录协议、MCP 工具名与 Obsidian 导出目录保留为兼容标识；新文案不能把它们当作品牌使用。旧路径的符号链接只用于兼容未迁移的工具与会话，新的命令和文档使用真实的新路径。
+项目、GitHub 主仓库与显示名称统一使用 `Ripplesight`，本机父目录为 `Ripplesight/`，仓库目录为 `ripplesight-server/` 与 `ripplesight-app/`；Compose 项目、容器、网络与自有镜像使用小写 `ripplesight` 前缀，生产项目为 `ripplesight-prod`，Pages 路径为 `/Ripplesight`。已有 `HOTKEY_*` 配置、数据库、历史数据卷、登录协议、MCP 工具名与 Obsidian 导出目录保留为兼容标识；新文案不能把它们当作品牌使用。旧路径的符号链接只用于兼容未迁移的工具与会话，新的命令和文档使用真实的新路径。
 
 1. 从 [需求与验证入口](content/product/reference/04-需求与验证入口.md)开始，接着读 [AI 任务协议](content/product/reference/05-AI任务协议.md)及 [BACKLOG](../BACKLOG.md)的当前检查点。按当前问题选择相关需求和证据，不把整个历史计划作为一次任务。
 2. 2026-10-07 用户要求：当前先搭 workspace、核对需求，暂不实现业务代码；真实验证先做最小 POC 和 demo。后续明确的用户指令可更新阶段；不能由计划或源码推断已获准开工。

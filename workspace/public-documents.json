@@ -28,13 +28,19 @@
     "product/reference/04-需求与验证入口.md",
     "product/reference/05-AI任务协议.md",
     "product/reference/06-POC验证卡.md",
+    "product/reference/07-关键词监控数据库设计.md",
     "product/plan/01-PLAN-workspace项目知识库.md",
     "product/plan/02-PLAN-前端重新设计.md",
     "product/prd/01-PRD.md",
     "product/prd/02-PRD-workspace项目知识库.md",
     "records/2026-10-06-前端重新设计验收.md",
     "research/2026-10-06-开源方案调研.md",
-    "research/2026-10-07-热点事件需求核对.md"
+    "research/2026-10-07-热点事件需求核对.md",
+    "research/2026-10-07-国内平台关键词监控POC验证.md",
+    "research/2026-10-07-热点监控市场与竞品调研.md",
+    "research/2026-10-07-用户细分旅程与POC优先级.md",
+    "research/2026-10-07-GitHub免费热点与评论采集调研.md",
+    "research/2026-10-07-关键词监控验证与交付设计.md"
   ],
   "references": [
     "templates/03-验收记录.md",
