@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from types import MappingProxyType
 
@@ -260,6 +260,49 @@ BILIBILI_PRESET = SourcePreset(
         max_requests=26,
         max_seconds=220,
         hard_timeout_seconds=240,
+        max_concurrency=1,
+        enabled=True,
+    ),
+)
+
+BILIBILI_CHROME_PRESET = replace(
+    BILIBILI_PRESET,
+    config=MappingProxyType(
+        {
+            **BILIBILI_PRESET.config,
+            "base_url": "https://api.bilibili.com",
+            "comment_scan": {
+                "candidate_age_seconds": 86400,
+                "refresh_interval_seconds": 3600,
+                "max_posts_per_topic": 2,
+                "page_size": 20,
+                "max_pages": 1,
+                "max_requests": 2,
+                "max_seconds": 60,
+                "first_level_limit": 20,
+                "replies_per_thread_limit": 0,
+            },
+        }
+    ),
+    capabilities=(
+        BILIBILI_PRESET.capabilities[0],
+        replace(
+            BILIBILI_PRESET.capabilities[1], processing_purpose="每次重新读取公开一级评论, 单页取样"
+        ),
+    ),
+    component_version="bilibili-chrome-poc-1",
+    upstream_revision=None,
+    patched_revision=None,
+    component_license="project-local implementation",
+    component_terms_reference="https://www.bilibili.com/",
+    execution_policy=SourceExecutionPolicy(
+        min_interval_seconds=3600,
+        quiet_windows=BILIBILI_PRESET.execution_policy.quiet_windows,
+        max_queries=1,
+        max_items_per_query=2,
+        max_requests=2,
+        max_seconds=60,
+        hard_timeout_seconds=90,
         max_concurrency=1,
         enabled=True,
     ),

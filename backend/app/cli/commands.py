@@ -240,7 +240,9 @@ def resume_bilibili(
     session = create_session_factory(engine)()
     try:
         owner_id = require_owner_id(session, user_id)
-        connection = SourceConnectionService(session).update_connection(
+        connection = SourceConnectionService(
+            session, chrome_owner_id=settings.bilibili_chrome_owner_id
+        ).update_connection(
             owner_id=owner_id,
             source_key="bilibili",
             command=SourceConnectionUpdateInput(

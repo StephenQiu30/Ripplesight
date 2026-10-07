@@ -367,7 +367,9 @@ def get_source_connection_service(
     request: Request, session: SessionDependency
 ) -> SourceConnectionService:
     return SourceConnectionService(
-        session, credentials=request.app.state.settings.source_credentials
+        session,
+        credentials=request.app.state.settings.source_credentials,
+        chrome_owner_id=request.app.state.settings.bilibili_chrome_owner_id,
     )
 
 

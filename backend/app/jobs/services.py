@@ -679,6 +679,12 @@ def load_job_execution_configuration_by_operation(
 
 
 def _job_execution_configuration(job: Job) -> JobExecutionConfiguration:
+    snapshot_version = job.scope.get("source_adapter_version")
+    native_version = (
+        snapshot_version
+        if job.source_key == "bilibili" and snapshot_version == "bilibili-chrome-poc-1"
+        else None
+    )
     return JobExecutionConfiguration(
         job_id=job.id,
         owner_id=job.owner_id,
@@ -699,7 +705,7 @@ def _job_execution_configuration(job: Job) -> JobExecutionConfiguration:
         scope=dict(job.scope),
         upstream_revision=job.upstream_revision,
         patched_revision=job.patched_revision,
-        adapter_version=job.adapter_version,
+        adapter_version=job.adapter_version or native_version,
     )
 
 
@@ -844,6 +850,31 @@ class ResourceBudgetService:
     ) -> None:
         self._session = session
         self._clock = clock or (lambda: datetime.now(UTC))
+
+    def ensure_initial_network_budget_in_transaction(self, *, owner_id: UUID) -> None:
+        """Bootstrap an empty account without replacing any existing global policy."""
+        existing = self._session.scalar(
+            select(ResourceBudgetPolicy.id)
+            .where(
+                ResourceBudgetPolicy.owner_id == owner_id,
+                ResourceBudgetPolicy.metric == BudgetMetric.NETWORK_REQUEST.value,
+                ResourceBudgetPolicy.scope_kind == BudgetScopeKind.GLOBAL.value,
+            )
+            .limit(1)
+        )
+        if existing is None:
+            self.save_budget_policy_in_transaction(
+                owner_id=owner_id,
+                command=BudgetPolicyInput(
+                    budget_key="network.initial.daily",
+                    metric=BudgetMetric.NETWORK_REQUEST,
+                    scope_kind=BudgetScopeKind.GLOBAL,
+                    limit_units=60,
+                    window_seconds=86400,
+                    window_anchor_at=datetime(2026, 1, 1, tzinfo=UTC),
+                    enabled=True,
+                ),
+            )
 
     def save_component_policy(
         self,
@@ -2460,6 +2491,8 @@ class JobService:
         upstream_revision = None
         patched_revision = None
         adapter_version = None
+        accepted_scope = dict(command.scope)
+        accepted_scope.pop("source_adapter_version", None)
         if (
             version_policy is not None
             and version_policy.upstream_revision is not None
@@ -2468,6 +2501,11 @@ class JobService:
             upstream_revision = version_policy.upstream_revision
             patched_revision = version_policy.patched_revision
             adapter_version = version_policy.component_version
+        elif (
+            version_policy is not None
+            and version_policy.component_version == "bilibili-chrome-poc-1"
+        ):
+            accepted_scope["source_adapter_version"] = version_policy.component_version
         job_id = uuid4()
         inserted_id = self._session.scalar(
             insert(Job)
@@ -2487,7 +2525,7 @@ class JobService:
                 upstream_revision=upstream_revision,
                 patched_revision=patched_revision,
                 adapter_version=adapter_version,
-                scope=command.scope,
+                scope=accepted_scope,
                 request_fingerprint=fingerprint,
                 status=JobStatus.QUEUED.value,
                 scheduled_for_at=command.scheduled_for_at,

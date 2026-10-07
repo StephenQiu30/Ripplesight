@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, select, true
 from sqlalchemy.orm import Session
 
 from connections.services import (
@@ -436,6 +436,8 @@ class MonitorScheduleService:
         self,
         *,
         now: datetime,
+        owner_id: UUID | None = None,
+        source_key: str | None = None,
     ) -> tuple[DueCollectionSchedule, ...]:
         if not self._session.in_transaction():
             raise RuntimeError("collection schedule claims require the caller's transaction")
@@ -459,6 +461,8 @@ class MonitorScheduleService:
             )
             .where(
                 MonitorSchedule.enabled.is_(True),
+                true() if owner_id is None else MonitorSchedule.owner_id == owner_id,
+                true() if source_key is None else MonitorSchedule.source_key == source_key,
                 MonitorSchedule.next_run_at <= now,
                 MonitorSchedule.capability == SourceCapability.SEARCH.value,
             )

@@ -51,7 +51,7 @@ SOURCE_CATALOG = (
         display_name="B 站关键词与评论",
         rollout_role="candidate",
         product_restricted=False,
-        restricted_next_action="本机 MediaCrawler 登录态与持久化验收通过后人工启用。",
+        restricted_next_action="先配置本机采集账号并启用来源, 可用状态以真实持久化结果为准。",
         capabilities=(SourceCapability.SEARCH, SourceCapability.COMMENTS),
         auth_kind=SourceConnectionAuthKind.NONE,
     ),

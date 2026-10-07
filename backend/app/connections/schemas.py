@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, time
 from enum import StrEnum
-from typing import Self
+from typing import Literal, Self
 from urllib.parse import urlsplit
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -115,6 +115,15 @@ class SourceConnectionConfig(InputModel):
     engines: tuple[str, ...] = Field(default=(), max_length=16)
     allowed_hosts: tuple[str, ...] = Field(default=(), max_length=32)
     comment_scan: CommentScanPolicy | None = None
+
+    @property
+    def bilibili_transport(self) -> Literal["mediacrawler", "chrome"]:
+        # Native API and legacy browser runner have distinct immutable endpoints.
+        return (
+            "chrome"
+            if str(self.base_url).rstrip("/") == "https://api.bilibili.com"
+            else "mediacrawler"
+        )
 
     @field_validator("feed_url", "feed_url_template")
     @classmethod

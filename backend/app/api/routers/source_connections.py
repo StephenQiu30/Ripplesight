@@ -5,7 +5,11 @@ from typing import Annotated
 from fastapi import APIRouter, Path, Response, status
 
 from api.dependencies import SourceConnectionServiceDependency, UserWriteScopeDependency
-from connections.schemas import SourceConnectionUpdateInput, SourceConnectionView
+from connections.schemas import (
+    SourceConnectionUpdateInput,
+    SourceConnectionView,
+    SourcePresetApplyView,
+)
 from core.schemas import ErrorView
 
 router = APIRouter(prefix="/source-connections", tags=["来源能力"])
@@ -40,3 +44,27 @@ def update_source_connection(
     view = service.update_connection(owner_id=scope_id, source_key=source_key, command=payload)
     response.headers["cache-control"] = "no-store"
     return view
+
+
+@router.post(
+    "/bilibili/chrome",
+    operation_id="connectBilibiliChrome",
+    status_code=status.HTTP_200_OK,
+    response_model=SourcePresetApplyView,
+    summary="启用本机 Chrome B站采集",
+    responses={
+        401: {"model": ErrorView, "description": "需要有效会话"},
+        422: {"model": ErrorView, "description": "请求参数校验失败"},
+        500: {"model": ErrorView, "description": "服务内部异常"},
+        503: {"model": ErrorView, "description": "持久库不可用"},
+        403: {"model": ErrorView, "description": "请求安全校验失败"},
+        409: {"model": ErrorView, "description": "未绑定本机账号或连接已暂停"},
+    },
+)
+def connect_bilibili_chrome(
+    response: Response,
+    service: SourceConnectionServiceDependency,
+    scope_id: UserWriteScopeDependency,
+) -> SourcePresetApplyView:
+    response.headers["cache-control"] = "no-store"
+    return service.connect_chrome(owner_id=scope_id)

@@ -19,7 +19,7 @@ from connections.models import (
     SourceConnection,
     SourceConnectionVersion,
 )
-from connections.presets import SOURCE_PRESETS, SourcePreset
+from connections.presets import BILIBILI_CHROME_PRESET, SOURCE_PRESETS, SourcePreset
 from connections.schemas import (
     CommentScanPolicy,
     ConnectionEvidenceKind,
@@ -69,6 +69,7 @@ class AppliedSourcePreset:
     connection_version: int
     capabilities: tuple[SourceCapability, ...]
     comment_scan_policy: CommentScanPolicy | None = None
+    bilibili_transport: str = "mediacrawler"
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,7 +177,12 @@ def load_applied_source_presets_in_transaction(
     ).all()
     applied: dict[str, AppliedSourcePreset] = {}
     for connection, version in rows:
-        preset = SOURCE_PRESETS.get(connection.source_key)
+        preset = (
+            BILIBILI_CHROME_PRESET
+            if connection.source_key == "bilibili"
+            and SourceConnectionConfig.model_validate(version.config).bilibili_transport == "chrome"
+            else SOURCE_PRESETS.get(connection.source_key)
+        )
         if preset is None:
             continue
         expected_config = SourceConnectionConfig.model_validate(dict(preset.config)).model_dump(
@@ -197,6 +203,9 @@ def load_applied_source_presets_in_transaction(
             connection_version=connection.current_version,
             capabilities=tuple(item.capability for item in preset.capabilities),
             comment_scan_policy=SourceConnectionConfig.model_validate(version.config).comment_scan,
+            bilibili_transport=SourceConnectionConfig.model_validate(
+                version.config
+            ).bilibili_transport,
         )
     return applied
 
@@ -741,13 +750,40 @@ class SourceConnectionService:
         *,
         credentials: Mapping[str, SecretStr] | None = None,
         clock: Clock | None = None,
+        chrome_owner_id: UUID | None = None,
     ) -> None:
+        self._chrome_owner_id = chrome_owner_id
         self._session = session
         self._clock = clock or (lambda: datetime.now(UTC))
         self._credential_refs = {
             key: source_credential_reference(key, value)
             for key, value in (credentials or {}).items()
         }
+
+    def connect_chrome(self, *, owner_id: UUID) -> SourcePresetApplyView:
+        from jobs.services import ResourceBudgetService
+
+        if self._chrome_owner_id is None or owner_id != self._chrome_owner_id:
+            raise ApplicationError("connection_credentials_missing")
+        with self._session.begin():
+            connection = self._session.scalar(
+                select(SourceConnection)
+                .where(
+                    SourceConnection.owner_id == owner_id,
+                    SourceConnection.source_key == "bilibili",
+                )
+                .with_for_update()
+            )
+            if connection is not None and connection.status != SourceConnectionStatus.ACTIVE.value:
+                # A setup button must never bypass explicit safety-stop recovery.
+                raise ApplicationError("connection_owner_confirmation_required")
+            ResourceBudgetService(
+                self._session, clock=self._clock
+            ).ensure_initial_network_budget_in_transaction(owner_id=owner_id)
+            return SourcePresetService(self._session, clock=self._clock).apply_in_transaction(
+                owner_id=owner_id,
+                preset=BILIBILI_CHROME_PRESET,
+            )
 
     def update_connection(
         self, *, owner_id: UUID, source_key: str, command: SourceConnectionUpdateInput
@@ -865,6 +901,19 @@ class SourceConnectionService:
                         raise ApplicationError("invalid_connection_configuration")
                 else:
                     target_config = {}
+            if (
+                source_key == "bilibili"
+                and SourceConnectionConfig.model_validate(previous.config).bilibili_transport
+                == "chrome"
+                and command.status is SourceConnectionStatus.ACTIVE
+            ):
+                if owner_id != self._chrome_owner_id:
+                    raise ApplicationError("connection_credentials_missing")
+                if command.allowed_hosts and set(command.allowed_hosts) != set(
+                    self._allowed_hosts(previous.config)
+                ):
+                    raise ApplicationError("invalid_connection_configuration")
+                target_config = dict(previous.config)
             unchanged = (
                 connection.status == command.status.value
                 and previous.auth_kind == target_auth_kind.value

@@ -169,6 +169,16 @@ class Settings(BaseSettings):
     )
     browser_state_dir: Path | None = None
 
+    bilibili_chrome_owner_id: UUID | None = None
+    bilibili_chrome_identity_env: Path = (
+        Path.home() / "Library/Application Support/Framefetch/identity.env"
+    )
+
+    @field_validator("bilibili_chrome_owner_id", mode="before")
+    @classmethod
+    def empty_chrome_owner_is_unconfigured(cls, value: object) -> object:
+        return None if value == "" else value
+
     mediacrawler_enabled: bool = False
     mediacrawler_dir: Path = Path("~/Desktop/StephenQiu/MediaCrawler")
     mediacrawler_output_dir: Path = _BACKEND_ROOT / "tmp" / "mediacrawler"

@@ -73,7 +73,7 @@ from publication.schedule import (
     enqueue_due_publication_in_transaction,
 )
 from reports.edition_services import EditionService
-from sources.contracts import SourceCapability
+from sources.contracts import SourceCapability, SourceSort
 from sources.editorial_schedule import enqueue_due_editorial_sources_in_transaction
 
 SCHEDULER_POLL_SECONDS = 30
@@ -404,6 +404,9 @@ def _accept_collection_schedule(
         lookback_seconds=get_settings().collection_lookback_seconds,
     )
     schedule_operation_id = collection_operation_id(schedule, due_at, connection_version)
+    applied = load_applied_source_presets_in_transaction(
+        session, owner_id=schedule.owner_id, source_keys=(schedule.source_key,)
+    ).get(schedule.source_key)
     accepted_ids: list[UUID] = []
     for query in schedule.search_queries[: policy.max_queries]:
         operation_id = uuid5(schedule_operation_id, f"query:{query}")
@@ -416,6 +419,9 @@ def _accept_collection_schedule(
                 source_key=schedule.source_key,
                 connection_id=connection_id,
                 connection_version=connection_version,
+                search_sort=SourceSort.LATEST
+                if applied and applied.bilibili_transport == "chrome"
+                else None,
                 primary_query=query,
                 starts_at=window_start,
                 ends_at=due_at,
@@ -578,7 +584,14 @@ def _process_collection_schedule(
     if policy.quiet_at(latest.due_at) or policy.quiet_at(now):
         return skip(DueSkipReason.QUIET)
     if schedule.source_key == "bilibili":
-        if not get_settings().mediacrawler_enabled or bilibili_accepted:
+        if (
+            not (
+                get_settings().bilibili_chrome_owner_id == schedule.owner_id
+                if applied.bilibili_transport == "chrome"
+                else get_settings().mediacrawler_enabled
+            )
+            or bilibili_accepted
+        ):
             return skip(DueSkipReason.DISABLED)
         if not session.scalar(select(func.pg_try_advisory_xact_lock(_BILIBILI_SCHEDULE_LOCK))):
             return 0, False
@@ -629,12 +642,16 @@ def _process_collection_schedule(
     return len(accepted_ids), schedule.source_key == "bilibili"
 
 
-def enqueue_due_collections_in_transaction(session: Session, now: datetime) -> int:
+def enqueue_due_collections_in_transaction(
+    session: Session, now: datetime, *, owner_id: UUID | None = None, source_key: str | None = None
+) -> int:
     """Claim and accept due collection rows; isolate one bad row with a savepoint."""
     if not session.in_transaction():
         raise RuntimeError("collection scan requires the caller's transaction")
     now_utc = now.astimezone(UTC) if now.tzinfo is not None else now
-    schedules = MonitorScheduleService(session).claim_due_collections_in_transaction(now=now_utc)
+    schedules = MonitorScheduleService(session).claim_due_collections_in_transaction(
+        now=now_utc, owner_id=owner_id, source_key=source_key
+    )
     last_accepted = {
         job_id: created_at
         for job_id, created_at in session.execute(
@@ -682,7 +699,13 @@ def enqueue_due_collections_in_transaction(session: Session, now: datetime) -> i
 def enqueue_due_comments_in_transaction(session: Session, now: datetime) -> int:
     return CommentScanService(session).enqueue_due_comments_in_transaction(
         now=now,
-        skip_bilibili=(not get_settings().mediacrawler_enabled or _bilibili_quiet(now)),
+        skip_bilibili=(
+            (
+                not get_settings().mediacrawler_enabled
+                and get_settings().bilibili_chrome_owner_id is None
+            )
+            or _bilibili_quiet(now)
+        ),
     )
 
 

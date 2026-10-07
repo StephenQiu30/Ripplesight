@@ -37,6 +37,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiRequestError } from "@/request";
 
 import { coverageTime } from "./coverage-window-table";
+import { ChromeConnection } from "./chrome-connection";
 import { SourceConnectionActions } from "./source-connection-actions";
 
 const STATUS_LABELS: Record<HotKeyAPI.SourcePlatformStatus, string> = {
@@ -193,6 +194,7 @@ export function SourceSettings() {
           {loading && platforms ? "正在刷新…" : "刷新状态"}
         </Button>
       </UI.Content>
+      <ChromeConnection onConnected={refresh} />
       {readFailed ? (
         <Alert variant="destructive">
           <AlertTitle>暂时无法读取来源状态</AlertTitle>

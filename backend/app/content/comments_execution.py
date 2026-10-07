@@ -7,7 +7,10 @@ from uuid import UUID, uuid5
 from sqlalchemy.orm import Session, sessionmaker
 
 from connections.schemas import SourceConnectionConfig
-from connections.services import require_source_connection_version
+from connections.services import (
+    pause_bilibili_connection_in_transaction,
+    require_source_connection_version,
+)
 from content.comments import (
     CommentPageCommitService,
     CommentRequestMeter,
@@ -34,6 +37,8 @@ from jobs.services import (
     JobExecutionConfiguration,
     load_job_execution_configuration,
 )
+from sources.adapters.bilibili_chrome import VERSION as CHROME_VERSION
+from sources.adapters.bilibili_chrome import BilibiliChromeAdapter
 from sources.adapters.hackernews import HackerNewsAdapter
 from sources.adapters.mediacrawler import (
     MediaCrawlerAdapter,
@@ -70,6 +75,18 @@ def build_comments_adapter_factory(
         raise ValueError("comments adapter requires allowed_hosts")
     if source_key == "bilibili":
         settings = get_settings()
+        if config.bilibili_transport == "chrome":
+            if owner_id is None or settings.bilibili_chrome_owner_id != owner_id:
+                raise ValueError("Chrome requires the configured local account")
+            return lambda before_request, cancelled, max_requests, max_seconds: (
+                BilibiliChromeAdapter(
+                    identity_env=settings.bilibili_chrome_identity_env,
+                    before_request=before_request,
+                    cancelled=cancelled,
+                    max_requests=max_requests,
+                    max_seconds=max_seconds,
+                )
+            )
         if not settings.mediacrawler_enabled or owner_id is None:
             raise ValueError("MediaCrawler requires enabled host configuration and owner")
         return lambda before_request, cancelled, max_requests, max_seconds: MediaCrawlerAdapter(
@@ -120,7 +137,11 @@ class CommentsExecutor:
         lease: ExecutionLease,
     ) -> tuple[ExecutionLease, JobCompletion]:
         configuration = self._configuration(message)
-        scope = configuration.scope
+        scope = {
+            key: value
+            for key, value in configuration.scope.items()
+            if key != "source_adapter_version"
+        }
         try:
             source_key = configuration.observation.source_key
             if source_key is None:
@@ -208,13 +229,33 @@ class CommentsExecutor:
 
         if source_key == "bilibili":
             try:
-                validate_job_version_evidence(
-                    upstream_revision=configuration.upstream_revision,
-                    patched_revision=configuration.patched_revision,
-                    adapter_version=configuration.adapter_version,
-                )
+                if configuration.adapter_version != CHROME_VERSION:
+                    validate_job_version_evidence(
+                        upstream_revision=configuration.upstream_revision,
+                        patched_revision=configuration.patched_revision,
+                        adapter_version=configuration.adapter_version,
+                    )
             except MediaCrawlerPreflightError as error:
                 raise self._adapter_failure(error) from error
+            try:
+                with self._sessions() as session, session.begin():
+                    accepted_config = require_source_connection_version(
+                        session,
+                        owner_id=configuration.owner_id,
+                        source_key=source_key,
+                        connection_id=connection_id,
+                        connection_version=connection_version,
+                    )
+            except ApplicationError as error:
+                raise self._adapter_failure(error) from error
+            if (accepted_config.bilibili_transport == "chrome") != (
+                configuration.adapter_version == CHROME_VERSION
+            ):
+                raise self._failure(
+                    "source_adapter_version_mismatch",
+                    JobFailureCategory.CONFIGURATION_UNAVAILABLE,
+                    "重新应用来源预设并提交任务",
+                )
 
         try:
             adapter_factory = self._adapter_factory or self._configured_adapter_factory(
@@ -395,7 +436,12 @@ class CommentsExecutor:
                         connection_id=connection_id,
                         connection_version=connection_version,
                         page=page,
-                        meter=None if source_key == "bilibili" else meter,
+                        meter=(
+                            None
+                            if source_key == "bilibili"
+                            and configuration.adapter_version != CHROME_VERSION
+                            else meter
+                        ),
                     )
                 except JobLeaseUnavailableError:
                     meter.fail_pending()
@@ -453,6 +499,21 @@ class CommentsExecutor:
                     and result.saved_items == 0
                     and page.stop_reason is not SourceStopReason.BUDGET_EXHAUSTED
                 ):
+                    if source_key == "bilibili" and page.stop_reason in {
+                        SourceStopReason.AUTHENTICATION_REQUIRED,
+                        SourceStopReason.RATE_LIMITED,
+                    }:
+                        session.rollback()
+                        with session.begin():
+                            pause_bilibili_connection_in_transaction(
+                                session,
+                                owner_id=configuration.owner_id,
+                                connection_id=connection_id,
+                                connection_version=connection_version,
+                                now=self._clock(),
+                                reason=page.stop_reason,
+                                trigger_job_id=lease.job_id,
+                            )
                     can_retry = False
                     if page.stop_reason in {
                         SourceStopReason.RATE_LIMITED,
@@ -513,7 +574,35 @@ class CommentsExecutor:
                 connection_id=connection_id,
                 connection_version=connection_version,
             )
-        return build_comments_adapter_factory(source_key, config, owner_id=owner_id)
+        factory = build_comments_adapter_factory(source_key, config, owner_id=owner_id)
+        if source_key != "bilibili":
+            return factory
+
+        def build_with_live_safety(
+            before_request: Callable[[int], bool],
+            cancelled: Callable[[], bool],
+            max_requests: int,
+            max_seconds: float,
+        ) -> SourceAdapter:
+            def safety_cancelled() -> bool:
+                if cancelled():
+                    return True
+                try:
+                    with self._sessions() as session, session.begin():
+                        require_source_connection_version(
+                            session,
+                            owner_id=owner_id,
+                            source_key=source_key,
+                            connection_id=connection_id,
+                            connection_version=connection_version,
+                        )
+                except ApplicationError:
+                    return True
+                return False
+
+            return factory(before_request, safety_cancelled, max_requests, max_seconds)
+
+        return build_with_live_safety
 
     def _stop_if_cancelled(
         self,
