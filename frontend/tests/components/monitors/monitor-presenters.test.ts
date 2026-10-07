@@ -13,7 +13,7 @@ import {
 
 describe("monitor presentation boundaries", () => {
   it.each([
-    ["active", "运行中"],
+    ["active", "定时已启用"],
     ["paused", "已暂停"],
     ["archived", "已归档"],
   ] as const)("labels %s without inferring task status", (status, label) => {

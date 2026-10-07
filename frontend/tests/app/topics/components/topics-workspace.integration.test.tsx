@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   pause: vi.fn(),
   resume: vi.fn(),
   update: vi.fn(),
+  run: vi.fn(),
   push: vi.fn(),
   error: vi.fn(),
   success: vi.fn(),
@@ -28,7 +29,7 @@ vi.mock("@/api/jiankongzhuti", () => ({
   updateMonitorTopic: api.update,
   archiveMonitorTopic: vi.fn(),
   cloneMonitorTopic: vi.fn(),
-  runMonitorTopic: vi.fn(),
+  runMonitorTopic: api.run,
 }));
 vi.mock("@/api/laiyuannengli", () => ({ listSourceCapabilities: api.sources }));
 vi.mock("@/api/gerentufagaojing", () => ({
@@ -60,6 +61,7 @@ const topic: HotKeyAPI.MonitorTopicView = {
   updated_at: "2026-10-01T01:00:00Z",
 };
 beforeEach(() => {
+  window.history.replaceState(null, "", "/topics");
   vi.resetAllMocks();
   api.list.mockResolvedValue({
     items: [topic, { ...topic, id: "topic-b", name: "主题二" }],
@@ -88,6 +90,10 @@ it("selects the first real topic, keeps old detail links, and reflects pause and
   expect(screen.getByLabelText("已保存关键词").textContent).toContain("全部词");
   expect(screen.getByLabelText("已保存关键词").textContent).toContain("排除词");
   expect(screen.queryByRole("img")).toBeNull();
+  fireEvent.mouseDown(screen.getByRole("tab", { name: "主题设置" }), {
+    button: 0,
+    ctrlKey: false,
+  });
   fireEvent.click(screen.getByRole("button", { name: "暂停关注" }));
   await screen.findByRole("button", { name: "恢复关注" });
   expect(api.pause).toHaveBeenCalledWith({ topic_id: "topic-a" });
@@ -98,7 +104,7 @@ it("selects the first real topic, keeps old detail links, and reflects pause and
   await screen.findByRole("button", { name: "暂停关注" });
   expect(api.resume).toHaveBeenCalledWith({ topic_id: "topic-a" });
   expect(screen.getByRole("link", { name: /主题一/ }).textContent).toContain(
-    "运行中",
+    "定时已启用",
   );
 });
 it("honors a deep linked topic outside the first list page", async () => {
@@ -188,6 +194,11 @@ it("retains one page heading while the embedded topic is loading", async () => {
 
 it("keeps a failed embedded refresh below the workspace heading", async () => {
   render(<TopicsWorkspace topicId="topic-a" />);
+  await screen.findByRole("tab", { name: "主题设置" });
+  fireEvent.mouseDown(screen.getByRole("tab", { name: "主题设置" }), {
+    button: 0,
+    ctrlKey: false,
+  });
   const name = await screen.findByLabelText("主题名称");
   fireEvent.change(name, { target: { value: "未保存的草稿" } });
   api.update.mockRejectedValueOnce(
@@ -211,3 +222,88 @@ it("keeps a failed embedded refresh below the workspace heading", async () => {
 vi.mock("@/app/monitors/[topicId]/components/topic-results", () => ({
   TopicResults: () => null,
 }));
+
+function selectTopicTab(name: string) {
+  fireEvent.mouseDown(screen.getByRole("tab", { name }), {
+    button: 0,
+    ctrlKey: false,
+  });
+}
+
+it("defaults to results, retains an unsaved draft across tabs, and preserves unrelated URL parameters", async () => {
+  window.history.replaceState(null, "", "/topics?from=bookmark");
+  render(<TopicsWorkspace topicId="topic-a" />);
+  await screen.findByRole("tab", { name: "监控结果" });
+  expect(
+    screen.getByRole("tab", { name: "监控结果" }).getAttribute("aria-selected"),
+  ).toBe("true");
+  expect(screen.queryByRole("button", { name: "保存修改" })).toBeNull();
+  selectTopicTab("主题设置");
+  fireEvent.change(screen.getByLabelText("主题名称"), {
+    target: { value: "跨页签草稿" },
+  });
+  expect(new URLSearchParams(window.location.search).get("tab")).toBe(
+    "settings",
+  );
+  expect(new URLSearchParams(window.location.search).get("from")).toBe(
+    "bookmark",
+  );
+  selectTopicTab("告警");
+  selectTopicTab("监控结果");
+  expect(new URLSearchParams(window.location.search).has("tab")).toBe(false);
+  selectTopicTab("主题设置");
+  expect((screen.getByLabelText("主题名称") as HTMLInputElement).value).toBe(
+    "跨页签草稿",
+  );
+  expect(api.update).not.toHaveBeenCalled();
+  expect(api.get).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  ["settings", "主题设置"],
+  ["unknown", "监控结果"],
+])("restores or validates URL tab %s", async (value, name) => {
+  window.history.replaceState(null, "", `/topics?tab=${value}`);
+  render(<TopicsWorkspace topicId="topic-a" />);
+  await screen.findByRole("tab", { name });
+  expect(screen.getByRole("tab", { name }).getAttribute("aria-selected")).toBe(
+    "true",
+  );
+});
+
+it("retains a pending manual run and its acceptance result across tab changes", async () => {
+  api.get.mockResolvedValue({ ...topic, source_keys: ["hackernews"] });
+  let resolve!: (value: HotKeyAPI.MonitorTopicRunView) => void;
+  api.run.mockImplementation(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  render(<TopicsWorkspace topicId="topic-a" />);
+  await screen.findByRole("tab", { name: "采集与运行" });
+  selectTopicTab("采集与运行");
+  fireEvent.click(screen.getByRole("button", { name: "立即采集" }));
+  selectTopicTab("监控结果");
+  selectTopicTab("采集与运行");
+  expect(
+    screen.getByRole("button", { name: "正在受理" }).hasAttribute("disabled"),
+  ).toBe(true);
+  expect(api.run).toHaveBeenCalledTimes(1);
+  resolve({
+    operation_id: "run-1",
+    topic_id: topic.id,
+    topic_version: 2,
+    sources: [
+      { source_key: "hackernews", job_ids: ["job-1"], skip_reason: null },
+    ],
+  });
+  await screen.findByText("已受理 1 个任务");
+  selectTopicTab("监控结果");
+  selectTopicTab("采集与运行");
+  expect(
+    screen.getByRole("link", { name: "查看任务 job-1" }).getAttribute("href"),
+  ).toBe("/jobs/job-1");
+  expect(screen.getByRole("button", { name: "发起新一轮" })).toBeTruthy();
+  expect(api.run).toHaveBeenCalledTimes(1);
+});

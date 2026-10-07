@@ -9,7 +9,7 @@ function Card({
   ...props
 }: React.ComponentProps<"div"> & {
   size?: "default" | "sm";
-  variant?: "default" | "muted";
+  variant?: "default" | "muted" | "inverse";
 }) {
   return (
     <div
@@ -19,6 +19,7 @@ function Card({
       className={cn(
         "group/card bg-card text-card-foreground flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl py-(--card-spacing) text-sm [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
         variant === "muted" && "bg-muted rounded-2xl",
+        variant === "inverse" && "bg-primary text-primary-foreground",
         className,
       )}
       {...props}

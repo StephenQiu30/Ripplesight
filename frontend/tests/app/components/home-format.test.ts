@@ -19,6 +19,8 @@ it("counts only this returned list, distinguishes failed counts from zero and us
   expect(homeOverview(reading)).toEqual({
     itemCount: 1,
     storyCount: 1,
+    sourceCount: 1,
+    topicCount: 0,
     updatedAt: "2026-10-06T07:00:00Z",
   });
   expect(
@@ -37,7 +39,13 @@ it("counts only this returned list, distinguishes failed counts from zero and us
       unavailable: [],
       observedAt: "2026-10-06T08:00:00Z",
     }),
-  ).toEqual({ itemCount: 0, storyCount: 0, updatedAt: null });
+  ).toEqual({
+    itemCount: 0,
+    storyCount: 0,
+    sourceCount: 0,
+    topicCount: 0,
+    updatedAt: null,
+  });
   expect(
     homeOverview({
       ...reading,

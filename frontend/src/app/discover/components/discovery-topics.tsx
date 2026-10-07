@@ -30,7 +30,9 @@ export function DiscoveryTopics({
       layout="stack"
       className="min-w-0"
     >
-      <UI.Heading level={2}>按专题浏览</UI.Heading>
+      <UI.Heading level={2} appearance="sidebar">
+        按专题浏览
+      </UI.Heading>
       {!directory ? (
         <PageState
           headingLevel={2}
@@ -51,8 +53,8 @@ export function DiscoveryTopics({
           {directory.topics.map((topic) => (
             <Fragment key={topic.slug}>
               <Separator />
-              <Item className="px-0 py-4" role="listitem">
-                <ItemContent className="min-w-0 gap-2">
+              <Item className="px-0 py-3" role="listitem">
+                <ItemContent className="min-w-0 gap-1">
                   <ItemTitle className="line-clamp-none break-words">
                     <UI.TextLink href={`/discover/topics/${topic.slug}`}>
                       {topic.name}

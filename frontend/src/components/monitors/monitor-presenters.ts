@@ -1,7 +1,7 @@
 import { ApiRequestError } from "@/request";
 
 export function topicStatusLabel(status: HotKeyAPI.MonitorTopicStatus) {
-  return { active: "运行中", paused: "已暂停", archived: "已归档" }[status];
+  return { active: "定时已启用", paused: "已暂停", archived: "已归档" }[status];
 }
 
 export function presentUpdatedTopic(

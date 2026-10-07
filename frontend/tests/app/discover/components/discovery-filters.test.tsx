@@ -26,7 +26,7 @@ it("submits the existing query fields and returns category/channel to empty valu
       ]}
     />,
   );
-  const form = screen.getByRole("button", { name: "查看" }).closest("form")!;
+  const form = screen.getByRole("button", { name: "搜索" }).closest("form")!;
   expect(new FormData(form).get("category")).toBe("paper");
   expect(new FormData(form).get("channel")).toBe("news");
   fireEvent.click(screen.getByRole("radio", { name: "全部分类" }));
@@ -44,7 +44,7 @@ it("submits the existing query fields and returns category/channel to empty valu
   });
 });
 
-it("keeps a single selection, submits the scope/time toggles, and removes an old cursor", () => {
+it("keeps a single selection, submits the scope and time, and removes an old cursor", async () => {
   render(
     <DiscoveryFilters
       mode="all"
@@ -66,7 +66,7 @@ it("keeps a single selection, submits the scope/time toggles, and removes an old
   fireEvent.click(screen.getByRole("radio", { name: "论文" }));
   fireEvent.click(screen.getByRole("radio", { name: "论文" }));
   fireEvent.click(screen.getByRole("radio", { name: "精选" }));
-  fireEvent.click(screen.getByRole("radio", { name: "7 天" }));
+  await selectOption(screen.getByLabelText("时间"), "过去 7 天");
   const query = new FormData(form);
   expect(form.getAttribute("action")).toBe("/discover");
   expect(form.getAttribute("method")).toBe("get");
@@ -100,7 +100,7 @@ it("shows readable source names while submitting stable keys and supports all so
   const source = screen.getByLabelText("来源");
   expect(source.textContent).toContain("arXiv 研究");
   expect(source.textContent).not.toContain("ed_rss_example");
-  const form = screen.getByRole("button", { name: "查看" }).closest("form")!;
+  const form = screen.getByRole("button", { name: "搜索" }).closest("form")!;
   await selectOption(source, "Crossref 元数据");
   expect(new FormData(form).get("source_key")).toBe("ed_json_example");
   await selectOption(source, "全部来源");
@@ -118,7 +118,7 @@ it("keeps advanced form values when filters are collapsed and restores the draft
     />,
   );
   const toggle = screen.getByRole("button", { name: "高级筛选" });
-  const form = screen.getByRole("button", { name: "查看" }).closest("form")!;
+  const form = screen.getByRole("button", { name: "搜索" }).closest("form")!;
   expect(toggle.getAttribute("aria-expanded")).toBe("false");
   expect(new FormData(form).get("by")).toBe("timeline");
   expect(new FormData(form).get("search_order")).toBe("relevance");

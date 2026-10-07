@@ -1,6 +1,7 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
+import designSystem from "./scripts/eslint-design-system.mjs";
 
 const requestMessage = "业务请求必须调用 src/api 中的 Umi OpenAPI 生成函数。";
 const httpLibraries =
@@ -86,7 +87,9 @@ const eslintConfig = defineConfig([
   {
     files: ["src/**/*.tsx"],
     ignores: ["src/components/ui/**"],
+    plugins: { "design-system": designSystem },
     rules: {
+      "design-system/conventions": "error",
       "no-restricted-syntax": [
         "error",
         ...dynamicImportRestrictions(businessImports),

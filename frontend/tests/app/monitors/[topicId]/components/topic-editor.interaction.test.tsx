@@ -67,6 +67,7 @@ const topic: HotKeyAPI.MonitorTopicView = {
 };
 
 beforeEach(() => {
+  window.history.replaceState(null, "", "/topics");
   api.email.mockResolvedValue({
     target_name: "我的报告邮箱",
     email: "reader@example.com",
@@ -95,6 +96,11 @@ describe("Demo topic editing", () => {
       }),
     );
     render(<TopicEditor topicId={topic.id} />);
+    await screen.findByRole("tab", { name: "主题设置" });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "主题设置" }), {
+      button: 0,
+      ctrlKey: false,
+    });
     const name = await screen.findByLabelText("主题名称");
     await waitFor(() =>
       expect((name as HTMLInputElement).value).toBe("已有主题"),
@@ -137,6 +143,11 @@ describe("Demo topic editing", () => {
       }),
     );
     render(<TopicEditor topicId={topic.id} />);
+    await screen.findByRole("tab", { name: "主题设置" });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "主题设置" }), {
+      button: 0,
+      ctrlKey: false,
+    });
     const name = await screen.findByLabelText("主题名称");
     fireEvent.change(name, { target: { value: "尚未保存的草稿" } });
     fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
@@ -167,6 +178,11 @@ describe("Demo topic editing", () => {
       weekly_report_enabled: false,
     });
     render(<TopicEditor topicId={topic.id} />);
+    await screen.findByRole("tab", { name: "主题设置" });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "主题设置" }), {
+      button: 0,
+      ctrlKey: false,
+    });
     await screen.findByLabelText("主题名称");
     expect(screen.queryByLabelText("每日报告时间")).toBeNull();
     expect(screen.queryByLabelText("生成周报")).toBeNull();
@@ -206,6 +222,11 @@ describe("Demo topic editing", () => {
         }),
     );
     render(<TopicEditor topicId={topic.id} />);
+    await screen.findByRole("tab", { name: "主题设置" });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "主题设置" }), {
+      button: 0,
+      ctrlKey: false,
+    });
     await screen.findByLabelText("主题名称");
     expect(screen.queryByLabelText("全部包含")).toBeNull();
     const save = screen.getByRole("button", { name: "保存修改" });
@@ -247,6 +268,11 @@ describe("Demo topic editing", () => {
       notification_target_names: ["已有日报邮箱", "我的报告邮箱"],
     });
     render(<TopicEditor topicId={topic.id} />);
+    await screen.findByRole("tab", { name: "主题设置" });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "主题设置" }), {
+      button: 0,
+      ctrlKey: false,
+    });
     await screen.findByLabelText("主题名称");
     fireEvent.click(screen.getByRole("button", { name: "报告设置" }));
     await screen.findByText(/发送到 reader@example.com/);
@@ -275,6 +301,11 @@ it("retains the draft and marks saved rules stale when a conflict reload fails",
     }),
   );
   render(<TopicEditor topicId={topic.id} />);
+  await screen.findByRole("tab", { name: "主题设置" });
+  fireEvent.mouseDown(screen.getByRole("tab", { name: "主题设置" }), {
+    button: 0,
+    ctrlKey: false,
+  });
   const name = await screen.findByLabelText("主题名称");
   fireEvent.change(name, { target: { value: "尚未保存的草稿" } });
   fireEvent.click(screen.getByRole("button", { name: "保存修改" }));

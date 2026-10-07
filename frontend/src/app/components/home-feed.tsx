@@ -35,12 +35,17 @@ import {
   ItemDescription,
   ItemGroup,
 } from "@/components/ui/item";
+import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 
 export function HomeStoryFacts({
   story,
+  showHeat = true,
+  heatMobileOnly = false,
 }: {
   story: HotKeyAPI.PublicStoryView;
+  showHeat?: boolean;
+  heatMobileOnly?: boolean;
 }) {
   const view = storyPresentation(story);
   const TrendIcon =
@@ -63,11 +68,14 @@ export function HomeStoryFacts({
           <InlineCode>{view.sourceCount}</InlineCode> {view.sourceCountLabel}
         </Text>
       ) : null}
-      {view.heat !== null ? (
+      {showHeat && view.heat !== null ? (
         <Text
           as="span"
           size="xs"
-          className="inline-flex flex-wrap items-center gap-1"
+          className={cn(
+            "inline-flex flex-wrap items-center gap-1",
+            heatMobileOnly && "md:hidden",
+          )}
           aria-label={`热度 ${view.heat}，${view.trendLabel}`}
         >
           热度{" "}
@@ -96,19 +104,30 @@ export function HomeStoryFeed({
 }) {
   return (
     <ItemGroup className="gap-0" aria-label="热点事件列表">
-      {stories.map((story) => {
+      {stories.map((story, index) => {
         const view = storyPresentation(story);
         return (
           <Fragment key={story.id}>
-            <Item asChild className="items-start px-0 py-6">
+            <Item
+              asChild
+              className="flex-nowrap items-start gap-6 px-0 py-5 md:py-6"
+            >
               <Content
                 as="article"
                 role="listitem"
                 aria-labelledby={`home-story-${story.id}`}
               >
-                <ItemContent className="min-w-0 gap-3">
+                <Text
+                  as="span"
+                  tone="muted"
+                  size="sm"
+                  aria-hidden="true"
+                  className="hidden w-5 shrink-0 md:block"
+                >
+                  <InlineCode>{String(index + 1).padStart(2, "0")}</InlineCode>
+                </Text>
+                <ItemContent className="min-w-0 gap-2 md:gap-3">
                   <Content layout="row">
-                    <Badge variant="outline">事件</Badge>
                     {view.categories.map((category) => (
                       <Badge key={category} variant="secondary">
                         {categories.find(([key]) => key === category)?.[1]}
@@ -136,15 +155,38 @@ export function HomeStoryFeed({
                     id={`home-story-${story.id}`}
                     className="break-words"
                   >
-                    <Link href={`/discover/stories/${story.id}`}>
+                    <Link
+                      href={`/discover/stories/${story.id}`}
+                      className="block"
+                    >
                       {story.title}
                     </Link>
                   </Heading>
-                  <ItemDescription className="line-clamp-none break-words">
+                  <ItemDescription className="line-clamp-none hidden break-words md:block">
                     {story.latest_progress ?? story.summary}
                   </ItemDescription>
-                  <HomeStoryFacts story={story} />
+                  <HomeStoryFacts story={story} heatMobileOnly />
                 </ItemContent>
+                {view.heat !== null ? (
+                  <Content
+                    className="hidden w-24 shrink-0 flex-col items-end gap-2 md:flex"
+                    aria-label={`热度 ${view.heat}，${view.trendLabel}`}
+                  >
+                    <Text className="font-medium">
+                      <InlineCode>
+                        {view.heat.toLocaleString("zh-CN", {
+                          maximumFractionDigits: 1,
+                        })}
+                      </InlineCode>
+                    </Text>
+                    <Text size="xs" tone="muted">
+                      {view.trendLabel}
+                    </Text>
+                    <Text size="xs" tone="muted" className="hidden md:block">
+                      当前热度
+                    </Text>
+                  </Content>
+                ) : null}
               </Content>
             </Item>
             <Separator />
@@ -205,7 +247,9 @@ export function HomeItemFeed({
                   id={`home-item-${item.id}`}
                   className="break-words"
                 >
-                  <Link href={item.reading_url}>{item.title}</Link>
+                  <Link href={item.reading_url} className="block">
+                    {item.title}
+                  </Link>
                 </Heading>
                 <ItemDescription className="line-clamp-none break-words">
                   {item.summary ? (
@@ -237,14 +281,14 @@ export function HomeItemFeed({
                   ))}
                 </Content>
                 <ItemActions className="flex-wrap justify-between gap-1">
-                  <Button asChild variant="ghost" size="feed">
+                  <Button asChild variant="ghost" size="sm">
                     <Link href={item.reading_url}>
                       <BookOpenIcon data-icon="inline-start" />
                       站内阅读
                     </Link>
                   </Button>
                   {item.original_url ? (
-                    <Button asChild variant="ghost" size="feed">
+                    <Button asChild variant="ghost" size="sm">
                       <Link
                         href={item.original_url}
                         target="_blank"
@@ -256,7 +300,7 @@ export function HomeItemFeed({
                     </Button>
                   ) : null}
                   {item.event_id ? (
-                    <Button asChild variant="ghost" size="feed">
+                    <Button asChild variant="ghost" size="sm">
                       <Link href={`/discover/stories/${item.event_id}`}>
                         <GitBranchIcon data-icon="inline-start" />
                         事件脉络

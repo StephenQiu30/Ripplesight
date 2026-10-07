@@ -26,6 +26,19 @@ export function homeOverview(reading: HomeReading) {
     storyCount: reading.unavailable.includes("stories")
       ? null
       : reading.stories.length,
+    sourceCount:
+      reading.unavailable.includes("items") &&
+      reading.unavailable.includes("stories")
+        ? null
+        : new Set(
+            [
+              ...reading.items,
+              ...reading.stories.flatMap((story) => story.reports),
+            ].map((item) => item.source.key),
+          ).size,
+    topicCount: reading.unavailable.includes("topics")
+      ? null
+      : reading.topics.length,
     updatedAt: latestTime([
       ...reading.items.flatMap((item) => [
         item.discovered_at,

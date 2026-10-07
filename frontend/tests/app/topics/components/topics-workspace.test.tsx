@@ -26,7 +26,7 @@ describe("Demo workbench", () => {
 
     expect(screen.getByText("业务主题列表")).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: "创建关注" }).getAttribute("href"),
+      screen.getByRole("link", { name: "新建主题" }).getAttribute("href"),
     ).toBe("/monitors/new");
     expect(screen.queryByRole("button", { name: "退出" })).toBeNull();
     expect(screen.queryByText(/验证会话/)).toBeNull();

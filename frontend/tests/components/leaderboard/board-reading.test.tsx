@@ -15,7 +15,9 @@ describe("model leaderboard reading", () => {
   it("preserves the published rank after filtering and marks missing prices", () => {
     render(<BoardReading data={board} domestic openWeights={false} />);
     expect(
-      screen.getByRole("link", { name: "Fixed Model" }).getAttribute("href"),
+      screen
+        .getAllByRole("link", { name: "Fixed Model" })[0]
+        .getAttribute("href"),
     ).toBe("/leaderboard/models/fixed-model");
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(

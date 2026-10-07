@@ -250,3 +250,64 @@ it("shows safe API error code/status beside unreadable IDs and keeps other items
   expect(screen.queryByText("private internal details")).toBeNull();
   expect(screen.queryByText("还没有收藏。")).toBeNull();
 });
+
+it("exports only selected readable links and keeps hidden or withdrawn materials out of the file", async () => {
+  localStorage.setItem(SAVED_KEY, JSON.stringify([id(1), id(2), id(3)]));
+  api.read.mockImplementation(({ content_id }: { content_id: string }) =>
+    content_id === id(3)
+      ? Promise.reject(new Error("withdrawn"))
+      : Promise.resolve({
+          ...detail(content_id === id(1) ? 1 : 2),
+          body: "PRIVATE FULL TEXT MUST NOT BE EXPORTED",
+        }),
+  );
+  const create = vi.fn<(blob: Blob) => string>().mockReturnValue("blob:review");
+  vi.stubGlobal(
+    "URL",
+    class extends URL {
+      static createObjectURL = create;
+      static revokeObjectURL = vi.fn();
+    },
+  );
+  const click = vi
+    .spyOn(HTMLAnchorElement.prototype, "click")
+    .mockImplementation(() => {});
+  renderSavedPage({ full: true });
+  await screen.findByRole("checkbox", { name: "选择收藏：本机资讯 1" });
+  fireEvent.click(
+    screen.getByRole("checkbox", { name: "选择收藏：本机资讯 1" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "导出 Markdown" }));
+  const content = await (create.mock.calls[0][0] as Blob).text();
+  expect(content).toContain("本机资讯 1");
+  expect(content).toContain(publicItem.original_url);
+  expect(content).not.toContain("本机资讯 2");
+  expect(content).not.toContain(id(3));
+  expect(content).not.toContain("PRIVATE FULL TEXT");
+  expect(click).toHaveBeenCalledOnce();
+  fireEvent.change(screen.getByRole("searchbox", { name: "搜索本页收藏" }), {
+    target: { value: "不存在的关键词" },
+  });
+  expect(screen.queryByRole("button", { name: "导出 Markdown" })).toBeNull();
+  expect(
+    screen.getByRole("button", { name: "导出本页" }).hasAttribute("disabled"),
+  ).toBe(true);
+});
+
+it("clears a search with no matching saved item without deleting stored IDs", async () => {
+  localStorage.setItem(SAVED_KEY, JSON.stringify([id(1)]));
+  api.read.mockResolvedValue(detail(1));
+  renderSavedPage({ full: true });
+  await screen.findByRole("checkbox", { name: "选择收藏：本机资讯 1" });
+  fireEvent.change(screen.getByRole("searchbox", { name: "搜索本页收藏" }), {
+    target: { value: "找不到" },
+  });
+  expect(
+    screen.getByRole("heading", { name: "本页没有匹配的收藏" }),
+  ).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "清除筛选" }));
+  expect(
+    screen.getByRole("checkbox", { name: "选择收藏：本机资讯 1" }),
+  ).toBeTruthy();
+  expect(savedIds(localStorage)).toEqual([id(1)]);
+});

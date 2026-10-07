@@ -6,7 +6,8 @@ import { useEffect, useState } from "react";
 import {
   BellRingIcon,
   BookmarkIcon,
-  BookOpenIcon,
+  ActivityIcon,
+  EyeIcon,
   ChartNoAxesColumnIcon,
   CircleCheckIcon,
   CompassIcon,
@@ -14,8 +15,6 @@ import {
   HomeIcon,
   LayoutDashboardIcon,
   MoreHorizontalIcon,
-  PlusIcon,
-  RadarIcon,
   SearchIcon,
   UserRoundIcon,
   type LucideIcon,
@@ -27,12 +26,6 @@ import { useIdentitySession } from "@/components/auth/session-context";
 import { BrandLockup } from "@/components/brand/brand-lockup";
 import { Button } from "@/components/ui/button";
 import { Content, Text } from "@/components/ui/content";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbList,
-  BreadcrumbPage,
-} from "@/components/ui/breadcrumb";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,10 +51,9 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-  SidebarSeparator,
-  SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
-import { ThemeMenuItems, ThemeToggle } from "./theme-toggle";
+import { ThemeMenuItems } from "./theme-toggle";
 
 type Destination = {
   href: string;
@@ -70,43 +62,55 @@ type Destination = {
   match: string[];
 };
 
-// 阅读组：公开可见。
 const readingDestinations: Destination[] = [
-  { href: "/", label: "首页", icon: HomeIcon, match: ["/"] },
+  { href: "/", label: "今日热点", icon: HomeIcon, match: ["/"] },
   {
     href: "/discover?mode=all",
     label: "探索",
-    icon: SearchIcon,
+    icon: CompassIcon,
     match: ["/discover", "/items"],
   },
   {
-    href: "/discover/topics",
-    label: "专题",
-    icon: CompassIcon,
-    match: ["/discover/topics"],
-  },
-  {
-    href: "/discover/starred",
-    label: "本机收藏",
-    icon: BookmarkIcon,
-    match: ["/discover/starred"],
-  },
-  {
-    href: "/reports/weekly",
-    label: "日周月刊",
-    icon: BookOpenIcon,
-    match: ["/reports/daily", "/reports/weekly", "/reports/monthly"],
+    href: "/discover/stories",
+    label: "事件",
+    icon: ActivityIcon,
+    match: ["/discover/stories", "/events"],
   },
   {
     href: "/leaderboard",
-    label: "模型榜",
+    label: "榜单",
     icon: ChartNoAxesColumnIcon,
     match: ["/leaderboard"],
   },
+  {
+    href: "/reports/daily",
+    label: "日报",
+    icon: FileTextIcon,
+    match: [
+      "/reports/daily",
+      "/reports/weekly",
+      "/reports/monthly",
+      "/editions",
+    ],
+  },
 ];
-
-// 工作台组：只在有会话时显示。公开刊物的匹配路径更长，会优先于“我的报告”。
+const starredDestination: Destination = {
+  href: "/discover/starred",
+  label: "收藏",
+  icon: BookmarkIcon,
+  match: ["/discover/starred"],
+};
 const workspaceDestinations: Destination[] = [
+  {
+    href: "/topics",
+    label: "监控主题",
+    icon: EyeIcon,
+    match: ["/topics", "/monitors"],
+  },
+  { href: "/alerts", label: "告警", icon: BellRingIcon, match: ["/alerts"] },
+  starredDestination,
+];
+const moreDestinations: Destination[] = [
   {
     href: "/workspace",
     label: "工作台",
@@ -115,7 +119,6 @@ const workspaceDestinations: Destination[] = [
       "/workspace",
       "/jobs",
       "/content",
-      "/events",
       "/sources",
       "/operations",
       "/publication",
@@ -124,21 +127,8 @@ const workspaceDestinations: Destination[] = [
       "/hotlists",
       "/account",
       "/site",
-      "/editions",
       "/agent",
     ],
-  },
-  {
-    href: "/topics",
-    label: "我的关注",
-    icon: RadarIcon,
-    match: ["/topics", "/monitors"],
-  },
-  {
-    href: "/alerts",
-    label: "突发告警",
-    icon: BellRingIcon,
-    match: ["/alerts"],
   },
   {
     href: "/reports",
@@ -146,14 +136,22 @@ const workspaceDestinations: Destination[] = [
     icon: FileTextIcon,
     match: ["/reports"],
   },
+  {
+    href: "/discover/topics",
+    label: "专题",
+    icon: CompassIcon,
+    match: ["/discover/topics"],
+  },
 ];
 
 function useNavigation() {
   const pathname = usePathname() ?? "/";
   const session = useIdentitySession();
-  const destinations = session
-    ? [...readingDestinations, ...workspaceDestinations]
-    : readingDestinations;
+  const destinations = [
+    ...readingDestinations,
+    ...workspaceDestinations,
+    ...moreDestinations,
+  ];
   const current = destinations
     .flatMap((destination) =>
       destination.match
@@ -170,23 +168,24 @@ function useNavigation() {
 }
 
 function MoreMenuItems({ mobile = false }: { mobile?: boolean }) {
-  const { session, destinations } = useNavigation();
+  const { session, destinations, current } = useNavigation();
   return (
     <>
-      {mobile ? (
-        <DropdownMenuGroup>
-          {destinations
-            .filter(({ href }) => href !== "/")
-            .map(({ href, label, icon: Icon }) => (
-              <DropdownMenuItem key={href} asChild>
-                <Link href={href}>
-                  <Icon aria-hidden="true" />
-                  {label}
-                </Link>
-              </DropdownMenuItem>
-            ))}
-        </DropdownMenuGroup>
-      ) : null}
+      <DropdownMenuGroup>
+        {(mobile ? destinations : moreDestinations)
+          .filter(({ href }) => href !== "/")
+          .map(({ href, label, icon: Icon }) => (
+            <DropdownMenuItem key={href} asChild>
+              <Link
+                href={href}
+                aria-current={current === href ? "page" : undefined}
+              >
+                <Icon aria-hidden="true" />
+                {label}
+              </Link>
+            </DropdownMenuItem>
+          ))}
+      </DropdownMenuGroup>
       <DropdownMenuGroup>
         <DropdownMenuItem asChild>
           <Link href="/about">关于Ripplesight</Link>
@@ -200,7 +199,7 @@ function MoreMenuItems({ mobile = false }: { mobile?: boolean }) {
           </Link>
         </DropdownMenuItem>
       </DropdownMenuGroup>
-      {mobile ? <ThemeMenuItems /> : null}
+      <ThemeMenuItems />
     </>
   );
 }
@@ -258,7 +257,11 @@ function DestinationGroup({
   current: string | undefined;
 }) {
   return (
-    <SidebarGroup role="navigation" aria-label={navLabel}>
+    <SidebarGroup
+      role="navigation"
+      aria-label={navLabel}
+      className="px-4 pt-0 pb-6 group-data-[collapsible=icon]:px-2"
+    >
       <SidebarGroupLabel>{label}</SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
@@ -287,7 +290,8 @@ function DestinationGroup({
 
 // md 及以上的站点侧栏。展开 / 折叠为图标栏由 SidebarProvider 记住。
 export function BasicSidebar() {
-  const { session, current, personalHref } = useNavigation();
+  const { session, current } = useNavigation();
+  const { toggleSidebar } = useSidebar();
 
   return (
     <Sidebar
@@ -296,92 +300,63 @@ export function BasicSidebar() {
       aria-label="站点侧边栏"
       className="print:hidden"
     >
-      <SidebarHeader>
-        <Content className="flex items-center justify-between gap-2 px-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:px-0">
-          <BrandLockup href="/" collapsible />
-          <SidebarTrigger aria-label="展开或收起侧栏" />
-        </Content>
+      <SidebarHeader className="h-22 justify-center px-4 group-data-[collapsible=icon]:h-auto group-data-[collapsible=icon]:px-2 group-data-[collapsible=icon]:py-6">
+        <BrandLockup href="/" collapsible />
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className="max-w-64">
         <DestinationGroup
           label="阅读"
           navLabel="站点导航"
           destinations={readingDestinations}
           current={current}
         />
-        {session ? (
-          <DestinationGroup
-            label="工作台"
-            navLabel="工作台导航"
-            destinations={workspaceDestinations}
-            current={current}
-          />
-        ) : null}
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <SidebarMenuButton tooltip="更多" aria-label="更多导航">
-                      <MoreHorizontalIcon aria-hidden="true" />
-                      <Text as="span">更多</Text>
-                    </SidebarMenuButton>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    side="right"
-                    align="start"
-                    className="w-48"
-                    aria-label="更多导航"
-                  >
-                    <MoreMenuItems />
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </SidebarMenuItem>
-              <SidebarMenuItem className="pt-2">
-                <Button
-                  asChild
-                  className="w-full group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-0"
-                >
-                  <Link
-                    href={personalHref}
-                    aria-label={session ? "管理个人关注" : "定制我的关注"}
-                  >
-                    <PlusIcon aria-hidden="true" />
-                    <Text
-                      as="span"
-                      className="group-data-[collapsible=icon]:hidden"
-                    >
-                      {session ? "管理个人关注" : "定制我的关注"}
-                    </Text>
-                  </Link>
-                </Button>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <DestinationGroup
+          label="工作台"
+          navLabel="工作台导航"
+          destinations={workspaceDestinations}
+          current={current}
+        />
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter className="max-w-64 gap-3 px-6 py-5 group-data-[collapsible=icon]:px-2">
         <SidebarMenu>
           <ServiceStatus />
         </SidebarMenu>
-        <SidebarSeparator className="mx-0" />
-        <Content className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:flex-col">
+        <Content className="flex items-center justify-between gap-1 group-data-[collapsible=icon]:flex-col">
           {session ? (
             <AccountMenu />
           ) : (
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="登录账户">
-                  <Link href="/login">
-                    <UserRoundIcon aria-hidden="true" />
-                    <Text as="span">登录账户</Text>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/login">
+                <UserRoundIcon data-icon="inline-start" />
+                <Text
+                  as="span"
+                  className="group-data-[collapsible=icon]:hidden"
+                >
+                  登录账户
+                </Text>
+              </Link>
+            </Button>
           )}
-          <ThemeToggle />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon-sm" aria-label="更多导航">
+                <MoreHorizontalIcon data-icon="inline-start" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              side="top"
+              align="start"
+              className="w-48"
+              aria-label="更多导航"
+            >
+              <MoreMenuItems />
+              <DropdownMenuGroup>
+                <DropdownMenuItem onSelect={toggleSidebar}>
+                  展开或收起侧栏
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </Content>
       </SidebarFooter>
       <SidebarRail />
@@ -394,48 +369,42 @@ export function BasicMobileHeader() {
   return (
     <Content
       as="header"
+      role="navigation"
       aria-label="移动站点导航"
       className="flex h-14 shrink-0 items-center justify-between gap-3 px-4 md:hidden print:hidden"
     >
       <BrandLockup href="/" />
-      <Button asChild variant="ghost" size="icon-lg" className="size-11">
-        <Link href="/discover?mode=all" aria-label="搜索资讯">
-          <SearchIcon aria-hidden="true" />
-        </Link>
-      </Button>
+      <Content className="flex items-center gap-1">
+        <Button asChild variant="ghost" size="icon-lg" className="size-11">
+          <Link href="/discover?mode=all" aria-label="搜索资讯">
+            <SearchIcon aria-hidden="true" data-icon="inline-start" />
+          </Link>
+        </Button>
+        <Button asChild variant="ghost" size="icon-lg">
+          <Link href="/alerts" aria-label="告警">
+            <BellRingIcon data-icon="inline-start" />
+          </Link>
+        </Button>
+      </Content>
     </Content>
-  );
-}
-
-export function BasicPageLocation() {
-  const { destinations, current } = useNavigation();
-  const label = destinations.find((item) => item.href === current)?.label;
-  return (
-    <Breadcrumb aria-label="当前位置">
-      <BreadcrumbList>
-        <BreadcrumbItem>
-          <BreadcrumbPage>{label ?? "Ripplesight"}</BreadcrumbPage>
-        </BreadcrumbItem>
-      </BreadcrumbList>
-    </Breadcrumb>
   );
 }
 
 // md 以下的固定底部导航：首页、探索、收藏、工作台、更多。
 export function BasicMobileNavigation() {
   const { current, personalHref } = useNavigation();
-  const [home, explore, , starred] = readingDestinations;
+  const [home, explore] = readingDestinations;
   const items = [
     { ...home, label: "首页" },
     { ...explore, label: "探索" },
-    { ...starred, label: "收藏" },
+    { ...starredDestination, label: "收藏" },
   ];
 
   return (
     <NavigationMenu
       viewport={false}
       aria-label="手机导航"
-      className="bg-background fixed inset-x-0 bottom-0 z-30 h-16 w-full max-w-none border-t px-2 *:w-full md:hidden print:hidden"
+      className="bg-sidebar fixed inset-x-0 bottom-0 z-30 h-16 w-full max-w-none px-2 *:w-full md:hidden print:hidden"
     >
       <NavigationMenuList className="w-full justify-between gap-0">
         {items.map(({ href, label, icon: Icon }) => (
@@ -468,7 +437,7 @@ export function BasicMobileNavigation() {
               aria-label="个人工作台"
               aria-current={current === "/workspace" ? "page" : undefined}
             >
-              <LayoutDashboardIcon aria-hidden="true" />
+              <EyeIcon aria-hidden="true" />
               <Text as="span" size="xs">
                 工作台
               </Text>
@@ -483,7 +452,10 @@ export function BasicMobileNavigation() {
                 className="h-16 w-full flex-col gap-1 px-2"
                 aria-label="更多导航"
               >
-                <MoreHorizontalIcon aria-hidden="true" />
+                <MoreHorizontalIcon
+                  aria-hidden="true"
+                  data-icon="inline-start"
+                />
                 <Text as="span" size="xs">
                   更多
                 </Text>

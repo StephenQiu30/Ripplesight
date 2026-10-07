@@ -12,8 +12,6 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { BrandLockup } from "@/components/brand/brand-lockup";
-import { Separator } from "@/components/ui/separator";
 import { LayoutContainer } from "./layout-container";
 import { UsageGuide } from "./usage-guide";
 
@@ -28,9 +26,10 @@ export function BasicFooter() {
         role="contentinfo"
         className="layout-region shrink-0 overflow-hidden print:hidden"
       >
-        <Separator />
-        <LayoutContainer className="flex min-h-16 flex-wrap items-center justify-between gap-x-6 gap-y-2 py-4">
-          <BrandLockup href="/" />
+        <LayoutContainer className="flex min-h-16 max-w-none flex-wrap items-center justify-between gap-x-6 gap-y-2 py-2 md:px-8 lg:px-8">
+          <UI.Text tone="muted" size="xs">
+            © {new Date().getFullYear()} 知微见澜 Ripplesight
+          </UI.Text>
           <NavigationMenu
             viewport={false}
             className="max-w-full justify-start"

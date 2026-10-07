@@ -33,6 +33,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -385,12 +386,14 @@ export function DocumentWorkspace({
               <SelectValue placeholder="选择历史版本" />
             </SelectTrigger>
             <SelectContent>
-              {versions.map((value) => (
-                <SelectItem key={value.snapshot_id} value={value.snapshot_id}>
-                  {value.source_revision.slice(0, 8)} ·{" "}
-                  {value.snapshot_id.slice(0, 8)}
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                {versions.map((value) => (
+                  <SelectItem key={value.snapshot_id} value={value.snapshot_id}>
+                    {value.source_revision.slice(0, 8)} ·{" "}
+                    {value.snapshot_id.slice(0, 8)}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
           {restoreVersion && catalog.can_write && doc.status !== "废弃" ? (
@@ -621,7 +624,7 @@ export function DocumentWorkspace({
               <CollapsibleTrigger asChild>
                 <Button variant="ghost" className="w-full justify-between">
                   章节目录
-                  <ChevronDownIcon aria-hidden="true" />
+                  <ChevronDownIcon aria-hidden="true" data-icon="inline-end" />
                 </Button>
               </CollapsibleTrigger>
               <CollapsibleContent>

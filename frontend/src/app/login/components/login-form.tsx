@@ -315,7 +315,7 @@ export function LoginForm({
           <ToggleGroup
             // Keep pressed-button semantics; the controlled value allows one method.
             type="multiple"
-            variant="outline"
+            variant="segmented"
             size="lg"
             aria-label="登录方式"
             className="mb-5 w-full"
@@ -349,21 +349,6 @@ export function LoginForm({
               邮箱验证码
             </ToggleGroupItem>
           </ToggleGroup>
-          <UI.Text tone="muted" size="sm" className="mb-5">
-            已有账号可直接登录。新账号仅通过邮箱验证码或 GitHub
-            注册，验证后设置用户名和密码。
-          </UI.Text>
-          {method === "password" && options.email && (
-            <Button
-              type="button"
-              variant="link"
-              className="mb-4 px-0"
-              disabled={!ready}
-              onClick={() => changeMethod("email")}
-            >
-              首次使用？通过邮箱注册
-            </Button>
-          )}
           {(!options.password || !options.email) && (
             <UI.Content className="mb-5 flex flex-col gap-2">
               {!options.password && (
@@ -391,6 +376,7 @@ export function LoginForm({
                 >
                   <FieldLabel htmlFor="login-username">邮箱或用户名</FieldLabel>
                   <Input
+                    appearance="form"
                     ref={credentialInput}
                     id="login-username"
                     name="username"
@@ -411,8 +397,22 @@ export function LoginForm({
                   />
                 </Field>
                 <Field data-invalid={invalidFields.password}>
-                  <FieldLabel htmlFor="login-password">密码</FieldLabel>
-                  <InputGroup>
+                  <UI.Content className="flex items-center justify-between gap-2">
+                    <FieldLabel htmlFor="login-password">密码</FieldLabel>
+                    {options.email ? (
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="xs"
+                        className="h-auto px-0"
+                        disabled={!ready}
+                        onClick={() => changeMethod("email")}
+                      >
+                        首次使用？通过邮箱注册
+                      </Button>
+                    ) : null}
+                  </UI.Content>
+                  <InputGroup appearance="form">
                     <InputGroupInput
                       ref={passwordInput}
                       id="login-password"
@@ -455,7 +455,7 @@ export function LoginForm({
                   aria-busy={busy === "password"}
                   disabled={!ready}
                 >
-                  {busy === "password" ? "正在登录…" : "登录并进入工作区"}
+                  {busy === "password" ? "正在登录…" : "登录"}
                 </Button>
               </FieldGroup>
             </UI.Form>
@@ -473,6 +473,7 @@ export function LoginForm({
                 >
                   <FieldLabel htmlFor="login-email">邮箱</FieldLabel>
                   <Input
+                    appearance="form"
                     ref={credentialInput}
                     id="login-email"
                     name="email"
@@ -505,6 +506,7 @@ export function LoginForm({
                   >
                     <FieldLabel htmlFor="login-code">验证码</FieldLabel>
                     <Input
+                      appearance="form"
                       ref={codeInput}
                       id="login-code"
                       name="code"
@@ -572,7 +574,7 @@ export function LoginForm({
             <UI.Content className="flex items-center gap-3">
               <Separator className="flex-1" />
               <UI.Text as="span" tone="muted" size="xs">
-                或使用其他方式
+                或
               </UI.Text>
               <Separator className="flex-1" />
             </UI.Content>

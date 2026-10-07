@@ -25,10 +25,7 @@ export default async function StarredPage({
   return (
     <UI.Content layout="stack" className="gap-8">
       <UI.Content as="header" layout="stack" className="gap-2">
-        <UI.Heading level={1}>本机收藏</UI.Heading>
-        <UI.Text tone="muted" size="sm">
-          保存值得回看的资讯，继续阅读本机记录。
-        </UI.Text>
+        <UI.Heading level={1}>收藏</UI.Heading>
       </UI.Content>
       <SavedItems
         key={JSON.stringify(params)}

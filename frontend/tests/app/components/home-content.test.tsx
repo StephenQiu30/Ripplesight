@@ -26,7 +26,7 @@ afterEach(() => {
 it("offers public reading before account actions and keeps unpublished content honest", () => {
   render(<HomeContent />);
   expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
-    "公开资讯",
+    "今日 AI 热点",
   );
   expect(
     screen.getByRole("link", { name: "浏览全部资讯" }).getAttribute("href"),
@@ -223,7 +223,7 @@ it("searches trimmed text with Enter and ignores composition and empty queries",
   expect(url.searchParams.get("window")).toBe("7d");
 });
 
-it("keeps all four failures local, exposes safe codes, hides unavailable counts and retries the current URL", () => {
+it("keeps all four failures local, exposes safe codes, marks unavailable counts and retries the current URL", () => {
   render(
     <HomeContent
       mode="selected"
@@ -242,7 +242,11 @@ it("keeps all four failures local, exposes safe codes, hides unavailable counts 
   expect(screen.getAllByRole("alert")).toHaveLength(4);
   expect(screen.getByText("publication_search_busy · 503")).toBeTruthy();
   expect(screen.getByText("概览暂时无法读取")).toBeTruthy();
-  expect(screen.queryByText("当前资讯", { exact: false })).toBeNull();
+  expect(
+    within(screen.getByRole("region", { name: "当前阅读概览" })).getAllByText(
+      "—",
+    ),
+  ).toHaveLength(4);
   expect(screen.queryByText("等待新的公开内容")).toBeNull();
   expect(
     screen.getByRole("link", { name: "浏览全部资讯" }).getAttribute("href"),
@@ -275,7 +279,9 @@ it("renders measured story heat, independent sources and textual badges without 
   expect(
     feed.getByRole("link", { name: publicStory.title }).getAttribute("href"),
   ).toBe("/discover/stories/story-1");
-  expect(feed.getByLabelText("热度 1250，上升").textContent).toContain("1,250");
+  expect(feed.getAllByLabelText("热度 1250，上升")[0].textContent).toContain(
+    "1,250",
+  );
   expect(feed.getByText("来源骤增")).toBeTruthy();
   expect(feed.getByText("持续升温")).toBeTruthy();
   expect(feed.getByText("个独立来源", { exact: false }).textContent).toContain(
@@ -285,8 +291,8 @@ it("renders measured story heat, independent sources and textual badges without 
   expect(feed.getByText("覆盖待补全")).toBeTruthy();
   expect(screen.queryByText(/负面/)).toBeNull();
   const overview = screen.getByRole("region", { name: "当前阅读概览" });
-  expect(overview.textContent).toContain("当前资讯 0 条");
-  expect(overview.textContent).toContain("全站热点事件 1 个");
+  expect(overview.textContent).toContain("当前资讯0 条");
+  expect(overview.textContent).toContain("本页热点事件1 个");
   expect(
     screen
       .getByText("内容更新于", { exact: false })

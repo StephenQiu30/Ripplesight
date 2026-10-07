@@ -142,12 +142,12 @@ async function DiscoveryReadingPage({ params }: { params: DiscoveryParams }) {
         categories={categories}
         sources={discoverySources(page)}
       />
-      <UI.Content className="grid gap-10 lg:grid-cols-3">
+      <UI.Content className="reading-columns">
         <UI.Content
           as="section"
           aria-label="搜索结果"
           layout="stack"
-          className="min-w-0 lg:col-span-2"
+          className="min-w-0"
         >
           {page ? (
             <>

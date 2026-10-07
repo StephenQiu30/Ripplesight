@@ -160,7 +160,7 @@ function ReportDetailContent({ reportId }: { reportId: string }) {
           </UI.Content>
           <UI.Content
             as="section"
-            className="mt-8 space-y-3"
+            className="mt-8 flex flex-col gap-3"
             aria-label="私人报告导出"
           >
             <UI.Heading level={2} className="text-lg font-medium">

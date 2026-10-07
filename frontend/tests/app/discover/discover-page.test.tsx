@@ -275,9 +275,7 @@ it("restores the favorites URL fields with safe defaults and an explicit local t
     initialPage: 2,
   });
   render(page);
-  expect(
-    screen.getByRole("heading", { level: 1, name: "本机收藏" }),
-  ).toBeTruthy();
+  expect(screen.getByRole("heading", { level: 1, name: "收藏" })).toBeTruthy();
   cleanup();
   const invalid = await StarredPage({
     searchParams: Promise.resolve({

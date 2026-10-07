@@ -132,8 +132,8 @@ export function EventColumns({
   aside: ReactNode;
 }) {
   return (
-    <UI.Content className="grid min-w-0 grid-cols-1 items-start gap-10 lg:grid-cols-3 lg:gap-12">
-      <UI.Content className="flex min-w-0 flex-col gap-10 lg:col-span-2">
+    <UI.Content className="reading-columns min-w-0 items-start">
+      <UI.Content className="flex min-w-0 flex-col gap-12">
         {children}
       </UI.Content>
       <UI.Content
@@ -247,11 +247,14 @@ export function EventTimeline({
           {entries.map((entry) => (
             <UI.Content key={entry.id} className="flex flex-col gap-3">
               <Separator />
-              <Item role="listitem" className="items-start px-0">
+              <Item
+                role="listitem"
+                className="flex-nowrap items-start gap-5 px-0"
+              >
+                <UI.Text size="xs" tone="muted" className="w-28 shrink-0">
+                  <UI.InlineCode>{eventTime(entry.time)}</UI.InlineCode>
+                </UI.Text>
                 <ItemContent className="min-w-0 gap-2">
-                  <UI.Text size="xs" tone="muted">
-                    <UI.InlineCode>{eventTime(entry.time)}</UI.InlineCode>
-                  </UI.Text>
                   <UI.TextLink href={`#${eventSourceAnchor(entry.sourceId)}`}>
                     {entry.title}
                   </UI.TextLink>
@@ -381,7 +384,7 @@ export function RepresentativeComments({
       aria-labelledby="event-comments-heading"
       className="flex flex-col gap-4"
     >
-      <UI.Heading id="event-comments-heading">代表评论</UI.Heading>
+      <UI.Heading id="event-comments-heading">代表观点</UI.Heading>
       {publicReading ? (
         <EventEmpty>公开资料暂未提供代表评论。</EventEmpty>
       ) : !comments.length ? (
@@ -389,7 +392,11 @@ export function RepresentativeComments({
       ) : (
         <ItemGroup>
           {comments.map((comment) => (
-            <Item key={comment.id} role="listitem" variant="muted">
+            <Item
+              key={comment.id}
+              role="listitem"
+              className="border-b px-0 py-5"
+            >
               <ItemContent className="min-w-0 gap-3">
                 <UI.Text size="sm">{comment.source}</UI.Text>
                 {comment.state === "none" ? (
