@@ -1,4 +1,4 @@
-# HotKey Web 设计规范
+# Ripplesight Web 设计规范
 
 本文规定 Web 端的视觉、组件、布局和状态处理。数据请求与目录约定见 [README](README.md) 和 [AGENTS](../AGENTS.md)。
 
@@ -7,7 +7,7 @@
 ## 1. 视觉
 
 - 风格：黑白、留白、克制。层级靠排版、间距和表面明度区分，不靠装饰边框、阴影或卡片堆叠。
-- 品牌：界面上的产品名是「知微见澜」（英文 Ripplesight），标识只用 `components/brand` 的 `BrandLockup` / `BrandMark`（`src/app/icon.png`）。“HotKey”只是仓库代号，不出现在界面文案里。
+- 品牌：项目、GitHub 仓库和界面上的产品名统一使用 `Ripplesight`，标识只用 `components/brand` 的 `BrandLockup` / `BrandMark`（`src/app/icon.png`）。
 - 字体：Geist；Geist Mono 只用于数据和技术标识（计数、热度、时间、百分比、错误码），数字用等宽数字。字体集中在 `src/layout/layout-fonts.ts` 中装配。
 - 颜色、字体、圆角统一定义在 `src/app/globals.css` 的语义令牌中，业务组件只使用这些令牌。
 - 输入框、选择器、错误提示、键盘焦点和浮层保留必要的轮廓；信息流允许使用结构分隔线。

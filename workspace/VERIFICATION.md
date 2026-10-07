@@ -131,3 +131,84 @@ HTML 使用 Markdown 模式编译，保留首页 HTML 注释标记，首页与�
 截图保存在当前任务附件目录。受控身份、假数据入口及临时发布内容都没有加入产品代码或公开清单，验证结束关闭本轮临时进程，保留原本运行的服务。
 
 未完成门槛：真实账号 UUID 与正式本机初始化、真实 Obsidian 的五类十次往返、实际输入法、固定 20 条检索与 20 个本机 Codex 问题、目标环境完整冷启动与恢复。已尝试本机 Claude 只读审查，CLI 返回登录过期，审查没有执行。按 AGENTS §6，当前不标记“代码完成”或“能力可用”；没有本轮远端 CI 证据。Mermaid 内部页面显示可编辑源码，公开 Nextra 预览的图表渲染继续保留。
+
+## 2026-10-07 需求 workspace 阅读验证
+
+范围：按用户本轮要求，先搭需求阅读与核对 workspace，暂不实现业务代码；文档与执行以最小 POC/demo 为后续验证方式。基于 main 的 `5e098e86` 工作目录，修改未提交或推送。复用现有 Nextra 静态阅读工具，没有新增应用、接口、数据库结构、编辑器或同步实现。
+
+新增原文：[需求与验证入口](content/product/reference/04-需求与验证入口.md)、[AI 任务协议](content/product/reference/05-AI任务协议.md)、[POC 验证卡](content/product/reference/06-POC验证卡.md)、[热点事件候选核对](content/research/2026-10-07-热点事件需求核对.md)。首页改为先读当前需求与验证方式；根 AGENTS/BACKLOG 记录当前阶段，workspace/AGENTS 指向最小阅读路径。已有 PRD、决策、能力和大计划原文保留，不自动废弃或派发。
+
+| 检查 | 实际结果 |
+|---|---|
+| `pnpm index` | 退出 0；首页生成索引包含新增阅读页 |
+| `pnpm check` | 退出 0；34 页元数据/链接/命名有效，19 个现有工具测试与 TypeScript 通过 |
+| `pnpm build` | 退出 0；34 页静态正文、34 页 Pagefind 中文索引与原始 Markdown / AI 导出生成 |
+| `pnpm preview` | 已启动；仅监听 127.0.0.1:8668，阅读入口为 `http://127.0.0.1:8668/hotkey-server/` |
+| `pnpm verify` | 最终退出 0；34 页正文和原文、导航、根文件嵌入、链接与 AI 导出有效；舆情 13 条、评论 16 条、情感 10 条 |
+| 实际浏览器 | 首页显示当前阶段；打开需求原话、AI 协议与热点候选；搜索 POC 后点击第一条打开验证卡；候选明确标为待核对、未执行，卡保留待执行结果 |
+| 当前 Codex 原文读取 | 直接读取本机 `out/raw/` 的需求入口、AI 协议与候选；以下三项核对可回到作者原文 |
+
+原文核对问题与答案：
+
+1. 当前是否可以开始业务编码？不能；本轮阶段是 workspace 搭建与需求核对（需求入口“用户已经明确的要求”）。
+2. 首个热点 POC 是否已被选定或跑通？没有；它是待核对的 AI 候选，尚无业务验证结果（候选页开头）。
+3. 工程检查通过是否等于真实业务能力可用？不等于；证据等级与局限需要区分，验证卡通过不自动更新整项能力为可用（AI 协议“文档状态不能代替验证”“执行和交付”）。
+
+首次 `pnpm verify` 因 PROJECT 缺少“文档预览”说明而失败；在 PROJECT §10 补上当前实际使用的本机入口、作者来源与边界后，重新构建并复验通过。未修改验证脚本或放宽断言。
+
+首页截图保存于本机忽略目录 `.tools/requirements-workspace/2026-10-07-home.jpg`；浏览器阅读标签页保留。重启预览在 workspace 执行 `pnpm preview`，内容改动后先重新 build。
+
+边界：本次只验证文档阅读、检索、原文导出与当前 AI 的三条事实核对，尚未取得本人阅读反馈；没有选择或执行业务 POC，没有真实在线采集或模型调用，没有启动正式 `/workspace/docs` 的专用来源与账号配置，也没有实际 Obsidian 双端验收。当前作者目录仍是开发 checkout 的 `workspace/content/`。`llms.txt` 中的绝对 URL 仍指向既有 GitHub Pages，本轮新内容仅在本机，AI 应读当前本机文件或 8668 原文。没有对外发布，也没有改动已有业务服务和自动化配置。
+
+
+## 2026-10-07 产品参考英文目录修正
+
+按用户要求，将 product 根层六份参考文档移入 `content/product/reference/`，与 `prd/`、`plan/` 并列；保留文件名和编号。更新相对链接、根文件 source、related、公开/内部清单、AI 入口与架构目录说明。现有文档工具只调整目录分组、导航与指针路径，并同步现有测试/验证脚本中的路径；没有业务实现。
+
+`pnpm index`、`pnpm check`（34 页、19 个工具测试及 TypeScript）、`pnpm build`、`pnpm verify`（34 页正文/原文与 AI 导出）、`git diff --check` 均通过。浏览器重新加载首页，产品参考为独立分组，分类表显示 `product/reference/`；新页面与 raw 路径在 HTTP 验证中通过。旧编号历史文字保留，新原文导出使用迁移后的目录。截图：`.tools/requirements-workspace/2026-10-07-product-reference.jpg`。未提交、推送或对外发布。
+
+## 2026-10-07 页脚与项目显示名称
+
+核对 workspace/app/layout.tsx 及当前安装的 nextra-theme-docs 源码：全局 Footer 为 Nextra 内置组件，页脚文字由本项目配置，Layout 的 footer 参数为可选。本轮删除该组件的导入与配置。项目显示名沿用现有 frontend 的“知微见澜 Ripplesight”，统一文档导航、浏览器标题、首页、PRD、根目录说明与 AI 导出中的项目称呼。保留真实技术路径和标识，以及既有验证历史；需求、范围和业务实现未改变。
+
+`pnpm index`、`pnpm check`（19 项现有测试及 TypeScript）、`pnpm build`、`pnpm verify` 均通过。另对 34 个生成页面检查：HTTP 200、无 footer 元素、正式名称存在、旧页脚品牌不存在。实际浏览器刷新后正式名称显示正确，footer 元素数量为 0；默认视口内容宽度与滚动宽度均为 831px，390px 窄屏覆盖下两者均为 375px（扣除滚动条），无整页横向溢出。检查后恢复默认视口；页面末尾保留文章导航与原文入口，没有全局页脚。
+
+本机截图：`.tools/requirements-workspace/2026-10-07-footer-cleanup.jpg`、`.tools/requirements-workspace/2026-10-07-brand-mobile.jpg`。未新增测试、未提交、推送或对外部署。
+
+## 2026-10-07 Ripplesight 仓库与项目改名
+
+本人明确要求将 GitHub 仓库和当前项目名称统一为 `Ripplesight`。已通过 GitHub API 将 `StephenQiu30/hotkey-server` 改为 `StephenQiu30/Ripplesight`，仓库 ID 仍为 `1217852212`，默认分支仍为 main；description 同步当前产品定位。本机 origin 更新为 `https://github.com/StephenQiu30/Ripplesight.git`，`git ls-remote origin HEAD` 验证成功，远端 HEAD 仍为 `5e098e867543a7764891946eb93e5965d934c8a5`。
+
+当前源码同步产品标识、网页和 PWA 元数据、登录邮件及通知、报告与公开分发的品牌、MCP serverInfo、CLI 说明、采集 User-Agent、下载文件名前缀、根文档与 workspace 链接。包名为 `ripplesight-backend`、`ripplesight-frontend`、`ripplesight-docs`；镜像默认使用 `ripplesight-` 前缀。`uv lock --offline` 只更新并重排根虚拟包，依赖版本未变。文档 basePath、canonical、导航、raw、AI 导出与验证脚本使用 `/Ripplesight`。
+
+兼容边界：保留 `HOTKEY_*` 环境变量、数据库和数据卷、Compose 已有项目名、登录 Cookie/HTTP 协议、MCP 工具名、生成客户端类型名以及 Obsidian 默认 `HotKey/` 导出目录。本机共享 checkout 与既有 worktree 路径未移动；被冻结的 Flutter 项目未改动。未改业务能力、权限、数据库结构或自动化任务。
+
+| 检查 | 结果 |
+|---|---|
+| backend Ruff、格式、mypy | 全部通过；435 个源码文件类型检查通过 |
+| backend unit + architecture | 最终全量复测 1585 通过；首次 1584 通过、1 项 MediaCrawler 进程终止测试发生 OS `PermissionError`，该项单独复测通过后全量复测也通过；未修改采集进程逻辑 |
+| frontend lint、typecheck、format、test、build | 全部通过；118 个测试文件、939 个测试通过 |
+| workspace index、check、build、verify | 全部通过；34 页、19 个工具测试、TypeScript、逐页 HTTP/原文与 AI 导出有效；舆情/评论/情感查询分别命中 13/16/10 条 |
+| 文档静态产物复核 | 34 页无 footer、旧 Pages 路径、旧仓库链接和旧中文品牌 |
+| Compose 配置及 Git 差异 | `docker compose config --quiet`、`git diff --check` 通过；未重启既有 8666/8667 服务 |
+| 本机浏览器 | 文档桌面与 390px 预览无整页横向溢出；文档标题、导航、canonical 和原文指向新名称，footer 数量为 0；手机菜单与 Ripplesight 搜索可用；8686 临时应用预览的首页和关于页显示新品牌 |
+
+截图保存于本机忽略目录 `.tools/requirements-workspace/`：`2026-10-07-ripplesight-docs.jpg`、`2026-10-07-ripplesight-docs-mobile.jpg`、`2026-10-07-ripplesight-app-mobile.jpg`。测试后恢复默认视口；本机文档阅读入口为 <http://127.0.0.1:8668/Ripplesight/>。
+
+待发布：GitHub Pages API 已报告新地址 <https://stephenqiu30.github.io/Ripplesight/>，但其当前 HTML 仍为旧构建，标题为 `HotKey 文档 · HotKey 文档`，样式资源 `/hotkey-server/_next/static/css/11c59cc40cabfed8.css` 返回 404。GitHub 官方说明仓库改名不重定向项目站点地址（[来源](https://docs.github.com/en/repositories/creating-and-managing-repositories/renaming-a-repository)）。需提交、推送并完成 workspace-site 部署后再验线上；本轮尚未获得 AGENTS §7 所要求的明确提交/推送授权，源码与既有 workspace 调整保留为未提交修改。本机验证不代替线上部署、数据库集成、真实采集或模型验收。
+
+## 2026-10-07 父工作区、客户端与描述补齐
+
+按本人补充要求，将实际父目录迁为 `/Users/stephenqiu/Desktop/StephenQiu/Ripplesight`，实际仓库目录为 `ripplesight-server/` 与 `ripplesight-app/`。迁移前后分别核对两个仓库的 Git diff 与未跟踪文件 hash，一致；所有既有修改原样保留。旧父目录和旧仓库名仅保留符号链接，供未迁移的会话访问。外部 worktree 的 `.git` 指针和主仓库登记路径改为新地址；已有缺失的 deploy worktree 仍标记 prunable，未清理或改变其状态。
+
+Python 虚拟环境的 36 个启动/激活文件迁到新绝对路径，prompt 使用新包名。新路径执行锁文件同步后恢复了原有额外安装的 `tenacity==9.1.4`；未增加项目依赖。父目录新增 README/AGENTS 作为人和 AI 的入口；Claude 已有设计预览配置仅改显示名，保留真实的临时文件来源路径。
+
+冻结客户端 GitHub 仓库由 `hotkey-app` 改为 [Ripplesight-app](https://github.com/StephenQiu30/Ripplesight-app)，ID 仍为 `1247949203`，main HEAD 为 `6697bd9fc71891e4f29510329e5c3408d1745284`，本机 origin 同步。纠正其旧 About 对“内容创作者 Web 工作台”的错误描述，明确“Flutter 客户端预留仓库；当前冻结，仅维护工程约定，尚无可运行应用”。App README、规范和 GitHub 模板使用新品牌与链接；未初始化 Flutter 工程。
+
+主仓库 GitHub About、README、Web 标题与 description、PWA 描述、关于页、三个包与需求文档站描述统一当前定位：个人非商业使用的公开资讯阅读与舆情监控项目，围绕关键词连接来源材料、讨论与事件进展。关于页纠正首页用途为公开资讯阅读；描述不承诺已经完成真实业务验收。
+
+新路径下 frontend 的 lint/typecheck/format、939 个测试及构建通过；backend Ruff/格式、435 源码的 mypy 与 76 个配置/提示词测试通过；workspace 的 19 个测试、TypeScript、34 页构建、HTTP/原文/AI 导出与搜索检查通过；App 公共文档和模板检查、两仓库 `git diff --check` 通过。已有 8666/8667 服务没有重启；文档预览使用新目录启动。
+
+未完成的应用设置项：Codex `list_projects` 仍返回项目标签 `HotKey` 与旧路径，没有自动迁移。自动审批拒绝通过 `com.openai.codex` 界面改项目设置，理由是应用安全限制；当前没有可用的专用项目改名工具，未绕过限制编辑应用内部状态。需在 Codex 中将保存的项目目录切换为新父目录；兼容链接保证现有聊天仍能访问文件。源码尚未获明确提交/推送授权，GitHub README、Pages 与正式运行版本仍待发布。
+
+浏览器复核补充：新目录 8686 临时预览的首页标题为 `Ripplesight · 公开资讯阅读与个人舆情监控`，PWA name/short_name 均为 Ripplesight，description 为当前项目定位；关于页的标题、品牌与正文说明正确。默认 1280px 与 390px 视口无整页横向溢出，测试后恢复默认视口并关闭临时应用预览；截图为 `.tools/requirements-workspace/2026-10-07-ripplesight-description.jpg`。新目录的 8668 文档预览继续保留。

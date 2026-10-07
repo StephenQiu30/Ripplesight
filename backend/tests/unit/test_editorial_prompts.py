@@ -17,8 +17,8 @@ def test_migrated_group_rules_include_occurrences_developments_and_roundups() ->
     assert "不能只抽取两篇共同提到的一个产品" in rendered
 
 
-def test_editorial_prompt_uses_hotkey_brand_and_requires_all_inputs() -> None:
-    assert "HotKey" in prompts.render_editorial_prompt("prefilter")
+def test_editorial_prompt_uses_ripplesight_brand_and_requires_all_inputs() -> None:
+    assert "Ripplesight" in prompts.render_editorial_prompt("prefilter")
     with pytest.raises(ValueError, match="missing prompt value"):
         prompts.render_editorial_prompt("report-period")
     rendered = prompts.render_editorial_prompt(
@@ -43,10 +43,10 @@ def test_included_rule_change_changes_receipt_prompt_version(
     (tmp_path / "entry.md").write_text("{{> rule}} {{siteName}}")
     (tmp_path / "rule.md").write_text("original rule")
     first = prompts.editorial_prompt_version("entry")
-    assert prompts.render_editorial_prompt("entry") == "original rule HotKey"
+    assert prompts.render_editorial_prompt("entry") == "original rule Ripplesight"
     (tmp_path / "rule.md").write_text("revised rule")
     assert prompts.editorial_prompt_version("entry") != first
-    assert prompts.render_editorial_prompt("entry") == "revised rule HotKey"
+    assert prompts.render_editorial_prompt("entry") == "revised rule Ripplesight"
 
 
 def test_prompt_values_are_data_and_are_not_recursively_expanded(

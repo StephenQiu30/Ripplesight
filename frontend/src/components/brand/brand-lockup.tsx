@@ -26,7 +26,6 @@ export function BrandMark({ className }: { className?: string }) {
 type BrandLockupProps = {
   href: string;
   compactOnMobile?: boolean;
-  showEnglish?: boolean;
   rail?: boolean;
   /** 放在可折叠侧栏里：折叠为图标栏时只保留标识。 */
   collapsible?: boolean;
@@ -35,7 +34,6 @@ type BrandLockupProps = {
 export function BrandLockup({
   href,
   compactOnMobile = false,
-  showEnglish = false,
   rail = false,
   collapsible = false,
 }: BrandLockupProps) {
@@ -50,7 +48,7 @@ export function BrandLockup({
     >
       <Link
         href={href}
-        aria-label={href === "/" ? "知微见澜首页" : "知微见澜工作台"}
+        aria-label={href === "/" ? "Ripplesight首页" : "Ripplesight工作台"}
       >
         <BrandMark
           className={
@@ -66,19 +64,8 @@ export function BrandLockup({
             collapsible && "group-data-[collapsible=icon]:hidden",
           )}
         >
-          知微见澜
+          Ripplesight
         </UI.Text>
-        {showEnglish ? (
-          <UI.Text
-            as="span"
-            className={cn(
-              "text-muted-foreground hidden text-sm sm:inline",
-              collapsible && "group-data-[collapsible=icon]:hidden",
-            )}
-          >
-            / Ripplesight
-          </UI.Text>
-        ) : null}
       </Link>
     </Button>
   );

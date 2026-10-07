@@ -464,7 +464,7 @@ class PublicationApplicationService:
                 details,
                 origin=self.origin,
                 self_path=self_path or path,
-                title="HotKey精选" if kind != "all" else "HotKey全部资讯",
+                title="Ripplesight精选" if kind != "all" else "Ripplesight全部资讯",
                 now=at,
                 include_content=kind == "selected-full",
             )
@@ -487,7 +487,9 @@ class PublicationApplicationService:
 
     def latest_markdown(self, *, owner_id: UUID, now: datetime | None = None) -> str:
         return list_markdown(
-            self.items(owner_id=owner_id, now=now).items, title="HotKey精选", origin=self.origin
+            self.items(owner_id=owner_id, now=now).items,
+            title="Ripplesight精选",
+            origin=self.origin,
         )
 
     def jsonld(self, *, owner_id: UUID, content_id: UUID, now: datetime | None = None) -> str:
@@ -883,7 +885,12 @@ class PublicationApplicationService:
         from publication.share_images import ShareCard, render_share_png
 
         pages = {
-            "site": ("HotKey", "关注热点与真实变化", "经许可的来源、事实、精选与日周月刊", "/"),
+            "site": (
+                "Ripplesight",
+                "关注热点与真实变化",
+                "经许可的来源、事实、精选与日周月刊",
+                "/",
+            ),
             "all": (
                 "公开动态",
                 "所有公开来源的最新动态",
@@ -927,17 +934,22 @@ class PublicationApplicationService:
                 "时间窗口、适用范围和原始公告",
                 "/codex-resets",
             ),
-            "about": ("关于", "关于 HotKey", "项目范围、出处与当前使用边界", "/about"),
-            "terms": ("使用规则", "HotKey 使用规则", "页面、公开接口与分发的使用范围", "/terms"),
+            "about": ("关于", "关于 Ripplesight", "项目范围、出处与当前使用边界", "/about"),
+            "terms": (
+                "使用规则",
+                "Ripplesight 使用规则",
+                "页面、公开接口与分发的使用范围",
+                "/terms",
+            ),
             "privacy": (
                 "隐私说明",
-                "HotKey 隐私说明",
+                "Ripplesight 隐私说明",
                 "浏览器本机数据、日志与反馈资料",
                 "/privacy",
             ),
             "changelog": (
                 "更新日志",
-                "HotKey 更新记录",
+                "Ripplesight 更新记录",
                 "已实现的功能、变更与证据边界",
                 "/changelog",
             ),
@@ -948,7 +960,7 @@ class PublicationApplicationService:
                 "只读 MCP、RSS、REST 与 Markdown",
                 "/agent",
             ),
-            "contact": ("联系", "联系 HotKey", "当前启用的真实联系资料", "/contact"),
+            "contact": ("联系", "联系 Ripplesight", "当前启用的真实联系资料", "/contact"),
         }
         value = pages.get(page)
         if value is None:

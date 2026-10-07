@@ -151,7 +151,7 @@ class MediaMirrorClient:
                     headers={
                         "Host": host,
                         "Accept-Encoding": "identity",
-                        "User-Agent": "HotKey-Media/1.0",
+                        "User-Agent": "Ripplesight-Media/1.0",
                         "Accept": accept,
                     },
                     extensions={"sni_hostname": host},

@@ -1,4 +1,4 @@
-# HotKey 后端
+# Ripplesight 后端
 
 架构与约定见 [PROJECT](../PROJECT.md)，工程规范见 [AGENTS](../AGENTS.md)。
 

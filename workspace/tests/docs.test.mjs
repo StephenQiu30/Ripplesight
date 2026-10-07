@@ -16,7 +16,7 @@ import { exportDocuments } from '../scripts/export.mjs'
 const base = { title: '测试文档', summary: '用于验证约束', updated: '2026-10-06' }
 const capability = { ...base, type: 'capability', status: '部分可用', release: ['V1', 'V2'], kr: ['KR3'] }
 function fixture(t) {
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'hotkey-docs-check-'))
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'ripplesight-docs-check-'))
   const root = path.join(temporary, 'content')
   fs.mkdirSync(root)
   const manifest = path.join(temporary, 'public-documents.json')
@@ -103,12 +103,12 @@ test('根文档链接分流到站内或 GitHub，并保留中文路径和锚点'
   assert.equal(rewriteLink('workspace/content/capabilities/04-评论舆情.md#验收记录', origin), '/capabilities/04-%E8%AF%84%E8%AE%BA%E8%88%86%E6%83%85/#验收记录')
   assert.equal(rewriteLink('workspace/content/index.md#能力', origin), '/#能力')
   for (const file of ['AGENTS.md', 'backend/README.md', 'PROJECT.md#6-数据库']) {
-    assert.equal(rewriteLink(file, origin), `https://github.com/StephenQiu30/hotkey-server/blob/main/${file}`)
+    assert.equal(rewriteLink(file, origin), `https://github.com/StephenQiu30/Ripplesight/blob/main/${file}`)
   }
-  const document = readDocument(path.join(contentRoot, 'product/01-进度与优先级.md'))
+  const document = readDocument(path.join(contentRoot, 'product/reference/01-进度与优先级.md'))
   const tree = markdown.parse(document.body)
   remarkVault({ document, published: documents() })(tree)
-  assert.ok(tree.children.some(node => node.type === 'heading' && node.children[0].value === 'HotKey BACKLOG'))
+  assert.ok(tree.children.some(node => node.type === 'heading' && node.children[0].value === 'Ripplesight BACKLOG'))
 })
 
 test('导航保留 frontmatter 中文标题、五个链接，有验收记录时显示验收组', () => {
@@ -118,14 +118,14 @@ test('导航保留 frontmatter 中文标题、五个链接，有验收记录时�
   assert.deepEqual(docs.map(item => item.title), ['术语表', '产品', '能力', '决策', '验收记录', '调研'])
   assert.equal(docs.find(item => item.title === '能力').children[3].title, '评论舆情')
   const product = docs.find(item => item.title === '产品')
-  assert.deepEqual(product.children.filter(item => item.children).map(item => item.title), ['产品需求（PRD）', '执行计划（PLAN）'])
+  assert.deepEqual(product.children.filter(item => item.children).map(item => item.title), ['产品需求（PRD）', '执行计划（PLAN）', '产品参考'])
   assert.equal(normalized.topLevelNavbarItems.find(item => item.title === 'PLAN').href, '/product/plan/01-PLAN-workspace项目知识库/')
 })
 
 test('PRD、PLAN 与产品参考各自使用 01，目录内重复和 00 编号仍拒绝', t => {
   const { root, write, index } = fixture(t)
   write('product/plan/01-测试计划.md', { ...base, type: 'plan', status: '生效' })
-  write('product/01-产品参考.md', { ...base, type: 'pointer' })
+  write('product/reference/01-产品参考.md', { ...base, type: 'pointer' })
   fs.writeFileSync(index, regeneratedIndex(fs.readFileSync(index, 'utf8'), documents(root)))
   assert.deepEqual(checkDocuments(root).errors, [])
   write('product/plan/01-重复计划.md', { ...base, type: 'plan', status: '生效' })
@@ -191,6 +191,6 @@ test('公开清单拒绝私密文档、草稿、重复登记、缺失文件和�
 
 test('公开文档中的未登记资料链接不会自动退回 GitHub 原文出口', () => {
   assert.throws(() => rewriteLink('product/prd/99-未登记.md', path.join(contentRoot, 'index.md')), /链接指向未公开登记的资料/)
-  assert.equal(rewriteLink('templates/05-执行计划.md', path.join(contentRoot, 'index.md')), 'https://github.com/StephenQiu30/hotkey-server/blob/main/workspace/content/templates/05-%E6%89%A7%E8%A1%8C%E8%AE%A1%E5%88%92.md')
+  assert.equal(rewriteLink('templates/05-执行计划.md', path.join(contentRoot, 'index.md')), 'https://github.com/StephenQiu30/Ripplesight/blob/main/workspace/content/templates/05-%E6%89%A7%E8%A1%8C%E8%AE%A1%E5%88%92.md')
   assert.ok(!documents().some(item => item.relative.startsWith('templates/')))
 })

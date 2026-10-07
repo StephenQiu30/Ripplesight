@@ -30,7 +30,7 @@ export function BasicFooter() {
       >
         <Separator />
         <LayoutContainer className="flex min-h-16 flex-wrap items-center justify-between gap-x-6 gap-y-2 py-4">
-          <BrandLockup href="/" showEnglish />
+          <BrandLockup href="/" />
           <NavigationMenu
             viewport={false}
             className="max-w-full justify-start"

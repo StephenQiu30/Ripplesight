@@ -43,7 +43,7 @@ def _expand_editorial_prompt(name: str, trail: tuple[str, ...] = ()) -> tuple[st
 def render_editorial_prompt(name: str, values: Mapping[str, str] | None = None) -> str:
     """Render a trusted versioned template; substituted material is never re-expanded."""
     template, _ = _expand_editorial_prompt(name)
-    variables = {"siteName": "HotKey", **(values or {})}
+    variables = {"siteName": "Ripplesight", **(values or {})}
 
     def substitute(match: re.Match[str]) -> str:
         key = match.group(2)

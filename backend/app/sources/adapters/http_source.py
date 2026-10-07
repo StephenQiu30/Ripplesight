@@ -26,7 +26,7 @@ from sources.contracts import (
 _MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 _MAX_REDIRECTS = 5
 _LOCAL_SERVICE_HOSTS = frozenset({"127.0.0.1", "localhost"})
-_USER_AGENT = "HotKey/0.1 (+self-hosted research monitor)"
+_USER_AGENT = "Ripplesight/0.1 (+self-hosted research monitor)"
 
 
 class SourceFailureError(Exception):

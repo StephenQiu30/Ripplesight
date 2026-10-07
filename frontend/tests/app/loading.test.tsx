@@ -50,9 +50,11 @@ describe("route loading", () => {
       </BasicLayout>,
     );
     expect(screen.queryByRole("banner")).toBeNull();
-    expect(screen.getByRole("heading", { name: "登录知微见澜" })).toBeTruthy();
     expect(
-      screen.getByRole("complementary", { name: "知微见澜" }),
+      screen.getByRole("heading", { name: "登录Ripplesight" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("complementary", { name: "Ripplesight" }),
     ).toBeTruthy();
     expect(
       within(screen.getByRole("main"))

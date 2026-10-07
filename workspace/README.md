@@ -1,10 +1,25 @@
-# HotKey 文档工作区
+# Ripplesight 文档工作区
+
+当前工作方式从 [需求与验证入口](content/product/reference/04-需求与验证入口.md)开始：先核对用户场景，再用一张卡组织最小 POC 与 demo。2026-10-07 本轮只搭阅读 workspace、整理需求，不实现业务代码。已有 PRD、决策与计划保留，不把它们当成一次全部开工的任务。
+
+本轮直接维护仓库中的 `workspace/content/`，可在 Codex 或 Obsidian 打开 [首页](content/index.md)，也可使用下方现有工具启动本机网页。尚未初始化正式内部知识库作者副本；不要同时编辑两个目录。将来启用 LOCAL 所述专用来源时，再明确切换。
+
+| 读者 | 入口 |
+|---|---|
+| 人 | `content/index.md` 或本机 <http://127.0.0.1:8668/Ripplesight/> |
+| AI | `AGENTS.md` → `content/product/reference/04-需求与验证入口.md` → `content/product/reference/05-AI任务协议.md` → 当前任务相关文档 |
+| 验证设计 | [POC 验证卡](content/product/reference/06-POC验证卡.md)；当前 [热点候选](content/research/2026-10-07-热点事件需求核对.md)仍待核对 |
+| AI 原文 | 构建后的 `out/llms.txt`、`out/llms-full.txt` 和 `out/raw/`；需要时读单页，不必一次加载全文 |
+
+本机预览只监听 `127.0.0.1`，无需登录。它读取现有非敏感阅读清单；清单中的“可读”不表示提案已确认。本轮不推送或对外部署。正式工作台 `/workspace/docs` 的账号权限和双端编辑仍按 LOCAL 管理，不作为本轮阅读的前提。
+
+现有 `llms.txt` 生成器的绝对链接仍指向 GitHub Pages；本轮新增内容尚未发布，AI 应读取当前本机文件或 8668 的 `/raw/`，不要将旧线上页面当成本轮原文。
 
 `content/` 是普通 Markdown 与 Obsidian 的作者来源，外层保留文档校验、索引与快照工具。项目知识库用于开发维护，目标是在 frontend 的 `/workspace/docs` 接入 Nextra 与 Editor.js 编辑视图，共用样式、权限和版本；不采用 GitBook，不另建文档网站。本机实现与启动步骤见 [LOCAL](LOCAL.md)，真实账号及双端验收仍待完成；Notion 主来源路线仅作替代评估。
 
 继续使用 Nextra/theme 4.6.1、Next.js、React 与现有校验、公开预览工具。正式内部知识库接入 frontend 的 `/workspace/docs`，本期只需本机运行，不增加服务器部署。公开 Pages 预览不承担内部权限；现有公开发布清单继续隔离未登记资料。
 
-产品文档按用途分层：`content/product/prd/` 保存目标、范围与验收需求，`content/product/plan/` 保存任务、容量与执行依赖；`content/product/` 根层保留进度、架构与工程规范指针。每个目录独立从 01 编号，目录内不可重复，需求和计划允许各自使用 01。需求与计划通过标准相对链接互相引用，文档入口按这三类展示；实际任务状态统一维护在仓库根目录 BACKLOG。
+产品文档按用途分层：`content/product/prd/` 保存目标、范围与验收需求，`content/product/plan/` 保存任务、容量与执行依赖，`content/product/reference/` 保存需求核对入口、AI 约定、验证卡及进度、架构、工程规范指针。目录名统一用英文；每个目录独立从 01 编号，目录内不可重复，需求和计划允许各自使用 01。需求与计划通过标准相对链接互相引用，文档入口按这三类展示；实际任务状态统一维护在仓库根目录 BACKLOG。
 
 在本目录执行：
 
@@ -16,11 +31,11 @@ pnpm build
 pnpm preview
 ```
 
-预览服务器启动后，在另一个终端执行 `pnpm verify`，检查所有发布页面与原文、导航、嵌入与链接、AI 导出，以及 Pagefind 的“舆情 / 评论 / 情感”查询。可用 `DOCS_PREVIEW_URL` 指定其他预览地址（包含 `/hotkey-server` 前缀，不带结尾斜杠）。本次命令与结果见 [VERIFICATION.md](VERIFICATION.md)。
+预览服务器启动后，在另一个终端执行 `pnpm verify`，检查所有发布页面与原文、导航、嵌入与链接、AI 导出，以及 Pagefind 的“舆情 / 评论 / 情感”查询。可用 `DOCS_PREVIEW_URL` 指定其他预览地址（包含 `/Ripplesight` 前缀，不带结尾斜杠）。本次命令与结果见 [VERIFICATION.md](VERIFICATION.md)。
 
-预览地址为 <http://127.0.0.1:8668/hotkey-server/>，可用 `PORT` 改端口。开发用 `pnpm dev`，搜索需在生产构建后通过静态预览检查。
+预览地址为 <http://127.0.0.1:8668/Ripplesight/>，可用 `PORT` 改端口。开发用 `pnpm dev`，搜索需在生产构建后通过静态预览检查。
 
-当前旧站支持本地静态预览，GitHub Pages 工作流的构建与部署任务已成功，见[运行记录](https://github.com/StephenQiu30/hotkey-server/actions/runs/37417404223)；线上页面尚无本轮浏览器验收。公开预览与本机内部入口分开管理。内部资料入口已按专项 PRD 接入 HotKey frontend 与授权 API，需先初始化专用来源并配置现有账号。VERIFICATION 中较早的未部署描述保留为历史记录。
+当前旧站支持本地静态预览，GitHub Pages 工作流的构建与部署任务已成功，见[运行记录](https://github.com/StephenQiu30/Ripplesight/actions/runs/37417404223)；线上页面尚无本轮浏览器验收。公开预览与本机内部入口分开管理。内部资料入口已按专项 PRD 接入 Ripplesight frontend 与授权 API，需先初始化专用来源并配置现有账号。VERIFICATION 中较早的未部署描述保留为历史记录。
 
 `.md` 通过 Nextra 的 `compileMdx` / `evaluate` API 以 `format: 'md'` 编译；保留普通 Markdown 和 HTML 注释，不需要 MDX 写法。公开预览仅加载 `public-documents.json` 中的 `documents`，未登记文件默认不导出。登记私密文档、草稿、重复路径、越界或缺失文件时构建失败；新增页面需经过审查后登记。导航从 frontmatter 的 `title` 和文件名生成，PRD 与 PLAN 分组，空目录不显示。`templates/`、`views/`、`.obsidian/` 不进入路由、搜索或 AI 导出。清单中的 `references` 只允许明确登记的模板链接到其已有公开 Git 原文，不生成模板正文。
 

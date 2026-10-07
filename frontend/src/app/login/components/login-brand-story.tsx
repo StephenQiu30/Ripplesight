@@ -9,9 +9,9 @@ export function LoginBrandStory() {
     <UI.Content
       as="aside"
       className="mx-auto flex w-full max-w-md min-w-0 flex-col items-start gap-3 lg:max-w-none lg:gap-8"
-      aria-label="知微见澜"
+      aria-label="Ripplesight"
     >
-      <BrandLockup href="/" showEnglish />
+      <BrandLockup href="/" />
       <Image
         src="/brand/login-ripple.png"
         alt=""

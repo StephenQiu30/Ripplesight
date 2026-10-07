@@ -1,6 +1,10 @@
-# HotKey 工程规范
+# Ripplesight 工程规范
 
 适用于整个仓库，对人和 AI 代理都有效。`CLAUDE.md` 通过导入加载本文件，规则只在这里修改。技术架构见 [PROJECT](PROJECT.md)，产品能力见[文档工作区](workspace/content/index.md)，进度见 [BACKLOG](BACKLOG.md)。
+
+## 当前阶段（2026-10-07）
+
+本人本轮要求先搭好 workspace、核对文档与任务的理解偏差，暂不实现业务代码；后续真实验证先围绕最小 POC 和 demo 跑通。开始任务先读[需求与验证入口](workspace/content/product/reference/04-需求与验证入口.md)与 [AI 任务协议](workspace/content/product/reference/05-AI任务协议.md)，按 BACKLOG 的当前检查点行动。已有 PRD 和计划保留为核对依据，不能据此自动派发全部实现；后续本人明确指令可以更新当前阶段。
 
 ## 1. 分工
 

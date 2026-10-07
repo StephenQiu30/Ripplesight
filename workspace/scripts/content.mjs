@@ -11,9 +11,9 @@ import { visit } from 'unist-util-visit'
 export const workspaceRoot = process.cwd()
 export const repoRoot = path.resolve(workspaceRoot, '..')
 export const contentRoot = path.join(workspaceRoot, 'content')
-export const basePath = '/hotkey-server'
+export const basePath = '/Ripplesight'
 export const siteUrl = `https://stephenqiu30.github.io${basePath}`
-export const githubUrl = 'https://github.com/StephenQiu30/hotkey-server/blob/main'
+export const githubUrl = 'https://github.com/StephenQiu30/Ripplesight/blob/main'
 export const groups = [
   ['product', '产品'], ['capabilities', '能力'], ['decisions', '决策'],
   ['records', '验收记录'], ['research', '调研']
@@ -22,7 +22,7 @@ export const excluded = new Set(['templates', 'views', '.obsidian'])
 export const productGroups = [
   ['product/prd', '产品需求（PRD）'],
   ['product/plan', '执行计划（PLAN）'],
-  ['product', '产品参考']
+  ['product/reference', '产品参考']
 ]
 export const markdown = unified().use(remarkParse).use(remarkGfm)
 

@@ -30,9 +30,9 @@ function fixture(t) {
   write('workspace/content/assets/decision.txt', '原决策的附件')
   write('workspace/content/decisions/01-原决策.md', doc({ type: 'decision', status: '生效', decided: '2026-10-06', related: [prd] }, '# 测试文档\n\n[附件](../assets/decision.txt)\n'))
   write('PROJECT.md', '# 架构\n\n唯一原文\n')
-  write('workspace/content/product/02-技术架构.md', doc({ type: 'pointer', source: '../../../PROJECT.md' }, '# 来源\n'))
+  write('workspace/content/product/reference/02-技术架构.md', doc({ type: 'pointer', source: '../../../../PROJECT.md' }, '# 来源\n'))
   write('workspace/content/index.md', doc({ type: 'index' }, '# 导航\n\n<!-- index:start -->\n<!-- index:end -->\n'))
-  const paths = [prd, 'decisions/01-原决策.md', 'product/02-技术架构.md', 'index.md']
+  const paths = [prd, 'decisions/01-原决策.md', 'product/reference/02-技术架构.md', 'index.md']
   write('workspace/public-documents.json', JSON.stringify({ version: 1, documents: paths }))
   write('workspace/internal-documents.json', JSON.stringify({ version: 1, documents: paths }))
   const index = path.join(source, 'workspace/content/index.md')
@@ -50,7 +50,7 @@ function fixture(t) {
 test('快照确定性、根文件映射、原文与章节 hash；损坏不可静默读取', t => {
   const f = fixture(t)
   assert.equal(buildSnapshot(f.source).snapshot_id, f.initial.snapshot_id)
-  const root = f.run({ action: 'read', path: 'product/02-技术架构.md' })
+  const root = f.run({ action: 'read', path: 'product/reference/02-技术架构.md' })
   assert.equal(root.markdown, '# 架构\n\n唯一原文\n')
   assert.deepEqual(root.sections.map(item => item.title), ['来源', '架构'])
   const raw = f.run({ action: 'raw', path: prd, anchor: '测试文档' })

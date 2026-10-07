@@ -7,7 +7,7 @@ import { welcomeMetadata } from "@/components/site/welcome-metadata";
 export const metadata = welcomeMetadata(
   "/contact",
   "联系",
-  "查看知微见澜维护者的公开联系入口，登录后提交站内反馈。",
+  "查看Ripplesight维护者的公开联系入口，登录后提交站内反馈。",
 );
 export default async function ContactPage() {
   await connection();

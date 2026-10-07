@@ -183,7 +183,7 @@ function MoreMenuItems({ mobile = false }: { mobile?: boolean }) {
       ) : null}
       <DropdownMenuGroup>
         <DropdownMenuItem asChild>
-          <Link href="/about">关于知微见澜</Link>
+          <Link href="/about">关于Ripplesight</Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href="/feedback">意见反馈</Link>

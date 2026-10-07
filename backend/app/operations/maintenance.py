@@ -630,7 +630,7 @@ class OperationsMaintenanceExecutor:
                 self._settings.operations_alerts_enabled
                 and self._settings.operations_webhook_url is not None
             ):
-                self._deliver(message, audit_id, "HotKey 来源周报", body, lease, snapshot)
+                self._deliver(message, audit_id, "Ripplesight 来源周报", body, lease, snapshot)
                 snapshot["delivered"] = True
             else:
                 snapshot["delivered"] = False
@@ -648,7 +648,7 @@ class OperationsMaintenanceExecutor:
                 self._deliver(
                     message,
                     audit_id,
-                    "HotKey 运维" if action != "digest" else "HotKey 运维摘要",
+                    "Ripplesight 运维" if action != "digest" else "Ripplesight 运维摘要",
                     "\n".join(f"{item.title}: {item.detail}" for item in chosen),
                     lease,
                     snapshot,
@@ -944,7 +944,7 @@ class OperationsMaintenanceExecutor:
             self._deliver(
                 message,
                 audit_id,
-                "HotKey 私有反馈",
+                "Ripplesight 私有反馈",
                 body[:12000],
                 lease,
                 {"feedback_ids": [str(value) for value in ids]},

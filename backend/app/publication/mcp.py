@@ -1,4 +1,4 @@
-"""Five readonly AIHOT tools ported to HotKey's stateless JSON-RPC HTTP endpoint.
+"""Five readonly AIHOT tools ported to Ripplesight's stateless JSON-RPC HTTP endpoint.
 
 Protocol: https://modelcontextprotocol.io/specification/2025-06-18/basic/transports
 The API layer validates Origin, protocol headers and transport Accept; GET may return 405.
@@ -118,7 +118,7 @@ class PublicationMcpService:
                 result={
                     "protocolVersion": version if version in _PROTOCOLS else "2025-06-18",
                     "capabilities": {"tools": {"listChanged": False}},
-                    "serverInfo": {"name": "HotKey", "version": "publication-v1"},
+                    "serverInfo": {"name": "Ripplesight", "version": "publication-v1"},
                     "instructions": (
                         "Read-only public evidence. Preserve source attribution. "
                         "Native windows 24h/7d; full text stays site-scoped "

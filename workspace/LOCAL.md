@@ -1,10 +1,12 @@
 # 本机项目知识库
 
-内部入口是 <http://127.0.0.1:8666/workspace/docs>，沿用 HotKey 的登录、布局和主题。使用 Nextra 4.6.1 编译普通 Markdown，Editor.js 提供段落、标题的富文本编辑；代码、Mermaid、表格、frontmatter、注释及未知语法保留为原文块。Mermaid 目前显示源码，不加载需要宽松 HTML 或样式策略的渲染器。
+2026-10-07 本轮先搭需求阅读 workspace，直接维护当前 checkout 的 `workspace/content/`，使用已有静态预览 <http://127.0.0.1:8668/Ripplesight/> 与逐页原文读取；没有执行以下内部知识库初始化。当前阅读与 AI 使用方式见 [README](README.md)。下方保留正式知识库的账号、独立来源和双端编辑流程，需要启用时再明确切换作者来源。
+
+内部入口是 <http://127.0.0.1:8666/workspace/docs>，沿用 Ripplesight 的登录、布局和主题。使用 Nextra 4.6.1 编译普通 Markdown，Editor.js 提供段落、标题的富文本编辑；代码、Mermaid、表格、frontmatter、注释及未知语法保留为原文块。Mermaid 目前显示源码，不加载需要宽松 HTML 或样式策略的渲染器。
 
 ## 初始化与启动
 
-先按项目 README 配好本机 `.env`、数据库与现有 HotKey 账号，并在 backend、frontend 和 workspace 安装锁定依赖。本机 API 需要 Node.js、Git、uv，Web 和文档工具使用 pnpm。没有新增数据库表或独立知识库账号。
+先按项目 README 配好本机 `.env`、数据库与现有 Ripplesight 账号，并在 backend、frontend 和 workspace 安装锁定依赖。本机 API 需要 Node.js、Git、uv，Web 和文档工具使用 pnpm。没有新增数据库表或独立知识库账号。
 
 在 `workspace/` 执行：
 

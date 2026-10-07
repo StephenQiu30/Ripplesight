@@ -35,7 +35,7 @@ class Settings(BaseSettings):
         hide_input_in_errors=True,
     )
 
-    app_name: str = "HotKey"
+    app_name: str = "Ripplesight"
     app_version: str = "0.1.0"
     environment: Literal["development", "test", "staging", "production"] = "development"
     log_level: str = "INFO"

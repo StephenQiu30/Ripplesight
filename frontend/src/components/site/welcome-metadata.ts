@@ -28,7 +28,7 @@ export function welcomeMetadata(
       title,
       description,
       url: canonical,
-      siteName: "知微见澜 Ripplesight",
+      siteName: "Ripplesight",
       locale: "zh_CN",
       type: "website",
       images: [
@@ -36,7 +36,7 @@ export function welcomeMetadata(
           url: "/brand/hero-brand-soft.png",
           width: 366,
           height: 366,
-          alt: "知微见澜 Ripplesight",
+          alt: "Ripplesight",
         },
       ],
     },

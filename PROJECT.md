@@ -1,6 +1,6 @@
-# HotKey 技术架构
+# Ripplesight 技术架构
 
-本文说明 HotKey 由哪些部分组成、各部分负责什么、必须遵守哪些技术约定。产品能力与验收标准见[文档工作区](workspace/content/index.md)，工程流程见 [AGENTS](AGENTS.md)，进度见 [BACKLOG](BACKLOG.md)。
+本文说明 Ripplesight 由哪些部分组成、各部分负责什么、必须遵守哪些技术约定。产品能力与验收标准见[文档工作区](workspace/content/index.md)，工程流程见 [AGENTS](AGENTS.md)，进度见 [BACKLOG](BACKLOG.md)。
 
 ## 1. 技术栈
 
@@ -27,8 +27,10 @@ API 进程不跑定时器，也不消费消息。同一时间只运行一个 Wor
 
 ## 3. 目录
 
+本机父工作区为 `Ripplesight/`，其中 `ripplesight-server/` 是下方的主仓库，`ripplesight-app/` 是尚未初始化的冻结客户端仓库。目录已按新名称迁移；旧名称的符号链接仅为已有工具与会话保留，新配置应使用新路径。
+
 ```text
-hotkey-server/
+ripplesight-server/
 ├── backend/
 │   ├── app/main.py            # 应用工厂，只负责装配
 │   ├── app/api/               # 路由汇总、依赖注入、错误映射
@@ -49,9 +51,10 @@ hotkey-server/
 │   └── tests/                 # 前端测试
 └── workspace/                 # 文档与校验工具；保留 Nextra 公开预览及本机文档工具
     └── content/               # Obsidian 知识库
-        ├── product/           # 产品文档，根层保留进度、架构与工程规范指针
+        ├── product/           # 产品文档，按用途使用英文子目录
         │   ├── prd/           # 产品需求：目标、范围与验收要求
-        │   └── plan/          # 执行计划：任务、容量与依赖
+        │   ├── plan/          # 执行计划：任务、容量与依赖
+        │   └── reference/     # 产品参考：核对入口、AI 约定、验证卡及根文件指针
         ├── capabilities/      # 各项能力规格与可用状态
         ├── decisions/         # 生效与历史决策
         ├── records/           # 真实验收记录
@@ -128,6 +131,7 @@ hotkey-server/
 
 ## 10. 配置与部署
 
+- **文档预览（当前需求核对入口）**：在 `workspace/` 执行 `pnpm build`、`pnpm preview`，浏览 <http://127.0.0.1:8668/Ripplesight/>。2026-10-07 本轮复用这条已有路径阅读非敏感需求文档，不新增服务实现；作者来源是当前 checkout 的 `workspace/content/`，AI 按需读本机 `workspace/out/raw/`。预览只监听回环地址，不替代内部知识库权限或正式验收。
 - **文档工作区**：`workspace/content/` 是普通 Markdown 与 Obsidian 的作者来源，外层保留校验、索引与快照工具。现有 Nextra 静态站及 GitHub Pages 工作流继续保留，按 `workspace/public-documents.json` 控制公开产物，未登记文件、私密资料、草稿、模板、看板和本机配置不生成页面、搜索或 AI 导出。内部知识库独立使用授权快照，既有公开站与 CI 不承载内部权限。
 - **项目知识库（本机实现，待真实验收）**：用于项目开发维护，frontend 的 `/workspace/docs` 是内部网页入口，采用 Nextra 文档框架并复用现有布局、身份与访问规则；Editor.js 提供网页编辑视图。具体接口、权限、快照和写入位置见 §11。不采用 GitBook，不另建文档网站；Notion 主来源路线仅作替代方案评估，尚未采用。工程与受控浏览器结果不代表真实账号、Obsidian 或 AI 验收已通过。
 - 环境文件只放在仓库根目录：本机用 `.env`，生产用 `.env.prod`，模板是 `.env.example`。所有进程都读这一份，进程注入的环境变量优先。
@@ -159,7 +163,7 @@ Editor.js 与 Markdown 原文视图编辑同一草稿。适配器保留原始块
 
 ### 文档类型与生效规则
 
-一个项目对应一份明确的作者来源、文档清单和版本快照；当前只实现 HotKey，不扩展多租户平台。PRD 定义目标与验收，决策记录背景、取舍和影响，PROJECT/AGENTS 保留技术与工程约定，PLAN 组织任务与依赖，BACKLOG 是实际进度唯一来源，records 保留真实验收。关联使用现有相对链接与 `related`，页面按同一快照展示可核对的上下游；不复制进度或另起编号体系。
+一个项目对应一份明确的作者来源、文档清单和版本快照；当前只实现 Ripplesight，不扩展多租户平台。PRD 定义目标与验收，决策记录背景、取舍和影响，PROJECT/AGENTS 保留技术与工程约定，PLAN 组织任务与依赖，BACKLOG 是实际进度唯一来源，records 保留真实验收。关联使用现有相对链接与 `related`，页面按同一快照展示可核对的上下游；不复制进度或另起编号体系。
 
 页面编辑与文档生效分开。PRD/PLAN 普通修订保留 Git 历史；生效决策按现有写作规则生成修订草稿，由本人同意后把旧决策标为废弃并新建替代记录，相关引用和快照一起校验。决策草稿存入受保护草稿层，不擅自扩展作者文件的状态枚举。AI 默认读取已发布的生效规则，明确区分草稿、废弃规则和任务完成状态。
 
@@ -171,9 +175,9 @@ Editor.js 与 Markdown 原文视图编辑同一草稿。适配器保留原始块
 
 | 阅读路径 | 唯一作者原文 |
 |---|---|
-| `product/01-进度与优先级.md` | 根目录 `BACKLOG.md` |
-| `product/02-技术架构.md` | 根目录 `PROJECT.md` |
-| `product/03-工程规范.md` | 根目录 `AGENTS.md` |
+| `product/reference/01-进度与优先级.md` | 根目录 `BACKLOG.md` |
+| `product/reference/02-技术架构.md` | 根目录 `PROJECT.md` |
+| `product/reference/03-工程规范.md` | 根目录 `AGENTS.md` |
 
 指针说明和根文件正文一起参与页面快照；根文件保留自己的原文 hash，后续编辑与保存只定位到这个源文件。页面快照不是第二份可编辑文档。普通页面的原文读取保留作者文件字节；指针的原文入口返回根文件，另附来源映射。
 

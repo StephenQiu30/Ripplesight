@@ -18,9 +18,9 @@ updated: 2026-10-06
 
 有成熟实现可以复用。“普通 Markdown + Git + Obsidian + 应用内网页入口”适合当前开发用途，主要缺口是应用接入、权限与双端写入流程，换一个静态文档站不能消除这些缺口。
 
-按产品负责人明确的开发用途、框架复用与网页编辑偏好，方案采用现有 HotKey frontend 内的 Fumadocs Core 与必要 UI，采用 Editor.js 编辑视图并保留 Markdown 原文视图；退出 Nextra 独立站，不采用 GitBook。普通 Markdown、Git 和 Obsidian 继续承载作者内容，FastAPI 统一负责身份、文档授权、同版本读取、草稿与发布。Notion 已有可用的 Markdown API，是可选替代路线，但尚未采用，不同时维护两个主来源。
+按产品负责人明确的开发用途、框架复用与网页编辑偏好，方案采用现有 Ripplesight frontend 内的 Fumadocs Core 与必要 UI，采用 Editor.js 编辑视图并保留 Markdown 原文视图；退出 Nextra 独立站，不采用 GitBook。普通 Markdown、Git 和 Obsidian 继续承载作者内容，FastAPI 统一负责身份、文档授权、同版本读取、草稿与发布。Notion 已有可用的 Markdown API，是可选替代路线，但尚未采用，不同时维护两个主来源。
 
-Keystatic、Decap 是成熟的 Git 编辑工具，但其默认 GitHub 登录和仓库写权限并不等于 HotKey 的读取、修改、发布权限。SilverBullet 是完整的文件型网页知识库；接入当前工作台的样式与权限仍需要适配。本次评估的产品中，未发现无需适配就同时满足普通文件双端编辑、现有页面样式、现有权限和全部 AI 出口控制的方案；独立产品保留为市场资料，不纳入本期实现。
+Keystatic、Decap 是成熟的 Git 编辑工具，但其默认 GitHub 登录和仓库写权限并不等于 Ripplesight 的读取、修改、发布权限。SilverBullet 是完整的文件型网页知识库；接入当前工作台的样式与权限仍需要适配。本次评估的产品中，未发现无需适配就同时满足普通文件双端编辑、现有页面样式、现有权限和全部 AI 出口控制的方案；独立产品保留为市场资料，不纳入本期实现。
 
 选型先通过 4–8 个净工作小时的接入验证，再确定新增依赖。本次没有安装这些候选依赖、修改业务接口或完成双端编辑验收。
 
@@ -35,7 +35,7 @@ Keystatic、Decap 是成熟的 Git 编辑工具，但其默认 GitHub 登录和�
 | backend 的 knowledge/services.py | 当前负责日报业务导出 | 在该领域下增加项目文档切片，保持业务与项目资料的边界 |
 | [PROJECT §11](../../../PROJECT.md#11-项目文档知识库接入方案待审查) | 读写发布允许清单、不可变快照、专用工作副本等已经写入待审查方案 | 这些接口、权限与草稿能力尚未实现 |
 
-本次推送的 Workspace site 工作流，其构建与 Pages 部署任务已成功，见[运行记录](https://github.com/StephenQiu30/hotkey-server/actions/runs/37417404223)。这证明公开预览发布任务成功，不证明内部授权、AI 回答或双端编辑已经可用。README 已区分当前工程结果与目标路线，VERIFICATION 的较早描述保留为历史；Nextra 代码、依赖及发布工作流尚未实际退出。
+本次推送的 Workspace site 工作流，其构建与 Pages 部署任务已成功，见[运行记录](https://github.com/StephenQiu30/Ripplesight/actions/runs/37417404223)。这证明公开预览发布任务成功，不证明内部授权、AI 回答或双端编辑已经可用。README 已区分当前工程结果与目标路线，VERIFICATION 的较早描述保留为历史；Nextra 代码、依赖及发布工作流尚未实际退出。
 
 ## 成熟方案比较
 
@@ -44,22 +44,22 @@ Keystatic、Decap 是成熟的 Git 编辑工具，但其默认 GitHub 登录和�
 | 方案 | 已核实能力 | 与当前需求的差距 | 建议 |
 |---|---|---|---|
 | [Nextra](https://nextra.site/docs/advanced/remote) | Next.js 文档框架，支持远程内容、自定义组件和主题 | 通用文档框架；Git 编辑、应用授权、发布流程仍需接入 | 原生入口验收后退出，保留文档工具 |
-| [Fumadocs Core](https://www.fumadocs.dev/docs/headless) | 可脱离 Fumadocs UI 使用；导航、目录、插件与内容接口可组合 | 不代替 HotKey 的文档访问策略；服务器 Loader 不是浏览器 API | 纳入方案，按需组合 UI，在现有应用内接入 |
+| [Fumadocs Core](https://www.fumadocs.dev/docs/headless) | 可脱离 Fumadocs UI 使用；导航、目录、插件与内容接口可组合 | 不代替 Ripplesight 的文档访问策略；服务器 Loader 不是浏览器 API | 纳入方案，按需组合 UI，在现有应用内接入 |
 | [Keystatic](https://keystatic.com/docs/github-mode) | 文件型 CMS，GitHub 分支选择与网页编辑；支持配置 .md 扩展名 | GitHub 模式要求仓库 write 权限；本地模式没有现成应用鉴权；保存会序列化元数据 | 可做编辑后台备选，暂不作为正式入口 |
-| [Decap CMS](https://decapcms.org/docs/editorial-workflows/) | Markdown、Git 后端、草稿分支与 PR 审阅发布 | 默认使用 GitHub 登录与 push 权限；接入 HotKey 需要后端与认证适配 | 复用其 Git 工作流思路，保留独立编辑备选 |
+| [Decap CMS](https://decapcms.org/docs/editorial-workflows/) | Markdown、Git 后端、草稿分支与 PR 审阅发布 | 默认使用 GitHub 登录与 push 权限；接入 Ripplesight 需要后端与认证适配 | 复用其 Git 工作流思路，保留独立编辑备选 |
 | [SilverBullet](https://github.com/silverbulletmd/silverbullet/blob/main/README.md) | 自托管浏览器 Markdown 编辑器；文件型 Space；CodeMirror 6 | 自带前端、服务端、身份与扩展体系；统一界面和权限需要改造 | 希望快速获得独立文件型知识库时可选 |
-| [Quartz](https://github.com/jackyzha0/quartz) | 发布笔记与数字花园，适合文件作者与网站读者的组合 | 网页作者工作流与 HotKey 权限不是它的核心能力；现有内容没有大量 Obsidian 特有语法 | 当前没有迁移收益 |
+| [Quartz](https://github.com/jackyzha0/quartz) | 发布笔记与数字花园，适合文件作者与网站读者的组合 | 网页作者工作流与 Ripplesight 权限不是它的核心能力；现有内容没有大量 Obsidian 特有语法 | 当前没有迁移收益 |
 | [Wiki.js](https://docs.requarks.io/storage/git) | 完整 Wiki，Git 存储模块支持双向同步 | 官方模块要求专用仓库，不能只同步子目录；另有数据库、界面与授权体系 | 多人独立 Wiki 的备选 |
 | [Outline](https://github.com/outline/outline) | 成熟的独立协作知识库产品 | 本次未找到针对现有 vault 的原生 Git 双向编辑链路；数据库内容与 Markdown 往返需要额外验证 | 多人协作产品参考，当前不优先 |
 | [GitBook](https://gitbook.com/docs/docs-as-code/git-sync) | 网页与 Git 双向同步；托管文档与 AI 出口 | 单独的产品界面和内容模型；满足认证访问的套餐有费用 | 排除采用，保留市场能力资料 |
 
 ### 编辑工具的具体边界
 
-Keystatic 的官方 [MDX 字段](https://keystatic.com/docs/fields/mdx)允许 `extension: 'md'`，因此不能简单说它只支持 MDX。Context7 指向的 required-files 源码显示，它会解析并重新序列化 frontmatter；自定义字段、HTML 注释、Mermaid、中文路径与根文件指针仍需用现有样本验证。GitHub 模式有自己的 OAuth 路由与会话；“外层页面已登录”不等于它的所有数据接口已经受 HotKey 保护。[接口来源](https://github.com/Thinkmill/keystatic/blob/main/_autodocs/endpoints.md)
+Keystatic 的官方 [MDX 字段](https://keystatic.com/docs/fields/mdx)允许 `extension: 'md'`，因此不能简单说它只支持 MDX。Context7 指向的 required-files 源码显示，它会解析并重新序列化 frontmatter；自定义字段、HTML 注释、Mermaid、中文路径与根文件指针仍需用现有样本验证。GitHub 模式有自己的 OAuth 路由与会话；“外层页面已登录”不等于它的所有数据接口已经受 Ripplesight 保护。[接口来源](https://github.com/Thinkmill/keystatic/blob/main/_autodocs/endpoints.md)
 
 Decap 默认保存会提交到发布分支；启用 editorial_workflow 后，保存草稿变为分支和 PR，发布变为合并。GitHub 后端要求用户具有仓库 push 权限，并需要认证服务。[GitHub 后端](https://decapcms.org/docs/github-backend/)、[编辑工作流](https://decapcms.org/docs/editorial-workflows/)。这些机制成熟，但将其嵌入工作台后仍要解决三种应用权限、字节保留与发布失败恢复，不是配置一个 URL 就完成。
 
-SilverBullet 的当前 README 显示客户端使用 CodeMirror 6，服务端已使用 Rust；不能沿用旧文章中的 Deno 部署描述。它说明“浏览器编辑同一组 Markdown 文件”是现成产品路线，但不是可直接替换 HotKey 前端的无样式组件。[当前源码说明](https://github.com/silverbulletmd/silverbullet/blob/main/README.md)
+SilverBullet 的当前 README 显示客户端使用 CodeMirror 6，服务端已使用 Rust；不能沿用旧文章中的 Deno 部署描述。它说明“浏览器编辑同一组 Markdown 文件”是现成产品路线，但不是可直接替换 Ripplesight 前端的无样式组件。[当前源码说明](https://github.com/silverbulletmd/silverbullet/blob/main/README.md)
 
 ### 成熟度与许可证快照
 
@@ -163,13 +163,13 @@ Fumadocs 也有官方 `@fumadocs/notion` 集成，读取 Notion 数据源并在�
 
 | 路线 | 作者主来源与网页编辑 | Obsidian 与应用接入 | 取舍 |
 |---|---|---|---|
-| Fumadocs + Editor.js + Git | 原 Markdown；应用内富文本和原文视图 | 保留文件双端编辑，HotKey 授权与版本流程 | 满足当前目标，但要开发适配、草稿和发布 |
+| Fumadocs + Editor.js + Git | 原 Markdown；应用内富文本和原文视图 | 保留文件双端编辑，Ripplesight 授权与版本流程 | 满足当前目标，但要开发适配、草稿和发布 |
 | 直接使用 Notion | Notion 页面和数据库；在 Notion 编辑 | 初期导出为 Obsidian 阅读副本，AI 经授权 API/MCP 读取 | 最快获得成熟文档产品；改变普通文件作为主来源及统一网页入口的要求 |
-| Notion 作为 HotKey 的内容后端 | Notion 主写；HotKey 自建编辑界面，经 API 写回 | backend 维护 page ID 映射、授权与快照，再给 frontend | Fumadocs 可继续显示，但仍需编辑、版本及同步适配，不能等同直接嵌入完整 Notion 编辑器 |
+| Notion 作为 Ripplesight 的内容后端 | Notion 主写；Ripplesight 自建编辑界面，经 API 写回 | backend 维护 page ID 映射、授权与快照，再给 frontend | Fumadocs 可继续显示，但仍需编辑、版本及同步适配，不能等同直接嵌入完整 Notion 编辑器 |
 
 官方 Markdown 是 enhanced Markdown，部分块有扩展表达；读取可能出现 `truncated` 和 `unknown_block_ids`，既可能是页太大，也可能是连接没有子内容权限。不能把截断或未知块当空内容保存回去。官方导出也会将部分内容转为 HTML，并把数据库导出为 CSV 与子页 Markdown；可导出不证明 YAML、关系和普通 Markdown 可以无损往返。[Markdown 内容指南](https://developers.notion.com/guides/data-apis/working-with-markdown-content)、[导出说明](https://www.notion.com/help/export-your-content)
 
-Notion Free 适合个人试用，个人页面与块不限量，但单附件 5 MB、页面历史 7 天；内置 AI 能力含试用限制，不能把免费文档套餐解释成免费无限 AI。[实时价格核验](https://www.notion.com/pricing) 若采用来源后端，连接必须被授予页面访问权，HotKey 用户权限仍由应用自己校验，不能把服务连接可见范围自动授予所有登录用户。[连接授权](https://developers.notion.com/guides/get-started/authorization)
+Notion Free 适合个人试用，个人页面与块不限量，但单附件 5 MB、页面历史 7 天；内置 AI 能力含试用限制，不能把免费文档套餐解释成免费无限 AI。[实时价格核验](https://www.notion.com/pricing) 若采用来源后端，连接必须被授予页面访问权，Ripplesight 用户权限仍由应用自己校验，不能把服务连接可见范围自动授予所有登录用户。[连接授权](https://developers.notion.com/guides/get-started/authorization)
 
 建议先保持当前文件主来源路线。若优先级转为“立刻使用成熟网页编辑”，可改为 Notion 主来源、Obsidian 只读镜像；若仍要求两端主写，需要额外验证页 ID、目录映射、关系、附件、版本冲突和恢复，不能同时让 Notion 与 Git 不受约束地主写。当前尚未连接 Notion 或迁移任何内容。
 

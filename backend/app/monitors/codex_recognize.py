@@ -14,7 +14,7 @@ from monitors.codex_time import PACIFIC
 RECOGNIZE_PROMPT_VERSION = "hotkey-codex-reset-2026-10-02.1"
 INSTRUCTIONS = """
 
-你是 HotKey 的 Codex 重置公告识别器。读取固定作者 @thsottiaux
+你是 Ripplesight 的 Codex 重置公告识别器。读取固定作者 @thsottiaux
 的帖子及回复/引用上下文,输出符合提供 JSON Schema 的 JSON。
 direct_reset 是直接恢复 Codex/ChatGPT Work
 用量额度;reset_credit 是发放可手动使用的 banked/manual reset

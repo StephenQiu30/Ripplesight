@@ -774,7 +774,7 @@ class LeaderboardFetchClient:
             raise FetchAccessDeniedError("External leaderboard requests are disabled")
         if self._deadline is None:
             self._deadline = time.monotonic() + self.max_seconds
-        request_headers = {"user-agent": "HotKey/0.1 leaderboard evidence", **(headers or {})}
+        request_headers = {"user-agent": "Ripplesight/0.1 leaderboard evidence", **(headers or {})}
         with httpx.Client(transport=self._transport, follow_redirects=False) as client:
             for _ in range(6):
                 url = normalize_web_url(url, allowed_hosts=_HOSTS)

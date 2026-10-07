@@ -6,7 +6,7 @@ Source: https://github.com/KKKKhazix/AIHOT/tree/035f7b7f6e26cf203562ddd6065ff7ad
 Included editorial prompt templates are copied from `industry/prompts/` to
 `backend/app/analysis/prompt_templates/`. The rendering/include/hash logic in
 `backend/app/analysis/prompts.py` is adapted from
-`packages/backend/src/editorial/prompts.ts` to Python; HotKey's brand is provided
+`packages/backend/src/editorial/prompts.ts` to Python; Ripplesight's brand is provided
 at render time. The existing topic-analysis prompt remains a separate purpose
 under the same analysis domain and call/version ledger.
 
@@ -20,26 +20,26 @@ under `backend/app/leaderboard/` are also adapted from the upstream leaderboard 
 The prefilter, independent scoring, structure, writing and identity rules under
 `backend/app/analysis/editorial_*` are adapted from upstream `editorial/analyze.ts`,
 `editorial/input.ts`, `editorial/writing.ts`, `industry/selection.ts` and
-`industry/taxonomy.ts`; HotKey retains its own persistence, topic relevance and jobs.
-WP-008-002 updates the structure template, category guides and original-quote validation from AIHOT commit `9acad0c3d7687d9210c2b7774f83799dfd36734b`, preserving HotKey JSONB persistence and adding field-level discard diagnostics.
-WP-008-003 adapts group-definitions/group-method/group-pair, composite mention guards and relation comparison tests from the same `9acad0c` snapshot; unused group-batch/group-signal templates are removed because HotKey uses its existing fact-partition and pair-output contracts.
-WP-008-001 adapts the selection candidate/identity/value gate and failure semantics from AIHOT `9acad0c` (`docs/selection.md` step 6, `events/group.ts`, `events/relate.ts`, `publication/publish.ts`, `tests/selected-news-gate.test.ts` and `tests/selection-eval-runtime.test.ts`). HotKey reuses confirmed event relations and grounded fact evidence/conditions in a deterministic Python gate without additional model calls, retains its original Job/AI budget and permission contracts, and persists one representative per occurrence through the existing publication revisions and ledger.
+`industry/taxonomy.ts`; Ripplesight retains its own persistence, topic relevance and jobs.
+WP-008-002 updates the structure template, category guides and original-quote validation from AIHOT commit `9acad0c3d7687d9210c2b7774f83799dfd36734b`, preserving Ripplesight JSONB persistence and adding field-level discard diagnostics.
+WP-008-003 adapts group-definitions/group-method/group-pair, composite mention guards and relation comparison tests from the same `9acad0c` snapshot; unused group-batch/group-signal templates are removed because Ripplesight uses its existing fact-partition and pair-output contracts.
+WP-008-001 adapts the selection candidate/identity/value gate and failure semantics from AIHOT `9acad0c` (`docs/selection.md` step 6, `events/group.ts`, `events/relate.ts`, `publication/publish.ts`, `tests/selected-news-gate.test.ts` and `tests/selection-eval-runtime.test.ts`). Ripplesight reuses confirmed event relations and grounded fact evidence/conditions in a deterministic Python gate without additional model calls, retains its original Job/AI budget and permission contracts, and persists one representative per occurrence through the existing publication revisions and ledger.
 
 WP-008-004 adapts `industry/prompts/story-digest.md`,
 `docs/story-digest-evaluation.md`, `scripts/eval-story-digests-core.ts` and the
 related story-digest evaluation tests from AIHOT commit
-`9acad0c3d7687d9210c2b7774f83799dfd36734b`. HotKey uses Chinese
+`9acad0c3d7687d9210c2b7774f83799dfd36734b`. Ripplesight uses Chinese
 title/summary/latest_progress, existing prompt partials/content hashes and the
 original Job/AiCall ledger; its comparison uses controlled offline outputs and
 program checks only, with no real model requests or separate evaluation store.
 
 Codex announcement logic under `backend/app/monitors/codex_*` is adapted from
 upstream `monitor/{time,recognize,assemble,scan,read}.ts` and the monitor administration
-semantics. HotKey uses its existing model ledger and source authorization; it does not
+semantics. Ripplesight uses its existing model ledger and source authorization; it does not
 adopt the upstream SocialData provider. Times are interpreted by program rules and
 predictions remain distinct from confirmations. Event fact and correction semantics
 under `backend/app/events/` are adapted from upstream events/stories/facts modules,
-while preserving HotKey's frozen content versions and independent topic partitions.
+while preserving Ripplesight's frozen content versions and independent topic partitions.
 
 The six source adapters and editorial intake under `backend/app/sources/editorial_*`,
 `sources/adapters/editorial_*`, `connections/editorial_*` and `content/editorial_*`
@@ -49,7 +49,7 @@ are adapted from upstream publication/read/feed/MCP/share/media behavior. Calend
 editions under `backend/app/reports/edition_*`, translation under
 `backend/app/analysis/translation_*`, SelectBench under `analysis/evaluation_*`,
 and operational feedback/maintenance under `backend/app/operations/` are adapted
-from the corresponding upstream modules. They use HotKey's original content,
+from the corresponding upstream modules. They use Ripplesight's original content,
 Evidence, model usage, Job/Outbox, Kafka and notification ownership. Business UI
 under the corresponding `frontend/src/app/` routes implements these contracts;
 no upstream brand assets or private source material are included.
@@ -57,14 +57,14 @@ no upstream brand assets or private source material are included.
 Initial-import archive admission, undated derived-publication gates and robust source
 date/Atom text parsing are adapted from AIHOT commits `50b562b`, `309e32e` and
 `6560d7f` (reference snapshot `9acad0c`), including their source/publication date tests;
-HotKey retains undated raw reading and personal reports under its own contracts.
+Ripplesight retains undated raw reading and personal reports under its own contracts.
 
-Public outlet consistency, category filtering and bounded image rendition reuse are adapted from AIHOT commits `ec42ff7`, `1d48ec1`, `50b562b` and `36604b9` (reference snapshot `9acad0c`); HotKey retains ALL live permission checks and its restricted SVG codec, while MCP subscription capacity/retirement (`dd12db1`, `36604b9`) and oversized SVG conversion (`9acad0c`) are not ported.
+Public outlet consistency, category filtering and bounded image rendition reuse are adapted from AIHOT commits `ec42ff7`, `1d48ec1`, `50b562b` and `36604b9` (reference snapshot `9acad0c`); Ripplesight retains ALL live permission checks and its restricted SVG codec, while MCP subscription capacity/retirement (`dd12db1`, `36604b9`) and oversized SVG conversion (`9acad0c`) are not ported.
 
 Edition selection/memory and daily-to-period compilation are adapted from AIHOT
 `9acad0c` (`reports/edition.ts`, `reports/compose.ts`, `docs/selection.md` step 7);
 the three `report-period*.md` templates use that version, while the unused
-`report-daily-lead.md` template is removed. HotKey retains Beijing calendar
+`report-daily-lead.md` template is removed. Ripplesight retains Beijing calendar
 windows, ALL permission checks and the existing immutable version/call ledger.
 
 Source avatar selection/cache and native/embedding event rematching are adapted

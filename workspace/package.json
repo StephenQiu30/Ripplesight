@@ -1,5 +1,6 @@
 {
-  "name": "hotkey-docs",
+  "name": "ripplesight-docs",
+  "description": "Requirements, decisions, and POC evidence for Ripplesight",
   "version": "0.1.0",
   "private": true,
   "type": "module",

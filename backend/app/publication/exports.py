@@ -190,7 +190,7 @@ def item_jsonld(detail: PublicItemDetailView, *, origin: str) -> str | None:
         "headline": detail.title,
         "description": detail.summary,
         "url": base + detail.reading_url,
-        "publisher": {"@type": "Organization", "name": "HotKey"},
+        "publisher": {"@type": "Organization", "name": "Ripplesight"},
         "isAccessibleForFree": True,
         "citation": safe_link(detail.original_url) or None,
     }
@@ -260,7 +260,7 @@ def agent_instructions(*, origin: str, public_distribution: bool = False) -> str
     api = "/public/api/items" if public_distribution else "/api/publication/items"
     mcp = "/public/mcp" if public_distribution else "/mcp"
     return (
-        f"# HotKey public reading\n\n"
+        f"# Ripplesight public reading\n\n"
         f"Use the read-only JSON API at {base}{api} and MCP at {base}{mcp}.\n"
         + (
             "Anonymous distribution reads only the configured publisher. "
@@ -286,7 +286,7 @@ def render_edition_rss(
     parts = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<rss version="2.0"><channel>',
-        f"<title>HotKey {esc(kind)}</title>",
+        f"<title>Ripplesight {esc(kind)}</title>",
         f"<link>{esc(base)}/reports</link>",
         "<description>已复验固定公开材料的刊期</description>",
         f"<lastBuildDate>{format_datetime(now)}</lastBuildDate>",

@@ -151,7 +151,10 @@ class EditorialHttpClient:
             if set(credential_query) != {"key"}:
                 raise EditorialSourceError("invalid_runtime_credential", blocked=True)
             same_origin_redirects = True
-        request_headers = {"user-agent": "HotKey editorial source collector", **(headers or {})}
+        request_headers = {
+            "user-agent": "Ripplesight editorial source collector",
+            **(headers or {}),
+        }
         for redirect in range(4):
             if self._cancelled():
                 raise EditorialSourceError("cancelled", blocked=True)

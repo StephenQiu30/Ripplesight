@@ -1,5 +1,6 @@
 {
-  "name": "frontend",
+  "name": "ripplesight-frontend",
+  "description": "Ripplesight web app for public news reading and personal sentiment monitoring",
   "version": "0.1.0",
   "private": true,
   "scripts": {

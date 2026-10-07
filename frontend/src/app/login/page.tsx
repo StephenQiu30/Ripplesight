@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "登录",
-  description: "登录知微见澜，进入你的信息监控工作区。",
+  description: "登录Ripplesight，进入你的信息监控工作区。",
   robots: { index: false, follow: false },
 };
 

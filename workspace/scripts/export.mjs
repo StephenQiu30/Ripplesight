@@ -8,7 +8,7 @@ import {
 export function exportDocuments(out, published = documents()) {
   fs.mkdirSync(out, { recursive: true })
   fs.rmSync(path.join(out, 'raw'), { recursive: true, force: true })
-  const introduction = '# HotKey 文档\n\nHotKey 是公开资讯阅读与个人舆情监控工具，供个人非商业使用。本文档包括产品需求、执行计划、能力、决策、验收记录与调研。\n\n'
+  const introduction = '# Ripplesight 文档\n\nRipplesight 是公开资讯阅读与个人舆情监控工具，供个人非商业使用。本文档包括产品需求、执行计划、能力、决策、验收记录与调研。\n\n'
   const entry = item => `- [${item.frontmatter.title}](${siteUrl}${encodedPath(routeFor(item.relative))})：${item.frontmatter.summary}\n  - 原始 Markdown：${siteUrl}/raw/${encodedPath(item.relative)}`
   const sections = [['', '入口与术语'], ...groups.flatMap(group => group[0] === 'product' ? productGroups : [group])].flatMap(([folder, title]) => {
     const pages = published.filter(item => folder === 'product' ? path.posix.dirname(item.relative) === folder : folder ? item.relative.startsWith(`${folder}/`) : !item.relative.includes('/'))
