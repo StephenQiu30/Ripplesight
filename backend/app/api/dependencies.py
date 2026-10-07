@@ -526,6 +526,8 @@ CsrfProtectedIdentityDependency = Annotated[AuthenticatedIdentity, Depends(requi
 
 
 def get_user_scope(identity: AuthenticatedIdentityDependency) -> UUID:
+    if not identity.view.user.has_password:
+        raise ApplicationError("account_setup_required")
     return identity.view.user.id
 
 
@@ -533,7 +535,7 @@ UserScopeDependency = Annotated[UUID, Depends(get_user_scope)]
 
 
 def get_user_write_scope(identity: CsrfProtectedIdentityDependency) -> UUID:
-    return identity.view.user.id
+    return get_user_scope(identity)
 
 
 UserWriteScopeDependency = Annotated[UUID, Depends(get_user_write_scope)]

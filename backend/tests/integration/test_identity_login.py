@@ -191,7 +191,17 @@ def test_email_real_redis_single_use_and_first_password_then_revocation(identity
     owner = UUID(result.json()["user"]["id"])
     assert result.json()["user"]["email"] == "new.user@example.com"
     assert result.json()["user"]["has_password"] is False
-    assert client.get("/api/topics").json()["items"] == []
+    for path in ("/api/topics", "/api/contents", "/api/source-capabilities"):
+        incomplete = client.get(path)
+        assert incomplete.status_code == 403
+        assert incomplete.json()["code"] == "account_setup_required"
+    incomplete_write = client.post(
+        "/api/topics",
+        headers=write_headers(client),
+        json={"name": "premature", "match_any": ["AI"], "match_all": [], "exclude": []},
+    )
+    assert incomplete_write.status_code == 403
+    assert incomplete_write.json()["code"] == "account_setup_required"
     assert (
         client.post(
             "/api/identity/email/sessions", headers={"X-HotKey-CSRF": "1"}, json=value
@@ -958,3 +968,55 @@ def test_parallel_email_claims_have_one_winner_and_roll_back_the_other_session(
                     IdentityService(session, app.state.settings).authenticate(token).view.user.id
                     == identity.view.user.id
                 )
+
+
+@pytest.mark.parametrize("return_to", ["/sources", "/jobs?state=failed", "//bad.example"])
+def test_new_github_registration_requires_username_password_setup(identity_app, return_to) -> None:
+    app, client, _mail, _store = identity_app
+
+    def github(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/login/oauth/access_token":
+            return httpx.Response(200, json={"access_token": "test-token", "token_type": "bearer"})
+        if request.url.path == "/user":
+            return httpx.Response(200, json={"id": 999123})
+        return httpx.Response(
+            200, json=[{"email": "new.github@example.com", "primary": True, "verified": True}]
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(github)) as http:
+        app.state.identity_github = GitHubAdapter(
+            http,
+            "test-app",
+            "test-secret",
+            app.state.settings.web_origin + "/api/identity/github/callback",
+        )
+        started = client.post(
+            "/api/identity/github/authorize",
+            headers={"X-HotKey-CSRF": "1"},
+            json={"return_to": return_to},
+        )
+        state = httpx.URL(started.json()["authorization_url"]).params["state"]
+        callback = client.get(
+            "/api/identity/github/callback",
+            params={"state": state, "code": "test-code"},
+            follow_redirects=False,
+        )
+        target = httpx.URL(callback.headers["location"])
+        assert callback.status_code == 303
+        assert target.path == "/account"
+        assert target.params["setup"] == "1"
+        assert target.params["returnTo"] == ("/topics" if return_to.startswith("//") else return_to)
+        initial = client.get("/api/identity/session").json()
+        assert initial["user"]["has_password"] is False
+        changed = client.put(
+            "/api/identity/credentials",
+            headers=write_headers(client),
+            json={"username": "chosen.github", "password": PASSWORD},
+        )
+        assert changed.status_code == 200
+        assert changed.json()["user"]["id"] == initial["user"]["id"]
+        assert changed.json()["user"]["username"] == "chosen.github"
+        assert changed.json()["user"]["has_password"] is True
+        for identifier in ("chosen.github", "new.github@example.com"):
+            client.cookies.clear()
+            assert login(client, identifier).json()["user"]["id"] == initial["user"]["id"]

@@ -143,6 +143,23 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       invalidSession,
     );
   }
+  if (
+    authenticated &&
+    !hasPassword &&
+    !publicPage &&
+    request.nextUrl.pathname !== "/account"
+  ) {
+    const destination = new URL("/account", request.url);
+    destination.searchParams.set("setup", "1");
+    destination.searchParams.set(
+      "returnTo",
+      safeReturnTo(`${request.nextUrl.pathname}${request.nextUrl.search}`),
+    );
+    return setSecurityHeaders(
+      NextResponse.redirect(destination),
+      contentSecurityPolicy,
+    );
+  }
   if (request.nextUrl.pathname === "/login" && authenticated) {
     const returnTo = safeReturnTo(request.nextUrl.searchParams.get("returnTo"));
     const destination = new URL(

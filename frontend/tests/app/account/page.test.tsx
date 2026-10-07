@@ -103,3 +103,8 @@ it("preserves the safe original target when setup needs a new login", async () =
   expect(login.searchParams.get("returnTo")).toBe("/content?state=unread");
   expect(screen.queryByTestId("credentials")).toBeNull();
 });
+
+it("resumes registration on a plain account URL without relying on query flags", async () => {
+  render(await AccountPage({ searchParams: Promise.resolve({}) }));
+  expect(screen.getByTestId("credentials").dataset.setup).toBe("true");
+});

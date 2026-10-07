@@ -86,6 +86,9 @@ APPLICATION_ERRORS: Mapping[str, PublicError] = {
     "identity_link_conflict": PublicError(
         409, "identity_link_conflict", "登录身份无法关联到当前账户"
     ),
+    "account_setup_required": PublicError(
+        403, "account_setup_required", "请先设置用户名和密码完成注册"
+    ),
     "username_unavailable": PublicError(409, "username_unavailable", "用户名无法使用"),
     "invalid_avatar": PublicError(
         422, "invalid_avatar", "请选择有效的 JPG、PNG 或 WebP 静态图片,最大 2 MB"

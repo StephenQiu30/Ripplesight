@@ -38,7 +38,9 @@ export function CredentialsForm({
 }) {
   const router = useRouter();
   const [account, setAccount] = useState(session);
-  const [username, setUsername] = useState(session.user.username);
+  const [username, setUsername] = useState(
+    session.user.has_password ? session.user.username : "",
+  );
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -96,6 +98,10 @@ export function CredentialsForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (unavailable) return;
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{2,63}$/.test(username)) {
+      toast.error("用户名需要 3–64 个字母、数字或 . _ -，以字母或数字开头。");
+      return;
+    }
     if (password !== confirmation) {
       toast.error("两次输入的新密码不一致。");
       return;
@@ -228,7 +234,7 @@ export function CredentialsForm({
       <UI.Content as="header" className="flex flex-col gap-y-3">
         {!hasPassword && account.user.email && (
           <UI.Text className="text-muted-foreground text-sm">
-            邮箱已验证 · 设置登录密码
+            身份已验证 · 完成账户设置
           </UI.Text>
         )}
         {embedded ? (
@@ -237,7 +243,7 @@ export function CredentialsForm({
             id="password-title"
             className="text-2xl font-medium"
           >
-            {hasPassword ? "修改密码" : "设置登录密码"}
+            {hasPassword ? "修改密码" : "设置用户名和密码"}
           </UI.Heading>
         ) : (
           <UI.Heading
@@ -245,13 +251,13 @@ export function CredentialsForm({
             id="account-title"
             className="text-3xl font-medium tracking-tight"
           >
-            {hasPassword ? "账户设置" : "设置登录密码"}
+            {hasPassword ? "账户设置" : "设置用户名和密码"}
           </UI.Heading>
         )}
         <UI.Text className="text-muted-foreground text-sm leading-6">
           {hasPassword
             ? "修改密码后，当前设备保持登录，其他设备的旧会话将退出。"
-            : "为账户设置密码。以后可以直接使用已验证邮箱和密码登录。"}
+            : "选择你的用户名并设置密码。完成后可使用用户名、已验证邮箱或 GitHub 登录。"}
         </UI.Text>
         {!embedded && account.user.email && (
           <UI.Text className="text-muted-foreground text-sm break-all">
@@ -261,7 +267,7 @@ export function CredentialsForm({
       </UI.Content>
       <UI.Form onSubmit={submit} aria-label="设置登录凭据">
         <FieldGroup>
-          {hasPassword && !embedded && (
+          {(!hasPassword || !embedded) && (
             <Field data-disabled={unavailable}>
               <FieldLabel htmlFor="account-username">用户名</FieldLabel>
               <Input
@@ -272,13 +278,13 @@ export function CredentialsForm({
                 required
                 minLength={3}
                 maxLength={64}
-                pattern="[a-z0-9][a-z0-9._-]{2,63}"
+                pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,63}"
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
                 disabled={unavailable}
               />
               <FieldDescription>
-                3–64 个小写字母、数字或 . _ -，以字母或数字开头。
+                3–64 个字母、数字或 . _ -，以字母或数字开头，不区分大小写。
               </FieldDescription>
             </Field>
           )}
@@ -402,7 +408,7 @@ export function CredentialsForm({
             {busy === "save"
               ? "正在保存…"
               : initialSetup && !hasPassword
-                ? "设置密码并进入工作区"
+                ? "完成注册并进入工作区"
                 : "保存密码"}
           </Button>
         </FieldGroup>

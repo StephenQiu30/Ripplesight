@@ -75,6 +75,9 @@ afterEach(() => {
 });
 
 function setPassword(value = "next-test-password") {
+  const username = screen.queryByLabelText("用户名") as HTMLInputElement | null;
+  if (username && !username.value)
+    fireEvent.change(username, { target: { value: "chosen.reader" } });
   fireEvent.change(screen.getByLabelText("新密码"), { target: { value } });
   fireEvent.change(screen.getByLabelText("确认新密码"), { target: { value } });
 }
@@ -128,7 +131,7 @@ it("changes an existing password through the generated API and keeps the renewed
   ).toHaveProperty("value", "");
 });
 
-it("sets a first password after recent verification without exposing or requiring a generated username", async () => {
+it("sets a chosen username and first password after recent verification", async () => {
   mocks.update.mockResolvedValue({
     ...passwordless,
     user: { ...passwordless.user, has_password: true },
@@ -140,9 +143,11 @@ it("sets a first password after recent verification without exposing or requirin
       returnTo="/jobs/job-1?state=failed"
     />,
   );
-  expect(screen.getByRole("heading", { name: "设置登录密码" })).toBeTruthy();
+  expect(
+    screen.getByRole("heading", { name: "设置用户名和密码" }),
+  ).toBeTruthy();
   expect(screen.getByText("已验证邮箱：reader@example.com")).toBeTruthy();
-  expect(screen.queryByLabelText("用户名")).toBeNull();
+  expect(screen.getByLabelText("用户名")).toHaveProperty("value", "");
   expect(screen.queryByLabelText("当前密码", { selector: "input" })).toBeNull();
   expect(screen.queryByText("user_random_internal")).toBeNull();
   setPassword();
@@ -150,7 +155,7 @@ it("sets a first password after recent verification without exposing or requirin
   await waitFor(() =>
     expect(mocks.update).toHaveBeenCalledWith(
       {
-        username: "user_random_internal",
+        username: "chosen.reader",
         password: "next-test-password",
         current_password: undefined,
         challenge_id: undefined,
@@ -289,7 +294,7 @@ it("recovers expired recent verification by requesting a fresh code for the boun
   submit();
   await waitFor(() => expect(mocks.update).toHaveBeenCalledTimes(2));
   expect(mocks.update.mock.calls[1][0]).toEqual({
-    username: "user_random_internal",
+    username: "chosen.reader",
     password: "next-test-password",
     current_password: undefined,
     challenge_id: "00000000-0000-4000-8000-000000000003",
@@ -427,4 +432,37 @@ it("keeps save busy without a cancellation button and ignores completion after l
   expect(mocks.toastError).not.toHaveBeenCalled();
   expect(mocks.replace).not.toHaveBeenCalled();
   expect(mocks.refresh).not.toHaveBeenCalled();
+});
+
+it("requires a chosen username and preserves input after a name conflict", async () => {
+  render(<CredentialsForm session={passwordless} initialSetup />);
+  setPassword();
+  fireEvent.change(screen.getByLabelText("用户名"), { target: { value: "" } });
+  submit();
+  expect(mocks.update).not.toHaveBeenCalled();
+  mocks.update.mockRejectedValueOnce(
+    new ApiRequestError({
+      kind: "http",
+      status: 409,
+      code: "username_unavailable",
+      message: "用户名已被使用",
+    }),
+  );
+  fireEvent.change(screen.getByLabelText("用户名"), {
+    target: { value: "taken.reader" },
+  });
+  submit();
+  await waitFor(() =>
+    expect(mocks.toastError).toHaveBeenCalledWith("用户名已被使用"),
+  );
+  expect(mocks.replace).not.toHaveBeenCalled();
+  expect(screen.getByLabelText("新密码")).toHaveProperty(
+    "value",
+    "next-test-password",
+  );
+  fireEvent.change(screen.getByLabelText("用户名"), {
+    target: { value: "chosen.reader" },
+  });
+  submit();
+  await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/topics"));
 });

@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pwdlib import PasswordHash
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
@@ -22,6 +23,8 @@ from main import create_app
 _BACKEND_ROOT = str(Path(__file__).resolve().parent.parent)
 if _BACKEND_ROOT not in sys.path:
     sys.path.insert(0, _BACKEND_ROOT)
+
+_BUSINESS_FIXTURE_PASSWORD_HASH = PasswordHash.recommended().hash("fixed-business-fixture-password")
 
 TEST_DATABASE_TABLES = ", ".join(f'"{name}"' for name in sorted(Base.metadata.tables))
 TEST_DATABASE_TRUNCATE = f"TRUNCATE {TEST_DATABASE_TABLES} CASCADE"
@@ -38,7 +41,7 @@ def create_test_account(session: Session, *, owner_id: UUID | None = None) -> Id
             username=f"reader.{identifier.hex}",
             email=None,
             github_user_id=None,
-            password_hash=None,
+            password_hash=_BUSINESS_FIXTURE_PASSWORD_HASH,
             credential_version=1,
             created_at=now,
             updated_at=now,
