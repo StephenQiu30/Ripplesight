@@ -4,7 +4,7 @@
 
 ## 当前阶段（2026-10-07）
 
-本人本轮要求先搭好 workspace、核对文档与任务的理解偏差，暂不实现业务代码；后续真实验证先围绕最小 POC 和 demo 跑通。开始任务先读[需求与验证入口](workspace/content/product/reference/04-需求与验证入口.md)与 [AI 任务协议](workspace/content/product/reference/05-AI任务协议.md)，按 BACKLOG 的当前检查点行动。已有 PRD 和计划保留为核对依据，不能据此自动派发全部实现；后续本人明确指令可以更新当前阶段。
+本人最新要求开始实现并跑通真实、定时获取关键词信息的 POC demo，并直接复用 Chrome 中的登录状态；当前允许本卡范围内的业务实现与真实小样本验证。最新指令进一步授权把已跑通 demo 接入真实前后端，按 BACKLOG 当前接入任务执行。开始任务先读[需求与验证入口](workspace/content/product/reference/04-需求与验证入口.md)与 [AI 任务协议](workspace/content/product/reference/05-AI任务协议.md)，按 BACKLOG 的当前检查点行动。已有 PRD 和计划保留为核对依据，不能据此自动派发全部实现；后续本人明确指令可以更新当前阶段。
 
 ## 1. 分工
 

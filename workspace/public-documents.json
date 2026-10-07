@@ -40,7 +40,13 @@
     "research/2026-10-07-热点监控市场与竞品调研.md",
     "research/2026-10-07-用户细分旅程与POC优先级.md",
     "research/2026-10-07-GitHub免费热点与评论采集调研.md",
-    "research/2026-10-07-关键词监控验证与交付设计.md"
+    "research/2026-10-07-关键词监控验证与交付设计.md",
+    "research/2026-10-07-Chrome关键词demo运行说明.md",
+    "records/2026-10-07-Chrome关键词demo验收.md",
+    "records/2026-10-07-Chrome工作台接入验收.md",
+    "records/2026-10-07-登录注册流程修复.md",
+    "records/2026-10-07-PageContainer布局修复.md",
+    "research/2026-10-07-监控工作台体验设计.md"
   ],
   "references": [
     "templates/03-验收记录.md",

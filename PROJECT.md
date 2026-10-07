@@ -70,6 +70,8 @@ ripplesight-server/
         └── views/             # Obsidian 看板，不发布
 ```
 
+Web 外壳使用 `BasicLayout → PageContainer`：前者管理侧栏、移动导航和会话，后者统一固定位置栏、有限高度的正文滚动区、宽度与页脚。`LayoutContainer` 只负责横向对齐。滚动引用指向 `PageContainer` 的正文区，路由切换、阅读定位和跳到正文共用该节点；打印恢复自然文档流。全站只保留一个 main，业务页面不另建全屏滚动容器。
+
 ## 4. 业务领域
 
 后端只允许下列顶层包，架构测试（`tests/architecture/test_structure.py`）会拒绝未登记的包。新增领域需要先修改本表和该测试。
@@ -133,7 +135,7 @@ ripplesight-server/
 - FastAPI 路由注解加 Pydantic 是唯一的接口契约，运行时生成 `/openapi.json`；Web 客户端由它生成，不手写 OpenAPI 或客户端 DTO。
 - 每个接口声明唯一的 `operation_id`、中文 summary 和 tag、成功响应模型和实际可能返回的错误。成功时返回资源 DTO、`PageView[T]`（`items` / `next_cursor`）或 `JobAcceptedView`；失败时统一返回 `ErrorView(code, message, request_id, details)`。
 - 路径统一是 `/api/*`，不带版本号。日志只记录方法、路由模板、状态码和耗时，不记录 URL 参数、正文、Cookie 或 Token。
-- 登录方式有三种：密码（邮箱或用户名）、邮箱验证码、GitHub OAuth。会话存在数据库里，有效期 12 小时，可撤销；Cookie 为 HttpOnly + SameSite=Lax，生产环境加 Secure。写请求校验与会话绑定的 CSRF。修改密码会撤销全部旧会话。
+- 登录方式有三种：密码（邮箱或用户名）、邮箱验证码、GitHub OAuth。注册仅通过邮箱或 GitHub 验证身份，首次必须设置自选用户名和密码再进入工作台；密码入口只用于已有账号。GitHub 回调与邮箱验证统一导向账户设置，私有页面对未设置密码的会话继续引导设置，业务读写 API 返回 `account_setup_required`，身份验证与凭据设置接口仍可使用。会话存在数据库里，有效期 12 小时，可撤销；Cookie 为 HttpOnly + SameSite=Lax，生产环境加 Secure。写请求校验与会话绑定的 CSRF。修改密码会撤销全部旧会话。
 - 公开页面不需要登录，只读取 `HOTKEY_PUBLIC_PUBLICATION_OWNER_ID` 指定的发布账号；未配置时返回 `publication_not_configured`。个人数据按 owner 隔离，跨账户访问返回 404。
 
 ## 10. 配置与部署
@@ -299,3 +301,18 @@ API 持久受理 → jobs + Outbox → Kafka → 宿主 Worker → 来源 Adapte
 数据库方案见[字段与约束设计](workspace/content/product/reference/07-关键词监控数据库设计.md)。先复用既有记录/版本/观察/线程/任务/覆盖窗/证据表；只对过滤前候选和明确缺失语义补最小增量。仅在后续获准实现时修改唯一 schema、ORM 和结构断言；有数据升级沿用 §6 的备份、恢复、全新建库导入和切换，不另建迁移体系。
 
 性能、费用、可观测性、隐私、恢复与易用性的唯一目标在 PRD；验证设计负责列出输入、操作和证据。本轮设计依次验证契约、一个国内平台、相关性与两轮增量，再逐平台扩展；调度稳定性、海外和报告后置。源码检查、固定样本与真实来源证据分别记录，不能互相替代。
+
+### 12.7 Chrome 登录复用的首个可运行 demo
+
+最新用户授权启动真实定时 POC。为隔离既有积压 Job，首轮采用宿主 `cli.keyword_demo` 有界运行器，复用 sources 契约输出；不启动全局 Worker，不修改业务数据库结构。来源适配器只访问 B 站固定 HTTPS 端点，登录来自已部署的本机 Framefetch cookie-source（127.0.0.1），每轮重新获取、只驻留内存、不打印或落盘。桥接 token 仅保存在本机私有 .env 中。桥接断开、登录失效、验证码或限流停止并记录原因，不自动换身份或代理。
+
+POC 数据存于 git 忽略的私有 `.tools/keyword-demo`，原子写入 JSON 状态、按平台 ID 去重并输出转义后的本机 HTML 阅读报告；它是独立验收产物，不是第三份 PRD 或正式业务数据库。首次即运行，此后默认每小时轮询一次，每日最多 60 次来源请求、单轮最多 4 次（登录、搜索、最多两个帖的评论），一次只取一页、窗口 72 小时，结果明确标注抽样与关键词基线。持久化下一次时间、请求预算和停止原因，进程重启不补发密集积压；文件锁防止并行运行。正式账号下的 monitor/Job 集成、语义四档及其他平台不据此标为完成。
+
+
+### 12.8 Chrome demo 接入现有工作台（2026-10-07 授权实施）
+
+用户要求 demo 跑通后接入真实前后端。本切片保留 `bilibili` 来源键，通过连接版本的固定 API 地址 `https://api.bilibili.com` 区分旧 MediaCrawler 网页入口。Chrome 适配器实现现有 SourceAdapter，搜索与新鲜根评论分别进入 keyword.search / source.comments；继续用 PostgreSQL 的主题、任务、内容、预算与覆盖表，无新表、无第二份正文库。原生适配器版本写入既有 `jobs.scope.source_adapter_version`，由服务端按当次组件政策冻结；旧 MediaCrawler SHA 字段与约束保持不变，不需要 DDL 或业务库迁移。仅按本机显式绑定的 owner UUID 使用 Chrome，会话只在宿主进程内存中短暂存在。
+
+来源设置页提供当前账号应用 Chrome 预设的受保护写接口；未绑定账号拒绝执行。预设每小时、每日 60 次网络请求、单页两帖与每帖最多 20 根评论、00–08 点静默、30 天保留；搜索和评论共用来源预算。实际抓取受取消、连接版本、登录和风控停止约束；小样本始终报告部分覆盖。
+
+单机接管可限定 owner + bilibili，仅扫描该账号的主题日程和评论候选，并从现有 jobs/outbox 执行对应任务，复用 JobExecutionService 的租约、幂等、预算和完成流程，不启动其他账号历史任务。标准 Kafka Worker 保持兼容。原独立 demo 调度在真实链路接管时停止，旧 JSON/页面只保留验收证据。

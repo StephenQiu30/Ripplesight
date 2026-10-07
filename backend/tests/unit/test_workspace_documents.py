@@ -87,7 +87,9 @@ def test_all_document_http_outlets_require_identity_and_no_store(
             if token not in {"owner", "other"}:
                 raise ApplicationError("invalid_session")
             return SimpleNamespace(
-                view=SimpleNamespace(user=SimpleNamespace(id=OWNER if token == "owner" else OTHER))
+                view=SimpleNamespace(
+                    user=SimpleNamespace(id=OWNER if token == "owner" else OTHER, has_password=True)
+                )
             )
 
         def validate_csrf(self, identity: Any, *, cookie: str | None, header: str | None) -> None:
