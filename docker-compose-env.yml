@@ -1,9 +1,10 @@
 # Optional infrastructure; local development reuses existing services.
-# Keep the original project name so existing named volumes are preserved.
-name: hotkey
+# Explicit volume aliases can retain existing data when changing project names.
+name: ripplesight
 
 services:
   postgres:
+    container_name: ${COMPOSE_PROJECT_NAME}-postgres
     image: postgres:17.11-alpine3.23
     environment:
       POSTGRES_DB: hotkey
@@ -33,6 +34,7 @@ services:
           memory: 1536M
 
   redis:
+    container_name: ${COMPOSE_PROJECT_NAME}-redis
     image: redis:7.2.16-alpine3.21
     command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
     ports:
@@ -53,6 +55,7 @@ services:
           memory: 256M
 
   kafka:
+    container_name: ${COMPOSE_PROJECT_NAME}-kafka
     image: apache/kafka:4.1.2
     environment:
       CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
@@ -92,5 +95,8 @@ services:
 
 volumes:
   kafka-data:
+    name: ${HOTKEY_KAFKA_VOLUME_NAME:-${COMPOSE_PROJECT_NAME}_kafka-data}
   postgres-data:
+    name: ${HOTKEY_POSTGRES_VOLUME_NAME:-${COMPOSE_PROJECT_NAME}_postgres-data}
   redis-data:
+    name: ${HOTKEY_REDIS_VOLUME_NAME:-${COMPOSE_PROJECT_NAME}_redis-data}

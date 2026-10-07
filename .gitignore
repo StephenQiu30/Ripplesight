@@ -38,6 +38,7 @@ tsconfig.tsbuildinfo
 # Standalone documentation site
 /workspace/node_modules/
 /workspace/.next/
+/workspace/.preview/
 /workspace/out/
 /workspace/next-env.d.ts
 

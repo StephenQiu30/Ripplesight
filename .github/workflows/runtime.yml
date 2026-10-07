@@ -7,6 +7,8 @@ on:
       - "backend/**"
       - "frontend/**"
       - "docker-compose*.yml"
+      - "workspace/Dockerfile*"
+      - "workspace/nginx.conf"
       - ".env.example"
       - ".github/workflows/runtime.yml"
   pull_request:
@@ -15,6 +17,8 @@ on:
       - "backend/**"
       - "frontend/**"
       - "docker-compose*.yml"
+      - "workspace/Dockerfile*"
+      - "workspace/nginx.conf"
       - ".env.example"
       - ".github/workflows/runtime.yml"
 
@@ -70,7 +74,7 @@ jobs:
           def config(path, env_file):
               selected_environment = dict(environment, HOTKEY_COMPOSE_ENV_FILE=str(env_file))
               result = subprocess.check_output(
-                  ["docker", "compose", "--project-name", "hotkey-parity", "--env-file", str(env_file), "-f", path,
+                  ["docker", "compose", "--project-name", "ripplesight-parity", "--env-file", str(env_file), "-f", path,
                    "--profile", "*", "config", "--format", "json"], env=selected_environment, text=True
               )
               return json.loads(result)
@@ -84,16 +88,28 @@ jobs:
               local = config("docker-compose.yml", development)
               prod = config("docker-compose-prod.yml", production)
               infra = config("docker-compose-env.yml", development)
-              assert set(local["services"]) == {"backend", "frontend", "worker", "scheduler", "browser", "browser-egress", "cli"}
+              assert set(local["services"]) == {"backend", "frontend", "workspace", "worker", "scheduler", "browser", "browser-egress", "cli"}
               assert set(infra["services"]) == {"postgres", "redis", "kafka"}
+              for volume in ("postgres-data", "redis-data", "kafka-data"):
+                  assert infra["volumes"][volume]["name"] == "ripplesight-parity_" + volume
+              legacy = Path(directory) / "legacy.env"
+              legacy.write_text(template + "\nHOTKEY_POSTGRES_VOLUME_NAME=existing-postgres\n"
+                                + "HOTKEY_REDIS_VOLUME_NAME=existing-redis\n"
+                                + "HOTKEY_KAFKA_VOLUME_NAME=existing-kafka\n")
+              reused = config("docker-compose-env.yml", legacy)
+              for service in ("postgres", "redis", "kafka"):
+                  assert reused["volumes"][service + "-data"]["name"] == "existing-" + service
               assert "volumes" not in local
-              for name, host_port in (("backend", 8667), ("frontend", 8666)):
+              for name, host_port in (("backend", 8667), ("frontend", 8666), ("workspace", 8668)):
                   ports = local["services"][name]["ports"]
                   assert len(ports) == 1
                   assert ports[0]["host_ip"] == "127.0.0.1"
                   assert int(ports[0]["published"]) == host_port
                   assert ports[0]["target"] == 8080
-                  assert local["services"][name]["environment"]["HOTKEY_WEB_ORIGIN"] == "http://127.0.0.1:8666"
+                  if name != "workspace":
+                      assert local["services"][name]["environment"]["HOTKEY_WEB_ORIGIN"] == "http://127.0.0.1:8666"
+              assert local["services"]["workspace"]["read_only"]
+              assert "volumes" not in local["services"]["workspace"]
               assert local["services"]["backend"]["environment"]["HOTKEY_WEB_BASE_URL"] == "http://127.0.0.1:8666"
               assert local["services"]["frontend"]["environment"]["HOTKEY_API_ORIGIN"] == "http://backend:8080"
               for name in ("backend", "worker", "scheduler", "cli"):
@@ -127,11 +143,11 @@ jobs:
 
       - name: Validate and build the application with isolated infrastructure
         run: |
-          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci config --quiet
-          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci build backend frontend
+          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci config --quiet
+          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci build backend frontend workspace
 
       - name: Start the isolated runtime
-        run: docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci up --detach --wait postgres redis kafka backend frontend
+        run: docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci up --detach --wait postgres redis kafka backend frontend workspace
 
       - name: Verify production welcome and login CSP nonces
         run: |
@@ -182,32 +198,33 @@ jobs:
 
       - name: Verify dependencies, proxy, and idle Worker
         run: |
-          test "$(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T postgres psql -X --set ON_ERROR_STOP=on --username hotkey --dbname hotkey --tuples-only --no-align --command 'SELECT current_database()')" = "hotkey"
-          test "$(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T redis redis-cli ping)" = "PONG"
-          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server 127.0.0.1:9092 --list
-          test "$(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T postgres psql -X --username hotkey --dbname hotkey --tuples-only --no-align --command "SELECT to_regclass('public.identity_users') IS NOT NULL AND to_regclass('public.identity_sessions') IS NOT NULL")" = "t"
+          test "$(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci exec -T postgres psql -X --set ON_ERROR_STOP=on --username hotkey --dbname hotkey --tuples-only --no-align --command 'SELECT current_database()')" = "hotkey"
+          test "$(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci exec -T redis redis-cli ping)" = "PONG"
+          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server 127.0.0.1:9092 --list
+          test "$(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci exec -T postgres psql -X --username hotkey --dbname hotkey --tuples-only --no-align --command "SELECT to_regclass('public.identity_users') IS NOT NULL AND to_regclass('public.identity_sessions') IS NOT NULL")" = "t"
           curl --fail --silent http://127.0.0.1:8667/api/health
           curl --fail --silent http://127.0.0.1:8667/api/ready
           curl --fail --silent http://127.0.0.1:8666/health
+          curl --fail --silent --output /dev/null http://127.0.0.1:8668/Ripplesight/
           curl --fail --silent http://127.0.0.1:8666/api/health
-          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci --profile worker up --detach --wait --wait-timeout 30 worker
+          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci --profile worker up --detach --wait --wait-timeout 30 worker
           for _ in {1..15}; do
-            if docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci logs --no-color worker 2>&1 | grep --fixed-strings worker_started; then
+            if docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci logs --no-color worker 2>&1 | grep --fixed-strings worker_started; then
               break
             fi
             sleep 1
           done
-          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci logs --no-color worker 2>&1 | grep --fixed-strings worker_started
-          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci --profile worker stop worker
-          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci run --rm cli | grep Usage
-          test "$(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T backend id -u)" = "10001"
-          test "$(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T frontend id -u)" = "1001"
-          test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' $(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci ps --quiet backend))" = "true"
-          test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' $(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci ps --quiet frontend))" = "true"
+          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci logs --no-color worker 2>&1 | grep --fixed-strings worker_started
+          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci --profile worker stop worker
+          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci run --rm cli | grep Usage
+          test "$(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci exec -T backend id -u)" = "10001"
+          test "$(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci exec -T frontend id -u)" = "1001"
+          test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' $(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci ps --quiet backend))" = "true"
+          test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' $(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci ps --quiet frontend))" = "true"
 
       - name: Create an isolated runtime account
         run: |
-          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci exec -T backend /srv/backend/.venv/bin/python - <<'PYTHON'
+          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci exec -T backend /srv/backend/.venv/bin/python - <<'PYTHON'
           from core.config import get_settings
           from db.session import create_db_engine, create_session_factory
           from identity.services import IdentityService
@@ -339,7 +356,7 @@ jobs:
           PYTHON
 
       - name: Record one bounded resource snapshot
-        run: docker stats --no-stream $(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci ps --quiet)
+        run: docker stats --no-stream $(docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci ps --quiet)
 
       - name: Verify the generated client against the deployed API
         env:
@@ -348,8 +365,8 @@ jobs:
 
       - name: Print service logs after failure
         if: failure()
-        run: docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci logs --no-color
+        run: docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci logs --no-color
 
       - name: Remove the isolated runtime
         if: always()
-        run: docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name hotkey-ci down --volumes --remove-orphans
+        run: docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci down --volumes --remove-orphans
