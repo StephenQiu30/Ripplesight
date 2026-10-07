@@ -31,6 +31,7 @@ ERROR_CATEGORIES: Mapping[str, ErrorCategory] = MappingProxyType(
         "invalid_oauth_state": ErrorCategory.AUTHENTICATION,
         "github_authentication_failed": ErrorCategory.AUTHENTICATION,
         "credentials_verification_required": ErrorCategory.AUTHORIZATION,
+        "account_setup_required": ErrorCategory.AUTHORIZATION,
         "identity_link_conflict": ErrorCategory.CONFLICT,
         "username_unavailable": ErrorCategory.CONFLICT,
         "notification_email_not_bound": ErrorCategory.INVALID_INPUT,

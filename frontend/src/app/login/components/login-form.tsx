@@ -349,6 +349,21 @@ export function LoginForm({
               邮箱验证码
             </ToggleGroupItem>
           </ToggleGroup>
+          <UI.Text tone="muted" size="sm" className="mb-5">
+            已有账号可直接登录。新账号仅通过邮箱验证码或 GitHub
+            注册，验证后设置用户名和密码。
+          </UI.Text>
+          {method === "password" && options.email && (
+            <Button
+              type="button"
+              variant="link"
+              className="mb-4 px-0"
+              disabled={!ready}
+              onClick={() => changeMethod("email")}
+            >
+              首次使用？通过邮箱注册
+            </Button>
+          )}
           {(!options.password || !options.email) && (
             <UI.Content className="mb-5 flex flex-col gap-2">
               {!options.password && (
@@ -480,7 +495,7 @@ export function LoginForm({
                     disabled={!ready}
                   />
                   <FieldDescription>
-                    首次使用此邮箱？验证后设置密码，即可使用邮箱和密码登录。
+                    首次使用此邮箱会创建账号，验证后需设置用户名和密码。
                   </FieldDescription>
                 </Field>
                 {challenge && (

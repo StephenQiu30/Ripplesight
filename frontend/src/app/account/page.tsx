@@ -50,7 +50,7 @@ export default async function AccountPage({
     <AccountSettings
       key={session.expires_at}
       session={session}
-      initialSetup={params.setup === "1" && !session.user.has_password}
+      initialSetup={!session.user.has_password}
       returnTo={returnTo}
       oauthError={params.error}
       githubLinked={params.linked === "github" && session.user.github_connected}

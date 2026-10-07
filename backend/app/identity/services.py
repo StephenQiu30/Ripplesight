@@ -4,7 +4,7 @@ import hashlib
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from urllib.parse import unquote, urlsplit
+from urllib.parse import unquote, urlencode, urlsplit
 from uuid import UUID, uuid4
 
 from pwdlib import PasswordHash
@@ -269,9 +269,11 @@ class IdentityService:
                 return self._link_identity(
                     identity, github_user_id=verified.user_id
                 ), "/account?linked=github"
-            return self._verified_login(
-                email=verified.email, github_user_id=verified.user_id
-            ), safe_return_to(flow.return_to)
+            created = self._verified_login(email=verified.email, github_user_id=verified.user_id)
+            destination = safe_return_to(flow.return_to)
+            if not created.view.user.has_password:
+                destination = "/account?" + urlencode({"setup": "1", "returnTo": destination})
+            return created, destination
         except ApplicationError as failure:
             if flow.session_id:
                 raise ApplicationError(failure.code, context={"identity_link": True}) from None

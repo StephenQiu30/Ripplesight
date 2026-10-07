@@ -434,13 +434,13 @@ describe("authenticated navigation and CSP", () => {
     },
   );
 
-  it("continues to let an authenticated email-only account open existing workspace pages", async () => {
+  it("lets an unfinished account read public pages without a setup loop", async () => {
     getIdentitySession.mockResolvedValue({
       ...SESSION,
       user: { ...SESSION.user, has_password: false },
     });
     const response = await proxy(
-      new NextRequest("https://hotkey.test/topics", {
+      new NextRequest("https://hotkey.test/discover", {
         headers: { Cookie: "hotkey_session=token" },
       }),
     );
@@ -457,3 +457,23 @@ describe("authenticated navigation and CSP", () => {
     expect(login.searchParams.get("returnTo")).toBe("/jobs/job-1?state=failed");
   });
 });
+
+it.each(["/topics", "/monitors/new", "/sources", "/jobs?state=failed"])(
+  "resumes unfinished registration before private navigation to %s",
+  async (path) => {
+    getIdentitySession.mockResolvedValue({
+      ...SESSION,
+      user: { ...SESSION.user, has_password: false },
+    });
+    const response = await proxy(
+      new NextRequest(`https://hotkey.test${path}`, {
+        headers: { Cookie: "hotkey_session=valid" },
+      }),
+    );
+    const target = new URL(response.headers.get("location")!);
+    expect(target.pathname).toBe("/account");
+    expect(target.searchParams.get("setup")).toBe("1");
+    expect(target.searchParams.get("returnTo")).toBe(path);
+    expect(response.headers.get("set-cookie")).toBeNull();
+  },
+);
