@@ -105,7 +105,7 @@ export function EditorialLocalApproval({
   return (
     <UI.Content
       as="section"
-      className="space-y-4"
+      className="flex flex-col gap-4"
       aria-label="本机采集组件审批"
     >
       <UI.Heading level={2} className="text-xl font-medium">

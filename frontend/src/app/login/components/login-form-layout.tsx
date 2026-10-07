@@ -16,21 +16,21 @@ export function LoginFormLayout({
     <UI.Content
       as="section"
       aria-labelledby="login-title"
-      className="mx-auto w-full max-w-md min-w-0 lg:mr-0"
+      className="max-w-login-form mx-auto w-full min-w-0 lg:mr-0"
     >
-      <Card variant="muted" className="gap-5 py-5 sm:gap-6 sm:py-8">
-        <CardHeader className="gap-2 px-5 sm:px-8">
-          <UI.Heading level={1} id="login-title">
-            登录Ripplesight
+      <Card variant="muted" className="gap-6 py-7 sm:py-9">
+        <CardHeader className="gap-2 px-6 sm:px-9">
+          <UI.Heading level={1} appearance="form" id="login-title">
+            登录
           </UI.Heading>
           <UI.Text tone="muted" size="sm">
-            继续关注你在意的，沿着来源看见变化。
+            个人工作台与监控主题仅对本人可见。
           </UI.Text>
         </CardHeader>
-        <CardContent className="px-5 sm:px-8">
+        <CardContent className="px-6 sm:px-9">
           <UI.Content aria-busy={loading}>{children}</UI.Content>
         </CardContent>
-        <CardContent className="px-5 sm:px-8">
+        <CardContent className="px-6 sm:px-9">
           <UI.Text tone="muted" size="xs">
             登录即表示你已阅读
             <UI.TextLink href="/terms">使用条款</UI.TextLink>与

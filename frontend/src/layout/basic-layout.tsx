@@ -19,7 +19,6 @@ import { BasicFooter } from "./basic-footer";
 import {
   BasicMobileHeader,
   BasicMobileNavigation,
-  BasicPageLocation,
   BasicSidebar,
 } from "./basic-sidebar";
 import { PageContainer } from "./page-container";
@@ -78,9 +77,8 @@ export function BasicLayout({
                 {isLogin ? null : <BasicMobileHeader />}
                 <PageContainer
                   scrollRef={mainRef}
-                  edgeToEdge={pathname === "/"}
-                  header={isLogin ? undefined : <BasicPageLocation />}
-                  footer={<BasicFooter />}
+                  edgeToEdge={isLogin}
+                  footer={isLogin ? <BasicFooter /> : undefined}
                 >
                   {children}
                 </PageContainer>

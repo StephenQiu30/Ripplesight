@@ -12,10 +12,20 @@
 }
 
 @utility layout-region {
-  scrollbar-gutter: stable both-edges;
+  scrollbar-gutter: auto;
 }
 
 @theme inline {
+  --text-page: 2rem;
+  --text-page--line-height: 2.5rem;
+  --text-mobile-page: 1.625rem;
+  --text-mobile-page--line-height: 2.125rem;
+  --text-metric: 1.75rem;
+  --text-metric--line-height: 2.25rem;
+  --spacing-site-sidebar: 18.875rem;
+  --spacing-login-art: 12.5rem;
+  --container-login: 65rem;
+  --container-login-form: 26.25rem;
   --font-heading: var(--font-geist-sans);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
@@ -89,7 +99,7 @@
   --sidebar-foreground: #171717;
   --sidebar-primary: #171717;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f5f5f5;
+  --sidebar-accent: #ebebeb;
   --sidebar-accent-foreground: #171717;
   --sidebar-border: #ebebeb;
   --sidebar-ring: #0070f3;
@@ -218,5 +228,30 @@
     & hr {
       @apply border-border my-7 border-t;
     }
+  }
+}
+
+/* Geometry measured from the desktop-exported Figma frames (1440 / 390). */
+@utility reading-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2rem;
+  @media (min-width: 64rem) {
+    grid-template-columns: minmax(0, 1.8667fr) minmax(0, 1fr);
+    column-gap: 1.25rem;
+  }
+}
+@utility site-sidebar-width {
+  --sidebar-width: var(--spacing-site-sidebar);
+  --sidebar-width-icon: 3rem;
+}
+
+@utility login-page {
+  min-height: calc(100dvh - 4rem);
+}
+@utility login-columns {
+  grid-template-columns: minmax(0, 1fr);
+  @media (min-width: 64rem) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, var(--container-login-form));
   }
 }

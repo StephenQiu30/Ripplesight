@@ -61,10 +61,10 @@ export function AccountMenu() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="max-w-64 min-w-44">
-        <DropdownMenuLabel className="truncate">
-          {session.user.username}
-        </DropdownMenuLabel>
         <DropdownMenuGroup>
+          <DropdownMenuLabel className="truncate">
+            {session.user.username}
+          </DropdownMenuLabel>
           <DropdownMenuItem asChild>
             <Link href="/workspace">我的工作台</Link>
           </DropdownMenuItem>

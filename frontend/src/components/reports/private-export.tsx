@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -154,10 +155,12 @@ function PrivateExportControl({ target }: { target: ExportTarget }) {
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="markdown">Markdown</SelectItem>
-          <SelectItem value="pdf">PDF</SelectItem>
-          <SelectItem value="csv">CSV</SelectItem>
-          <SelectItem value="json">JSON</SelectItem>
+          <SelectGroup>
+            <SelectItem value="markdown">Markdown</SelectItem>
+            <SelectItem value="pdf">PDF</SelectItem>
+            <SelectItem value="csv">CSV</SelectItem>
+            <SelectItem value="json">JSON</SelectItem>
+          </SelectGroup>
         </SelectContent>
       </Select>
       {!view ? (

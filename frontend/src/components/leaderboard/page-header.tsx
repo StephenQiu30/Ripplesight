@@ -14,9 +14,11 @@ export function LeaderboardPageHeader({
   run?: HotKeyAPI.RunView | null;
 }) {
   return (
-    <UI.Content as="header" className="flex flex-col gap-3">
+    <UI.Content as="header" className="flex min-w-0 flex-1 flex-col gap-3">
       <UI.Heading level={1}>{title}</UI.Heading>
-      <UI.Text tone="muted">{description}</UI.Text>
+      <UI.Text tone="muted" size="sm">
+        {description}
+      </UI.Text>
       {run ? <RunStamp run={run} /> : null}
     </UI.Content>
   );
@@ -39,13 +41,15 @@ export function BoardPageFrame({
 }) {
   return (
     <UI.Content className="flex min-w-0 flex-col gap-6">
-      <LeaderboardPageHeader run={run} />
-      <BoardFilters
-        board={board}
-        domestic={domestic}
-        openWeights={openWeights}
-        tabs={tabs}
-      />
+      <UI.Content className="flex min-w-0 flex-col justify-between gap-5 xl:flex-row xl:items-start">
+        <LeaderboardPageHeader run={run} />
+        <BoardFilters
+          board={board}
+          domestic={domestic}
+          openWeights={openWeights}
+          tabs={tabs}
+        />
+      </UI.Content>
       {children}
     </UI.Content>
   );

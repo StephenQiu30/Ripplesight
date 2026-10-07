@@ -26,7 +26,7 @@ export function BoardFilters({
   const fieldId = useId();
   const href = boardHref(board);
   return (
-    <UI.Content className="flex min-w-0 flex-col gap-4">
+    <UI.Content className="flex w-full min-w-0 flex-col gap-4 xl:w-80 xl:shrink-0">
       <UI.Content className="hide-scrollbar min-w-0 overflow-x-auto py-1">
         <ToggleGroup
           type="single"

@@ -7,24 +7,37 @@ import { cn } from "@/lib/utils";
 const headingVariants = cva("tracking-tight", {
   variants: {
     level: {
-      1: "text-3xl font-medium",
-      2: "text-xl font-medium",
-      3: "text-lg font-medium",
-      4: "text-base font-medium",
+      1: "text-mobile-page font-semibold md:text-page",
+      2: "text-xl font-semibold",
+      3: "text-base leading-6 font-semibold md:text-lg md:leading-7",
+      4: "text-base font-semibold",
       5: "text-sm font-medium",
       6: "text-sm font-medium",
+    },
+    appearance: {
+      section: "text-xl font-semibold",
+      sidebar: "text-sm leading-6 font-semibold",
+      display: "text-4xl leading-tight font-semibold lg:text-5xl",
+      form: "text-2xl leading-8 font-semibold",
     },
   },
 });
 export function Heading({
   level = 2,
+  appearance,
   className,
   ...props
-}: React.ComponentProps<"h1"> & { level?: 1 | 2 | 3 | 4 | 5 | 6 }) {
+}: React.ComponentProps<"h1"> & {
+  level?: 1 | 2 | 3 | 4 | 5 | 6;
+  appearance?: "section" | "sidebar" | "display" | "form";
+}) {
   return React.createElement(`h${level}`, {
     "data-slot": "heading",
     ...props,
-    className: cn(headingVariants({ level }), className),
+    className: cn(
+      headingVariants({ level: appearance ? null : level, appearance }),
+      className,
+    ),
   });
 }
 const textVariants = cva("", {
@@ -34,7 +47,13 @@ const textVariants = cva("", {
       muted: "text-muted-foreground",
       destructive: "text-destructive",
     },
-    size: { inherit: "", sm: "text-sm", xs: "text-xs" },
+    size: {
+      inherit: "",
+      sm: "text-sm leading-6",
+      xs: "text-xs leading-5",
+      metric: "text-2xl leading-8 font-medium md:text-metric",
+      lead: "text-lg leading-8",
+    },
   },
   defaultVariants: { tone: "default", size: "inherit" },
 });
@@ -125,7 +144,7 @@ export function InlineCode({
   return (
     <code
       data-slot="inline-code"
-      className={cn("font-mono", className)}
+      className={cn("font-mono tabular-nums", className)}
       {...props}
     />
   );

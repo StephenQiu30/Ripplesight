@@ -39,20 +39,22 @@ export default function LeaderboardLayout({
   children: ReactNode;
 }) {
   return (
-    <UI.Content className="grid min-w-0 grid-cols-1 items-start gap-8 lg:grid-cols-3 lg:gap-12">
-      <UI.Content className="min-w-0 lg:col-span-2">{children}</UI.Content>
+    <UI.Content className="flex min-w-0 flex-col gap-12">
+      <UI.Content className="min-w-0">{children}</UI.Content>
       <UI.Content
         as="aside"
         aria-label="模型榜阅读入口"
-        className="flex min-w-0 flex-col gap-6"
+        className="flex min-w-0 flex-col gap-4 border-t pt-6"
       >
-        <UI.Heading level={2}>来源与规则</UI.Heading>
+        <UI.Heading level={2} appearance="sidebar">
+          来源与规则
+        </UI.Heading>
         <NavigationMenu
           viewport={false}
           className="max-w-full justify-start"
           aria-label="模型榜相关页面"
         >
-          <NavigationMenuList className="w-full flex-col items-stretch">
+          <NavigationMenuList className="w-full flex-wrap items-start">
             {readingLinks.map(({ href, title, description, icon: Icon }) => (
               <NavigationMenuItem key={href}>
                 <NavigationMenuLink asChild>

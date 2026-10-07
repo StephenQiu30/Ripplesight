@@ -1,4 +1,5 @@
 import * as UI from "@/components/ui/content";
+import { cn } from "@/lib/utils";
 import { Viewer } from "@/components/editor";
 import {
   NavigationMenu,
@@ -56,12 +57,15 @@ export function PublicEditionReader({
   return (
     <UI.Content
       data-edition-reader=""
-      className={`${styles.reader} grid min-w-0 grid-cols-1 items-start gap-10 lg:grid-cols-3 lg:gap-12 print:block`}
+      className={cn(
+        styles.reader,
+        "reading-columns min-w-0 items-start print:block",
+      )}
     >
       <UI.Content
         as="article"
         aria-label={edition.title}
-        className="flex min-w-0 flex-col gap-10 lg:col-span-2"
+        className="flex min-w-0 flex-col gap-12"
       >
         <UI.Content as="header" className="flex flex-col gap-4">
           <UI.Text tone="muted" size="sm">

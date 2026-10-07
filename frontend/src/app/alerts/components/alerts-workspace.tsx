@@ -45,6 +45,7 @@ import { Spinner } from "@/components/ui/spinner";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -99,7 +100,9 @@ function Choice({
       <SelectTrigger id={id} className="w-full min-w-0" aria-invalid={invalid}>
         <SelectValue placeholder="请选择" />
       </SelectTrigger>
-      <SelectContent position="popper">{children}</SelectContent>
+      <SelectContent position="popper">
+        <SelectGroup>{children}</SelectGroup>
+      </SelectContent>
     </Select>
   );
 }
@@ -257,7 +260,7 @@ function RuleEditor({
     >
       <UI.Heading level={2}>{row ? "编辑告警规则" : "新建告警规则"}</UI.Heading>
       <FieldGroup className="grid gap-5 sm:grid-cols-2">
-        <Field>
+        <Field data-invalid={invalidFields.includes("name")}>
           <FieldLabel htmlFor={`${id}-name`}>规则名称</FieldLabel>
           <Input
             id={`${id}-name`}
@@ -268,7 +271,7 @@ function RuleEditor({
             maxLength={80}
           />
         </Field>
-        <Field>
+        <Field data-invalid={invalidFields.includes("topic_id")}>
           <FieldLabel htmlFor={`${id}-topic`}>关注方向</FieldLabel>
           <Choice
             id={`${id}-topic`}
@@ -286,7 +289,7 @@ function RuleEditor({
             ))}
           </Choice>
         </Field>
-        <Field>
+        <Field data-invalid={invalidFields.includes("metric")}>
           <FieldLabel htmlFor={`${id}-metric`}>判断指标</FieldLabel>
           <Choice
             id={`${id}-metric`}
@@ -308,7 +311,7 @@ function RuleEditor({
           </FieldDescription>
         </Field>
         {metric === "heat_increment" && (
-          <Field>
+          <Field data-invalid={invalidFields.includes("event_id")}>
             <FieldLabel htmlFor={`${id}-event`}>关注下的事件</FieldLabel>
             <Choice
               id={`${id}-event`}
@@ -327,7 +330,7 @@ function RuleEditor({
             </FieldDescription>
           </Field>
         )}
-        <Field>
+        <Field data-invalid={invalidFields.includes("threshold")}>
           <FieldLabel htmlFor={`${id}-threshold`}>触发阈值</FieldLabel>
           <Input
             id={`${id}-threshold`}
@@ -341,7 +344,7 @@ function RuleEditor({
             required
           />
         </Field>
-        <Field>
+        <Field data-invalid={invalidFields.includes("cooldown_seconds")}>
           <FieldLabel htmlFor={`${id}-cooldown`}>冷却时间（分钟）</FieldLabel>
           <Input
             id={`${id}-cooldown`}
@@ -355,7 +358,7 @@ function RuleEditor({
             required
           />
         </Field>
-        <Field>
+        <Field data-invalid={invalidFields.includes("target_id")}>
           <FieldLabel htmlFor={`${id}-target`}>通知目标</FieldLabel>
           <Choice
             id={`${id}-target`}
@@ -376,7 +379,11 @@ function RuleEditor({
             </FieldDescription>
           )}
         </Field>
-        <Field className="sm:col-span-2">
+        <Field
+          className="sm:col-span-2"
+          data-invalid={invalidFields.includes("enabled")}
+          data-disabled={!canEnable && !enabled}
+        >
           <UI.Content className="flex items-center gap-3">
             <Switch
               aria-invalid={invalidFields.includes("enabled")}

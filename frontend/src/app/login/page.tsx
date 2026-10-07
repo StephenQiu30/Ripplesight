@@ -1,4 +1,7 @@
 import * as UI from "@/components/ui/content";
+import { Suspense } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { LoginLiveStories } from "./components/login-live-stories";
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { headers } from "next/headers";
@@ -45,7 +48,13 @@ export default async function LoginPage({
       />
     );
   return (
-    <LoginExperience>
+    <LoginExperience
+      liveStories={
+        <Suspense fallback={<Skeleton className="h-28 w-full" />}>
+          <LoginLiveStories />
+        </Suspense>
+      }
+    >
       <LoginForm returnTo={returnTo} oauthFailed={!!params.error} />
     </LoginExperience>
   );

@@ -46,7 +46,8 @@
     "records/2026-10-07-Chrome工作台接入验收.md",
     "records/2026-10-07-登录注册流程修复.md",
     "records/2026-10-07-PageContainer布局修复.md",
-    "research/2026-10-07-监控工作台体验设计.md"
+    "research/2026-10-07-监控工作台体验设计.md",
+    "records/2026-10-07-监控工作台体验接入.md"
   ],
   "references": [
     "templates/03-验收记录.md",

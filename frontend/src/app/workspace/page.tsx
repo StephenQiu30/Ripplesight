@@ -90,7 +90,7 @@ export default async function WorkspacePage() {
               size="navigation"
             >
               {group.title}
-              <ChevronDownIcon aria-hidden="true" />
+              <ChevronDownIcon aria-hidden="true" data-icon="inline-end" />
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-4">

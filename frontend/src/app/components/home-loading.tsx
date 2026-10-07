@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export function HomeLoading() {
   return (
     <Content
-      className="px-5 py-6 sm:px-8"
+      className="min-w-0"
       role="status"
       aria-label="首页加载中"
       aria-busy="true"
@@ -21,8 +21,8 @@ export function HomeLoading() {
         <Skeleton className="h-5 w-1/2 motion-reduce:animate-none" />
         <Separator />
       </Content>
-      <Content className="grid gap-8 lg:grid-cols-3">
-        <Content className="lg:col-span-2">
+      <Content className="reading-columns">
+        <Content className="min-w-0">
           <PageState
             headingLevel={2}
             state="loading"

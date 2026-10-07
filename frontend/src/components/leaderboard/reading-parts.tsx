@@ -68,9 +68,7 @@ export function ScoreSupport({
       <Progress
         value={supportScoreValue(score)}
         aria-label={label}
-        getValueLabel={() =>
-          `${score.toFixed(1)}，固定锚点支持指数，不是获胜概率`
-        }
+        aria-valuetext={`${score.toFixed(1)}，固定锚点支持指数，不是获胜概率`}
       />
     </UI.Content>
   );

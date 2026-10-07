@@ -54,7 +54,7 @@ import {
   type MonitorFailure,
 } from "@/components/monitors/monitor-presenters";
 import { TopicAlerts } from "@/components/monitors/topic-alerts";
-import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageState } from "@/components/system/page-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -89,6 +89,13 @@ type ActionFeedback = {
   requestId?: string;
   fields?: TopicFieldErrors;
 };
+
+const TOPIC_TABS = ["results", "runs", "settings", "alerts"] as const;
+type TopicTab = (typeof TOPIC_TABS)[number];
+function readTopicTab(): TopicTab {
+  const value = new URLSearchParams(window.location.search).get("tab");
+  return TOPIC_TABS.find((tab) => tab === value) ?? "results";
+}
 
 type PendingAction = "archive" | "clone" | "pause" | "resume" | "save";
 
@@ -145,6 +152,21 @@ export function TopicEditor({
     };
   }, []);
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<TopicTab>("results");
+  useEffect(() => {
+    const syncTab = () => setActiveTab(readTopicTab());
+    syncTab();
+    window.addEventListener("popstate", syncTab);
+    return () => window.removeEventListener("popstate", syncTab);
+  }, [topicId]);
+  function selectTab(value: string) {
+    const tab = TOPIC_TABS.find((item) => item === value) ?? "results";
+    setActiveTab(tab);
+    const url = new URL(window.location.href);
+    if (tab === "results") url.searchParams.delete("tab");
+    else url.searchParams.set("tab", tab);
+    window.history.replaceState(window.history.state, "", url);
+  }
   const [state, setState] = useState<EditorState>({ status: "loading" });
   const [reloadFailure, setReloadFailure] = useState<MonitorFailure | null>(
     null,
@@ -546,216 +568,279 @@ export function TopicEditor({
             </UI.Text>
           </UI.Content>
           <UI.Heading level={embedded ? 2 : 1}>{topic.name}</UI.Heading>
-          <UI.Content
-            className="grid grid-cols-1 gap-4 sm:grid-cols-2"
-            aria-label="已保存关键词"
-          >
-            {(
-              [
-                ["任一关键词", topic.rules.match_any],
-                ["全部关键词", topic.rules.match_all],
-                ["排除关键词", topic.rules.exclude],
-              ] as const
-            ).map(([label, words]) => (
-              <UI.Content key={label} className="flex min-w-0 flex-col gap-2">
-                <UI.Text tone="muted" size="xs">
-                  {label}
-                </UI.Text>
-                <UI.Text size="sm" className="break-words">
-                  {words.join(" · ") || "未设置"}
-                </UI.Text>
-              </UI.Content>
-            ))}
+          <UI.Content className="flex flex-wrap items-center gap-3">
+            <UI.Text tone="muted" size="sm">
+              每 {topic.collection_interval_seconds / 60} 分钟 ·{" "}
+              {topic.source_keys.length} 个来源
+            </UI.Text>
+            <UI.Text tone="muted" size="sm" className="min-w-0 break-words">
+              关键词：
+              {[...topic.rules.match_any, ...topic.rules.match_all].join(
+                " · ",
+              ) || "未设置"}
+            </UI.Text>
           </UI.Content>
-          <UI.Text tone="muted" size="sm">
-            调整后保存才会生效，保存不会立即开始采集。
-          </UI.Text>
           <UI.Content className="flex flex-wrap gap-2">
-            {topic.status === "active" ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="navigation"
-                disabled={isBusy}
-                aria-busy={pendingAction === "pause"}
-                onClick={() => void runLifecycleAction("pause")}
-              >
-                {pendingAction === "pause" ? (
-                  <Spinner aria-hidden="true" data-icon="inline-start" />
-                ) : (
-                  <PauseIcon data-icon="inline-start" />
-                )}
-                暂停关注
-              </Button>
-            ) : topic.status === "paused" ? (
-              <Button
-                type="button"
-                size="navigation"
-                disabled={isBusy}
-                aria-busy={pendingAction === "resume"}
-                onClick={() => void runLifecycleAction("resume")}
-              >
-                {pendingAction === "resume" ? (
-                  <Spinner aria-hidden="true" data-icon="inline-start" />
-                ) : (
-                  <PlayIcon data-icon="inline-start" />
-                )}
-                恢复关注
-              </Button>
-            ) : null}
+            <Button type="button" onClick={() => selectTab("runs")}>
+              采集与运行
+            </Button>
             <Button
               type="button"
-              variant="ghost"
-              size="navigation"
-              disabled={isBusy}
-              aria-busy={pendingAction === "clone"}
-              onClick={() => void runLifecycleAction("clone")}
+              variant="outline"
+              onClick={() => selectTab("settings")}
             >
-              {pendingAction === "clone" ? (
-                <Spinner aria-hidden="true" data-icon="inline-start" />
-              ) : (
-                <CopyIcon data-icon="inline-start" />
-              )}
-              复制
+              编辑设置
             </Button>
-            {topic.status !== "archived" ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="navigation"
-                disabled={isBusy}
-                aria-busy={pendingAction === "archive"}
-                onClick={() => void runLifecycleAction("archive")}
-              >
-                {pendingAction === "archive" ? (
-                  <Spinner aria-hidden="true" data-icon="inline-start" />
-                ) : (
-                  <ArchiveIcon data-icon="inline-start" />
-                )}
-                归档
-              </Button>
-            ) : null}
-          </UI.Content>
-          <UI.Content>
-            <TopicRunActions
-              key={`${topic.id}:${topic.current_version}:${topic.source_keys.join(",")}`}
-              topic={topic}
-              sourceNames={Object.fromEntries(
-                sourceOptions.map((source) => [
-                  source.sourceKey,
-                  source.displayName,
-                ]),
-              )}
-              disabled={isBusy}
-            />
           </UI.Content>
         </UI.Content>
-        <Separator />
-        <TopicResults topicId={topic.id} />
-        <Separator />
-        <UI.Form
-          aria-label="编辑主题设置"
-          ref={formRef}
-          onSubmit={handleSubmit}
-          noValidate
+        <Tabs
+          value={activeTab}
+          onValueChange={selectTab}
+          className="min-w-0 gap-6"
         >
-          <FieldGroup className="gap-6">
-            <UI.Heading level={3}>主题设置</UI.Heading>
-            <Field
-              data-disabled={formDisabled}
-              data-invalid={Boolean(fieldErrors.name)}
-            >
-              <FieldLabel htmlFor="topic-name">主题名称</FieldLabel>
-              <Input
-                id="topic-name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                disabled={formDisabled}
-                minLength={1}
-                maxLength={80}
-                required
-                aria-invalid={Boolean(fieldErrors.name)}
-              />
-            </Field>
-            <KeywordGroupField
-              id="match-any"
-              label="想关注的关键词"
-              description="任意一个词出现即可。每行填写一个关键词。"
-              value={matchAny}
-              onChange={setMatchAny}
-              disabled={formDisabled}
-              error={fieldErrors.match_any}
-            />
-            <TopicSettingsFields
-              sourceOptions={sourceOptions}
-              sourceKeys={sourceKeys}
-              onSourceKeysChange={setSourceKeys}
-              disabled={formDisabled}
-              fieldErrors={fieldErrors}
-            />
-            <EditorialTopicSources
-              selectedProfileIds={editorialProfileIds}
-              onChange={setEditorialProfileIds}
-              disabled={formDisabled}
-            />
-            <TopicAdvancedFields
-              key={`${topic.id}:${topic.current_version}`}
-              matchAll={matchAll}
-              onMatchAllChange={setMatchAll}
-              exclude={exclude}
-              onExcludeChange={setExclude}
-              collectionIntervalSeconds={collectionIntervalSeconds}
-              onCollectionIntervalSecondsChange={setCollectionIntervalSeconds}
-              disabled={formDisabled}
-              fieldErrors={fieldErrors}
-            />
-            <TopicReportFields
-              reportTime={reportTime}
-              onReportTimeChange={setReportTime}
-              weeklyReportEnabled={weeklyReportEnabled}
-              onWeeklyReportEnabledChange={setWeeklyReportEnabled}
-              notificationTargetNames={notificationTargetNames}
-              onNotificationTargetNamesChange={setNotificationTargetNames}
-              disabled={formDisabled}
-              error={fieldErrors.report_time}
-            />
-            <Field
-              orientation="horizontal"
-              className="flex-wrap justify-between gap-3"
-              data-disabled={formDisabled}
-            >
-              <TopicRulePreview
-                matchAny={matchAny}
-                matchAll={matchAll}
-                exclude={exclude}
-                sourceKeys={sourceKeys}
+          <UI.Content className="overflow-x-auto pb-1">
+            <TabsList variant="line" aria-label="主题功能">
+              <TabsTrigger value="results">监控结果</TabsTrigger>
+              <TabsTrigger value="runs">采集与运行</TabsTrigger>
+              <TabsTrigger value="settings">主题设置</TabsTrigger>
+              <TabsTrigger value="alerts">告警</TabsTrigger>
+            </TabsList>
+          </UI.Content>
+          <TabsContent
+            value="results"
+            forceMount
+            hidden={activeTab !== "results"}
+          >
+            <TopicResults topicId={topic.id} />
+          </TabsContent>
+          <TabsContent
+            value="settings"
+            forceMount
+            hidden={activeTab !== "settings"}
+            className="min-w-0"
+          >
+            <UI.Content className="flex flex-col gap-6">
+              <UI.Content
+                className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+                aria-label="已保存关键词"
+              >
+                {(
+                  [
+                    ["任一关键词", topic.rules.match_any],
+                    ["全部关键词", topic.rules.match_all],
+                    ["排除关键词", topic.rules.exclude],
+                  ] as const
+                ).map(([label, words]) => (
+                  <UI.Content
+                    key={label}
+                    className="flex min-w-0 flex-col gap-2"
+                  >
+                    <UI.Text tone="muted" size="xs">
+                      {label}
+                    </UI.Text>
+                    <UI.Text size="sm" className="break-words">
+                      {words.join(" · ") || "未设置"}
+                    </UI.Text>
+                  </UI.Content>
+                ))}
+              </UI.Content>
+              <UI.Text tone="muted" size="sm">
+                调整后保存才会生效，保存不会立即开始采集。
+              </UI.Text>
+              <UI.Content className="flex flex-wrap gap-2">
+                {topic.status === "active" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="navigation"
+                    disabled={isBusy}
+                    aria-busy={pendingAction === "pause"}
+                    onClick={() => void runLifecycleAction("pause")}
+                  >
+                    {pendingAction === "pause" ? (
+                      <Spinner aria-hidden="true" data-icon="inline-start" />
+                    ) : (
+                      <PauseIcon data-icon="inline-start" />
+                    )}
+                    暂停关注
+                  </Button>
+                ) : topic.status === "paused" ? (
+                  <Button
+                    type="button"
+                    size="navigation"
+                    disabled={isBusy}
+                    aria-busy={pendingAction === "resume"}
+                    onClick={() => void runLifecycleAction("resume")}
+                  >
+                    {pendingAction === "resume" ? (
+                      <Spinner aria-hidden="true" data-icon="inline-start" />
+                    ) : (
+                      <PlayIcon data-icon="inline-start" />
+                    )}
+                    恢复关注
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="navigation"
+                  disabled={isBusy}
+                  aria-busy={pendingAction === "clone"}
+                  onClick={() => void runLifecycleAction("clone")}
+                >
+                  {pendingAction === "clone" ? (
+                    <Spinner aria-hidden="true" data-icon="inline-start" />
+                  ) : (
+                    <CopyIcon data-icon="inline-start" />
+                  )}
+                  复制
+                </Button>
+                {topic.status !== "archived" ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="navigation"
+                    disabled={isBusy}
+                    aria-busy={pendingAction === "archive"}
+                    onClick={() => void runLifecycleAction("archive")}
+                  >
+                    {pendingAction === "archive" ? (
+                      <Spinner aria-hidden="true" data-icon="inline-start" />
+                    ) : (
+                      <ArchiveIcon data-icon="inline-start" />
+                    )}
+                    归档
+                  </Button>
+                ) : null}
+              </UI.Content>
+              <UI.Form
+                aria-label="编辑主题设置"
+                ref={formRef}
+                onSubmit={handleSubmit}
+                noValidate
+              >
+                <FieldGroup className="gap-6">
+                  <UI.Heading level={3}>主题设置</UI.Heading>
+                  <Field
+                    data-disabled={formDisabled}
+                    data-invalid={Boolean(fieldErrors.name)}
+                  >
+                    <FieldLabel htmlFor="topic-name">主题名称</FieldLabel>
+                    <Input
+                      id="topic-name"
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                      disabled={formDisabled}
+                      minLength={1}
+                      maxLength={80}
+                      required
+                      aria-invalid={Boolean(fieldErrors.name)}
+                    />
+                  </Field>
+                  <KeywordGroupField
+                    id="match-any"
+                    label="想关注的关键词"
+                    description="任意一个词出现即可。每行填写一个关键词。"
+                    value={matchAny}
+                    onChange={setMatchAny}
+                    disabled={formDisabled}
+                    error={fieldErrors.match_any}
+                  />
+                  <TopicSettingsFields
+                    sourceOptions={sourceOptions}
+                    sourceKeys={sourceKeys}
+                    onSourceKeysChange={setSourceKeys}
+                    disabled={formDisabled}
+                    fieldErrors={fieldErrors}
+                  />
+                  <EditorialTopicSources
+                    selectedProfileIds={editorialProfileIds}
+                    onChange={setEditorialProfileIds}
+                    disabled={formDisabled}
+                  />
+                  <TopicAdvancedFields
+                    key={`${topic.id}:${topic.current_version}`}
+                    matchAll={matchAll}
+                    onMatchAllChange={setMatchAll}
+                    exclude={exclude}
+                    onExcludeChange={setExclude}
+                    collectionIntervalSeconds={collectionIntervalSeconds}
+                    onCollectionIntervalSecondsChange={
+                      setCollectionIntervalSeconds
+                    }
+                    disabled={formDisabled}
+                    fieldErrors={fieldErrors}
+                  />
+                  <TopicReportFields
+                    reportTime={reportTime}
+                    onReportTimeChange={setReportTime}
+                    weeklyReportEnabled={weeklyReportEnabled}
+                    onWeeklyReportEnabledChange={setWeeklyReportEnabled}
+                    notificationTargetNames={notificationTargetNames}
+                    onNotificationTargetNamesChange={setNotificationTargetNames}
+                    disabled={formDisabled}
+                    error={fieldErrors.report_time}
+                  />
+                  <Field
+                    orientation="horizontal"
+                    className="flex-wrap justify-between gap-3"
+                    data-disabled={formDisabled}
+                  >
+                    <TopicRulePreview
+                      matchAny={matchAny}
+                      matchAll={matchAll}
+                      exclude={exclude}
+                      sourceKeys={sourceKeys}
+                      disabled={isBusy}
+                    />
+                    <Button
+                      type="submit"
+                      size="navigation"
+                      disabled={formDisabled}
+                      aria-busy={pendingAction === "save"}
+                    >
+                      {pendingAction === "save" ? (
+                        <Spinner data-icon="inline-start" aria-hidden="true" />
+                      ) : (
+                        <SaveIcon data-icon="inline-start" />
+                      )}
+                      {pendingAction === "save" ? "正在保存" : "保存修改"}
+                    </Button>
+                  </Field>
+                  <FieldDescription>
+                    {topic.readiness_status === "pending_source_selection"
+                      ? "还未选择来源。保存后可以继续配置。"
+                      : topic.readiness_status === "pending_source_readiness"
+                        ? "来源尚待就绪，请在来源设置中核查。"
+                        : "开始关注前，会再次检查来源与预算。"}
+                  </FieldDescription>
+                </FieldGroup>
+              </UI.Form>
+            </UI.Content>
+          </TabsContent>
+          <TabsContent value="runs" forceMount hidden={activeTab !== "runs"}>
+            <UI.Content>
+              <TopicRunActions
+                key={`${topic.id}:${topic.current_version}:${topic.source_keys.join(",")}`}
+                topic={topic}
+                sourceNames={Object.fromEntries(
+                  sourceOptions.map((source) => [
+                    source.sourceKey,
+                    source.displayName,
+                  ]),
+                )}
                 disabled={isBusy}
               />
-              <Button
-                type="submit"
-                size="navigation"
-                disabled={formDisabled}
-                aria-busy={pendingAction === "save"}
-              >
-                {pendingAction === "save" ? (
-                  <Spinner data-icon="inline-start" aria-hidden="true" />
-                ) : (
-                  <SaveIcon data-icon="inline-start" />
-                )}
-                {pendingAction === "save" ? "正在保存" : "保存修改"}
-              </Button>
-            </Field>
-            <FieldDescription>
-              {topic.readiness_status === "pending_source_selection"
-                ? "还未选择来源。保存后可以继续配置。"
-                : topic.readiness_status === "pending_source_readiness"
-                  ? "来源尚待就绪，请在来源设置中核查。"
-                  : "开始关注前，会再次检查来源与预算。"}
-            </FieldDescription>
-          </FieldGroup>
-        </UI.Form>
-        <Separator />
-        <TopicAlerts topicId={topic.id} />
+            </UI.Content>
+          </TabsContent>
+          <TabsContent
+            value="alerts"
+            forceMount
+            hidden={activeTab !== "alerts"}
+          >
+            <TopicAlerts topicId={topic.id} />
+          </TabsContent>
+        </Tabs>
       </UI.Content>
     </UI.Content>
   );

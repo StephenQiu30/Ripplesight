@@ -514,7 +514,7 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
       </UI.Content>
       <UI.Content
         as="section"
-        className="mt-6 space-y-3"
+        className="mt-6 flex flex-col gap-3"
         aria-label="私人内容导出"
       >
         <UI.Heading level={2} className="text-lg font-medium">

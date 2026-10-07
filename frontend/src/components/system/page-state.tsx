@@ -10,6 +10,7 @@ import {
   EmptyContent,
   EmptyDescription,
   EmptyHeader,
+  EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Item, ItemContent } from "@/components/ui/item";
@@ -153,10 +154,14 @@ export function PageState({
     >
       <Empty>
         <EmptyHeader className="gap-4">
-          <Badge variant="secondary">{eyebrow}</Badge>
-          <Icon aria-hidden="true" className="size-6" />
+          <UI.Text className="sr-only">{eyebrow}</UI.Text>
+          <EmptyMedia>
+            <Icon aria-hidden="true" />
+          </EmptyMedia>
           <EmptyTitle>
-            <UI.Heading level={headingLevel}>{title}</UI.Heading>
+            <UI.Heading level={headingLevel} appearance="sidebar">
+              {title}
+            </UI.Heading>
           </EmptyTitle>
           <EmptyDescription>{description}</EmptyDescription>
         </EmptyHeader>

@@ -2,7 +2,6 @@ import * as UI from "@/components/ui/content";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import Link from "next/link";
-
 import { cn } from "@/lib/utils";
 
 export function BrandMark({ className }: { className?: string }) {
@@ -23,49 +22,52 @@ export function BrandMark({ className }: { className?: string }) {
   );
 }
 
-type BrandLockupProps = {
-  href: string;
-  compactOnMobile?: boolean;
-  rail?: boolean;
-  /** 放在可折叠侧栏里：折叠为图标栏时只保留标识。 */
-  collapsible?: boolean;
-};
-
 export function BrandLockup({
   href,
   compactOnMobile = false,
   rail = false,
   collapsible = false,
-}: BrandLockupProps) {
+  bilingual = false,
+}: {
+  href: string;
+  compactOnMobile?: boolean;
+  rail?: boolean;
+  collapsible?: boolean;
+  bilingual?: boolean;
+}) {
   return (
     <Button
       asChild
       variant="ghost"
-      className={cn(
-        "h-auto min-h-11 gap-3 px-0 hover:bg-transparent",
-        collapsible && "group-data-[collapsible=icon]:min-h-8",
-      )}
+      className="h-auto min-h-11 justify-start gap-3 px-0 hover:bg-transparent"
     >
       <Link
         href={href}
         aria-label={href === "/" ? "Ripplesight首页" : "Ripplesight工作台"}
       >
         <BrandMark
-          className={
-            collapsible ? "group-data-[collapsible=icon]:size-8" : undefined
-          }
-        />
-        <UI.Text
-          as="span"
           className={cn(
-            "text-base font-semibold tracking-tight sm:text-lg",
-            compactOnMobile && "hidden sm:inline",
-            rail && "hidden lg:inline",
+            "size-8 md:size-11",
+            collapsible && "group-data-[collapsible=icon]:size-8",
+          )}
+        />
+        <UI.Content
+          className={cn(
+            "flex min-w-0 flex-col items-start gap-0",
+            compactOnMobile && "hidden sm:flex",
+            rail && "hidden lg:flex",
             collapsible && "group-data-[collapsible=icon]:hidden",
           )}
         >
-          Ripplesight
-        </UI.Text>
+          <UI.Text as="strong" size="sm">
+            {bilingual ? "知微见澜 / Ripplesight" : "知微见澜"}
+          </UI.Text>
+          {collapsible ? (
+            <UI.Text as="span" tone="muted" size="xs">
+              Ripplesight · AI 热点监测
+            </UI.Text>
+          ) : null}
+        </UI.Content>
       </Link>
     </Button>
   );

@@ -109,19 +109,6 @@ export function DiscoveryResults({
                       "尚未获取站内内容。"
                     )}
                   </ItemDescription>
-                  {item.tags.length > 0 && (
-                    <UI.Content layout="row">
-                      {item.tags.map((tag) => (
-                        <Badge
-                          key={tag}
-                          variant="secondary"
-                          className="max-w-full break-all whitespace-normal"
-                        >
-                          #{tag}
-                        </Badge>
-                      ))}
-                    </UI.Content>
-                  )}
                   {card?.group?.latest_development && (
                     <UI.Text size="sm" tone="muted">
                       最新进展 · {card.group.latest_development.title}
@@ -134,10 +121,24 @@ export function DiscoveryResults({
                     />
                   )}
                   <ItemActions className="flex-wrap">
-                    <Button asChild variant="ghost" size="feed">
+                    {item.tags.length > 0 && (
+                      <UI.Content layout="row">
+                        {item.tags.map((tag) => (
+                          <Badge
+                            key={tag}
+                            variant="secondary"
+                            className="max-w-full break-all whitespace-normal"
+                          >
+                            #{tag}
+                          </Badge>
+                        ))}
+                      </UI.Content>
+                    )}
+
+                    <Button asChild variant="ghost" size="sm">
                       <Link href={item.reading_url}>站内阅读</Link>
                     </Button>
-                    <Button asChild variant="ghost" size="feed">
+                    <Button asChild variant="ghost" size="sm">
                       <Link
                         href={item.original_url}
                         target="_blank"
@@ -151,7 +152,7 @@ export function DiscoveryResults({
                       </Link>
                     </Button>
                     {item.event_id && (
-                      <Button asChild variant="ghost" size="feed">
+                      <Button asChild variant="ghost" size="sm">
                         <Link href={`/discover/stories/${item.event_id}`}>
                           事件脉络
                         </Link>

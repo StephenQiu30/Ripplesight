@@ -121,7 +121,7 @@ export function PublicStoryReading({
         heat={story.heat}
         revision={story.revision}
         phase={story.phase}
-        href="/discover"
+        href="/discover/stories"
       />
       <UI.Text size="sm" tone="muted">
         来源数只计当前已加载的公开报道来源。
@@ -205,7 +205,7 @@ export function PublicStoryReading({
         </UI.Content>
         <UI.Content as="section" className="flex flex-col gap-4">
           <UI.Heading>热度历史</UI.Heading>
-          <EventEmpty>公开资料暂未提供热度历史，不绘制曲线。</EventEmpty>
+          <EventEmpty>热度历史发布后，会在这里展示变化趋势。</EventEmpty>
           {story.attention ? (
             <UI.Text size="sm" tone="muted">
               当前热度窗口{" "}

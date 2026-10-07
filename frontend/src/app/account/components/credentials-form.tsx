@@ -1,5 +1,6 @@
 "use client";
 import * as UI from "@/components/ui/content";
+import { cn } from "@/lib/utils";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -229,7 +230,7 @@ export function CredentialsForm({
     <UI.Content
       as="section"
       aria-labelledby={embedded ? "password-title" : "account-title"}
-      className={`flex w-full flex-col gap-y-8 ${embedded ? "" : "max-w-xl"}`}
+      className={cn("flex w-full flex-col gap-y-8", !embedded && "max-w-xl")}
     >
       <UI.Content as="header" className="flex flex-col gap-y-3">
         {!hasPassword && account.user.email && (

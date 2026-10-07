@@ -53,7 +53,11 @@ afterEach(() => {
 });
 
 const page = <h1>资讯正文</h1>;
-const trigger = () => screen.getByRole("button", { name: /切换主题/ });
+const trigger = () =>
+  within(screen.getByRole("complementary", { name: "站点侧边栏" })).getByRole(
+    "button",
+    { name: "更多导航" },
+  );
 
 async function choose(name: string) {
   fireEvent.keyDown(trigger(), { key: "ArrowDown" });
@@ -67,7 +71,7 @@ it("has one sidebar theme control and retains the existing preference across rou
     within(screen.getByRole("complementary", { name: "站点侧边栏" })).getByRole(
       "button",
       {
-        name: /切换主题/,
+        name: "更多导航",
       },
     ),
   ).toBe(trigger());
@@ -81,7 +85,7 @@ it("has one sidebar theme control and retains the existing preference across rou
       <h1>模型榜</h1>
     </BasicLayout>,
   );
-  expect(trigger().getAttribute("aria-label")).toContain("深色");
+  expect(document.documentElement.classList.contains("dark")).toBe(true);
   view.unmount();
   render(
     <BasicLayout>
@@ -89,7 +93,7 @@ it("has one sidebar theme control and retains the existing preference across rou
     </BasicLayout>,
   );
   await waitFor(() =>
-    expect(trigger().getAttribute("aria-label")).toContain("深色"),
+    expect(document.documentElement.classList.contains("dark")).toBe(true),
   );
   fireEvent.keyDown(trigger(), { key: "ArrowDown" });
   const selected = await screen.findByRole("menuitemradio", { name: "深色" });
@@ -132,13 +136,13 @@ it("updates the global theme after importing the existing bundle and receiving c
     );
   });
   await waitFor(() =>
-    expect(trigger().getAttribute("aria-label")).toContain("深色"),
+    expect(document.documentElement.classList.contains("dark")).toBe(true),
   );
   expect(document.documentElement.classList.contains("dark")).toBe(true);
   localStorage.setItem("hotkey.publication.theme.v1", "light");
   fireEvent(window, new Event("storage"));
   await waitFor(() =>
-    expect(trigger().getAttribute("aria-label")).toContain("浅色"),
+    expect(document.documentElement.classList.contains("dark")).toBe(false),
   );
   expect(document.documentElement.classList.contains("dark")).toBe(false);
 });
@@ -160,5 +164,5 @@ it("applies a choice when storage is unavailable and keeps it through system cha
   );
   await act(async () => media.dispatchEvent(new Event("change")));
   expect(document.documentElement.classList.contains("dark")).toBe(true);
-  expect(trigger().getAttribute("aria-label")).toContain("深色");
+  expect(document.documentElement.classList.contains("dark")).toBe(true);
 });

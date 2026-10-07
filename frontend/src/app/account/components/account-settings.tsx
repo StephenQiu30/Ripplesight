@@ -209,7 +209,7 @@ export function AccountSettings({
                   disabled={disabled}
                   onClick={() => fileInput.current?.click()}
                 >
-                  <UploadIcon aria-hidden="true" />
+                  <UploadIcon aria-hidden="true" data-icon="inline-start" />
                   {busy === "avatar"
                     ? "正在上传…"
                     : account.user.avatar_sha256
@@ -260,7 +260,7 @@ export function AccountSettings({
               onClick={() => setTab("profile")}
             >
               编辑资料
-              <ChevronRightIcon aria-hidden="true" />
+              <ChevronRightIcon aria-hidden="true" data-icon="inline-end" />
             </Button>
           </UI.Content>
         </Item>

@@ -12,7 +12,10 @@ export function LayoutContainer({
 }) {
   return (
     <UI.Content
-      className={cn("mx-auto w-full max-w-7xl min-w-0 px-5 sm:px-8", className)}
+      className={cn(
+        "mx-auto w-full max-w-screen-2xl min-w-0 px-4 md:px-8 lg:px-12",
+        className,
+      )}
     >
       {children}
     </UI.Content>

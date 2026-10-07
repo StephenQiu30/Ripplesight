@@ -62,4 +62,29 @@ function EmptyContent({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-export { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyContent };
+function EmptyMedia({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="empty-media"
+      className={cn(
+        "bg-secondary text-muted-foreground mb-1 flex size-12 shrink-0 items-center justify-center rounded-xl [&_svg]:size-5",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </div>
+  );
+}
+export {
+  Empty,
+  EmptyHeader,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyContent,
+  EmptyMedia,
+};

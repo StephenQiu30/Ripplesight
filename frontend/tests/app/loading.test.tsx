@@ -30,11 +30,13 @@ describe("route loading", () => {
       </BasicLayout>,
     );
     expect(screen.getAllByRole("main")).toHaveLength(1);
-    expect(screen.getByRole("banner", { name: "移动站点导航" })).toBeTruthy();
+    expect(
+      screen.getByRole("navigation", { name: "移动站点导航" }),
+    ).toBeTruthy();
     expect(
       screen.getByRole("complementary", { name: "站点侧边栏" }),
     ).toBeTruthy();
-    expect(screen.getByRole("contentinfo")).toBeTruthy();
+    expect(screen.queryByRole("contentinfo")).toBeNull();
     expect(
       screen
         .getByRole("status", { name: "页面加载中" })
@@ -49,10 +51,10 @@ describe("route loading", () => {
         <LoginLoading />
       </BasicLayout>,
     );
-    expect(screen.queryByRole("banner")).toBeNull();
     expect(
-      screen.getByRole("heading", { name: "登录Ripplesight" }),
+      screen.getByRole("link", { name: "不登录，先看今日热点" }),
     ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "登录" })).toBeTruthy();
     expect(
       screen.getByRole("complementary", { name: "Ripplesight" }),
     ).toBeTruthy();

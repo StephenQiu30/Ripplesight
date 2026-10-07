@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -148,12 +149,14 @@ export function EventList() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">全部关注</SelectItem>
-                {topics.map((topic) => (
-                  <SelectItem key={topic.id} value={topic.id}>
-                    {topic.name}
-                  </SelectItem>
-                ))}
+                <SelectGroup>
+                  <SelectItem value="all">全部关注</SelectItem>
+                  {topics.map((topic) => (
+                    <SelectItem key={topic.id} value={topic.id}>
+                      {topic.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
           </Field>
@@ -164,12 +167,17 @@ export function EventList() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">全部来源</SelectItem>
-                {sources.map((source) => (
-                  <SelectItem key={source.source_key} value={source.source_key}>
-                    {source.display_name}
-                  </SelectItem>
-                ))}
+                <SelectGroup>
+                  <SelectItem value="all">全部来源</SelectItem>
+                  {sources.map((source) => (
+                    <SelectItem
+                      key={source.source_key}
+                      value={source.source_key}
+                    >
+                      {source.display_name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
           </Field>

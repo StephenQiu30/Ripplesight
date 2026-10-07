@@ -176,7 +176,7 @@ export function TopicList({
       aria-labelledby="monitor-topics-heading"
     >
       <UI.Content className="flex flex-wrap items-center justify-between gap-4">
-        <UI.Heading level={2} id="monitor-topics-heading">
+        <UI.Heading level={2} appearance="sidebar" id="monitor-topics-heading">
           主题列表
         </UI.Heading>
         <Field orientation="horizontal" className="w-fit">
@@ -246,6 +246,7 @@ export function TopicList({
               <Item
                 asChild
                 variant={selectedTopicId === topic.id ? "muted" : "default"}
+                className="px-4 py-3"
               >
                 <Link
                   href={`/monitors/${topic.id}`}
@@ -254,12 +255,7 @@ export function TopicList({
                   }
                 >
                   <ItemContent>
-                    <ItemTitle>
-                      {topic.name}
-                      <Badge variant="secondary">
-                        {topicStatusLabel(topic.status)}
-                      </Badge>
-                    </ItemTitle>
+                    <ItemTitle>{topic.name}</ItemTitle>
                     <ItemDescription>
                       {[...topic.rules.match_any, ...topic.rules.match_all]
                         .slice(0, 3)
@@ -269,6 +265,9 @@ export function TopicList({
                         ? `${topic.source_keys.length} 个来源`
                         : "待设置来源"}
                     </ItemDescription>
+                    <Badge variant="secondary" className="self-start">
+                      {topicStatusLabel(topic.status)}
+                    </Badge>
                   </ItemContent>
                   <ItemActions>
                     <ArrowRightIcon aria-hidden="true" />
