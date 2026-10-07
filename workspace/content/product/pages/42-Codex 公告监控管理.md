@@ -1,0 +1,80 @@
+---
+type: pointer
+title: Codex 公告监控管理页面需求
+summary: /codex-resets/manage 的功能、数据、权限、缺口与验收；基于已推送页面基线的需求提案
+updated: 2026-10-08
+---
+
+# Codex 公告监控管理
+
+路由：`/codex-resets/manage`。角色：**独立运营人员**。源码：[页面入口](../../../../frontend/src/app/codex-resets/manage/page.tsx)。设计与范围见[全站页面需求总纲](../prd/03-PRD-全站页面需求.md)；实际任务状态只看 [BACKLOG](../../../../BACKLOG.md)。
+
+## 用户故事
+
+作为独立运营人员，我希望配置官方扫描并审查识别结果。页面应减少重复查找，并让每个结果能追到来源、时间、权限和处理状态。
+
+## 功能需求表
+
+以下是从页面、生成客户端与既有需求整理的目标行为；现有入口/调用见后文，但不表示每条规则都已实现。每条作为独立可验收的要求；已识别的设计缺口单列，真实平台能力需独立验收。
+
+| 功能 | 必须满足的规则与可见结果 | 优先级 | 数据／操作边界 |
+|---|---|---|---|
+| 配置 | 官方作者、批准 X 连接及版本、页数和间隔，保存后仍受授权/预算约束。 | 本页交付必须 | 有写操作时按下表方法、所属用户、版本与操作键校验；纯读不得触发采集。 |
+| 扫描与缺口 | 显式人工扫描，未知请求先核对；扫描缺口审核不静默补齐。 | 本页交付必须 | 有写操作时按下表方法、所属用户、版本与操作键校验；纯读不得触发采集。 |
+| 复核 | 帖子跳过/重识别、公告归属、日期修订和人工到账核对分别留原因。 | 本页交付必须 | 有写操作时按下表方法、所属用户、版本与操作键校验；纯读不得触发采集。 |
+
+## 设计缺口与范围取舍
+
+不得绕过 X 授权和免费取数边界；识别准确度需要真实公告样本验证。
+
+这是本轮整理出的待补需求或风险，不因写入文档自动获准执行。缺口涉及字段与方法时以[接口增量设计](../reference/08-全站页面接口设计.md)和[数据库增量设计](../reference/09-全站页面数据库设计.md)为准；未知数据不填设计稿示例值。
+
+## 输入、接口与持久化
+
+下面从本页组件依赖中核对现有生成函数；包含共用组件的可选能力，**不表示每次渲染都会调用全部接口**。输入类型的精确字段、可选性和输出见[现有接口清单](../reference/12-现有接口清单.md)。方法之外不得自行发请求。
+
+| 现有函数 | 方法与路径 | 请求类型 | 返回类型 | 服务端授权入口 |
+|---|---|---|---|---|
+| [`configureCodexResetMonitor`](../reference/12-现有接口清单.md#configurecodexresetmonitor) | `PUT /api/codex-resets/configuration` | body: `CodexConfigurationInput` | `MonitorView` | 独立运营写权限 |
+| [`correctCodexResetEvent`](../reference/12-现有接口清单.md#correctcodexresetevent) | `PATCH /api/codex-resets/monitors/{monitor_id}/events/{event_id}` | params: `correctCodexResetEventParams`；body: `CodexEventReviewInput` | `ResetEventView` | 独立运营写权限 |
+| [`getCodexResetConfiguration`](../reference/12-现有接口清单.md#getcodexresetconfiguration) | `GET /api/codex-resets/configuration` | 无业务参数 | `MonitorView | null` | 当前用户读取 |
+| [`getCodexResetSnapshot`](../reference/12-现有接口清单.md#getcodexresetsnapshot) | `GET /api/codex-resets/snapshot` | params: `getCodexResetSnapshotParams` | `ResetSnapshot | null` | 当前用户读取 |
+| [`listCodexResetPosts`](../reference/12-现有接口清单.md#listcodexresetposts) | `GET /api/codex-resets/posts` | params: `listCodexResetPostsParams` | `ResetPostView[]` | 当前用户读取 |
+| [`listCodexResetScanGaps`](../reference/12-现有接口清单.md#listcodexresetscangaps) | `GET /api/codex-resets/monitors/{monitor_id}/gaps` | params: `listCodexResetScanGapsParams` | `ScanGapView[]` | 独立运营读权限 |
+| [`pollCodexResetMonitor`](../reference/12-现有接口清单.md#pollcodexresetmonitor) | `POST /api/codex-resets/monitors/{monitor_id}/ticks` | params: `pollCodexResetMonitorParams`；body: `CodexTickInput` | `JobView` | 独立运营写权限 |
+| [`relinkCodexResetPost`](../reference/12-现有接口清单.md#relinkcodexresetpost) | `POST /api/codex-resets/monitors/{monitor_id}/posts/{post_id}/relink` | params: `relinkCodexResetPostParams`；body: `CodexPostRelinkInput` | `ResetPostView` | 独立运营写权限 |
+| [`reviewCodexResetPost`](../reference/12-现有接口清单.md#reviewcodexresetpost) | `POST /api/codex-resets/monitors/{monitor_id}/posts/{post_id}/review` | params: `reviewCodexResetPostParams`；body: `CodexPostReviewInput` | `ResetPostView` | 独立运营写权限 |
+| [`reviewCodexResetScanGap`](../reference/12-现有接口清单.md#reviewcodexresetscangap) | `POST /api/codex-resets/monitors/{monitor_id}/gaps/{gap_id}/review` | params: `reviewCodexResetScanGapParams`；body: `CodexGapReviewInput` | `ScanGapView` | 独立运营写权限 |
+
+| 现有数据表 | 本页使用要求 |
+|---|---|
+| [`codex_reset_monitors`](../reference/13-现有数据库字典.md#codex_reset_monitors) | 按领域服务读写，字段与约束以唯一 schema 为准；不创建页面专用副本。 |
+| [`codex_reset_monitor_versions`](../reference/13-现有数据库字典.md#codex_reset_monitor_versions) | 按领域服务读写，字段与约束以唯一 schema 为准；不创建页面专用副本。 |
+| [`codex_reset_reviews`](../reference/13-现有数据库字典.md#codex_reset_reviews) | 按领域服务读写，字段与约束以唯一 schema 为准；不创建页面专用副本。 |
+| [`codex_reset_scan_gaps`](../reference/13-现有数据库字典.md#codex_reset_scan_gaps) | 按领域服务读写，字段与约束以唯一 schema 为准；不创建页面专用副本。 |
+| [`codex_reset_posts`](../reference/13-现有数据库字典.md#codex_reset_posts) | 按领域服务读写，字段与约束以唯一 schema 为准；不创建页面专用副本。 |
+| [`codex_reset_events`](../reference/13-现有数据库字典.md#codex_reset_events) | 按领域服务读写，字段与约束以唯一 schema 为准；不创建页面专用副本。 |
+| [`jobs`](../reference/13-现有数据库字典.md#jobs) | 按领域服务读写，字段与约束以唯一 schema 为准；不创建页面专用副本。 |
+
+## 权限和状态
+
+| 状态 | 页面应怎样处理 |
+|---|---|
+| 正常 | 展示返回范围、真实时间与可用操作；没有字段就不宣称有对应能力。 |
+| 空 | 说明当前筛选或配置范围内没有记录；给出调整条件、创建或返回入口。静态说明页不虚构空态。 |
+| 加载 | 首次读取使用骨架；写操作禁用重复提交；旧结果刷新期间可保留但不冒充新结果。 |
+| 错误 | 保留可恢复输入；显示错误码和重试。写入结果未知先查原操作，不自动重复外发。 |
+| 无权限／撤回 | 匿名个人页安全跳登录；已撤销权限清除旧敏感内容；公开记录撤回按现有 404/许可语义处理，不绕过。 |
+
+公开角色只读公开投影，登录角色只能访问所属资源，运营角色额外要求独立授权；具体以每个后端依赖和服务校验为准。编辑令牌、Cookie、正文敏感字段不进入 URL、本机持久令牌、日志或模型工具指令。
+
+## 验收场景
+
+前置：独立样本准备正常数据、零数据、请求延迟、服务失败和越权身份；真实账号验证单列，不用样本替代。执行角色与本页角色一致。
+
+- 打开页面并执行对应功能 → 归属修订不触发模型或自动确认到账；缺口恢复绑定原窗口。
+- 分别在 1440px 与 390px 操作 → 标题、筛选、列表、表单、浮层和固定导航不遮挡；需要宽度的表格只在自身区域滚动。
+- 用 Tab / Enter / Escape 和适用的方向键完成主路径 → 焦点可见，关闭浮层后返回触发点；错误能被读屏识别。
+- 注入空、延迟、失败、无权限 → 与上表一致；不把失败、无权限或未知值统计为零或成功。
+
+非功能数值、测试输入口径及跨页验收见[非功能需求](../reference/10-全站非功能需求.md)与[全站验收场景](../reference/11-全站验收场景.md)。本文件记录需求，不记录执行通过率。

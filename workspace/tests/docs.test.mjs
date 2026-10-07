@@ -118,7 +118,10 @@ test('导航保留 frontmatter 中文标题、五个链接，有验收记录时�
   assert.deepEqual(docs.map(item => item.title), ['术语表', '产品', '能力', '决策', '验收记录', '调研'])
   assert.equal(docs.find(item => item.title === '能力').children[3].title, '评论舆情')
   const product = docs.find(item => item.title === '产品')
-  assert.deepEqual(product.children.filter(item => item.children).map(item => item.title), ['产品需求（PRD）', '执行计划（PLAN）', '产品参考'])
+  assert.deepEqual(product.children.filter(item => item.children).map(item => item.title), ['产品需求（PRD）', '执行计划（PLAN）', '页面需求', '产品参考'])
+  const pageRequirements = product.children.find(item => item.title === '页面需求').children
+  assert.ok(pageRequirements.some(item => item.route === '/product/pages/01-今日热点'))
+  assert.ok(pageRequirements.some(item => item.route === '/product/pages/52-Agent 读取说明'))
   assert.equal(normalized.topLevelNavbarItems.find(item => item.title === 'PLAN').href, '/product/plan/01-PLAN-workspace项目知识库/')
 })
 

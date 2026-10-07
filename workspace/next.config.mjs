@@ -8,6 +8,9 @@ export default withNextra({
   trailingSlash: true,
   images: { unoptimized: true },
   poweredByHeader: false,
+  // Serialize static rendering so the complete requirements catalogue fits
+  // the documentation container's 2 GB memory limit.
+  experimental: { cpus: 1 },
   // Keep the standalone package independent of the frontend lockfile.
   outputFileTracingRoot: import.meta.dirname
 })
