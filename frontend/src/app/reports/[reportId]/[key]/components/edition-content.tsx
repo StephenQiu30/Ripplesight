@@ -43,6 +43,7 @@ export function EditionContent({
           <ItemGroup className="gap-0">
             {section.items.map((item, index) => (
               <Item
+                role="listitem"
                 key={item.id}
                 className="flex-nowrap items-start gap-2 border-0 px-0 py-2"
               >
@@ -157,7 +158,7 @@ function EditionEventBlocks({ items }: { items: HotKeyAPI.PublicItemView[] }) {
           <Fragment key={item.id}>
             <Separator />
             <Item asChild className="px-0 py-6">
-              <UI.Content as="article" aria-label={item.title}>
+              <UI.Content role="listitem" aria-label={item.title}>
                 <ItemContent className="min-w-0 gap-3">
                   <UI.Content className="flex flex-wrap items-center gap-2">
                     {category ? (

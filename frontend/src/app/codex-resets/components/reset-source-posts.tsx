@@ -143,7 +143,10 @@ export function ResetSourcePosts({ refresh }: { refresh: number }) {
               </EmptyHeader>
             </Empty>
           )}
-          <ItemGroup className="flex flex-col gap-y-8">
+          <ItemGroup
+            role={state.posts.length ? "list" : "group"}
+            className="flex flex-col gap-y-8"
+          >
             {state.posts.map((post) => (
               <Item
                 role="listitem"

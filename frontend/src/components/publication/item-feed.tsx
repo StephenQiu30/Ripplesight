@@ -51,7 +51,7 @@ export function PublicItemFeed({
               aria-labelledby={`reading-item-${item.id}`}
               className="items-start gap-3 rounded-none px-4 py-5 sm:px-5"
             >
-              <Content as="article" role="listitem" className="flex-nowrap">
+              <Content role="listitem" className="flex-nowrap">
                 <Avatar size="lg">
                   {safeIcon ? <AvatarImage src={icon} alt="" /> : null}
                   <AvatarFallback>

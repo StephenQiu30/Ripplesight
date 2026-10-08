@@ -22,11 +22,7 @@ export function HomeStoryFeed({
             key={story.id}
             className="border-border flex-nowrap items-start gap-6 rounded-none border-x-0 border-t-0 border-b px-0 py-6"
           >
-            <Content
-              as="article"
-              role="listitem"
-              aria-labelledby={`home-story-${story.id}`}
-            >
+            <Content role="listitem" aria-labelledby={`home-story-${story.id}`}>
               <Text
                 as="span"
                 tone="muted"
@@ -46,7 +42,8 @@ export function HomeStoryFeed({
                   · {relativeTime(view.time, observedAt)}
                 </Text>
                 <Heading
-                  level={3}
+                  level={2}
+                  appearance="feed"
                   id={`home-story-${story.id}`}
                   className="break-words"
                 >

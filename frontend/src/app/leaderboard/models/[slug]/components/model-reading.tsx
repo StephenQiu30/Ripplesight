@@ -106,7 +106,7 @@ export function ModelReading({ data }: { data: HotKeyAPI.ModelDetailView }) {
                 : ""}
             </UI.Text>
           ) : null}
-          <ItemGroup>
+          <ItemGroup role={data.categories.length ? "list" : "group"}>
             {data.categories.map((category) => (
               <Item role="listitem" key={category.key}>
                 <ItemContent className="gap-2">

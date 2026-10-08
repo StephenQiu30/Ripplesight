@@ -62,6 +62,7 @@ describe("Figma reading shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "定位正文" }));
     expect(document.activeElement).toBe(content);
     expect(content.id).toBe("page-content");
+    expect(content.tabIndex).toBe(0);
     expect(screen.getAllByRole("main")).toHaveLength(1);
     expect(
       content.contains(screen.getByRole("navigation", { name: "手机导航" })),

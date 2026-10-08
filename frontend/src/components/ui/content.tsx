@@ -20,6 +20,7 @@ const headingVariants = cva("tracking-tight", {
       display: "text-4xl leading-tight font-semibold lg:text-5xl",
       form: "text-2xl leading-8 font-semibold",
       result: "text-base leading-6 font-semibold",
+      feed: "text-base leading-6 font-semibold md:text-lg md:leading-6",
     },
   },
 });
@@ -30,7 +31,7 @@ export function Heading({
   ...props
 }: React.ComponentProps<"h1"> & {
   level?: 1 | 2 | 3 | 4 | 5 | 6;
-  appearance?: "section" | "sidebar" | "display" | "form" | "result";
+  appearance?: "section" | "sidebar" | "display" | "form" | "result" | "feed";
 }) {
   return React.createElement(`h${level}`, {
     "data-slot": "heading",

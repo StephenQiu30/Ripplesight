@@ -67,6 +67,7 @@ export function UserAvatar({
           />
         )}
         <AvatarFallback
+          role="img"
           aria-label={current?.failed ? "头像暂不可用" : "默认用户头像"}
         >
           <UserRoundIcon className="size-1/2" aria-hidden="true" />

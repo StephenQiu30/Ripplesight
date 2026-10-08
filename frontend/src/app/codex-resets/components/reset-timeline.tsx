@@ -145,7 +145,10 @@ export function ResetTimeline({
               。此时间不是账户精确到账时间。
             </UI.Text>
           )}
-          <ItemGroup className="flex flex-col gap-y-3">
+          <ItemGroup
+            role={event.posts?.length ? "list" : "group"}
+            className="flex flex-col gap-y-3"
+          >
             {(event.posts ?? []).map((post) => (
               <Item
                 role="listitem"

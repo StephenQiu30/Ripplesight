@@ -341,6 +341,8 @@ export function PublicPlatformCatalog() {
       ) : null}
       {platforms === null && loading ? (
         <UI.Content
+          role="status"
+          aria-busy="true"
           aria-label="正在读取平台目录"
           className="flex flex-col gap-3"
         >
@@ -358,9 +360,9 @@ export function PublicPlatformCatalog() {
           </EmptyHeader>
         </Empty>
       ) : null}
-      <ItemGroup className="gap-8">
+      <ItemGroup role={platforms?.length ? "list" : "group"} className="gap-8">
         {platforms?.map((platform, index) => (
-          <UI.Content key={platform.platform_key}>
+          <UI.Content role="listitem" key={platform.platform_key}>
             {index > 0 ? <Separator className="mb-8" /> : null}
             <Platform platform={platform} />
           </UI.Content>
