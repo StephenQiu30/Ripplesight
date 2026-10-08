@@ -14,12 +14,12 @@ RUN pnpm install --frozen-lockfile
 
 FROM dependencies AS development
 COPY --chown=node:node . .
-RUN chown node:node /app
+RUN mkdir -p /app/.next && chown node:node /app /app/.next
 USER node
 EXPOSE 8080
 HEALTHCHECK --interval=5s --timeout=5s --start-period=30s --retries=12 \
   CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:8080/health || exit 1
-CMD ["node", "node_modules/next/dist/bin/next", "dev", "--webpack", "--hostname", "0.0.0.0", "--port", "8080"]
+CMD ["node", "node_modules/next/dist/bin/next", "dev", "--hostname", "0.0.0.0", "--port", "8080"]
 
 FROM base AS builder
 WORKDIR /app
