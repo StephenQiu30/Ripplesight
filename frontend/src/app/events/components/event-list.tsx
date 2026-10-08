@@ -15,7 +15,6 @@ import { listEvents } from "@/api/shijian";
 import { EventHotList } from "./event-hot-list";
 import { listMonitorTopics } from "@/api/jiankongzhuti";
 import { listSourceCapabilities } from "@/api/laiyuannengli";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,12 +33,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageState } from "@/components/system/page-state";
 import { ApiRequestError } from "@/request";
 
 type ResultState =
   | { status: "loading" }
-  | { status: "error" }
+  | { status: "error"; httpStatus?: number; errorCode?: string }
   | { status: "ready"; page: HotKeyAPI.PageViewEventReadView_ };
 
 function message(error: unknown): string {
@@ -218,7 +217,13 @@ function EventResults({
           !current.signal.aborted &&
           !(error instanceof ApiRequestError && error.kind === "cancelled")
         ) {
-          setState({ status: "error" });
+          setState({
+            status: "error",
+            httpStatus:
+              error instanceof ApiRequestError ? error.status : undefined,
+            errorCode:
+              error instanceof ApiRequestError ? error.code : undefined,
+          });
           toast.error(message(error));
         }
       });
@@ -255,8 +260,18 @@ function EventResults({
       if (
         !signal?.aborted &&
         !(error instanceof ApiRequestError && error.kind === "cancelled")
-      )
+      ) {
+        if (
+          error instanceof ApiRequestError &&
+          (error.status === 401 || error.status === 403)
+        )
+          setState({
+            status: "error",
+            httpStatus: error.status,
+            errorCode: error.code,
+          });
         toast.error(message(error));
+      }
     } finally {
       if (!signal?.aborted) setLoadingMore(false);
     }
@@ -264,21 +279,31 @@ function EventResults({
 
   if (state.status === "loading")
     return (
-      <UI.Content
-        aria-label="正在读取事件"
-        className="mt-10 flex flex-col gap-y-5"
-      >
-        {[1, 2, 3].map((id) => (
-          <Skeleton key={id} className="h-28 w-full" />
-        ))}
-      </UI.Content>
+      <PageState
+        headingLevel={2}
+        state="loading"
+        title="正在读取事件"
+        description="正在读取当前筛选下的事件。"
+      />
     );
   if (state.status === "error")
     return (
-      <Alert variant="destructive" className="mt-10">
-        <AlertTitle>无法读取事件</AlertTitle>
-        <AlertDescription>
-          可以重新读取当前筛选下的事件。
+      <PageState
+        headingLevel={2}
+        state={
+          state.httpStatus === 401 || state.httpStatus === 403
+            ? "forbidden"
+            : "error"
+        }
+        title={
+          state.httpStatus === 401 || state.httpStatus === 403
+            ? "暂时无法访问事件"
+            : "无法读取事件"
+        }
+        description="请重新读取；权限变化时已清除先前列表。"
+        httpStatus={state.httpStatus}
+        errorCode={state.errorCode}
+        action={
           <Button
             variant="outline"
             onClick={() => {
@@ -288,10 +313,9 @@ function EventResults({
           >
             重试事件读取
           </Button>
-        </AlertDescription>
-      </Alert>
+        }
+      />
     );
-
   const names = new Map(
     sources.map((source) => [source.source_key, source.display_name]),
   );

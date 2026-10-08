@@ -1,6 +1,7 @@
 "use client";
 import * as UI from "@/components/ui/content";
 
+import { PageState } from "@/components/system/page-state";
 import { toast } from "sonner";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -116,6 +117,8 @@ export function SourceSettings() {
   >(null);
   const [loading, setLoading] = useState(true);
   const [readFailed, setReadFailed] = useState(false);
+  const [forbidden, setForbidden] = useState(false);
+  const refreshButton = useRef<HTMLButtonElement>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
   const origin = useRef<HTMLButtonElement | null>(null);
@@ -127,7 +130,10 @@ export function SourceSettings() {
     (current: AbortController) =>
       listSourceCapabilities({ signal: current.signal })
         .then((page) => {
-          if (!current.signal.aborted) setPlatforms(page.items);
+          if (!current.signal.aborted) {
+            setPlatforms(page.items);
+            setForbidden(false);
+          }
         })
         .catch((failure: unknown) => {
           if (
@@ -137,6 +143,14 @@ export function SourceSettings() {
             return;
           if (current.signal.aborted) return;
           setReadFailed(true);
+          if (
+            failure instanceof ApiRequestError &&
+            (failure.status === 401 || failure.status === 403)
+          ) {
+            setForbidden(true);
+            setPlatforms(null);
+            setSelectedKey(null);
+          }
           toast.error(
             failure instanceof ApiRequestError
               ? `${failure.message}${failure.requestId ? ` 请求编号：${failure.requestId}` : ""}`
@@ -155,6 +169,7 @@ export function SourceSettings() {
     controller.current = current;
     setLoading(true);
     setReadFailed(false);
+    setForbidden(false);
     await read(current);
   }, [read]);
 
@@ -187,6 +202,7 @@ export function SourceSettings() {
         <Button
           variant="outline"
           size="sm"
+          ref={refreshButton}
           disabled={loading}
           onClick={() => void refresh()}
         >
@@ -194,8 +210,20 @@ export function SourceSettings() {
           {loading && platforms ? "正在刷新…" : "刷新状态"}
         </Button>
       </UI.Content>
-      <ChromeConnection onConnected={refresh} />
-      {readFailed ? (
+      {!forbidden ? <ChromeConnection onConnected={refresh} /> : null}
+      {readFailed && forbidden ? (
+        <PageState
+          state="forbidden"
+          headingLevel={2}
+          title="无权读取来源状态"
+          description="连接信息已清除，请重新确认来源访问权限。"
+          action={
+            <Button variant="outline" onClick={() => void refresh()}>
+              重新加载
+            </Button>
+          }
+        />
+      ) : readFailed ? (
         <Alert variant="destructive">
           <AlertTitle>暂时无法读取来源状态</AlertTitle>
           <AlertDescription>
@@ -216,6 +244,8 @@ export function SourceSettings() {
       ) : null}
       {platforms === null && loading ? (
         <UI.Content
+          role="status"
+          aria-busy="true"
           aria-label="正在读取来源设置"
           className="flex flex-col gap-3"
         >
@@ -277,7 +307,8 @@ export function SourceSettings() {
           className="overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-xl"
           onCloseAutoFocus={(event) => {
             event.preventDefault();
-            origin.current?.focus();
+            if (origin.current?.isConnected) origin.current.focus();
+            else refreshButton.current?.focus();
           }}
         >
           <SheetHeader className="pr-14">

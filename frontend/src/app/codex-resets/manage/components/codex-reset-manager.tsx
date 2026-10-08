@@ -46,6 +46,9 @@ export function CodexResetManager() {
 
   const [monitor, setMonitor] = useState<HotKeyAPI.MonitorView | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [readFailure, setReadFailure] = useState<"error" | "forbidden" | null>(
+    null,
+  );
   const [token, setToken] = useState("");
   const [configuration, setConfiguration] =
     useState<HotKeyAPI.MonitorConfiguration>({
@@ -77,6 +80,7 @@ export function CodexResetManager() {
   const [relinkTarget, setRelinkTarget] =
     useState<HotKeyAPI.ResetEventView | null>(null);
   const context = useRef(0);
+  const configurationReads = useRef(0);
   const operations = useRef(new Map<string, string>());
   const headers = { "X-HotKey-Operator-Token": token, "X-HotKey-CSRF": "1" };
   function id(value: object) {
@@ -86,8 +90,10 @@ export function CodexResetManager() {
     return operations.current.get(key)!;
   }
   function applyMonitor(value: HotKeyAPI.MonitorView | null) {
+    configurationReads.current += 1;
     setMonitor(value);
     setLoaded(true);
+    setReadFailure(null);
     if (value) {
       setConfiguration(value.configuration);
       setEnabled(value.enabled);
@@ -110,23 +116,65 @@ export function CodexResetManager() {
   }
   useEffect(() => {
     const controller = new AbortController();
+    const readVersion = ++configurationReads.current;
     void getCodexResetConfiguration({ signal: controller.signal })
       .then((value) => {
-        if (!controller.signal.aborted) applyMonitor(value);
+        if (
+          !controller.signal.aborted &&
+          readVersion === configurationReads.current
+        )
+          applyMonitor(value);
       })
       .catch((cause) => {
         if (cause instanceof ApiRequestError && cause.kind === "cancelled")
           return;
-        if (!controller.signal.aborted)
+        if (
+          !controller.signal.aborted &&
+          readVersion === configurationReads.current
+        ) {
+          setReadFailure(
+            cause instanceof ApiRequestError &&
+              (cause.status === 401 || cause.status === 403)
+              ? "forbidden"
+              : "error",
+          );
           toast.error(
             cause instanceof ApiRequestError ? cause.message : "配置读取失败。",
           );
+        }
       });
     return () => {
       context.current += 1;
       controller.abort();
     };
   }, []);
+  async function rereadConfiguration() {
+    const epoch = context.current;
+    const readVersion = ++configurationReads.current;
+    try {
+      const value = await getCodexResetConfiguration();
+      if (
+        epoch === context.current &&
+        readVersion === configurationReads.current
+      )
+        applyMonitor(value);
+    } catch (cause) {
+      if (
+        epoch !== context.current ||
+        readVersion !== configurationReads.current
+      )
+        return;
+      if (cause instanceof ApiRequestError && cause.kind === "cancelled")
+        return;
+      setReadFailure(
+        cause instanceof ApiRequestError &&
+          (cause.status === 401 || cause.status === 403)
+          ? "forbidden"
+          : "error",
+      );
+      throw cause;
+    }
+  }
   async function perform(action: () => Promise<void>, operationId?: string) {
     const epoch = context.current;
     setBusy(true);
@@ -402,11 +450,7 @@ export function CodexResetManager() {
               <Button
                 variant="outline"
                 disabled={busy}
-                onClick={() =>
-                  void perform(async () =>
-                    applyMonitor(await getCodexResetConfiguration()),
-                  )
-                }
+                onClick={() => void perform(rereadConfiguration)}
               >
                 重读配置
               </Button>
@@ -427,13 +471,18 @@ export function CodexResetManager() {
         as="section"
         className="flex flex-col gap-y-5"
         aria-label="官方监控配置"
+        aria-busy={!loaded && !readFailure}
       >
         <UI.Heading level={2} className="text-xl font-medium">
-          {monitor
-            ? `监控修订 ${monitor.revision} · 配置版本 ${monitor.configuration_version}`
-            : loaded
-              ? "尚未配置公告监控"
-              : "正在读取配置…"}
+          {readFailure
+            ? readFailure === "forbidden"
+              ? "无权读取公告配置"
+              : "配置暂不可读，请重读配置"
+            : monitor
+              ? `监控修订 ${monitor.revision} · 配置版本 ${monitor.configuration_version}`
+              : loaded
+                ? "尚未配置公告监控"
+                : "正在读取配置…"}
         </UI.Heading>
         <UI.Content className="grid gap-5 sm:grid-cols-2">
           <Field className="flex flex-col gap-y-2">

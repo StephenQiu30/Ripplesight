@@ -38,7 +38,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageState } from "@/components/system/page-state";
 import { Textarea } from "@/components/ui/textarea";
 import {
   EditionCard,
@@ -54,9 +54,15 @@ function EditionReferences({
   ids: string[];
   entries: HotKeyAPI.ReportPublicationCandidate[];
 }) {
+  const visibleIds = ids.filter((id) =>
+    entries.some((entry) => entry.content_id === id),
+  );
   return (
-    <ItemGroup className="flex flex-col gap-y-5">
-      {ids.map((id) => {
+    <ItemGroup
+      role={visibleIds.length ? "list" : "group"}
+      className="flex flex-col gap-y-5"
+    >
+      {visibleIds.map((id) => {
         const entry = entries.find((row) => row.content_id === id);
         return entry ? (
           <Item
@@ -248,7 +254,10 @@ export function EditionDetail({ editionId }: { editionId: string }) {
   const router = useRouter();
   const [row, setRow] = useState<HotKeyAPI.EditionDetailView>();
   const [history, setHistory] = useState<HotKeyAPI.EditionSummaryView[]>([]);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadError, setLoadError] = useState<{
+    status?: number;
+    code?: string;
+  }>();
   const [historyError, setHistoryError] = useState(false);
   const [refresh, setRefresh] = useState(0);
   useEffect(() => {
@@ -262,7 +271,7 @@ export function EditionDetail({ editionId }: { editionId: string }) {
         );
         if (controller.signal.aborted) return;
         setRow(next);
-        setLoadFailed(false);
+        setLoadError(undefined);
         if (next.status === "queued" || next.status === "running")
           timer = setTimeout(read, 5000);
       } catch (err) {
@@ -271,7 +280,11 @@ export function EditionDetail({ editionId }: { editionId: string }) {
           !(err instanceof ApiRequestError && err.kind === "cancelled")
         ) {
           setRow(undefined);
-          setLoadFailed(true);
+          setLoadError(
+            err instanceof ApiRequestError
+              ? { status: err.status, code: err.code }
+              : {},
+          );
           toast.error(editionError(err));
         }
       }
@@ -314,15 +327,48 @@ export function EditionDetail({ editionId }: { editionId: string }) {
             刷新刊期
           </Button>
         </UI.Content>
-        {loadFailed ? (
-          <Alert variant="destructive">
-            <AlertTitle>正文暂不可读</AlertTitle>
-            <AlertDescription>
-              刷新后可以重新检查当前刊期许可。
-            </AlertDescription>
-          </Alert>
+        {loadError ? (
+          <PageState
+            state={
+              loadError.status === 401 || loadError.status === 403
+                ? "forbidden"
+                : loadError.status === 404
+                  ? "empty"
+                  : "error"
+            }
+            title={
+              loadError.status === 401 || loadError.status === 403
+                ? "无法查看这个刊期"
+                : loadError.status === 404
+                  ? "没有找到这个刊期"
+                  : "正文暂不可读"
+            }
+            description="刷新后可以重新检查当前刊期许可。"
+            errorCode={loadError.code}
+            httpStatus={loadError.status}
+            action={
+              <Button
+                variant="outline"
+                onClick={() => setRefresh((n) => n + 1)}
+              >
+                重试
+              </Button>
+            }
+          />
         ) : null}
-        {!row && !loadFailed ? <Skeleton className="h-40 w-full" /> : null}
+        {!row && !loadError ? (
+          <>
+            <UI.Heading level={1} className="sr-only">
+              正在读取刊期
+            </UI.Heading>
+            <PageState
+              state="loading"
+              title="正在读取刊期"
+              description="正在检查正文许可与历史修订。"
+              loadingLayout="detail"
+            />
+          </>
+        ) : null}
         {row ? (
           <>
             <UI.Text className="text-muted-foreground text-sm">
@@ -483,7 +529,7 @@ export function EditionDetail({ editionId }: { editionId: string }) {
               <AlertDescription>刷新后可以重新读取历史修订。</AlertDescription>
             </Alert>
           ) : (
-            <ItemGroup>
+            <ItemGroup role={history.length ? "list" : "group"}>
               {history.map((item) => (
                 <EditionCard row={item} key={item.id} />
               ))}

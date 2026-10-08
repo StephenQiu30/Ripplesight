@@ -58,7 +58,7 @@ const SOURCES = [
 type SourcesState =
   | { status: "loading" }
   | { status: "ready"; items: HotKeyAPI.HotlistSourceView[] }
-  | { status: "error" };
+  | { status: "error"; forbidden?: boolean };
 
 type HistoryState =
   | { status: "loading"; sourceKey: string }
@@ -68,7 +68,7 @@ type HistoryState =
       items: HotKeyAPI.HotlistSnapshotSummaryView[];
       nextCursor: string | null;
     }
-  | { status: "error"; sourceKey: string };
+  | { status: "error"; sourceKey: string; forbidden?: boolean };
 
 type DetailState =
   | { status: "loading"; snapshotId: string }
@@ -93,6 +93,13 @@ function safeExternalHref(value: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+function isForbidden(error: unknown) {
+  return (
+    error instanceof ApiRequestError &&
+    (error.status === 401 || error.status === 403)
+  );
 }
 
 function readError(error: unknown, fallback: string) {
@@ -319,6 +326,7 @@ export function HotlistWorkspace() {
 
         setSources({
           status: "error",
+          forbidden: isForbidden(error),
         });
       });
     return () => {
@@ -363,6 +371,7 @@ export function HotlistWorkspace() {
 
         setHistory({
           status: "error",
+          forbidden: isForbidden(error),
           sourceKey: activeSource,
         });
       });
@@ -407,7 +416,7 @@ export function HotlistWorkspace() {
           snapshotId: selectedSnapshot,
           forbidden:
             error instanceof ApiRequestError &&
-            (error.status === 403 || error.status === 404),
+            (isForbidden(error) || error.status === 404),
         });
       });
     return () => controller.abort();
@@ -468,6 +477,14 @@ export function HotlistWorkspace() {
     } catch (error) {
       if (controller.signal.aborted) return;
       toast.error(readError(error, "后续历史加载失败，请重试。").message);
+      if (isForbidden(error)) {
+        setHistory({
+          status: "error",
+          sourceKey: activeSource,
+          forbidden: true,
+        });
+        setDetail(null);
+      }
     } finally {
       if (!controller.signal.aborted) {
         historyMorePending.current = false;
@@ -516,6 +533,13 @@ export function HotlistWorkspace() {
     } catch (error) {
       if (controller.signal.aborted) return;
       toast.error(readError(error, "后续榜位加载失败，请重试。").message);
+      if (isForbidden(error)) {
+        setDetail({
+          status: "error",
+          snapshotId: selectedSnapshot,
+          forbidden: true,
+        });
+      }
     } finally {
       if (!controller.signal.aborted) {
         entriesMorePending.current = false;
@@ -541,9 +565,9 @@ export function HotlistWorkspace() {
   if (sources.status === "error")
     return (
       <PageState
-        state="error"
-        eyebrow="加载失败"
-        title="暂时无法打开热榜"
+        state={sources.forbidden ? "forbidden" : "error"}
+        eyebrow={sources.forbidden ? "访问受限" : "加载失败"}
+        title={sources.forbidden ? "无权读取热榜" : "暂时无法打开热榜"}
         description="请重新加载以读取已应用的热榜来源。"
         action={
           <Button onClick={() => window.location.reload()}>
@@ -610,8 +634,8 @@ export function HotlistWorkspace() {
         />
       ) : history?.status === "error" && history.sourceKey === activeSource ? (
         <InlineState
-          eyebrow="加载失败"
-          title="无法读取历史快照"
+          eyebrow={history.forbidden ? "访问受限" : "加载失败"}
+          title={history.forbidden ? "无权读取历史快照" : "无法读取历史快照"}
           description="请重新加载以读取当前来源的历史快照。"
           action={
             <Button

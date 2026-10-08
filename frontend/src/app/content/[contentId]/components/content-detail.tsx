@@ -53,7 +53,12 @@ type DetailState =
   | { status: "loading" }
   | { status: "ready"; content: HotKeyAPI.ContentRecordDetailView }
   | { status: "not-found" }
-  | { status: "error"; message: string; requestId?: string };
+  | {
+      status: "error";
+      message: string;
+      requestId?: string;
+      forbidden?: boolean;
+    };
 
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
@@ -403,6 +408,7 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
                   status: "error",
                   message: error.message,
                   requestId: error.requestId,
+                  forbidden: error.status === 401 || error.status === 403,
                 }
               : { status: "error", message: "作品资料加载失败，请稍后重试。" },
           );
@@ -452,9 +458,9 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
   if (state.status === "error") {
     return (
       <PageState
-        state="error"
-        eyebrow="加载失败"
-        title="暂时无法读取作品"
+        state={state.forbidden ? "forbidden" : "error"}
+        eyebrow={state.forbidden ? "访问受限" : "加载失败"}
+        title={state.forbidden ? "无权读取作品" : "暂时无法读取作品"}
         description="请重新加载作品资料。"
         action={
           <Button

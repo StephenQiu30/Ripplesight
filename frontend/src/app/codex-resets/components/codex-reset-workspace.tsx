@@ -33,7 +33,7 @@ type Reading = {
 type State =
   | { status: "loading" }
   | { status: "unconfigured" }
-  | { status: "error" }
+  | { status: "error"; forbidden?: boolean }
   | { status: "ready"; data: Reading; refreshing?: boolean; stale?: boolean };
 const healthLabel: Record<HotKeyAPI.ResetHealth["status"], string> = {
   unknown: "暂无完整核验",
@@ -57,9 +57,11 @@ export function CodexResetWorkspace() {
   const [includeWithdrawn, setIncludeWithdrawn] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const versionProbeFailed = useRef(false);
+  const permissionVersion = useRef(0);
   const version = state.status === "ready" ? state.data.snapshot.version : null;
   useEffect(() => {
     const controller = new AbortController();
+    const readVersion = permissionVersion.current;
     void Promise.all([
       getCodexResetConfiguration({ signal: controller.signal }),
       getCodexResetSnapshot(
@@ -69,7 +71,11 @@ export function CodexResetWorkspace() {
       getRecentCodexResets({ signal: controller.signal }),
     ])
       .then(([configuration, snapshot, recent]) => {
-        if (controller.signal.aborted) return;
+        if (
+          controller.signal.aborted ||
+          readVersion !== permissionVersion.current
+        )
+          return;
         if (!configuration) {
           setState({ status: "unconfigured" });
           return;
@@ -85,10 +91,19 @@ export function CodexResetWorkspace() {
       .catch((error) => {
         if (
           controller.signal.aborted ||
+          readVersion !== permissionVersion.current ||
           (error instanceof ApiRequestError && error.kind === "cancelled")
         )
           return;
         toast.error(errorMessage(error));
+        if (
+          error instanceof ApiRequestError &&
+          (error.status === 401 || error.status === 403)
+        ) {
+          permissionVersion.current += 1;
+          setState({ status: "error", forbidden: true });
+          return;
+        }
         setState((previous) =>
           previous.status === "ready"
             ? {
@@ -107,19 +122,34 @@ export function CodexResetWorkspace() {
     const controller = new AbortController();
     const timer = setInterval(() => {
       if (document.visibilityState === "hidden") return;
+      const readVersion = permissionVersion.current;
       void getCodexResetVersion({ signal: controller.signal })
         .then((probe) => {
-          if (!controller.signal.aborted) versionProbeFailed.current = false;
+          if (
+            controller.signal.aborted ||
+            readVersion !== permissionVersion.current
+          )
+            return;
+          versionProbeFailed.current = false;
           if (!controller.signal.aborted && probe?.version !== version)
             setRefresh((value) => value + 1);
         })
         .catch((error) => {
           if (
             !controller.signal.aborted &&
+            readVersion === permissionVersion.current &&
             !(error instanceof ApiRequestError && error.kind === "cancelled")
           ) {
             if (!versionProbeFailed.current) toast.error(errorMessage(error));
             versionProbeFailed.current = true;
+            if (
+              error instanceof ApiRequestError &&
+              (error.status === 401 || error.status === 403)
+            ) {
+              permissionVersion.current += 1;
+              setState({ status: "error", forbidden: true });
+              return;
+            }
             setState((previous) =>
               previous.status === "ready"
                 ? {
@@ -138,6 +168,7 @@ export function CodexResetWorkspace() {
   }, [version]);
 
   function reload() {
+    permissionVersion.current += 1;
     setState((previous) =>
       previous.status === "ready"
         ? { ...previous, refreshing: true, stale: undefined }
@@ -164,9 +195,9 @@ export function CodexResetWorkspace() {
   if (state.status === "error")
     return (
       <PageState
-        state="error"
+        state={state.forbidden ? "forbidden" : "error"}
         eyebrow="公告读取"
-        title="暂时无法读取公告"
+        title={state.forbidden ? "无权读取公告" : "暂时无法读取公告"}
         description="可以重新读取公告与日历。"
         action={<Button onClick={reload}>重试读取公告</Button>}
       />

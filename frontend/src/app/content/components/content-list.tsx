@@ -29,7 +29,6 @@ import {
   visibilityStatusNotice,
 } from "@/app/content/components/content-presenters";
 import { WebPageCaptureForm } from "@/app/content/components/webpage-capture-form";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -62,7 +61,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageState } from "@/components/system/page-state";
 import { ApiRequestError } from "@/request";
 
 type ContentListState =
@@ -72,7 +71,13 @@ type ContentListState =
       items: HotKeyAPI.ContentRecordSummaryView[];
       nextCursor: string | null;
     }
-  | { status: "error"; message: string; requestId?: string };
+  | {
+      status: "error";
+      message: string;
+      requestId?: string;
+      httpStatus?: number;
+      errorCode?: string;
+    };
 
 type AnalysisFilter =
   "" | NonNullable<HotKeyAPI.listContentRecordsParams["analysis_state"]>;
@@ -238,7 +243,13 @@ function toErrorState(
   error: unknown,
 ): Extract<ContentListState, { status: "error" }> {
   return error instanceof ApiRequestError
-    ? { status: "error", message: error.message, requestId: error.requestId }
+    ? {
+        status: "error",
+        message: error.message,
+        requestId: error.requestId,
+        httpStatus: error.status,
+        errorCode: error.code,
+      }
     : { status: "error", message: "作品资料加载失败，请稍后重试。" };
 }
 
@@ -360,12 +371,18 @@ export function ContentList() {
     } catch (error) {
       if (error instanceof ApiRequestError && error.kind === "cancelled")
         return;
-      if (!controller.signal.aborted)
+      if (!controller.signal.aborted) {
+        if (
+          error instanceof ApiRequestError &&
+          (error.status === 401 || error.status === 403)
+        )
+          setState(toErrorState(error));
         toast.error(
           error instanceof ApiRequestError
             ? error.message
             : "后续作品加载失败，请重试。",
         );
+      }
     } finally {
       if (!controller.signal.aborted) {
         loadingMore.current = false;
@@ -604,26 +621,36 @@ export function ContentList() {
         </UI.Content>
       </UI.Content>
       {state.status === "loading" ? (
-        <UI.Content
-          aria-label="正在读取作品资料"
-          className="mt-12 flex flex-col gap-6"
-        >
-          {[0, 1, 2].map((item) => (
-            <Skeleton key={item} className="h-24 w-full" />
-          ))}
-        </UI.Content>
+        <PageState
+          headingLevel={2}
+          state="loading"
+          title="正在读取作品资料"
+          description="正在读取当前筛选下的作品。"
+        />
       ) : null}
       {state.status === "error" ? (
-        <Alert variant="destructive" className="mt-12">
-          <AlertTitle>暂时无法读取作品</AlertTitle>
-          <AlertDescription>
-            请重新加载作品资料。
+        <PageState
+          headingLevel={2}
+          state={
+            state.httpStatus === 401 || state.httpStatus === 403
+              ? "forbidden"
+              : "error"
+          }
+          title={
+            state.httpStatus === 401 || state.httpStatus === 403
+              ? "暂时无法访问作品资料"
+              : "暂时无法读取作品"
+          }
+          description="请重新读取；权限变化时已清除先前列表。"
+          errorCode={state.errorCode}
+          httpStatus={state.httpStatus}
+          action={
             <Button variant="outline" onClick={() => reload(applied)}>
               <RotateCcwIcon data-icon="inline-start" />
               重新加载
             </Button>
-          </AlertDescription>
-        </Alert>
+          }
+        />
       ) : null}
       {state.status === "ready" && state.items.length === 0 ? (
         <Empty className="mt-12">

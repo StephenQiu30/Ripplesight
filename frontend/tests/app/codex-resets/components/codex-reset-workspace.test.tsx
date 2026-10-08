@@ -27,6 +27,8 @@ vi.mock("@/api/zhongzhigonggao", () => ({
   listCodexResetPosts: api.posts,
 }));
 
+import { ApiRequestError } from "@/request";
+
 import { CodexResetWorkspace } from "@/app/codex-resets/components/codex-reset-workspace";
 
 const event: HotKeyAPI.ResetEventView = {
@@ -116,6 +118,128 @@ function ready() {
 }
 
 describe("Codex reset reading", () => {
+  it.each([401, 403])(
+    "clears private calendar on refresh denial %s",
+    async (status) => {
+      ready();
+      render(<CodexResetWorkspace />);
+      await screen.findByRole("heading", { name: event.title });
+      api.snapshot.mockRejectedValue(
+        new ApiRequestError({
+          kind: "http",
+          status,
+          code: "permission_denied",
+          message: "denied",
+        }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "刷新公告" }));
+      await screen.findByRole("heading", { name: "无权读取公告" });
+      expect(screen.queryByRole("heading", { name: event.title })).toBeNull();
+      expect(screen.queryByRole("link", { name: "阅读公告原帖" })).toBeNull();
+      expect(screen.queryByText(/当前为上次读取的数据/)).toBeNull();
+    },
+  );
+
+  it.each([401, 403])(
+    "clears private calendar on version probe denial %s",
+    async (status) => {
+      ready();
+      api.version.mockRejectedValue(
+        new ApiRequestError({
+          kind: "http",
+          status,
+          code: "permission_denied",
+          message: "denied",
+        }),
+      );
+      vi.useFakeTimers();
+      await act(async () => {
+        render(<CodexResetWorkspace />);
+      });
+      expect(screen.getByRole("heading", { name: event.title })).toBeTruthy();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000);
+      });
+      expect(
+        screen.getByRole("heading", { name: "无权读取公告" }),
+      ).toBeTruthy();
+      expect(screen.queryByRole("heading", { name: event.title })).toBeNull();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000);
+      });
+      expect(api.version).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("does not refill a private calendar from a late refresh after probe denial", async () => {
+    ready();
+    let complete: (value: HotKeyAPI.ResetSnapshot) => void = () => {};
+    api.version.mockRejectedValue(
+      new ApiRequestError({
+        kind: "http",
+        status: 403,
+        code: "permission_denied",
+        message: "denied",
+      }),
+    );
+    vi.useFakeTimers();
+    await act(async () => {
+      render(<CodexResetWorkspace />);
+    });
+    api.snapshot.mockImplementationOnce(
+      () =>
+        new Promise<HotKeyAPI.ResetSnapshot>((resolve) => {
+          complete = resolve;
+        }),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "刷新公告" }));
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(screen.getByRole("heading", { name: "无权读取公告" })).toBeTruthy();
+    await act(async () => {
+      complete(snapshot);
+    });
+    expect(screen.getByRole("heading", { name: "无权读取公告" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: event.title })).toBeNull();
+  });
+
+  it("ignores a late successful probe after a refresh denial", async () => {
+    ready();
+    let complete: (value: HotKeyAPI.ResetVersionView) => void = () => {};
+    api.version.mockImplementationOnce(
+      () =>
+        new Promise<HotKeyAPI.ResetVersionView>((resolve) => {
+          complete = resolve;
+        }),
+    );
+    vi.useFakeTimers();
+    await act(async () => {
+      render(<CodexResetWorkspace />);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    api.snapshot.mockRejectedValueOnce(
+      new ApiRequestError({
+        kind: "http",
+        status: 401,
+        code: "invalid_session",
+        message: "denied",
+      }),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "刷新公告" }));
+    });
+    await act(async () => {
+      complete({ version: "version2", checked_at: null, today: "2026-10-08" });
+    });
+    expect(screen.getByRole("heading", { name: "无权读取公告" })).toBeTruthy();
+    expect(api.snapshot).toHaveBeenCalledTimes(2);
+  });
+
   it("announces a failed background probe once while retaining stale data", async () => {
     ready();
     api.version.mockRejectedValue(new Error("offline"));

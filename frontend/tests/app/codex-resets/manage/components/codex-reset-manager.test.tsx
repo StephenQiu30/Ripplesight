@@ -1,6 +1,7 @@
 import { selectOption } from "../../../../select";
 // @vitest-environment happy-dom
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -34,6 +35,70 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("announcement operational UI", () => {
+  it.each([401, 403, 503])(
+    "ends the initial waiting state on configuration failure %s and recovers on retry",
+    async (status) => {
+      api.getCodexResetConfiguration.mockRejectedValueOnce(
+        new ApiRequestError({
+          kind: "http",
+          status,
+          code: "permission_denied",
+          message: "denied",
+        }),
+      );
+      render(<CodexResetManager />);
+      await screen.findByRole("heading", {
+        name: status === 503 ? "配置暂不可读，请重读配置" : "无权读取公告配置",
+      });
+      expect(
+        screen.queryByRole("heading", { name: "正在读取配置…" }),
+      ).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "重读配置" }));
+      await screen.findByRole("heading", { name: "尚未配置公告监控" });
+      expect(api.configureCodexResetMonitor).not.toHaveBeenCalled();
+    },
+  );
+
+  it("ignores a late initial failure after a successful explicit configuration reread", async () => {
+    let reject: (cause: Error) => void = () => {};
+    api.getCodexResetConfiguration.mockImplementationOnce(
+      () =>
+        new Promise((_, fail) => {
+          reject = fail;
+        }),
+    );
+    render(<CodexResetManager />);
+    fireEvent.click(screen.getByRole("button", { name: "重读配置" }));
+    await screen.findByRole("heading", { name: "尚未配置公告监控" });
+    await act(async () => {
+      reject(
+        new ApiRequestError({
+          kind: "http",
+          status: 503,
+          message: "late failure",
+        }),
+      );
+    });
+    expect(
+      screen.getByRole("heading", { name: "尚未配置公告监控" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "配置暂不可读，请重读配置" }),
+    ).toBeNull();
+    expect(notifications.error).not.toHaveBeenCalled();
+  });
+
+  it("classifies an explicit reread failure after initial success", async () => {
+    render(<CodexResetManager />);
+    await screen.findByRole("heading", { name: "尚未配置公告监控" });
+    api.getCodexResetConfiguration.mockRejectedValueOnce(
+      new ApiRequestError({ kind: "http", status: 403, message: "denied" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "重读配置" }));
+    await screen.findByRole("heading", { name: "无权读取公告配置" });
+    expect(notifications.error).toHaveBeenCalled();
+  });
+
   function linkedPosts() {
     api.getCodexResetConfiguration.mockResolvedValue({
       id: "monitor",
