@@ -93,6 +93,9 @@ describe("core topic creation", () => {
       target: { value: "AI\nAgent" },
     });
     const save = screen.getByRole("button", { name: "保存关注" });
+    expect(
+      screen.getByLabelText("每日报告时间").closest("fieldset")?.disabled,
+    ).toBe(true);
     fireEvent.click(save);
     fireEvent.click(save);
     expect(api.create).toHaveBeenCalledTimes(1);
@@ -108,7 +111,6 @@ describe("core topic creation", () => {
       weekly_report_enabled: true,
       notification_target_names: [],
     });
-    expect(screen.queryByLabelText("每日报告时间")).toBeNull();
     resolve({ id: "persisted-topic" });
     await waitFor(() =>
       expect(api.replace).toHaveBeenCalledWith("/monitors/persisted-topic"),

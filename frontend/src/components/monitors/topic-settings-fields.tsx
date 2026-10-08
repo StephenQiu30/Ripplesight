@@ -203,12 +203,9 @@ export function TopicAdvancedFields({
     fieldErrors.exclude ||
     fieldErrors.collection_interval_seconds,
   );
+  const expanded = open || hasError;
   return (
-    <Collapsible
-      open={open || hasError}
-      onOpenChange={setOpen}
-      disabled={disabled}
-    >
+    <Collapsible open={expanded} onOpenChange={setOpen} disabled={disabled}>
       <CollapsibleTrigger asChild>
         <Button
           type="button"
@@ -220,98 +217,107 @@ export function TopicAdvancedFields({
           进阶设置 <ChevronDownIcon data-icon="inline-end" />
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="pt-6">
-        <FieldGroup>
-          <KeywordGroupField
-            id="match-all"
-            label="全部包含"
-            description="每个关键词都需要出现；留空则不增加限制。"
-            value={matchAll}
-            onChange={onMatchAllChange}
-            disabled={disabled}
-            error={fieldErrors.match_all}
-          />
-          <KeywordGroupField
-            id="exclude"
-            label="排除"
-            description="包含任意排除词的内容将被过滤。"
-            value={exclude}
-            onChange={onExcludeChange}
-            disabled={disabled}
-            error={fieldErrors.exclude}
-          />
-          <Field
-            data-disabled={disabled}
-            data-invalid={Boolean(fieldErrors.collection_interval_seconds)}
-          >
-            <FieldLabel htmlFor="collection-frequency">更新频率</FieldLabel>
-            <Select
-              value={
-                customInterval ? "custom" : String(collectionIntervalSeconds)
-              }
+      <CollapsibleContent motion="height">
+        <FieldSet className="pt-6" disabled={disabled || !expanded}>
+          <FieldLegend className="sr-only">进阶设置字段</FieldLegend>
+          <FieldGroup>
+            <KeywordGroupField
+              id="match-all"
+              label="全部包含"
+              description="每个关键词都需要出现；留空则不增加限制。"
+              value={matchAll}
+              onChange={onMatchAllChange}
               disabled={disabled}
-              onValueChange={(value) => {
-                setCustomInterval(value === "custom");
-                if (value !== "custom")
-                  onCollectionIntervalSecondsChange(Number(value));
-              }}
-            >
-              <SelectTrigger
-                id="collection-frequency"
-                className="w-full"
-                aria-invalid={Boolean(fieldErrors.collection_interval_seconds)}
-                aria-describedby="collection-frequency-description"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectLabel className="sr-only">更新频率</SelectLabel>
-                  {INTERVALS.map((item) => (
-                    <SelectItem key={item.value} value={String(item.value)}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="custom">自定义间隔</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <FieldDescription id="collection-frequency-description">
-              实际采集也会遵循来源自身的频次限制。
-            </FieldDescription>
-          </Field>
-          {customInterval ? (
+              error={fieldErrors.match_all}
+            />
+            <KeywordGroupField
+              id="exclude"
+              label="排除"
+              description="包含任意排除词的内容将被过滤。"
+              value={exclude}
+              onChange={onExcludeChange}
+              disabled={disabled}
+              error={fieldErrors.exclude}
+            />
             <Field
               data-disabled={disabled}
               data-invalid={Boolean(fieldErrors.collection_interval_seconds)}
             >
-              <FieldLabel htmlFor="collection-interval">
-                采集频率（秒）
-              </FieldLabel>
-              <Input
-                id="collection-interval"
-                type="number"
-                min={600}
-                max={86400}
-                step={1}
+              <FieldLabel htmlFor="collection-frequency">更新频率</FieldLabel>
+              <Select
                 value={
-                  Number.isNaN(collectionIntervalSeconds)
-                    ? ""
-                    : collectionIntervalSeconds
-                }
-                onChange={(event) =>
-                  onCollectionIntervalSecondsChange(event.target.valueAsNumber)
+                  customInterval ? "custom" : String(collectionIntervalSeconds)
                 }
                 disabled={disabled}
-                aria-invalid={Boolean(fieldErrors.collection_interval_seconds)}
-                aria-describedby="collection-interval-description"
-              />
-              <FieldDescription id="collection-interval-description">
-                填写 600—86400 之间的整数秒。
+                onValueChange={(value) => {
+                  setCustomInterval(value === "custom");
+                  if (value !== "custom")
+                    onCollectionIntervalSecondsChange(Number(value));
+                }}
+              >
+                <SelectTrigger
+                  id="collection-frequency"
+                  className="w-full"
+                  aria-invalid={Boolean(
+                    fieldErrors.collection_interval_seconds,
+                  )}
+                  aria-describedby="collection-frequency-description"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel className="sr-only">更新频率</SelectLabel>
+                    {INTERVALS.map((item) => (
+                      <SelectItem key={item.value} value={String(item.value)}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="custom">自定义间隔</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <FieldDescription id="collection-frequency-description">
+                实际采集也会遵循来源自身的频次限制。
               </FieldDescription>
             </Field>
-          ) : null}
-        </FieldGroup>
+            {customInterval ? (
+              <Field
+                data-disabled={disabled}
+                data-invalid={Boolean(fieldErrors.collection_interval_seconds)}
+              >
+                <FieldLabel htmlFor="collection-interval">
+                  采集频率（秒）
+                </FieldLabel>
+                <Input
+                  id="collection-interval"
+                  type="number"
+                  min={600}
+                  max={86400}
+                  step={1}
+                  value={
+                    Number.isNaN(collectionIntervalSeconds)
+                      ? ""
+                      : collectionIntervalSeconds
+                  }
+                  onChange={(event) =>
+                    onCollectionIntervalSecondsChange(
+                      event.target.valueAsNumber,
+                    )
+                  }
+                  disabled={disabled}
+                  aria-invalid={Boolean(
+                    fieldErrors.collection_interval_seconds,
+                  )}
+                  aria-describedby="collection-interval-description"
+                />
+                <FieldDescription id="collection-interval-description">
+                  填写 600—86400 之间的整数秒。
+                </FieldDescription>
+              </Field>
+            ) : null}
+          </FieldGroup>
+        </FieldSet>
       </CollapsibleContent>
     </Collapsible>
   );
@@ -361,8 +367,9 @@ export function TopicReportFields({
   }, [open, reload]);
   const targetName = subscription?.target_name ?? "我的报告邮箱";
   const selected = notificationTargetNames.includes(targetName);
+  const expanded = open || Boolean(error);
   return (
-    <Collapsible open={open || Boolean(error)} onOpenChange={setOpen}>
+    <Collapsible open={expanded} onOpenChange={setOpen}>
       <CollapsibleTrigger asChild>
         <Button
           type="button"
@@ -374,90 +381,93 @@ export function TopicReportFields({
           报告设置 <ChevronDownIcon data-icon="inline-end" />
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="pt-6">
-        <FieldGroup>
-          <Field data-disabled={disabled} data-invalid={Boolean(error)}>
-            <FieldLabel htmlFor="report-time">每日报告时间</FieldLabel>
-            <Input
-              id="report-time"
-              type="time"
-              step="any"
-              value={reportTime}
-              onChange={(event) => onReportTimeChange(event.target.value)}
-              disabled={disabled}
-              required
-              aria-invalid={Boolean(error)}
-              aria-describedby="report-time-description"
-            />
-            <FieldDescription id="report-time-description">
-              北京时间，汇总前一自然日的已获取材料。{error}
-            </FieldDescription>
-          </Field>
-          <Field orientation="horizontal" data-disabled={disabled}>
-            <FieldContent>
-              <FieldLabel htmlFor="weekly-report">生成周报</FieldLabel>
-              <FieldDescription>
-                每周一北京时间 08:00，汇总上一周的已获取材料。
+      <CollapsibleContent motion="height">
+        <FieldSet className="pt-6" disabled={disabled || !expanded}>
+          <FieldLegend className="sr-only">报告设置字段</FieldLegend>
+          <FieldGroup>
+            <Field data-disabled={disabled} data-invalid={Boolean(error)}>
+              <FieldLabel htmlFor="report-time">每日报告时间</FieldLabel>
+              <Input
+                id="report-time"
+                type="time"
+                step="any"
+                value={reportTime}
+                onChange={(event) => onReportTimeChange(event.target.value)}
+                disabled={disabled}
+                required
+                aria-invalid={Boolean(error)}
+                aria-describedby="report-time-description"
+              />
+              <FieldDescription id="report-time-description">
+                北京时间，汇总前一自然日的已获取材料。{error}
               </FieldDescription>
-            </FieldContent>
-            <Switch
-              id="weekly-report"
-              checked={weeklyReportEnabled}
-              onCheckedChange={onWeeklyReportEnabledChange}
-              disabled={disabled}
-            />
-          </Field>
-          <Field orientation="horizontal">
-            <FieldContent>
-              <FieldLabel htmlFor="topic-email-reports">
-                邮件发送日报和周报
-              </FieldLabel>
-              <FieldDescription>
-                {subscription?.enabled
-                  ? `发送到 ${subscription.email}。`
-                  : "先在账户设置中绑定邮箱并开启报告订阅。"}
-                {subscription?.enabled && !subscription.delivery_available
-                  ? "平台发信服务尚未就绪，偏好仍可保存。"
-                  : ""}
-              </FieldDescription>
-            </FieldContent>
-            <Switch
-              id="topic-email-reports"
-              checked={selected}
-              disabled={disabled || (!selected && !subscription?.enabled)}
-              onCheckedChange={(value) =>
-                onNotificationTargetNamesChange(
-                  value
-                    ? [...new Set([...notificationTargetNames, targetName])]
-                    : notificationTargetNames.filter(
-                        (name) => name !== targetName,
-                      ),
-                )
-              }
-            />
-          </Field>
-          {failed ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={disabled}
-              onClick={() => setReload((value) => value + 1)}
-            >
-              重试读取邮件订阅
+            </Field>
+            <Field orientation="horizontal" data-disabled={disabled}>
+              <FieldContent>
+                <FieldLabel htmlFor="weekly-report">生成周报</FieldLabel>
+                <FieldDescription>
+                  每周一北京时间 08:00，汇总上一周的已获取材料。
+                </FieldDescription>
+              </FieldContent>
+              <Switch
+                id="weekly-report"
+                checked={weeklyReportEnabled}
+                onCheckedChange={onWeeklyReportEnabledChange}
+                disabled={disabled}
+              />
+            </Field>
+            <Field orientation="horizontal">
+              <FieldContent>
+                <FieldLabel htmlFor="topic-email-reports">
+                  邮件发送日报和周报
+                </FieldLabel>
+                <FieldDescription>
+                  {subscription?.enabled
+                    ? `发送到 ${subscription.email}。`
+                    : "先在账户设置中绑定邮箱并开启报告订阅。"}
+                  {subscription?.enabled && !subscription.delivery_available
+                    ? "平台发信服务尚未就绪，偏好仍可保存。"
+                    : ""}
+                </FieldDescription>
+              </FieldContent>
+              <Switch
+                id="topic-email-reports"
+                checked={selected}
+                disabled={disabled || (!selected && !subscription?.enabled)}
+                onCheckedChange={(value) =>
+                  onNotificationTargetNamesChange(
+                    value
+                      ? [...new Set([...notificationTargetNames, targetName])]
+                      : notificationTargetNames.filter(
+                          (name) => name !== targetName,
+                        ),
+                  )
+                }
+              />
+            </Field>
+            {failed ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={disabled}
+                onClick={() => setReload((value) => value + 1)}
+              >
+                重试读取邮件订阅
+              </Button>
+            ) : !subscription && open ? (
+              <Item role="status">
+                <Spinner />
+                正在读取邮件订阅…
+              </Item>
+            ) : null}
+            <Button asChild variant="link" className="self-start">
+              <Link href="/account">管理账户邮件订阅</Link>
             </Button>
-          ) : !subscription && open ? (
-            <Item role="status">
-              <Spinner />
-              正在读取邮件订阅…
-            </Item>
-          ) : null}
-          <Button asChild variant="link" className="self-start">
-            <Link href="/account">管理账户邮件订阅</Link>
-          </Button>
-          <FieldDescription>
-            报告保留资料缺口。到期开始生成，完成后投递；个人资料仅本人可读。
-          </FieldDescription>
-        </FieldGroup>
+            <FieldDescription>
+              报告保留资料缺口。到期开始生成，完成后投递；个人资料仅本人可读。
+            </FieldDescription>
+          </FieldGroup>
+        </FieldSet>
       </CollapsibleContent>
     </Collapsible>
   );

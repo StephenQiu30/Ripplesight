@@ -86,6 +86,54 @@ afterEach(() => {
 });
 
 describe("Demo topic editing", () => {
+  it("reopens hidden report fields for invalid drafts without writing", async () => {
+    render(<TopicEditor topicId={topic.id} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "编辑主题设置" }),
+    );
+    const report = screen.getByRole("button", { name: "报告设置" });
+    fireEvent.click(report);
+    const time = screen.getByLabelText("每日报告时间") as HTMLInputElement;
+    fireEvent.change(time, { target: { value: "" } });
+    fireEvent.click(report);
+    expect(time.closest("fieldset")?.disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+    await waitFor(() => expect(time.closest("fieldset")?.disabled).toBe(false));
+    expect(time.getAttribute("aria-invalid")).toBe("true");
+    expect(time.value).toBe("");
+    expect(document.activeElement).toBe(time);
+    expect(api.update).not.toHaveBeenCalled();
+  });
+
+  it("preserves draft controls and URL state through rapid panel changes", async () => {
+    render(<TopicEditor topicId={topic.id} />);
+    const settings = await screen.findByRole("button", {
+      name: "编辑主题设置",
+    });
+    fireEvent.click(settings);
+    const input = screen.getByLabelText("主题名称") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "切换后保留草稿" } });
+    input.focus();
+    const results = screen.getByRole("button", { name: "查看监控结果" });
+    fireEvent.click(results);
+    expect(document.activeElement).toBe(settings);
+    expect(new URLSearchParams(location.search).get("tab")).toBe("results");
+    expect(
+      input.closest('[data-slot="motion-panel"]')?.hasAttribute("inert"),
+    ).toBe(true);
+    fireEvent.click(settings);
+    expect(screen.getByLabelText("主题名称")).toBe(input);
+    expect(input.value).toBe("切换后保留草稿");
+    expect(
+      input.closest('[data-slot="motion-panel"]')?.hasAttribute("inert"),
+    ).toBe(false);
+    expect(new URLSearchParams(location.search).get("tab")).toBe("settings");
+    expect(
+      document.getElementById(settings.getAttribute("aria-controls")!),
+    ).toBe(input.closest('[data-slot="motion-panel"]'));
+    expect(api.update).not.toHaveBeenCalled();
+  });
+
   it("preserves the draft after a version conflict and reloads on request", async () => {
     api.update.mockRejectedValueOnce(
       new ApiRequestError({
@@ -175,8 +223,10 @@ describe("Demo topic editing", () => {
     await screen.findByRole("button", { name: "编辑主题设置" });
     fireEvent.click(screen.getByRole("button", { name: "编辑主题设置" }));
     await screen.findByLabelText("主题名称");
-    expect(screen.queryByLabelText("每日报告时间")).toBeNull();
-    expect(screen.queryByLabelText("生成周报")).toBeNull();
+    expect(
+      screen.getByLabelText("每日报告时间").closest("fieldset")?.disabled,
+    ).toBe(true);
+    expect(screen.queryByRole("switch", { name: "生成周报" })).toBeNull();
     expect(screen.queryByLabelText("推送目标名称")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "报告设置" }));
     expect(
@@ -216,7 +266,9 @@ describe("Demo topic editing", () => {
     await screen.findByRole("button", { name: "编辑主题设置" });
     fireEvent.click(screen.getByRole("button", { name: "编辑主题设置" }));
     await screen.findByLabelText("主题名称");
-    expect(screen.queryByLabelText("全部包含")).toBeNull();
+    expect(
+      screen.getByLabelText("全部包含").closest("fieldset")?.disabled,
+    ).toBe(true);
     const save = screen.getByRole("button", { name: "保存修改" });
     fireEvent.click(save);
     fireEvent.click(save);
@@ -236,7 +288,11 @@ describe("Demo topic editing", () => {
         ],
       }),
     );
-    expect(await screen.findByLabelText("全部包含")).toBeTruthy();
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText("全部包含").closest("fieldset")?.disabled,
+      ).toBe(false),
+    );
     expect(toasts.error).toHaveBeenCalledWith(
       "输入不符合要求",
       expect.objectContaining({ description: "关键词过长" }),

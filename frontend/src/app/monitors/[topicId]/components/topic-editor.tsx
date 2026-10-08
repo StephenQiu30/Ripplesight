@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import {
   type FormEvent,
   useCallback,
+  useId,
   useEffect,
   useRef,
   useState,
@@ -57,6 +58,7 @@ import { TopicAlerts } from "@/components/monitors/topic-alerts";
 import { TopicOverview } from "./topic-overview";
 import { PageState } from "@/components/system/page-state";
 import { Button } from "@/components/ui/button";
+import { MotionPanel } from "@/components/ui/motion-panel";
 import {
   Field,
   FieldGroup,
@@ -157,6 +159,7 @@ export function TopicEditor({
     };
   }, []);
   const router = useRouter();
+  const controlsId = useId();
   const [activeTab, setActiveTab] = useState<TopicTab>("overview");
   useEffect(() => {
     const syncTab = () => setActiveTab(readTopicTab());
@@ -598,6 +601,8 @@ export function TopicEditor({
         >
           <Button
             variant="secondary"
+            id={`${controlsId}-results-trigger`}
+            aria-controls={`${controlsId}-results-panel`}
             aria-expanded={activeTab === "results"}
             onClick={() =>
               selectTab(activeTab === "results" ? "overview" : "results")
@@ -607,6 +612,8 @@ export function TopicEditor({
           </Button>
           <Button
             variant="secondary"
+            id={`${controlsId}-runs-trigger`}
+            aria-controls={`${controlsId}-runs-panel`}
             aria-expanded={activeTab === "runs"}
             onClick={() =>
               selectTab(activeTab === "runs" ? "overview" : "runs")
@@ -616,6 +623,8 @@ export function TopicEditor({
           </Button>
           <Button
             variant="secondary"
+            id={`${controlsId}-settings-trigger`}
+            aria-controls={`${controlsId}-settings-panel`}
             aria-expanded={activeTab === "settings"}
             onClick={() =>
               selectTab(activeTab === "settings" ? "overview" : "settings")
@@ -625,10 +634,22 @@ export function TopicEditor({
           </Button>
         </UI.Content>
         <UI.Content className="min-w-0">
-          <UI.Content hidden={activeTab !== "results"}>
+          <MotionPanel
+            open={activeTab === "results"}
+            id={`${controlsId}-results-panel`}
+            aria-labelledby={`${controlsId}-results-trigger`}
+            triggerId={`${controlsId}-results-trigger`}
+            className="min-w-0"
+          >
             <TopicResults topicId={topic.id} />
-          </UI.Content>
-          <UI.Content hidden={activeTab !== "settings"} className="min-w-0">
+          </MotionPanel>
+          <MotionPanel
+            open={activeTab === "settings"}
+            id={`${controlsId}-settings-panel`}
+            aria-labelledby={`${controlsId}-settings-trigger`}
+            triggerId={`${controlsId}-settings-trigger`}
+            className="min-w-0"
+          >
             <UI.Content className="flex flex-col gap-6">
               <UI.Content
                 className="grid grid-cols-1 gap-4 sm:grid-cols-2"
@@ -827,8 +848,14 @@ export function TopicEditor({
                 </FieldGroup>
               </UI.Form>
             </UI.Content>
-          </UI.Content>
-          <UI.Content hidden={activeTab !== "runs"}>
+          </MotionPanel>
+          <MotionPanel
+            open={activeTab === "runs"}
+            id={`${controlsId}-runs-panel`}
+            aria-labelledby={`${controlsId}-runs-trigger`}
+            triggerId={`${controlsId}-runs-trigger`}
+            className="min-w-0"
+          >
             <UI.Content>
               <TopicRunActions
                 key={`${topic.id}:${topic.current_version}:${topic.source_keys.join(",")}`}
@@ -842,7 +869,7 @@ export function TopicEditor({
                 disabled={isBusy}
               />
             </UI.Content>
-          </UI.Content>
+          </MotionPanel>
         </UI.Content>
       </UI.Content>
     </UI.Content>
