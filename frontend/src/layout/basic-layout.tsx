@@ -16,11 +16,8 @@ import {
 } from "react";
 
 import { BasicFooter } from "./basic-footer";
-import {
-  BasicMobileHeader,
-  BasicMobileNavigation,
-  BasicSidebar,
-} from "./basic-sidebar";
+import { BasicMobileHeader, BasicMobileNavigation } from "./basic-sidebar";
+import { SidebarLayout } from "./sidebar-layout";
 import { PageContainer } from "./page-container";
 import { IdentitySessionProvider } from "@/components/auth/session-context";
 import { Toaster } from "@/components/ui/sonner";
@@ -54,38 +51,36 @@ export function BasicLayout({
       <IdentitySessionProvider session={session}>
         <LayoutScrollContext.Provider value={mainRef}>
           <TooltipProvider>
-            <SidebarProvider
-              open={true}
-              className="h-dvh min-h-0 overflow-hidden print:block print:h-auto print:overflow-visible"
-            >
+            <SidebarProvider className="h-dvh min-h-0 overflow-hidden print:block print:h-auto print:overflow-visible">
               <Button
                 asChild
                 className="sr-only focus-within:not-sr-only focus-within:fixed focus-within:top-3 focus-within:left-5 focus-within:z-50"
               >
                 <UI.TextLink href="#page-content">跳到正文</UI.TextLink>
               </Button>
-              {isLogin ? null : <BasicSidebar />}
-              <SidebarInset
-                asChild
-                id="main-content"
-                tabIndex={-1}
-                data-login={isLogin || undefined}
-                className="min-h-0 min-w-0 overflow-clip pb-16 focus-visible:outline-none data-[login=true]:pb-0 md:pb-0 print:overflow-visible print:pb-0"
-              >
-                <UI.Content
-                  as={isLogin ? "div" : "main"}
-                  className="flex min-h-0 flex-1 flex-col"
+              <ShellLayout isLogin={isLogin}>
+                <SidebarInset
+                  asChild
+                  id="main-content"
+                  tabIndex={-1}
+                  data-login={isLogin || undefined}
+                  className="min-h-0 min-w-0 overflow-clip pb-16 focus-visible:outline-none data-[login=true]:pb-0 md:pb-0 print:overflow-visible print:pb-0"
                 >
-                  {isLogin ? null : <BasicMobileHeader />}
-                  <PageContainer
-                    scrollRef={mainRef}
-                    edgeToEdge={isLogin}
-                    footer={isLogin ? <BasicFooter /> : undefined}
+                  <UI.Content
+                    as={isLogin ? "div" : "main"}
+                    className="flex min-h-0 flex-1 flex-col"
                   >
-                    {children}
-                  </PageContainer>
-                </UI.Content>
-              </SidebarInset>
+                    {isLogin ? null : <BasicMobileHeader />}
+                    <PageContainer
+                      scrollRef={mainRef}
+                      edgeToEdge={isLogin}
+                      footer={isLogin ? <BasicFooter /> : undefined}
+                    >
+                      {children}
+                    </PageContainer>
+                  </UI.Content>
+                </SidebarInset>
+              </ShellLayout>
               {isLogin ? null : <BasicMobileNavigation />}
             </SidebarProvider>
           </TooltipProvider>
@@ -99,4 +94,14 @@ export function BasicLayout({
       </IdentitySessionProvider>
     </ThemeProvider>
   );
+}
+
+function ShellLayout({
+  isLogin,
+  children,
+}: {
+  isLogin: boolean;
+  children: ReactNode;
+}) {
+  return isLogin ? children : <SidebarLayout>{children}</SidebarLayout>;
 }

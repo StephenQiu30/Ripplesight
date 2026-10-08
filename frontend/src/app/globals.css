@@ -22,7 +22,7 @@
   --text-mobile-page--line-height: 2.125rem;
   --text-metric: 1.75rem;
   --text-metric--line-height: 2.25rem;
-  --spacing-site-sidebar: 18.875rem;
+  --spacing-site-sidebar: 15rem;
   --spacing-monitor-list: 20.625rem;
   --spacing-login-art: 12.5rem;
   --container-login: 65rem;
@@ -265,5 +265,37 @@
   @media (min-width: 64rem) {
     grid-template-columns: minmax(0, 2.35fr) minmax(0, 1fr);
     column-gap: 3rem;
+  }
+}
+
+/* Resizable stays mounted when switching between desktop and mobile. */
+.site-resizable-layout > [data-panel] > div {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden !important;
+}
+@media (width < 48rem) {
+  .site-resizable-layout > [data-panel="true"]:first-child {
+    flex: 0 0 0 !important;
+    overflow: hidden;
+  }
+  .site-resizable-layout > [data-panel="true"]:last-child {
+    flex: 1 1 0 !important;
+  }
+}
+@media print {
+  .site-resizable-layout {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .site-resizable-layout > [data-panel]:first-child {
+    display: none;
+  }
+  .site-resizable-layout > [data-panel]:last-child,
+  .site-resizable-layout > [data-panel]:last-child > div {
+    height: auto !important;
+    overflow: visible !important;
   }
 }

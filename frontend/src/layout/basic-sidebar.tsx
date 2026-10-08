@@ -50,6 +50,8 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { ThemeMenuItems } from "./theme-toggle";
 
@@ -233,7 +235,9 @@ function ServiceStatus() {
       className="flex items-center gap-2 px-1"
     >
       <CircleIcon aria-hidden="true" className="size-1.5 fill-current" />
-      <Text size="xs">{label}</Text>
+      <Text size="xs" className="group-data-[collapsible=icon]:hidden">
+        {label}
+      </Text>
     </Content>
   );
 }
@@ -253,9 +257,11 @@ function DestinationGroup({
     <SidebarGroup
       role="navigation"
       aria-label={navLabel}
-      className="px-4 pt-0 pb-6 group-data-[collapsible=icon]:px-2"
+      className="px-3 pt-0 pb-4 group-data-[collapsible=icon]:px-2"
     >
-      <SidebarGroupLabel className="h-7">{label}</SidebarGroupLabel>
+      <SidebarGroupLabel className="h-7 group-data-[collapsible=icon]:hidden">
+        {label}
+      </SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
           {destinations.map(({ href, label: itemLabel, icon: Icon }) => (
@@ -284,18 +290,24 @@ function DestinationGroup({
 // md 及以上的站点侧栏。展开 / 折叠为图标栏由 SidebarProvider 记住。
 export function BasicSidebar() {
   const { session, current } = useNavigation();
+  const { open } = useSidebar();
 
   return (
     <Sidebar
-      collapsible="none"
+      collapsible="icon"
       role="complementary"
       aria-label="站点侧边栏"
-      className="hidden shrink-0 md:flex print:hidden"
+      className="hidden shrink-0 transition-none md:flex print:hidden"
     >
-      <SidebarHeader className="h-22 justify-center px-4 group-data-[collapsible=icon]:h-auto group-data-[collapsible=icon]:px-2 group-data-[collapsible=icon]:py-6">
+      <SidebarHeader className="h-22 flex-row items-center justify-between gap-1 px-3 group-data-[collapsible=icon]:h-auto group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:px-2 group-data-[collapsible=icon]:py-4">
         <BrandLockup href="/" collapsible />
+        <SidebarTrigger
+          aria-label={open ? "折叠侧边栏" : "展开侧边栏"}
+          title={open ? "折叠侧边栏" : "展开侧边栏"}
+          aria-expanded={open}
+        />
       </SidebarHeader>
-      <SidebarContent className="max-w-64">
+      <SidebarContent>
         <DestinationGroup
           label="阅读"
           navLabel="站点导航"
@@ -309,14 +321,14 @@ export function BasicSidebar() {
           current={current}
         />
       </SidebarContent>
-      <SidebarFooter className="max-w-64 gap-3 px-6 py-5 group-data-[collapsible=icon]:px-2">
+      <SidebarFooter className="gap-3 px-3 py-5 group-data-[collapsible=icon]:px-2">
         <ServiceStatus />
         <Content className="flex items-center justify-between gap-1 group-data-[collapsible=icon]:flex-col">
           {session ? (
             <AccountMenu />
           ) : (
             <Button asChild variant="ghost" size="sm">
-              <Link href="/login">
+              <Link href="/login" aria-label="登录账户">
                 <UserRoundIcon data-icon="inline-start" />
                 <Text
                   as="span"
