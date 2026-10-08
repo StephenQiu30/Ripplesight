@@ -12,9 +12,9 @@ function createContentSecurityPolicy(nonce: string): string {
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDevelopment ? " 'unsafe-eval'" : ""}`,
-    // Sonner 2.0.8 and two Editor.js 2.31.7 dependency styles lack a nonce.
+    // Sonner 2.0.8 injects a stylesheet without a nonce.
     // Permit only that exact stylesheet; the dependency hash is verified in tests.
-    `style-src 'self'${isDevelopment ? " 'unsafe-inline'" : ` 'nonce-${nonce}' 'sha256-StEaX+se6YS7pqjzrzMIA0KaX9zF/8zAhvQXZAe5epY=' 'sha256-XJt+VG4GO/3UzuYzfgM8hXd1esyCUc8XFrjROetEixs=' 'sha256-3xk/4vimQaPGDuOrm0sl2iNXKnKRY3vf/hBJwXH/wjg='`}`,
+    `style-src 'self'${isDevelopment ? " 'unsafe-inline'" : ` 'nonce-${nonce}' 'sha256-StEaX+se6YS7pqjzrzMIA0KaX9zF/8zAhvQXZAe5epY='`}`,
     "img-src 'self' blob: data:",
     "font-src 'self' data:",
     "connect-src 'self'",

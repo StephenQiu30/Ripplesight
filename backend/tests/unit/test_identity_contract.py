@@ -131,6 +131,7 @@ def test_openapi_exposes_session_security_and_never_credentials_as_query(app: Fa
         "$ref": "#/components/schemas/IdentitySessionView"
     }
     assert not any(path.endswith(("/initialize", "/workspace")) for path in schema["paths"])
+    assert not any(path.startswith("/api/workspace/documents") for path in schema["paths"])
 
 
 def test_non_ascii_csrf_is_rejected_without_an_internal_error() -> None:

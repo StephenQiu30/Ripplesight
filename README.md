@@ -7,9 +7,9 @@ GitHub 仓库：[StephenQiu30/Ripplesight](https://github.com/StephenQiu30/Rippl
 - 不登录：阅读有出处、经过去重的公开资讯、事件、日报周报，以及 AI 模型榜。
 - 登录后：配置关键词和来源，查看已采集的帖子、评论与任务状态。来源、情感分析、报告与告警的可用范围以实际配置和验收为准，不代表各平台已全部接通。
 
-当前需求以[页面数据与操作](workspace/content/product/prd/03-PRD-全站页面需求.md)为依据；[收敛方案](workspace/content/product/reference/14-页面驱动的收敛方案.md)说明已撤销的过度设计、必要依赖和后续清理门槛。
+当前需求以[页面数据与操作](docs/product/prd/03-PRD-全站页面需求.md)为依据；[收敛方案](docs/product/reference/14-页面驱动的收敛方案.md)说明已撤销的过度设计、必要依赖和后续清理门槛。
 
-产品目标与规划见 [PRD](workspace/content/product/prd/01-PRD.md)，每项能力现在到哪一步见[文档工作区](workspace/content/index.md)；下一步做什么，见 [BACKLOG](BACKLOG.md)。
+产品目标与规划见 [PRD](docs/product/prd/01-PRD.md)，每项能力现在到哪一步见[文档工作区](docs/index.md)；下一步做什么，见 [BACKLOG](BACKLOG.md)。
 
 ## 快速开始
 
@@ -22,37 +22,29 @@ cp .env.example .env
 编辑 `.env`，填写数据库、Redis、Kafka 的连接地址和各项密钥。然后启动：
 
 ```bash
-docker compose --env-file .env up --detach --build --wait backend frontend workspace
+docker compose --env-file .env up --detach --build --wait backend frontend
 ```
 
 - 网站：<http://127.0.0.1:8666/>
 - API 文档：<http://127.0.0.1:8667/docs>
-- 知识库阅读：<http://127.0.0.1:8668/Ripplesight/>
 
-前后端和知识库均由 Docker 运行，复用本机已有的数据服务。默认自动加载 `docker-compose.override.yml`，本机开启热更新：
+前后端由 Docker 运行，复用本机已有的数据服务。默认自动加载 `docker-compose.override.yml`，本机开启热更新：
 
 - 修改 `backend/app/` 的 Python 代码后，API 自动重载。
 - 修改 `frontend/src/` 或 `frontend/public/` 后，Next.js 开发服务器自动更新页面。
-- 修改 `workspace/content/`、公开阅读清单或根目录文档后，知识库自动校验、生成页面、搜索索引和 AI 原文，然后通知已打开的页面刷新。通常需要几十秒；校验失败会在容器日志中报错并保留上一版。新增公开文档仍需登记清单并执行 `pnpm index`。
 
-容器只读访问作者来源，依赖与生成物留在容器内。`.env`、依赖锁文件、Dockerfile 和数据库结构变化仍需按对应流程重新加载或构建。查看知识库更新结果：
+代码挂载与依赖缓存留在开发容器内。环境文件、依赖、Dockerfile 和数据库结构变化仍按对应流程重新加载或构建。项目文档直接在 docs 中编辑，Obsidian 打开同一目录。
 
-```bash
-docker compose logs --tail 100 workspace
-```
-
-需要重新构建依赖并重启这三个服务时：
+需要重新构建依赖并重启前后端时：
 
 ```bash
-docker compose --env-file .env up --detach --build --force-recreate --wait backend frontend workspace
+docker compose --env-file .env up --detach --build --force-recreate --wait backend frontend
 ```
-
-如果 8668 仍有先前的宿主机 `pnpm preview`，先正常停止该预览进程，再启动 Compose。
 
 本机要使用与生产一致的构建镜像时，显式选择基础文件：
 
 ```bash
-docker compose --env-file .env -f docker-compose.yml up --detach --build --wait backend frontend workspace
+docker compose --env-file .env -f docker-compose.yml up --detach --build --wait backend frontend
 ```
 
 启动后台任务。Worker 建议跑在宿主机上，见 [backend/README](backend/README.md)；Scheduler 可以用 Compose 启动：
@@ -91,12 +83,11 @@ docker compose --env-file .env.prod -f docker-compose-prod.yml up --detach --bui
 
 ## 文档
 
-文档与校验工具说明见 [workspace/README](workspace/README.md)。项目知识库用于内部开发，本机内部入口为 frontend 的 `/workspace/docs`，使用 Nextra 与 Editor.js，共用身份和样式。初始化与启动见 [本机知识库](workspace/LOCAL.md)。现有 Nextra 公开预览 <http://127.0.0.1:8668/Ripplesight/> 与公开清单继续保留；内部资料走授权 API。真实账号与 Obsidian 验收仍需完成。
-
+项目文档回归 [docs](docs/README.md) 下的 Markdown/Git 管理。Obsidian 直接打开 `docs/`，模板、Bases 看板、相对链接和元数据继续保留；AI 直接按需读取原文。在线项目知识库、网页编辑和自动发布已撤销，业务报告的 Obsidian 导出继续保留。
 | 文档 | 内容 |
 |---|---|
-| [PRD](workspace/content/product/prd/01-PRD.md) | 为什么做、为谁做、目标与发布规划 |
-| [文档工作区](workspace/content/index.md) | 各能力的现状与验收标准（Obsidian 打开 `workspace/content`） |
+| [PRD](docs/product/prd/01-PRD.md) | 为什么做、为谁做、目标与发布规划 |
+| [文档工作区](docs/index.md) | 各能力的现状与验收标准（Obsidian 打开 `docs`） |
 | [BACKLOG](BACKLOG.md) | 优先级与进度 |
 | [PROJECT](PROJECT.md) | 技术架构与约定 |
 | [AGENTS](AGENTS.md) | 工程规范与检查 |

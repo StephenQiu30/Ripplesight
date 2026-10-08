@@ -165,31 +165,6 @@ services:
           cpus: "0.50"
           memory: 768M
 
-  workspace:
-    container_name: ${COMPOSE_PROJECT_NAME}-workspace
-    build:
-      context: .
-      dockerfile: workspace/Dockerfile
-    image: ${HOTKEY_WORKSPACE_IMAGE:-ripplesight-workspace:local}
-    init: true
-    read_only: true
-    tmpfs:
-      - /tmp
-    ports:
-      - 127.0.0.1:${HOTKEY_WORKSPACE_PORT:-8668}:8080
-    healthcheck:
-      test:
-        ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8080/Ripplesight/"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-      start_period: 5s
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: "0.25"
-          memory: 128M
 
   worker:
     container_name: ${COMPOSE_PROJECT_NAME}-worker

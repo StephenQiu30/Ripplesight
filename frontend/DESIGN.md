@@ -2,7 +2,7 @@
 
 本文规定 Web 端的视觉、组件、布局和状态处理。数据请求与目录约定见 [README](README.md) 和 [AGENTS](../AGENTS.md)。
 
-2026-10 重新设计的高保真稿见 [Claude 画布](https://claude.ai/artifact/ERFs389e9sFhhp11U5cviY) 与 [Figma](https://www.figma.com/design/DfWRfnw965ocH6lmlSYGgs)，任务拆分见[前端重新设计计划](../workspace/content/product/plan/02-PLAN-前端重新设计.md)。设计稿是视觉与结构的依据，其中的示例数据不进产品代码。本人最新要求清理旧实现并按稿重建；与本文旧版视觉规则冲突时，以本轮 Figma 原稿为准，数据真实性、权限和可访问性要求继续适用。
+2026-10 重新设计的高保真稿见 [Claude 画布](https://claude.ai/artifact/ERFs389e9sFhhp11U5cviY) 与 [Figma](https://www.figma.com/design/DfWRfnw965ocH6lmlSYGgs)，任务拆分见[前端重新设计计划](../docs/product/plan/02-PLAN-前端重新设计.md)。设计稿是视觉与结构的依据，其中的示例数据不进产品代码。本人最新要求清理旧实现并按稿重建；与本文旧版视觉规则冲突时，以本轮 Figma 原稿为准，数据真实性、权限和可访问性要求继续适用。
 
 本轮用户要求按上述 Figma 还原，并严格遵守 shadcn 与 Vercel React Best Practices。验收分为组件规范和视觉比对：前者核查组件组合、语义令牌、表单反馈、键盘访问与 React 实现；后者以 Figma 桌面端导出的 10 页原稿（1440px 桌面与 390px 移动）为依据，在同尺寸浏览器下比对布局、排版和资产。原稿已成功读取；MCP 额度限制不再阻止视觉实现。接口未提供的历史曲线、情感比例、趋势不能用设计样本冒充；个人备注按本机输入保存，保留真实空态并单独记录能力缺口。
 

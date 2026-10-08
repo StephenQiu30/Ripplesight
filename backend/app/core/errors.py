@@ -19,12 +19,6 @@ class ErrorCategory(StrEnum):
 
 ERROR_CATEGORIES: Mapping[str, ErrorCategory] = MappingProxyType(
     {
-        "workspace_forbidden": ErrorCategory.AUTHORIZATION,
-        "workspace_unavailable": ErrorCategory.DEPENDENCY_UNAVAILABLE,
-        "workspace_busy": ErrorCategory.CONFLICT,
-        "workspace_version_conflict": ErrorCategory.CONFLICT,
-        "workspace_decision_requires_replacement": ErrorCategory.CONFLICT,
-        "workspace_invalid_input": ErrorCategory.INVALID_INPUT,
         "invalid_credentials": ErrorCategory.AUTHENTICATION,
         "invalid_session": ErrorCategory.AUTHENTICATION,
         "invalid_email_code": ErrorCategory.AUTHENTICATION,

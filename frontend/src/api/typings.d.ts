@@ -3439,38 +3439,6 @@ declare namespace HotKeyAPI {
       | "image-1600";
   };
 
-  type getWorkspaceDocumentAttachmentParams = {
-    attachment_id: string;
-    snapshot_id?: string | null;
-    history?: boolean;
-  };
-
-  type getWorkspaceDocumentDraftParams = {
-    path: string;
-    snapshot_id?: string | null;
-  };
-
-  type getWorkspaceDocumentHistoryParams = {
-    path: string;
-  };
-
-  type getWorkspaceDocumentOperationParams = {
-    operation_id: string;
-  };
-
-  type getWorkspaceDocumentParams = {
-    path: string;
-    snapshot_id?: string | null;
-    history?: boolean;
-  };
-
-  type getWorkspaceDocumentRawParams = {
-    path: string;
-    snapshot_id?: string | null;
-    anchor?: string | null;
-    history?: boolean;
-  };
-
   type GithubAuthorizationInput = {
     /** Return To */
     return_to?: string;
@@ -4019,11 +3987,6 @@ declare namespace HotKeyAPI {
     kind?: ReportKind;
     cursor?: string | null;
     limit?: number;
-  };
-
-  type listWorkspaceDocumentsParams = {
-    snapshot_id?: string | null;
-    history?: boolean;
   };
 
   type LoginOptionsView = {
@@ -6132,12 +6095,6 @@ declare namespace HotKeyAPI {
     data_base64: string;
   };
 
-  type searchWorkspaceDocumentsParams = {
-    query: string;
-    snapshot_id?: string | null;
-    history?: boolean;
-  };
-
   type SelectBenchAcceptedView = {
     run: SelectBenchRunView;
     /** Job Ids */
@@ -6909,194 +6866,5 @@ declare namespace HotKeyAPI {
     kind: "webpage.collect";
     /** Url */
     url: string;
-  };
-
-  type WorkspaceCatalogView = {
-    /** Snapshot Id */
-    snapshot_id: string;
-    /** Source Revision */
-    source_revision: string;
-    /** Documents */
-    documents: WorkspaceDocumentMetadata[];
-    /** Can Write */
-    can_write: boolean;
-    /** Can Publish */
-    can_publish: boolean;
-  };
-
-  type WorkspaceDocumentMetadata = {
-    /** Path */
-    path: string;
-    /** Source Path */
-    source_path: string;
-    /** Title */
-    title: string;
-    /** Summary */
-    summary: string;
-    /** Type */
-    type: string;
-    /** Status */
-    status: string | null;
-    /** Updated */
-    updated: string;
-    /** Related */
-    related: string[];
-    /** Source Hash */
-    source_hash: string;
-    /** Reading Hash */
-    reading_hash: string;
-  };
-
-  type WorkspaceDocumentView = {
-    /** Path */
-    path: string;
-    /** Source Path */
-    source_path: string;
-    /** Title */
-    title: string;
-    /** Summary */
-    summary: string;
-    /** Type */
-    type: string;
-    /** Status */
-    status: string | null;
-    /** Updated */
-    updated: string;
-    /** Related */
-    related: string[];
-    /** Source Hash */
-    source_hash: string;
-    /** Reading Hash */
-    reading_hash: string;
-    /** Snapshot Id */
-    snapshot_id: string;
-    /** Source Revision */
-    source_revision: string;
-    /** Markdown */
-    markdown: string;
-    /** Reading Markdown */
-    reading_markdown: string;
-    /** Sections */
-    sections: WorkspaceSection[];
-  };
-
-  type WorkspaceDraftView = {
-    /** Path */
-    path: string;
-    /** Snapshot Id */
-    snapshot_id: string;
-    /** Source Hash */
-    source_hash: string;
-    /** Revision */
-    revision: number;
-    /** Markdown */
-    markdown: string;
-    /** Base Markdown */
-    base_markdown: string;
-    /** Source Markdown */
-    source_markdown?: string | null;
-    /** Current Source Hash */
-    current_source_hash?: string | null;
-    /** Conflicted */
-    conflicted?: boolean;
-  };
-
-  type WorkspaceHistoryItem = {
-    /** Snapshot Id */
-    snapshot_id: string;
-    /** Source Revision */
-    source_revision: string;
-    /** Source Hash */
-    source_hash: string;
-  };
-
-  type WorkspaceHistoryView = {
-    /** Items */
-    items: WorkspaceHistoryItem[];
-  };
-
-  type WorkspaceOperationView = {
-    /** Status */
-    status: "pending" | "published" | "failed" | "saved";
-    /** Operation Id */
-    operation_id: string;
-    /** Snapshot Id */
-    snapshot_id?: string | null;
-    /** Source Revision */
-    source_revision?: string | null;
-    /** Previous Revision */
-    previous_revision?: string | null;
-    /** Published Path */
-    published_path?: string | null;
-    draft?: WorkspaceDraftView | null;
-    /** Code */
-    code?: string | null;
-  };
-
-  type WorkspacePublishInput = {
-    /** Path */
-    path: string;
-    /** Snapshot Id */
-    snapshot_id: string;
-    /** Source Hash */
-    source_hash: string;
-    /** Draft Revision */
-    draft_revision: number;
-    /** Operation Id */
-    operation_id: string;
-    /** Action */
-    action?: "publish" | "sync" | "restore" | "replace";
-    /** Replacement Path */
-    replacement_path?: string | null;
-    /** Restore Snapshot Id */
-    restore_snapshot_id?: string | null;
-  };
-
-  type WorkspaceSaveInput = {
-    /** Path */
-    path: string;
-    /** Snapshot Id */
-    snapshot_id: string;
-    /** Source Hash */
-    source_hash: string;
-    /** Draft Revision */
-    draft_revision: number;
-    /** Operation Id */
-    operation_id: string;
-    /** Markdown */
-    markdown: string;
-  };
-
-  type WorkspaceSearchItem = {
-    /** Path */
-    path: string;
-    /** Title */
-    title: string;
-    /** Anchor */
-    anchor: string;
-    /** Section Title */
-    section_title: string;
-    /** Snippet */
-    snippet: string;
-    /** Score */
-    score: number;
-  };
-
-  type WorkspaceSearchView = {
-    /** Snapshot Id */
-    snapshot_id: string;
-    /** Items */
-    items: WorkspaceSearchItem[];
-  };
-
-  type WorkspaceSection = {
-    /** Title */
-    title: string;
-    /** Anchor */
-    anchor: string;
-    /** Level */
-    level: number;
-    /** Content */
-    content: string;
   };
 }
