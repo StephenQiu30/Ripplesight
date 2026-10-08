@@ -11,6 +11,18 @@ CI仍使用实际锁定运行栈；移除旧卷名兼容检查和重复全套Web
 
 本机证据：Ruff及721文件格式检查通过、mypy440源文件通过；1596单元/架构测试通过；原59数据库定向项通过，新增边界与相关模块51项通过（两组有重叠，不相加）；contract53项通过；文档26工具测试/类型检查及114页构建通过。隔离库hotkey_test_ci_fix_20261008用唯一schema初始化，未操作业务库；生产镜像构建及远端最终SHA结果以随后CI记录和交付链接为准。独立subagent只读审查及embedding10项/workspace7项复核通过，要求的六名称skip白名单已采纳。
 
+代码提交[c8f2f1f8](https://github.com/StephenQiu30/Ripplesight/commit/c8f2f1f861c2beac49ba4061388c120b70165132)已推送main，同一SHA远端结果如下。三份JUnit共2584个唯一用例，无遗漏/重叠；2578通过、零失败/错误，6个已登记浏览器沙箱用例未执行。分片分别852/782/950项，耗时931/928/1257秒；backend整条工作流约24分16秒，原失败运行pytest约47分56秒，本次观测只用于比较并行耗时，不声明性能SLA。
+
+| 工作流 | 远端证据 | 结果 |
+|---|---|---|
+| backend | [37740914447](https://github.com/StephenQiu30/Ripplesight/actions/runs/37740914447) | 三个独立服务分片全部成功；静态检查及意外skip保护通过 |
+| frontend | [37740914381](https://github.com/StephenQiu30/Ripplesight/actions/runs/37740914381) | 125文件1028项、lint/双类型/格式/build全部成功 |
+| contract | [37740914441](https://github.com/StephenQiu30/Ripplesight/actions/runs/37740914441) | 同提交运行API生成漂移与53专项成功 |
+| runtime | [37740914351](https://github.com/StephenQiu30/Ripplesight/actions/runs/37740914351) | 生产构建、schema/SQL/Redis/Kafka、代理/Worker、登录/CSRF/动态nonce/注销、非root只读成功 |
+| Workspace site | [37740914406](https://github.com/StephenQiu30/Ripplesight/actions/runs/37740914406) | 内容/26工具测试/类型、114页构建与Pages发布成功 |
+
+本机生产文档builder在不携带.git的Docker上下文内实际构建与check成功；skip保护负向验证确认数据库skip、新增未登记浏览器skip、缺失依赖环境都拒绝通过。隔离数据库及验证镜像已删除。完整原始日志/JUnit保存在本机/tmp/ripplesight-ci-*及远端backend-tests-0/1/2 artifacts；最终归档只更改BACKLOG和本记录，不更改已验代码或CI配置，按其受影响工作流重新检查。本轮未操作业务数据库；CI通过不替代已有Figma/真实提供方/长期送达验收边界。
+
 ## 2026-10-08 subagent独立审查与全站验收
 
 本轮从main/origin/main均为bf72cfe3、工作区干净开始。本人允许一名独立subagent替代Claude并继续agent-browser验收与修复；历史Claude登录过期不再是本轮门槛。永久逐页证据见[全站验收矩阵](content/product/reference/16-全站验收矩阵.md)与[验收记录](content/records/2026-10-08-subagent全站验收.md)。
