@@ -44,21 +44,6 @@ services:
           cpus: "2.00"
           memory: 3G
 
-  workspace:
-    build:
-      target: development
-    image: ripplesight-workspace:dev
-    read_only: false
-    volumes:
-      - .:/source:ro
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8080/Ripplesight/"]
-      start_period: 120s
-    deploy:
-      resources:
-        limits:
-          cpus: "2.00"
-          memory: 2G
 
 volumes:
   frontend_dev_cache:

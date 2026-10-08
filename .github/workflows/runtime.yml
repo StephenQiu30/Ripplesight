@@ -8,8 +8,6 @@ on:
       - "backend/**"
       - "frontend/**"
       - "docker-compose*.yml"
-      - "workspace/Dockerfile*"
-      - "workspace/**"
       - "PROJECT.md"
       - "BACKLOG.md"
       - "AGENTS.md"
@@ -21,8 +19,6 @@ on:
       - "backend/**"
       - "frontend/**"
       - "docker-compose*.yml"
-      - "workspace/Dockerfile*"
-      - "workspace/**"
       - "PROJECT.md"
       - "BACKLOG.md"
       - "AGENTS.md"
@@ -95,21 +91,18 @@ jobs:
               local = config("docker-compose.yml", development)
               prod = config("docker-compose-prod.yml", production)
               infra = config("docker-compose-env.yml", development)
-              assert set(local["services"]) == {"backend", "frontend", "workspace", "worker", "scheduler", "browser", "browser-egress", "cli"}
+              assert set(local["services"]) == {"backend", "frontend", "worker", "scheduler", "browser", "browser-egress", "cli"}
               assert set(infra["services"]) == {"postgres", "redis", "kafka"}
               for volume in ("postgres-data", "redis-data", "kafka-data"):
                   assert infra["volumes"][volume]["name"] == "ripplesight-parity_" + volume
               assert "volumes" not in local
-              for name, host_port in (("backend", 8667), ("frontend", 8666), ("workspace", 8668)):
+              for name, host_port in (("backend", 8667), ("frontend", 8666)):
                   ports = local["services"][name]["ports"]
                   assert len(ports) == 1
                   assert ports[0]["host_ip"] == "127.0.0.1"
                   assert int(ports[0]["published"]) == host_port
                   assert ports[0]["target"] == 8080
-                  if name != "workspace":
-                      assert local["services"][name]["environment"]["HOTKEY_WEB_ORIGIN"] == "http://127.0.0.1:8666"
-              assert local["services"]["workspace"]["read_only"]
-              assert "volumes" not in local["services"]["workspace"]
+                  assert local["services"][name]["environment"]["HOTKEY_WEB_ORIGIN"] == "http://127.0.0.1:8666"
               assert local["services"]["backend"]["environment"]["HOTKEY_WEB_BASE_URL"] == "http://127.0.0.1:8666"
               assert local["services"]["frontend"]["environment"]["HOTKEY_API_ORIGIN"] == "http://backend:8080"
               for name in ("backend", "worker", "scheduler", "cli"):
@@ -144,10 +137,10 @@ jobs:
       - name: Validate and build the application with isolated infrastructure
         run: |
           docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci config --quiet
-          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci build backend frontend workspace
+          docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci build backend frontend
 
       - name: Start the isolated runtime
-        run: docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci up --detach --wait postgres redis kafka backend frontend workspace
+        run: docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci up --detach --wait postgres redis kafka backend frontend
 
       - name: Verify production welcome and login CSP nonces
         run: |
@@ -205,7 +198,6 @@ jobs:
           curl --fail --silent http://127.0.0.1:8667/api/health
           curl --fail --silent http://127.0.0.1:8667/api/ready
           curl --fail --silent http://127.0.0.1:8666/health
-          curl --fail --silent --output /dev/null http://127.0.0.1:8668/Ripplesight/
           curl --fail --silent http://127.0.0.1:8666/api/health
           docker compose -f docker-compose.yml -f docker-compose-env.yml --project-name ripplesight-ci --profile worker up --detach --wait --wait-timeout 30 worker
           for _ in {1..15}; do
