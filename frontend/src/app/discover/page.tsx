@@ -253,7 +253,15 @@ async function DiscoveryReadingPage({ params }: { params: DiscoveryParams }) {
                 将关键词保存为监控主题，持续跟踪新内容与讨论。
               </UI.Text>
               <Button asChild variant="outline" size="sm" className="mt-4">
-                <Link href="/monitors/new">存为监控主题</Link>
+                <Link
+                  href={
+                    params.q
+                      ? `/monitors/new?${new URLSearchParams({ q: params.q })}`
+                      : "/monitors/new"
+                  }
+                >
+                  存为监控主题
+                </Link>
               </Button>
             </CardContent>
           </Card>

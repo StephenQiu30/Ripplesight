@@ -8,7 +8,14 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function NewMonitorTopicPage() {
+export default async function NewMonitorTopicPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string | string[] }>;
+}) {
   await connection();
-  return <TopicForm />;
+  const { q } = await searchParams;
+  const initialKeywords =
+    typeof q === "string" && q.length <= 200 ? q.trim() : "";
+  return <TopicForm initialKeywords={initialKeywords} />;
 }

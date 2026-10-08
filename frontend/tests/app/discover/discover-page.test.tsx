@@ -353,3 +353,28 @@ it("keeps source failures available behind a compact, keyboard-operable disclosu
   expect(within(screen.getByRole("alert")).getByText(/异常来源0/)).toBeTruthy();
   expect(screen.getByRole("heading", { name: "没有找到资讯" })).toBeTruthy();
 });
+
+it("preserves the current search phrase when opening a monitor draft", async () => {
+  const q = "芯片 & C++";
+  const { content } = await read({ q });
+  render(content);
+  const href = screen
+    .getByRole("link", { name: "存为监控主题" })
+    .getAttribute("href")!;
+  const destination = new URL(href, "https://hotkey.test");
+  expect(destination.pathname).toBe("/monitors/new");
+  expect(destination.searchParams.get("q")).toBe(q);
+  expect(
+    screen.getByRole("combobox", { name: "排序" }).hasAttribute("disabled"),
+  ).toBe(false);
+});
+
+it("does not offer relevance sorting before a search query exists", async () => {
+  const { content } = await read({ search_order: "relevance" });
+  render(content);
+  const sorting = screen.getByRole("combobox", {
+    name: "排序：输入关键词后可切换",
+  });
+  expect(sorting.hasAttribute("disabled")).toBe(true);
+  expect(sorting.textContent).toContain("最新时间");
+});

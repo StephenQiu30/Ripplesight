@@ -23,6 +23,7 @@ vi.mock("@/api/jiankongzhuti", () => ({
   listMonitorEditorialSources: () => Promise.resolve([]),
 }));
 vi.mock("@/api/laiyuannengli", () => ({ listSourceCapabilities: api.sources }));
+vi.mock("next/server", () => ({ connection: () => Promise.resolve() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: api.replace, refresh: api.refresh }),
 }));
@@ -114,3 +115,22 @@ describe("core topic creation", () => {
     );
   });
 });
+
+it.each([
+  { q: "  芯片 & C++  ", expected: "芯片 & C++" },
+  { q: ["芯片", "模型"], expected: "" },
+  { q: "x".repeat(201), expected: "" },
+])(
+  "seeds only a bounded single search phrase without creating a topic",
+  async ({ q, expected }) => {
+    api.sources.mockResolvedValue({ items: [], next_cursor: null });
+    const { default: NewMonitorTopicPage } =
+      await import("@/app/monitors/new/page");
+    render(await NewMonitorTopicPage({ searchParams: Promise.resolve({ q }) }));
+    expect(
+      (screen.getByLabelText("想关注的关键词") as HTMLTextAreaElement).value,
+    ).toBe(expected);
+    await waitFor(() => expect(api.sources).toHaveBeenCalled());
+    expect(api.create).not.toHaveBeenCalled();
+  },
+);
