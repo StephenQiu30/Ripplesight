@@ -1,13 +1,11 @@
 import type { ReactNode, Ref } from "react";
 
 import { Content } from "@/components/ui/content";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { LayoutContainer } from "./layout-container";
 
 type PageContainerProps = {
   children: ReactNode;
-  header?: ReactNode;
   footer?: ReactNode;
   scrollRef?: Ref<HTMLElement>;
   edgeToEdge?: boolean;
@@ -16,7 +14,6 @@ type PageContainerProps = {
 /** Owns the viewport boundary; page content never shares flex sizing with the footer. */
 export function PageContainer({
   children,
-  header,
   footer,
   scrollRef,
   edgeToEdge = false,
@@ -26,14 +23,6 @@ export function PageContainer({
       data-page-container=""
       className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip print:block print:overflow-visible"
     >
-      {header && (
-        <Content as="header" className="shrink-0 print:hidden">
-          <LayoutContainer className="flex min-h-12 items-center py-2">
-            {header}
-          </LayoutContainer>
-          <Separator />
-        </Content>
-      )}
       <Content
         id="page-content"
         ref={scrollRef}
