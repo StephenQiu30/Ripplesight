@@ -1,5 +1,25 @@
 # 文档网站验证记录
 
+## 2026-10-08 设计审查问题修复
+
+修复前快照为58817e7d。修改探索、公开事件时间线、登录语义、榜单空态和开发配置；需求和证据登记在现有页面文档与[修复记录](content/records/2026-10-08-设计审查问题修复.md)。没有改业务schema、真实认证或冻结App。
+
+| 检查 | 结果与边界 |
+|---|---|
+| Web | lint、typecheck、format:check、124文件974项测试、生产build通过 |
+| 后端 | ruff check/format、440文件mypy通过；普通pytest：1626项通过、953项明确跳过；完整数据库集成没有通过 |
+| 数据库合同 | 独立hotkey_test_design_fixes_20261008执行canonical schema；榜单3项、HTTP合同10项、读取单元2项共15项通过，库已删除；含无发布404与依赖503区分 |
+| 扩展数据库检查 | 349项通过/16项跳过时发现5项历史失败并停止，不能称全量通过；修复前HEAD原始backend快照上5项全部复现 |
+| 契约 | 同提交热更新API后重新生成客户端并openapi:check无差异；只改错误语义和描述，无新增响应字段 |
+| 文档 | index、check（26项工具测试和TypeScript）、build通过；110页正文、原文/AI导出和Pagefind索引生成 |
+| 开发稳定性 | 缓存移出tmpfs后webpack仍达到堆阈值主动重启；切换Turbopack后52个代表路由均200，无OOM/容器重启，三个服务健康；峰值约2.84GiB，空闲约0.83GiB，长期容量未验收 |
+| 浏览器 | 1440/390复核探索、事件、榜单、登录，共8组核心布局；来源状态用键盘Enter展开，登录跳转主内容可用；提醒红色对浅色背景为4.86:1；探索正常/空/错误/无权限及事件时间线加载共10例均无横向溢出；完整逐页五状态未验收 |
+| 独立审查 | Claude CLI返回Login expired，未取得审查，按AGENTS§6不记正式代码完成或能力可用 |
+
+最终axe复扫：探索、事件和登录的1440/390均零违规、零待人工确认；榜单390零违规、零待确认，1440零违规、有1项对比度待确认（4个分数的背景被判断为遮挡）。滚动后8个分数均实际可见，读取前景rgb(23,23,23)与白色背景，人工复算17.93:1；不把该自动待确认项改写为自动通过。专题计数和事实引用已改为可命名的group语义。
+
+历史数据库失败：test_collection_coverage_http的analysis_anomaly/unknown区分；test_content_records的可见性历史、media_only和当前规则annotation投影；test_content_search的analysis_state过滤。修复前后均失败，单独列入BACKLOG，不删断言或改变许可规则掩盖。临时原始快照已清理；日志和截图位于忽略目录.tools/agent-browser-fix-review/及本机/tmp/ripplesight-fix-*.log。
+
 以下原始记录保留历史上下文，不作为当前 checkout 或线上部署的证明。本轮重新执行的结果见文末。
 
 ## 原始记录
