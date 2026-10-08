@@ -4,11 +4,11 @@ import * as UI from "@/components/ui/content";
 import { toast } from "sonner";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRightIcon, ChevronDownIcon, RotateCcwIcon } from "lucide-react";
 import { listMonitorTopics } from "@/api/jiankongzhuti";
 import { listReports } from "@/api/ribao";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,7 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageState } from "@/components/system/page-state";
 import { ApiRequestError } from "@/request";
 
 type ListState =
@@ -52,7 +52,12 @@ type ListState =
       items: HotKeyAPI.ReportSummaryView[];
       nextCursor: string | null;
     }
-  | { status: "error"; message: string };
+  | {
+      status: "error";
+      message: string;
+      httpStatus?: number;
+      errorCode?: string;
+    };
 
 function errorMessage(error: unknown): string {
   return error instanceof ApiRequestError
@@ -72,10 +77,29 @@ function reportDate(value: string) {
 export function ReportList() {
   const [topics, setTopics] = useState<HotKeyAPI.MonitorTopicView[]>([]);
   const [topicOptionsError, setTopicOptionsError] = useState(false);
-  const [kind, setKind] = useState<"daily" | "weekly">("daily");
-  const [topicId, setTopicId] = useState("all");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const searchParams = useSearchParams();
+  const kind = searchParams.get("kind") === "weekly" ? "weekly" : "daily";
+  const topicId = searchParams.get("topic_id") || "all";
+  const validDate = (value: string | null) =>
+    value &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    !Number.isNaN(Date.parse(value)) &&
+    new Date(value).toISOString().slice(0, 10) === value
+      ? value
+      : "";
+  const dateFrom = validDate(searchParams.get("date_from"));
+  const dateTo = validDate(searchParams.get("date_to"));
+  const navigate = (key: string, value: string) => {
+    const query = new URLSearchParams(window.location.search);
+    if (!value || value === "all") query.delete(key);
+    else query.set(key, value);
+    query.delete("cursor");
+    window.history.replaceState(
+      null,
+      "",
+      query.size ? `/reports?${query}` : "/reports",
+    );
+  };
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
@@ -141,7 +165,7 @@ export function ReportList() {
         type="single"
         value={kind}
         onValueChange={(value) => {
-          if (value === "daily" || value === "weekly") setKind(value);
+          if (value === "daily" || value === "weekly") navigate("kind", value);
         }}
         aria-label="报告周期"
         variant="outline"
@@ -161,7 +185,10 @@ export function ReportList() {
           <UI.Content className="grid gap-5 sm:grid-cols-3">
             <Field>
               <FieldLabel htmlFor="report-topic">关注主题</FieldLabel>
-              <Select value={topicId} onValueChange={setTopicId}>
+              <Select
+                value={topicId}
+                onValueChange={(value) => navigate("topic_id", value)}
+              >
                 <SelectTrigger id="report-topic" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -186,11 +213,14 @@ export function ReportList() {
                 value={dateFrom}
                 onChange={(event) => {
                   const next = event.target.value;
-                  if (next && dateTo && next > dateTo) {
+                  const upper = validDate(
+                    new URLSearchParams(window.location.search).get("date_to"),
+                  );
+                  if (next && upper && next > upper) {
                     toast.error("开始日期不能晚于结束日期。");
                     return;
                   }
-                  setDateFrom(next);
+                  navigate("date_from", next);
                 }}
               />
             </Field>
@@ -202,11 +232,16 @@ export function ReportList() {
                 value={dateTo}
                 onChange={(event) => {
                   const next = event.target.value;
-                  if (next && dateFrom && dateFrom > next) {
+                  const lower = validDate(
+                    new URLSearchParams(window.location.search).get(
+                      "date_from",
+                    ),
+                  );
+                  if (next && lower && lower > next) {
                     toast.error("开始日期不能晚于结束日期。");
                     return;
                   }
-                  setDateTo(next);
+                  navigate("date_to", next);
                 }}
               />
             </Field>
@@ -274,7 +309,14 @@ function ReportResults({
           return;
         if (!current.signal.aborted) {
           toast.error(errorMessage(error));
-          setState({ status: "error", message: errorMessage(error) });
+          setState({
+            status: "error",
+            message: errorMessage(error),
+            httpStatus:
+              error instanceof ApiRequestError ? error.status : undefined,
+            errorCode:
+              error instanceof ApiRequestError ? error.code : undefined,
+          });
         }
       });
     return () => current.abort();
@@ -313,7 +355,19 @@ function ReportResults({
     } catch (error) {
       if (error instanceof ApiRequestError && error.kind === "cancelled")
         return;
-      if (!current.signal.aborted) toast.error(errorMessage(error));
+      if (!current.signal.aborted) {
+        if (
+          error instanceof ApiRequestError &&
+          (error.status === 401 || error.status === 403)
+        )
+          setState({
+            status: "error",
+            message: errorMessage(error),
+            httpStatus: error.status,
+            errorCode: error.code,
+          });
+        toast.error(errorMessage(error));
+      }
     } finally {
       if (!current.signal.aborted) {
         paginationLock.current = false;
@@ -325,24 +379,35 @@ function ReportResults({
   return (
     <>
       {state.status === "loading" ? (
-        <UI.Content
-          aria-label="正在读取报告"
-          className="mt-10 flex flex-col gap-4"
-        >
-          <Skeleton className="h-20 w-full" />
-          <Skeleton className="h-20 w-full" />
-        </UI.Content>
+        <PageState
+          headingLevel={2}
+          state="loading"
+          title="正在读取报告"
+          description="正在读取当前筛选下的报告。"
+        />
       ) : null}
       {state.status === "error" ? (
-        <Alert variant="destructive" className="mt-10">
-          <AlertTitle>暂时无法读取报告</AlertTitle>
-          <AlertDescription>
-            <UI.Text>请重新加载报告。</UI.Text>
-            <Button variant="outline" className="mt-4" onClick={onRetry}>
+        <PageState
+          headingLevel={2}
+          state={
+            state.httpStatus === 401 || state.httpStatus === 403
+              ? "forbidden"
+              : "error"
+          }
+          title={
+            state.httpStatus === 401 || state.httpStatus === 403
+              ? "暂时无法访问报告"
+              : "暂时无法读取报告"
+          }
+          description="请重新读取；权限变化时已清除先前列表。"
+          errorCode={state.errorCode}
+          httpStatus={state.httpStatus}
+          action={
+            <Button variant="outline" onClick={onRetry}>
               重新加载
             </Button>
-          </AlertDescription>
-        </Alert>
+          }
+        />
       ) : null}
       {state.status === "ready" ? (
         <UI.Content as="section" aria-label="报告列表" className="mt-10">

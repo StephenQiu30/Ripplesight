@@ -142,3 +142,63 @@ describe("confirmed event list", () => {
     expect(api.events.mock.calls[2][0].cursor).toBe("same-cursor");
   });
 });
+
+it.each([401, 403])(
+  "removes private event titles when the next page is denied (%s)",
+  async (status) => {
+    api.topics.mockResolvedValue({ items: [], next_cursor: null });
+    api.sources.mockResolvedValue({ items: [], next_cursor: null });
+    api.events
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: "event-a",
+            title: "私有旧事件",
+            summary: "私有旧摘要",
+            member_count: 1,
+            readable_member_count: 1,
+            evidence_state: "complete",
+            source_counts: {},
+            first_seen_at: "2026-10-02T00:00:00Z",
+          },
+        ],
+        next_cursor: "next",
+      })
+      .mockRejectedValueOnce(
+        new ApiRequestError({
+          kind: "http",
+          status,
+          code: "permission_denied",
+          message: "请求被拒绝",
+        }),
+      );
+    render(<EventList />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "加载更多事件" }),
+    );
+    await screen.findByRole("heading", { name: "暂时无法访问事件" });
+    expect(screen.queryByText("私有旧事件")).toBeNull();
+    expect(screen.queryByText("私有旧摘要")).toBeNull();
+    expect(screen.queryByRole("button", { name: "加载更多事件" })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  },
+);
+
+it.each([401, 403])(
+  "shows event permission denial on the initial read (%s)",
+  async (status) => {
+    api.topics.mockResolvedValue({ items: [], next_cursor: null });
+    api.sources.mockResolvedValue({ items: [], next_cursor: null });
+    api.events.mockRejectedValueOnce(
+      new ApiRequestError({
+        kind: "http",
+        status,
+        code: "permission_denied",
+        message: "请求被拒绝",
+      }),
+    );
+    render(<EventList />);
+    await screen.findByRole("heading", { name: "暂时无法访问事件" });
+    expect(screen.queryByRole("alert")).toBeNull();
+  },
+);

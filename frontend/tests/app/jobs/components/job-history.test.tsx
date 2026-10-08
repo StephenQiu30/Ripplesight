@@ -23,6 +23,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+import { ApiRequestError } from "@/request";
 import {
   JobHistory,
   JobHistoryCard,
@@ -112,3 +113,43 @@ describe("job history pagination feedback", () => {
     expect(api.list.mock.calls[2][0].cursor).toBe("next-page");
   });
 });
+
+it.each([401, 403])(
+  "removes previous job details when pagination loses permission (%s)",
+  async (status) => {
+    api.list
+      .mockResolvedValueOnce({ items: [job], next_cursor: "next" })
+      .mockRejectedValueOnce(
+        new ApiRequestError({
+          kind: "http",
+          status,
+          code: "permission_denied",
+          message: "请求被拒绝",
+        }),
+      );
+    render(<JobHistory />);
+    fireEvent.click(await screen.findByRole("button", { name: "加载更多" }));
+    await screen.findByRole("heading", { name: "暂时无法访问任务记录" });
+    expect(screen.queryByRole("link", { name: "查看详情" })).toBeNull();
+    expect(screen.queryByText("请求 2 次 · 已保存 3 条")).toBeNull();
+    expect(screen.queryByRole("button", { name: "加载更多" })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  },
+);
+
+it.each([401, 403])(
+  "shows job permission denial on the initial read (%s)",
+  async (status) => {
+    api.list.mockRejectedValueOnce(
+      new ApiRequestError({
+        kind: "http",
+        status,
+        code: "permission_denied",
+        message: "请求被拒绝",
+      }),
+    );
+    render(<JobHistory />);
+    await screen.findByRole("heading", { name: "暂时无法访问任务记录" });
+    expect(screen.queryByRole("alert")).toBeNull();
+  },
+);

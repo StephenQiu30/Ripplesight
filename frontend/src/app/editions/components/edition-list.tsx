@@ -27,30 +27,49 @@ export function EditionList() {
   const [before, setBefore] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [forbidden, setForbidden] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [saving, setSaving] = useState(false);
   const [accepted, setAccepted] = useState<HotKeyAPI.EditionDetailView>();
+  const permissionVersion = useRef(0);
+  const deniedRef = useRef(false);
   const operation = useRef<{ signature: string; id: string } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
+    const readVersion = permissionVersion.current;
     void listReportEditions(
       { kind, before_key: before, limit: 20 },
       { signal: controller.signal },
     )
       .then((items) => {
-        if (!controller.signal.aborted) {
+        if (
+          !controller.signal.aborted &&
+          readVersion === permissionVersion.current
+        ) {
           setRows(items);
           setLoadFailed(false);
+          setForbidden(false);
+          deniedRef.current = false;
         }
       })
       .catch((err: unknown) => {
         if (
           !controller.signal.aborted &&
+          readVersion === permissionVersion.current &&
           !(err instanceof ApiRequestError && err.kind === "cancelled")
         ) {
           setRows([]);
           setLoadFailed(true);
+          const denied =
+            err instanceof ApiRequestError &&
+            (err.status === 401 || err.status === 403);
+          if (denied) setForbidden(true);
+          if (denied) {
+            permissionVersion.current += 1;
+            deniedRef.current = true;
+            setAccepted(undefined);
+          }
           toast.error(editionError(err));
         }
       })
@@ -62,6 +81,8 @@ export function EditionList() {
 
   async function generate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving || deniedRef.current) return;
+    const writeVersion = permissionVersion.current;
     const form = new FormData(event.currentTarget);
     const key = String(form.get("key") ?? "").trim();
     const reason = String(form.get("reason") ?? "").trim();
@@ -81,11 +102,13 @@ export function EditionList() {
         expected_revision: revision,
         operation_id: operation.current.id,
       });
+      if (writeVersion !== permissionVersion.current) return;
       setAccepted(row);
       toast.success("刊期编选已受理，可查看进度与正文。");
       operation.current = null;
       setRefresh((value) => value + 1);
     } catch (err) {
+      if (writeVersion !== permissionVersion.current) return;
       if (err instanceof ApiRequestError && err.kind === "cancelled") return;
       toast.error(editionError(err));
     } finally {
@@ -136,7 +159,9 @@ export function EditionList() {
         </UI.Content>
         {loadFailed ? (
           <Alert variant="destructive">
-            <AlertTitle>刊期暂不可用</AlertTitle>
+            <AlertTitle>
+              {forbidden ? "无权读取刊期" : "刊期暂不可用"}
+            </AlertTitle>
             <AlertDescription>刷新后可以重新读取刊期档案。</AlertDescription>
           </Alert>
         ) : null}
@@ -147,7 +172,13 @@ export function EditionList() {
             aria-label="刊期档案"
           >
             {loading ? (
-              <Skeleton className="h-32 w-full" />
+              <UI.Content
+                role="status"
+                aria-busy="true"
+                aria-label="正在读取刊期档案"
+              >
+                <Skeleton className="h-32 w-full" />
+              </UI.Content>
             ) : loadFailed ? null : rows.length ? (
               <ItemGroup>
                 {rows.map((row) => (
@@ -227,7 +258,7 @@ export function EditionList() {
                 <UI.Text className="text-muted-foreground text-xs leading-6">
                   请选择已结束的刊期。有新材料或需要重新编选时会保留此前修订。
                 </UI.Text>
-                <Button type="submit" disabled={saving}>
+                <Button type="submit" disabled={saving || forbidden}>
                   {saving ? "正在受理…" : "提交编选"}
                 </Button>
               </FieldGroup>

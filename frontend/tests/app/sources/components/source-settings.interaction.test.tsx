@@ -17,9 +17,13 @@ afterEach(() => vi.clearAllMocks());
 vi.mock("@/api/laiyuannengli", () => ({
   listSourceCapabilities: vi.fn(),
   updateSourceConnection: vi.fn(),
+  connectBilibiliChrome: vi.fn(),
 }));
 
-import { listSourceCapabilities } from "@/api/laiyuannengli";
+import {
+  listSourceCapabilities,
+  connectBilibiliChrome,
+} from "@/api/laiyuannengli";
 import { ApiRequestError } from "@/request";
 
 import { SourceSettings } from "@/app/sources/components/source-settings";
@@ -110,6 +114,94 @@ describe("source settings", () => {
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
     expect(listSourceCapabilities).toHaveBeenCalledTimes(3);
   });
+
+  it.each([401, 403])(
+    "clears private connection data and closes its sheet when a pending refresh returns %s",
+    async (status) => {
+      render(<SourceSettings />);
+      const manage = await screen.findByRole("button", {
+        name: "管理Hacker News",
+      });
+      let reject!: (error: unknown) => void;
+      vi.mocked(listSourceCapabilities).mockImplementationOnce(
+        () =>
+          new Promise((_resolve, fail) => {
+            reject = fail;
+          }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "刷新状态" }));
+      fireEvent.click(manage);
+      await screen.findByRole("dialog");
+      await act(async () => {
+        reject(
+          new ApiRequestError({
+            kind: "http",
+            status,
+            code: "permission_denied",
+            message: "无权限",
+          }),
+        );
+      });
+      await screen.findByRole("heading", {
+        level: 2,
+        name: "无权读取来源状态",
+      });
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(
+        screen.queryByRole("button", { name: "管理Hacker News" }),
+      ).toBeNull();
+      expect(screen.queryByText("hacker-news.firebaseio.com")).toBeNull();
+      expect(screen.queryByRole("button", { name: "停用连接" })).toBeNull();
+      await waitFor(() =>
+        expect(document.activeElement).toBe(
+          screen.getByRole("button", { name: "刷新状态" }),
+        ),
+      );
+    },
+  );
+
+  it.each([401, 403])(
+    "clears a successful Chrome connection status after refresh returns %s",
+    async (status) => {
+      vi.mocked(connectBilibiliChrome).mockResolvedValue(
+        {} as Awaited<ReturnType<typeof connectBilibiliChrome>>,
+      );
+      render(<SourceSettings />);
+      await screen.findByRole("button", { name: "管理Hacker News" });
+      fireEvent.click(screen.getByRole("button", { name: "启用 Chrome 采集" }));
+      await screen.findByRole("button", { name: "已启用 Chrome 采集" });
+      await waitFor(() =>
+        expect(
+          screen
+            .getByRole("button", { name: "刷新状态" })
+            .hasAttribute("disabled"),
+        ).toBe(false),
+      );
+      vi.mocked(listSourceCapabilities).mockRejectedValueOnce(
+        new ApiRequestError({
+          kind: "http",
+          status,
+          code: "permission_denied",
+          message: "无权限",
+        }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "刷新状态" }));
+      await screen.findByRole("heading", { name: "无权读取来源状态" });
+      expect(
+        screen.queryByRole("button", { name: "已启用 Chrome 采集" }),
+      ).toBeNull();
+      expect(screen.queryByText(/来源预设已保存/)).toBeNull();
+      expect(screen.queryByRole("link", { name: "创建监控主题" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
+      await screen.findByRole("button", { name: "管理Hacker News" });
+      expect(
+        screen.queryByRole("button", { name: "已启用 Chrome 采集" }),
+      ).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "启用 Chrome 采集" }),
+      ).toBeTruthy();
+    },
+  );
 
   it("aborts the source read on unmount and discards its late result", async () => {
     let finish!: (page: HotKeyAPI.PageViewSourcePlatformView_) => void;

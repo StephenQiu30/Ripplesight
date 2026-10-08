@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { createElement } from "react";
+import { ApiRequestError } from "@/request";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   act,
@@ -245,3 +246,44 @@ describe("content list request recovery", () => {
     ).toBeTruthy();
   });
 });
+
+it.each([401, 403])(
+  "clears old content and pagination after permission denial (%s)",
+  async (status) => {
+    api.list
+      .mockResolvedValueOnce({ items: [content], next_cursor: "next" })
+      .mockRejectedValueOnce(
+        new ApiRequestError({
+          kind: "http",
+          status,
+          code: "permission_denied",
+          message: "请求被拒绝",
+        }),
+      );
+    render(<ContentList />);
+    fireEvent.click(await screen.findByRole("button", { name: "加载更多" }));
+    await screen.findByRole("heading", { name: "暂时无法访问作品资料" });
+    expect(screen.queryByRole("button", { name: "加载更多" })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: content.external_id }),
+    ).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  },
+);
+
+it.each([401, 403])(
+  "shows content permission denial on the initial read (%s)",
+  async (status) => {
+    api.list.mockRejectedValueOnce(
+      new ApiRequestError({
+        kind: "http",
+        status,
+        code: "permission_denied",
+        message: "请求被拒绝",
+      }),
+    );
+    render(<ContentList />);
+    await screen.findByRole("heading", { name: "暂时无法访问作品资料" });
+    expect(screen.queryByRole("alert")).toBeNull();
+  },
+);

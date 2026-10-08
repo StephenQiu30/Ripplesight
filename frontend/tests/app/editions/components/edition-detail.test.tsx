@@ -9,6 +9,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
 vi.mock("sonner", () => ({ toast: notifications }));
+import { ApiRequestError } from "@/request";
 import { EditionDetail } from "@/app/editions/components/edition-detail";
 
 const mocks = vi.hoisted(() => ({
@@ -98,6 +99,32 @@ describe("Edition reading", () => {
     ).toBe("/jobs/job-1");
     expect(mocks.correct).not.toHaveBeenCalled();
   });
+
+  it.each([
+    [401, "无法查看这个刊期"],
+    [403, "无法查看这个刊期"],
+    [404, "没有找到这个刊期"],
+    [503, "正文暂不可读"],
+  ])(
+    "replaces a previously readable edition with the %s state",
+    async (status, title) => {
+      mocks.read.mockResolvedValueOnce(edition()).mockRejectedValueOnce(
+        new ApiRequestError({
+          kind: "http",
+          status,
+          code: "edition_unavailable",
+          message: "unavailable",
+        }),
+      );
+      render(<EditionDetail editionId="edition-1" />);
+      await screen.findAllByText("已许可导读");
+      fireEvent.click(screen.getByRole("button", { name: "刷新刊期" }));
+      await screen.findByRole("heading", { level: 1, name: title });
+      expect(screen.queryByText("已许可标题")).toBeNull();
+      expect(screen.queryAllByText("已许可导读")).toHaveLength(0);
+      expect(screen.getByRole("button", { name: "重试" })).toBeTruthy();
+    },
+  );
 
   it("does not keep a previously readable body after a failed permission check", async () => {
     mocks.read

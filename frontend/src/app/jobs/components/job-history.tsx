@@ -29,13 +29,25 @@ type HistoryState =
       items: HotKeyAPI.JobHistoryItemView[];
       nextCursor: string | null;
     }
-  | { status: "error"; message: string; requestId?: string };
+  | {
+      status: "error";
+      message: string;
+      requestId?: string;
+      httpStatus?: number;
+      errorCode?: string;
+    };
 
 function toErrorState(
   error: unknown,
 ): Extract<HistoryState, { status: "error" }> {
   return error instanceof ApiRequestError
-    ? { status: "error", message: error.message, requestId: error.requestId }
+    ? {
+        status: "error",
+        message: error.message,
+        requestId: error.requestId,
+        httpStatus: error.status,
+        errorCode: error.code,
+      }
     : { status: "error", message: "任务记录加载失败，请稍后重试。" };
 }
 
@@ -231,6 +243,11 @@ export function JobHistory() {
       if (error instanceof ApiRequestError && error.kind === "cancelled")
         return;
       if (controller.signal.aborted) return;
+      if (
+        error instanceof ApiRequestError &&
+        (error.status === 401 || error.status === 403)
+      )
+        setState(toErrorState(error));
       toast.error(
         error instanceof ApiRequestError
           ? error.message
@@ -263,9 +280,19 @@ export function JobHistory() {
   if (state.status === "error") {
     return (
       <PageState
-        state="error"
-        eyebrow="加载失败"
-        title="暂时无法读取任务记录"
+        state={
+          state.httpStatus === 401 || state.httpStatus === 403
+            ? "forbidden"
+            : "error"
+        }
+        errorCode={state.errorCode}
+        httpStatus={state.httpStatus}
+        eyebrow="任务记录"
+        title={
+          state.httpStatus === 401 || state.httpStatus === 403
+            ? "暂时无法访问任务记录"
+            : "暂时无法读取任务记录"
+        }
         description="请重新加载任务记录。"
         action={
           <Button onClick={() => void reload()}>
