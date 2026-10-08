@@ -180,7 +180,7 @@ export function indexBlock(published) {
       ? '| 文档 | 摘要 | 状态 | 版本 |\n|---|---|---|---|'
       : '| 文档 | 摘要 | 状态 |\n|---|---|---|'
     const rows = items.map(({ relative, frontmatter: fm }) => {
-      const cells = [`[${cell(fm.title)}](${relative})`, cell(fm.summary), cell(fm.status ?? fm.date)]
+      const cells = [`[${cell(fm.title)}](<${relative}>)`, cell(fm.summary), cell(fm.status ?? fm.date)]
       if (capability) cells.push(cell(fm.release?.join(', ')))
       return `| ${cells.join(' | ')} |`
     })

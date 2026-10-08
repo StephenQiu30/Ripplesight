@@ -2,9 +2,9 @@
 
 适用于整个仓库，对人和 AI 代理都有效。`CLAUDE.md` 通过导入加载本文件，规则只在这里修改。技术架构见 [PROJECT](PROJECT.md)，产品能力见[文档工作区](workspace/content/index.md)，进度见 [BACKLOG](BACKLOG.md)。
 
-## 当前阶段（2026-10-07）
+## 当前阶段（2026-10-08）
 
-本人最新要求开始实现并跑通真实、定时获取关键词信息的 POC demo，并直接复用 Chrome 中的登录状态；当前允许本卡范围内的业务实现与真实小样本验证。最新指令进一步授权把已跑通 demo 接入真实前后端，按 BACKLOG 当前接入任务执行。开始任务先读[需求与验证入口](workspace/content/product/reference/04-需求与验证入口.md)与 [AI 任务协议](workspace/content/product/reference/05-AI任务协议.md)，按 BACKLOG 的当前检查点行动。已有 PRD 和计划保留为核对依据，不能据此自动派发全部实现；后续本人明确指令可以更新当前阶段。
+本人最新要求从当前前端页面的展示字段、数量和操作反推需求、接口与数据库，识别并替换历史冗余设计和无使用方的实现；不是按文档或表数量扩建。先读[页面PRD](workspace/content/product/prd/03-PRD-全站页面需求.md)、[收敛方案](workspace/content/product/reference/14-页面驱动的收敛方案.md)和BACKLOG顶部。现有服务/权限/数据依赖需保留，物理删表先验证消费者与迁移。此前Figma桌面重建和已授权POC接入继续保留，旧V1/V2与未实施增量不自动派发；本轮已明确授权提交推送main。
 
 ## 1. 分工
 

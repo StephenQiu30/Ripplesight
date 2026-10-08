@@ -5,7 +5,9 @@ Ripplesight 是面向个人非商业使用的**公开资讯阅读与舆情监控
 GitHub 仓库：[StephenQiu30/Ripplesight](https://github.com/StephenQiu30/Ripplesight)。本机工作区为 `Ripplesight/`，当前仓库为其中的 `ripplesight-server/`，冻结的客户端为 `ripplesight-app/`。Compose 项目、容器、网络与自有镜像统一使用 `ripplesight`，生产项目为 `ripplesight-prod`。既有 `HOTKEY_*` 环境变量、数据库、历史数据卷、登录协议、MCP 工具名及 Obsidian 导出目录继续兼容现有部署；改名不迁移这些数据。
 
 - 不登录：阅读有出处、经过去重的公开资讯、事件、日报周报，以及 AI 模型榜。
-- 登录后：为关心的主题设置关键词，每小时获取各平台的热点与评论，每天看到社交媒体上最热的事件，查看情感走向，接收报告和告警。
+- 登录后：配置关键词和来源，查看已采集的帖子、评论与任务状态。来源、情感分析、报告与告警的可用范围以实际配置和验收为准，不代表各平台已全部接通。
+
+当前需求以[页面数据与操作](workspace/content/product/prd/03-PRD-全站页面需求.md)为依据；[收敛方案](workspace/content/product/reference/14-页面驱动的收敛方案.md)说明已撤销的过度设计、必要依赖和后续清理门槛。
 
 产品目标与规划见 [PRD](workspace/content/product/prd/01-PRD.md)，每项能力现在到哪一步见[文档工作区](workspace/content/index.md)；下一步做什么，见 [BACKLOG](BACKLOG.md)。
 

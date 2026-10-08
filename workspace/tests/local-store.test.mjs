@@ -8,7 +8,27 @@ import test from 'node:test'
 import { stringify } from 'yaml'
 import { execute, initialize, buildSnapshot, writeAtomic } from '../scripts/local-store.mjs'
 import { checkDocuments } from '../scripts/check.mjs'
-import { documents, regeneratedIndex } from '../scripts/content.mjs'
+import { documents, regeneratedIndex, repoRoot } from '../scripts/content.mjs'
+
+test('当前页面需求及其链接可进入内部阅读快照，不初始化或发布实际工作台', () => {
+  const publicPaths = JSON.parse(fs.readFileSync(path.join(repoRoot, 'workspace/public-documents.json'), 'utf8')).documents
+  const snapshot = buildSnapshot(repoRoot)
+  const byPath = new Map(snapshot.documents.map(document => [document.path, document]))
+  for (const relative of publicPaths) {
+    assert.ok(byPath.has(relative), `内部快照缺少已登记资料：${relative}`)
+  }
+  const prd = byPath.get('product/prd/03-PRD-全站页面需求.md')
+  assert.ok(prd.reading_markdown.includes('/workspace/docs/product/pages/'))
+  const index = byPath.get('index.md')
+  for (const relative of publicPaths.filter(relative => relative.startsWith('product/pages/'))) {
+    const destination = '/workspace/docs/' + relative.split('/').map(encodeURIComponent).join('/')
+    assert.ok(prd.reading_markdown.includes(destination), `总表的页面链接没有被解析：${relative}`)
+    assert.ok(index.reading_markdown.includes(destination), `首页的页面链接没有被解析：${relative}`)
+  }
+  for (const document of snapshot.documents) {
+    assert.ok(!document.reading_markdown.includes('#unregistered-document'), `内部阅读链接未登记：${document.path}`)
+  }
+})
 
 const hash = value => crypto.createHash('sha256').update(value).digest('hex')
 const owner = '11111111-1111-4111-8111-111111111111'
