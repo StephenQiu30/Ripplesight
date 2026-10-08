@@ -159,39 +159,55 @@ export function LeaderboardFailure({
   resource?: boolean;
 }) {
   const known = error instanceof ApiRequestError ? error : null;
+  const unpublished =
+    known?.status === 404 && known.code === "leaderboard_not_published";
   const absent = resource && known?.status === 404;
   const forbidden = known?.status === 401 || known?.status === 403;
-  const description = absent
-    ? "该模型或来源没有可读取的公开记录。可以回到榜单或查看来源覆盖。"
-    : forbidden
-      ? "模型榜是公开阅读页面，通常无需登录。当前请求被服务拒绝，请重试或返回首页。"
-      : known?.status === 503
-        ? "当前没有可读取的发布结果，或依赖服务暂时不可用。来源和计算规则仍可独立查看。"
-        : known?.kind === "timeout"
-          ? "本次读取超时，请重新加载。读取不会启动抓取或计算。"
-          : known?.kind === "network"
-            ? "暂时无法连接榜单服务，请重新加载。"
-            : known?.kind === "protocol"
-              ? "服务返回的数据不符合约定，请重新加载或检查服务状态。"
-              : "本次读取未完成，请重新加载。已有发布结果由服务端保留。";
+  const description = unpublished
+    ? "尚无有效的已发布轮次。可以先查看来源和计算规则；读取页面不会启动采集或计算。"
+    : absent
+      ? "该模型或来源没有可读取的公开记录。可以回到榜单或查看来源覆盖。"
+      : forbidden
+        ? "模型榜是公开阅读页面，通常无需登录。当前请求被服务拒绝，请重试或返回首页。"
+        : known?.status === 503
+          ? "榜单依赖服务暂时不可用。来源和计算规则仍可独立查看。"
+          : known?.kind === "timeout"
+            ? "本次读取超时，请重新加载。读取不会启动抓取或计算。"
+            : known?.kind === "network"
+              ? "暂时无法连接榜单服务，请重新加载。"
+              : known?.kind === "protocol"
+                ? "服务返回的数据不符合约定，请重新加载或检查服务状态。"
+                : "本次读取未完成，请重新加载。已有发布结果由服务端保留。";
   return (
     <PageState
       headingLevel={2}
-      state={absent ? "empty" : forbidden ? "forbidden" : "error"}
-      errorCode={known?.code}
-      httpStatus={known?.status}
-      eyebrow={absent ? "未找到" : forbidden ? "请求被拒绝" : "读取未完成"}
+      state={
+        unpublished || absent ? "empty" : forbidden ? "forbidden" : "error"
+      }
+      errorCode={unpublished ? undefined : known?.code}
+      httpStatus={unpublished ? undefined : known?.status}
+      eyebrow={
+        unpublished
+          ? "尚未发布"
+          : absent
+            ? "未找到"
+            : forbidden
+              ? "请求被拒绝"
+              : "读取未完成"
+      }
       title={
-        absent
-          ? "没有这条公开记录"
-          : forbidden
-            ? "暂时无法访问公开模型榜"
-            : "暂时无法读取模型榜"
+        unpublished
+          ? "暂无已发布模型榜"
+          : absent
+            ? "没有这条公开记录"
+            : forbidden
+              ? "暂时无法访问公开模型榜"
+              : "暂时无法读取模型榜"
       }
       description={description}
       action={
         <UI.Content className="flex flex-wrap items-center gap-3">
-          {!absent ? (
+          {!absent && !unpublished ? (
             <Button asChild>
               <Link href={href}>重新加载</Link>
             </Button>

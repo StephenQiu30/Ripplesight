@@ -21,9 +21,9 @@ router = APIRouter(
 )
 
 _READ_RESPONSES: dict[int | str, dict[str, Any]] = {
-    404: {"model": ErrorView, "description": "模型、来源或榜单不存在"},
+    404: {"model": ErrorView, "description": "尚无已发布榜单; 或模型、来源、榜单不存在"},
     422: {"model": ErrorView, "description": "输入条件无效"},
-    503: {"model": ErrorView, "description": "数据库不可用或尚无有效发布榜单"},
+    503: {"model": ErrorView, "description": "数据库等运行依赖不可用"},
     500: {"model": ErrorView, "description": "服务内部异常"},
 }
 
