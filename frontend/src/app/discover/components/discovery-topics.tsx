@@ -36,7 +36,11 @@ export function DiscoveryTopics({
       {!directory ? (
         <PageState
           headingLevel={2}
-          state="error"
+          state={
+            known?.status === 401 || known?.status === 403
+              ? "forbidden"
+              : "error"
+          }
           eyebrow="专题目录"
           title="专题暂不可读"
           description="可以继续阅读搜索结果，或重新读取专题。"
@@ -50,24 +54,27 @@ export function DiscoveryTopics({
         />
       ) : directory.topics.length ? (
         <ItemGroup className="gap-0">
-          {directory.topics.map((topic) => (
+          {directory.topics.slice(0, 6).map((topic) => (
             <Fragment key={topic.slug}>
               <Separator />
-              <Item className="px-0 py-3" role="listitem">
+              <Item className="flex-nowrap px-0 py-2.5" role="listitem">
                 <ItemContent className="min-w-0 gap-1">
-                  <ItemTitle className="line-clamp-none break-words">
+                  <ItemTitle className="block w-full truncate">
                     <UI.TextLink href={`/discover/topics/${topic.slug}`}>
                       {topic.name}
                     </UI.TextLink>
                   </ItemTitle>
-                  <ItemDescription className="line-clamp-none break-words">
+                  <ItemDescription className="line-clamp-1 text-xs leading-5 break-words">
                     {topic.definition}
                   </ItemDescription>
-                  <UI.Text tone="muted" size="xs">
-                    <UI.InlineCode>{topic.total}</UI.InlineCode> 篇精选 · 最近
-                    30 天 <UI.InlineCode>{topic.recent}</UI.InlineCode> 篇
-                  </UI.Text>
                 </ItemContent>
+                <UI.Content
+                  role="group"
+                  className="text-muted-foreground shrink-0 text-xs"
+                  aria-label={`${topic.name}：${topic.total} 篇精选，最近30天 ${topic.recent} 篇`}
+                >
+                  <UI.InlineCode>{topic.total}</UI.InlineCode>
+                </UI.Content>
               </Item>
             </Fragment>
           ))}

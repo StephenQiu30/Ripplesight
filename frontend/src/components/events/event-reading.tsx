@@ -171,7 +171,9 @@ export function EventSectionFailure({
   return (
     <PageState
       headingLevel={2}
-      state="error"
+      state={
+        known?.status === 401 || known?.status === 403 ? "forbidden" : "error"
+      }
       eyebrow="事件读取"
       title={title}
       description="可以重新读取；其他已成功读取的部分仍可阅读。"
@@ -207,7 +209,11 @@ export function FactSummary({
         {summary ? (
           <UI.Text className="whitespace-pre-wrap">{summary}</UI.Text>
         ) : null}
-        <UI.Content className="flex flex-wrap gap-2" aria-label="事实来源引用">
+        <UI.Content
+          role="group"
+          className="flex flex-wrap gap-2"
+          aria-label="事实来源引用"
+        >
           {sources.map((source) => (
             <UI.TextLink
               key={source.id}
@@ -225,9 +231,13 @@ export function FactSummary({
 
 export function EventTimeline({
   entries,
+  feedback,
+  footer,
   description = "按当前已加载成员的发布时间排列；未提供发布时间时使用观察时间。",
 }: {
   entries: TimelineEntry[];
+  feedback?: ReactNode;
+  footer?: ReactNode;
   description?: string;
 }) {
   return (
@@ -240,31 +250,66 @@ export function EventTimeline({
       <UI.Text size="xs" tone="muted">
         {description}
       </UI.Text>
-      {!entries.length ? (
-        <EventEmpty>当前事件尚无成员。</EventEmpty>
-      ) : (
-        <ItemGroup>
-          {entries.map((entry) => (
-            <UI.Content key={entry.id} className="flex flex-col gap-3">
-              <Separator />
-              <Item
-                role="listitem"
-                className="flex-nowrap items-start gap-5 px-0"
-              >
-                <UI.Text size="xs" tone="muted" className="w-20 shrink-0">
-                  <UI.InlineCode>{eventTime(entry.time)}</UI.InlineCode>
-                </UI.Text>
-                <ItemContent className="min-w-0 gap-2">
-                  <UI.TextLink href={`#${eventSourceAnchor(entry.sourceId)}`}>
-                    {entry.title}
-                  </UI.TextLink>
-                  <ItemDescription>{entry.source}</ItemDescription>
-                </ItemContent>
-              </Item>
-            </UI.Content>
-          ))}
-        </ItemGroup>
-      )}
+      {feedback ??
+        (!entries.length ? (
+          <EventEmpty>当前事件尚无成员。</EventEmpty>
+        ) : (
+          <ItemGroup>
+            {entries.map((entry) => (
+              <UI.Content key={entry.id} className="flex flex-col gap-3">
+                <Separator />
+                <Item
+                  role="listitem"
+                  className="flex-nowrap items-start gap-5 px-0"
+                >
+                  <UI.Text size="xs" tone="muted" className="w-20 shrink-0">
+                    <UI.InlineCode>{eventTime(entry.time)}</UI.InlineCode>
+                  </UI.Text>
+                  <ItemContent className="min-w-0 gap-2">
+                    {entry.references ? (
+                      <UI.Heading
+                        level={3}
+                        className="text-sm font-normal md:text-sm"
+                      >
+                        {entry.title}
+                      </UI.Heading>
+                    ) : (
+                      <UI.TextLink
+                        href={`#${eventSourceAnchor(entry.sourceId)}`}
+                      >
+                        {entry.title}
+                      </UI.TextLink>
+                    )}
+                    <ItemDescription>
+                      {entry.source}
+                      {entry.reportCount !== undefined
+                        ? ` · ${entry.reportCount} 篇公开报道`
+                        : ""}
+                    </ItemDescription>
+                    {entry.references ? (
+                      <UI.Content
+                        className="flex flex-wrap gap-2"
+                        role="group"
+                        aria-label="事实来源引用"
+                      >
+                        {entry.references.map((source) => (
+                          <UI.TextLink
+                            key={source.id}
+                            href={`#${eventSourceAnchor(source.id)}`}
+                            aria-label={`来源 ${source.number}`}
+                          >
+                            <UI.InlineCode>[{source.number}]</UI.InlineCode>
+                          </UI.TextLink>
+                        ))}
+                      </UI.Content>
+                    ) : null}
+                  </ItemContent>
+                </Item>
+              </UI.Content>
+            ))}
+          </ItemGroup>
+        ))}
+      {footer}
     </UI.Content>
   );
 }

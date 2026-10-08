@@ -35,13 +35,9 @@ export function DiscoveryResults({
         <Item
           key={item.id}
           asChild
-          className="border-border flex-nowrap items-start gap-4 rounded-none border-x-0 border-t-0 border-b px-0 py-6"
+          className="border-border flex-nowrap items-start gap-4 rounded-none border-x-0 border-t-0 border-b px-0 py-5"
         >
-          <Content
-            as="article"
-            role="listitem"
-            aria-labelledby={`discover-${item.id}`}
-          >
+          <Content role="listitem" aria-labelledby={`discover-${item.id}`}>
             <ItemContent className="min-w-0 gap-3">
               <Content layout="row">
                 <Badge variant="secondary">资讯</Badge>
@@ -49,7 +45,7 @@ export function DiscoveryResults({
                   {item.source.name} · {publicationTime(item.timeline_at)}
                 </Text>
               </Content>
-              <Heading level={3} appearance="result" id={`discover-${item.id}`}>
+              <Heading level={2} appearance="result" id={`discover-${item.id}`}>
                 <Link href={item.reading_url}>{item.title}</Link>
               </Heading>
               <Text size="sm" tone="muted">
