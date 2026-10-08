@@ -14,6 +14,8 @@
 | Claude | 维护 docs 与 BACKLOG；写任务卡并派给 Codex；审查代码；做真实运行验收并记录结果。不写实现代码 |
 | Codex | 按任务卡实现代码和测试，并跑完 §5 的检查 |
 
+2026-10-08 本人明确允许本轮用独立 subagent 替代 Claude 审查，由 Codex 继续全站验收、修复并记录证据；Claude 登录状态不再是本轮验收的前置条件。审查代理只读核查，实施代理处理修复，不能以自检替代独立审查。
+
 ## 2. 开始改动前
 
 1. 先读 [workspace/content/index.md](workspace/content/index.md)，按其中的阅读顺序读 [PRD](workspace/content/product/prd/01-PRD.md)、对应的能力文档（`workspace/content/capabilities/`）、相关决策（`workspace/content/decisions/`）和相关代码、测试。
@@ -62,7 +64,7 @@
 
 ## 6. 什么算“完成”
 
-- **代码完成**：§5 的检查全部通过，并经 Claude 审查。
+- **代码完成**：§5 的检查全部通过，并经独立审查。本轮按本人授权由 subagent 替代 Claude。
 - **能力可用**：用本机真实数据跑通对应的验收标准，并在 `workspace/content/records/` 新建一份验收记录（用 `workspace/content/templates/03-验收记录.md`），同步更新能力文档的 `status`。
 - 单元测试、模拟数据或健康检查通过，只能算代码完成，不能算可用。
 
