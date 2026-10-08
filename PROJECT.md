@@ -30,7 +30,7 @@ API 进程不跑定时器，也不消费消息。同一时间只运行一个 Wor
 
 Compose 本机项目名为 `ripplesight`，生产项目名为 `ripplesight-prod`，容器、网络和自有镜像使用 `ripplesight` 前缀；后端容器用户也使用 `ripplesight`，UID 保持 10001。应用继续使用本机已有数据库及 `HOTKEY_*` 配置。可选环境栈的新数据卷跟随当前 Compose 项目名，已有卷可通过 `HOTKEY_POSTGRES_VOLUME_NAME`、`HOTKEY_REDIS_VOLUME_NAME`、`HOTKEY_KAFKA_VOLUME_NAME` 显式复用；改名不复制、删除或初始化已有数据。
 
-本机默认加载 `docker-compose.override.yml` 开启热更新：API 只读挂载 `backend/app`，由 Uvicorn 重载；Web 只读挂载 `frontend/src`、`public` 与开发配置，使用 Next.js 开发服务器。知识库容器只读读取当前 checkout，将筛选后的文档及链接校验来源复制到容器构建目录；监听变化后自动执行原有校验、静态导出和 Pagefind 索引。构建只读捕获的来源副本，成功后整体切换预览目录并通知浏览器刷新；构建期间的新修改排入下一轮，失败保留上一版。依赖和生成物留在容器内，不回写作者文件，不自动发布内部知识库。验收标准是保存代码或已登记文档后无需人工重建，HTTP 可读到更新，文档正文、检索与 AI 导出保持同版。生产和 CI 显式选择基础 Compose 文件，继续使用只读的生产镜像；环境变量、依赖及数据库结构变化仍按原流程处理。
+本机默认加载 `docker-compose.override.yml` 开启热更新：API 只读挂载 `backend/app`，由 Uvicorn 重载；Web 只读挂载 `frontend/src`、`public` 与开发配置，使用 Next.js 默认 Turbopack 开发服务器。知识库容器只读读取当前 checkout，将筛选后的文档及链接校验来源复制到容器构建目录；监听变化后自动执行原有校验、静态导出和 Pagefind 索引。构建只读捕获的来源副本，成功后整体切换预览目录并通知浏览器刷新；构建期间的新修改排入下一轮，失败保留上一版。依赖和生成物留在容器内，不回写作者文件，不自动发布内部知识库。验收标准是保存代码或已登记文档后无需人工重建，HTTP 可读到更新，文档正文、检索与 AI 导出保持同版。Web 开发缓存使用独立命名卷，不放入计入容器内存的 tmpfs；开发容器上限 3GiB、Node 堆上限 1536MiB、2 CPU，配合 Turbopack 避免 webpack 持续累积编译内存导致开发子进程重启。更新依赖或 Next.js 版本时可单独清理该缓存卷，业务数据卷不受影响。生产和 CI 显式选择基础 Compose 文件，继续使用只读的生产镜像；环境变量、依赖及数据库结构变化仍按原流程处理。
 
 ## 3. 目录
 
