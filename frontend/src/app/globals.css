@@ -23,6 +23,7 @@
   --text-metric: 1.75rem;
   --text-metric--line-height: 2.25rem;
   --spacing-site-sidebar: 18.875rem;
+  --spacing-monitor-list: 20.625rem;
   --spacing-login-art: 12.5rem;
   --container-login: 65rem;
   --container-login-form: 26.25rem;
@@ -253,5 +254,15 @@
   grid-template-columns: minmax(0, 1fr);
   @media (min-width: 64rem) {
     grid-template-columns: minmax(0, 1fr) minmax(0, var(--container-login-form));
+  }
+}
+
+@utility edition-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2rem;
+  @media (min-width: 64rem) {
+    grid-template-columns: minmax(0, 2.35fr) minmax(0, 1fr);
+    column-gap: 3rem;
   }
 }

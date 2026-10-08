@@ -23,39 +23,29 @@ describe("model leaderboard reading", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: "模型榜" }),
     ).toBeTruthy();
-    expect(screen.getByText("7")).toBeTruthy();
+    expect(screen.getByText("07")).toBeTruthy();
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe(
       "69.4",
     );
-    expect(screen.queryByRole("columnheader", { name: "变化" })).toBeNull();
+    expect(screen.getByRole("columnheader", { name: "变化" })).toBeTruthy();
+    expect(screen.getByTitle("暂无上期排名对比").textContent).toBe("—");
     expect(screen.queryByRole("columnheader", { name: "上下文" })).toBeNull();
-    expect(screen.getByText("55%")).toBeTruthy();
-    expect(screen.getByText("对证据变化敏感")).toBeTruthy();
-    expect(screen.getByText("暂无公开价格")).toBeTruthy();
-    expect(screen.getByText(/保留原排名/)).toBeTruthy();
-    expect(
-      screen
-        .getByRole("checkbox", { name: "国内模型" })
-        .getAttribute("aria-checked"),
-    ).toBe("true");
+    expect(screen.queryByText("官方价格")).toBeNull();
+    expect(screen.getByRole("heading", { name: "本周变化" })).toBeTruthy();
     expect(screen.queryByText("¥0")).toBeNull();
   });
 
-  it("renders a valid empty filter as an empty result with reset", () => {
+  it("does not fabricate a ranking for an empty applied filter", () => {
     render(
       <BoardReading data={{ ...board, entries: [] }} domestic openWeights />,
     );
-    expect(screen.getByText("当前筛选没有符合条件的模型")).toBeTruthy();
-    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(
-      screen.getByRole("heading", {
-        level: 2,
-        name: "当前筛选没有符合条件的模型",
-      }),
+      screen.getByRole("status", { name: "暂无可展示的已发布模型" }),
     ).toBeTruthy();
+    expect(screen.queryByRole("table")).toBeNull();
     expect(
-      screen.getByRole("link", { name: "清除筛选" }).getAttribute("href"),
-    ).toBe("/leaderboard");
+      screen.getByRole("radio", { name: "开源" }).getAttribute("aria-checked"),
+    ).toBe("true");
   });
   it("renders an unfiltered empty publication without a fake ranking", () => {
     render(

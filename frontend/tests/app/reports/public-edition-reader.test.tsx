@@ -52,9 +52,10 @@ it.each(["daily", "weekly", "monthly"] as const)(
     );
     const links = outline.getAllByRole("link");
     expect(links.map((link) => link.textContent)).toEqual([
-      "重点关注",
-      "重点事件",
+      "今日要点",
       "今日社媒热点",
+      "重点事件",
+      "舆情提示",
       "固定引用",
     ]);
     for (const link of links) {
@@ -77,7 +78,7 @@ it.each(["daily", "weekly", "monthly"] as const)(
         .getAttribute("href"),
     ).toBe(edition.entries[0].reading_url);
     expect(screen.queryByRole("columnheader", { name: "帖子" })).toBeNull();
-    expect(screen.queryByText("舆情提示")).toBeNull();
+    expect(screen.getByRole("heading", { name: "舆情提示" })).toBeTruthy();
     expect(screen.queryByText("0 个来源")).toBeNull();
     const past = within(screen.getByRole("region", { name: "往期刊物" }));
     expect(
@@ -85,9 +86,7 @@ it.each(["daily", "weekly", "monthly"] as const)(
     ).toBe("/reports/daily/2026-10-05");
     expect(past.queryByText("刊物 2026-10-07")).toBeNull();
     expect(past.queryByText(`刊物 ${edition.key}`)).toBeNull();
-    expect(
-      screen.getByRole("link", { name: "读取 Markdown" }).getAttribute("href"),
-    ).toBe(`/reports/${kind}/${edition.key}.md`);
+    expect(screen.queryByRole("link", { name: "读取 Markdown" })).toBeNull();
     expect(
       container.querySelector("[data-edition-sidebar]")?.className,
     ).toContain("print:hidden");
@@ -167,8 +166,9 @@ it("omits empty chapters and keeps a real empty issue readable", () => {
     />,
   );
   expect(screen.getByText("本期暂无可公开的条目。")).toBeTruthy();
-  expect(screen.queryByRole("navigation", { name: "本期目录" })).toBeNull();
-  expect(screen.queryByRole("heading", { name: "今日社媒热点" })).toBeNull();
+  expect(screen.getByRole("navigation", { name: "本期目录" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "今日社媒热点" })).toBeTruthy();
+  expect(screen.getByText("暂无本期公开社媒趋势快照。")).toBeTruthy();
 });
 
 it("labels a derived reference count accurately when publication metrics are missing", () => {

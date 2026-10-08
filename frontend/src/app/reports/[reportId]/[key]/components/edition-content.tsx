@@ -39,7 +39,31 @@ export function EditionContent({
       </UI.Heading>
       {section.summary?.trim() ? <Viewer value={section.summary} /> : null}
       {section.items.length ? (
-        section.presentation === "table" ? (
+        section.id === "edition-highlights" ? (
+          <ItemGroup className="gap-0">
+            {section.items.map((item, index) => (
+              <Item
+                key={item.id}
+                className="flex-nowrap items-start gap-2 border-0 px-0 py-2"
+              >
+                <UI.Text size="sm" tone="muted">
+                  <UI.InlineCode>{index + 1}.</UI.InlineCode>
+                </UI.Text>
+                <ItemContent>
+                  <UI.Text size="sm">
+                    {item.summary || item.title}{" "}
+                    <UI.TextLink
+                      href={item.reading_url}
+                      aria-label={`要点来源 ${index + 1}`}
+                    >
+                      [{index + 1}]
+                    </UI.TextLink>
+                  </UI.Text>
+                </ItemContent>
+              </Item>
+            ))}
+          </ItemGroup>
+        ) : section.presentation === "table" ? (
           <EditionReferenceTable
             items={section.items}
             labelledBy={section.id}
@@ -160,16 +184,28 @@ function EditionEventBlocks({ items }: { items: HotKeyAPI.PublicItemView[] }) {
                       {item.title}
                     </UI.TextLink>
                   </UI.Heading>
-                  {item.summary ? (
-                    <UI.Content className="flex flex-col gap-2">
-                      {item.summary_origin === "source" ? (
-                        <UI.Text size="xs" tone="muted">
-                          来源摘要
+                  <UI.Content className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                    <UI.Content layout="stack" className="gap-2">
+                      <UI.Heading level={4} appearance="sidebar">
+                        发生了什么
+                      </UI.Heading>
+                      {item.summary ? (
+                        <Viewer value={item.summary} format="text" />
+                      ) : (
+                        <UI.Text size="sm" tone="muted">
+                          暂无摘要。
                         </UI.Text>
-                      ) : null}
-                      <Viewer value={item.summary} format="text" />
+                      )}
                     </UI.Content>
-                  ) : null}
+                    <UI.Content layout="stack" className="gap-2">
+                      <UI.Heading level={4} appearance="sidebar">
+                        大家怎么看
+                      </UI.Heading>
+                      <UI.Text size="sm" tone="muted">
+                        暂无本期公开评论与情感观测。
+                      </UI.Text>
+                    </UI.Content>
+                  </UI.Content>
                   <UI.Content className="flex flex-wrap gap-4 print:hidden">
                     {item.original_url ? (
                       <UI.TextLink

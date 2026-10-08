@@ -1,9 +1,15 @@
 "use client";
 
+import { SavedNote, readSavedNotes } from "./saved-note";
 import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { BookmarkIcon, SearchIcon } from "lucide-react";
+import {
+  BookmarkIcon,
+  SearchIcon,
+  ExternalLinkIcon,
+  XIcon,
+} from "lucide-react";
 import { getSitePublicationItem } from "@/api/gongkaifabu";
 import * as UI from "@/components/ui/content";
 import { Button } from "@/components/ui/button";
@@ -13,7 +19,6 @@ import {
   Item,
   ItemActions,
   ItemContent,
-  ItemDescription,
   ItemGroup,
   ItemTitle,
 } from "@/components/ui/item";
@@ -22,6 +27,14 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldLabel } from "@/components/ui/field";
 import {
@@ -35,13 +48,15 @@ import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { PageState } from "@/components/system/page-state";
 import { ApiRequestError } from "@/request";
-import { categories, publicationTime } from "./reading-format";
+import { publicationTime } from "./reading-format";
 import {
   LOCAL_CHANGE,
   savedIds,
   readIds,
   toggleSaved,
   removeSaved,
+  removeSavedMany,
+  savedDates,
   markRead,
   localReadingIssue,
 } from "./local-state";
@@ -149,24 +164,32 @@ type LocalFailure = { id: string; code: string; status?: number };
 
 export function SavedItems({
   full = false,
+  pageTitle = false,
   initialCategory = "all",
   initialView = "saved",
   initialPage = 1,
+  initialSort = "recent",
+  initialType = "all",
 }: {
   full?: boolean;
+  pageTitle?: boolean;
   initialCategory?: string;
   initialView?: LocalView;
   initialPage?: number;
+  initialSort?: "recent" | "oldest";
+  initialType?: string;
 }) {
   const [query, setQuery] = useState("");
+  const [sort, setSort] = useState(initialSort);
   const [selected, setSelected] = useState<string[]>([]);
   const download = useRef<HTMLAnchorElement>(null);
   const [items, setItems] = useState<HotKeyAPI.PublicItemDetailView[]>([]);
+  const [dates, setDates] = useState<Record<string, string>>({});
   const [ids, setIds] = useState<string[]>([]);
   const [read, setRead] = useState<string[]>([]);
   const [page, setPage] = useState(initialPage);
   const [category, setCategory] = useState(initialCategory);
-  const [view, setView] = useState<LocalView>(initialView);
+  const [view] = useState<LocalView>(initialView);
   const [busy, setBusy] = useState(true);
   const [storageUnavailable, setStorageUnavailable] = useState(false);
   const [failures, setFailures] = useState<LocalFailure[]>([]);
@@ -175,20 +198,25 @@ export function SavedItems({
   const [generation, setGeneration] = useState(0);
   const pageSize = 20;
   const label = view === "read" ? "阅读记录" : "本机收藏";
+  const [contentType, setContentType] = useState(initialType);
   const retry = () => setGeneration((old) => old + 1);
   function remember(next: {
     page?: number;
     category?: string;
     view?: LocalView;
+    sort?: "recent" | "oldest";
+    type?: string;
   }) {
     if (!full) return;
     const query = new URLSearchParams(window.location.search);
-    const values = { page, category, view, ...next };
+    const values = { page, category, view, sort, type: contentType, ...next };
     for (const [key, value] of Object.entries(values)) {
       if (
         (key === "page" && value === 1) ||
         (key === "category" && value === "all") ||
-        (key === "view" && value === "saved")
+        (key === "view" && value === "saved") ||
+        (key === "sort" && value === "recent") ||
+        (key === "type" && value === "all")
       )
         query.delete(key);
       else query.set(key, String(value));
@@ -220,8 +248,10 @@ export function SavedItems({
       try {
         issue = Boolean(localReadingIssue(localStorage));
         if (!issue) {
+          setDates(savedDates(localStorage));
           reading = readIds(localStorage);
           selected = view === "read" ? reading : savedIds(localStorage);
+          if (sort === "oldest") selected.reverse();
         }
       } catch {
         issue = true;
@@ -282,8 +312,11 @@ export function SavedItems({
       active = false;
       cancelAnimationFrame(frame);
     };
-  }, [page, generation, view, full]);
-  const filtered = filterLocalItems(items, category).filter(
+  }, [page, generation, view, full, sort]);
+  const filtered = filterLocalItems(
+    contentType === "all" || contentType === "items" ? items : [],
+    category,
+  ).filter(
     (item) =>
       !query.trim() ||
       `${item.title} ${item.summary ?? ""} ${item.source.name}`
@@ -296,11 +329,18 @@ export function SavedItems({
       : [];
   function exportItems(values: HotKeyAPI.PublicItemDetailView[]) {
     if (!values.length) return;
+    let notes: Record<string, string>;
+    try {
+      notes = readSavedNotes(localStorage);
+    } catch {
+      toast.error("备注暂不可读，未导出；原记录已保留。");
+      return;
+    }
     const markdown = [
       `# 知微见澜 · ${label}`,
       ...values.map(
         (item) =>
-          `## ${item.title.replaceAll("\n", " ")}\n\n来源：${item.source.name}\n\n${item.original_url}\n\n发布时间 / 发现时间：${item.timeline_at}`,
+          `## ${item.title.replaceAll("\n", " ")}\n\n来源：${item.source.name}\n\n${item.original_url}\n\n发布时间 / 发现时间：${item.timeline_at}${notes[item.id] ? `\n\n个人备注：\n${notes[item.id]}` : ""}`,
       ),
     ].join("\n\n");
     const url = URL.createObjectURL(
@@ -338,8 +378,11 @@ export function SavedItems({
       </UI.TextLink>
       <UI.Content className="flex flex-wrap items-center justify-between gap-4">
         <UI.Content layout="stack" className="gap-1">
-          <UI.Heading level={2} className={full ? "sr-only" : undefined}>
-            {full ? (label === "本机收藏" ? "收藏列表" : label) : label}
+          <UI.Heading
+            level={pageTitle ? 1 : 2}
+            className={full && !pageTitle ? "sr-only" : undefined}
+          >
+            {full ? "收藏" : label}
           </UI.Heading>
           <UI.Text tone="muted" size="sm">
             {!busy && !storageUnavailable
@@ -370,58 +413,54 @@ export function SavedItems({
       </UI.Content>
       <UI.Content className={full ? "reading-columns items-start" : undefined}>
         <UI.Content className="flex min-w-0 flex-col gap-4">
-          {full && (
-            <>
-              <UI.Content className="hide-scrollbar max-w-full overflow-x-auto py-1">
-                <ToggleGroup
-                  type="single"
-                  value={view}
-                  aria-label="本机记录"
-                  className="min-w-max"
-                  onValueChange={(value) => {
-                    if (value !== "saved" && value !== "read") return;
-                    setBusy(true);
-                    setView(value);
-                    setPage(1);
-                    remember({ view: value, page: 1 });
-                  }}
-                >
-                  <ToggleGroupItem value="saved">收藏</ToggleGroupItem>
-                  <ToggleGroupItem value="read">阅读记录</ToggleGroupItem>
-                </ToggleGroup>
-              </UI.Content>
-              <UI.Content layout="stack" className="gap-2">
-                <UI.Text size="sm">本页分类</UI.Text>
-                <UI.Content className="hide-scrollbar max-w-full overflow-x-auto py-1">
-                  <ToggleGroup
-                    type="single"
-                    value={category}
-                    aria-label="本页分类"
-                    className="min-w-max"
-                    onValueChange={(value) => {
-                      if (value) {
-                        setCategory(value);
-                        remember({ category: value });
-                      }
-                    }}
-                  >
-                    <ToggleGroupItem value="all">全部分类</ToggleGroupItem>
-                    {categories.map(([key, name]) => (
-                      <ToggleGroupItem key={key} value={key}>
-                        {name}
-                      </ToggleGroupItem>
-                    ))}
-                    <ToggleGroupItem value="uncategorized">
-                      未分类
-                    </ToggleGroupItem>
-                  </ToggleGroup>
-                </UI.Content>
-                <UI.Text size="xs" tone="muted">
-                  分类只筛选当前页已读取的资讯；分页按本机编号顺序，每页重新检查许可。
-                </UI.Text>
-              </UI.Content>
-            </>
-          )}
+          {full ? (
+            <UI.Content className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+              <ToggleGroup
+                type="single"
+                size="default"
+                value={contentType}
+                aria-label="收藏类型"
+                onValueChange={(value) => {
+                  if (value) {
+                    setContentType(value);
+                    remember({ type: value });
+                  }
+                }}
+              >
+                {[
+                  ["all", "全部"],
+                  ["events", "事件"],
+                  ["items", "资讯"],
+                  ["comments", "评论"],
+                  ["editions", "日报"],
+                ].map(([value, title]) => (
+                  <ToggleGroupItem key={value} value={value}>
+                    {title}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+              <Select
+                value={sort}
+                onValueChange={(value) => {
+                  const next = value === "oldest" ? "oldest" : "recent";
+                  setSort(next);
+                  setPage(1);
+                  setSelected([]);
+                  remember({ sort: next, page: 1 });
+                }}
+              >
+                <SelectTrigger aria-label="收藏排序">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="recent">最近收藏</SelectItem>
+                    <SelectItem value="oldest">最早收藏</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </UI.Content>
+          ) : null}
           {full && selectedItems.length > 0 ? (
             <Card variant="inverse" size="sm">
               <CardContent className="flex flex-wrap items-center justify-between gap-2">
@@ -433,6 +472,24 @@ export function SavedItems({
                     onClick={() => exportItems(selectedItems)}
                   >
                     导出 Markdown
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={removing.length > 0}
+                    onClick={() => {
+                      const ids = selectedItems.map((item) => item.id);
+                      setRemoving(ids);
+                      void removeSavedMany(ids)
+                        .then(() => {
+                          setSelected([]);
+                          toast.success(`已取消 ${ids.length} 项收藏。`);
+                        })
+                        .catch(() => toast.error("存储不可用，未删除。"))
+                        .finally(() => setRemoving([]));
+                    }}
+                  >
+                    取消收藏
                   </Button>
                   <Button
                     variant="secondary"
@@ -501,13 +558,9 @@ export function SavedItems({
                             }
                           />
                         ) : null}
-                        <ItemContent className="min-w-0 gap-3">
-                          <UI.Content layout="row">
-                            <Badge variant="secondary">
-                              {categories.find(
-                                ([key]) => key === item.category,
-                              )?.[1] ?? "未分类"}
-                            </Badge>
+                        <ItemContent className="relative min-w-0 gap-2">
+                          <UI.Content layout="row" className="pr-24">
+                            <Badge variant="secondary">资讯</Badge>
                             <UI.Text size="xs" tone="muted">
                               {item.source.name}
                             </UI.Text>
@@ -515,43 +568,46 @@ export function SavedItems({
                               <Badge variant="outline">已读</Badge>
                             )}
                           </UI.Content>
-                          <ItemTitle className="line-clamp-none break-words">
-                            <UI.Heading level={3}>
+                          <ItemTitle className="line-clamp-none pr-20 break-words">
+                            <UI.Heading level={3} appearance="result">
                               <UI.TextLink href={item.reading_url}>
                                 {item.title}
                               </UI.TextLink>
                             </UI.Heading>
                           </ItemTitle>
-                          {item.summary && (
-                            <ItemDescription className="line-clamp-none break-words">
-                              {item.summary}
-                            </ItemDescription>
-                          )}
+                          {view === "saved" ? (
+                            <SavedNote id={item.id} compact />
+                          ) : null}
                           <UI.Text tone="muted" size="xs">
-                            {item.published_at ? "发布于 " : "发现于 "}
+                            {view === "saved" ? "收藏于 " : "发现于 "}
                             <UI.InlineCode>
-                              {publicationTime(item.timeline_at)}
+                              {view === "saved"
+                                ? dates[item.id]
+                                  ? publicationTime(dates[item.id])
+                                  : "时间未记录"
+                                : publicationTime(item.timeline_at)}
                             </UI.InlineCode>
                           </UI.Text>
-                          <ItemActions className="flex-wrap">
-                            <Button asChild variant="ghost" size="feed">
+                          <ItemActions className="absolute top-0 right-8 gap-0">
+                            <Button asChild variant="ghost" size="icon-sm">
                               <Link
                                 href={item.original_url}
                                 target="_blank"
                                 rel="noreferrer"
+                                aria-label="来源原文"
                               >
-                                来源原文
+                                <ExternalLinkIcon data-icon="inline-start" />
                               </Link>
                             </Button>
                             {full && view === "saved" && (
                               <Button
                                 variant="ghost"
-                                size="feed"
+                                size="icon-sm"
                                 disabled={removing.includes(item.id)}
                                 aria-label={`取消收藏：${item.title}`}
                                 onClick={() => remove(item.id)}
                               >
-                                取消收藏
+                                <XIcon data-icon="inline-start" />
                               </Button>
                             )}
                           </ItemActions>
@@ -568,22 +624,26 @@ export function SavedItems({
                     state="empty"
                     eyebrow={label}
                     title={
-                      ids.length
-                        ? query.trim()
-                          ? "本页没有匹配的收藏"
-                          : "本页没有符合分类的资讯"
-                        : view === "read"
-                          ? "还没有阅读记录。"
-                          : "还没有收藏。"
+                      contentType !== "all" && contentType !== "items"
+                        ? "暂无此类收藏"
+                        : ids.length
+                          ? query.trim()
+                            ? "本页没有匹配的收藏"
+                            : "本页没有符合分类的资讯"
+                          : view === "read"
+                            ? "还没有阅读记录。"
+                            : "还没有收藏。"
                     }
                     description={
-                      ids.length
-                        ? query.trim()
-                          ? "尝试其他关键词，或清除搜索条件。"
-                          : "选择全部分类或继续翻页。"
-                        : view === "read"
-                          ? "打开公开资讯后，本机记录会出现在这里。"
-                          : "在公开资讯旁点击收藏，即可在这里继续阅读。"
+                      contentType !== "all" && contentType !== "items"
+                        ? "当前本机收藏支持资讯，其他内容类型尚未开放。"
+                        : ids.length
+                          ? query.trim()
+                            ? "尝试其他关键词，或清除搜索条件。"
+                            : "选择全部分类或继续翻页。"
+                          : view === "read"
+                            ? "打开公开资讯后，本机记录会出现在这里。"
+                            : "在公开资讯旁点击收藏，即可在这里继续阅读。"
                     }
                     action={
                       ids.length ? (
@@ -713,11 +773,19 @@ export function SavedItems({
             aria-label="收藏说明"
             className="flex min-w-0 flex-col gap-8"
           >
+            <UI.Content as="section" layout="stack">
+              <UI.Heading level={2} appearance="sidebar">
+                关注中的事件
+              </UI.Heading>
+              <UI.Text size="sm" tone="muted">
+                事件关注尚未开放，已收藏资讯保留在左侧列表。
+              </UI.Text>
+            </UI.Content>
             <Card variant="muted">
               <CardHeader>
                 <CardTitle>导出与知识库</CardTitle>
                 <CardDescription>
-                  将本页可读收藏的标题、原文链接与时间导出为
+                  将本页可读收藏的标题、备注、原文链接与时间导出为
                   Markdown，方便放进自己的笔记库。
                 </CardDescription>
               </CardHeader>

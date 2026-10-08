@@ -1,6 +1,5 @@
 import * as UI from "@/components/ui/content";
 import { cn } from "@/lib/utils";
-import { Viewer } from "@/components/editor";
 import {
   NavigationMenu,
   NavigationMenuList,
@@ -16,10 +15,17 @@ import {
 } from "@/components/ui/collapsible";
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
-import { Separator } from "@/components/ui/separator";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableBody,
+  TableCell,
+} from "@/components/ui/table";
 import { EditionPrint } from "@/components/publication/edition-print";
 import { EditionCopyLink } from "@/components/publication/edition-copy-link";
-import { PosterDownload } from "@/components/publication/poster-download";
 import { publicationTime } from "@/components/publication/reading-format";
 import { EditionFailure } from "../../components/edition-state";
 import { EditionContent, EditionReferenceTable } from "./edition-content";
@@ -42,8 +48,21 @@ export function PublicEditionReader({
   navigationError?: unknown;
 }) {
   const sections = editionReadingSections(edition);
+  const social = sections.filter((section) => section.title === "今日社媒热点");
+  const rest = sections.filter(
+    (section) =>
+      section.id !== "edition-highlights" && section.title !== "今日社媒热点",
+  );
+  const highlights = sections.filter(
+    (section) => section.id === "edition-highlights",
+  );
   const outline = [
-    ...sections.map(({ id, title }) => ({ id, title })),
+    ...highlights.map(({ id, title }) => ({ id, title })),
+    ...(social.length
+      ? social.map(({ id, title }) => ({ id, title }))
+      : [{ id: "edition-social", title: "今日社媒热点" }]),
+    ...rest.map(({ id, title }) => ({ id, title })),
+    { id: "edition-sentiment", title: "舆情提示" },
     ...(edition.entries.length
       ? [{ id: "edition-references", title: "固定引用" }]
       : []),
@@ -59,7 +78,7 @@ export function PublicEditionReader({
       data-edition-reader=""
       className={cn(
         styles.reader,
-        "reading-columns min-w-0 items-start print:block",
+        "edition-columns min-w-0 items-start print:block",
       )}
     >
       <UI.Content
@@ -67,41 +86,40 @@ export function PublicEditionReader({
         aria-label={edition.title}
         className="flex min-w-0 flex-col gap-12"
       >
-        <UI.Content as="header" className="flex flex-col gap-4">
+        <UI.Content as="header" className="flex flex-col gap-3">
           <UI.Text tone="muted" size="sm">
             <UI.InlineCode>
               {labels[edition.kind]} · {edition.key} · 修订 {edition.revision}
             </UI.InlineCode>
           </UI.Text>
-          <UI.Heading level={1} className="break-words">
+          <UI.Heading level={1} appearance="display" className="break-words">
             {edition.title}
           </UI.Heading>
-          <UI.Text tone="muted" size="xs">
-            生成于{" "}
-            <UI.Timestamp dateTime={edition.created_at}>
-              <UI.InlineCode>
-                {publicationTime(edition.created_at)}
-              </UI.InlineCode>
-            </UI.Timestamp>
-          </UI.Text>
-          <UI.Text tone="muted" size="xs">
-            覆盖{" "}
-            <UI.Timestamp dateTime={edition.window_start}>
-              <UI.InlineCode>
-                {publicationTime(edition.window_start)}
-              </UI.InlineCode>
-            </UI.Timestamp>{" "}
-            至{" "}
-            <UI.Timestamp dateTime={edition.window_end}>
-              <UI.InlineCode>
-                {publicationTime(edition.window_end)}
-              </UI.InlineCode>
-            </UI.Timestamp>
-          </UI.Text>
-          {edition.lead.trim() ? <Viewer value={edition.lead} /> : null}
-          <Separator />
-          <UI.Content className="flex flex-wrap gap-4">
-            <UI.Text size="sm">
+          <UI.Content className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <UI.Text tone="muted" size="xs">
+              生成于{" "}
+              <UI.Timestamp dateTime={edition.created_at}>
+                <UI.InlineCode>
+                  {publicationTime(edition.created_at)}
+                </UI.InlineCode>
+              </UI.Timestamp>
+            </UI.Text>
+            <UI.Text tone="muted" size="xs">
+              覆盖{" "}
+              <UI.Timestamp dateTime={edition.window_start}>
+                <UI.InlineCode>
+                  {publicationTime(edition.window_start)}
+                </UI.InlineCode>
+              </UI.Timestamp>{" "}
+              至{" "}
+              <UI.Timestamp dateTime={edition.window_end}>
+                <UI.InlineCode>
+                  {publicationTime(edition.window_end)}
+                </UI.InlineCode>
+              </UI.Timestamp>
+            </UI.Text>
+
+            <UI.Text size="xs" tone="muted">
               <UI.InlineCode>
                 {typeof selectedCount === "number" &&
                 Number.isFinite(selectedCount)
@@ -115,16 +133,71 @@ export function PublicEditionReader({
             </UI.Text>
             {typeof sourcesCount === "number" &&
             Number.isFinite(sourcesCount) ? (
-              <UI.Text size="sm">
+              <UI.Text size="xs" tone="muted">
                 <UI.InlineCode>{sourcesCount}</UI.InlineCode> 个来源
               </UI.Text>
             ) : null}
           </UI.Content>
-          <Separator />
         </UI.Content>
-        {sections.map((section) => (
+        {sections
+          .filter((section) => section.id === "edition-highlights")
+          .map((section) => (
+            <EditionContent key={section.id} section={section} />
+          ))}
+        {social.length ? (
+          social.map((section) => (
+            <EditionContent key={section.id} section={section} />
+          ))
+        ) : (
+          <UI.Content
+            as="section"
+            layout="stack"
+            aria-labelledby="edition-social"
+          >
+            <UI.Heading level={2} id="edition-social" tabIndex={-1}>
+              今日社媒热点
+            </UI.Heading>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>趋势</TableHead>
+                  <TableHead>帖子数</TableHead>
+                  <TableHead>关联资讯</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell colSpan={4} className="py-8">
+                    <UI.Text size="sm" tone="muted">
+                      暂无本期公开社媒趋势快照。
+                    </UI.Text>
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </UI.Content>
+        )}
+        {rest.map((section) => (
           <EditionContent key={section.id} section={section} />
         ))}
+        <Card variant="muted">
+          <CardHeader>
+            <UI.Heading
+              level={2}
+              appearance="sidebar"
+              id="edition-sentiment"
+              tabIndex={-1}
+            >
+              舆情提示
+            </UI.Heading>
+          </CardHeader>
+          <CardContent>
+            <UI.Text size="sm" tone="muted">
+              暂无本期公开舆情提示，不能从资讯摘要推断评论情感。
+            </UI.Text>
+          </CardContent>
+        </Card>
         {edition.entries.length ? (
           <UI.Content
             as="section"
@@ -226,14 +299,12 @@ export function PublicEditionReader({
             <EditionCopyLink href={readingUrl} />
             <EditionPrint />
           </UI.Content>
-          <Button asChild variant="outline">
-            <UI.TextLink href={`${readingUrl}.md`}>读取 Markdown</UI.TextLink>
-          </Button>
-          <PosterDownload target={{ kind: edition.kind, key: edition.key }} />
         </UI.Content>
         {outline.length ? (
           <UI.Content className="flex flex-col gap-3">
-            <UI.Heading level={2}>本期目录</UI.Heading>
+            <UI.Heading level={2} appearance="sidebar">
+              本期目录
+            </UI.Heading>
             <NavigationMenu
               viewport={false}
               orientation="vertical"
@@ -262,7 +333,9 @@ export function PublicEditionReader({
           aria-label="往期刊物"
           className="flex flex-col gap-4"
         >
-          <UI.Heading level={2}>往期{labels[edition.kind]}</UI.Heading>
+          <UI.Heading level={2} appearance="sidebar">
+            往期{labels[edition.kind]}
+          </UI.Heading>
           {catalogueError ? (
             <EditionFailure
               headingLevel={2}

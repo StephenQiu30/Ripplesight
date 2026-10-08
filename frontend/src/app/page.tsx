@@ -4,15 +4,11 @@ import { Suspense } from "react";
 import { HomeLoading } from "@/app/components/home-loading";
 
 import { HomeContent, type HomeReading } from "@/app/components/home-content";
-import {
-  getPublicHotStories,
-  getPublicTopicDirectory,
-  listPublicItems,
-} from "@/api/gongkaifabu";
+import { getPublicHotStories } from "@/api/gongkaifabu";
 import { listPublicEditionCatalogue } from "@/api/gongkaikanwumulu";
 import { welcomeMetadata } from "@/components/site/welcome-metadata";
 import { ApiRequestError } from "@/request";
-import { categories } from "@/components/publication/reading-parts";
+import { homeCategories } from "./components/home-format";
 
 export const metadata = {
   ...welcomeMetadata(
@@ -30,30 +26,18 @@ export default async function Home({
 }) {
   await connection();
   const params = await searchParams;
-  const mode = params.mode === "selected" ? "selected" : "all";
-  const category = categories.find(([key]) => key === params.category)?.[0];
-  const cursor = typeof params.cursor === "string" ? params.cursor : undefined;
+  const category = homeCategories.find(([key]) => key === params.category)?.[0];
   return (
     <Suspense fallback={<HomeLoading />}>
-      <HomeReadingPage mode={mode} category={category} cursor={cursor} />
+      <HomeReadingPage category={category} />
     </Suspense>
   );
 }
 
-async function HomeReadingPage({
-  mode,
-  category,
-  cursor,
-}: {
-  mode: "all" | "selected";
-  category?: HotKeyAPI.PublicItemView["category"];
-  cursor?: string;
-}) {
+async function HomeReadingPage({ category }: { category?: string }) {
   const results = await Promise.allSettled([
-    listPublicItems({ mode, category, cursor, window: "7d", limit: 20 }),
-    getPublicHotStories({ limit: 4 }),
-    getPublicTopicDirectory(),
-    listPublicEditionCatalogue({ limit: 2 }),
+    getPublicHotStories({ limit: 50 }),
+    listPublicEditionCatalogue({ kind: "daily", limit: 1 }),
   ]);
   const failures = Object.fromEntries(
     results.flatMap((result, index) => {
@@ -67,7 +51,7 @@ async function HomeReadingPage({
         result.reason instanceof ApiRequestError ? result.reason : null;
       return [
         [
-          ["items", "stories", "topics", "editions"][index],
+          ["stories", "editions"][index],
           { code: known?.code, status: known?.status },
         ],
       ];
@@ -76,32 +60,17 @@ async function HomeReadingPage({
   const reading: HomeReading = {
     observedAt: new Date().toISOString(),
     failures,
-    items: results[0].status === "fulfilled" ? results[0].value.items : [],
-    sourceStatus:
-      results[0].status === "fulfilled"
-        ? (results[0].value.source_status ?? [])
-        : [],
-    stories: results[1].status === "fulfilled" ? results[1].value.stories : [],
-    topics: results[2].status === "fulfilled" ? results[2].value.topics : [],
-    editions: results[3].status === "fulfilled" ? results[3].value.entries : [],
-    nextCursor:
-      results[0].status === "fulfilled" ? results[0].value.next_cursor : null,
+    stories: results[0].status === "fulfilled" ? results[0].value.stories : [],
+    editions: results[1].status === "fulfilled" ? results[1].value.entries : [],
     unavailable: results.flatMap((result, index) =>
       result.status === "rejected" &&
       !(
         result.reason instanceof ApiRequestError &&
         result.reason.code === "publication_not_configured"
       )
-        ? [["items", "stories", "topics", "editions"][index]]
+        ? [["stories", "editions"][index]]
         : [],
     ),
   };
-  return (
-    <HomeContent
-      reading={reading}
-      mode={mode}
-      category={category}
-      cursor={cursor}
-    />
-  );
+  return <HomeContent reading={reading} category={category} />;
 }

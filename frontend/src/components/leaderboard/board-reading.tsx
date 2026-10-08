@@ -1,25 +1,25 @@
 import Link from "next/link";
-
-import * as UI from "@/components/ui/content";
-import { PageState } from "@/components/system/page-state";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import {
+  Content,
+  Heading,
+  Text,
+  InlineCode,
+  TextLink,
+} from "@/components/ui/content";
 import {
   Table,
   TableBody,
-  TableCaption,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
+  TableCaption,
 } from "@/components/ui/table";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { PageState } from "@/components/system/page-state";
 import { BoardPageFrame } from "./page-header";
-import { confidenceLabel } from "./board-format";
-import { boardHref } from "./board-navigation";
-import { OfficialPrice, ScoreSupport } from "./reading-parts";
+import { ScoreSupport } from "./reading-parts";
 
 export function BoardReading({
   data,
@@ -38,75 +38,48 @@ export function BoardReading({
       tabs={data.tabs}
       run={data.run}
     >
-      <UI.Content className="reading-columns items-start">
-        <UI.Content
-          as="section"
-          aria-label="模型排名"
-          className="flex min-w-0 flex-col gap-4"
-        >
-          <UI.Text tone="muted" size="xs">
-            筛选保留原排名，最多展示 30 个模型；输入 / 输出价格单位为每百万
-            token。
-          </UI.Text>
-          {data.entries.length === 0 ? (
-            <PageState
-              headingLevel={2}
-              state="empty"
-              eyebrow="暂无结果"
-              title={
-                domestic || openWeights
-                  ? "当前筛选没有符合条件的模型"
-                  : "暂无可展示的已发布模型"
-              }
-              description="可以清除筛选或查看来源覆盖。没有已发布证据的模型不按零分计入。"
-              action={
-                <Button asChild variant="secondary">
-                  <Link href={boardHref(data.board.key)}>查看完整榜单</Link>
-                </Button>
-              }
-            />
-          ) : (
-            <Table className="min-w-xl">
+      <Content className="reading-columns items-start">
+        <Content as="section" aria-label="模型排名" className="min-w-0">
+          {data.entries.length ? (
+            <Table>
               <TableCaption>
-                原始发布排名与固定锚点支持指数（0–100）；比例条保持固定尺度
+                支持指数为固定锚点 0–100 分；缺失证据不补分。
+                <TextLink href="/leaderboard/rules">计算规则</TextLink> ·{" "}
+                <TextLink href="/leaderboard/sources">评测来源</TextLink>
               </TableCaption>
               <TableHeader>
                 <TableRow>
-                  <TableHead scope="col">原排名</TableHead>
-                  <TableHead scope="col">模型</TableHead>
-                  <TableHead scope="col">支持指数</TableHead>
-                  <TableHead scope="col">证据</TableHead>
-                  <TableHead scope="col">稳定性</TableHead>
+                  <TableHead>#</TableHead>
+                  <TableHead>模型</TableHead>
+                  <TableHead>类型</TableHead>
+                  <TableHead>支持指数</TableHead>
+                  <TableHead>变化</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data.entries.map((entry) => (
                   <TableRow key={entry.model.slug}>
                     <TableCell>
-                      <UI.InlineCode>{entry.rank}</UI.InlineCode>
+                      <InlineCode>
+                        {String(entry.rank).padStart(2, "0")}
+                      </InlineCode>
+                    </TableCell>
+                    <TableCell className="py-3">
+                      <Content layout="stack" className="min-w-32 gap-0">
+                        <Link href={`/leaderboard/models/${entry.model.slug}`}>
+                          <Text as="strong" size="sm">
+                            {entry.model.name}
+                          </Text>
+                        </Link>
+                        <Text size="xs" tone="muted">
+                          {entry.model.provider ?? "运营方未知"}
+                        </Text>
+                      </Content>
                     </TableCell>
                     <TableCell>
-                      <UI.Content className="flex min-w-40 flex-col gap-1">
-                        <UI.TextLink
-                          href={`/leaderboard/models/${entry.model.slug}`}
-                        >
-                          {entry.model.name}
-                        </UI.TextLink>
-                        <UI.Text tone="muted" size="xs">
-                          {entry.model.provider ?? "运营方未知"}
-                        </UI.Text>
-                        {entry.access.weights_url ? (
-                          <UI.TextLink
-                            href={entry.access.weights_url}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            <UI.Text as="span" tone="muted" size="xs">
-                              开放权重
-                            </UI.Text>
-                          </UI.TextLink>
-                        ) : null}
-                      </UI.Content>
+                      <Badge variant="secondary">
+                        {entry.access.weights_url ? "开放权重" : "未开放权重"}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <ScoreSupport
@@ -115,123 +88,56 @@ export function BoardReading({
                       />
                     </TableCell>
                     <TableCell>
-                      <UI.Text size="sm">
-                        {entry.source_count} 项 / {entry.operator_count} 家
-                      </UI.Text>
-                      <UI.Text tone="muted" size="xs">
-                        <UI.InlineCode>
-                          {Math.round(entry.coverage * 100)}%
-                        </UI.InlineCode>
-                      </UI.Text>
-                    </TableCell>
-                    <TableCell>
-                      <UI.Content className="flex flex-col gap-1">
-                        <Badge variant="secondary">
-                          {confidenceLabel(entry)}
-                        </Badge>
-                        <UI.Text tone="muted" size="xs">
-                          {entry.stability
-                            ? `重算范围 ${entry.stability.from_rank}–${entry.stability.to_rank}；不可用 ${entry.stability.unavailable} 轮`
-                            : "未提供稳定性结果"}
-                        </UI.Text>
-                      </UI.Content>
+                      <Text size="xs" tone="muted" title="暂无上期排名对比">
+                        —
+                      </Text>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+          ) : (
+            <PageState
+              headingLevel={2}
+              state="empty"
+              title="暂无可展示的已发布模型"
+              description="公开评测发布后显示排名；缺失数据不计作零分。"
+            />
           )}
-        </UI.Content>
-        <UI.Content
+        </Content>
+        <Content
           as="aside"
-          aria-label="榜单说明与价格"
-          className="flex min-w-0 flex-col gap-10"
+          aria-label="榜单动态"
+          layout="stack"
+          className="gap-10"
         >
           <Card variant="muted">
             <CardHeader>
-              <CardTitle>本期榜单</CardTitle>
+              <Heading level={2} appearance="sidebar">
+                本周变化
+              </Heading>
             </CardHeader>
             <CardContent>
-              <UI.Content
-                as="section"
-                aria-label="榜单解读"
-                className="flex flex-col gap-3"
-              >
-                <UI.Heading level={2} appearance="sidebar">
-                  {data.board.name}
-                </UI.Heading>
-                <UI.Text tone="muted" size="sm">
-                  {data.board.description}
-                </UI.Text>
-                <UI.Text size="sm">{data.board.how_to_read}</UI.Text>
-                <UI.Text tone="muted" size="sm">
-                  本轮 <UI.InlineCode>{data.board.model_count}</UI.InlineCode>{" "}
-                  个合资格模型，
-                  <UI.InlineCode>{data.board.source_count}</UI.InlineCode>{" "}
-                  个来源、
-                  <UI.InlineCode>
-                    {data.board.operator_count}
-                  </UI.InlineCode>{" "}
-                  个运营方。
-                </UI.Text>
-                <UI.Text tone="muted" size="sm">
-                  排名由加权 Kemeny
-                  共识决定，支持指数基于固定锚点。指数不是能力差距或获胜概率；缺失证据不补分、不重新分配预算。
-                </UI.Text>
-              </UI.Content>
+              <Text size="sm" tone="muted">
+                暂无可比较的历史排名。
+              </Text>
+              <Text size="xs" tone="muted" className="mt-3">
+                {data.board.model_count} 个模型 · {data.board.source_count}{" "}
+                个评测来源
+              </Text>
             </CardContent>
           </Card>
-          <UI.Content
-            as="section"
-            aria-label="官方价格"
-            className="flex min-w-0 flex-col gap-4"
-          >
-            <UI.Heading level={2} appearance="sidebar">
-              官方价格
-            </UI.Heading>
-            <UI.Text tone="muted" size="xs">
-              输入 / 输出价格单位为每百万 token。
-            </UI.Text>
-            <ItemGroup className="gap-0">
-              {data.entries.map((entry) => (
-                <Item key={entry.model.slug} className="border-b px-0 py-4">
-                  <ItemContent className="gap-2">
-                    <UI.TextLink
-                      href={`/leaderboard/models/${entry.model.slug}`}
-                    >
-                      {entry.model.name}
-                    </UI.TextLink>
-                    <OfficialPrice price={entry.price} compact />
-                  </ItemContent>
-                </Item>
-              ))}
-            </ItemGroup>
-          </UI.Content>
-        </UI.Content>
-      </UI.Content>
-      {data.pending.length > 0 ? (
-        <UI.Content as="section" className="flex flex-col gap-4">
-          <Separator />
-          <UI.Heading level={2}>综合榜模型的分类证据缺口</UI.Heading>
-          <UI.Text tone="muted" size="sm">
-            这些模型尚未满足当前分类的独立证据资格，不能把未上榜解释为能力较低。
-          </UI.Text>
-          <ItemGroup>
-            {data.pending.map((item) => (
-              <Item key={item.model.slug} role="listitem">
-                <ItemContent className="gap-2">
-                  <UI.TextLink href={`/leaderboard/models/${item.model.slug}`}>
-                    {item.model.name}
-                  </UI.TextLink>
-                  <UI.Text tone="muted" size="sm">
-                    {item.sources} 个来源
-                  </UI.Text>
-                </ItemContent>
-              </Item>
-            ))}
-          </ItemGroup>
-        </UI.Content>
-      ) : null}
+          <Content as="section" layout="stack">
+            <Heading level={2} appearance="sidebar">
+              Codex 公告
+            </Heading>
+            <Text size="sm" tone="muted">
+              公告可在 Codex 动态页阅读。
+            </Text>
+            <TextLink href="/codex-resets">查看全部公告 →</TextLink>
+          </Content>
+        </Content>
+      </Content>
     </BoardPageFrame>
   );
 }

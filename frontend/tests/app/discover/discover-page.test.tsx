@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   connection: vi.fn(),
   site: vi.fn(),
 }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("next/server", () => ({ connection: api.connection }));
 vi.mock("@/api/gongkaifabu", () => ({
   listPublicItems: api.items,
@@ -267,8 +268,7 @@ it("restores the favorites URL fields with safe defaults and an explicit local t
       page: "2",
     }),
   });
-  const children = page.props.children as ReactElement[];
-  expect(children[1].props).toMatchObject({
+  expect(page.props).toMatchObject({
     full: true,
     initialCategory: "industry",
     initialView: "read",
@@ -284,7 +284,7 @@ it("restores the favorites URL fields with safe defaults and an explicit local t
       page: "-2",
     }),
   });
-  expect(invalid.props.children[1].props).toMatchObject({
+  expect(invalid.props).toMatchObject({
     initialCategory: "all",
     initialView: "saved",
     initialPage: 1,

@@ -408,7 +408,7 @@ export function LoginForm({
                         disabled={!ready}
                         onClick={() => changeMethod("email")}
                       >
-                        首次使用？通过邮箱注册
+                        忘记密码？
                       </Button>
                     ) : null}
                   </UI.Content>

@@ -9,7 +9,7 @@ import {
   ActivityIcon,
   EyeIcon,
   ChartNoAxesColumnIcon,
-  CircleCheckIcon,
+  CircleIcon,
   CompassIcon,
   FileTextIcon,
   HomeIcon,
@@ -50,8 +50,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarRail,
-  useSidebar,
 } from "@/components/ui/sidebar";
 import { ThemeMenuItems } from "./theme-toggle";
 
@@ -229,19 +227,14 @@ function ServiceStatus() {
   if (!status) return null;
   const label = status === "ready" ? "服务就绪" : "服务在线";
   return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        asChild
-        size="sm"
-        tooltip={label}
-        className="pointer-events-none"
-      >
-        <Content role="status" aria-label="服务状态">
-          <CircleCheckIcon aria-hidden="true" />
-          <Text as="span">{label}</Text>
-        </Content>
-      </SidebarMenuButton>
-    </SidebarMenuItem>
+    <Content
+      role="status"
+      aria-label="服务状态"
+      className="flex items-center gap-2 px-1"
+    >
+      <CircleIcon aria-hidden="true" className="size-1.5 fill-current" />
+      <Text size="xs">{label}</Text>
+    </Content>
   );
 }
 
@@ -262,7 +255,7 @@ function DestinationGroup({
       aria-label={navLabel}
       className="px-4 pt-0 pb-6 group-data-[collapsible=icon]:px-2"
     >
-      <SidebarGroupLabel>{label}</SidebarGroupLabel>
+      <SidebarGroupLabel className="h-7">{label}</SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
           {destinations.map(({ href, label: itemLabel, icon: Icon }) => (
@@ -291,14 +284,13 @@ function DestinationGroup({
 // md 及以上的站点侧栏。展开 / 折叠为图标栏由 SidebarProvider 记住。
 export function BasicSidebar() {
   const { session, current } = useNavigation();
-  const { toggleSidebar } = useSidebar();
 
   return (
     <Sidebar
-      collapsible="icon"
+      collapsible="none"
       role="complementary"
       aria-label="站点侧边栏"
-      className="print:hidden"
+      className="hidden shrink-0 md:flex print:hidden"
     >
       <SidebarHeader className="h-22 justify-center px-4 group-data-[collapsible=icon]:h-auto group-data-[collapsible=icon]:px-2 group-data-[collapsible=icon]:py-6">
         <BrandLockup href="/" collapsible />
@@ -318,9 +310,7 @@ export function BasicSidebar() {
         />
       </SidebarContent>
       <SidebarFooter className="max-w-64 gap-3 px-6 py-5 group-data-[collapsible=icon]:px-2">
-        <SidebarMenu>
-          <ServiceStatus />
-        </SidebarMenu>
+        <ServiceStatus />
         <Content className="flex items-center justify-between gap-1 group-data-[collapsible=icon]:flex-col">
           {session ? (
             <AccountMenu />
@@ -350,16 +340,10 @@ export function BasicSidebar() {
               aria-label="更多导航"
             >
               <MoreMenuItems />
-              <DropdownMenuGroup>
-                <DropdownMenuItem onSelect={toggleSidebar}>
-                  展开或收起侧栏
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
         </Content>
       </SidebarFooter>
-      <SidebarRail />
     </Sidebar>
   );
 }
@@ -392,7 +376,7 @@ export function BasicMobileHeader() {
 
 // md 以下的固定底部导航：首页、探索、收藏、工作台、更多。
 export function BasicMobileNavigation() {
-  const { current, personalHref } = useNavigation();
+  const { current } = useNavigation();
   const [home, explore] = readingDestinations;
   const items = [
     { ...home, label: "首页" },
@@ -429,17 +413,17 @@ export function BasicMobileNavigation() {
         <NavigationMenuItem className="flex-1">
           <NavigationMenuLink
             asChild
-            active={current === "/workspace"}
+            active={current === "/topics"}
             className="h-16 flex-col justify-center gap-1 px-2"
           >
             <Link
-              href={personalHref}
-              aria-label="个人工作台"
-              aria-current={current === "/workspace" ? "page" : undefined}
+              href="/topics"
+              aria-label="监控主题"
+              aria-current={current === "/topics" ? "page" : undefined}
             >
               <EyeIcon aria-hidden="true" />
               <Text as="span" size="xs">
-                工作台
+                监控
               </Text>
             </Link>
           </NavigationMenuLink>

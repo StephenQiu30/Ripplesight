@@ -1,8 +1,8 @@
 import { type ReactElement } from "react";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type HomeReading } from "@/app/components/home-format";
-import { publicItem, publicStory } from "./components/home-fixtures";
-
+import { beforeEach, expect, it, vi } from "vitest";
+import type { HomeReading } from "@/app/components/home-format";
+import { publicStory } from "./components/home-fixtures";
+import { ApiRequestError } from "@/request";
 const api = vi.hoisted(() => ({
   items: vi.fn(),
   hot: vi.fn(),
@@ -20,144 +20,64 @@ vi.mock("@/api/gongkaikanwumulu", () => ({
   listPublicEditionCatalogue: api.editions,
 }));
 import Home from "@/app/page";
-import { ApiRequestError } from "@/request";
-
 beforeEach(() => {
   vi.clearAllMocks();
-  api.items.mockResolvedValue({
-    items: [publicItem],
-    source_status: [],
-    next_cursor: "next",
-    snapshot_at: "2026-10-06T08:00:00Z",
-  });
-  api.hot.mockResolvedValue({ stories: [publicStory], ranking_basis: "heat" });
-  api.topics.mockResolvedValue({ topics: [], refresh_at: null });
+  api.hot.mockResolvedValue({ stories: [publicStory] });
   api.editions.mockResolvedValue({ entries: [] });
 });
-afterEach(() => vi.useRealTimers());
-
-async function readHome(
-  params: { mode?: string; category?: string; cursor?: string } = {},
-) {
+async function read(params: Record<string, string> = {}) {
   const shell = await Home({ searchParams: Promise.resolve(params) });
-  const boundary = shell.props.children as ReactElement<{
-    mode: "all" | "selected";
-    category?: HotKeyAPI.PublicItemView["category"];
-    cursor?: string;
-  }>;
-  const render = boundary.type as (props: typeof boundary.props) => Promise<
-    ReactElement<{
-      reading: HomeReading;
-      mode: string;
-      category?: string;
-      cursor?: string;
-    }>
+  const boundary = shell.props.children as ReactElement<
+    Record<string, unknown>
   >;
-  return { shell, content: await render(boundary.props) };
+  return await (
+    boundary.type as (
+      props: typeof boundary.props,
+    ) => Promise<ReactElement<{ reading: HomeReading; category?: string }>>
+  )(boundary.props);
 }
-
-it("keeps the homepage anonymous and passes URL scope into only the existing endpoints", async () => {
-  vi.useFakeTimers();
-  vi.setSystemTime(new Date("2026-10-06T08:00:00Z"));
-  const { shell, content } = await readHome({
-    mode: "selected",
-    category: "paper",
-    cursor: "signed-cursor",
-  });
-  expect(shell.props.fallback.type.name).toBe("HomeLoading");
-  expect(api.connection).toHaveBeenCalledTimes(1);
-  expect(api.items).toHaveBeenCalledWith({
-    mode: "selected",
-    category: "paper",
-    cursor: "signed-cursor",
-    window: "7d",
-    limit: 20,
-  });
-  expect(api.hot).toHaveBeenCalledWith({ limit: 4 });
-  expect(api.topics).toHaveBeenCalledTimes(1);
-  expect(api.editions).toHaveBeenCalledWith({ limit: 2 });
-  expect(content.props).toMatchObject({
-    mode: "selected",
-    category: "paper",
-    cursor: "signed-cursor",
-    reading: {
-      items: [publicItem],
-      stories: [publicStory],
-      nextCursor: "next",
-      unavailable: [],
-      observedAt: "2026-10-06T08:00:00.000Z",
-    },
-  });
+it("loads the event design without fetching the retired article feed or topic sidebar", async () => {
+  const page = await read();
+  expect(api.hot).toHaveBeenCalledWith({ limit: 50 });
+  expect(api.editions).toHaveBeenCalledWith({ kind: "daily", limit: 1 });
+  expect(api.items).not.toHaveBeenCalled();
+  expect(api.topics).not.toHaveBeenCalled();
+  expect(page.props.reading.stories).toEqual([publicStory]);
 });
-
-it("normalizes unknown scope without losing a valid cursor", async () => {
-  await readHome({
-    mode: "unknown",
-    category: "not-a-category",
-    cursor: "page-2",
-  });
-  expect(api.items).toHaveBeenCalledWith({
-    mode: "all",
-    category: undefined,
-    cursor: "page-2",
-    window: "7d",
-    limit: 20,
-  });
+it("normalizes unsupported categories while accepting the design's categories", async () => {
+  expect((await read({ category: "bad" })).props.category).toBeUndefined();
+  expect((await read({ category: "policy" })).props.category).toBe("policy");
 });
-
-it("isolates a topic failure and transports only safe code/status details", async () => {
-  api.topics.mockRejectedValue(
+it("isolates a failed daily edition and never serializes provider messages", async () => {
+  api.editions.mockRejectedValue(
     new ApiRequestError({
       kind: "http",
-      code: "publication_search_busy",
       status: 503,
-      message: "Internal details must not be exposed",
+      code: "database_unavailable",
+      message: "private provider details",
     }),
   );
-  const { content } = await readHome();
-  expect(content.props.reading.unavailable).toEqual(["topics"]);
-  expect(content.props.reading.failures).toEqual({
-    topics: { code: "publication_search_busy", status: 503 },
+  const { reading } = (await read()).props;
+  expect(reading.stories).toEqual([publicStory]);
+  expect(reading.unavailable).toEqual(["editions"]);
+  expect(reading.failures).toEqual({
+    editions: { status: 503, code: "database_unavailable" },
   });
-  expect(content.props.reading.items).toEqual([publicItem]);
-  expect(content.props.reading.stories).toEqual([publicStory]);
-  expect(content.props.reading.topics).toEqual([]);
+  expect(JSON.stringify(reading)).not.toContain("private provider");
 });
-
-it.each(["items", "hot", "topics", "editions"] as const)(
-  "treats publication_not_configured from %s as unpublished while preserving other blocks",
-  async (section) => {
-    api[section].mockRejectedValue(
+it.each(["hot", "editions"] as const)(
+  "treats unpublished %s as empty without fake records",
+  async (key) => {
+    api[key].mockRejectedValue(
       new ApiRequestError({
         kind: "http",
+        status: 404,
         code: "publication_not_configured",
-        status: 503,
-        message: "Not configured",
+        message: "unpublished",
       }),
     );
-    const { content } = await readHome();
-    expect(content.props.reading.unavailable).toEqual([]);
-    expect(content.props.reading.failures).toEqual({});
-    if (section !== "items")
-      expect(content.props.reading.items).toEqual([publicItem]);
-    if (section !== "hot")
-      expect(content.props.reading.stories).toEqual([publicStory]);
+    const { reading } = (await read()).props;
+    expect(reading.unavailable).toEqual([]);
+    expect(key === "hot" ? reading.stories : reading.editions).toEqual([]);
   },
 );
-
-it("keeps all failures in their own blocks rather than throwing away the public page", async () => {
-  for (const section of [api.items, api.hot, api.topics, api.editions])
-    section.mockRejectedValue(new Error("Connection unavailable"));
-  const { content } = await readHome();
-  expect(content.props.reading.unavailable).toEqual([
-    "items",
-    "stories",
-    "topics",
-    "editions",
-  ]);
-  expect(content.props.reading.items).toEqual([]);
-  expect(content.props.reading.stories).toEqual([]);
-  expect(content.props.reading.topics).toEqual([]);
-  expect(content.props.reading.editions).toEqual([]);
-  expect(content.props.reading.nextCursor).toBeNull();
-});

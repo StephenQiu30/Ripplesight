@@ -37,12 +37,9 @@ export function useLayoutScrollContainer() {
 export function BasicLayout({
   children,
   session = null,
-  sidebarOpen = true,
 }: {
   children: ReactNode;
   session?: HotKeyAPI.IdentitySessionView | null;
-  /** 侧栏上次是展开还是收起，由根布局从 cookie 读出，避免首屏闪动。 */
-  sidebarOpen?: boolean;
 }) {
   const pathname = usePathname();
   const mainRef = useRef<HTMLElement>(null);
@@ -58,7 +55,7 @@ export function BasicLayout({
         <LayoutScrollContext.Provider value={mainRef}>
           <TooltipProvider>
             <SidebarProvider
-              defaultOpen={sidebarOpen}
+              open={true}
               className="h-dvh min-h-0 overflow-hidden print:block print:h-auto print:overflow-visible"
             >
               <Button

@@ -25,8 +25,8 @@ export function LoginBrandStory({ children }: { children?: ReactNode }) {
           知微见澜
         </UI.Heading>
         <UI.Text tone="muted" size="lead">
-          沿着各平台的 AI
-          热点，看清发生了什么、讨论如何变化。登录后设置监控主题，跟踪来源、进展与告警。
+          从细微的信号，读懂世界的波澜。聚合多平台 AI
+          热点，以事实与讨论为线索，帮你看清发生了什么、大家怎么看。
         </UI.Text>
       </UI.Content>
       <UI.Content layout="stack" className="gap-2">

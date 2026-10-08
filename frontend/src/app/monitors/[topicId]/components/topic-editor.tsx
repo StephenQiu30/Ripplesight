@@ -54,9 +54,8 @@ import {
   type MonitorFailure,
 } from "@/components/monitors/monitor-presenters";
 import { TopicAlerts } from "@/components/monitors/topic-alerts";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TopicOverview } from "./topic-overview";
 import { PageState } from "@/components/system/page-state";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -90,11 +89,17 @@ type ActionFeedback = {
   fields?: TopicFieldErrors;
 };
 
-const TOPIC_TABS = ["results", "runs", "settings", "alerts"] as const;
+const TOPIC_TABS = [
+  "overview",
+  "results",
+  "runs",
+  "settings",
+  "alerts",
+] as const;
 type TopicTab = (typeof TOPIC_TABS)[number];
 function readTopicTab(): TopicTab {
   const value = new URLSearchParams(window.location.search).get("tab");
-  return TOPIC_TABS.find((tab) => tab === value) ?? "results";
+  return TOPIC_TABS.find((tab) => tab === value) ?? "overview";
 }
 
 type PendingAction = "archive" | "clone" | "pause" | "resume" | "save";
@@ -152,7 +157,7 @@ export function TopicEditor({
     };
   }, []);
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TopicTab>("results");
+  const [activeTab, setActiveTab] = useState<TopicTab>("overview");
   useEffect(() => {
     const syncTab = () => setActiveTab(readTopicTab());
     syncTab();
@@ -160,10 +165,10 @@ export function TopicEditor({
     return () => window.removeEventListener("popstate", syncTab);
   }, [topicId]);
   function selectTab(value: string) {
-    const tab = TOPIC_TABS.find((item) => item === value) ?? "results";
+    const tab = TOPIC_TABS.find((item) => item === value) ?? "overview";
     setActiveTab(tab);
     const url = new URL(window.location.href);
-    if (tab === "results") url.searchParams.delete("tab");
+    if (tab === "overview") url.searchParams.delete("tab");
     else url.searchParams.set("tab", tab);
     window.history.replaceState(window.history.state, "", url);
   }
@@ -561,64 +566,69 @@ export function TopicEditor({
           aria-label="主题详情"
           className="flex flex-col gap-5"
         >
-          <UI.Content className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">{topicStatusLabel(topic.status)}</Badge>
-            <UI.Text as="span" tone="muted" size="sm">
-              版本 <UI.InlineCode>v{topic.current_version}</UI.InlineCode>
-            </UI.Text>
-          </UI.Content>
-          <UI.Heading level={embedded ? 2 : 1}>{topic.name}</UI.Heading>
-          <UI.Content className="flex flex-wrap items-center gap-3">
-            <UI.Text tone="muted" size="sm">
-              每 {topic.collection_interval_seconds / 60} 分钟 ·{" "}
-              {topic.source_keys.length} 个来源
-            </UI.Text>
-            <UI.Text tone="muted" size="sm" className="min-w-0 break-words">
-              关键词：
-              {[...topic.rules.match_any, ...topic.rules.match_all].join(
-                " · ",
-              ) || "未设置"}
-            </UI.Text>
-          </UI.Content>
-          <UI.Content className="flex flex-wrap gap-2">
-            <Button type="button" onClick={() => selectTab("runs")}>
-              采集与运行
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => selectTab("settings")}
-            >
-              编辑设置
-            </Button>
-          </UI.Content>
+          <UI.Heading
+            level={embedded ? 2 : 1}
+            appearance={embedded ? "form" : undefined}
+          >
+            {topic.name}
+          </UI.Heading>
+          <UI.Text tone="muted" size="xs">
+            {topicStatusLabel(topic.status)} · 每{" "}
+            {topic.collection_interval_seconds / 60} 分钟检索 ·{" "}
+            {topic.source_keys.length} 个来源
+          </UI.Text>
         </UI.Content>
-        <Tabs
-          value={activeTab}
-          onValueChange={selectTab}
-          className="min-w-0 gap-6"
+        <TopicOverview
+          topic={topic}
+          sources={sourceOptions}
+          onSourceChange={(key, checked) => {
+            setSourceKeys((current) =>
+              checked
+                ? [...new Set([...current, key])]
+                : current.filter((value) => value !== key),
+            );
+            selectTab("settings");
+          }}
+        />
+        <TopicAlerts topicId={topic.id} />
+        <UI.Content
+          className="flex flex-wrap gap-2 border-t pt-6"
+          role="group"
+          aria-label="主题操作"
         >
-          <UI.Content className="overflow-x-auto pb-1">
-            <TabsList variant="line" aria-label="主题功能">
-              <TabsTrigger value="results">监控结果</TabsTrigger>
-              <TabsTrigger value="runs">采集与运行</TabsTrigger>
-              <TabsTrigger value="settings">主题设置</TabsTrigger>
-              <TabsTrigger value="alerts">告警</TabsTrigger>
-            </TabsList>
-          </UI.Content>
-          <TabsContent
-            value="results"
-            forceMount
-            hidden={activeTab !== "results"}
+          <Button
+            variant="secondary"
+            aria-expanded={activeTab === "results"}
+            onClick={() =>
+              selectTab(activeTab === "results" ? "overview" : "results")
+            }
           >
+            查看监控结果
+          </Button>
+          <Button
+            variant="secondary"
+            aria-expanded={activeTab === "runs"}
+            onClick={() =>
+              selectTab(activeTab === "runs" ? "overview" : "runs")
+            }
+          >
+            采集与运行
+          </Button>
+          <Button
+            variant="secondary"
+            aria-expanded={activeTab === "settings"}
+            onClick={() =>
+              selectTab(activeTab === "settings" ? "overview" : "settings")
+            }
+          >
+            编辑主题设置
+          </Button>
+        </UI.Content>
+        <UI.Content className="min-w-0">
+          <UI.Content hidden={activeTab !== "results"}>
             <TopicResults topicId={topic.id} />
-          </TabsContent>
-          <TabsContent
-            value="settings"
-            forceMount
-            hidden={activeTab !== "settings"}
-            className="min-w-0"
-          >
+          </UI.Content>
+          <UI.Content hidden={activeTab !== "settings"} className="min-w-0">
             <UI.Content className="flex flex-col gap-6">
               <UI.Content
                 className="grid grid-cols-1 gap-4 sm:grid-cols-2"
@@ -817,8 +827,8 @@ export function TopicEditor({
                 </FieldGroup>
               </UI.Form>
             </UI.Content>
-          </TabsContent>
-          <TabsContent value="runs" forceMount hidden={activeTab !== "runs"}>
+          </UI.Content>
+          <UI.Content hidden={activeTab !== "runs"}>
             <UI.Content>
               <TopicRunActions
                 key={`${topic.id}:${topic.current_version}:${topic.source_keys.join(",")}`}
@@ -832,15 +842,8 @@ export function TopicEditor({
                 disabled={isBusy}
               />
             </UI.Content>
-          </TabsContent>
-          <TabsContent
-            value="alerts"
-            forceMount
-            hidden={activeTab !== "alerts"}
-          >
-            <TopicAlerts topicId={topic.id} />
-          </TabsContent>
-        </Tabs>
+          </UI.Content>
+        </UI.Content>
       </UI.Content>
     </UI.Content>
   );

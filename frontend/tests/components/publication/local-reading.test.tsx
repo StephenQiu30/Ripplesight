@@ -126,40 +126,32 @@ it("maps only the actual category, including uncategorized items, without invent
   expect(filterLocalItems(items, "event")).toEqual([]);
 });
 
-it("filters the current page and restores category/view/page from the URL on refresh", async () => {
+it("keeps legacy category deep links while using the design's content-type filter", async () => {
   localStorage.setItem(SAVED_KEY, JSON.stringify([id(1), id(2)]));
   api.read.mockImplementation(({ content_id }: { content_id: string }) =>
     Promise.resolve(content_id === id(1) ? detail(1) : detail(2, "industry")),
   );
-  const mounted = renderSavedPage({ full: true });
-  await screen.findByRole("link", { name: "本机资讯 1" });
-  fireEvent.click(screen.getByRole("radio", { name: "行业" }));
-  expect(screen.queryByRole("link", { name: "本机资讯 1" })).toBeNull();
-  expect(screen.getByRole("link", { name: "本机资讯 2" })).toBeTruthy();
-  expect(new URL(window.location.href).searchParams.get("category")).toBe(
-    "industry",
-  );
-  mounted.unmount();
   renderSavedPage({ full: true, initialCategory: "industry" });
   await screen.findByRole("link", { name: "本机资讯 2" });
   expect(screen.queryByRole("link", { name: "本机资讯 1" })).toBeNull();
-  expect(api.read).toHaveBeenCalledTimes(4);
+  fireEvent.click(screen.getByRole("radio", { name: "事件" }));
+  expect(screen.getByRole("status", { name: "暂无此类收藏" })).toBeTruthy();
+  expect(savedIds(localStorage)).toEqual([id(1), id(2)]);
+  fireEvent.click(screen.getByRole("radio", { name: "资讯" }));
+  expect(screen.getByRole("link", { name: "本机资讯 2" })).toBeTruthy();
 });
 
-it("shows independent reading history, persists its URL, and does not offer removal of read marks", async () => {
+it("keeps reading history accessible by its existing deep link without mixing it with bookmark types", async () => {
   localStorage.setItem(SAVED_KEY, JSON.stringify([id(1)]));
   localStorage.setItem(READ_KEY, JSON.stringify([id(2)]));
   api.read.mockImplementation(({ content_id }: { content_id: string }) =>
     Promise.resolve(content_id === id(1) ? detail(1) : detail(2)),
   );
-  renderSavedPage({ full: true });
-  await screen.findByRole("link", { name: "本机资讯 1" });
-  fireEvent.click(screen.getByRole("radio", { name: "阅读记录" }));
+  renderSavedPage({ full: true, initialView: "read" });
   await screen.findByRole("link", { name: "本机资讯 2" });
   expect(screen.queryByRole("link", { name: "本机资讯 1" })).toBeNull();
   expect(screen.getByText("已读")).toBeTruthy();
   expect(screen.queryByRole("button", { name: /取消收藏/ })).toBeNull();
-  expect(new URL(window.location.href).searchParams.get("view")).toBe("read");
   expect(localStorage.getItem(READ_KEY)).toBe(JSON.stringify([id(2)]));
 });
 

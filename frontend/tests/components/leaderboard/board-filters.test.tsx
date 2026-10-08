@@ -14,25 +14,17 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 afterEach(cleanup);
 beforeEach(() => push.mockReset());
 
-it("uses the existing dimension URL and preserves both applied filters", () => {
+it("uses the design dimensions, maps open weights to the real filter and labels unavailable context", () => {
   render(<BoardFilters board="overall" domestic openWeights />);
-  const container = screen.getByRole("radiogroup", {
-    name: "榜单维度",
-  }).parentElement!;
-  expect(container.classList.contains("overflow-x-auto")).toBe(true);
-  expect(container.classList.contains("hide-scrollbar")).toBe(true);
   fireEvent.click(screen.getByRole("radio", { name: "编程" }));
   expect(push).toHaveBeenCalledWith(
-    "/leaderboard/category/coding?domestic=true&open_weights=true",
+    "/leaderboard/category/coding?domestic=true",
   );
   expect(
-    screen.getByRole("form", { name: "模型筛选" }).getAttribute("action"),
-  ).toBe("/leaderboard");
-  expect(
-    screen.getByRole("link", { name: "清除筛选" }).getAttribute("href"),
-  ).toBe("/leaderboard");
+    screen.getByRole("radio", { name: "长上下文" }).hasAttribute("disabled"),
+  ).toBe(true);
+  expect(screen.queryByRole("form", { name: "模型筛选" })).toBeNull();
 });
-
 it("keeps the active dimension selected when it is clicked again", () => {
   render(<BoardFilters board="coding" domestic={false} openWeights={false} />);
   fireEvent.click(screen.getByRole("radio", { name: "编程" }));
@@ -42,25 +34,22 @@ it("keeps the active dimension selected when it is clicked again", () => {
   ).toBe("true");
 });
 
-it("synchronizes the checkboxes when the applied URL changes", () => {
+it("synchronizes the active open-weight dimension from URL props", () => {
   const { rerender } = render(
-    <BoardFilters board="overall" domestic openWeights />,
+    <BoardFilters board="overall" domestic={false} openWeights />,
   );
+  expect(
+    screen.getByRole("radio", { name: "开源" }).getAttribute("aria-checked"),
+  ).toBe("true");
   rerender(
     <BoardFilters board="overall" domestic={false} openWeights={false} />,
   );
   expect(
-    screen
-      .getByRole("checkbox", { name: "国内模型" })
-      .getAttribute("aria-checked"),
-  ).toBe("false");
-  expect(
-    screen
-      .getByRole("checkbox", { name: "开放权重" })
-      .getAttribute("aria-checked"),
-  ).toBe("false");
+    screen.getByRole("radio", { name: "综合" }).getAttribute("aria-checked"),
+  ).toBe("true");
+  fireEvent.click(screen.getByRole("radio", { name: "开源" }));
+  expect(push).toHaveBeenCalledWith("/leaderboard?open_weights=true");
 });
-
 it("allows keyboard focus to move between dimensions", async () => {
   render(<BoardFilters board="overall" domestic={false} openWeights={false} />);
   const overall = screen.getByRole("radio", { name: "综合" });

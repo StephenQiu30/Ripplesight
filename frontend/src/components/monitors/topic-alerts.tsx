@@ -43,7 +43,9 @@ export function TopicAlerts({ topicId }: { topicId: string }) {
       className="flex min-w-0 flex-col gap-4"
     >
       <UI.Content className="flex flex-wrap items-center justify-between gap-3">
-        <UI.Heading level={3}>告警规则与历史</UI.Heading>
+        <UI.Heading level={3} appearance="sidebar">
+          告警规则
+        </UI.Heading>
         <Button asChild variant="link">
           <Link href="/alerts">管理告警</Link>
         </Button>
@@ -109,9 +111,6 @@ export function TopicAlerts({ topicId }: { topicId: string }) {
                   >
                     评估历史
                   </Button>
-                  {historyId === rule.id && (
-                    <AlertHistory key={rule.id} ruleId={rule.id} />
-                  )}
                 </ItemContent>
               </Item>
             ))}
@@ -130,6 +129,32 @@ export function TopicAlerts({ topicId }: { topicId: string }) {
             }
           />
         ))}
+      {!error?.forbidden && rules ? (
+        <UI.Content as="section" layout="stack" className="mt-5">
+          <UI.Content className="flex items-center justify-between gap-3">
+            <UI.Heading level={3} appearance="sidebar">
+              最近告警
+            </UI.Heading>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled
+              title="告警已读状态暂未开放"
+            >
+              全部标为已读
+            </Button>
+          </UI.Content>
+          {historyId ? (
+            <AlertHistory key={historyId} ruleId={historyId} />
+          ) : (
+            <UI.Text size="sm" tone="muted">
+              {rules.length
+                ? "选择一条规则的评估历史，查看最近观测与触发记录。"
+                : "暂无告警记录。"}
+            </UI.Text>
+          )}
+        </UI.Content>
+      ) : null}
     </UI.Content>
   );
 }

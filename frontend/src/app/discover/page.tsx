@@ -18,6 +18,8 @@ import {
 import { publicSiteMetadata } from "@/components/publication/site-metadata";
 import { DiscoveryFilters } from "./components/discovery-filters";
 import { DiscoveryResults } from "./components/discovery-results";
+import { DiscoveryPlatforms } from "./components/discovery-platforms";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { DiscoveryTopics } from "./components/discovery-topics";
 import {
   discoveryScope,
@@ -126,13 +128,18 @@ async function DiscoveryReadingPage({ params }: { params: DiscoveryParams }) {
           }
         : reading.value
       : null;
+  const contentType = ["events", "items", "comments"].includes(
+    params.type ?? "",
+  )
+    ? params.type
+    : "all";
   const currentHref = discoveryHref(params, params.cursor);
   return (
     <UI.Content layout="stack" className="gap-8">
       <UI.Content as="header" layout="stack" className="gap-2">
         <UI.Heading level={1}>探索</UI.Heading>
         <UI.Text tone="muted" size="sm">
-          检索当前可公开的资讯，按分类与专题找到值得阅读的内容。
+          检索事件与资讯，沿着来源阅读原文。评论与情感数据发布后开放检索。
         </UI.Text>
       </UI.Content>
       <DiscoveryFilters
@@ -151,37 +158,57 @@ async function DiscoveryReadingPage({ params }: { params: DiscoveryParams }) {
         >
           {page ? (
             <>
-              <UI.Text tone="muted" size="xs">
-                本页 <UI.InlineCode>{page.items.length}</UI.InlineCode> 条 ·{" "}
-                {scope.window === "7d" ? "过去 7 天" : "过去 24 小时"}
-              </UI.Text>
+              {contentType === "all" || contentType === "items" ? (
+                <UI.Text tone="muted" size="xs">
+                  本页资讯 <UI.InlineCode>{page.items.length}</UI.InlineCode> 条
+                  · {scope.window === "7d" ? "过去 7 天" : "过去 24 小时"}
+                </UI.Text>
+              ) : null}
               <PublicSourceStatus sources={page.source_status ?? []} />
-              <DiscoveryResults page={page} timeline={timeline} />
-              {(params.cursor || page.next_cursor) && (
-                <UI.Content
-                  role="navigation"
-                  aria-label="结果分页"
-                  className="flex flex-wrap items-center justify-between gap-3"
-                >
-                  {params.cursor ? (
-                    <Button asChild variant="outline" size="navigation">
-                      <Link href={discoveryHref(params)}>回到第一页</Link>
-                    </Button>
-                  ) : null}
-                  {page.next_cursor ? (
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="navigation"
-                      className="ml-auto"
-                    >
-                      <Link href={discoveryHref(params, page.next_cursor)}>
-                        下一页
-                      </Link>
-                    </Button>
-                  ) : null}
-                </UI.Content>
+              {contentType === "comments" || contentType === "events" ? (
+                <PageState
+                  headingLevel={2}
+                  state="empty"
+                  title={
+                    contentType === "events"
+                      ? "事件检索尚未开放"
+                      : "暂无公开评论"
+                  }
+                  description={
+                    contentType === "events"
+                      ? "可在事件页阅读当前热榜；全量事件搜索尚未接入。"
+                      : "公开评论发布后将在这里提供检索。"
+                  }
+                />
+              ) : (
+                <DiscoveryResults page={page} timeline={timeline} />
               )}
+              {(contentType === "all" || contentType === "items") &&
+                (params.cursor || page.next_cursor) && (
+                  <UI.Content
+                    role="navigation"
+                    aria-label="结果分页"
+                    className="flex flex-wrap items-center justify-between gap-3"
+                  >
+                    {params.cursor ? (
+                      <Button asChild variant="outline" size="navigation">
+                        <Link href={discoveryHref(params)}>回到第一页</Link>
+                      </Button>
+                    ) : null}
+                    {page.next_cursor ? (
+                      <Button
+                        asChild
+                        variant="outline"
+                        size="navigation"
+                        className="ml-auto"
+                      >
+                        <Link href={discoveryHref(params, page.next_cursor)}>
+                          下一页
+                        </Link>
+                      </Button>
+                    ) : null}
+                  </UI.Content>
+                )}
             </>
           ) : (
             <PublicationFailure
@@ -193,11 +220,45 @@ async function DiscoveryReadingPage({ params }: { params: DiscoveryParams }) {
             />
           )}
         </UI.Content>
-        <DiscoveryTopics
-          directory={topics.status === "fulfilled" ? topics.value : null}
-          error={topics.status === "rejected" ? topics.reason : undefined}
-          retryHref={currentHref}
-        />
+        <UI.Content
+          as="aside"
+          aria-label="搜索筛选与主题"
+          layout="stack"
+          className="gap-10"
+        >
+          <DiscoveryPlatforms
+            sources={discoverySources(page)}
+            params={params}
+          />
+          <DiscoveryTopics
+            directory={topics.status === "fulfilled" ? topics.value : null}
+            error={topics.status === "rejected" ? topics.reason : undefined}
+            retryHref={currentHref}
+          />
+          <UI.Content as="section" layout="stack">
+            <UI.Heading level={2} appearance="sidebar">
+              相关搜索
+            </UI.Heading>
+            <UI.Text size="sm" tone="muted">
+              暂无搜索建议。
+            </UI.Text>
+          </UI.Content>
+          <Card variant="muted">
+            <CardHeader>
+              <UI.Heading level={2} appearance="sidebar">
+                持续关注这个主题
+              </UI.Heading>
+            </CardHeader>
+            <CardContent>
+              <UI.Text size="sm" tone="muted">
+                将关键词保存为监控主题，持续跟踪新内容与讨论。
+              </UI.Text>
+              <Button asChild variant="outline" size="sm" className="mt-4">
+                <Link href="/monitors/new">存为监控主题</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </UI.Content>
       </UI.Content>
     </UI.Content>
   );

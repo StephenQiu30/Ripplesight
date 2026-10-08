@@ -1,53 +1,42 @@
 import { expect, it } from "vitest";
 import {
-  homeOverview,
+  homeUpdatedAt,
   relativeTime,
   storyPresentation,
   type HomeReading,
 } from "@/app/components/home-format";
-import { attention, publicItem, publicStory } from "./home-fixtures";
+import { attention, publicStory } from "./home-fixtures";
 
 const reading: HomeReading = {
-  items: [publicItem],
   stories: [publicStory],
-  topics: [],
   editions: [],
   unavailable: [],
 };
 
-it("counts only this returned list, distinguishes failed counts from zero and uses content times", () => {
-  expect(homeOverview(reading)).toEqual({
-    itemCount: 1,
-    storyCount: 1,
-    sourceCount: 1,
-    topicCount: 0,
-    updatedAt: "2026-10-06T07:00:00Z",
-  });
+it("uses published content time rather than request time, and keeps missing timestamps unknown", () => {
+  expect(homeUpdatedAt(reading)).toBe("2026-10-06T07:00:00Z");
   expect(
-    homeOverview({ ...reading, items: [], unavailable: ["items"] }).itemCount,
-  ).toBeNull();
-  expect(
-    homeOverview({ ...reading, stories: [], unavailable: ["stories"] })
-      .storyCount,
-  ).toBeNull();
-  expect(
-    homeOverview({
-      items: [],
+    homeUpdatedAt({
+      ...reading,
       stories: [],
-      topics: [],
-      editions: [],
-      unavailable: [],
       observedAt: "2026-10-06T08:00:00Z",
     }),
-  ).toEqual({
-    itemCount: 0,
-    storyCount: 0,
-    sourceCount: 0,
-    topicCount: 0,
-    updatedAt: null,
-  });
+  ).toBeNull();
   expect(
-    homeOverview({
+    homeUpdatedAt({
+      ...reading,
+      stories: [
+        {
+          ...publicStory,
+          first_seen_at: "invalid",
+          reports: [],
+          attention: null,
+        },
+      ],
+    }),
+  ).toBeNull();
+  expect(
+    homeUpdatedAt({
       ...reading,
       editions: [
         {
@@ -59,17 +48,8 @@ it("counts only this returned list, distinguishes failed counts from zero and us
           reading_url: "/reports/daily/2026-10-06",
         },
       ],
-    }).updatedAt,
+    }),
   ).toBe("2026-10-06T08:00:00Z");
-  expect(
-    homeOverview({
-      ...reading,
-      items: [
-        { ...publicItem, timeline_at: "invalid", discovered_at: "invalid" },
-      ],
-      stories: [],
-    }).updatedAt,
-  ).toBeNull();
 });
 
 it.each(["up", "down", "flat", "new", "unknown"] as const)(

@@ -1,4 +1,3 @@
-import * as UI from "@/components/ui/content";
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { SavedItems } from "@/components/publication/local-reading";
@@ -23,17 +22,19 @@ export default async function StarredPage({
       ? requestedPage
       : 1;
   return (
-    <UI.Content layout="stack" className="gap-8">
-      <UI.Content as="header" layout="stack" className="gap-2">
-        <UI.Heading level={1}>收藏</UI.Heading>
-      </UI.Content>
-      <SavedItems
-        key={JSON.stringify(params)}
-        full
-        initialCategory={category}
-        initialView={params.view === "read" ? "read" : "saved"}
-        initialPage={page}
-      />
-    </UI.Content>
+    <SavedItems
+      key={JSON.stringify(params)}
+      pageTitle
+      full
+      initialCategory={category}
+      initialView={params.view === "read" ? "read" : "saved"}
+      initialPage={page}
+      initialSort={params.sort === "oldest" ? "oldest" : "recent"}
+      initialType={
+        ["events", "items", "comments", "editions"].includes(params.type ?? "")
+          ? params.type
+          : "all"
+      }
+    />
   );
 }

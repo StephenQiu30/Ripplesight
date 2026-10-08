@@ -80,7 +80,7 @@ export function EventHeader({
         {actions}
       </UI.Content>
       <UI.Content className="flex flex-wrap gap-x-5 gap-y-2">
-        <UI.Text size="sm" tone="muted">
+        <UI.Text size="xs" tone="muted">
           首次{firstSeenBasis === "published" ? "发布" : "发现"}{" "}
           <UI.InlineCode>
             <UI.Timestamp dateTime={firstSeenAt}>
@@ -88,7 +88,7 @@ export function EventHeader({
             </UI.Timestamp>
           </UI.InlineCode>
         </UI.Text>
-        <UI.Text size="sm" tone="muted">
+        <UI.Text size="xs" tone="muted">
           {updatedAt ? (
             <>
               最近更新{" "}
@@ -102,10 +102,10 @@ export function EventHeader({
             "事件更新时间未提供"
           )}
         </UI.Text>
-        <UI.Text size="sm" tone="muted">
+        <UI.Text size="xs" tone="muted">
           <UI.InlineCode>{sourceCount}</UI.InlineCode> 个来源
         </UI.Text>
-        <UI.Text size="sm" tone="muted">
+        <UI.Text size="xs" tone="muted">
           热度{" "}
           <UI.InlineCode>
             {heat == null
@@ -113,7 +113,7 @@ export function EventHeader({
               : heat.toLocaleString("zh-CN", { maximumFractionDigits: 1 })}
           </UI.InlineCode>
         </UI.Text>
-        <UI.Text size="sm" tone="muted">
+        <UI.Text size="xs" tone="muted" className="sr-only">
           修订 <UI.InlineCode>{revision}</UI.InlineCode>
           {phase
             ? ` · ${{ active: "持续发展", watching: "观察中", settled: "已收束" }[phase]}`
@@ -237,7 +237,7 @@ export function EventTimeline({
       className="flex flex-col gap-4"
     >
       <UI.Heading id="event-timeline-heading">时间线</UI.Heading>
-      <UI.Text size="sm" tone="muted">
+      <UI.Text size="xs" tone="muted">
         {description}
       </UI.Text>
       {!entries.length ? (
@@ -251,7 +251,7 @@ export function EventTimeline({
                 role="listitem"
                 className="flex-nowrap items-start gap-5 px-0"
               >
-                <UI.Text size="xs" tone="muted" className="w-28 shrink-0">
+                <UI.Text size="xs" tone="muted" className="w-20 shrink-0">
                   <UI.InlineCode>{eventTime(entry.time)}</UI.InlineCode>
                 </UI.Text>
                 <ItemContent className="min-w-0 gap-2">
@@ -400,11 +400,11 @@ export function RepresentativeComments({
               <ItemContent className="min-w-0 gap-3">
                 <UI.Text size="sm">{comment.source}</UI.Text>
                 {comment.state === "none" ? (
-                  <UI.Text size="sm" tone="muted">
+                  <UI.Text size="xs" tone="muted">
                     此来源尚无代表评论。
                   </UI.Text>
                 ) : comment.state === "unavailable" ? (
-                  <UI.Text size="sm" tone="muted">
+                  <UI.Text size="xs" tone="muted">
                     代表评论证据暂不可读。
                   </UI.Text>
                 ) : (

@@ -1,84 +1,37 @@
-"use client";
-import * as UI from "@/components/ui/content";
-
+import Link from "next/link";
+import { Content, Text } from "@/components/ui/content";
 import {
   NavigationMenu,
   NavigationMenuList,
   NavigationMenuItem,
   NavigationMenuLink,
 } from "@/components/ui/navigation-menu";
-
-import Link from "next/link";
-import { useRef, useState } from "react";
-
-import { Button } from "@/components/ui/button";
-import { LayoutContainer } from "./layout-container";
-import { UsageGuide } from "./usage-guide";
-
 export function BasicFooter() {
-  const [guideOpen, setGuideOpen] = useState(false);
-  const guideTriggerRef = useRef<HTMLButtonElement>(null);
-
   return (
-    <>
-      <UI.Content
-        as="footer"
-        role="contentinfo"
-        className="layout-region shrink-0 overflow-hidden print:hidden"
-      >
-        <LayoutContainer className="flex min-h-16 max-w-none flex-wrap items-center justify-between gap-x-6 gap-y-2 py-2 md:px-8 lg:px-8">
-          <UI.Text tone="muted" size="xs">
-            © {new Date().getFullYear()} 知微见澜 Ripplesight
-          </UI.Text>
-          <NavigationMenu
-            viewport={false}
-            className="max-w-full justify-start"
-            aria-label="站点信息"
-          >
-            <NavigationMenuList className="flex-wrap justify-start gap-2">
-              <NavigationMenuItem>
-                <Button
-                  ref={guideTriggerRef}
-                  variant="link"
-                  size="sm"
-                  className="h-auto p-0"
-                  onClick={() => setGuideOpen(true)}
-                >
-                  使用指南
-                </Button>
-              </NavigationMenuItem>
-              <NavigationMenuItem>
-                <NavigationMenuLink asChild>
-                  <Link href="/about">关于</Link>
-                </NavigationMenuLink>
-              </NavigationMenuItem>
-              <NavigationMenuItem>
-                <NavigationMenuLink asChild>
-                  <Link href="/privacy">隐私</Link>
-                </NavigationMenuLink>
-              </NavigationMenuItem>
-              <NavigationMenuItem>
-                <NavigationMenuLink asChild>
-                  <Link href="/terms">使用条款</Link>
-                </NavigationMenuLink>
-              </NavigationMenuItem>
-              <NavigationMenuItem>
-                <NavigationMenuLink asChild>
-                  <Link href="/contact">联系</Link>
-                </NavigationMenuLink>
-              </NavigationMenuItem>
-            </NavigationMenuList>
-          </NavigationMenu>
-        </LayoutContainer>
-      </UI.Content>
-      <UsageGuide
-        view={guideOpen ? "guide" : null}
-        onClose={() => setGuideOpen(false)}
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          guideTriggerRef.current?.focus();
-        }}
-      />
-    </>
+    <Content
+      as="footer"
+      role="contentinfo"
+      className="flex min-h-16 flex-wrap items-center justify-between gap-4 px-4 py-3 md:px-8 print:hidden"
+    >
+      <Text tone="muted" size="xs">
+        © {new Date().getFullYear()} 知微见澜 Ripplesight
+      </Text>
+      <NavigationMenu viewport={false} aria-label="站点信息">
+        <NavigationMenuList className="flex-wrap gap-3">
+          {[
+            ["/about", "关于"],
+            ["/privacy", "隐私"],
+            ["/terms", "条款"],
+            ["/changelog", "更新日志"],
+          ].map(([href, label]) => (
+            <NavigationMenuItem key={href}>
+              <NavigationMenuLink asChild>
+                <Link href={href}>{label}</Link>
+              </NavigationMenuLink>
+            </NavigationMenuItem>
+          ))}
+        </NavigationMenuList>
+      </NavigationMenu>
+    </Content>
   );
 }

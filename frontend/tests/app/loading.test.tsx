@@ -76,8 +76,8 @@ describe("route loading", () => {
       ).queryByRole("button"),
     ).toBeNull();
     expect(
-      within(screen.getByRole("contentinfo")).getByRole("button", {
-        name: "使用指南",
+      within(screen.getByRole("contentinfo")).getByRole("link", {
+        name: "更新日志",
       }),
     ).toBeTruthy();
   });

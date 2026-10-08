@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { CircleAlertIcon, InboxIcon, LockKeyholeIcon } from "lucide-react";
+import { CircleAlertIcon, EyeIcon, LockKeyholeIcon } from "lucide-react";
 
 import * as UI from "@/components/ui/content";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -20,7 +20,7 @@ import { RetryButton } from "./retry-button";
 
 type PageStateProps = {
   state: "loading" | "empty" | "error" | "forbidden" | "stale";
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   description: string;
   action?: ReactNode;
@@ -145,7 +145,7 @@ export function PageState({
       </UI.Content>
     );
 
-  const Icon = state === "forbidden" ? LockKeyholeIcon : InboxIcon;
+  const Icon = state === "forbidden" ? LockKeyholeIcon : EyeIcon;
   return (
     <UI.Content
       className="flex flex-1 items-center py-10"
