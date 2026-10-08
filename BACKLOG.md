@@ -1,5 +1,17 @@
 # Ripplesight BACKLOG
 
+## 当前：按 Figma 从基础重新复现（2026-10-08）
+
+本人明确否定现有前端的视觉还原。下方原“Figma重建”完成项仅是历史执行记录，不代表用户认可或本轮视觉验收；现有页面不是设计基线。
+
+- [x] 按桌面原稿重建固定侧栏、正文、排版和语义组件；移除旧侧栏折叠状态与全局快捷键干扰。
+- [x] 重建首页、探索、事件、日报、模型榜、监控、收藏、登录及共用页面状态，替换旧展示组合；收藏增加本机备注及排序，监控默认改为连续详情，既有结果与设置保留入口。
+- [x] 同步需求入口、8个核心页面需求、API/数据库/非功能/验收与收敛方案；原稿所需统计、情感、曲线、关注和已读保留为待接入需求，不能因旧 UI 没有而撤销。
+- [x] Web lint、typecheck、format:check、124文件970项测试和生产构建通过；文档check（26项测试及TypeScript）和107页构建通过。末次记录更新后重验文档，结果见 workspace/VERIFICATION.md。
+- [x] 核对8类主页面的1440px/390px正常布局、横向范围；首页共用空/加载/错误/无权限状态及筛选键盘、收藏备注保存可用。真实8666只读核对已有监控主题和5条结果；隔离固定样本不算真实业务验收。
+- [ ] 全站逐路由五状态浏览器矩阵、用户最终视觉评审仍待完成；Claude CLI再次返回登录过期，未获得独立审查，按§6不标记“代码完成”或“能力可用”。
+- [ ] 全站公开统计、情感观测/历史曲线、X趋势、事件/评论搜索、云关注与告警已读等服务缺口按页面合同逐项实现；本轮未修改业务schema、生成API、来源采集或冻结App。
+
 ## 当前页面驱动的需求收敛与报错修复（2026-10-08）
 
 本人纠正：不盘点文档数量，而要根据前端当前展示数据、需求和操作反推数据库与接口，替换历史冗余设计和实现。当前依据为[页面PRD](workspace/content/product/prd/03-PRD-全站页面需求.md)与[收敛方案](workspace/content/product/reference/14-页面驱动的收敛方案.md)。下方之前的“当前”段落均为历史，不作为新一轮扩建派发。
@@ -230,11 +242,11 @@
 
 | 顺序 | 工作与任务卡 | 完成条件 | 状态 |
 |---|---|---|---|
-| 1 | [外壳与公共状态](workspace/content/product/plan/02-PLAN-前端重新设计.md#1-外壳与公共状态) | 新侧栏、底部导航、PageState；全部一级路由在新外壳下正常 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md) |
-| 2 | [首页](workspace/content/product/plan/02-PLAN-前端重新设计.md#2-首页) | 真实数据下各块正确，单块失败不影响整页 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md) |
-| 3 | [事件详情](workspace/content/product/plan/02-PLAN-前端重新设计.md#3-事件详情) | 公开与工作台入口、有无代表评论两类事件均正确 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md)；真实事件数据待有后复核 |
-| 4 | [探索与收藏](workspace/content/product/plan/02-PLAN-前端重新设计.md#4-探索与收藏) | 筛选可分享，本机收藏刷新后保持 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md) |
-| 5 | [日周月刊阅读](workspace/content/product/plan/02-PLAN-前端重新设计.md#5-日周月刊阅读) | 最新与归档各一期、打印预览正确 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md) |
-| 6 | [工作台：监控主题与告警](workspace/content/product/plan/02-PLAN-前端重新设计.md#6-工作台监控主题与告警) | 真实会话下主题与告警增改停复各一次 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md)；告警创建待通知目标配置 |
-| 7 | [模型榜](workspace/content/product/plan/02-PLAN-前端重新设计.md#7-模型榜) | 各维度与子页可用，空数据有空状态 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md) |
-| 8 | [登录页](workspace/content/product/plan/02-PLAN-前端重新设计.md#8-登录页) | 三种方式在已配置与未配置下显示正确 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md) |
+| 1 | [外壳与公共状态](workspace/content/product/plan/02-PLAN-前端重新设计.md#实施顺序) | 新侧栏、底部导航、PageState；全部一级路由在新外壳下正常 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md) |
+| 2 | [首页](workspace/content/product/plan/02-PLAN-前端重新设计.md#实施顺序) | 真实数据下各块正确，单块失败不影响整页 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md) |
+| 3 | [事件详情](workspace/content/product/plan/02-PLAN-前端重新设计.md#实施顺序) | 公开与工作台入口、有无代表评论两类事件均正确 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md)；真实事件数据待有后复核 |
+| 4 | [探索与收藏](workspace/content/product/plan/02-PLAN-前端重新设计.md#实施顺序) | 筛选可分享，本机收藏刷新后保持 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md) |
+| 5 | [日周月刊阅读](workspace/content/product/plan/02-PLAN-前端重新设计.md#实施顺序) | 最新与归档各一期、打印预览正确 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md) |
+| 6 | [工作台：监控主题与告警](workspace/content/product/plan/02-PLAN-前端重新设计.md#实施顺序) | 真实会话下主题与告警增改停复各一次 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md)；告警创建待通知目标配置 |
+| 7 | [模型榜](workspace/content/product/plan/02-PLAN-前端重新设计.md#实施顺序) | 各维度与子页可用，空数据有空状态 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md) |
+| 8 | [登录页](workspace/content/product/plan/02-PLAN-前端重新设计.md#实施顺序) | 三种方式在已配置与未配置下显示正确 | 2026-10-07 完成，见[验收记录](workspace/content/records/2026-10-06-前端重新设计验收.md) |
