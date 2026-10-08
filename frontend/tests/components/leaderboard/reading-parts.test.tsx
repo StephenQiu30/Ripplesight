@@ -295,3 +295,25 @@ it.each([
     }
   },
 );
+
+it("distinguishes an unpublished board from dependency failure without starting a refresh", () => {
+  render(
+    <LeaderboardFailure
+      error={
+        new ApiRequestError({
+          kind: "http",
+          status: 404,
+          code: "leaderboard_not_published",
+          message: "unpublished",
+        })
+      }
+      href="/leaderboard"
+    />,
+  );
+  expect(screen.getByRole("status", { name: "暂无已发布模型榜" })).toBeTruthy();
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.queryByRole("link", { name: "重新加载" })).toBeNull();
+  expect(
+    screen.getByRole("link", { name: "查看来源" }).getAttribute("href"),
+  ).toBe("/leaderboard/sources");
+});

@@ -4,7 +4,8 @@ import pytest
 from fastapi import FastAPI, HTTPException, Query
 from httpx import ASGITransport, AsyncClient
 
-from core.errors import DependencyUnavailableError
+from api.dependencies import get_leaderboard_read_service
+from core.errors import ApplicationError, DependencyUnavailableError
 from core.schemas import HealthView
 
 
@@ -239,3 +240,24 @@ async def test_openapi_and_documentation_share_runtime_contract(app: FastAPI) ->
     assert "/scalar" not in schema.json()["paths"]
     assert swagger.status_code == 200
     assert scalar.status_code == 200
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("code", "status"), [("leaderboard_not_published", 404), ("database_unavailable", 503)]
+)
+async def test_leaderboard_distinguishes_no_published_run_from_dependency_failure(
+    app: FastAPI, code: str, status: int
+) -> None:
+    def fail_read() -> None:
+        raise ApplicationError(code)
+
+    app.dependency_overrides[get_leaderboard_read_service] = fail_read
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        response = await client.get("/api/leaderboard/boards/overall")
+    assert response.status_code == status
+    assert response.json()["code"] == code
+    assert response.json()["request_id"] == response.headers["x-request-id"]

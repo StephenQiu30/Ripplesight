@@ -123,6 +123,7 @@ ERROR_CATEGORIES: Mapping[str, ErrorCategory] = MappingProxyType(
         "invalid_monitor_rules": ErrorCategory.INVALID_INPUT,
         "invalid_topic_source_selection": ErrorCategory.INVALID_INPUT,
         "keyword_group_conflict": ErrorCategory.INVALID_INPUT,
+        "leaderboard_not_published": ErrorCategory.NOT_FOUND,
         "resource_not_found": ErrorCategory.NOT_FOUND,
         "source_target_not_allowed": ErrorCategory.INVALID_INPUT,
         "source_preset_not_applied": ErrorCategory.CONFLICT,

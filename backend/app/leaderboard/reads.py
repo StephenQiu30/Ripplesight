@@ -9,7 +9,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from core.errors import ApplicationError, DependencyUnavailableError
+from core.errors import ApplicationError
 from leaderboard.configuration import cloaked_model
 from leaderboard.method.constants import (
     ANCHORS,
@@ -164,7 +164,7 @@ class LeaderboardReadService:
     def _latest(self, *, required: bool = True) -> LeaderboardRun | None:
         run = LeaderboardService(self.session).latest_published()
         if run is None and required:
-            raise DependencyUnavailableError(context={"reason": "no_published_leaderboard_run"})
+            raise ApplicationError("leaderboard_not_published")
         return run
 
     def _rankings(self, run: LeaderboardRun) -> list[tuple[LeaderboardRanking, LeaderboardModel]]:

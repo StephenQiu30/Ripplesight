@@ -274,6 +274,7 @@ APPLICATION_ERRORS: Mapping[str, PublicError] = {
         "keyword_group_conflict",
         "同一关键词不能同时出现在冲突分组",
     ),
+    "leaderboard_not_published": PublicError(404, "leaderboard_not_published", "尚无已发布模型榜"),
     "resource_not_found": PublicError(404, "resource_not_found", "请求资源不存在"),
     "source_target_not_allowed": PublicError(
         422, "source_target_not_allowed", "目标地址不在当前连接允许范围"
