@@ -19,7 +19,7 @@ export function editionReadingSections(
   const sections: EditionReadingSection[] = [
     {
       id: "edition-highlights",
-      title: "重点关注",
+      title: "今日要点",
       items: references(edition.highlights),
       presentation: "events",
     },

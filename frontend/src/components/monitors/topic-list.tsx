@@ -15,7 +15,6 @@ import {
   topicStatusLabel,
   type MonitorFailure,
 } from "./monitor-presenters";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import {
@@ -240,7 +239,7 @@ export function TopicList({
         />
       )}
       {state.status === "ready" && topics.length > 0 ? (
-        <ItemGroup>
+        <ItemGroup className="gap-1">
           {topics.map((topic) => (
             <UI.Content key={topic.id} role="listitem">
               <Item
@@ -257,17 +256,9 @@ export function TopicList({
                   <ItemContent>
                     <ItemTitle>{topic.name}</ItemTitle>
                     <ItemDescription>
-                      {[...topic.rules.match_any, ...topic.rules.match_all]
-                        .slice(0, 3)
-                        .join(" · ") || "查看关键词"}{" "}
-                      ·{" "}
-                      {topic.source_keys.length
-                        ? `${topic.source_keys.length} 个来源`
-                        : "待设置来源"}
+                      {topicStatusLabel(topic.status)} · 每{" "}
+                      {topic.collection_interval_seconds / 60} 分钟
                     </ItemDescription>
-                    <Badge variant="secondary" className="self-start">
-                      {topicStatusLabel(topic.status)}
-                    </Badge>
                   </ItemContent>
                   <ItemActions>
                     <ArrowRightIcon aria-hidden="true" />

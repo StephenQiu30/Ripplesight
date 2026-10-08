@@ -36,7 +36,7 @@ const requestId = "00000000-0000-4000-8000-000000000003";
 afterEach(cleanup);
 
 it("shows 503 and request ID below the header and filters while the sidebar works", () => {
-  const { container } = render(
+  render(
     <LeaderboardLayout>
       <BoardPageFrame board="overall" domestic openWeights={false}>
         <LeaderboardFailure
@@ -54,14 +54,9 @@ it("shows 503 and request ID below the header and filters while the sidebar work
       </BoardPageFrame>
     </LeaderboardLayout>,
   );
-  const column = container.firstElementChild!.firstElementChild!;
-  expect(column.firstElementChild!.querySelector('[role="alert"]')).toBe(
-    screen.getByRole("alert"),
-  );
-  expect(column.className).not.toMatch(/min-h|h-screen|items-center/);
   expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   const title = screen.getByRole("heading", { level: 1, name: "模型榜" });
-  const filters = screen.getByRole("form", { name: "模型筛选" });
+  const filters = screen.getByRole("radiogroup", { name: "榜单维度" });
   const errorTitle = screen.getByRole("heading", {
     level: 2,
     name: "暂时无法读取模型榜",
@@ -78,10 +73,6 @@ it("shows 503 and request ID below the header and filters while the sidebar work
   expect(
     screen.getByRole("link", { name: "重新加载" }).getAttribute("href"),
   ).toBe("/leaderboard?domestic=true");
-  const sidebar = screen.getByRole("complementary", { name: "模型榜阅读入口" });
-  expect(sidebar.querySelector('a[href="/leaderboard/sources"]')).toBeTruthy();
-  expect(sidebar.querySelector('a[href="/leaderboard/rules"]')).toBeTruthy();
-  expect(screen.queryByText("Codex 公告")).toBeNull();
 });
 
 it.each([401, 403])(
@@ -239,7 +230,6 @@ it("keeps sidebar entries available for the render-error and missing-route bound
   expect(
     screen.getByRole("heading", { level: 2, name: "模型榜页面未完成加载" }),
   ).toBeTruthy();
-  expect(screen.getByRole("link", { name: /计算规则/ })).toBeTruthy();
   rerender(
     <LeaderboardLayout>
       <LeaderboardNotFound />
@@ -286,28 +276,19 @@ it.each([
       name: "模型榜页面未完成加载",
     });
     if (pathname === "/leaderboard" || pathname.includes("/category/")) {
-      const filters = screen.getByRole("form", { name: "模型筛选" });
+      const filters = screen.getByRole("radiogroup", { name: "榜单维度" });
       expect(
         filters.compareDocumentPosition(errorTitle) &
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
       expect(
         screen
-          .getByRole("checkbox", { name: "国内模型" })
+          .getByRole("radio", { name: "开源" })
           .getAttribute("aria-checked"),
       ).toBe("true");
-      expect(
-        screen
-          .getByRole("checkbox", { name: "开放权重" })
-          .getAttribute("aria-checked"),
-      ).toBe("true");
-      fireEvent.click(
-        screen.getByRole("radio", {
-          name: pathname.endsWith("knowledge") ? "编程" : "知识",
-        }),
-      );
+      fireEvent.click(screen.getByRole("radio", { name: "编程" }));
       expect(route.push).toHaveBeenCalledWith(
-        `/leaderboard/category/${pathname.endsWith("knowledge") ? "coding" : "knowledge"}?domestic=true&open_weights=true`,
+        "/leaderboard/category/coding?domestic=true",
       );
     } else {
       expect(screen.queryByRole("form", { name: "模型筛选" })).toBeNull();

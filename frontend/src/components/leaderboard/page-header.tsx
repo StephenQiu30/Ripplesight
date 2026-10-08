@@ -2,11 +2,11 @@ import type { ReactNode } from "react";
 
 import * as UI from "@/components/ui/content";
 import { BoardFilters } from "./board-filters";
-import { RunStamp } from "./reading-parts";
+import { evidenceDate } from "./reading-parts";
 
 export function LeaderboardPageHeader({
   title = "模型榜",
-  description = "阅读公开模型排名、证据覆盖与官方价格，并核对评测来源和计算规则。",
+  description = "汇总公开评测 · 按已发布证据更新",
   run,
 }: {
   title?: string;
@@ -14,12 +14,12 @@ export function LeaderboardPageHeader({
   run?: HotKeyAPI.RunView | null;
 }) {
   return (
-    <UI.Content as="header" className="flex min-w-0 flex-1 flex-col gap-3">
+    <UI.Content as="header" className="flex min-w-0 flex-1 flex-col gap-1">
       <UI.Heading level={1}>{title}</UI.Heading>
       <UI.Text tone="muted" size="sm">
         {description}
+        {run ? ` · 发布轮次：${evidenceDate(run.generated_at)}` : ""}
       </UI.Text>
-      {run ? <RunStamp run={run} /> : null}
     </UI.Content>
   );
 }
@@ -41,7 +41,7 @@ export function BoardPageFrame({
 }) {
   return (
     <UI.Content className="flex min-w-0 flex-col gap-6">
-      <UI.Content className="flex min-w-0 flex-col justify-between gap-5 xl:flex-row xl:items-start">
+      <UI.Content className="flex min-w-0 flex-col justify-between gap-5 xl:flex-row xl:items-center">
         <LeaderboardPageHeader run={run} />
         <BoardFilters
           board={board}

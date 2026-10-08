@@ -40,17 +40,12 @@ function expectBoardStateOrder(stateTitle: string) {
   expectPageTitle("模型榜");
   const title = screen.getByRole("heading", { level: 1, name: "模型榜" });
   const dimension = screen.getByRole("radiogroup", { name: "榜单维度" });
-  const filters = screen.getByRole("form", { name: "模型筛选" });
   const state = screen.getByRole("heading", { level: 2, name: stateTitle });
   expect(
     title.compareDocumentPosition(dimension) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
   expect(
-    dimension.compareDocumentPosition(filters) &
-      Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
-  expect(
-    filters.compareDocumentPosition(state) & Node.DOCUMENT_POSITION_FOLLOWING,
+    dimension.compareDocumentPosition(state) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
 }
 
@@ -69,7 +64,7 @@ it("reads the public board using only the existing generated function and applie
   expectPageTitle("模型榜");
   expect(screen.getByText(/发布轮次：/)).toBeTruthy();
   expect(screen.getByRole("table")).toBeTruthy();
-  expect(screen.getByText("7")).toBeTruthy();
+  expect(screen.getByText("07")).toBeTruthy();
 });
 
 it("keeps the header and filters before failed requests with usable sidebar routes", async () => {
@@ -99,9 +94,6 @@ it("keeps the header and filters before failed requests with usable sidebar rout
   expect(
     screen.getByRole("link", { name: "重新加载" }).getAttribute("href"),
   ).toBe("/leaderboard?domestic=true&open_weights=true");
-  expect(
-    screen.getByRole("link", { name: /计算规则/ }).getAttribute("href"),
-  ).toBe("/leaderboard/rules");
   expect(screen.getByRole("radio", { name: "编程" })).toBeTruthy();
   expect(
     (await generateMetadata({ searchParams: Promise.resolve({}) })).robots,

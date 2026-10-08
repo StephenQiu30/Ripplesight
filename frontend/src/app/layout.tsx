@@ -1,6 +1,5 @@
 import * as UI from "@/components/ui/content";
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 import type { ReactNode } from "react";
 
 import { BasicLayout } from "@/layout/basic-layout";
@@ -26,8 +25,6 @@ export default async function RootLayout({
   children: ReactNode;
 }) {
   const session = await readLayoutSession();
-  // shadcn Sidebar 把展开状态写在 sidebar_state cookie；没有记录时默认展开。
-  const sidebarOpen = (await cookies()).get("sidebar_state")?.value !== "false";
   // Browser extensions may add theme attributes before hydration. Limit this
   // exception to <html>; descendants must still report rendering mismatches.
   return (
@@ -38,9 +35,7 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <UI.DocumentBody className="overflow-hidden print:overflow-visible">
-        <BasicLayout session={session} sidebarOpen={sidebarOpen}>
-          {children}
-        </BasicLayout>
+        <BasicLayout session={session}>{children}</BasicLayout>
       </UI.DocumentBody>
     </UI.DocumentRoot>
   );

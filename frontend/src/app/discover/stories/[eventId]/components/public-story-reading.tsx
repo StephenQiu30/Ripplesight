@@ -6,7 +6,13 @@ import * as UI from "@/components/ui/content";
 import { Button } from "@/components/ui/button";
 import { ItemGroup } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PosterDownload } from "@/components/publication/poster-download";
+import { EditionCopyLink } from "@/components/publication/edition-copy-link";
+import {
+  ObservationGap,
+  SignalNotice,
+  SentimentLegend,
+} from "@/components/ui/signal";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   EventColumns,
   EventEmpty,
@@ -15,7 +21,6 @@ import {
   EventSources,
   EventTimeline,
   FactSummary,
-  RepresentativeComments,
 } from "@/components/events/event-reading";
 import {
   eventTime,
@@ -122,17 +127,81 @@ export function PublicStoryReading({
         revision={story.revision}
         phase={story.phase}
         href="/discover/stories"
+        updatedAt={story.attention?.last_source_time}
+        actions={
+          <UI.Content layout="row">
+            <Button variant="secondary" disabled title="事件关注暂未开放">
+              关注
+            </Button>
+            <Button variant="secondary" disabled title="事件收藏暂未开放">
+              收藏
+            </Button>
+            <EditionCopyLink href={`/discover/stories/${story.id}`} />
+          </UI.Content>
+        }
       />
-      <UI.Text size="sm" tone="muted">
-        来源数只计当前已加载的公开报道来源。
-      </UI.Text>
+
       <EventColumns
         aside={
           <>
-            <RepresentativeComments comments={[]} publicReading />
-            <UI.Content as="section" className="flex flex-col gap-4">
-              <UI.Heading>关联事件</UI.Heading>
-              <EventEmpty>公开资料暂未提供关联事件。</EventEmpty>
+            <UI.Content as="section" layout="stack">
+              <UI.Heading>大家怎么看</UI.Heading>
+              <UI.Text size="xs" tone="muted">
+                暂无公开评论样本
+              </UI.Text>
+              <ObservationGap compact>情感占比暂无数据</ObservationGap>
+              <SentimentLegend />
+            </UI.Content>
+            <SignalNotice title="负面突增提醒">
+              <UI.Text size="sm" tone="muted">
+                暂无有效的公开情感观测。
+              </UI.Text>
+            </SignalNotice>
+            <UI.Content layout="stack">
+              <UI.Heading>代表观点</UI.Heading>
+              <ToggleGroup
+                type="single"
+                size="default"
+                value="all"
+                aria-label="观点立场"
+              >
+                <ToggleGroupItem value="all">全部</ToggleGroupItem>
+                <ToggleGroupItem value="negative" disabled>
+                  担忧
+                </ToggleGroupItem>
+                <ToggleGroupItem value="neutral" disabled>
+                  中立
+                </ToggleGroupItem>
+                <ToggleGroupItem value="positive" disabled>
+                  支持
+                </ToggleGroupItem>
+              </ToggleGroup>
+              <EventEmpty>公开资料暂未提供代表评论。</EventEmpty>
+            </UI.Content>
+            <UI.Content as="section" layout="stack">
+              <UI.Heading>平台分布</UI.Heading>
+              <UI.Text size="xs" tone="muted">
+                按当前已加载的公开报道统计
+              </UI.Text>
+              {[...new Set(sources.map((source) => source.source))].map(
+                (name) => (
+                  <UI.Content
+                    key={name}
+                    className="flex items-center justify-between gap-4 border-b py-3"
+                  >
+                    <UI.Text size="sm">{name}</UI.Text>
+                    <UI.Text size="sm" tone="muted">
+                      <UI.InlineCode>
+                        {
+                          sources.filter((source) => source.source === name)
+                            .length
+                        }
+                      </UI.InlineCode>{" "}
+                      篇
+                    </UI.Text>
+                  </UI.Content>
+                ),
+              )}
             </UI.Content>
           </>
         }
@@ -147,6 +216,24 @@ export function PublicStoryReading({
                 {story.latest_progress}
               </UI.Text>
             </>
+          ) : null}
+        </UI.Content>
+        <UI.Content as="section" className="flex flex-col gap-4">
+          <UI.Heading>热度与负面占比</UI.Heading>
+          <ObservationGap>
+            暂无公开历史曲线与负面占比，不能由单次热度推算趋势。
+          </ObservationGap>
+          {story.attention ? (
+            <UI.Text size="sm" tone="muted">
+              当前热度窗口{" "}
+              <UI.InlineCode>
+                {eventTime(story.attention.window_end)}
+              </UI.InlineCode>{" "}
+              ·{" "}
+              <UI.InlineCode>{story.attention.participant_count}</UI.InlineCode>{" "}
+              个独立参与者。
+              {story.attention.complete ? "" : "部分来源尚未完成及时采集。"}
+            </UI.Text>
           ) : null}
         </UI.Content>
         <UI.Content
@@ -203,28 +290,11 @@ export function PublicStoryReading({
             </Button>
           ) : null}
         </UI.Content>
-        <UI.Content as="section" className="flex flex-col gap-4">
-          <UI.Heading>热度历史</UI.Heading>
-          <EventEmpty>热度历史发布后，会在这里展示变化趋势。</EventEmpty>
-          {story.attention ? (
-            <UI.Text size="sm" tone="muted">
-              当前热度窗口{" "}
-              <UI.InlineCode>
-                {eventTime(story.attention.window_end)}
-              </UI.InlineCode>{" "}
-              ·{" "}
-              <UI.InlineCode>{story.attention.participant_count}</UI.InlineCode>{" "}
-              个独立参与者。
-              {story.attention.complete ? "" : "部分来源尚未完成及时采集。"}
-            </UI.Text>
-          ) : null}
-        </UI.Content>
         <EventTimeline
           entries={sourceTimeline(sources)}
           description="按当前已加载的公开报道时间排列。"
         />
         <EventSources sources={sources} />
-        <PosterDownload target={{ eventId: story.id }} />
       </EventColumns>
     </UI.Content>
   );

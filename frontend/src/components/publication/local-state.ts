@@ -2,6 +2,7 @@
 // Upstream license: backend/app/publication/AIHOT-LICENSE. Store IDs, never copies of licensed text.
 export const SAVED_KEY = "hotkey.publication.saved.v1";
 export const READ_KEY = "hotkey.publication.read.v1";
+export const NOTES_KEY = "ripplesight.publication.notes.v1";
 const DATES_KEY = "hotkey.publication.saved-dates.v1";
 const THEME_KEY = "hotkey.publication.theme.v1";
 export const LOCAL_CHANGE = "hotkey-publication-local-change";
@@ -131,6 +132,31 @@ export function removeSaved(id: string): Promise<void> {
     );
     notify();
   });
+}
+export function removeSavedMany(ids: string[]): Promise<void> {
+  return editLocalData(() => {
+    requireReadable(localStorage, SAVED_KEY);
+    const removed = new Set(ids);
+    localStorage.setItem(
+      SAVED_KEY,
+      JSON.stringify(savedIds(localStorage).filter((id) => !removed.has(id))),
+    );
+    notify();
+  });
+}
+export function savedDates(storage: Reader): Record<string, string> {
+  try {
+    const value: unknown = JSON.parse(storage.getItem(DATES_KEY) ?? "{}");
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    return Object.fromEntries(
+      Object.entries(value).filter(
+        (entry): entry is [string, string] =>
+          typeof entry[1] === "string" && Number.isFinite(Date.parse(entry[1])),
+      ),
+    );
+  } catch {
+    return {};
+  }
 }
 export function markRead(id: string): Promise<void> {
   return editLocalData(() => {
@@ -330,7 +356,7 @@ export function saveTheme(theme: Theme) {
 }
 export function clearLocalReading(): Promise<void> {
   return editLocalData(() => {
-    for (const key of [SAVED_KEY, READ_KEY, DATES_KEY])
+    for (const key of [SAVED_KEY, READ_KEY, DATES_KEY, NOTES_KEY])
       localStorage.removeItem(key);
     notify();
   });

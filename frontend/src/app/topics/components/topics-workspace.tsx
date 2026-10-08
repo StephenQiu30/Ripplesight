@@ -40,7 +40,7 @@ export function TopicsWorkspace({
           </UI.Heading>
           {
             <UI.Text tone="muted" size="sm">
-              设置关键词与来源，查看运行结果和告警。采集遵循主题频率与来源限制。
+              定时在各平台检索你关心的主题，汇总命中内容、评论与讨论变化。
             </UI.Text>
           }
         </UI.Content>
@@ -55,7 +55,7 @@ export function TopicsWorkspace({
         <Collapsible
           open={topicsOpen || !selectedTopicId || listForbidden}
           onOpenChange={setTopicsOpen}
-          className="min-w-0 lg:w-80 lg:shrink-0"
+          className="lg:w-monitor-list min-w-0 lg:shrink-0"
         >
           <CollapsibleTrigger asChild className="mb-4 lg:hidden">
             <Button variant="outline">

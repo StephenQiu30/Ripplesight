@@ -83,9 +83,9 @@ it("keeps anonymous public reading inside public APIs, counts actual sources, an
     document.getElementById(citation.getAttribute("href")!.slice(1)),
   ).toBeTruthy();
   expect(screen.getByText("公开资料暂未提供代表评论。")).toBeTruthy();
-  expect(screen.getByText("公开资料暂未提供关联事件。")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "平台分布" })).toBeTruthy();
   expect(
-    screen.getByText("热度历史发布后，会在这里展示变化趋势。"),
+    screen.getByText("暂无公开历史曲线与负面占比，不能由单次热度推算趋势。"),
   ).toBeTruthy();
   expect(api.developments).toHaveBeenCalledWith(
     { event_id: "event", limit: 20, window: "7d" },

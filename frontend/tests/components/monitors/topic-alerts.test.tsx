@@ -35,7 +35,7 @@ const rule: HotKeyAPI.AlertRuleView = {
 };
 beforeEach(() => vi.resetAllMocks());
 afterEach(cleanup);
-it("only renders this topic's rules, reads history on demand, and has no unread controls", async () => {
+it("only renders this topic's rules, reads history on demand, and disables unsupported unread controls", async () => {
   api.list.mockResolvedValue([
     rule,
     { ...rule, id: "other", name: "其他主题规则", topic_id: "other-topic" },
@@ -47,7 +47,11 @@ it("only renders this topic's rules, reads history on demand, and has no unread 
   expect(screen.getByText(/同公式热度增量/)).toBeTruthy();
   expect(screen.getByText("12.5")).toBeTruthy();
   expect(screen.getByText("10")).toBeTruthy();
-  expect(screen.queryByText(/未读|已读/)).toBeNull();
+  expect(
+    screen
+      .getByRole("button", { name: "全部标为已读" })
+      .hasAttribute("disabled"),
+  ).toBe(true);
   expect(api.history).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "评估历史" }));
   await screen.findByText("尚无评估记录");

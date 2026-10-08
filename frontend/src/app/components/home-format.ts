@@ -1,12 +1,16 @@
+export const homeCategories = [
+  ["all", "全部"],
+  ["ai-models", "模型发布"],
+  ["ai-products", "产品"],
+  ["paper", "研究"],
+  ["open-source", "开源"],
+  ["policy", "政策与安全"],
+] as const;
 export type HomeReading = {
-  items: HotKeyAPI.PublicItemView[];
   stories: HotKeyAPI.PublicStoryView[];
-  topics: HotKeyAPI.PublicTopicSummaryView[];
   editions: HotKeyAPI.PublicEditionIndexView[];
   unavailable: string[];
   failures?: Record<string, { code?: string; status?: number }>;
-  sourceStatus?: HotKeyAPI.PublicSourceStatusView[];
-  nextCursor?: string | null;
   observedAt?: string;
 };
 
@@ -18,44 +22,18 @@ export function latestTime(values: (string | null | undefined)[]) {
   return dates.sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? null;
 }
 
-export function homeOverview(reading: HomeReading) {
-  return {
-    itemCount: reading.unavailable.includes("items")
-      ? null
-      : reading.items.length,
-    storyCount: reading.unavailable.includes("stories")
-      ? null
-      : reading.stories.length,
-    sourceCount:
-      reading.unavailable.includes("items") &&
-      reading.unavailable.includes("stories")
-        ? null
-        : new Set(
-            [
-              ...reading.items,
-              ...reading.stories.flatMap((story) => story.reports),
-            ].map((item) => item.source.key),
-          ).size,
-    topicCount: reading.unavailable.includes("topics")
-      ? null
-      : reading.topics.length,
-    updatedAt: latestTime([
-      ...reading.items.flatMap((item) => [
+export function homeUpdatedAt(reading: HomeReading) {
+  return latestTime([
+    ...reading.stories.flatMap((story) => [
+      story.first_seen_at,
+      story.attention?.last_source_time,
+      ...story.reports.flatMap((item) => [
         item.discovered_at,
         item.timeline_at,
       ]),
-      ...reading.stories.flatMap((story) => [
-        story.first_seen_at,
-        story.attention?.last_source_time,
-        ...story.reports.flatMap((item) => [
-          item.discovered_at,
-          item.timeline_at,
-        ]),
-      ]),
-      ...reading.topics.map((topic) => topic.latest_at),
-      ...reading.editions.map((edition) => edition.created_at),
     ]),
-  };
+    ...reading.editions.map((edition) => edition.created_at),
+  ]);
 }
 
 const trendLabels = {

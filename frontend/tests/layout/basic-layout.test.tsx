@@ -149,11 +149,11 @@ describe("Figma reading shell", () => {
     ).toEqual(["/topics", "/alerts", "/discover/starred"]);
     const mobile = within(screen.getByRole("navigation", { name: "手机导航" }));
     expect(mobile.getAllByRole("link").map((link) => link.textContent)).toEqual(
-      ["首页", "探索", "收藏", "工作台"],
+      ["首页", "探索", "收藏", "监控"],
     );
     expect(
-      mobile.getByRole("link", { name: "个人工作台" }).getAttribute("href"),
-    ).toBe("/login?returnTo=%2Fworkspace");
+      mobile.getByRole("link", { name: "监控主题" }).getAttribute("href"),
+    ).toBe("/topics");
     expect(sidebar().getByRole("link", { name: "登录账户" })).toBeTruthy();
   });
   it("updates account controls from the real session", () => {
@@ -162,8 +162,10 @@ describe("Figma reading shell", () => {
     view.rerender(<BasicLayout session={session}>{page}</BasicLayout>);
     expect(sidebar().getByRole("button", { name: "账户菜单" })).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: "个人工作台" }).getAttribute("href"),
-    ).toBe("/workspace");
+      within(screen.getByRole("navigation", { name: "手机导航" }))
+        .getByRole("link", { name: "监控主题" })
+        .getAttribute("href"),
+    ).toBe("/topics");
   });
   it.each([
     ["/", "今日热点"],
@@ -255,16 +257,14 @@ describe("Figma reading shell", () => {
     );
     expect(content.scrollTop).toBe(0);
   });
-  it("keeps the login footer guide accessible and restores focus", async () => {
+  it("uses the four design footer links on login", () => {
     route.pathname = "/login";
     render(<BasicLayout>{page}</BasicLayout>);
-    const trigger = screen.getByRole("button", { name: "使用指南" });
-    trigger.focus();
-    fireEvent.click(trigger);
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "关闭" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    const footer = within(screen.getByRole("contentinfo"));
+    expect(
+      footer.getAllByRole("link").map((link) => link.getAttribute("href")),
+    ).toEqual(["/about", "/privacy", "/terms", "/changelog"]);
+    expect(footer.queryByText("使用指南")).toBeNull();
   });
   it("recovers active navigation when router pathname becomes available", () => {
     route.pathname = null;
