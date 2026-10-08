@@ -1,5 +1,11 @@
 # Third-party code and assets
 
+GSAP 3.15.0 and @gsap/react 2.1.2 are used as installed dependencies for the
+user-requested React transitions. Copyright GreenSock; GSAP Standard License:
+https://gsap.com/standard-license. Official React guidance:
+https://gsap.com/resources/React/. These dependencies retain their own license;
+Ripplesight's transition implementation is original code.
+
 AIHOT, fixed upstream commit `035f7b7f6e26cf203562ddd6065ff7adc1bb0c07`.
 Source: https://github.com/KKKKhazix/AIHOT/tree/035f7b7f6e26cf203562ddd6065ff7adc1bb0c07
 

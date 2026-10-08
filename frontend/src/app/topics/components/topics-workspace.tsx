@@ -62,10 +62,7 @@ export function TopicsWorkspace({
               {topicsOpen ? "收起主题列表" : "切换监控主题"}
             </Button>
           </CollapsibleTrigger>
-          <CollapsibleContent
-            forceMount
-            className="data-[state=closed]:hidden lg:data-[state=closed]:block"
-          >
+          <CollapsibleContent forceMount motion="below-lg">
             <TopicList
               selectedTopicId={selectedTopicId}
               onFirstTopic={setFirstTopicId}
