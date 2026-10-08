@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { getPublicStoryDevelopments } from "@/api/gongkaifabu";
 import * as UI from "@/components/ui/content";
 import { Button } from "@/components/ui/button";
-import { ItemGroup } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EditionCopyLink } from "@/components/publication/edition-copy-link";
 import {
@@ -20,7 +19,6 @@ import {
   EventSectionFailure,
   EventSources,
   EventTimeline,
-  FactSummary,
 } from "@/components/events/event-reading";
 import {
   eventTime,
@@ -236,63 +234,59 @@ export function PublicStoryReading({
             </UI.Text>
           ) : null}
         </UI.Content>
-        <UI.Content
-          as="section"
-          className="flex flex-col gap-4"
-          aria-labelledby="public-event-facts-heading"
-        >
-          <UI.Heading id="public-event-facts-heading">事实与进展</UI.Heading>
-          <UI.Text tone="muted" size="sm">
-            最近 7 天可公开的事实与进展；引用指向对应的代表报道。
-          </UI.Text>
-          {state.status === "error" ? (
-            <EventSectionFailure
-              title="无法读取公开事实与进展"
-              error={state.error}
-              retry={() => {
-                setState({ status: "loading" });
-                setRetry((value) => value + 1);
-              }}
-            />
-          ) : state.status === "loading" ? (
-            <Skeleton
-              aria-label="正在读取公开事实与进展"
-              className="h-24 w-full motion-reduce:animate-none"
-            />
-          ) : !developments.length ? (
-            <EventEmpty>当前窗口尚无可公开的事实与进展。</EventEmpty>
-          ) : (
-            <ItemGroup>
-              {developments.map((entry) => (
-                <FactSummary
-                  key={entry.fact_id}
-                  title={entry.title}
-                  sources={sources.filter(
-                    (source) => source.id === entry.representative.id,
-                  )}
-                >
-                  <UI.Text size="sm" tone="muted">
-                    <UI.InlineCode>{eventTime(entry.anchor_at)}</UI.InlineCode>{" "}
-                    · <UI.InlineCode>{entry.report_count}</UI.InlineCode>{" "}
-                    篇公开报道
-                  </UI.Text>
-                </FactSummary>
-              ))}
-            </ItemGroup>
-          )}
-          {state.status === "ready" && state.page.next_cursor ? (
-            <Button
-              variant="outline"
-              disabled={loadingMore}
-              onClick={() => void more()}
-            >
-              {loadingMore ? "正在读取更多进展…" : "加载更多事实与进展"}
-            </Button>
-          ) : null}
-        </UI.Content>
         <EventTimeline
-          entries={sourceTimeline(sources)}
-          description="按当前已加载的公开报道时间排列。"
+          entries={
+            developments.length
+              ? developments.map((entry) => ({
+                  id: entry.fact_id,
+                  title: entry.title,
+                  time: entry.anchor_at,
+                  source: entry.representative.source.name,
+                  sourceId: entry.representative.id,
+                  references: sources.filter(
+                    (source) => source.id === entry.representative.id,
+                  ),
+                  reportCount: entry.report_count,
+                }))
+              : sourceTimeline(sources)
+          }
+          description="最近7天的公开进展；引用指向代表报道。尚无进展时按已加载报道时间排列。"
+          feedback={
+            state.status === "error" ? (
+              <EventSectionFailure
+                title="无法读取公开时间线"
+                error={state.error}
+                retry={() => {
+                  setState({ status: "loading" });
+                  setRetry((value) => value + 1);
+                }}
+              />
+            ) : state.status === "loading" ? (
+              <Skeleton
+                role="status"
+                aria-busy="true"
+                aria-label="正在读取公开时间线"
+                className="h-24 w-full motion-reduce:animate-none"
+              />
+            ) : undefined
+          }
+          footer={
+            state.status === "ready" ? (
+              state.page.next_cursor ? (
+                <Button
+                  variant="outline"
+                  disabled={loadingMore}
+                  onClick={() => void more()}
+                >
+                  {loadingMore ? "正在读取更多进展…" : "加载更多进展"}
+                </Button>
+              ) : !developments.length ? (
+                <UI.Text size="xs" tone="muted">
+                  当前窗口尚无可公开的事实与进展。
+                </UI.Text>
+              ) : undefined
+            ) : undefined
+          }
         />
         <EventSources sources={sources} />
       </EventColumns>

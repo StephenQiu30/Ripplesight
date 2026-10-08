@@ -352,7 +352,6 @@ export function BasicSidebar() {
 export function BasicMobileHeader() {
   return (
     <Content
-      as="header"
       role="navigation"
       aria-label="移动站点导航"
       className="flex h-14 shrink-0 items-center justify-between gap-3 px-4 md:hidden print:hidden"

@@ -26,6 +26,7 @@ export function ObservationGap({
 export function SentimentLegend() {
   return (
     <div
+      role="group"
       aria-label="情感图例"
       className="text-muted-foreground flex shrink-0 items-center gap-3 text-xs"
     >

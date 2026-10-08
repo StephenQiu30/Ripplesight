@@ -135,7 +135,7 @@ async function DiscoveryReadingPage({ params }: { params: DiscoveryParams }) {
     : "all";
   const currentHref = discoveryHref(params, params.cursor);
   return (
-    <UI.Content layout="stack" className="gap-8">
+    <UI.Content layout="stack" className="gap-6">
       <UI.Content as="header" layout="stack" className="gap-2">
         <UI.Heading level={1}>探索</UI.Heading>
         <UI.Text tone="muted" size="sm">
@@ -146,6 +146,11 @@ async function DiscoveryReadingPage({ params }: { params: DiscoveryParams }) {
         key={JSON.stringify(params)}
         {...scope}
         params={params}
+        resultCount={
+          page && (contentType === "all" || contentType === "items")
+            ? page.items.length
+            : undefined
+        }
         categories={categories}
         sources={discoverySources(page)}
       />
@@ -158,13 +163,7 @@ async function DiscoveryReadingPage({ params }: { params: DiscoveryParams }) {
         >
           {page ? (
             <>
-              {contentType === "all" || contentType === "items" ? (
-                <UI.Text tone="muted" size="xs">
-                  本页资讯 <UI.InlineCode>{page.items.length}</UI.InlineCode> 条
-                  · {scope.window === "7d" ? "过去 7 天" : "过去 24 小时"}
-                </UI.Text>
-              ) : null}
-              <PublicSourceStatus sources={page.source_status ?? []} />
+              <PublicSourceStatus sources={page.source_status ?? []} compact />
               {contentType === "comments" || contentType === "events" ? (
                 <PageState
                   headingLevel={2}

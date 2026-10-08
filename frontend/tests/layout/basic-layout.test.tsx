@@ -234,7 +234,15 @@ describe("Figma reading shell", () => {
     ).toBeNull();
     expect(screen.queryByRole("navigation", { name: "手机导航" })).toBeNull();
     expect(getReadiness).not.toHaveBeenCalled();
-    expect(screen.getByRole("contentinfo")).toBeTruthy();
+    const footer = screen.getByRole("contentinfo");
+    expect(footer.closest("main, [role=region]")).toBeNull();
+    expect(screen.getAllByRole("main")).toHaveLength(1);
+    expect(
+      screen.getByRole("main").contains(screen.getByText("页面正文")),
+    ).toBe(true);
+    expect(document.getElementById("page-content")).toBe(
+      screen.getByRole("main"),
+    );
     route.pathname = "/";
     view.rerender(<BasicLayout>{page}</BasicLayout>);
     expect(sidebar().getByRole("link", { name: "今日热点" })).toBeTruthy();

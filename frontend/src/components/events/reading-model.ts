@@ -18,6 +18,8 @@ export type TimelineEntry = {
   source: string;
   time: string | null;
   sourceId: string;
+  references?: EventSource[];
+  reportCount?: number;
 };
 
 export type RepresentativeComment = {

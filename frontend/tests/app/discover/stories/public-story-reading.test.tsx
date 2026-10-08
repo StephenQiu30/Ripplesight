@@ -105,7 +105,7 @@ it("shows development loading and empty members without inventing content", asyn
     }),
   );
   render(<PublicStoryReading story={{ ...story, reports: [] }} />);
-  expect(screen.getByLabelText("正在读取公开事实与进展")).toBeTruthy();
+  expect(screen.getByLabelText("正在读取公开时间线")).toBeTruthy();
   resolve({
     event_id: "event",
     revision: "empty",
@@ -150,8 +150,8 @@ it("binds pagination to the returned public snapshot and clears old developments
   });
   render(<PublicStoryReading story={story} />);
   await screen.findByRole("heading", { name: "旧的公开事实" });
-  fireEvent.click(screen.getByRole("button", { name: "加载更多事实与进展" }));
-  await screen.findByRole("heading", { name: "无法读取公开事实与进展" });
+  fireEvent.click(screen.getByRole("button", { name: "加载更多进展" }));
+  await screen.findByRole("heading", { name: "无法读取公开时间线" });
   expect(screen.getByText("publication_cursor_stale · 409")).toBeTruthy();
   expect(screen.queryByRole("heading", { name: "旧的公开事实" })).toBeNull();
   expect(screen.queryByText("公开报道 old")).toBeNull();
@@ -182,4 +182,21 @@ it("aborts development reads when leaving the public event", async () => {
   const signal = api.developments.mock.calls[0][1].signal as AbortSignal;
   unmount();
   expect(signal.aborted).toBe(true);
+});
+
+it("shows a denied timeline as forbidden without leaving previous development citations", async () => {
+  api.developments.mockRejectedValue(
+    new ApiRequestError({
+      kind: "http",
+      status: 403,
+      code: "forbidden",
+      message: "denied",
+    }),
+  );
+  render(<PublicStoryReading story={story} />);
+  expect(
+    await screen.findByRole("status", { name: "无法读取公开时间线" }),
+  ).toBeTruthy();
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.queryByRole("link", { name: "来源 1" })).toBeNull();
 });

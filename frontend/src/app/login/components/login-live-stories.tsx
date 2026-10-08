@@ -15,6 +15,7 @@ export async function LoginLiveStories() {
       {data.stories.slice(0, 3).map((story) => (
         <Item
           key={story.id}
+          role="listitem"
           className="flex-nowrap gap-4 rounded-none border-x-0 border-t border-b-0 px-0 py-3"
         >
           <UI.Text size="xs" tone="muted" className="shrink-0">

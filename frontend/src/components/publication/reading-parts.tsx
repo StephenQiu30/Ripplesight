@@ -8,6 +8,11 @@ import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import Link from "next/link";
 
 import { PageState } from "@/components/system/page-state";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ApiRequestError } from "@/request";
@@ -26,30 +31,35 @@ export function PublicationFailure({
   headingLevel?: 1 | 2;
 }) {
   const known = error instanceof ApiRequestError ? error : null;
+  const forbidden = known?.status === 401 || known?.status === 403;
   return (
     <PageState
       headingLevel={headingLevel}
-      state="error"
+      state={forbidden ? "forbidden" : "error"}
       errorCode={known?.code}
       httpStatus={known?.status}
       eyebrow="读取未完成"
       title={
-        known?.code === "publication_not_configured"
-          ? "公开资讯尚未发布"
-          : known?.code === "publication_search_busy"
-            ? "检索暂时繁忙"
-            : known?.status === 404
-              ? "这份材料目前不可公开阅读"
-              : "暂时无法读取资讯"
+        forbidden
+          ? "暂时无法访问公开资讯"
+          : known?.code === "publication_not_configured"
+            ? "公开资讯尚未发布"
+            : known?.code === "publication_search_busy"
+              ? "检索暂时繁忙"
+              : known?.status === 404
+                ? "这份材料目前不可公开阅读"
+                : "暂时无法读取资讯"
       }
       description={
-        known?.code === "publication_not_configured"
-          ? "公开资料发布后即可阅读，登录后仍可使用个人关注与报告。"
-          : known?.code === "publication_search_busy"
-            ? "请缩小时间或来源范围，或稍后重新检索。本次没有返回截断结果。"
-            : known?.status === 404
-              ? "材料不存在、已撤回或许可已经变化。"
-              : "请重新加载；读取不会触发来源请求或模型调用。"
+        forbidden
+          ? "当前请求被服务拒绝。可以返回首页或重新读取；公开阅读通常无需登录。"
+          : known?.code === "publication_not_configured"
+            ? "公开资料发布后即可阅读，登录后仍可使用个人关注与报告。"
+            : known?.code === "publication_search_busy"
+              ? "请缩小时间或来源范围，或稍后重新检索。本次没有返回截断结果。"
+              : known?.status === 404
+                ? "材料不存在、已撤回或许可已经变化。"
+                : "请重新加载；读取不会触发来源请求或模型调用。"
       }
       action={
         <Button asChild variant="outline">
@@ -78,40 +88,55 @@ export function PublicItemCards({
 
 export function PublicSourceStatus({
   sources,
+  compact = false,
 }: {
   sources: HotKeyAPI.PublicSourceStatusView[];
+  compact?: boolean;
 }) {
   const affected = sources.filter(
     (source) =>
       !source.enabled || ["degraded", "failing"].includes(source.health),
   );
   if (!affected.length) return null;
+  const details = (
+    <ItemGroup className="gap-2">
+      {affected.map((source) => (
+        <Item key={source.source_key} role="listitem" size="xs" className="p-0">
+          <ItemContent>
+            <ItemDescription className="line-clamp-none">
+              {source.name} ·{" "}
+              {!source.enabled
+                ? "已暂停"
+                : source.health === "failing"
+                  ? "采集失败"
+                  : "采集不完整"}
+              {" · "}最近成功：{publicationTime(source.last_success_at)}
+            </ItemDescription>
+          </ItemContent>
+        </Item>
+      ))}
+    </ItemGroup>
+  );
   return (
     <Alert className="mb-5">
       <AlertTitle>部分来源暂未更新</AlertTitle>
       <AlertDescription>
-        <ItemGroup className="gap-2">
-          {affected.map((source) => (
-            <Item
-              key={source.source_key}
-              role="listitem"
-              size="xs"
-              className="p-0"
-            >
-              <ItemContent>
-                <ItemDescription className="line-clamp-none">
-                  {source.name} ·{" "}
-                  {!source.enabled
-                    ? "已暂停"
-                    : source.health === "failing"
-                      ? "采集失败"
-                      : "采集不完整"}
-                  {" · "}最近成功：{publicationTime(source.last_success_at)}
-                </ItemDescription>
-              </ItemContent>
-            </Item>
-          ))}
-        </ItemGroup>
+        {compact ? (
+          <Collapsible className="w-full">
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-auto justify-start px-0"
+              >
+                查看 {affected.length} 个来源的状态
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-2">{details}</CollapsibleContent>
+          </Collapsible>
+        ) : (
+          details
+        )}
         已保存且许可仍有效的资讯可以继续阅读。
       </AlertDescription>
     </Alert>

@@ -1,7 +1,13 @@
 // @vitest-environment happy-dom
 import { expectOnePageHeading } from "../../page-heading";
 import { type ReactElement } from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ApiRequestError } from "@/request";
 import { publicItem } from "../components/home-fixtures";
@@ -239,7 +245,9 @@ it.each([403, 503])(
     api.topics.mockRejectedValue(error);
     const { content } = await read();
     render(content);
-    expect(screen.getAllByRole("alert")).toHaveLength(2);
+    expect(
+      screen.getAllByRole(status === 403 ? "status" : "alert"),
+    ).toHaveLength(2);
     expectOnePageHeading();
     expect(
       screen.getByRole("heading", { level: 2, name: "专题暂不可读" }),
@@ -289,4 +297,59 @@ it("restores the favorites URL fields with safe defaults and an explicit local t
     initialView: "saved",
     initialPage: 1,
   });
+});
+
+it("bounds the discovery sidebar while keeping full-directory navigation and count in the filter group", async () => {
+  api.topics.mockResolvedValue({
+    topics: Array.from({ length: 38 }, (_, i) => ({
+      slug: `topic-${i}`,
+      name: `专题${i}`,
+      definition: "很长的专题定义".repeat(30),
+      group: "field",
+      total: 4,
+      recent: 2,
+      latest_at: null,
+      indexable: false,
+    })),
+    refresh_at: null,
+  });
+  const { content } = await read();
+  render(content);
+  const topics = within(
+    screen.getByRole("complementary", { name: "按专题浏览" }),
+  );
+  expect(topics.getAllByRole("listitem")).toHaveLength(6);
+  expect(topics.queryByRole("link", { name: "专题6" })).toBeNull();
+  expect(
+    topics.getByRole("link", { name: "全部专题" }).getAttribute("href"),
+  ).toBe("/discover/topics");
+  expect(
+    within(screen.getByRole("group", { name: "检索筛选" })).getByText(
+      /本页资讯 1 条/,
+    ),
+  ).toBeTruthy();
+});
+
+it("keeps source failures available behind a compact, keyboard-operable disclosure", async () => {
+  api.items.mockResolvedValue({
+    items: [],
+    next_cursor: null,
+    snapshot_at: "2026-10-08T00:00:00Z",
+    source_status: Array.from({ length: 11 }, (_, i) => ({
+      source_key: `source-${i}`,
+      name: `异常来源${i}`,
+      enabled: true,
+      health: "failing",
+      last_success_at: null,
+    })),
+  });
+  const { content } = await read();
+  render(content);
+  const trigger = screen.getByRole("button", { name: "查看 11 个来源的状态" });
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  expect(within(screen.getByRole("alert")).queryByText(/异常来源0/)).toBeNull();
+  fireEvent.click(trigger);
+  expect(trigger.getAttribute("aria-expanded")).toBe("true");
+  expect(within(screen.getByRole("alert")).getByText(/异常来源0/)).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "没有找到资讯" })).toBeTruthy();
 });

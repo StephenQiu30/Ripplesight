@@ -25,7 +25,9 @@ import { discoveryHref } from "./discovery-data";
 export function DiscoveryFilters({
   window,
   params,
+  resultCount,
 }: {
+  resultCount?: number;
   mode: string;
   window: string;
   category?: string;
@@ -40,7 +42,7 @@ export function DiscoveryFilters({
   const navigate = (key: string, value: string) =>
     router.push(discoveryHref({ ...params, [key]: value }));
   return (
-    <Content layout="stack" className="gap-5">
+    <Content layout="stack" className="gap-3">
       <Form action="/discover" role="search" aria-label="公开资讯检索">
         <FieldGroup className="flex-row items-center gap-2">
           <Field className="min-w-0 flex-1">
@@ -71,7 +73,11 @@ export function DiscoveryFilters({
             <Input key={key} name={key} type="hidden" value={value} />
           ))}
       </Form>
-      <Content className="flex flex-wrap items-center gap-3">
+      <Content
+        role="group"
+        aria-label="检索筛选"
+        className="flex flex-wrap items-center gap-3"
+      >
         <Content className="hide-scrollbar min-w-0 overflow-x-auto">
           <ToggleGroup
             type="single"
@@ -135,6 +141,12 @@ export function DiscoveryFilters({
             </SelectGroup>
           </SelectContent>
         </Select>
+        {resultCount !== undefined ? (
+          <Text tone="muted" size="xs" className="ml-auto">
+            本页资讯 {resultCount} 条 ·{" "}
+            {window === "7d" ? "过去 7 天" : "过去 24 小时"}
+          </Text>
+        ) : null}
       </Content>
     </Content>
   );

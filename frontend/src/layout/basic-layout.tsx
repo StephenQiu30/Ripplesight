@@ -66,19 +66,25 @@ export function BasicLayout({
               </Button>
               {isLogin ? null : <BasicSidebar />}
               <SidebarInset
+                asChild
                 id="main-content"
                 tabIndex={-1}
                 data-login={isLogin || undefined}
                 className="min-h-0 min-w-0 overflow-clip pb-16 focus-visible:outline-none data-[login=true]:pb-0 md:pb-0 print:overflow-visible print:pb-0"
               >
-                {isLogin ? null : <BasicMobileHeader />}
-                <PageContainer
-                  scrollRef={mainRef}
-                  edgeToEdge={isLogin}
-                  footer={isLogin ? <BasicFooter /> : undefined}
+                <UI.Content
+                  as={isLogin ? "div" : "main"}
+                  className="flex min-h-0 flex-1 flex-col"
                 >
-                  {children}
-                </PageContainer>
+                  {isLogin ? null : <BasicMobileHeader />}
+                  <PageContainer
+                    scrollRef={mainRef}
+                    edgeToEdge={isLogin}
+                    footer={isLogin ? <BasicFooter /> : undefined}
+                  >
+                    {children}
+                  </PageContainer>
+                </UI.Content>
               </SidebarInset>
               {isLogin ? null : <BasicMobileNavigation />}
             </SidebarProvider>
