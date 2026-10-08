@@ -12,7 +12,8 @@ import { documents, regeneratedIndex, repoRoot } from '../scripts/content.mjs'
 
 test('当前页面需求及其链接可进入内部阅读快照，不初始化或发布实际工作台', () => {
   const publicPaths = JSON.parse(fs.readFileSync(path.join(repoRoot, 'workspace/public-documents.json'), 'utf8')).documents
-  const snapshot = buildSnapshot(repoRoot)
+  // This case checks document links in a source export; Git revisions are tested below.
+  const snapshot = buildSnapshot(repoRoot, "controlled-document-snapshot")
   const byPath = new Map(snapshot.documents.map(document => [document.path, document]))
   for (const relative of publicPaths) {
     assert.ok(byPath.has(relative), `内部快照缺少已登记资料：${relative}`)

@@ -1,6 +1,16 @@
 # 文档网站验证记录
 
 
+## CI生产底线修复（2026-10-08）
+
+远端原runtime [37738855513](https://github.com/StephenQiu30/Ripplesight/actions/runs/37738855513)在生产文档镜像中的Git元数据依赖失败；原backend [37727825324](https://github.com/StephenQiu30/Ripplesight/actions/runs/37727825324)有17失败、2556通过、6浏览器沙箱项跳过。此前普通pytest/专项通过不能代表全量CI通过。
+
+本轮修复embedding计费接口字段遗漏；可见性读取保留最后明确来源结论，超时不撤权、删除/受限不因后续失败恢复；media_only按已授权实际语义字段复核。详情/检索/覆盖fixture补齐真实observation清单、signature、原Evidence及完整job scope。X确认删除后的旧200正文断言与生效决策06冲突，改为404且不可泄露文本；超时前版本及可见性历史断言保留，并加入deleted→timeout、restricted→unknown与媒体字段撤权回归。语义样本时间移入真实14天窗，新增窗边界及最近接收不刷新旧发布时间回归。
+
+CI仍使用实际锁定运行栈；移除旧卷名兼容检查和重复全套Web/startup测试。后端248文件按83/83/82划分至三个隔离运行环境，全套无遗漏或重叠，失败不取消其他分片；JUnit保留证据，除现有六个浏览器沙箱用例外的skip阻断通过。六项需要专门远程浏览器/出口沙箱，仍明确未在普通CI执行；不是数据库/消息/对象存储缺失的豁免。contract保留运行API生成漂移和53专项，frontend全量交互/静态/构建，runtime生产依赖/代理/会话/CSRF/CSP/Worker/非root只读边界，Workspace校验/工具测试/构建/发布均保留，支持按SHA手动重验。
+
+本机证据：Ruff及721文件格式检查通过、mypy440源文件通过；1596单元/架构测试通过；原59数据库定向项通过，新增边界与相关模块51项通过（两组有重叠，不相加）；contract53项通过；文档26工具测试/类型检查及114页构建通过。隔离库hotkey_test_ci_fix_20261008用唯一schema初始化，未操作业务库；生产镜像构建及远端最终SHA结果以随后CI记录和交付链接为准。独立subagent只读审查及embedding10项/workspace7项复核通过，要求的六名称skip白名单已采纳。
+
 ## 2026-10-08 subagent独立审查与全站验收
 
 本轮从main/origin/main均为bf72cfe3、工作区干净开始。本人允许一名独立subagent替代Claude并继续agent-browser验收与修复；历史Claude登录过期不再是本轮门槛。永久逐页证据见[全站验收矩阵](content/product/reference/16-全站验收矩阵.md)与[验收记录](content/records/2026-10-08-subagent全站验收.md)。

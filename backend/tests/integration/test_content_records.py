@@ -16,6 +16,7 @@ from tests.conftest import TEST_DATABASE_TRUNCATE, authenticate_test_client, aut
 from analysis.prompts import ANALYSIS_PROMPT_VERSION
 from connections.schemas import SourceEntryPoint
 from connections.services import SourceConnectionService
+from content.analysis_inputs import freeze_analysis_observation_inputs_in_transaction
 from content.schemas import (
     ContentSamplePreviewInput,
     ContentVisibilityBasis,
@@ -414,6 +415,16 @@ def test_edit_and_visibility_history_keep_last_success_across_failures_and_late_
             ),
         )
         after_timeout = service.get_content(owner_id=owner_id, content_id=created.id)
+        assert [item.content_version.body for item in after_timeout.version_history] == [
+            "第二版正文",
+            "第一版正文",
+        ]
+        assert [item.status.value for item in after_timeout.visibility_history] == [
+            "transient_failure",
+            "visible",
+            "deleted",
+            "visible",
+        ]
         service.record_visibility(
             owner_id=owner_id,
             command=RecordContentVisibilityInput(
@@ -445,24 +456,25 @@ def test_edit_and_visibility_history_keep_last_success_across_failures_and_late_
     assert after_timeout.latest_observation.content_version is not None
     assert after_timeout.latest_observation.content_version.body == "第二版正文"
 
+    # Decision 06 forbids resurfacing X source-deleted text, even to its owner.
     response = content_client.get(f"/api/contents/{created.id}")
-    assert response.status_code == 200, response.json()
-    detail = response.json()
-    assert detail["current_visibility"]["status"] == "deleted"
-    assert detail["current_visibility"]["basis"] == "source_tombstone"
-    assert detail["latest_observation"]["content_version"]["body"] == "第二版正文"
-    assert [item["content_version"]["body"] for item in detail["version_history"]] == [
-        "第二版正文",
-        "第一版正文",
-    ]
-    assert [item["status"] for item in detail["visibility_history"]] == [
-        "deleted",
-        "unknown",
-        "transient_failure",
-        "visible",
-        "deleted",
-        "visible",
-    ]
+    assert response.status_code == 404, response.json()
+    assert response.json()["code"] == "resource_not_found"
+    assert "第二版正文" not in response.text and "第一版正文" not in response.text
+    with factory() as session:
+        service = ContentService(session, clock=lambda: base_time + timedelta(minutes=8))
+        service.record_visibility(
+            owner_id=owner_id,
+            command=RecordContentVisibilityInput(
+                content_id=created.id,
+                job_id=job_id,
+                source_operation_id=uuid4(),
+                observed_at=base_time + timedelta(minutes=7),
+                status=ContentVisibilityStatus.TRANSIENT_FAILURE,
+                basis=ContentVisibilityBasis.TIMEOUT,
+            ),
+        )
+    assert content_client.get(f"/api/contents/{created.id}").status_code == 404
 
 
 def test_lifecycle_cleanup_removes_postgres_content_and_blocks_exact_replay(
@@ -909,14 +921,27 @@ def test_detail_reads_annotation_status_by_readable_version_and_current_topic_ru
             (current_version.id, 2, "pending"),
         ):
             valid = state == "valid"
+            manifest = freeze_analysis_observation_inputs_in_transaction(
+                session,
+                owner_id=owner_id,
+                post_observations={
+                    version_id: first.latest_observation.id
+                    if version_id == old_version.id
+                    else second.latest_observation.id
+                },
+                comment_observations={},
+                now=now,
+            )
             session.execute(
                 text(
                     "INSERT INTO content_annotations "
                     "(id, owner_id, content_id, content_version_id, topic_id, topic_rule_version, "
                     "prompt_version, relevant, relevance_reason, sentiment, summary, ai_call_id, "
-                    "status, result_state, first_valid_at, created_at, updated_at) VALUES "
+                    "status, result_state, first_valid_at, input_signature, "
+                    "input_manifest, created_at, updated_at) VALUES "
                     "(:id, :owner, :content, :version, :topic, :rule, :prompt, :relevant, "
-                    ":reason, :sentiment, :summary, :call, :status, :state, :first_valid_at, "
+                    ":reason, :sentiment, :summary, :call, :status, :state, "
+                    ":first_valid_at, :signature, CAST(:manifest AS jsonb), "
                     ":now, :now)"
                 ),
                 {
@@ -935,6 +960,8 @@ def test_detail_reads_annotation_status_by_readable_version_and_current_topic_ru
                     "status": "annotated" if valid else "unanalyzed",
                     "state": state,
                     "first_valid_at": now if valid else None,
+                    "signature": manifest.signature,
+                    "manifest": manifest.model_dump_json(),
                     "now": now,
                 },
             )
@@ -1868,3 +1895,86 @@ def test_persisted_rule_preview_is_bounded_local_and_owner_scoped(
     assert empty.json()["sample_status"] == "insufficient_samples" and not empty.json()["samples"]
     content_client.cookies.clear()
     assert content_client.post("/api/topics/sample-preview", json=payload).status_code == 401
+
+
+@pytest.mark.parametrize(
+    "status,basis,failed_status,failed_basis",
+    [
+        (
+            ContentVisibilityStatus.DELETED,
+            ContentVisibilityBasis.SOURCE_TOMBSTONE,
+            ContentVisibilityStatus.TRANSIENT_FAILURE,
+            ContentVisibilityBasis.TIMEOUT,
+        ),
+        (
+            ContentVisibilityStatus.RESTRICTED,
+            ContentVisibilityBasis.AUTHENTICATION_REQUIRED,
+            ContentVisibilityStatus.UNKNOWN,
+            ContentVisibilityBasis.NOT_FOUND,
+        ),
+    ],
+)
+def test_failed_observation_never_restores_revoked_source_text(
+    content_client, status, basis, failed_status, failed_basis
+):
+    owner = _user_scope(content_client)
+    connection, policy, retention, job, _ = _seed_context(content_client, owner)
+    now = datetime.now(UTC)
+    with content_client.app.state.session_factory() as session:
+        service = ContentService(session)
+        post = service.persist_post(
+            owner_id=owner,
+            command=_command(
+                owner_id=owner,
+                connection_id=connection,
+                policy_id=policy,
+                retention_id=retention,
+                job_id=job,
+                operation_id=uuid4(),
+                observed_at=now - timedelta(minutes=3),
+                extra_fields={"text_scope": "full", "text_origin": "source", "body": "已撤回正文"},
+            ),
+        )
+        for index, (state, proof) in enumerate(((status, basis), (failed_status, failed_basis))):
+            service.record_visibility(
+                owner_id=owner,
+                command=RecordContentVisibilityInput(
+                    content_id=post.id,
+                    job_id=job,
+                    source_operation_id=uuid4(),
+                    observed_at=now - timedelta(minutes=2 - index),
+                    status=state,
+                    basis=proof,
+                ),
+            )
+    response = content_client.get(f"/api/contents/{post.id}")
+    assert response.status_code == 404 and "已撤回正文" not in response.text
+
+
+def test_media_only_requires_current_permission_for_stored_semantics(content_client):
+    owner = _user_scope(content_client)
+    connection, policy, retention, job, _ = _seed_context(content_client, owner)
+    with content_client.app.state.session_factory() as session:
+        post = ContentService(session).persist_post(
+            owner_id=owner,
+            command=_command(
+                owner_id=owner,
+                connection_id=connection,
+                policy_id=policy,
+                retention_id=retention,
+                job_id=job,
+                operation_id=uuid4(),
+                observed_at=datetime.now(UTC) - timedelta(minutes=1),
+                extra_fields={"text_scope": "media_only", "text_origin": "source"},
+            ),
+        )
+    assert content_client.get(f"/api/contents/{post.id}").status_code == 200
+    with content_client.app.state.session_factory.begin() as session:
+        session.execute(
+            text(
+                "UPDATE source_access_policies SET "
+                "field_purposes=field_purposes - 'text_scope' WHERE id=:id"
+            ),
+            {"id": policy},
+        )
+    assert content_client.get(f"/api/contents/{post.id}").status_code == 404

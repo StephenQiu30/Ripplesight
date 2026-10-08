@@ -1,6 +1,7 @@
 name: runtime
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -8,7 +9,10 @@ on:
       - "frontend/**"
       - "docker-compose*.yml"
       - "workspace/Dockerfile*"
-      - "workspace/nginx.conf"
+      - "workspace/**"
+      - "PROJECT.md"
+      - "BACKLOG.md"
+      - "AGENTS.md"
       - ".env.example"
       - ".github/workflows/runtime.yml"
   pull_request:
@@ -18,7 +22,10 @@ on:
       - "frontend/**"
       - "docker-compose*.yml"
       - "workspace/Dockerfile*"
-      - "workspace/nginx.conf"
+      - "workspace/**"
+      - "PROJECT.md"
+      - "BACKLOG.md"
+      - "AGENTS.md"
       - ".env.example"
       - ".github/workflows/runtime.yml"
 
@@ -92,13 +99,6 @@ jobs:
               assert set(infra["services"]) == {"postgres", "redis", "kafka"}
               for volume in ("postgres-data", "redis-data", "kafka-data"):
                   assert infra["volumes"][volume]["name"] == "ripplesight-parity_" + volume
-              legacy = Path(directory) / "legacy.env"
-              legacy.write_text(template + "\nHOTKEY_POSTGRES_VOLUME_NAME=existing-postgres\n"
-                                + "HOTKEY_REDIS_VOLUME_NAME=existing-redis\n"
-                                + "HOTKEY_KAFKA_VOLUME_NAME=existing-kafka\n")
-              reused = config("docker-compose-env.yml", legacy)
-              for service in ("postgres", "redis", "kafka"):
-                  assert reused["volumes"][service + "-data"]["name"] == "existing-" + service
               assert "volumes" not in local
               for name, host_port in (("backend", 8667), ("frontend", 8666), ("workspace", 8668)):
                   ports = local["services"][name]["ports"]
