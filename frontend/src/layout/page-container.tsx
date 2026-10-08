@@ -20,6 +20,7 @@ export function PageContainer({
 }: PageContainerProps) {
   const content = (
     <LayoutContainer
+      routeTransition
       className={cn(
         "flex min-h-full flex-col pt-2 pb-10 md:pt-8 md:pb-16 print:block print:py-0",
         edgeToEdge && "min-h-0 max-w-none px-0 py-0 md:px-0 md:py-0 lg:px-0",
