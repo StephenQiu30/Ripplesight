@@ -38,8 +38,8 @@ export function PageContainer({
         ref={scrollRef}
         role={footer ? undefined : "region"}
         aria-label={footer ? undefined : "页面内容"}
-        tabIndex={footer ? undefined : -1}
-        className="layout-region hide-scrollbar relative min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain scroll-smooth focus-visible:outline-none motion-reduce:scroll-auto print:overflow-visible"
+        tabIndex={footer ? undefined : 0}
+        className="layout-region hide-scrollbar focus-visible:outline-ring relative min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain scroll-smooth focus-visible:outline-2 focus-visible:-outline-offset-2 motion-reduce:scroll-auto print:overflow-visible"
       >
         {footer ? (
           <Content

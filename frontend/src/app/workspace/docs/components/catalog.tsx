@@ -118,12 +118,17 @@ export function WorkspaceCatalog() {
     );
   if (!catalog || loadedFor !== user)
     return (
-      <PageState
-        state="loading"
-        eyebrow="项目知识库"
-        title="正在读取文档"
-        description="正在核对项目资料和版本。"
-      />
+      <>
+        <UI.Heading level={1} className="sr-only">
+          正在读取文档
+        </UI.Heading>
+        <PageState
+          state="loading"
+          eyebrow="项目知识库"
+          title="正在读取文档"
+          description="正在核对项目资料和版本。"
+        />
+      </>
     );
   const items = catalog.documents.filter((item) => !type || item.type === type);
   return (
@@ -210,7 +215,7 @@ export function WorkspaceCatalog() {
           </UI.Content>
         </Field>
       </UI.Form>
-      <UI.Content layout="row" aria-label="文档分类">
+      <UI.Content role="group" layout="row" aria-label="文档分类">
         <Button
           variant={!type ? "secondary" : "ghost"}
           onClick={() => setType("")}
@@ -234,7 +239,7 @@ export function WorkspaceCatalog() {
         <ItemGroup>
           {results.items.length ? (
             results.items.map((item, index) => (
-              <Item key={index}>
+              <Item key={index} role="listitem">
                 <ItemContent>
                   <ItemTitle>
                     <Link
@@ -251,14 +256,16 @@ export function WorkspaceCatalog() {
               </Item>
             ))
           ) : (
-            <UI.Text>没有找到相关文档。</UI.Text>
+            <Item role="listitem">
+              <UI.Text>没有找到相关文档。</UI.Text>
+            </Item>
           )}
         </ItemGroup>
       ) : (
         <ItemGroup>
           {items.length ? (
             items.map((item) => (
-              <Item key={item.path}>
+              <Item key={item.path} role="listitem">
                 <ItemContent>
                   <ItemTitle>
                     <Link
@@ -282,7 +289,9 @@ export function WorkspaceCatalog() {
               </Item>
             ))
           ) : (
-            <UI.Text>此分类暂无文档。</UI.Text>
+            <Item role="listitem">
+              <UI.Text>此分类暂无文档。</UI.Text>
+            </Item>
           )}
         </ItemGroup>
       )}

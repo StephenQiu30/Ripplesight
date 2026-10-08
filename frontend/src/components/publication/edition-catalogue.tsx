@@ -293,49 +293,50 @@ export function DailyCalendar({
 }) {
   const entries = new Map(calendar.entries.map((entry) => [entry.key, entry]));
   return (
-    <Calendar
-      locale={zhCN}
-      timeZone="Asia/Shanghai"
-      weekStartsOn={0}
-      month={new Date(`${calendar.month}-01T00:00:00+08:00`)}
-      hideNavigation
-      showOutsideDays={false}
-      className="w-full"
-      aria-label={`${calendar.month} 已公开日报`}
-      components={{
-        Day: ({ day, modifiers, children, ...props }) => {
-          const key = format(day.date, "yyyy-MM-dd");
-          const entry = entries.get(key);
-          return (
-            <TableCell {...props}>
-              {modifiers.hidden ? null : entry ? (
-                <Button
-                  asChild
-                  variant="secondary"
-                  className="size-full min-w-0 px-0"
-                >
-                  <Link
-                    href={entry.reading_url}
-                    title={entry.title}
-                    aria-label={`${entry.key} 日报：${entry.title}`}
+    <UI.Content role="group" aria-label={`${calendar.month} 已公开日报`}>
+      <Calendar
+        locale={zhCN}
+        timeZone="Asia/Shanghai"
+        weekStartsOn={0}
+        month={new Date(`${calendar.month}-01T00:00:00+08:00`)}
+        hideNavigation
+        showOutsideDays={false}
+        className="w-full"
+        components={{
+          Day: ({ day, modifiers, children, ...props }) => {
+            const key = format(day.date, "yyyy-MM-dd");
+            const entry = entries.get(key);
+            return (
+              <TableCell {...props}>
+                {modifiers.hidden ? null : entry ? (
+                  <Button
+                    asChild
+                    variant="secondary"
+                    className="size-full min-w-0 px-0"
+                  >
+                    <Link
+                      href={entry.reading_url}
+                      title={entry.title}
+                      aria-label={`${entry.key} 日报：${entry.title}`}
+                    >
+                      {children}
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    disabled
+                    className="size-full min-w-0 px-0"
+                    aria-label={`${key} 暂无公开日报`}
                   >
                     {children}
-                  </Link>
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  disabled
-                  className="size-full min-w-0 px-0"
-                  aria-label={`${key} 暂无公开日报`}
-                >
-                  {children}
-                </Button>
-              )}
-            </TableCell>
-          );
-        },
-      }}
-    />
+                  </Button>
+                )}
+              </TableCell>
+            );
+          },
+        }}
+      />
+    </UI.Content>
   );
 }

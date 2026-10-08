@@ -289,7 +289,11 @@ export function PublicEditionReader({
         data-edition-sidebar=""
         className="flex min-w-0 flex-col gap-8 print:hidden"
       >
-        <UI.Content className="flex flex-col gap-3" aria-label="刊物操作">
+        <UI.Content
+          role="group"
+          className="flex flex-col gap-3"
+          aria-label="刊物操作"
+        >
           <Button asChild>
             <UI.TextLink href={`/feed/${edition.kind}.xml`}>
               订阅{labels[edition.kind]}
@@ -345,17 +349,18 @@ export function PublicEditionReader({
           ) : past.length ? (
             <ItemGroup className="gap-0">
               {past.map((entry) => (
-                <Item key={entry.key} asChild className="px-0 py-4">
-                  <UI.TextLink href={entry.reading_url}>
-                    <ItemContent className="min-w-0 gap-2">
-                      <UI.Text tone="muted" size="xs">
-                        <UI.InlineCode>{entry.key}</UI.InlineCode>
-                      </UI.Text>
-                      <UI.Text size="sm" className="break-words">
-                        {entry.title}
-                      </UI.Text>
-                    </ItemContent>
-                  </UI.TextLink>
+                <Item key={entry.key} role="listitem" className="px-0 py-4">
+                  <ItemContent className="min-w-0 gap-2">
+                    <UI.Text tone="muted" size="xs">
+                      <UI.InlineCode>{entry.key}</UI.InlineCode>
+                    </UI.Text>
+                    <UI.TextLink
+                      href={entry.reading_url}
+                      className="break-words"
+                    >
+                      {entry.title}
+                    </UI.TextLink>
+                  </ItemContent>
                 </Item>
               ))}
             </ItemGroup>
