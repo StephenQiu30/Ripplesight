@@ -80,7 +80,11 @@ function toSourcesError(error: unknown): SourcesState {
   };
 }
 
-export function TopicForm() {
+export function TopicForm({
+  initialKeywords = "",
+}: {
+  initialKeywords?: string;
+}) {
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -93,7 +97,7 @@ export function TopicForm() {
     status: "loading",
   });
   const [name, setName] = useState("");
-  const [matchAny, setMatchAny] = useState("");
+  const [matchAny, setMatchAny] = useState(initialKeywords);
   const [matchAll, setMatchAll] = useState("");
   const [exclude, setExclude] = useState("");
   const [sourceKeys, setSourceKeys] = useState<string[]>([]);

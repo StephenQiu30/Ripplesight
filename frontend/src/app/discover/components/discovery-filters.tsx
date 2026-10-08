@@ -1,5 +1,5 @@
 "use client";
-import { useId } from "react";
+import { useEffect, useId } from "react";
 import { useRouter } from "next/navigation";
 import { SearchIcon } from "lucide-react";
 import { Content, Form, Text } from "@/components/ui/content";
@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useLayoutScrollContainer } from "@/layout/basic-layout";
 import { discoveryHref } from "./discovery-data";
 
 export function DiscoveryFilters({
@@ -39,6 +40,16 @@ export function DiscoveryFilters({
 }) {
   const id = useId();
   const router = useRouter();
+  const scroller = useLayoutScrollContainer();
+  const locationKey = new URLSearchParams(
+    Object.entries(params).filter((entry): entry is [string, string] =>
+      Boolean(entry[1]),
+    ),
+  ).toString();
+  useEffect(() => {
+    scroller?.current?.scrollTo({ top: 0, behavior: "instant" });
+  }, [locationKey, scroller]);
+  const canSort = Boolean(params.q?.trim());
   const navigate = (key: string, value: string) =>
     router.push(discoveryHref({ ...params, [key]: value }));
   return (
@@ -128,10 +139,16 @@ export function DiscoveryFilters({
           </SelectContent>
         </Select>
         <Select
-          value={params.search_order === "time" ? "time" : "relevance"}
+          value={
+            !canSort || params.search_order === "time" ? "time" : "relevance"
+          }
+          disabled={!canSort}
           onValueChange={(value) => navigate("search_order", value)}
         >
-          <SelectTrigger aria-label="排序" className="w-auto">
+          <SelectTrigger
+            aria-label={canSort ? "排序" : "排序：输入关键词后可切换"}
+            className="w-auto"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
