@@ -1,6 +1,6 @@
 # 本机项目知识库
 
-2026-10-07 本轮先搭需求阅读 workspace，直接维护当前 checkout 的 `workspace/content/`，使用已有静态预览 <http://127.0.0.1:8668/Ripplesight/> 与逐页原文读取；没有执行以下内部知识库初始化。当前阅读与 AI 使用方式见 [README](README.md)。下方保留正式知识库的账号、独立来源和双端编辑流程，需要启用时再明确切换作者来源。
+2026-10-08 当前作者来源是开发 checkout 的 `workspace/content/`，静态预览为 <http://127.0.0.1:8668/Ripplesight/>。本轮核查未发现 `.tools/workspace/config.json`，运行中的 Docker API 也未设置 WORKSPACE 相关配置，因此不能把公开文档构建通过写成内部知识库已启用。内部账号与双端编辑验收仍待执行，不据文档审查自动授予账号权限。当前阅读入口见 [README](README.md)。
 
 内部入口是 <http://127.0.0.1:8666/workspace/docs>，沿用 Ripplesight 的登录、布局和主题。使用 Nextra 4.6.1 编译普通 Markdown，Editor.js 提供段落、标题的富文本编辑；代码、Mermaid、表格、frontmatter、注释及未知语法保留为原文块。Mermaid 目前显示源码，不加载需要宽松 HTML 或样式策略的渲染器。
 
@@ -15,7 +15,7 @@ pnpm local:init -- --user <现有账号的 UUID>
 pnpm local:start
 ```
 
-账号 UUID 来自登录后的 `/api/identity/session` 的 `user.id`，不使用用户名或公开发布账号推断。初始化生成被 Git 忽略的 `.tools/workspace/config.json`，默认只允许这个账号读、改和发布。配置中三组允许清单可分别调整；发布还需具备读写权限。未初始化、未配置账号或坏快照均不开放读取。启动不会终止其他进程，8666/8667 已占用时先正常停止现有 Web/API。
+账号 UUID 来自登录后的 `/api/identity/session` 的 `user.id`，不使用用户名或公开发布账号推断。初始化生成被 Git 忽略的 `.tools/workspace/config.json`，默认只允许这个账号读、改和发布。配置中三组允许清单可分别调整；发布还需具备读写权限。未初始化、未配置账号或坏快照均不开放读取。启动不会终止其他进程，8666/8667 已占用时会拒绝启动；当前 Docker 服务继续运行。需要切换到内部宿主模式时先安排端口/进程切换，不并行启动第二份同端口 Web/API。
 
 初始化创建 `.tools/workspace/source/` 专用 Git 副本，复制当前文档及 BACKLOG、PROJECT、AGENTS，并保存初始本地文档历史；不提交或修改开发 checkout，也没有远端推送。`.tools/workspace/store/` 保存不可变快照、本人草稿和操作记录，重启复用这些目录，不重复执行初始化。配置目录权限为 0700，状态文件为 0600。备份时一起保留 source、store 与 config；不要只备份 `.next` 或公开静态导出。
 
@@ -50,3 +50,9 @@ pnpm local:read -- read --path product/prd/02-PRD-workspace项目知识库.md --
 原 Nextra/theme、Pagefind、公开 AI 导出、补丁及 Pages 工作流继续保留，只读取 `public-documents.json`。本机内部清单为 `internal-documents.json`，新增私密资料留在专用副本，不进入公开仓库或静态产物。
 
 工程测试覆盖权限、Markdown 往返、隔离 Git、冲突、失败和操作恢复。能力可用仍须按 PRD 验证真实账号、桌面与 390px、实际 Obsidian、固定中文查询和本机 Codex，并由 Claude 审查与记录；受控样本不替代这些验收。
+
+## 从仓库更新已初始化的内部副本
+
+仓库 main 推送不会更新已有专用副本。先备份 source/store/config 并检查未发布草稿；在专用 source 中审查合并本轮文档、根指针源和 public/internal 清单，保留私密资料与冲突双方。完成索引/链接检查，再发布本地来源变更，读取新 snapshot_id 并核对目录、搜索和原文。不能重新执行 local:init 覆盖已经编辑的来源，不能把内部新增资料复制进公开清单。
+
+默认 Docker Compose 提供网站、API 与公开静态预览，未配置内部 source/store 挂载、WORKSPACE 允许清单和 Node/Git 宿主工具。内部编辑遵循上面的宿主启动流程，或另做明确的容器接入切片；不能临时安装工具后宣称已长期支持。
