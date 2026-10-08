@@ -252,3 +252,7 @@ POC 数据存于 git 忽略的私有 `.tools/keyword-demo`，原子写入 JSON �
 阅读主流程、监控闭环、辅助管理与冻结功能分别维护；保留当前调用需要的历史存储，不以“页面不直接读表”为由删除任务、权限、许可、版本或审计。物理删表必须先验证服务、任务、外键与历史数据迁移，按§6在独立库恢复和验证。§12中的四档相关性、候选关联等尚未实现的扩展只作为历史讨论，不是本轮默认前置。
 
 现有 `/topics`、`/monitors/[topicId]`、`/workspace` 共享 TopicsWorkspace，保持一套主题数据和编辑流程。Figma 外壳只由 PageContainer 管理正文滚动和登录页脚，删除无调用者的旧固定 header 插槽；不重新引入全局位置栏。具体取舍、删除证据与后续清理门槛见[页面驱动的收敛方案](workspace/content/product/reference/14-页面驱动的收敛方案.md)。
+
+### CI生产底线（2026-10-08）
+
+CI只验证当前锁定运行栈，不扩展旧版本、旧卷名或多系统兼容矩阵。frontend执行完整静态检查、交互回归与构建；contract仅执行同提交运行API的生成客户端漂移及传输层专项，不重复全套Web测试；backend使用隔离hotkey_test_*库、唯一schema和实际Redis/Kafka/MinIO做全量回归；runtime使用生产镜像验证依赖、HTTP代理、会话/CSRF、动态CSP、Worker及非root只读边界。公开文档保留内容校验、工具测试、构建与发布，镜像测试使用隔离Git夹具而不依赖Docker上下文携带仓库元数据。CI成功不替代Figma视觉、真实提供方和长期服务验收。

@@ -127,7 +127,11 @@ def _source_fields(
 
 
 def load_observation_visibilities_in_transaction(
-    session: Session, *, owner_id: UUID, contexts: dict[UUID, ContentObservationContext]
+    session: Session,
+    *,
+    owner_id: UUID,
+    contexts: dict[UUID, ContentObservationContext],
+    decisive_only: bool = False,
 ) -> dict[UUID, ContentVisibilityObservation]:
     if not session.in_transaction() or len(contexts) > 20000:
         raise ValueError("bounded observation visibility requires caller transaction")
@@ -166,6 +170,9 @@ def load_observation_visibilities_in_transaction(
     result = {}
     for identifier, actual in contexts.items():
         for row in by_content.get(actual.content_id, ()):
+            # Failures do not grant or revoke visibility; retain the last source conclusion.
+            if decisive_only and row.status in {"transient_failure", "unknown"}:
+                continue
             job = jobs.get(row.job_id)
             if (
                 job is not None

@@ -87,7 +87,7 @@ def _readable_leaves(
         session, owner_id=owner_id, observation_ids=identifiers
     )
     visibility = load_observation_visibilities_in_transaction(
-        session, owner_id=owner_id, contexts=contexts
+        session, owner_id=owner_id, contexts=contexts, decisive_only=True
     )
     admissions = {}
     source_contexts = tuple({(c.source_key, c.job.source_capability) for c in contexts.values()})
@@ -109,7 +109,7 @@ def _readable_leaves(
         if (
             actual is None
             or original is None
-            or (visible is not None and visible.status != "visible")
+            or (visible is not None and visible.status in {"deleted", "restricted"})
         ):
             continue
         admission = admissions.get((actual.source_key, actual.job.source_capability))
@@ -118,6 +118,9 @@ def _readable_leaves(
         payload: dict[str, object] = {
             field: getattr(version, field) for field in ("title", "body") if getattr(version, field)
         }
+        if not payload and version.text_scope == "media_only":
+            # A media-only record still needs current permission for its stored semantics.
+            payload = {"text_scope": version.text_scope, "text_origin": version.text_origin}
         try:
             if observation.native_identity_proof is not None:
                 if admission.field_purposes.get("native_identity") != NATIVE_IDENTITY_PURPOSE:

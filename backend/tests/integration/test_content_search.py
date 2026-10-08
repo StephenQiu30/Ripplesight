@@ -12,6 +12,7 @@ from tests.conftest import authenticate_test_client
 from tests.integration.test_content_records import _command, _seed_context, _user_scope
 
 from analysis.prompts import ANALYSIS_PROMPT_VERSION
+from content.analysis_inputs import freeze_analysis_observation_inputs_in_transaction
 from content.schemas import ContentRecordSummaryView
 from content.services import ContentService
 from core.config import Settings
@@ -254,13 +255,21 @@ def test_search_preserves_filters_cursor_scope_and_current_analysis_state(
     now = datetime.now(UTC)
     factory = search_client.app.state.session_factory
     with factory.begin() as session:
+        manifest = freeze_analysis_observation_inputs_in_transaction(
+            session,
+            owner_id=owner,
+            post_observations={version.id: posts[0].latest_observation.id},
+            comment_observations={},
+            now=now,
+        )
         session.execute(
             text(
                 "INSERT INTO content_annotations "
                 "(id, owner_id, content_id, content_version_id, topic_id, topic_rule_version, "
-                "prompt_version, status, result_state, created_at, updated_at) VALUES "
+                "prompt_version, status, result_state, input_signature, "
+                "input_manifest, created_at, updated_at) VALUES "
                 "(:id, :owner, :content, :version, :topic, 1, :prompt, 'unanalyzed', "
-                "'pending', :now, :now)"
+                "'pending', :signature, CAST(:manifest AS jsonb), :now, :now)"
             ),
             {
                 "id": uuid4(),
@@ -269,6 +278,8 @@ def test_search_preserves_filters_cursor_scope_and_current_analysis_state(
                 "version": version.id,
                 "topic": topic,
                 "prompt": ANALYSIS_PROMPT_VERSION,
+                "signature": manifest.signature,
+                "manifest": manifest.model_dump_json(),
                 "now": now,
             },
         )

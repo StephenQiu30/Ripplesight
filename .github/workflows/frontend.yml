@@ -1,6 +1,7 @@
 name: frontend
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -22,6 +23,7 @@ concurrency:
 jobs:
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       NEXT_TELEMETRY_DISABLED: "1"
     defaults:
@@ -49,7 +51,7 @@ jobs:
         run: pnpm lint
 
       - name: Test (vitest)
-        run: pnpm test
+        run: pnpm test --maxWorkers=2
 
       - name: Type check (tsc)
         run: pnpm typecheck

@@ -14,7 +14,8 @@ from core.config import Settings
 
 
 class EmbeddingPricing:
-    max_output_tokens = 1
+    # Embeddings reserve input cost only; the shared ledger requires a positive output cap.
+    output_tokens_limit = 1
 
     def __init__(self, configuration: FrozenEmbeddingConfiguration):
         self.configuration = configuration

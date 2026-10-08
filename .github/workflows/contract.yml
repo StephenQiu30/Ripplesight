@@ -1,6 +1,7 @@
 name: contract
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -76,5 +77,4 @@ jobs:
             sleep 1
           done
           pnpm --dir frontend openapi:check
-          pnpm --dir frontend test
-          pnpm --dir frontend typecheck
+          pnpm --dir frontend test tests/request.test.ts tests/config/openapi2ts.config.test.ts 'tests/app/api/[[...path]]/route.test.ts'

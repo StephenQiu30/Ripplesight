@@ -263,6 +263,14 @@ def _semantic(client, monkeypatch, *, vector=(1, 0)):
     monkeypatch.setattr("events.embedding_execution.create_embedding_client", embedding_client)
     now = datetime.now(UTC)
     with factory() as session, session.begin():
+        # These context reports are in-window; historical reports are tested separately.
+        session.execute(
+            text(
+                "UPDATE content_observations SET published_at=:at WHERE "
+                "owner_id=:owner AND published_at IS NOT NULL"
+            ),
+            {"at": now - timedelta(hours=1), "owner": owner},
+        )
         assert (
             EventEmbeddingService(session, settings).enqueue_due_in_transaction(
                 now=now, ai_enabled=True
@@ -497,3 +505,41 @@ def test_semantic_judge_below_confidence_threshold_leaves_discussion_independent
             session.scalar(select(EventFactMember).where(EventFactMember.content_id == signal.id))
             is None
         )
+
+
+@pytest.mark.parametrize("outside", [False, True])
+def test_context_window_uses_original_source_time_despite_recent_receipt(
+    event_read_client, outside
+):
+    from events.services import _fixed_context_inputs
+
+    owner, factory, _, _, _, _, _ = _pair(event_read_client)
+    now = datetime.now(UTC)
+    since = now - timedelta(days=14)
+    published = since - timedelta(microseconds=1) if outside else since
+    with factory() as session, session.begin():
+        session.execute(
+            text(
+                "UPDATE content_observations SET published_at=:published, "
+                "received_at=:now WHERE owner_id=:owner"
+            ),
+            {"published": published, "now": now, "owner": owner},
+        )
+        members = tuple(
+            session.scalars(
+                select(EventMember).where(
+                    EventMember.owner_id == owner, EventMember.removed_revision.is_(None)
+                )
+            )
+        )
+        assert len(members) == 2
+        inputs = _fixed_context_inputs(
+            session,
+            owner_id=owner,
+            topic_id=members[0].topic_id,
+            members=members,
+            since=since,
+            now=now,
+            apply_topic_rules=False,
+        )
+        assert len(inputs) == (0 if outside else 2)

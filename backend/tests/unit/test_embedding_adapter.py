@@ -79,6 +79,7 @@ def test_embedding_configuration_freezes_model_dimensions_and_known_price_withou
     assert "never-persist" not in frozen.model_dump_json()
     client = create_embedding_client(settings)
     assert client.embedding_configuration == frozen
+    assert client.pricing_spec.output_tokens_limit == 1
     assert client.pricing_spec.quote(input_tokens_cap=1000, output_tokens_cap=1).cap_micros == 20
     client.close()
 

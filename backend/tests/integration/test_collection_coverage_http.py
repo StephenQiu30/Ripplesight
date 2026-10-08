@@ -12,8 +12,21 @@ from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 from tests.conftest import TEST_DATABASE_TRUNCATE, authenticate_test_client, authenticated_owner_id
 
+from analysis.schemas import AnalysisJobScope, AnalysisPromptItem
+from content.analysis_inputs import freeze_analysis_observation_inputs_in_transaction
 from core.config import Settings
 from core.errors import ApplicationError
+from evidence.admission_reading import load_current_source_admissions_in_transaction
+from evidence.schemas import (
+    AccessBasis,
+    AccessPolicyStatus,
+    CleanupTargetKind,
+    CleanupTargetSpec,
+    DataClass,
+    RetentionPolicyInput,
+    SourceAccessPolicyInput,
+)
+from evidence.services import LifecycleService, RetentionPolicyService, SourceAccessPolicyService
 from jobs.coverage import CollectionCoverageQueryService
 from jobs.schemas import (
     BudgetContext,
@@ -29,9 +42,10 @@ from jobs.schemas import (
 )
 from jobs.services import ResourceBudgetService
 from main import create_app
+from sources.contracts import SourceCapability
 
 _DATABASE_ENV = "HOTKEY_TEST_DATABASE_URL"
-_BASE = datetime(2026, 9, 27, 0, 0, tzinfo=UTC)
+_BASE = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
 
 
 @pytest.fixture
@@ -788,7 +802,8 @@ def test_coverage_http_keeps_analysis_anomaly_separate_from_unknown(
     contents = (uuid4(), uuid4(), uuid4())
     versions = (uuid4(), uuid4(), uuid4())
     call_id = uuid4()
-    with engine.begin() as connection:
+    observations = (uuid4(), uuid4())
+    with Session(engine) as connection, connection.begin():
         for content_id, version_id in zip(contents, versions, strict=True):
             connection.execute(
                 text(
@@ -813,7 +828,9 @@ def test_coverage_http_keeps_analysis_anomaly_separate_from_unknown(
                     "at": _BASE,
                 },
             )
-        for content_id, version_id in zip(contents[:2], versions[:2], strict=True):
+        for content_id, version_id, observation_id in zip(
+            contents[:2], versions[:2], observations, strict=True
+        ):
             connection.execute(
                 text(
                     "INSERT INTO content_observations "
@@ -822,7 +839,7 @@ def test_coverage_http_keeps_analysis_anomaly_separate_from_unknown(
                     "(:id, :owner, :content, :job, :operation, :version, :at, :at)"
                 ),
                 {
-                    "id": uuid4(),
+                    "id": observation_id,
                     "owner": owner_id,
                     "content": content_id,
                     "job": collection_job_id,
@@ -831,6 +848,74 @@ def test_coverage_http_keeps_analysis_anomaly_separate_from_unknown(
                     "at": _BASE + timedelta(minutes=1),
                 },
             )
+        proof_time = _BASE + timedelta(minutes=2)
+        policy = SourceAccessPolicyService(
+            connection, clock=lambda: proof_time
+        ).save_in_transaction(
+            owner_id=owner_id,
+            command=SourceAccessPolicyInput(
+                source_key="rss_36kr",
+                capability=SourceCapability.SEARCH,
+                status=AccessPolicyStatus.APPROVED,
+                enabled=True,
+                access_basis=AccessBasis.MANUAL_IMPORT,
+                terms_reference="https://example.invalid/controlled",
+                processing_purpose="controlled coverage proof",
+                component_name="controlled",
+                component_version="1",
+                component_license="MIT",
+                field_purposes={"title": "controlled reading"},
+                reviewed_at=_BASE,
+            ),
+        )
+        RetentionPolicyService(connection, clock=lambda: proof_time).save_in_transaction(
+            owner_id=owner_id,
+            command=RetentionPolicyInput(
+                source_policy_id=policy.id, data_class=DataClass.STRUCTURED, requested_days=30
+            ),
+        )
+        admission = load_current_source_admissions_in_transaction(
+            connection,
+            owner_id=owner_id,
+            source_contexts={("rss_36kr", SourceCapability.SEARCH)},
+            data_class=DataClass.STRUCTURED,
+            now=proof_time,
+        )[("rss_36kr", SourceCapability.SEARCH)]
+        for observation_id in observations:
+            LifecycleService(connection, clock=lambda: proof_time).track_resource_in_transaction(
+                owner_id=owner_id,
+                resource_type="content_observation",
+                resource_id=observation_id,
+                admission=admission.admit(
+                    collected_at=_BASE + timedelta(minutes=1),
+                    payload={"title": "title"},
+                    now=proof_time,
+                ),
+                cleanup_targets=[
+                    CleanupTargetSpec(
+                        kind=CleanupTargetKind.POSTGRES_CONTENT_OBSERVATION,
+                        reference=str(observation_id),
+                    )
+                ],
+            )
+        manifest = freeze_analysis_observation_inputs_in_transaction(
+            connection,
+            owner_id=owner_id,
+            post_observations=dict(zip(versions[:2], observations, strict=True)),
+            comment_observations={},
+            now=proof_time,
+        )
+        scope = AnalysisJobScope(
+            topic_id=topic_id,
+            topic_rule_version=1,
+            prompt_version="v1",
+            content_version_ids=versions[:2],
+            input_manifest=manifest,
+            prompt_items=tuple(
+                AnalysisPromptItem(content_id=c, content_version_id=v, title="title")
+                for c, v in zip(contents[:2], versions[:2], strict=True)
+            ),
+        )
         connection.execute(
             text(
                 "INSERT INTO jobs "
@@ -844,14 +929,7 @@ def test_coverage_http_keeps_analysis_anomaly_separate_from_unknown(
                 "owner": owner_id,
                 "operation": uuid4(),
                 "ref": f"topic:{topic_id}",
-                "scope": json.dumps(
-                    {
-                        "topic_id": str(topic_id),
-                        "topic_rule_version": 1,
-                        "prompt_version": "v1",
-                        "content_version_ids": json.dumps([str(item) for item in versions[:2]]),
-                    }
-                ),
+                "scope": json.dumps(scope.to_job_scope()),
                 "fingerprint": b"a" * 32,
                 "at": _BASE,
             },
@@ -872,10 +950,11 @@ def test_coverage_http_keeps_analysis_anomaly_separate_from_unknown(
                 "INSERT INTO content_annotations "
                 "(id, owner_id, content_id, content_version_id, topic_id, "
                 "topic_rule_version, prompt_version, viewpoints, ai_call_id, status, "
-                "result_state, error_code, diagnostic_history, created_at, updated_at) "
+                "result_state, error_code, diagnostic_history, "
+                "input_signature, input_manifest, created_at, updated_at) "
                 "VALUES (:id, :owner, :content, :version, :topic, 1, 'v1', "
                 "'[]'::jsonb, :call, 'unanalyzed', 'invalid', 'invalid_output', "
-                "'[]'::jsonb, :at, :at)"
+                "'[]'::jsonb, :signature, CAST(:manifest AS jsonb), :at, :at)"
             ),
             {
                 "id": uuid4(),
@@ -884,6 +963,8 @@ def test_coverage_http_keeps_analysis_anomaly_separate_from_unknown(
                 "version": versions[0],
                 "topic": topic_id,
                 "call": call_id,
+                "signature": manifest.signature,
+                "manifest": manifest.model_dump_json(),
                 "at": _BASE,
             },
         )
