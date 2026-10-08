@@ -39,7 +39,7 @@ export function BrandLockup({
     <Button
       asChild
       variant="ghost"
-      className="h-auto min-h-11 justify-start gap-3 px-0 hover:bg-transparent"
+      className="h-auto min-h-11 min-w-0 justify-start gap-2 px-0 hover:bg-transparent"
     >
       <Link
         href={href}
@@ -54,6 +54,8 @@ export function BrandLockup({
         <UI.Content
           className={cn(
             "flex min-w-0 flex-col items-start gap-0",
+            collapsible &&
+              "overflow-hidden [&>span]:max-w-full [&>span]:truncate",
             compactOnMobile && "hidden sm:flex",
             rail && "hidden lg:flex",
             collapsible && "group-data-[collapsible=icon]:hidden",

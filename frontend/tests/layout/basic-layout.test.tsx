@@ -30,6 +30,7 @@ const session: HotKeyAPI.IdentitySessionView = {
 };
 beforeEach(() => {
   route.pathname = "/";
+  localStorage.removeItem("ripplesight-sidebar");
   vi.mocked(getReadiness).mockReset();
   vi.mocked(getReadiness).mockRejectedValue(new Error("service unavailable"));
 });
@@ -265,6 +266,65 @@ describe("Figma reading shell", () => {
       </BasicLayout>,
     );
     expect(content.scrollTop).toBe(0);
+  });
+  it("collapses from the named trigger without remounting the page or losing reading position", async () => {
+    const mounted = vi.fn();
+    function Draft() {
+      mounted();
+      return <input aria-label="页面草稿" defaultValue="" />;
+    }
+    render(
+      <BasicLayout>
+        <Draft />
+      </BasicLayout>,
+    );
+    const draft = screen.getByRole("textbox", { name: "页面草稿" });
+    fireEvent.change(draft, { target: { value: "保留正在输入的内容" } });
+    const content = screen.getByRole("region", { name: "页面内容" });
+    content.scrollTop = 480;
+    const beforeToggle = mounted.mock.calls.length;
+    fireEvent.click(sidebar().getByRole("button", { name: "折叠侧边栏" }));
+    expect(
+      sidebar()
+        .getByRole("button", { name: "展开侧边栏" })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
+    expect(sidebar().getByRole("link", { name: "登录账户" })).toBeTruthy();
+    expect(mounted).toHaveBeenCalledTimes(beforeToggle);
+    expect(screen.getByRole("textbox", { name: "页面草稿" })).toBe(draft);
+    expect((draft as HTMLInputElement).value).toBe("保留正在输入的内容");
+    expect(content.scrollTop).toBe(480);
+    await waitFor(() =>
+      expect(
+        JSON.parse(localStorage.getItem("ripplesight-sidebar")!).open,
+      ).toBe(false),
+    );
+    fireEvent.click(sidebar().getByRole("button", { name: "展开侧边栏" }));
+    expect(sidebar().getByRole("button", { name: "折叠侧边栏" })).toBeTruthy();
+  });
+  it("restores collapse preference and safely ignores damaged preference storage", () => {
+    localStorage.setItem(
+      "ripplesight-sidebar",
+      JSON.stringify({ width: 280, open: false }),
+    );
+    const view = render(<BasicLayout>{page}</BasicLayout>);
+    expect(sidebar().getByRole("button", { name: "展开侧边栏" })).toBeTruthy();
+    view.unmount();
+    localStorage.setItem("ripplesight-sidebar", "invalid");
+    render(<BasicLayout>{page}</BasicLayout>);
+    expect(sidebar().getByRole("button", { name: "折叠侧边栏" })).toBeTruthy();
+  });
+  it("does not intercept editor shortcuts or already handled keyboard events", () => {
+    render(
+      <BasicLayout>
+        <input aria-label="编辑内容" />
+      </BasicLayout>,
+    );
+    const editor = screen.getByRole("textbox", { name: "编辑内容" });
+    fireEvent.keyDown(editor, { key: "b", ctrlKey: true });
+    expect(sidebar().getByRole("button", { name: "折叠侧边栏" })).toBeTruthy();
+    fireEvent.keyDown(window, { key: "b", ctrlKey: true });
+    expect(sidebar().getByRole("button", { name: "展开侧边栏" })).toBeTruthy();
   });
   it("uses the four design footer links on login", () => {
     route.pathname = "/login";

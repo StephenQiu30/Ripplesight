@@ -93,7 +93,16 @@ function SidebarProvider({
   React.useEffect(() => {
     if (openProp !== undefined && !setOpenProp) return;
     const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
       if (
+        event.defaultPrevented ||
+        (target instanceof HTMLElement &&
+          (target.isContentEditable ||
+            target.closest("input, textarea, select, [role=textbox]")))
+      )
+        return;
+      if (
+        !isMobile &&
         event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
         (event.metaKey || event.ctrlKey)
       ) {
@@ -104,7 +113,7 @@ function SidebarProvider({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [toggleSidebar, openProp, setOpenProp]);
+  }, [toggleSidebar, openProp, setOpenProp, isMobile]);
 
   // We add a state so that we can do data-state="expanded" or "collapsed".
   // This makes it easier to style the sidebar with Tailwind classes.
@@ -195,7 +204,7 @@ function Sidebar({
 
   return (
     <div
-      className="group peer text-sidebar-foreground hidden md:block"
+      className="group peer text-sidebar-foreground hidden md:block print:hidden"
       data-state={state}
       data-collapsible={state === "collapsed" ? collapsible : ""}
       data-variant={variant}
@@ -206,7 +215,7 @@ function Sidebar({
       <div
         data-slot="sidebar-gap"
         className={cn(
-          "relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear",
+          "relative w-(--sidebar-width) bg-transparent",
           "group-data-[collapsible=offcanvas]:w-0",
           "group-data-[side=right]:rotate-180",
           variant === "floating" || variant === "inset"
@@ -248,6 +257,7 @@ function SidebarTrigger({
 
   return (
     <Button
+      aria-label="Toggle Sidebar"
       data-sidebar="trigger"
       data-slot="sidebar-trigger"
       variant="ghost"
@@ -259,8 +269,7 @@ function SidebarTrigger({
       }}
       {...props}
     >
-      <PanelLeftIcon />
-      <span className="sr-only">Toggle Sidebar</span>
+      <PanelLeftIcon data-icon="inline-start" />
     </Button>
   );
 }
