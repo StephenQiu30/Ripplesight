@@ -1,7 +1,7 @@
 "use client";
 
 import { AuthLink as Link } from "@/components/auth/auth-link";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { SearchIcon, ArrowUpRightIcon } from "lucide-react";
 import { HomeStoryFeed } from "./home-feed";
@@ -23,6 +23,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { SignalNotice, SentimentLegend } from "@/components/ui/signal";
 import { PageState } from "@/components/system/page-state";
+import { LoadingSignal } from "@/components/system/global-loading";
 import { useLayoutScrollContainer } from "@/layout/basic-layout";
 import { publicationTime } from "@/components/publication/reading-format";
 
@@ -44,6 +45,8 @@ export function HomeContent({
   const scroll = useLayoutScrollContainer();
   const searchId = useId();
   const [visibleCount, setVisibleCount] = useState(6);
+  const [isPending, startTransition] = useTransition();
+  const refresh = () => startTransition(() => router.refresh());
   useEffect(() => {
     scroll?.current?.scrollTo({ top: 0, behavior: "instant" });
   }, [scroll, category]);
@@ -63,6 +66,9 @@ export function HomeContent({
     .sort((a, b) => b.attention!.trend_pct! - a.attention!.trend_pct!)
     .slice(0, 5);
   const denied = [401, 403].includes(reading.failures?.stories?.status ?? 0);
+  const storiesUnavailable = reading.unavailable.includes("stories");
+  const editionsUnavailable = reading.unavailable.includes("editions");
+  const emptyCategory = category !== "all" && reading.stories.length > 0;
   const notice = (
     <SignalNotice title="负面突增提醒">
       <Text size="sm" tone="muted">
@@ -71,7 +77,8 @@ export function HomeContent({
     </SignalNotice>
   );
   return (
-    <Content layout="stack" className="gap-8">
+    <Content layout="stack" className="gap-8" aria-busy={isPending}>
+      <LoadingSignal active={isPending} />
       <Content
         as="header"
         className="flex flex-wrap items-end justify-between gap-4"
@@ -142,7 +149,7 @@ export function HomeContent({
         className="grid grid-cols-2 gap-x-8 gap-y-6 border-y py-5 md:grid-cols-4"
       >
         {["追踪中事件", "过去 24 小时新增", "覆盖平台", "负面突增"].map(
-          (label, index) => (
+          (label) => (
             <Content key={label} className="flex flex-col gap-1">
               <Content as="dt">
                 <Text tone="muted" size="xs">
@@ -150,11 +157,7 @@ export function HomeContent({
                 </Text>
               </Content>
               <Content as="dd">
-                <Text
-                  size="metric"
-                  tone={index === 3 ? "destructive" : "default"}
-                  title="暂无全站统计"
-                >
+                <Text size="metric" tone="muted" title="暂无全站统计">
                   <InlineCode>—</InlineCode>
                 </Text>
               </Content>
@@ -176,7 +179,11 @@ export function HomeContent({
                 onValueChange={(value) => {
                   if (value) {
                     setVisibleCount(6);
-                    router.push(value === "all" ? "/" : `/?category=${value}`);
+                    startTransition(() =>
+                      router.push(
+                        value === "all" ? "/" : `/?category=${value}`,
+                      ),
+                    );
                   }
                 }}
               >
@@ -191,7 +198,7 @@ export function HomeContent({
               <SentimentLegend />
             </Content>
           </Content>
-          {reading.unavailable.includes("stories") ? (
+          {storiesUnavailable ? (
             <PageState
               headingLevel={2}
               state={denied ? "forbidden" : "error"}
@@ -204,8 +211,12 @@ export function HomeContent({
               httpStatus={reading.failures?.stories?.status}
               errorCode={reading.failures?.stories?.code}
               action={
-                <Button variant="outline" onClick={() => router.refresh()}>
-                  重新加载
+                <Button
+                  variant="outline"
+                  onClick={refresh}
+                  disabled={isPending}
+                >
+                  {isPending ? "正在重新加载…" : "重新加载"}
                 </Button>
               }
             />
@@ -218,8 +229,26 @@ export function HomeContent({
             <PageState
               headingLevel={2}
               state="empty"
-              title="暂无公开事件"
-              description="当前分类尚无可公开的事件，发布后将展示进展、来源与热度。"
+              title={emptyCategory ? "当前分类暂无事件" : "暂无公开事件"}
+              description={
+                emptyCategory
+                  ? "试试其他分类，或查看全部已发布的事件。"
+                  : "公开事件发布后，这里会显示进展、来源与热度。你也可以先探索资讯，或设置自己的关键词监控。"
+              }
+              action={
+                emptyCategory ? (
+                  <Button
+                    variant="outline"
+                    disabled={isPending}
+                    onClick={() => {
+                      setVisibleCount(6);
+                      startTransition(() => router.push("/"));
+                    }}
+                  >
+                    查看全部事件
+                  </Button>
+                ) : undefined
+              }
             />
           )}
           {stories.length > visibleCount ? (
@@ -247,7 +276,13 @@ export function HomeContent({
             <Text size="xs" tone="muted">
               当前可比较的公开事件 · 48 小时窗口
             </Text>
-            {rising.length ? (
+            {storiesUnavailable ? (
+              <Text size="sm" tone="muted">
+                {denied
+                  ? "无权读取事件热度变化。"
+                  : "事件读取失败，暂时无法比较热度变化。"}
+              </Text>
+            ) : rising.length ? (
               rising.map((story, index) => (
                 <Content key={story.id} className="flex items-start gap-4 py-2">
                   <Text size="xs" tone="muted">
@@ -286,7 +321,30 @@ export function HomeContent({
             <Heading level={2} appearance="sidebar" id="home-daily">
               今日日报
             </Heading>
-            {reading.editions.length ? (
+            {editionsUnavailable ? (
+              <PageState
+                headingLevel={2}
+                state={
+                  [401, 403].includes(reading.failures?.editions?.status ?? 0)
+                    ? "forbidden"
+                    : "error"
+                }
+                title="日报暂时无法读取"
+                description="请重新加载，或稍后再试。"
+                errorCode={reading.failures?.editions?.code}
+                httpStatus={reading.failures?.editions?.status}
+                action={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={refresh}
+                    disabled={isPending}
+                  >
+                    {isPending ? "正在重新加载…" : "重试日报"}
+                  </Button>
+                }
+              />
+            ) : reading.editions.length ? (
               reading.editions.slice(0, 1).map((edition) => (
                 <Content key={edition.key} layout="stack" className="gap-2">
                   <Heading level={3} appearance="result">
@@ -302,9 +360,7 @@ export function HomeContent({
               ))
             ) : (
               <Text size="sm" tone="muted">
-                {reading.unavailable.includes("editions")
-                  ? "日报暂时无法读取。"
-                  : "今日日报尚未发布。"}
+                今日日报尚未发布，发布后可在这里阅读。
               </Text>
             )}
             <Button asChild variant="ghost" size="sm" className="self-start">

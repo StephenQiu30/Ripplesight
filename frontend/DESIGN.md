@@ -63,6 +63,7 @@
 
 ## 5. 状态与反馈
 
+- 全站共用加载条汇总PageState、首页骨架及重试的加载状态，不显示虚构百分比、不遮挡导航。读屏status常驻，独立于正文aria-busy；减少动态效果时停止脉冲。首页分类切换和重新加载保留当前内容并显示忙碌状态，空分类可返回全部事件；读取失败不得显示成暂无数据。
 - 每个页面都要处理五种状态：正常、空、加载、错误、无权限。路由级统一提供 loading、error、global-error、not-found 边界；正文状态使用 `components/system/page-state.tsx` 中的 `PageState`。
 - 操作反馈只用 Sonner：失败用 `toast.error`，成功用 `toast.success`，主动取消用 `toast.info`。Toaster 只在 BasicLayout 挂载一次。不要在表单底部放消息块，也不要自定义 Toast。
 - 字段错误保留 `aria-invalid` 和纠错焦点。加载失败时显示 Empty 或 Alert，并提供重试入口。旧数据刷新失败时要标明“已过期”。
