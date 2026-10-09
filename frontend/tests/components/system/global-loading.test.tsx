@@ -29,6 +29,12 @@ it("keeps a single global indicator until every concurrent loading boundary fini
   expect(screen.getAllByRole("status", { name: "全局加载状态" })).toHaveLength(
     1,
   );
+  expect(
+    document.querySelectorAll('[data-slot="global-loading-indicator"]'),
+  ).toHaveLength(1);
+  expect(screen.getByRole("status", { name: "全局加载状态" }).textContent).toBe(
+    "正在加载，请稍候。",
+  );
   view.rerender(
     <StrictMode>
       <GlobalLoadingProvider>
@@ -37,6 +43,9 @@ it("keeps a single global indicator until every concurrent loading boundary fini
     </StrictMode>,
   );
   expect(screen.getByRole("status", { name: "全局加载状态" })).toBeTruthy();
+  expect(
+    document.querySelector('[data-slot="global-loading-indicator"]'),
+  ).not.toBeNull();
   view.rerender(
     <StrictMode>
       <GlobalLoadingProvider>
@@ -48,7 +57,7 @@ it("keeps a single global indicator until every concurrent loading boundary fini
     "",
   );
   expect(
-    document.querySelector('[data-slot="global-loading-progress"]'),
+    document.querySelector('[data-slot="global-loading-indicator"]'),
   ).toBeNull();
   expect(screen.getByRole("status", { name: "暂无内容" })).toBeTruthy();
 });
@@ -80,6 +89,9 @@ it("reports a pending transition while retaining content and clears on completio
   );
   fireEvent.click(screen.getByRole("button", { name: "重试" }));
   expect(screen.getByRole("status", { name: "全局加载状态" })).toBeTruthy();
+  expect(
+    document.querySelector('[data-slot="global-loading-indicator"]'),
+  ).not.toBeNull();
   expect(screen.getByText("已加载的正文")).toBeTruthy();
   expect((screen.getByRole("button") as HTMLButtonElement).disabled).toBe(true);
   await act(async () => {
@@ -90,6 +102,6 @@ it("reports a pending transition while retaining content and clears on completio
     "",
   );
   expect(
-    document.querySelector('[data-slot="global-loading-progress"]'),
+    document.querySelector('[data-slot="global-loading-indicator"]'),
   ).toBeNull();
 });
