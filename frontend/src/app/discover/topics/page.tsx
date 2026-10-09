@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 import {
   Item,
@@ -35,14 +36,12 @@ export default async function PublicTopicsPage() {
   return (
     <>
       <UI.Content className="flex flex-col gap-y-10">
-        <UI.Content as="header">
-          <UI.Heading level={1} className="text-3xl font-medium">
-            行业专题
-          </UI.Heading>
-          <UI.Text className="text-muted-foreground mt-3 text-sm">
-            围绕明确的主体与技术信号，持续阅读当前可公开的精选材料。
-          </UI.Text>
-        </UI.Content>
+        <PageHeader
+          title={<>行业专题</>}
+          description={
+            <>围绕明确的主体与技术信号，持续阅读当前可公开的精选材料。</>
+          }
+        />
         {groups.map(([group, label]) => (
           <UI.Content as="section" key={group}>
             <UI.Heading level={2} className="mb-4 text-lg font-medium">

@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 import {
   NavigationMenu,
@@ -78,15 +79,14 @@ export default async function TopicPage({
   return (
     <>
       <UI.Content>
-        <Link href="/discover/topics" className="text-muted-foreground text-sm">
-          ← 全部专题
-        </Link>
-        <UI.Heading level={1} className="mt-6 text-3xl font-medium">
-          {page.topic.name}
-        </UI.Heading>
-        <UI.Text className="text-muted-foreground mt-3 leading-7">
-          {page.topic.definition}
-        </UI.Text>
+        <PageHeader
+          breadcrumbs={[
+            { label: "行业专题", href: "/discover/topics" },
+            { label: "专题详情" },
+          ]}
+          title={<>{page.topic.name}</>}
+          description={<>{page.topic.definition}</>}
+        />
         <UI.Text className="text-muted-foreground mt-3 text-sm">
           {page.topic.total} 篇精选 · 最近 30 天 {page.topic.recent} 篇
         </UI.Text>

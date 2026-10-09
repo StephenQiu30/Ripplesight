@@ -101,7 +101,7 @@ export function BoardReading({
               headingLevel={2}
               state="empty"
               title="暂无可展示的已发布模型"
-              description="公开评测发布后显示排名；缺失数据不计作零分。"
+              description="请试试其他维度。"
             />
           )}
         </Content>

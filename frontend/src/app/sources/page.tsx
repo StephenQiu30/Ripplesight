@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/system/page-header";
 import { AuthLink } from "@/components/auth/auth-link";
 import { Button } from "@/components/ui/button";
 import * as UI from "@/components/ui/content";
@@ -19,15 +20,14 @@ export default async function SourcesPage() {
   return (
     <UI.Content className="flex flex-col gap-10">
       <UI.Content className="flex flex-col gap-3">
-        <UI.Heading
-          level={1}
-          className="text-3xl font-semibold tracking-tight sm:text-4xl"
-        >
-          平台接入
-        </UI.Heading>
-        <UI.Text className="text-muted-foreground max-w-2xl leading-7">
-          选择系统内置的平台，配置连接并按需启用或停用。关键词搜索、评论和热榜能力分别标明，配置后可在监控主题中选择来源。
-        </UI.Text>
+        <PageHeader
+          title={<>平台接入</>}
+          description={
+            <>
+              选择系统内置的平台，配置连接并按需启用或停用。关键词搜索、评论和热榜能力分别标明，配置后可在监控主题中选择来源。
+            </>
+          }
+        />
       </UI.Content>
       <Button asChild variant="outline" className="self-start">
         <AuthLink href="/monitors/new">设置关键词并选择平台</AuthLink>

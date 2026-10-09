@@ -1,4 +1,6 @@
 "use client";
+
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -354,12 +356,14 @@ export function EditorialSourceManager() {
     <>
       <UI.Content className="flex flex-col gap-y-8">
         <UI.Content>
-          <UI.Heading level={1} className="text-3xl font-medium">
-            编辑来源配置
-          </UI.Heading>
-          <UI.Text className="text-muted-foreground mt-3">
-            六类来源共用批准策略、原内容版本和任务回执。来源健康依据真实完整抓取，默认关闭。
-          </UI.Text>
+          <PageHeader
+            title={<>编辑来源配置</>}
+            description={
+              <>
+                六类来源共用批准策略、原内容版本和任务回执。来源健康依据真实完整抓取，默认关闭。
+              </>
+            }
+          />
         </UI.Content>
         <Item variant="muted" asChild>
           <UI.Content

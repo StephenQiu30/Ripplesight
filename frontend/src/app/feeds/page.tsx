@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
 import type { Metadata } from "next";
@@ -23,13 +24,15 @@ export default async function FeedsPage() {
   return (
     <>
       <UI.Content>
-        <UI.Heading level={1} className="text-3xl font-medium">
-          订阅资讯
-        </UI.Heading>
-        <UI.Text className="text-muted-foreground mt-5 text-sm leading-7">
-          复制链接到 RSS
-          阅读器。订阅读取服务器明确设置的发布账号，未设置时保持未发布。全文订阅只包含有明确再分发许可的正文，其余条目保留摘要和站内阅读入口。每个订阅最多50项，公开接口共享每60秒120次的访问额度。
-        </UI.Text>
+        <PageHeader
+          title={<>订阅资讯</>}
+          description={
+            <>
+              复制链接到 RSS
+              阅读器。订阅读取服务器明确设置的发布账号，未设置时保持未发布。全文订阅只包含有明确再分发许可的正文，其余条目保留摘要和站内阅读入口。每个订阅最多50项，公开接口共享每60秒120次的访问额度。
+            </>
+          }
+        />
         <ItemGroup className="mt-8 flex flex-col gap-y-5">
           {feeds.map(([href, label]) => (
             <Item

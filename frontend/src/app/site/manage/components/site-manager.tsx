@@ -1,4 +1,6 @@
 "use client";
+
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 
 import { toast } from "sonner";
@@ -164,12 +166,14 @@ export function SiteManager() {
   return (
     <>
       <UI.Content>
-        <UI.Heading level={1} className="text-3xl font-medium">
-          站点联系设置
-        </UI.Heading>
-        <UI.Text className="text-muted-foreground mt-4 text-sm leading-7">
-          运营令牌仅保存在当前页面内存。启用、更换和关闭均保存修订与原因；关闭后旧二维码链接不可读取。
-        </UI.Text>
+        <PageHeader
+          title={<>站点联系设置</>}
+          description={
+            <>
+              运营令牌仅保存在当前页面内存。启用、更换和关闭均保存修订与原因；关闭后旧二维码链接不可读取。
+            </>
+          }
+        />
         <Field className="mt-8 flex flex-col gap-y-3">
           <FieldLabel htmlFor="site-token">运营令牌</FieldLabel>
           <Input

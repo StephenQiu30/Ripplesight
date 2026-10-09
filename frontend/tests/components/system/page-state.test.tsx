@@ -36,14 +36,18 @@ describe("PageState", () => {
     expect(screen.queryByRole("link")).toBeNull();
   });
 
-  it("gives the empty state a real next step", () => {
-    render(<PageState {...copy} state="empty" />);
+  it("keeps an empty state minimal without inventing a next step", () => {
+    const { container } = render(
+      <PageState state="empty" title={copy.title} />,
+    );
     expect(
       screen.getByRole("heading", { level: 1, name: copy.title }),
     ).toBeTruthy();
+    expect(screen.queryByRole("link")).toBeNull();
     expect(
-      screen.getByRole("link", { name: "探索资讯" }).getAttribute("href"),
-    ).toBe("/discover?mode=all");
+      container.querySelector('[data-slot="empty-description"]'),
+    ).toBeNull();
+    expect(container.querySelector('[data-slot="empty-content"]')).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 

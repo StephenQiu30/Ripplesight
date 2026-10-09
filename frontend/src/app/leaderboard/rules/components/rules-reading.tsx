@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
 import { ChevronDownIcon } from "lucide-react";
@@ -23,22 +24,26 @@ import {
 export function RulesReading({ data }: { data: HotKeyAPI.RulesView }) {
   return (
     <UI.Content className="flex min-w-0 flex-col gap-8">
-      <UI.Content as="header" className="flex flex-col gap-3">
-        <UI.Text tone="muted" size="sm">
-          模型榜
-        </UI.Text>
-        <UI.Heading level={1}>计算规则与证据边界</UI.Heading>
-        <UI.Text tone="muted">
-          公开来源先形成成对偏好，再通过加权不完整 Kemeny
-          求解全局顺序。跨来源原始分数不可直接求均值，缺项不补分。
-        </UI.Text>
+      <PageHeader
+        title="计算规则与证据边界"
+        description={
+          <>
+            公开来源先形成成对偏好，再通过加权不完整 Kemeny
+            求解全局顺序。跨来源原始分数不可直接求均值，缺项不补分。
+          </>
+        }
+        breadcrumbs={[
+          { label: "模型榜", href: "/leaderboard" },
+          { label: "计算规则与证据边界" },
+        ]}
+      >
         <RunStamp run={data.run} />
         <UI.Text tone="muted" size="xs" className="break-all">
           <UI.InlineCode>
             {data.methodology_version} · {data.display_method}
           </UI.InlineCode>
         </UI.Text>
-      </UI.Content>
+      </PageHeader>
       <Separator />
       <UI.Content as="section" className="flex flex-col gap-3">
         <UI.Heading level={2}>怎样理解排名和指数</UI.Heading>

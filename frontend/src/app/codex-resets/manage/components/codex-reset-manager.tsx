@@ -1,4 +1,6 @@
 "use client";
+
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -407,13 +409,15 @@ export function CodexResetManager() {
   return (
     <UI.Content className="flex flex-col gap-y-8">
       <UI.Content>
-        <UI.Heading level={1} className="text-3xl font-medium">
-          公告配置与人工复核
-        </UI.Heading>
-        <UI.Text className="text-muted-foreground mt-3">
-          固定官方作者
-          thsottiaux。预测日程与确认到账分别记录，未知来源或模型请求需要人工复核。
-        </UI.Text>
+        <PageHeader
+          title={<>公告配置与人工复核</>}
+          description={
+            <>
+              固定官方作者
+              thsottiaux。预测日程与确认到账分别记录，未知来源或模型请求需要人工复核。
+            </>
+          }
+        />
         <Link
           href="/codex-resets"
           className="mt-3 inline-block underline underline-offset-4"

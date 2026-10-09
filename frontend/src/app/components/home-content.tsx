@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/components/system/page-header";
+
 import { AuthLink as Link } from "@/components/auth/auth-link";
 import { useEffect, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -79,48 +81,43 @@ export function HomeContent({
   return (
     <Content layout="stack" className="gap-8" aria-busy={isPending}>
       <LoadingSignal active={isPending} />
-      <Content
-        as="header"
-        className="flex flex-wrap items-end justify-between gap-4"
-      >
-        <Content layout="stack" className="gap-1">
-          <Heading level={1}>今日 AI 热点</Heading>
-          <Text size="xs" tone="muted">
-            {updatedAt
-              ? `更新于 ${publicationTime(updatedAt)}`
-              : "公开事件发布后显示更新时间"}
-          </Text>
-        </Content>
-        <Content className="hidden items-center gap-2 md:flex">
-          <Form
-            action="/discover"
-            role="search"
-            aria-label="搜索事件、主题或来源"
-            className="w-70"
-          >
-            <Field>
-              <FieldLabel htmlFor={searchId} className="sr-only">
-                搜索事件、主题或来源
-              </FieldLabel>
-              <InputGroup>
-                <InputGroupAddon>
-                  <SearchIcon />
-                </InputGroupAddon>
-                <InputGroupInput
-                  id={searchId}
-                  name="q"
-                  type="search"
-                  maxLength={200}
-                  placeholder="搜索事件、主题或来源"
-                />
-              </InputGroup>
-            </Field>
-          </Form>
-          <Button asChild>
-            <Link href="/feed/daily.xml">订阅日报</Link>
-          </Button>
-        </Content>
-      </Content>
+      <PageHeader
+        title="今日 AI 热点"
+        description={
+          updatedAt ? `更新于 ${publicationTime(updatedAt)}` : undefined
+        }
+        actions={
+          <Content className="hidden items-center gap-2 md:flex">
+            <Form
+              action="/discover"
+              role="search"
+              aria-label="搜索事件、主题或来源"
+              className="w-70"
+            >
+              <Field>
+                <FieldLabel htmlFor={searchId} className="sr-only">
+                  搜索事件、主题或来源
+                </FieldLabel>
+                <InputGroup>
+                  <InputGroupAddon>
+                    <SearchIcon />
+                  </InputGroupAddon>
+                  <InputGroupInput
+                    id={searchId}
+                    name="q"
+                    type="search"
+                    maxLength={200}
+                    placeholder="搜索事件、主题或来源"
+                  />
+                </InputGroup>
+              </Field>
+            </Form>
+            <Button asChild>
+              <Link href="/feed/daily.xml">订阅日报</Link>
+            </Button>
+          </Content>
+        }
+      />
       <Content
         as="section"
         aria-label="个人关键词监控"
@@ -233,7 +230,7 @@ export function HomeContent({
               description={
                 emptyCategory
                   ? "试试其他分类，或查看全部已发布的事件。"
-                  : "公开事件发布后，这里会显示进展、来源与热度。你也可以先探索资讯，或设置自己的关键词监控。"
+                  : "试试探索资讯，或设置关键词监控。"
               }
               action={
                 emptyCategory ? (
@@ -247,7 +244,11 @@ export function HomeContent({
                   >
                     查看全部事件
                   </Button>
-                ) : undefined
+                ) : (
+                  <Button asChild variant="outline">
+                    <Link href="/discover?mode=all">探索资讯</Link>
+                  </Button>
+                )
               }
             />
           )}

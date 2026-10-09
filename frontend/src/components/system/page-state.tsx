@@ -24,7 +24,7 @@ type PageStateProps = {
   state: "loading" | "empty" | "error" | "forbidden" | "stale";
   eyebrow?: string;
   title: string;
-  description: string;
+  description?: string;
   action?: ReactNode;
   errorCode?: string;
   httpStatus?: number;
@@ -109,7 +109,8 @@ export function PageState({
       >
         <LoadingSignal />
         <UI.Text size="sm" tone="muted" className="mb-6">
-          {title}。{description}
+          {title}
+          {description ? `。${description}` : ""}
         </UI.Text>
         <LoadingContent layout={loadingLayout} />
       </UI.Content>
@@ -132,7 +133,7 @@ export function PageState({
           </AlertTitle>
           <AlertDescription>
             <UI.Content className="flex flex-col gap-2">
-              <UI.Text>{description}</UI.Text>
+              {description && <UI.Text>{description}</UI.Text>}
               {state === "stale" && staleAt && (
                 <UI.Text size="xs">
                   数据停留在 <UI.InlineCode>{staleAt}</UI.InlineCode>
@@ -156,7 +157,7 @@ export function PageState({
       aria-label={title}
     >
       <Empty>
-        <EmptyHeader className="gap-4">
+        <EmptyHeader>
           <UI.Text className="sr-only">{eyebrow}</UI.Text>
           <EmptyMedia>
             <Icon aria-hidden="true" />
@@ -166,26 +167,25 @@ export function PageState({
               {title}
             </UI.Heading>
           </EmptyTitle>
-          <EmptyDescription>{description}</EmptyDescription>
+          {description && <EmptyDescription>{description}</EmptyDescription>}
         </EmptyHeader>
-        <EmptyContent className="mt-4">
-          <UI.Content className="flex flex-wrap justify-center gap-3">
-            {action ?? (
-              <Button asChild>
-                <AuthLink
-                  href={state === "forbidden" ? "/login" : "/discover?mode=all"}
-                >
-                  {state === "forbidden" ? "登录" : "探索资讯"}
-                </AuthLink>
-              </Button>
-            )}
-            {state === "forbidden" && (
-              <Button asChild variant="secondary">
-                <UI.TextLink href="/">返回首页</UI.TextLink>
-              </Button>
-            )}
-          </UI.Content>
-        </EmptyContent>
+        {(action || state === "forbidden") && (
+          <EmptyContent>
+            <UI.Content className="flex flex-wrap justify-center gap-3">
+              {action ??
+                (state === "forbidden" ? (
+                  <Button asChild>
+                    <AuthLink href="/login">登录</AuthLink>
+                  </Button>
+                ) : null)}
+              {state === "forbidden" && (
+                <Button asChild variant="secondary">
+                  <UI.TextLink href="/">返回首页</UI.TextLink>
+                </Button>
+              )}
+            </UI.Content>
+          </EmptyContent>
+        )}
       </Empty>
     </UI.Content>
   );

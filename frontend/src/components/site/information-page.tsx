@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 import {
   NavigationMenu,
@@ -16,9 +17,7 @@ export function InformationPage({
 }) {
   return (
     <UI.Content>
-      <UI.Heading level={1} className="text-3xl font-medium">
-        {title}
-      </UI.Heading>
+      <PageHeader title={<>{title}</>} />
       <UI.Content className="text-muted-foreground mt-8 flex flex-col gap-y-6 text-sm leading-7">
         {children}
       </UI.Content>

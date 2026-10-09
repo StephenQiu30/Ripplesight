@@ -1,5 +1,7 @@
 "use client";
 
+import { PageHeader } from "@/components/system/page-header";
+
 import { SavedNote, readSavedNotes } from "./saved-note";
 import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -377,20 +379,34 @@ export function SavedItems({
         下载收藏
       </UI.TextLink>
       <UI.Content className="flex flex-wrap items-center justify-between gap-4">
-        <UI.Content layout="stack" className="gap-1">
-          <UI.Heading
-            level={pageTitle ? 1 : 2}
-            className={full && !pageTitle ? "sr-only" : undefined}
-          >
-            {full ? "收藏" : label}
-          </UI.Heading>
-          <UI.Text tone="muted" size="sm">
-            {!busy && !storageUnavailable
-              ? `共 ${ids.length} ${view === "read" ? "个已读标记" : "篇收藏"} · `
-              : ""}
-            仅保存在本机浏览器，不跨设备同步。
-          </UI.Text>
-        </UI.Content>
+        {pageTitle ? (
+          <PageHeader
+            title={full ? "收藏" : label}
+            description={
+              <>
+                {!busy && !storageUnavailable
+                  ? `共 ${ids.length} ${view === "read" ? "个已读标记" : "篇收藏"} · `
+                  : ""}
+                仅保存在本机浏览器，不跨设备同步。
+              </>
+            }
+          />
+        ) : (
+          <UI.Content layout="stack" className="gap-1">
+            <UI.Heading
+              level={pageTitle ? 1 : 2}
+              className={full && !pageTitle ? "sr-only" : undefined}
+            >
+              {full ? "收藏" : label}
+            </UI.Heading>
+            <UI.Text tone="muted" size="sm">
+              {!busy && !storageUnavailable
+                ? `共 ${ids.length} ${view === "read" ? "个已读标记" : "篇收藏"} · `
+                : ""}
+              仅保存在本机浏览器，不跨设备同步。
+            </UI.Text>
+          </UI.Content>
+        )}
         {full ? (
           <Field className="w-full md:w-65">
             <FieldLabel htmlFor="saved-search" className="sr-only">

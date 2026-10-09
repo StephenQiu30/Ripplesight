@@ -1,4 +1,6 @@
 "use client";
+
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 
 import { AlertDescription, Alert } from "@/components/ui/alert";
@@ -1084,12 +1086,10 @@ export function OperationsWorkspace() {
       <UI.Content className="grid gap-10">
         <UI.Content className="flex flex-wrap items-center justify-between gap-4">
           <UI.Content>
-            <UI.Heading level={1} className="text-3xl font-semibold">
-              运营管理
-            </UI.Heading>
-            <UI.Text className="text-muted-foreground mt-2 text-sm">
-              独立运营权限 · Token 仅保留在当前页面内存
-            </UI.Text>
+            <PageHeader
+              title={<>运营管理</>}
+              description={<>独立运营权限 · Token 仅保留在当前页面内存</>}
+            />
           </UI.Content>
           <Link href="/feedback" className="text-sm underline">
             打开反馈入口

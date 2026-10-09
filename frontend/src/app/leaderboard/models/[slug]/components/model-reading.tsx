@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import {
@@ -37,25 +38,29 @@ import {
 export function ModelReading({ data }: { data: HotKeyAPI.ModelDetailView }) {
   return (
     <UI.Content className="flex min-w-0 flex-col gap-8">
-      <UI.Content as="header" className="flex flex-col gap-3">
-        <UI.TextLink href="/leaderboard">
-          <UI.Text as="span" tone="muted" size="sm">
-            ← 模型榜
+      <PageHeader
+        title={
+          <UI.Text as="span" className="flex min-w-0 items-center gap-3">
+            <ModelMark model={data.model} />
+            <UI.Text as="span" className="min-w-0 break-words">
+              {data.model.name}
+            </UI.Text>
           </UI.Text>
-        </UI.TextLink>
-        <UI.Content className="flex items-center gap-3">
-          <ModelMark model={data.model} />
-          <UI.Heading level={1} className="min-w-0 break-words">
-            {data.model.name}
-          </UI.Heading>
-        </UI.Content>
-        <UI.Text tone="muted" size="sm">
-          {data.model.provider ?? "运营方未知"} · 发布日期{" "}
-          {data.model.released_at ?? "未知"}
-          {data.context_window_tokens === null
-            ? null
-            : ` · 上下文 ${data.context_window_tokens.toLocaleString("zh-CN")} token`}
-        </UI.Text>
+        }
+        description={
+          <>
+            {data.model.provider ?? "运营方未知"} · 发布日期{" "}
+            {data.model.released_at ?? "未知"}
+            {data.context_window_tokens === null
+              ? null
+              : ` · 上下文 ${data.context_window_tokens.toLocaleString("zh-CN")} token`}
+          </>
+        }
+        breadcrumbs={[
+          { label: "模型榜", href: "/leaderboard" },
+          { label: "模型证据" },
+        ]}
+      >
         <RunStamp run={data.run} />
         {data.historical ? (
           <Alert role="note">
@@ -69,7 +74,7 @@ export function ModelReading({ data }: { data: HotKeyAPI.ModelDetailView }) {
             查看公开模型权重
           </UI.TextLink>
         ) : null}
-      </UI.Content>
+      </PageHeader>
       <Separator />
       <UI.Content
         as="section"

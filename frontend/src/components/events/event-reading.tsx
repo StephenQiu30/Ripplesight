@@ -1,13 +1,6 @@
+import { PageHeader } from "@/components/system/page-header";
 import type { ReactNode } from "react";
 import * as UI from "@/components/ui/content";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
 import {
   Item,
   ItemContent,
@@ -61,24 +54,11 @@ export function EventHeader({
   actions?: ReactNode;
 }) {
   return (
-    <UI.Content as="header" className="flex flex-col gap-4">
-      <Breadcrumb aria-label="面包屑">
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <UI.TextLink href={href}>事件</UI.TextLink>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>事件详情</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
-      <UI.Content className="flex flex-wrap items-start justify-between gap-4">
-        <UI.Heading level={1}>{title}</UI.Heading>
-        {actions}
-      </UI.Content>
+    <PageHeader
+      title={title}
+      actions={actions}
+      breadcrumbs={[{ label: "事件", href }, { label: "事件详情" }]}
+    >
       <UI.Content className="flex flex-wrap gap-x-5 gap-y-2">
         <UI.Text size="xs" tone="muted">
           首次{firstSeenBasis === "published" ? "发布" : "发现"}{" "}
@@ -120,7 +100,7 @@ export function EventHeader({
             : ""}
         </UI.Text>
       </UI.Content>
-    </UI.Content>
+    </PageHeader>
   );
 }
 
