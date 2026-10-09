@@ -288,13 +288,24 @@ export function TopicForm({
               error={fieldErrors.match_any}
             />
             {sourcesState.status === "ready" ? (
-              <TopicSettingsFields
-                sourceOptions={sourcesState.sourceOptions}
-                sourceKeys={sourceKeys}
-                onSourceKeysChange={setSourceKeys}
-                disabled={isSubmitting}
-                fieldErrors={fieldErrors}
-              />
+              <UI.Content layout="stack" className="gap-3">
+                <TopicSettingsFields
+                  sourceOptions={sourcesState.sourceOptions}
+                  sourceKeys={sourceKeys}
+                  onSourceKeysChange={setSourceKeys}
+                  disabled={isSubmitting}
+                  fieldErrors={fieldErrors}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="self-start"
+                  disabled={isSubmitting}
+                  onClick={() => void reloadSources()}
+                >
+                  刷新平台状态
+                </Button>
+              </UI.Content>
             ) : sourcesState.status === "loading" ? (
               <Field>
                 <FieldLabel>信息来源</FieldLabel>

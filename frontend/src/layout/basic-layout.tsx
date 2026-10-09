@@ -15,11 +15,11 @@ import {
   type RefObject,
 } from "react";
 
-import { BasicFooter } from "./basic-footer";
 import { BasicMobileHeader, BasicMobileNavigation } from "./basic-sidebar";
 import { SidebarLayout } from "./sidebar-layout";
 import { PageContainer } from "./page-container";
 import { IdentitySessionProvider } from "@/components/auth/session-context";
+import { LoginProvider } from "@/components/auth/login-context";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "./theme-toggle";
 
@@ -40,7 +40,6 @@ export function BasicLayout({
 }) {
   const pathname = usePathname();
   const mainRef = useRef<HTMLElement>(null);
-  const isLogin = pathname === "/login";
 
   useEffect(() => {
     if (mainRef.current) mainRef.current.scrollTop = 0;
@@ -49,59 +48,46 @@ export function BasicLayout({
   return (
     <ThemeProvider>
       <IdentitySessionProvider session={session}>
-        <LayoutScrollContext.Provider value={mainRef}>
-          <TooltipProvider>
-            <SidebarProvider className="h-dvh min-h-0 overflow-hidden print:block print:h-auto print:overflow-visible">
-              <Button
-                asChild
-                className="sr-only focus-within:not-sr-only focus-within:fixed focus-within:top-3 focus-within:left-5 focus-within:z-50"
-              >
-                <UI.TextLink href="#page-content">跳到正文</UI.TextLink>
-              </Button>
-              <ShellLayout isLogin={isLogin}>
-                <SidebarInset
+        <LoginProvider>
+          <LayoutScrollContext.Provider value={mainRef}>
+            <TooltipProvider>
+              <SidebarProvider className="h-dvh min-h-0 overflow-hidden print:block print:h-auto print:overflow-visible">
+                <Button
                   asChild
-                  id="main-content"
-                  tabIndex={-1}
-                  data-login={isLogin || undefined}
-                  className="min-h-0 min-w-0 overflow-clip pb-16 focus-visible:outline-none data-[login=true]:pb-0 md:pb-0 print:overflow-visible print:pb-0"
+                  className="sr-only focus-within:not-sr-only focus-within:fixed focus-within:top-3 focus-within:left-5 focus-within:z-50"
                 >
-                  <UI.Content
-                    as={isLogin ? "div" : "main"}
-                    className="flex min-h-0 flex-1 flex-col"
+                  <UI.TextLink href="#page-content">跳到正文</UI.TextLink>
+                </Button>
+                <SidebarLayout>
+                  <SidebarInset
+                    asChild
+                    id="main-content"
+                    tabIndex={-1}
+                    className="min-h-0 min-w-0 overflow-clip pb-16 focus-visible:outline-none data-[login=true]:pb-0 md:pb-0 print:overflow-visible print:pb-0"
                   >
-                    {isLogin ? null : <BasicMobileHeader />}
-                    <PageContainer
-                      scrollRef={mainRef}
-                      edgeToEdge={isLogin}
-                      footer={isLogin ? <BasicFooter /> : undefined}
+                    <UI.Content
+                      as="main"
+                      className="flex min-h-0 flex-1 flex-col"
                     >
-                      {children}
-                    </PageContainer>
-                  </UI.Content>
-                </SidebarInset>
-              </ShellLayout>
-              {isLogin ? null : <BasicMobileNavigation />}
-            </SidebarProvider>
-          </TooltipProvider>
-          <Toaster
-            position="top-right"
-            closeButton
-            duration={6000}
-            containerAriaLabel="通知"
-          />
-        </LayoutScrollContext.Provider>
+                      <BasicMobileHeader />
+                      <PageContainer scrollRef={mainRef}>
+                        {children}
+                      </PageContainer>
+                    </UI.Content>
+                  </SidebarInset>
+                </SidebarLayout>
+                <BasicMobileNavigation />
+              </SidebarProvider>
+            </TooltipProvider>
+            <Toaster
+              position="top-right"
+              closeButton
+              duration={6000}
+              containerAriaLabel="通知"
+            />
+          </LayoutScrollContext.Provider>
+        </LoginProvider>
       </IdentitySessionProvider>
     </ThemeProvider>
   );
-}
-
-function ShellLayout({
-  isLogin,
-  children,
-}: {
-  isLogin: boolean;
-  children: ReactNode;
-}) {
-  return isLogin ? children : <SidebarLayout>{children}</SidebarLayout>;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { AuthLink as Link } from "@/components/auth/auth-link";
 import { useEffect, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SearchIcon, ArrowUpRightIcon } from "lucide-react";
@@ -111,6 +111,28 @@ export function HomeContent({
           </Form>
           <Button asChild>
             <Link href="/feed/daily.xml">订阅日报</Link>
+          </Button>
+        </Content>
+      </Content>
+      <Content
+        as="section"
+        aria-label="个人关键词监控"
+        className="flex flex-wrap items-center justify-between gap-4 rounded-xl border p-4"
+      >
+        <Content layout="stack" className="gap-1">
+          <Heading level={2} appearance="sidebar">
+            关注你自己的关键词
+          </Heading>
+          <Text tone="muted" size="sm">
+            填写关键词，选择已接入的平台，在监控主题中查看相关帖子与评论。个人结果由你决定何时采集。
+          </Text>
+        </Content>
+        <Content className="flex flex-wrap gap-2">
+          <Button asChild>
+            <Link href="/monitors/new">设置关键词</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/sources">平台接入</Link>
           </Button>
         </Content>
       </Content>

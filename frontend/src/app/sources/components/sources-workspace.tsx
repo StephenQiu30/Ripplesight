@@ -37,9 +37,9 @@ export function SourcesWorkspace() {
         <TabsTrigger value="coverage">采集覆盖</TabsTrigger>
       </TabsList>
       <TabsContent value="settings" className="flex flex-col gap-10">
-        <PublicPlatformCatalog />
-        <Separator />
         <SourceSettings />
+        <Separator />
+        <PublicPlatformCatalog />
       </TabsContent>
       <TabsContent value="coverage">
         <SourceCoveragePanel />

@@ -1,15 +1,5 @@
-import { LoginExperience } from "./components/login-experience";
-import {
-  LoginFormLayout,
-  LoginFormSkeleton,
-} from "./components/login-form-layout";
+import { HomeLoading } from "@/app/components/home-loading";
 
 export default function Loading() {
-  return (
-    <LoginExperience>
-      <LoginFormLayout loading>
-        <LoginFormSkeleton />
-      </LoginFormLayout>
-    </LoginExperience>
-  );
+  return <HomeLoading />;
 }

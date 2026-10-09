@@ -13,8 +13,6 @@ vi.mock("next/navigation", () => ({
   usePathname: () => route.pathname,
   useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
 }));
-vi.mock("@/api/xitongzhuangtai", () => ({ getReadiness: vi.fn() }));
-import { getReadiness } from "@/api/xitongzhuangtai";
 import { BasicLayout, useLayoutScrollContainer } from "@/layout/basic-layout";
 import { PageState } from "@/components/system/page-state";
 const page = <h1>页面正文</h1>;
@@ -31,8 +29,6 @@ const session: HotKeyAPI.IdentitySessionView = {
 beforeEach(() => {
   route.pathname = "/";
   localStorage.removeItem("ripplesight-sidebar");
-  vi.mocked(getReadiness).mockReset();
-  vi.mocked(getReadiness).mockRejectedValue(new Error("service unavailable"));
 });
 afterEach(cleanup);
 const sidebar = () =>
@@ -98,39 +94,6 @@ describe("Figma reading shell", () => {
       expect(sidebar().getByRole("link", { name: "今日热点" })).toBeTruthy();
     },
   );
-  it.each([
-    ["ready", "服务就绪"],
-    ["ok", "服务在线"],
-  ] as const)("uses the actual readiness %s", async (status, label) => {
-    vi.mocked(getReadiness).mockResolvedValue({ status });
-    render(<BasicLayout>{page}</BasicLayout>);
-    expect(
-      within(await screen.findByRole("status", { name: "服务状态" })).getByText(
-        label,
-      ),
-    ).toBeTruthy();
-    expect(getReadiness).toHaveBeenCalledWith({
-      signal: expect.any(AbortSignal),
-    });
-    expect(screen.queryByText(/采集正常|未读/)).toBeNull();
-  });
-  it.each([undefined, null, {}, { status: "unexpected" }])(
-    "hides unavailable readiness without changing identity: %s",
-    async (data) => {
-      vi.mocked(getReadiness).mockResolvedValue(data as HotKeyAPI.HealthView);
-      render(<BasicLayout session={session}>{page}</BasicLayout>);
-      await waitFor(() => expect(getReadiness).toHaveBeenCalled());
-      expect(screen.queryByRole("status", { name: "服务状态" })).toBeNull();
-      expect(sidebar().getByRole("button", { name: "账户菜单" })).toBeTruthy();
-    },
-  );
-  it("aborts readiness when the shell unmounts", () => {
-    vi.mocked(getReadiness).mockImplementation(() => new Promise(() => {}));
-    const view = render(<BasicLayout>{page}</BasicLayout>);
-    const signal = vi.mocked(getReadiness).mock.calls[0][0]?.signal;
-    view.unmount();
-    expect(signal?.aborted).toBe(true);
-  });
   it("offers design navigation to guests while keeping private routes protected by the existing entry points", () => {
     render(<BasicLayout>{page}</BasicLayout>);
     expect(
@@ -148,7 +111,13 @@ describe("Figma reading shell", () => {
       within(screen.getByRole("navigation", { name: "工作台导航" }))
         .getAllByRole("link")
         .map((link) => link.getAttribute("href")),
-    ).toEqual(["/topics", "/alerts", "/discover/starred"]);
+    ).toEqual([
+      "/monitors/new",
+      "/sources",
+      "/topics",
+      "/alerts",
+      "/discover/starred",
+    ]);
     const mobile = within(screen.getByRole("navigation", { name: "手机导航" }));
     expect(mobile.getAllByRole("link").map((link) => link.textContent)).toEqual(
       ["首页", "探索", "收藏", "监控"],
@@ -193,7 +162,6 @@ describe("Figma reading shell", () => {
     "/workspace",
     "/jobs/job",
     "/content/content",
-    "/sources/source",
     "/operations/models",
     "/publication/manage",
     "/editorial-sources/source",
@@ -228,26 +196,13 @@ describe("Figma reading shell", () => {
     await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(trigger));
   });
-  it("omits product navigation on login and restores it on exit", () => {
+  it("retains public navigation behind the login route dialog", () => {
     route.pathname = "/login";
-    const view = render(<BasicLayout>{page}</BasicLayout>);
-    expect(
-      screen.queryByRole("complementary", { name: "站点侧边栏" }),
-    ).toBeNull();
-    expect(screen.queryByRole("navigation", { name: "手机导航" })).toBeNull();
-    expect(getReadiness).not.toHaveBeenCalled();
-    const footer = screen.getByRole("contentinfo");
-    expect(footer.closest("main, [role=region]")).toBeNull();
-    expect(screen.getAllByRole("main")).toHaveLength(1);
-    expect(
-      screen.getByRole("main").contains(screen.getByText("页面正文")),
-    ).toBe(true);
-    expect(document.getElementById("page-content")).toBe(
-      screen.getByRole("main"),
-    );
-    route.pathname = "/";
-    view.rerender(<BasicLayout>{page}</BasicLayout>);
+    render(<BasicLayout>{page}</BasicLayout>);
     expect(sidebar().getByRole("link", { name: "今日热点" })).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: "手机导航" })).toBeTruthy();
+    expect(screen.getAllByRole("main")).toHaveLength(1);
+    expect(screen.queryByRole("contentinfo")).toBeNull();
   });
   it("resets reading scroll on route change and preserves it within a route", () => {
     const view = render(<BasicLayout>{page}</BasicLayout>);
@@ -326,14 +281,14 @@ describe("Figma reading shell", () => {
     fireEvent.keyDown(window, { key: "b", ctrlKey: true });
     expect(sidebar().getByRole("button", { name: "展开侧边栏" })).toBeTruthy();
   });
-  it("uses the four design footer links on login", () => {
-    route.pathname = "/login";
+  it("exposes platform configuration as a primary destination", () => {
+    route.pathname = "/sources";
     render(<BasicLayout>{page}</BasicLayout>);
-    const footer = within(screen.getByRole("contentinfo"));
     expect(
-      footer.getAllByRole("link").map((link) => link.getAttribute("href")),
-    ).toEqual(["/about", "/privacy", "/terms", "/changelog"]);
-    expect(footer.queryByText("使用指南")).toBeNull();
+      sidebar()
+        .getByRole("link", { name: "平台接入", current: "page" })
+        .getAttribute("href"),
+    ).toBe("/sources");
   });
   it("recovers active navigation when router pathname becomes available", () => {
     route.pathname = null;

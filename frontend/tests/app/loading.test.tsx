@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { expectOnePageHeading } from "../page-heading";
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Loading from "@/app/loading";
@@ -44,7 +44,7 @@ describe("route loading", () => {
     ).toBe("true");
   });
 
-  it("keeps the login content visible while announcing its non-interactive placeholder", () => {
+  it("retains public navigation while loading the login route", () => {
     route.pathname = "/login";
     render(
       <BasicLayout>
@@ -52,33 +52,10 @@ describe("route loading", () => {
       </BasicLayout>,
     );
     expect(
-      screen.getByRole("link", { name: "不登录，先看今日热点" }),
+      screen.getByRole("complementary", { name: "站点侧边栏" }),
     ).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "登录" })).toBeTruthy();
-    expect(
-      screen.getByRole("complementary", { name: "Ripplesight" }),
-    ).toBeTruthy();
-    expect(
-      within(screen.getByRole("main"))
-        .getAllByRole("link", { name: "使用条款" })[0]
-        .getAttribute("href"),
-    ).toBe("/terms");
-    expect(
-      screen
-        .getByRole("status", { name: "正在读取登录方式" })
-        .parentElement?.getAttribute("aria-busy"),
-    ).toBe("true");
-    const main = within(screen.getByRole("main"));
-    expect(main.queryByRole("textbox")).toBeNull();
-    expect(
-      within(
-        screen.getByRole("status", { name: "正在读取登录方式" }).parentElement!,
-      ).queryByRole("button"),
-    ).toBeNull();
-    expect(
-      within(screen.getByRole("contentinfo")).getByRole("link", {
-        name: "更新日志",
-      }),
-    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: "今日热点" })).toBeTruthy();
+    expect(screen.getByRole("status", { name: "首页加载中" })).toBeTruthy();
+    expect(screen.queryByRole("textbox")).toBeNull();
   });
 });

@@ -136,3 +136,40 @@ it.each([
     expect(api.create).not.toHaveBeenCalled();
   },
 );
+
+it("refreshes platform choices after connection without losing the keyword draft", async () => {
+  api.sources.mockResolvedValueOnce({ items: [], next_cursor: null });
+  render(<TopicForm />);
+  fireEvent.change(screen.getByLabelText("想关注的关键词"), {
+    target: { value: "我自己的关键词" },
+  });
+  await screen.findByRole("button", { name: "刷新平台状态" });
+  api.sources.mockResolvedValueOnce({
+    items: [
+      {
+        source_key: "bilibili",
+        display_name: "B站",
+        connection_status: "active",
+        has_credentials: false,
+        capabilities: [
+          {
+            capability: "search",
+            display_name: "关键词搜索",
+            scheduled: {
+              status: "pending_verification",
+              next_action: "待验证",
+            },
+          },
+        ],
+      },
+    ],
+    next_cursor: null,
+  });
+  fireEvent.click(screen.getByRole("button", { name: "刷新平台状态" }));
+  const platform = await screen.findByRole("switch", { name: "B站" });
+  expect(platform.hasAttribute("disabled")).toBe(false);
+  expect(
+    (screen.getByLabelText("想关注的关键词") as HTMLTextAreaElement).value,
+  ).toBe("我自己的关键词");
+  expect(api.create).not.toHaveBeenCalled();
+});

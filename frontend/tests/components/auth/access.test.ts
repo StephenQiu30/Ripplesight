@@ -50,7 +50,6 @@ describe("welcome and workspace access", () => {
 
   it.each([
     undefined,
-    "/",
     "/login",
     "https://evil.example",
     "//evil.example",
@@ -63,6 +62,19 @@ describe("welcome and workspace access", () => {
     "/topics-bad",
   ])("rejects an unsafe return target %s", (path) => {
     expect(safeReturnTo(path)).toBe("/topics");
+  });
+
+  it.each(["/about", "/privacy", "/terms", "/contact", "/changelog"])(
+    "returns to %s after optional login",
+    (path) => {
+      expect(safeReturnTo(path)).toBe(path);
+    },
+  );
+
+  it("allows returning to public home after optional login", () => {
+    expect(safeReturnTo("/?category=research#page-content")).toBe(
+      "/?category=research#page-content",
+    );
   });
 
   it("preserves a valid workspace query and anchor", () => {

@@ -1,3 +1,4 @@
+import { AuthLink } from "@/components/auth/auth-link";
 import type { ReactNode } from "react";
 import { CircleAlertIcon, EyeIcon, LockKeyholeIcon } from "lucide-react";
 
@@ -169,11 +170,11 @@ export function PageState({
           <UI.Content className="flex flex-wrap justify-center gap-3">
             {action ?? (
               <Button asChild>
-                <UI.TextLink
+                <AuthLink
                   href={state === "forbidden" ? "/login" : "/discover?mode=all"}
                 >
                   {state === "forbidden" ? "登录" : "探索资讯"}
-                </UI.TextLink>
+                </AuthLink>
               </Button>
             )}
             {state === "forbidden" && (
