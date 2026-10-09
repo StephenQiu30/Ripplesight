@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { Content, Text } from "@/components/ui/content";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 
 const LoadingContext = createContext<(() => () => void) | null>(null);
 
@@ -33,11 +33,11 @@ export function GlobalLoadingProvider({ children }: { children: ReactNode }) {
       </Text>
       {pending > 0 && (
         <Content
-          data-slot="global-loading-progress"
+          data-slot="global-loading-indicator"
           aria-hidden="true"
-          className="pointer-events-none fixed inset-x-0 top-0 z-50"
+          className="pointer-events-none fixed right-6 bottom-20 z-50 md:bottom-6"
         >
-          <Skeleton className="bg-foreground h-1 w-full rounded-none motion-reduce:animate-none" />
+          <Spinner className="size-5" />
         </Content>
       )}
     </LoadingContext.Provider>
