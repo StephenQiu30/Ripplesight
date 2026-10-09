@@ -1,14 +1,13 @@
 import * as UI from "@/components/ui/content";
 import { Suspense } from "react";
-import { Skeleton } from "@/components/ui/skeleton";
-import { LoginLiveStories } from "./components/login-live-stories";
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { headers } from "next/headers";
 
 import { safeReturnTo } from "@/components/auth/access";
-import { LoginExperience } from "./components/login-experience";
-import { LoginForm } from "./components/login-form";
+import Home from "@/app/page";
+import { HomeLoading } from "@/app/components/home-loading";
+import { LoginRouteDialog } from "@/components/auth/login-route-dialog";
 import { PageState } from "@/components/system/page-state";
 import { Button } from "@/components/ui/button";
 
@@ -33,8 +32,8 @@ export default async function LoginPage({
   const returnTo = safeReturnTo(
     params.returnTo ?? params.return_to ?? params.next,
   );
-  if ((await headers()).get("x-hotkey-session-error") === "1")
-    return (
+  const errorContent =
+    (await headers()).get("x-hotkey-session-error") === "1" ? (
       <PageState
         state="error"
         eyebrow="服务暂时不可用"
@@ -46,16 +45,17 @@ export default async function LoginPage({
           </Button>
         }
       />
-    );
+    ) : undefined;
   return (
-    <LoginExperience
-      liveStories={
-        <Suspense fallback={<Skeleton className="h-28 w-full" />}>
-          <LoginLiveStories />
-        </Suspense>
-      }
-    >
-      <LoginForm returnTo={returnTo} oauthFailed={!!params.error} />
-    </LoginExperience>
+    <>
+      <Suspense fallback={<HomeLoading />}>
+        <Home searchParams={Promise.resolve({})} />
+      </Suspense>
+      <LoginRouteDialog
+        returnTo={returnTo}
+        oauthFailed={!!params.error}
+        errorContent={errorContent}
+      />
+    </>
   );
 }

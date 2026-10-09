@@ -8,10 +8,23 @@ import { Skeleton } from "@/components/ui/skeleton";
 export function LoginFormLayout({
   children,
   loading = false,
+  embedded = false,
 }: {
   children: ReactNode;
   loading?: boolean;
+  embedded?: boolean;
 }) {
+  if (embedded)
+    return (
+      <UI.Content layout="stack" className="gap-5">
+        <UI.Content aria-busy={loading}>{children}</UI.Content>
+        <UI.Text tone="muted" size="xs">
+          登录即表示你已阅读<UI.TextLink href="/terms">使用条款</UI.TextLink>与
+          <UI.TextLink href="/privacy">隐私说明</UI.TextLink>
+          。本站仅供个人非商业使用。
+        </UI.Text>
+      </UI.Content>
+    );
   return (
     <UI.Content
       as="section"

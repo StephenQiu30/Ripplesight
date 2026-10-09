@@ -81,10 +81,15 @@ export function safeReturnTo(value?: string | null): string {
       destination.origin !== "https://hotkey.local" ||
       /[\\\u0000-\u0020\u007f]/.test(decodedPath) ||
       decodedPath.startsWith("//") ||
-      !SYSTEM_PAGE_PREFIXES.some(
-        (prefix) =>
-          destination.pathname === prefix ||
-          destination.pathname.startsWith(`${prefix}/`),
+      !(
+        PUBLIC_PAGE_PATHS.some(
+          (path) => path !== "/login" && path === destination.pathname,
+        ) ||
+        SYSTEM_PAGE_PREFIXES.some(
+          (prefix) =>
+            destination.pathname === prefix ||
+            destination.pathname.startsWith(`${prefix}/`),
+        )
       )
     )
       return "/topics";

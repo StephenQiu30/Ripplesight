@@ -1,15 +1,16 @@
 "use client";
 
-import Link from "next/link";
+import { AuthLink as Link } from "@/components/auth/auth-link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+
 import {
   BellRingIcon,
   BookmarkIcon,
   ActivityIcon,
   EyeIcon,
+  Settings2Icon,
+  PlugIcon,
   ChartNoAxesColumnIcon,
-  CircleIcon,
   CompassIcon,
   FileTextIcon,
   HomeIcon,
@@ -20,7 +21,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { getReadiness } from "@/api/xitongzhuangtai";
 import { AccountMenu } from "@/components/auth/account-menu";
 import { useIdentitySession } from "@/components/auth/session-context";
 import { BrandLockup } from "@/components/brand/brand-lockup";
@@ -101,6 +101,13 @@ const starredDestination: Destination = {
   match: ["/discover/starred"],
 };
 const workspaceDestinations: Destination[] = [
+  {
+    href: "/monitors/new",
+    label: "设置关键词",
+    icon: Settings2Icon,
+    match: ["/monitors/new"],
+  },
+  { href: "/sources", label: "平台接入", icon: PlugIcon, match: ["/sources"] },
   {
     href: "/topics",
     label: "监控主题",
@@ -204,44 +211,6 @@ function MoreMenuItems({ mobile = false }: { mobile?: boolean }) {
   );
 }
 
-function ServiceStatus() {
-  const [status, setStatus] = useState<HotKeyAPI.HealthView["status"] | null>(
-    null,
-  );
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void getReadiness({ signal: controller.signal }).then(
-      (data) => {
-        if (
-          !controller.signal.aborted &&
-          (data?.status === "ready" || data?.status === "ok")
-        )
-          setStatus(data.status);
-      },
-      () => {
-        if (!controller.signal.aborted) setStatus(null);
-      },
-    );
-    return () => controller.abort();
-  }, []);
-
-  if (!status) return null;
-  const label = status === "ready" ? "服务就绪" : "服务在线";
-  return (
-    <Content
-      role="status"
-      aria-label="服务状态"
-      className="flex items-center gap-2 px-1"
-    >
-      <CircleIcon aria-hidden="true" className="size-1.5 fill-current" />
-      <Text size="xs" className="group-data-[collapsible=icon]:hidden">
-        {label}
-      </Text>
-    </Content>
-  );
-}
-
 function DestinationGroup({
   label,
   navLabel,
@@ -322,7 +291,6 @@ export function BasicSidebar() {
         />
       </SidebarContent>
       <SidebarFooter className="gap-3 px-3 py-5 group-data-[collapsible=icon]:px-2">
-        <ServiceStatus />
         <Content className="flex items-center justify-between gap-1 group-data-[collapsible=icon]:flex-col">
           {session ? (
             <AccountMenu />

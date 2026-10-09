@@ -43,6 +43,7 @@ export type TopicSourceOption = {
   displayName: string;
   selectable: boolean;
   reason: string;
+  capabilities?: string;
 };
 
 export function selectableTopicSources(
@@ -64,6 +65,9 @@ export function selectableTopicSources(
         sourceKey: platform.source_key,
         displayName: platform.display_name,
         selectable,
+        capabilities: platform.capabilities
+          .map((capability) => capability.display_name)
+          .join(" · "),
         reason: selectable
           ? status === "available"
             ? "已验证；恢复时还会检查预算。"
@@ -112,7 +116,7 @@ export function TopicSettingsFields({
     <FieldSet disabled={disabled}>
       <FieldLegend variant="label">信息来源</FieldLegend>
       <FieldDescription>
-        选择你想持续关注的来源，保存后生效。也可以先保存，之后再配置。
+        从系统内置平台中选择关键词搜索来源。未接入的平台先完成连接配置；新主题保存后暂停，由你开始运行。
       </FieldDescription>
       {sourceOptions.length > 0 ? (
         <FieldGroup className="gap-5">
@@ -131,6 +135,9 @@ export function TopicSettingsFields({
                     <FieldLabel htmlFor={`source-${source.sourceKey}`}>
                       {source.displayName}
                     </FieldLabel>
+                    {source.capabilities ? (
+                      <FieldDescription>{source.capabilities}</FieldDescription>
+                    ) : null}
                     <FieldDescription
                       id={`source-${source.sourceKey}-description`}
                     >
@@ -158,7 +165,9 @@ export function TopicSettingsFields({
         </FieldDescription>
       )}
       <Button asChild variant="link" className="w-fit px-0">
-        <Link href="/sources">管理来源</Link>
+        <Link href="/sources" target="_blank" rel="noopener noreferrer">
+          配置平台接入（新标签页）
+        </Link>
       </Button>
     </FieldSet>
   );

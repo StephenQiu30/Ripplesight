@@ -48,9 +48,13 @@ type LoginField = "username" | "password" | "email" | "code";
 export function LoginForm({
   returnTo,
   oauthFailed = false,
+  embedded = false,
+  onAuthenticated,
 }: {
   returnTo: string;
   oauthFailed?: boolean;
+  embedded?: boolean;
+  onAuthenticated?: () => void;
 }) {
   const router = useRouter();
   const [options, setOptions] = useState<HotKeyAPI.LoginOptionsView | null>(
@@ -189,6 +193,7 @@ export function LoginForm({
   }
 
   function enterWorkspace() {
+    onAuthenticated?.();
     router.replace(safeReturnTo(returnTo));
     router.refresh();
   }
@@ -256,6 +261,7 @@ export function LoginForm({
       if (signal.aborted) return;
       setCode("");
       if (!session.user.has_password) {
+        onAuthenticated?.();
         router.replace(
           `/account?setup=1&returnTo=${encodeURIComponent(safeReturnTo(returnTo))}`,
         );
@@ -289,7 +295,7 @@ export function LoginForm({
   }
 
   return (
-    <LoginFormLayout loading={!options && !optionError}>
+    <LoginFormLayout embedded={embedded} loading={!options && !optionError}>
       {!options && !optionError && <LoginFormSkeleton />}
       {optionError && (
         <Empty>

@@ -1,6 +1,6 @@
 import * as UI from "@/components/ui/content";
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
-import Link from "next/link";
+import { AuthLink as Link } from "@/components/auth/auth-link";
 import { ArrowRightIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
