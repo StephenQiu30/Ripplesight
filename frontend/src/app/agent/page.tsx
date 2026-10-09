@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 import { ChevronDownIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -40,14 +41,16 @@ export default async function AgentPage() {
   return (
     <>
       <UI.Content>
-        <UI.Heading level={1} className="text-3xl font-medium">
-          让 Agent 读取资讯
-        </UI.Heading>
-        <UI.Text className="text-muted-foreground mt-5 text-sm leading-7">
-          匿名 MCP 使用同站 /public/mcp 的 HTTP POST
-          接入；/public/api/items、RSS 与 Markdown
-          读取同一明确发布账号的公开投影，Cookie不会改变该账号。未配置发布账号时保持未发布。读取不会抓取外站、调用模型或执行写入。
-        </UI.Text>
+        <PageHeader
+          title={<>让 Agent 读取资讯</>}
+          description={
+            <>
+              匿名 MCP 使用同站 /public/mcp 的 HTTP POST
+              接入；/public/api/items、RSS 与 Markdown
+              读取同一明确发布账号的公开投影，Cookie不会改变该账号。未配置发布账号时保持未发布。读取不会抓取外站、调用模型或执行写入。
+            </>
+          }
+        />
         <UI.Heading level={2} className="mt-10 text-lg font-medium">
           五个只读工具
         </UI.Heading>

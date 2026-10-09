@@ -1,4 +1,6 @@
 "use client";
+
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 
 import Link from "next/link";
@@ -33,24 +35,18 @@ export function TopicsWorkspace({
   const selectedTopicId = topicId ?? firstTopicId;
   return (
     <UI.Content className="flex min-w-0 flex-col gap-8">
-      <UI.Content className="flex flex-wrap items-center justify-between gap-4">
-        <UI.Content className="flex flex-col gap-2">
-          <UI.Heading level={1}>
-            {workspace ? "我的工作台" : "监控主题"}
-          </UI.Heading>
-          {
-            <UI.Text tone="muted" size="sm">
-              定时在各平台检索你关心的主题，汇总命中内容、评论与讨论变化。
-            </UI.Text>
-          }
-        </UI.Content>
-        <Button asChild size="navigation">
-          <Link href="/monitors/new">
-            <PlusIcon data-icon="inline-start" />
-            新建主题
-          </Link>
-        </Button>
-      </UI.Content>
+      <PageHeader
+        title={workspace ? "我的工作台" : "监控主题"}
+        description="跟踪关键词，查看各平台的命中内容与讨论。"
+        actions={
+          <Button asChild size="navigation">
+            <Link href="/monitors/new">
+              <PlusIcon data-icon="inline-start" />
+              新建主题
+            </Link>
+          </Button>
+        }
+      />
       <UI.Content className="flex min-w-0 flex-col items-stretch gap-8 lg:flex-row">
         <Collapsible
           open={topicsOpen || !selectedTopicId || listForbidden}

@@ -1,4 +1,5 @@
-import { Content, Heading, Text } from "@/components/ui/content";
+import { PageHeader } from "@/components/system/page-header";
+import { Content } from "@/components/ui/content";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LoadingSignal } from "@/components/system/global-loading";
 
@@ -13,10 +14,10 @@ export function HomeLoading() {
     >
       <LoadingSignal />
       <Content layout="stack" className="gap-1">
-        <Heading level={1}>今日 AI 热点</Heading>
-        <Text size="xs" tone="muted">
-          正在加载公开事件与日报…
-        </Text>
+        <PageHeader
+          title={<>今日 AI 热点</>}
+          description={<>正在加载公开事件与日报…</>}
+        />
       </Content>
       <Content
         aria-hidden="true"

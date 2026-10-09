@@ -1,4 +1,6 @@
 "use client";
+
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 
 import { Item } from "@/components/ui/item";
@@ -162,18 +164,11 @@ export function AccountSettings({
       aria-labelledby="account-title"
       className="flex w-full flex-col gap-8"
     >
-      <UI.Content as="header" className="flex flex-col gap-3">
-        <UI.Heading
-          level={1}
-          id="account-title"
-          className="text-3xl font-medium tracking-tight sm:text-4xl"
-        >
-          账户设置
-        </UI.Heading>
-        <UI.Text className="text-muted-foreground text-sm leading-6">
-          让资料与登录方式保持最新。
-        </UI.Text>
-      </UI.Content>
+      <PageHeader
+        title="账户设置"
+        titleId="account-title"
+        description="让资料与登录方式保持最新。"
+      />
       <UI.Content className="flex flex-col items-stretch gap-8 lg:flex-row lg:items-start lg:gap-12">
         <Item variant="muted" className="bg-muted items-stretch" asChild>
           <UI.Content

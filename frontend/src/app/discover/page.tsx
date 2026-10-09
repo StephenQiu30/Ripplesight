@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/system/page-header";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
@@ -136,12 +137,12 @@ async function DiscoveryReadingPage({ params }: { params: DiscoveryParams }) {
   const currentHref = discoveryHref(params, params.cursor);
   return (
     <UI.Content layout="stack" className="gap-6">
-      <UI.Content as="header" layout="stack" className="gap-2">
-        <UI.Heading level={1}>探索</UI.Heading>
-        <UI.Text tone="muted" size="sm">
-          检索事件与资讯，沿着来源阅读原文。评论与情感数据发布后开放检索。
-        </UI.Text>
-      </UI.Content>
+      <PageHeader
+        title={<>探索</>}
+        description={
+          <>检索事件与资讯，沿着来源阅读原文。评论与情感数据发布后开放检索。</>
+        }
+      />
       <DiscoveryFilters
         key={JSON.stringify(params)}
         {...scope}

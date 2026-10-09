@@ -70,6 +70,8 @@ ripplesight-server/
 
 Web 外壳使用 `BasicLayout → PageContainer`：前者管理侧栏、移动导航和会话，后者统一有限高度的正文滚动区与宽度，页脚仅登录页使用；页内标题由页面提供。`LayoutContainer` 只负责横向对齐。滚动引用指向 `PageContainer` 的正文区，路由切换、阅读定位和跳到正文共用该节点；打印恢复自然文档流。全站只保留一个 main，业务页面不另建全屏滚动容器。
 
+普通页头复用 `components/system/page-header.tsx` 的 `PageHeader`，统一标题、可选说明、操作与详情面包屑；面包屑直接组合现有 shadcn 基础组件。空状态由 `PageState` 组合 `Empty`，说明与操作均按当前场景提供，不自动添加无关跳转或技术诊断。刊物报头与登录表单保留专用排版。
+
 ## 4. 业务领域
 
 后端只允许下列顶层包，架构测试（`tests/architecture/test_structure.py`）会拒绝未登记的包。新增领域需要先修改本表和该测试。

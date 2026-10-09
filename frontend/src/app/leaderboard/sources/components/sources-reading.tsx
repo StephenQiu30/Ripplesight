@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 import {
   Item,
@@ -15,17 +16,24 @@ import { Separator } from "@/components/ui/separator";
 export function SourcesReading({ data }: { data: HotKeyAPI.SourcesView }) {
   return (
     <UI.Content className="flex min-w-0 flex-col gap-8">
-      <UI.Content as="header" className="flex flex-col gap-3">
-        <UI.Heading level={1}>评测来源与覆盖</UI.Heading>
-        <UI.Text tone="muted">
-          查看各项证据的运营方、用途与固定预算。注册来源不等于本轮已经采集，交叉参考和系统任务不重复计票。
-        </UI.Text>
+      <PageHeader
+        title={<>评测来源与覆盖</>}
+        description={
+          <>
+            查看各项证据的运营方、用途与固定预算。注册来源不等于本轮已经采集，交叉参考和系统任务不重复计票。
+          </>
+        }
+        breadcrumbs={[
+          { label: "模型榜", href: "/leaderboard" },
+          { label: "评测来源" },
+        ]}
+      >
         <RunStamp run={data.run} />
         <UI.Text tone="muted" size="xs">
           来源说明来自 AIHOT 2026-09-26
           固定注册表；成绩和证据时间以具体发布轮次为准。
         </UI.Text>
-      </UI.Content>
+      </PageHeader>
       {data.groups.length === 0 ? (
         <PageState
           headingLevel={2}

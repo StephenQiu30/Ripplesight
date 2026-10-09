@@ -1,4 +1,6 @@
 "use client";
+
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 
 import {
@@ -469,10 +471,14 @@ export function AlertsWorkspace() {
   return (
     <UI.Content className="flex min-w-0 flex-col gap-8">
       <UI.Content className="flex flex-col gap-3">
-        <UI.Heading level={1}>突发告警</UI.Heading>
-        <UI.Text tone="muted" size="sm">
-          使用已取得且许可有效的材料评估规则，查看触发与冷却记录。无法判定和送达未知分别记录；未知送达不会自动重发。
-        </UI.Text>
+        <PageHeader
+          title={<>突发告警</>}
+          description={
+            <>
+              使用已取得且许可有效的材料评估规则，查看触发与冷却记录。无法判定和送达未知分别记录；未知送达不会自动重发。
+            </>
+          }
+        />
       </UI.Content>
       <Alert role="status">
         <AlertDescription>

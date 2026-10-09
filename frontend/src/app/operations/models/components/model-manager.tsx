@@ -1,4 +1,6 @@
 "use client";
+
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
@@ -376,15 +378,15 @@ export function ModelManager() {
   return (
     <>
       <UI.Content className="flex flex-col gap-y-8">
-        <UI.Content as="header" className="flex flex-col gap-y-3">
-          <UI.Heading level={1} className="text-3xl font-medium tracking-tight">
-            模型配置与费用
-          </UI.Heading>
-          <UI.Text className="text-muted-foreground text-sm">
-            11
-            个能力独立配置；已受理任务保留原模型与预算。读取配置不会调用模型。
-          </UI.Text>
-        </UI.Content>
+        <PageHeader
+          title={<>模型配置与费用</>}
+          description={
+            <>
+              11
+              个能力独立配置；已受理任务保留原模型与预算。读取配置不会调用模型。
+            </>
+          }
+        />
         <UI.Content as="section" className="flex flex-wrap items-end gap-3">
           <Field className="min-w-0 flex-1 basis-full gap-2 sm:basis-64">
             <FieldLabel htmlFor="operator-token">操作员令牌</FieldLabel>

@@ -1,4 +1,6 @@
 "use client";
+
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 
 import { toast } from "sonner";
@@ -306,15 +308,10 @@ export function JobHistory() {
 
   return (
     <UI.Content>
-      <UI.Heading
-        level={1}
-        className="mt-3 text-3xl font-normal tracking-tight sm:text-4xl"
-      >
-        任务记录
-      </UI.Heading>
-      <UI.Text className="text-muted-foreground mt-4 max-w-2xl leading-7">
-        查看任务状态与已持久保存的进度。
-      </UI.Text>
+      <PageHeader
+        title={<>任务记录</>}
+        description={<>查看任务状态与已持久保存的进度。</>}
+      />
 
       <JobHealthSummary />
 

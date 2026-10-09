@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 import { AlertDescription, Alert } from "@/components/ui/alert";
 import { PageState } from "@/components/system/page-state";
@@ -22,13 +23,14 @@ import {
 export function SourceReading({ data }: { data: HotKeyAPI.SourceDetailView }) {
   return (
     <UI.Content className="flex min-w-0 flex-col gap-8">
-      <UI.Content as="header" className="flex flex-col gap-3">
-        <UI.TextLink href="/leaderboard/sources">
-          <UI.Text as="span" tone="muted" size="sm">
-            ← 评测来源
-          </UI.Text>
-        </UI.TextLink>
-        <UI.Heading level={1}>{data.full_name}</UI.Heading>
+      <PageHeader
+        title={data.full_name}
+        description={data.source.description}
+        breadcrumbs={[
+          { label: "评测来源", href: "/leaderboard/sources" },
+          { label: "评测来源明细" },
+        ]}
+      >
         <UI.Content className="flex flex-wrap items-center gap-3">
           <SourceStatus source={data.source} />
           <UI.Text as="span" tone="muted" size="sm">
@@ -36,7 +38,6 @@ export function SourceReading({ data }: { data: HotKeyAPI.SourceDetailView }) {
             {data.area ? ` · ${data.area}` : ""}
           </UI.Text>
         </UI.Content>
-        <UI.Text tone="muted">{data.source.description}</UI.Text>
         <RunStamp run={data.run} />
         <UI.Text tone="muted" size="xs">
           用途、限制与许可说明来自 AIHOT 2026-09-26
@@ -51,7 +52,7 @@ export function SourceReading({ data }: { data: HotKeyAPI.SourceDetailView }) {
             官方来源
           </UI.TextLink>
         ) : null}
-      </UI.Content>
+      </PageHeader>
       <Separator />
       <UI.Content
         as="section"

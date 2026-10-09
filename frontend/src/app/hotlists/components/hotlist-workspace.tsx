@@ -1,4 +1,6 @@
 "use client";
+
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
@@ -580,15 +582,10 @@ export function HotlistWorkspace() {
 
   return (
     <UI.Content>
-      <UI.Heading
-        level={1}
-        className="mt-3 text-3xl font-normal tracking-tight sm:text-4xl"
-      >
-        热榜
-      </UI.Heading>
-      <UI.Text className="text-muted-foreground mt-4 max-w-2xl leading-7">
-        选择来源，查看已保存的热榜与排名变化。
-      </UI.Text>
+      <PageHeader
+        title={<>热榜</>}
+        description={<>选择来源，查看已保存的热榜与排名变化。</>}
+      />
       {sources.items.length > 0 ? (
         <FieldGroup className="mt-8 max-w-sm">
           <Field>

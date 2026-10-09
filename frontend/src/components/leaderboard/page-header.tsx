@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/system/page-header";
 import type { ReactNode } from "react";
 
 import * as UI from "@/components/ui/content";
@@ -8,19 +9,29 @@ export function LeaderboardPageHeader({
   title = "模型榜",
   description = "汇总公开评测 · 按已发布证据更新",
   run,
+  actions,
 }: {
   title?: string;
   description?: string;
   run?: HotKeyAPI.RunView | null;
+  actions?: ReactNode;
 }) {
   return (
-    <UI.Content as="header" className="flex min-w-0 flex-1 flex-col gap-1">
-      <UI.Heading level={1}>{title}</UI.Heading>
-      <UI.Text tone="muted" size="sm">
-        {description}
-        {run ? ` · 发布轮次：${evidenceDate(run.generated_at)}` : ""}
-      </UI.Text>
-    </UI.Content>
+    <PageHeader
+      title={title}
+      description={
+        <>
+          {description}
+          {run ? ` · 发布轮次：${evidenceDate(run.generated_at)}` : ""}
+        </>
+      }
+      actions={actions}
+      breadcrumbs={
+        title === "模型榜"
+          ? undefined
+          : [{ label: "模型榜", href: "/leaderboard" }, { label: title }]
+      }
+    />
   );
 }
 
@@ -41,15 +52,17 @@ export function BoardPageFrame({
 }) {
   return (
     <UI.Content className="flex min-w-0 flex-col gap-6">
-      <UI.Content className="flex min-w-0 flex-col justify-between gap-5 xl:flex-row xl:items-center">
-        <LeaderboardPageHeader run={run} />
-        <BoardFilters
-          board={board}
-          domestic={domestic}
-          openWeights={openWeights}
-          tabs={tabs}
-        />
-      </UI.Content>
+      <LeaderboardPageHeader
+        run={run}
+        actions={
+          <BoardFilters
+            board={board}
+            domestic={domestic}
+            openWeights={openWeights}
+            tabs={tabs}
+          />
+        }
+      />
       {children}
     </UI.Content>
   );

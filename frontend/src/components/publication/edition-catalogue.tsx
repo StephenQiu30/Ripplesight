@@ -1,4 +1,6 @@
 "use client";
+
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 
 import { format } from "date-fns";
@@ -111,7 +113,7 @@ export function PublicEditionCatalogue({
   }
   return (
     <UI.Content className="flex min-w-0 flex-col gap-8">
-      <UI.Heading level={1}>{labels[initial.kind]}历史</UI.Heading>
+      <PageHeader title={<>{labels[initial.kind]}历史</>} />
       <NavigationMenu
         viewport={false}
         className="max-w-full justify-start print:hidden"

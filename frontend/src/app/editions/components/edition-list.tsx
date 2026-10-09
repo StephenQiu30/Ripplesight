@@ -1,4 +1,6 @@
 "use client";
+
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
@@ -119,12 +121,14 @@ export function EditionList() {
   return (
     <>
       <UI.Content>
-        <UI.Heading level={1} className="text-3xl font-medium tracking-tight">
-          日周月刊
-        </UI.Heading>
-        <UI.Text className="text-muted-foreground mt-4 leading-7">
-          按北京时间的完整自然刊期编选资讯，阅读来源、关键事实和历史修订。
-        </UI.Text>
+        <PageHeader
+          title={<>日周月刊</>}
+          description={
+            <>
+              按北京时间的完整自然刊期编选资讯，阅读来源、关键事实和历史修订。
+            </>
+          }
+        />
         <UI.Content className="my-7 flex flex-wrap gap-3">
           <ToggleGroup
             type="single"

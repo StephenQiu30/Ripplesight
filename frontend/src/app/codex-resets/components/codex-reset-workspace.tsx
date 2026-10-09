@@ -1,4 +1,6 @@
 "use client";
+
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 
 import { Spinner } from "@/components/ui/spinner";
@@ -179,9 +181,7 @@ export function CodexResetWorkspace() {
   if (state.status === "loading")
     return (
       <UI.Content>
-        <UI.Heading level={1} className="text-3xl font-medium">
-          Codex 重置公告
-        </UI.Heading>
+        <PageHeader title={<>Codex 重置公告</>} />
         <Item role="status" className="mt-6">
           <Spinner aria-hidden="true" />
           <ItemContent>
@@ -208,7 +208,7 @@ export function CodexResetWorkspace() {
         state="empty"
         eyebrow="Codex 重置公告"
         title="尚未配置公告监控"
-        description="公告监控需要维护者配置官方 X 来源并确认凭据、本人授权与预算。当前没有公告记录。"
+        description="配置公告监控后即可查看记录。"
         action={
           <UI.Content className="flex flex-wrap gap-3">
             <Button variant="outline" onClick={reload}>
@@ -236,15 +236,14 @@ export function CodexResetWorkspace() {
     <UI.Content>
       <UI.Content className="flex flex-wrap items-end justify-between gap-5">
         <UI.Content>
-          <UI.Heading
-            level={1}
-            className="text-3xl font-medium tracking-tight sm:text-4xl"
-          >
-            Codex 重置公告
-          </UI.Heading>
-          <UI.Text className="text-muted-foreground mt-4 max-w-2xl leading-7">
-            从源公告阅读重置、重置额度与确认进展。时间估计和推测始终保留未确认状态。
-          </UI.Text>
+          <PageHeader
+            title={<>Codex 重置公告</>}
+            description={
+              <>
+                从源公告阅读重置、重置额度与确认进展。时间估计和推测始终保留未确认状态。
+              </>
+            }
+          />
           <Link
             href="/codex-resets/manage"
             className="mt-3 inline-block text-sm underline underline-offset-4"

@@ -1,4 +1,6 @@
 "use client";
+
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
@@ -485,18 +487,13 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
   const title = observation.content_version?.title ?? content.external_id;
   return (
     <UI.Content>
-      <Button asChild variant="ghost" size="sm">
-        <Link href="/content">
-          <ArrowLeftIcon data-icon="inline-start" />
-          返回作品列表
-        </Link>
-      </Button>
-      <UI.Heading
-        level={1}
-        className="mt-8 text-3xl font-normal tracking-tight break-words sm:text-4xl"
-      >
-        {title}
-      </UI.Heading>
+      <PageHeader
+        title={title}
+        breadcrumbs={[
+          { label: "作品资料", href: "/content" },
+          { label: "作品详情" },
+        ]}
+      />
       <UI.Content className="text-muted-foreground mt-4 flex flex-wrap items-center gap-3 text-sm">
         <UI.Text as="span">
           {contentSourceLabel(content.source_key, content.source_name)}

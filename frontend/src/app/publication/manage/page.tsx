@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 import type { Metadata } from "next";
 import { connection } from "next/server";
@@ -20,12 +21,14 @@ export default async function ManagePublicationPage({
   return (
     <>
       <UI.Content>
-        <UI.Heading level={1} className="text-3xl font-medium">
-          发布管理
-        </UI.Heading>
-        <UI.Text className="text-muted-foreground mt-4 text-sm leading-7">
-          使用独立操作员令牌管理来源公开许可和发布修订。许可收紧立即生效；提高范围后需重建公开投影。
-        </UI.Text>
+        <PageHeader
+          title={<>发布管理</>}
+          description={
+            <>
+              使用独立操作员令牌管理来源公开许可和发布修订。许可收紧立即生效；提高范围后需重建公开投影。
+            </>
+          }
+        />
         <PublicationManager />
         <EditorialCorrectionManager initialContentId={contentId} />
       </UI.Content>

@@ -63,6 +63,8 @@
 
 ## 5. 状态与反馈
 
+- 2026-10-10 用户要求精简空状态并统一页头。普通空状态复用 `PageState` 与 shadcn `Empty`，只展示简短标题、必要的一句说明和与当前页面相关的操作；没有合适操作时不默认推荐探索。正常空态不显示请求 ID、错误码或读取不会启动任务等实现说明。错误、无权限和过期状态继续保留恢复信息。
+- 页面页头统一组合 `components/system/page-header.tsx` 的 `PageHeader`，共用标题、说明和操作区的间距及窄屏换行；详情页通过同一组件组合现有 shadcn `Breadcrumb`，取代手写返回文字。一级页面不重复添加路径条，刊物报头与登录表单保留专用排版。
 - 全站共用普通Spinner汇总PageState、首页骨架及重试的加载状态；按2026-10-10用户纠正，移除深色横条，不使用黑框、背景面板、边框或阴影。指示器位于右下角，窄屏避开底部导航，不遮挡或阻止操作，不显示虚构百分比。读屏status常驻，独立于正文aria-busy；减少动态效果时停止旋转。首页分类切换和重新加载保留当前内容并显示忙碌状态，空分类可返回全部事件；读取失败不得显示成暂无数据。
 - 每个页面都要处理五种状态：正常、空、加载、错误、无权限。路由级统一提供 loading、error、global-error、not-found 边界；正文状态使用 `components/system/page-state.tsx` 中的 `PageState`。
 - 操作反馈只用 Sonner：失败用 `toast.error`，成功用 `toast.success`，主动取消用 `toast.info`。Toaster 只在 BasicLayout 挂载一次。不要在表单底部放消息块，也不要自定义 Toast。

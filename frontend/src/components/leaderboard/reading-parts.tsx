@@ -164,9 +164,9 @@ export function LeaderboardFailure({
   const absent = resource && known?.status === 404;
   const forbidden = known?.status === 401 || known?.status === 403;
   const description = unpublished
-    ? "尚无有效的已发布轮次。可以先查看来源和计算规则；读取页面不会启动采集或计算。"
+    ? undefined
     : absent
-      ? "该模型或来源没有可读取的公开记录。可以回到榜单或查看来源覆盖。"
+      ? undefined
       : forbidden
         ? "模型榜是公开阅读页面，通常无需登录。当前请求被服务拒绝，请重试或返回首页。"
         : known?.status === 503
@@ -222,7 +222,7 @@ export function LeaderboardFailure({
               </UI.InlineCode>
             </UI.Text>
           ) : null}
-          {known?.requestId ? (
+          {!unpublished && !absent && known?.requestId ? (
             <UI.Text tone="muted" size="xs">
               请求 ID：
               <UI.InlineCode className="break-all">

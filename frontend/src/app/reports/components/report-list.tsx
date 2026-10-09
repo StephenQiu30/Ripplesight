@@ -1,4 +1,6 @@
 "use client";
+
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 
 import { toast } from "sonner";
@@ -143,15 +145,10 @@ export function ReportList() {
     <UI.Content>
       <UI.Content className="flex flex-wrap items-end justify-between gap-5">
         <UI.Content>
-          <UI.Heading
-            level={1}
-            className="text-3xl font-medium tracking-tight sm:text-4xl"
-          >
-            已有报告
-          </UI.Heading>
-          <UI.Text className="text-muted-foreground mt-4 leading-7">
-            按主题和日期，阅读已经定稿的日报和周报。
-          </UI.Text>
+          <PageHeader
+            title={<>已有报告</>}
+            description={<>按主题和日期，阅读已经定稿的日报和周报。</>}
+          />
         </UI.Content>
         <Button
           variant="outline"

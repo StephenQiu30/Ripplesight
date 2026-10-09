@@ -1,4 +1,6 @@
 "use client";
+
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 
 import { toast } from "sonner";
@@ -396,15 +398,10 @@ export function ContentList() {
     <UI.Content>
       <UI.Content className="flex flex-wrap items-end justify-between gap-6">
         <UI.Content className="flex max-w-xl flex-col gap-4">
-          <UI.Heading
-            level={1}
-            className="text-3xl font-normal tracking-tight sm:text-4xl"
-          >
-            作品资料
-          </UI.Heading>
-          <UI.Text className="text-muted-foreground leading-7">
-            阅读已保存的内容，查看评论与主题分析。
-          </UI.Text>
+          <PageHeader
+            title={<>作品资料</>}
+            description={<>阅读已保存的内容，查看评论与主题分析。</>}
+          />
         </UI.Content>
         <UI.Content className="flex flex-wrap gap-3">
           <Dialog open={filterOpen} onOpenChange={setFilterOpen}>

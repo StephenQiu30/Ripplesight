@@ -1,9 +1,10 @@
 "use client";
+
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 
 import { toast } from "sonner";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { ArrowRightIcon, RotateCcwIcon } from "lucide-react";
@@ -235,12 +236,15 @@ export function TopicForm({
 
   return (
     <UI.Content className="flex min-w-0 flex-col gap-8">
-      <Button asChild variant="ghost" size="navigation" className="self-start">
-        <Link href="/topics">返回我的关注</Link>
-      </Button>
+      <PageHeader
+        title="新建监控主题"
+        breadcrumbs={[
+          { label: "监控主题", href: "/topics" },
+          { label: "新建主题" },
+        ]}
+      />
       <UI.Content className="grid min-w-0 grid-cols-1 items-start gap-8 xl:grid-cols-3 xl:gap-12">
         <UI.Content as="section" className="flex flex-col gap-4">
-          <UI.Heading level={1}>新建监控主题</UI.Heading>
           <UI.Text tone="muted" size="sm">
             选好关键词、排除词和来源，持续跟踪你关心的变化。新主题保持暂停，保存后可以恢复运行。
           </UI.Text>

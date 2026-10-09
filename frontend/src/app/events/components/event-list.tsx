@@ -1,4 +1,6 @@
 "use client";
+
+import { PageHeader } from "@/components/system/page-header";
 import * as UI from "@/components/ui/content";
 
 import {
@@ -112,15 +114,10 @@ export function EventList() {
     <UI.Content>
       <UI.Content className="flex flex-wrap items-end justify-between gap-5">
         <UI.Content>
-          <UI.Heading
-            level={1}
-            className="text-3xl font-medium tracking-tight sm:text-4xl"
-          >
-            已确认事件
-          </UI.Heading>
-          <UI.Text className="text-muted-foreground mt-4 leading-7">
-            阅读已归并的事件与对应的固定版本证据。
-          </UI.Text>
+          <PageHeader
+            title={<>已确认事件</>}
+            description={<>阅读已归并的事件与对应的固定版本证据。</>}
+          />
         </UI.Content>
         <Button
           variant="outline"
