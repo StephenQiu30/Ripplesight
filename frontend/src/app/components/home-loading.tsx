@@ -1,5 +1,6 @@
-import { Content, Heading } from "@/components/ui/content";
+import { Content, Heading, Text } from "@/components/ui/content";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingSignal } from "@/components/system/global-loading";
 
 export function HomeLoading() {
   return (
@@ -10,12 +11,22 @@ export function HomeLoading() {
       aria-label="首页加载中"
       aria-busy="true"
     >
-      <Heading level={1} className="sr-only">
-        正在读取首页资讯
-      </Heading>
-      <Content aria-hidden="true" layout="stack" className="gap-3">
-        <Skeleton className="h-10 w-48 motion-reduce:animate-none" />
-        <Skeleton className="h-4 w-64 motion-reduce:animate-none" />
+      <LoadingSignal />
+      <Content layout="stack" className="gap-1">
+        <Heading level={1}>今日 AI 热点</Heading>
+        <Text size="xs" tone="muted">
+          正在加载公开事件与日报…
+        </Text>
+      </Content>
+      <Content
+        aria-hidden="true"
+        className="flex flex-wrap items-center justify-between gap-4 rounded-xl border p-4"
+      >
+        <Content layout="stack" className="w-full gap-3 md:w-2/3">
+          <Skeleton className="h-4 w-40 motion-reduce:animate-none" />
+          <Skeleton className="h-4 w-full motion-reduce:animate-none" />
+        </Content>
+        <Skeleton className="h-9 w-40 motion-reduce:animate-none" />
       </Content>
       <Content
         aria-hidden="true"

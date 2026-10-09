@@ -52,7 +52,9 @@ it("keeps the category selection in the URL and drops retired pagination state",
 });
 it("keeps an empty category honest even when other published events exist", () => {
   render(<HomeContent category="policy" reading={reading} />);
-  expect(screen.getByRole("status", { name: "暂无公开事件" })).toBeTruthy();
+  expect(screen.getByRole("status", { name: "当前分类暂无事件" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "查看全部事件" }));
+  expect(navigation.push).toHaveBeenCalledWith("/");
   expect(
     within(screen.getByRole("region", { name: "热点事件" })).queryByRole(
       "link",
@@ -72,8 +74,42 @@ it("does not fall back to the retired article feed when events fail", () => {
   );
   expect(screen.getByText("public_failed · 503")).toBeTruthy();
   expect(screen.queryByText(publicItem.title)).toBeNull();
+  expect(screen.queryByText("暂无可比较的热度变化。")).toBeNull();
+  expect(screen.getByText("事件读取失败，暂时无法比较热度变化。")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
   expect(navigation.refresh).toHaveBeenCalledOnce();
+});
+
+it("keeps a failed daily edition recoverable without hiding valid events", () => {
+  render(
+    <HomeContent
+      reading={{
+        ...reading,
+        unavailable: ["editions"],
+        failures: {
+          editions: { status: 503, code: "database_unavailable" },
+        },
+      }}
+    />,
+  );
+  expect(
+    within(screen.getByRole("region", { name: "热点事件" })).getByRole("link", {
+      name: publicStory.title,
+    }),
+  ).toBeTruthy();
+  expect(screen.getByRole("alert", { name: "日报暂时无法读取" })).toBeTruthy();
+  expect(screen.queryByText(/今日日报尚未发布/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "重试日报" }));
+  expect(navigation.refresh).toHaveBeenCalledOnce();
+});
+
+it("keeps unknown negative metrics neutral and offers a useful empty next step", () => {
+  render(<HomeContent />);
+  expect(screen.getByRole("status", { name: "暂无公开事件" })).toBeTruthy();
+  expect(screen.getByRole("link", { name: "探索资讯" })).toBeTruthy();
+  screen.getAllByTitle("暂无全站统计").forEach((metric) => {
+    expect(metric.className).not.toContain("text-destructive");
+  });
 });
 it("submits search through the real discovery route and keeps the actual RSS subscription", () => {
   render(<HomeContent />);

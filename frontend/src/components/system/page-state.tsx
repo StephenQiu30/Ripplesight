@@ -18,6 +18,7 @@ import { Item, ItemContent } from "@/components/ui/item";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RetryButton } from "./retry-button";
+import { LoadingSignal } from "./global-loading";
 
 type PageStateProps = {
   state: "loading" | "empty" | "error" | "forbidden" | "stale";
@@ -106,7 +107,8 @@ export function PageState({
         aria-busy="true"
         className="w-full py-6"
       >
-        <UI.Text className="sr-only">
+        <LoadingSignal />
+        <UI.Text size="sm" tone="muted" className="mb-6">
           {title}。{description}
         </UI.Text>
         <LoadingContent layout={loadingLayout} />
