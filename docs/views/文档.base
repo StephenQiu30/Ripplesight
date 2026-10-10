@@ -1,0 +1,20 @@
+filters:
+  and:
+    - file.ext == "md"
+    - or:
+        - file.inFolder("requirement")
+        - file.inFolder("design")
+        - file.inFolder("prd")
+        - file.inFolder("plan")
+views:
+  - type: table
+    name: 当前文档
+    order:
+      - file.folder
+      - file.name
+      - file.mtime
+    sort:
+      - property: file.folder
+        direction: ASC
+      - property: file.name
+        direction: ASC

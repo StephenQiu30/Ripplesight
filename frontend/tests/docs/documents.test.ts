@@ -3,13 +3,13 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { checkDocuments } from "./check.mjs";
-import { documents, regeneratedIndex } from "./content.mjs";
 
 const temporary: string[] = [];
 
@@ -24,75 +24,79 @@ function fixture() {
   temporary.push(repo);
   const root = path.join(repo, "docs");
   mkdirSync(root);
-  const metadata = (type: string, title: string) =>
-    `---\ntype: ${type}\ntitle: ${title}\nsummary: 测试文档\nupdated: 2026-10-10\n---\n\n`;
-  const index = path.join(root, "index.md");
-  const pages = path.join(root, "product/pages");
-  mkdirSync(pages, { recursive: true });
-  const page = path.join(pages, "01-example.md");
-  writeFileSync(
-    index,
-    metadata("index", "目录") + "<!-- index:start -->\n<!-- index:end -->\n",
-  );
-  writeFileSync(page, metadata("pointer", "示例") + "# 示例\n");
-  writeFileSync(
-    index,
-    regeneratedIndex(readFileSync(index, "utf8"), documents(root)),
-  );
-  return { repo, root, index, page };
+  const page = path.join(root, "PRD.md");
+  writeFileSync(page, "# 产品需求\n\n## 用户任务\n");
+  return { repo, root, page };
 }
 
-it("validates the actual project documents through the frontend entry point", () => {
+it("validates the actual core documents and templates", () => {
   const result = checkDocuments();
   expect(result.errors).toEqual([]);
   expect(result.count).toBeGreaterThan(0);
 });
 
-it("accepts valid local documents and a regenerated index", () => {
+it("accepts plain Markdown without metadata, numbering or a generated index", () => {
   const { repo, root } = fixture();
+  writeFileSync(
+    path.join(root, "Design.md"),
+    "# 设计\n[需求](PRD.md#用户任务)\n",
+  );
   expect(checkDocuments(root, repo)).toEqual({ errors: [], count: 2 });
 });
 
 it.each([
-  ["missing metadata", "updated: 2026-10-10\n", "", "缺少必填字段：updated"],
-  ["invalid date", "2026-10-10", "2026-02-30", "必须是有效的 YYYY-MM-DD 日期"],
-  ["missing link", "# 示例", "[缺失](missing.md)", "本地链接不存在"],
-  ["missing anchor", "# 示例", "[章节](#missing)", "本地锚点不存在"],
-  ["vault link", "# 示例", "[[示例]]", "不允许 Obsidian 双链"],
-])("rejects %s", (_label, before, after, error) => {
+  ["missing link", "[缺失](missing.md)", "本地链接不存在"],
+  ["missing image", "![缺失](missing.png)", "本地链接不存在"],
+  ["missing anchor", "[章节](#missing)", "本地锚点不存在"],
+  ["invalid encoding", "[章节](%ZZ.md)", "链接编码无效"],
+  ["path escape", "[外部文件](../../private.md)", "链接超出仓库"],
+])("rejects %s", (_label, link, error) => {
   const { repo, root, page } = fixture();
-  writeFileSync(page, readFileSync(page, "utf8").replace(before, after));
+  writeFileSync(page, readFileSync(page, "utf8") + `\n${link}\n`);
   expect(checkDocuments(root, repo).errors.join("\n")).toContain(error);
 });
 
-it("rejects duplicate numbering and stale generated indexes", () => {
+it("resolves encoded paths, query parameters, duplicate headings and references", () => {
   const { repo, root, page } = fixture();
-  writeFileSync(
-    path.join(path.dirname(page), "01-duplicate.md"),
-    readFileSync(page, "utf8"),
-  );
-  const errors = checkDocuments(root, repo).errors.join("\n");
-  expect(errors).toContain("编号 01 重复");
+  writeFileSync(path.join(root, "设计 说明.md"), "# `布局`\n\n## 布局\n");
   writeFileSync(
     page,
-    readFileSync(page, "utf8").replace("title: 示例", "title: 新标题"),
+    "# 需求\n[规范][design]\n\n[design]: %E8%AE%BE%E8%AE%A1%20%E8%AF%B4%E6%98%8E.md?view=raw#布局-1\n",
   );
-  expect(checkDocuments(root, repo).errors.join("\n")).toContain(
-    "索引块已过期",
-  );
+  expect(checkDocuments(root, repo).errors).toEqual([]);
 });
 
-it("keeps root-file pointers restricted to the documented source files", () => {
+it("checks templates and ignores links in code, external URLs and private vault state", () => {
   const { repo, root, page } = fixture();
-  writeFileSync(path.join(repo, "private.md"), "# 私密文件\n");
+  mkdirSync(path.join(root, "templates"));
+  writeFileSync(
+    path.join(root, "templates", "示例.md"),
+    "[不存在](missing.md)\n",
+  );
+  mkdirSync(path.join(root, ".obsidian"));
+  writeFileSync(
+    path.join(root, ".obsidian", "private.md"),
+    "[私密](missing.md)\n",
+  );
   writeFileSync(
     page,
-    readFileSync(page, "utf8").replace(
-      "type: pointer",
-      "type: pointer\nsource: ../private.md",
-    ),
+    "# 需求\n`[代码](missing.md)`\n[网站](https://example.com)\n[邮件](mailto:test@example.com)\n",
   );
+  const result = checkDocuments(root, repo);
+  expect(result.count).toBe(2);
+  expect(result.errors).toEqual([
+    "templates/示例.md：本地链接不存在：missing.md",
+  ]);
+});
+
+it("rejects local links through symlinks pointing outside the repository", () => {
+  const { repo, root, page } = fixture();
+  const outside = mkdtempSync(path.join(tmpdir(), "ripplesight-docs-outside-"));
+  temporary.push(outside);
+  writeFileSync(path.join(outside, "private.md"), "# 私密\n");
+  symlinkSync(path.join(outside, "private.md"), path.join(root, "linked.md"));
+  writeFileSync(page, "[外部文件](linked.md)\n");
   expect(checkDocuments(root, repo).errors.join("\n")).toContain(
-    "source 只允许指向仓库根目录",
+    "链接超出仓库",
   );
 });

@@ -48,7 +48,5 @@ jobs:
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: pnpm docs:index
-      - run: git diff --exit-code -- ../docs/index.md
       - run: pnpm docs:check
       - run: pnpm test tests/docs/documents.test.ts
