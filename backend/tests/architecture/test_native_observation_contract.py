@@ -57,7 +57,7 @@ def test_modern_provenance_is_complete_but_legacy_null_and_record_source_are_pre
 
 
 def test_canonical_schema_keeps_old_defaults_and_new_content_contract():
-    schema = (Path(__file__).resolve().parents[2] / "database/schema.sql").read_text()
+    schema = (Path(__file__).resolve().parents[2] / "sql/schema.sql").read_text()
     for name in ("content_native_identities", "content_observation_inputs"):
         assert f"CREATE TABLE {name} (" in schema
     assert "content_observations_source_context_key UNIQUE" in schema

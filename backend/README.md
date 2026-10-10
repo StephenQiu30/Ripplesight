@@ -54,10 +54,10 @@ HOTKEY_TEST_DATABASE_URL=postgresql://USER:PASSWORD@127.0.0.1:5432/hotkey_test_l
 
 ## 数据库
 
-`database/schema.sql` 是唯一的建表来源，只能用于全新的空库：
+`sql/schema.sql` 是唯一的建表来源，只能用于全新的空库：
 
 ```bash
-psql -X --set ON_ERROR_STOP=on --dbname 'postgresql://USER:PASSWORD@HOST:5432/DATABASE' --file database/schema.sql
+psql -X --set ON_ERROR_STOP=on --dbname 'postgresql://USER:PASSWORD@HOST:5432/DATABASE' --file sql/schema.sql
 ```
 
 有数据的库不能直接执行这个脚本，升级流程见 [PROJECT §6](../PROJECT.md#6-数据库)。

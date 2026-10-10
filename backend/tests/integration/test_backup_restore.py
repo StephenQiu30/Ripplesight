@@ -227,7 +227,7 @@ def test_candidate_backup_uses_real_snapshot_archive_and_minio_inventory(
         object_inspector=object_store,
         object_archiver=object_store,
         evidence_bucket=bucket,
-        schema_path=Path(__file__).resolve().parents[2] / "database" / "schema.sql",
+        schema_path=Path(__file__).resolve().parents[2] / "sql" / "schema.sql",
     )
     try:
         result = service.create_candidate(tmp_path)
@@ -298,7 +298,7 @@ def test_restore_candidate_in_isolated_database_and_remove_it(
             object_inspector=object_store,
             object_archiver=object_store,
             evidence_bucket=bucket,
-            schema_path=Path(__file__).resolve().parents[2] / "database" / "schema.sql",
+            schema_path=Path(__file__).resolve().parents[2] / "sql" / "schema.sql",
         ).create_candidate(tmp_path)
         with engine.connect() as connection:
             before = {
@@ -311,13 +311,13 @@ def test_restore_candidate_in_isolated_database_and_remove_it(
             BackupRestoreService(
                 source_database_url=database_url,
                 isolation_database_url=database_url,
-                schema_path=Path(__file__).resolve().parents[2] / "database" / "schema.sql",
+                schema_path=Path(__file__).resolve().parents[2] / "sql" / "schema.sql",
                 evidence_restore_verifier=MinioEvidenceRestoreVerifier(minio, bucket),
             ).verify(candidate.directory)
         result = BackupRestoreService(
             source_database_url=database_url,
             isolation_database_url=make_url(database_url).set(database="postgres"),
-            schema_path=Path(__file__).resolve().parents[2] / "database" / "schema.sql",
+            schema_path=Path(__file__).resolve().parents[2] / "sql" / "schema.sql",
             evidence_restore_verifier=MinioEvidenceRestoreVerifier(minio, bucket),
         ).verify(candidate.directory)
         assert result.backup_id == candidate.manifest.backup_id
@@ -358,7 +358,7 @@ def test_corrupt_candidate_rejected_without_changing_existing_backup(
             object_inspector=object_store,
             object_archiver=object_store,
             evidence_bucket=bucket,
-            schema_path=Path(__file__).resolve().parents[2] / "database" / "schema.sql",
+            schema_path=Path(__file__).resolve().parents[2] / "sql" / "schema.sql",
         ).create_candidate(tmp_path)
         original = (candidate.directory / "database.dump").read_bytes()
         damaged_root = tmp_path / "damaged"
@@ -373,7 +373,7 @@ def test_corrupt_candidate_rejected_without_changing_existing_backup(
             BackupRestoreService(
                 source_database_url=database_url,
                 isolation_database_url=make_url(database_url).set(database="postgres"),
-                schema_path=Path(__file__).resolve().parents[2] / "database" / "schema.sql",
+                schema_path=Path(__file__).resolve().parents[2] / "sql" / "schema.sql",
             ).verify(bad)
         assert (candidate.directory / "database.dump").read_bytes() == original
         assert (candidate.directory / "manifest.json").exists()
@@ -387,7 +387,7 @@ def test_failed_new_candidate_preserves_previous_candidate(
 ) -> None:
     database_url, minio, bucket, _ = backup_environment
     engine = create_engine(database_url)
-    schema_path = Path(__file__).resolve().parents[2] / "database" / "schema.sql"
+    schema_path = Path(__file__).resolve().parents[2] / "sql" / "schema.sql"
     object_store = MinioObjectInventory(minio, bucket)
     try:
         previous = BackupService(
@@ -438,7 +438,7 @@ def test_missing_evidence_object_rejects_restore_before_creating_target(
             object_inspector=object_store,
             object_archiver=object_store,
             evidence_bucket=bucket,
-            schema_path=Path(__file__).resolve().parents[2] / "database" / "schema.sql",
+            schema_path=Path(__file__).resolve().parents[2] / "sql" / "schema.sql",
         ).create_candidate(tmp_path)
         assert candidate.manifest.evidence_objects[0].state is EvidenceObjectState.MISSING
         with engine.connect() as connection:
@@ -449,7 +449,7 @@ def test_missing_evidence_object_rejects_restore_before_creating_target(
             BackupRestoreService(
                 source_database_url=database_url,
                 isolation_database_url=make_url(database_url).set(database="postgres"),
-                schema_path=Path(__file__).resolve().parents[2] / "database" / "schema.sql",
+                schema_path=Path(__file__).resolve().parents[2] / "sql" / "schema.sql",
                 evidence_restore_verifier=MinioEvidenceRestoreVerifier(minio, bucket),
             ).verify(candidate.directory)
         with engine.connect() as connection:

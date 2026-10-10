@@ -22,7 +22,7 @@ WORKDIR /srv/backend
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
-COPY database ./database
+COPY sql ./sql
 COPY app ./app
 
 RUN useradd --create-home --uid 10001 ripplesight \

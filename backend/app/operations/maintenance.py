@@ -772,7 +772,7 @@ class OperationsMaintenanceExecutor:
             object_inspector=store,
             object_archiver=store,
             evidence_bucket=self._settings.minio_bucket,
-            schema_path=Path(__file__).resolve().parents[2] / "database" / "schema.sql",
+            schema_path=Path(__file__).resolve().parents[2] / "sql" / "schema.sql",
             clock=self._clock,
         ).create_candidate(root)
         return {
@@ -811,7 +811,7 @@ class OperationsMaintenanceExecutor:
         result = BackupRestoreService(
             source_database_url=self._settings.database_url.get_secret_value(),
             isolation_database_url=isolation.get_secret_value(),
-            schema_path=Path(__file__).resolve().parents[2] / "database" / "schema.sql",
+            schema_path=Path(__file__).resolve().parents[2] / "sql" / "schema.sql",
             evidence_restore_verifier=MinioEvidenceRestoreVerifier(
                 self._minio(), self._settings.minio_bucket
             ),

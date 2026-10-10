@@ -1,4 +1,4 @@
-"""Private export records; canonical database/schema.sql alone creates these tables."""
+"""Private export records; canonical sql/schema.sql alone creates these tables."""
 
 from datetime import datetime
 from uuid import UUID

@@ -45,7 +45,7 @@ ripplesight-server/
 │   ├── app/<领域>/            # 各业务领域，见 §4
 │   ├── app/worker/            # Kafka 消费、任务子进程、Scheduler
 │   ├── app/cli/               # 维护命令
-│   ├── database/schema.sql    # 唯一的完整建表脚本
+│   ├── sql/schema.sql    # 唯一的完整建表脚本
 │   └── tests/                 # unit / integration / architecture
 ├── frontend/
 │   ├── src/app/               # 路由；页面专属组件放在路由下的 components/
@@ -111,7 +111,7 @@ Web 外壳使用 `BasicLayout → PageContainer`：前者管理侧栏、移动�
 
 ## 6. 数据库
 
-- `backend/database/schema.sql` 是唯一的建表来源，自带 `BEGIN/COMMIT`，只用于全新的空库。不用 Alembic，不用 ORM 建表，也不用 SQLite 存业务数据。所有时间字段使用 `TIMESTAMPTZ`。
+- `backend/sql/schema.sql` 是唯一的建表来源，自带 `BEGIN/COMMIT`，只用于全新的空库。不用 Alembic，不用 ORM 建表，也不用 SQLite 存业务数据。所有时间字段使用 `TIMESTAMPTZ`。
 - 改表结构时，SQL、ORM 模型和结构断言要在同一次提交里更新，并在一个全新的 PostgreSQL 上核对所有表的列、类型、可空性和主键。
 - 业务库名固定为 `hotkey`。测试只用独立的 `hotkey_test_<后缀>` 库，用完删除；绝不能在业务库上跑测试。
 - **升级有数据的库**：先停写并备份，在新库上实际恢复一遍，确认能读；再建一个全新空库、执行完整的 `schema.sql`、导入并核对数据（各表行数、外键、任务和预算等）；全部核对无误后才切换，旧库保留作回退。禁止直接在旧库上执行 `schema.sql`。
