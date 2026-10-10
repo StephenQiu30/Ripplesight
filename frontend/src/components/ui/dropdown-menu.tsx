@@ -26,21 +26,40 @@ function DropdownMenuContent({
   className,
   align = "start",
   sideOffset = 4,
+  variant = "default",
   ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Content> & {
+  variant?: "default" | "navigation";
+}) {
   return (
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.Content
         data-slot="dropdown-menu-content"
+        data-variant={variant}
         sideOffset={sideOffset}
         align={align}
         className={cn(
           "bg-popover text-popover-foreground ring-foreground/10 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 z-50 max-h-(--radix-dropdown-menu-content-available-height) w-(--radix-dropdown-menu-trigger-width) min-w-32 origin-(--radix-dropdown-menu-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-lg p-1 shadow-md ring-1 duration-100 data-[state=closed]:overflow-hidden",
+          variant === "navigation" &&
+            "[&_[data-slot=dropdown-menu-item][aria-current=page]]:bg-accent w-72 max-w-(--radix-dropdown-menu-content-available-width) rounded-xl p-2 motion-reduce:animate-none [&_[data-slot=dropdown-menu-item]]:min-h-11 [&_[data-slot=dropdown-menu-item]]:gap-3 [&_[data-slot=dropdown-menu-item]]:px-3 md:[&_[data-slot=dropdown-menu-item]]:min-h-10 [&_[data-slot=dropdown-menu-label]]:px-3 [&_[data-slot=dropdown-menu-label]]:py-2 [&_[data-slot=dropdown-menu-radio-item]]:min-h-11 [&_[data-slot=dropdown-menu-radio-item]]:gap-3 [&_[data-slot=dropdown-menu-radio-item]]:pl-3 md:[&_[data-slot=dropdown-menu-radio-item]]:min-h-10",
           className,
         )}
         {...props}
       />
     </DropdownMenuPrimitive.Portal>
+  );
+}
+
+function DropdownMenuSeparator({
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>) {
+  return (
+    <DropdownMenuPrimitive.Separator
+      data-slot="dropdown-menu-separator"
+      className={cn("bg-border -mx-1 my-2 h-px", className)}
+      {...props}
+    />
   );
 }
 
@@ -146,4 +165,5 @@ export {
   DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
 };

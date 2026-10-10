@@ -5,6 +5,10 @@ import { usePathname } from "next/navigation";
 
 import {
   BellRingIcon,
+  InfoIcon,
+  MessageSquareIcon,
+  LogInIcon,
+  SettingsIcon,
   BookmarkIcon,
   ActivityIcon,
   EyeIcon,
@@ -29,8 +33,7 @@ import { Content, Text } from "@/components/ui/content";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -53,6 +56,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { MenuNavigation } from "@/components/navigation/menu-navigation";
 import { ThemeMenuItems } from "./theme-toggle";
 
 type Destination = {
@@ -178,34 +182,31 @@ function MoreMenuItems({ mobile = false }: { mobile?: boolean }) {
   const { session, destinations, current } = useNavigation();
   return (
     <>
-      <DropdownMenuGroup>
-        {(mobile ? destinations : moreDestinations)
-          .filter(({ href }) => href !== "/")
-          .map(({ href, label, icon: Icon }) => (
-            <DropdownMenuItem key={href} asChild>
-              <Link
-                href={href}
-                aria-current={current === href ? "page" : undefined}
-              >
-                <Icon aria-hidden="true" />
-                {label}
-              </Link>
-            </DropdownMenuItem>
-          ))}
-      </DropdownMenuGroup>
-      <DropdownMenuGroup>
-        <DropdownMenuItem asChild>
-          <Link href="/about">关于Ripplesight</Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/feedback">意见反馈</Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href={session ? "/account" : "/login"}>
-            {session ? "账户设置" : "登录"}
-          </Link>
-        </DropdownMenuItem>
-      </DropdownMenuGroup>
+      <MenuNavigation
+        label={mobile ? "站点导航" : "更多探索"}
+        items={(mobile ? destinations : moreDestinations).filter(
+          ({ href }) => href !== "/",
+        )}
+        current={current}
+      />
+      <DropdownMenuSeparator />
+      <MenuNavigation
+        label={session && !mobile ? "帮助与反馈" : "帮助与账户"}
+        items={[
+          { href: "/about", label: "关于 Ripplesight", icon: InfoIcon },
+          { href: "/feedback", label: "意见反馈", icon: MessageSquareIcon },
+          ...(!session || mobile
+            ? [
+                {
+                  href: session ? "/account" : "/login",
+                  label: session ? "账户设置" : "登录",
+                  icon: session ? SettingsIcon : LogInIcon,
+                },
+              ]
+            : []),
+        ]}
+      />
+      <DropdownMenuSeparator />
       <ThemeMenuItems />
     </>
   );
@@ -290,7 +291,7 @@ export function BasicSidebar() {
           current={current}
         />
       </SidebarContent>
-      <SidebarFooter className="gap-3 px-3 py-5 group-data-[collapsible=icon]:px-2">
+      <SidebarFooter className="gap-3 px-3 py-3 group-data-[collapsible=icon]:px-2">
         <Content className="flex items-center justify-between gap-1 group-data-[collapsible=icon]:flex-col">
           {session ? (
             <AccountMenu />
@@ -309,14 +310,21 @@ export function BasicSidebar() {
           )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm" aria-label="更多导航">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="更多导航"
+                title="更多导航与外观"
+              >
                 <MoreHorizontalIcon data-icon="inline-start" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
               side="top"
               align="start"
-              className="w-48"
+              variant="navigation"
+              sideOffset={8}
+              collisionPadding={16}
               aria-label="更多导航"
             >
               <MoreMenuItems />
@@ -330,6 +338,7 @@ export function BasicSidebar() {
 
 // md 以下的顶栏：品牌与搜索入口。
 export function BasicMobileHeader() {
+  const session = useIdentitySession();
   return (
     <Content
       role="navigation"
@@ -348,6 +357,7 @@ export function BasicMobileHeader() {
             <BellRingIcon data-icon="inline-start" />
           </Link>
         </Button>
+        {session && <AccountMenu compact />}
       </Content>
     </Content>
   );
@@ -427,7 +437,9 @@ export function BasicMobileNavigation() {
             <DropdownMenuContent
               side="top"
               align="end"
-              className="w-56"
+              variant="navigation"
+              sideOffset={8}
+              collisionPadding={16}
               aria-label="更多导航"
             >
               <MoreMenuItems mobile />

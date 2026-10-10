@@ -31,6 +31,8 @@ const buttonVariants = cva(
         feed: "h-11 gap-1.5 px-2 text-xs [&_svg:not([class*='size-'])]:size-4",
         navigation:
           "h-11 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5 md:h-8 md:px-2.5 md:has-data-[icon=inline-end]:pr-2 md:has-data-[icon=inline-start]:pl-2",
+        account:
+          "h-14 min-w-0 flex-1 justify-start gap-2 px-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:p-0",
         hero: "h-11 gap-2 rounded-full px-6 text-sm xl:h-12 xl:px-7 xl:text-base 2xl:h-13 2xl:px-9 2xl:text-xl",
         announcement:
           "h-10 gap-3 px-0 text-xs font-normal md:text-sm 2xl:text-base",
