@@ -23,7 +23,7 @@ export function TopicsWorkspace({
   topicId?: string;
   workspace?: boolean;
 }) {
-  const [topicsOpen, setTopicsOpen] = useState(false);
+  const [topicsOpen, setTopicsOpen] = useState(true);
   const [firstTopicId, setFirstTopicId] = useState<string>();
   const [listForbidden, setListForbidden] = useState(false);
   const [updatedTopics, setUpdatedTopics] = useState<
@@ -47,18 +47,18 @@ export function TopicsWorkspace({
           </Button>
         }
       />
-      <UI.Content className="flex min-w-0 flex-col items-stretch gap-8 lg:flex-row">
+      <UI.Content className="flex min-w-0 flex-col items-stretch gap-8">
         <Collapsible
           open={topicsOpen || !selectedTopicId || listForbidden}
           onOpenChange={setTopicsOpen}
-          className="lg:w-monitor-list min-w-0 lg:shrink-0"
+          className="min-w-0"
         >
-          <CollapsibleTrigger asChild className="mb-4 lg:hidden">
+          <CollapsibleTrigger asChild className="mb-4">
             <Button variant="outline">
               {topicsOpen ? "收起主题列表" : "切换监控主题"}
             </Button>
           </CollapsibleTrigger>
-          <CollapsibleContent forceMount motion="below-lg">
+          <CollapsibleContent forceMount motion="height">
             <TopicList
               selectedTopicId={selectedTopicId}
               onFirstTopic={setFirstTopicId}

@@ -304,3 +304,22 @@ it("retains a pending manual run and its acceptance result across tab changes", 
   expect(screen.getByRole("button", { name: "发起新一轮" })).toBeTruthy();
   expect(api.run).toHaveBeenCalledTimes(1);
 });
+
+it("lets readers collapse the full-width topic list without remounting the selected topic or losing its draft", async () => {
+  render(<TopicsWorkspace topicId="topic-a" />);
+  await screen.findByRole("heading", { name: "主题一" });
+  expect(screen.getByRole("link", { name: /主题二/ })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "编辑主题设置" }));
+  const draft = screen.getByLabelText("主题名称") as HTMLInputElement;
+  fireEvent.change(draft, { target: { value: "收起列表后保留草稿" } });
+  fireEvent.click(screen.getByRole("button", { name: "收起主题列表" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("link", { name: /主题二/ })).toBeNull(),
+  );
+  expect(draft.value).toBe("收起列表后保留草稿");
+  fireEvent.click(screen.getByRole("button", { name: "切换监控主题" }));
+  await screen.findByRole("link", { name: /主题二/ });
+  expect(screen.getByLabelText("主题名称")).toBe(draft);
+  expect(api.get).toHaveBeenCalledTimes(1);
+  expect(api.update).not.toHaveBeenCalled();
+});
