@@ -45,7 +45,7 @@ ripplesight-server/
 │   ├── app/<领域>/            # 各业务领域，见 §4
 │   ├── app/worker/            # Kafka 消费、任务子进程、Scheduler
 │   ├── app/cli/               # 维护命令
-│   ├── sql/schema.sql    # 唯一的完整建表脚本
+│   ├── sql/schema.sql         # 唯一的完整建表脚本
 │   └── tests/                 # unit / integration / architecture
 ├── frontend/
 │   ├── src/app/               # 路由；页面专属组件放在路由下的 components/
@@ -142,6 +142,7 @@ Web 外壳使用 `BasicLayout → PageContainer`：前者管理侧栏、移动�
 - **项目文档**：普通 Markdown 唯一原文在 docs/，Obsidian 直接打开 docs；BACKLOG、PROJECT、AGENTS 保持仓库根文件原文。索引与链接校验复用 frontend 的依赖与测试入口，实现在 frontend/tests/docs/，通过 pnpm docs:index、pnpm docs:check 执行，不维护独立 scripts/docs 包，不生成网页或数据库正文副本。业务报告的 Obsidian 导出继续使用 knowledge/obsidian.py。
 - 环境文件只放在仓库根目录：本机用 `.env`，生产用 `.env.prod`，模板是 `.env.example`。所有进程都读这一份，进程注入的环境变量优先。
 - `docker-compose.yml` 定义应用（API、Web，以及按需启用的 Worker / Scheduler / CLI）；`docker-compose-env.yml` 只在需要全新的 PostgreSQL/Redis/Kafka 时使用；`docker-compose-prod.yml` 通过 include 复用应用定义。
+- 2026-10-10 按用户要求移除无业务采集消费者的独立 browser/browser-egress 服务、远程浏览器适配器与探测命令。浏览器会话凭据兼容合同及报告导出的 Playwright 用途保留，后者不依赖已移除的远程服务。
 - Web 生产构建为 standalone，以非 root 用户和只读文件系统运行；每个请求生成独立的 CSP nonce。
 
 ## 11. 项目文档知识库接入方案（待审查）

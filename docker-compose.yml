@@ -18,8 +18,6 @@ x-backend-environment: &backend-environment
   HOTKEY_SEARXNG_HOST: ${HOTKEY_SEARXNG_HOST:-host.docker.internal}
   HOTKEY_COLLECTION_LOOKBACK_SECONDS: ${HOTKEY_COLLECTION_LOOKBACK_SECONDS:-86400}
   HOTKEY_SOURCE_CREDENTIALS: '${HOTKEY_SOURCE_CREDENTIALS:-{}}'
-  HOTKEY_BROWSER_ENABLED: ${HOTKEY_BROWSER_ENABLED:-false}
-  HOTKEY_BROWSER_WS_URL: ${HOTKEY_BROWSER_WS_URL:-}
   HOTKEY_WEB_ORIGIN: ${HOTKEY_WEB_ORIGIN:-http://127.0.0.1:8666}
   HOTKEY_WEB_BASE_URL: ${HOTKEY_WEB_BASE_URL:-http://127.0.0.1:8666}
   HOTKEY_SESSION_TTL_SECONDS: ${HOTKEY_SESSION_TTL_SECONDS:-43200}
@@ -41,8 +39,6 @@ x-backend-environment: &backend-environment
   HOTKEY_KAFKA_DELIVERY_TIMEOUT_SECONDS: ${HOTKEY_KAFKA_DELIVERY_TIMEOUT_SECONDS:-10}
   HOTKEY_JOB_LEASE_SECONDS: ${HOTKEY_JOB_LEASE_SECONDS:-75}
   HOTKEY_JOB_MAX_CATCHUP_WINDOWS: ${HOTKEY_JOB_MAX_CATCHUP_WINDOWS:-3}
-  HOTKEY_BROWSER_CONNECT_TIMEOUT_SECONDS: ${HOTKEY_BROWSER_CONNECT_TIMEOUT_SECONDS:-5}
-  HOTKEY_BROWSER_EXECUTION_TIMEOUT_SECONDS: ${HOTKEY_BROWSER_EXECUTION_TIMEOUT_SECONDS:-45}
   HOTKEY_BROWSER_STATE_DIR: ${HOTKEY_BROWSER_STATE_DIR:-}
   HOTKEY_BILIBILI_CHROME_OWNER_ID: ${HOTKEY_BILIBILI_CHROME_OWNER_ID:-}
   HOTKEY_AI_ENABLED: ${HOTKEY_AI_ENABLED:-false}
@@ -172,9 +168,6 @@ services:
     command: ["/srv/backend/.venv/bin/python", "-m", "worker"]
     restart: unless-stopped
     profiles: ["worker"]
-    networks:
-      - default
-      - browser-internal
     deploy:
       resources:
         limits:
@@ -193,92 +186,6 @@ services:
           cpus: "0.50"
           memory: 512M
 
-  browser:
-    container_name: ${COMPOSE_PROJECT_NAME}-browser
-    build:
-      context: ./backend
-      target: browser
-    image: ${HOTKEY_BROWSER_IMAGE:-ripplesight-browser:local}
-    environment:
-      HOTKEY_BROWSER_WS_URL: ${HOTKEY_BROWSER_WS_URL:-}
-    init: true
-    user: pwuser
-    read_only: true
-    tmpfs:
-      - /tmp:rw,nosuid,size=512m
-      - /home/pwuser:rw,nosuid,size=64m
-    shm_size: 512m
-    cap_drop: [ALL]
-    cap_add: [SYS_CHROOT]
-    security_opt:
-      - no-new-privileges:true
-      - seccomp:./backend/browser/seccomp.json
-    depends_on:
-      browser-egress:
-        condition: service_healthy
-    networks:
-      - browser-internal
-      - browser-egress-internal
-    profiles: ["browser"]
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "require('net').connect(3000,'127.0.0.1').on('connect',function(){this.end()}).on('error',()=>process.exit(1))",
-        ]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-      start_period: 10s
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: "1.00"
-          memory: 2G
-          pids: 256
-
-  browser-egress:
-    container_name: ${COMPOSE_PROJECT_NAME}-browser-egress
-    image: ubuntu/squid:6.6-24.04_edge@sha256:8a3baed477e2c282ab8aa5edad442f69873246964f225c5c2ae8364b6610963c
-    user: "13:13"
-    read_only: true
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
-      - /var/log/squid:rw,nosuid,size=4m,uid=13,gid=13,mode=0700
-      - /var/spool/squid:rw,nosuid,size=4m,uid=13,gid=13,mode=0700
-    cap_drop: [ALL]
-    security_opt:
-      - no-new-privileges:true
-    entrypoint: ["squid"]
-    command: ["-N", "-f", "/etc/squid/squid.conf"]
-    volumes:
-      - type: bind
-        source: ./backend/browser/squid.conf
-        target: /etc/squid/squid.conf
-        read_only: true
-        bind:
-          create_host_path: false
-    networks:
-      - browser-egress-internal
-      - browser-uplink
-    profiles: ["browser"]
-    healthcheck:
-      test: ["CMD", "squid", "-k", "check", "-f", "/etc/squid/squid.conf"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-      start_period: 5s
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: "0.25"
-          memory: 256M
-          pids: 64
-
   cli:
     container_name: ${COMPOSE_PROJECT_NAME}-cli
     <<: *backend-service
@@ -290,10 +197,3 @@ services:
         limits:
           cpus: "0.25"
           memory: 256M
-
-networks:
-  browser-internal:
-    internal: true
-  browser-egress-internal:
-    internal: true
-  browser-uplink:
