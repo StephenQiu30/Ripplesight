@@ -60,7 +60,7 @@
 | 契约 | 修改了接口时，`pnpm openapi:check` 无差异 |
 | 数据库 | 修改了结构时，在全新库上执行 `schema.sql`，并跑结构断言 |
 | 页面 | 修改了 UI 时，在桌面和 390px 宽的窄屏下分别检查正常、空、加载、错误、无权限五种状态，以及键盘操作 |
-| 文档 | 在 scripts/docs/ 下执行 pnpm index、pnpm check；不再构建文档站 |
+| 文档 | 在 frontend/ 下执行 pnpm docs:index、pnpm docs:check；不再构建文档站 |
 
 检查失败就照实报告，不能把跳过当作通过。
 

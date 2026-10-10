@@ -13,7 +13,9 @@
     "format": "prettier --plugin prettier-plugin-tailwindcss --write .",
     "format:check": "prettier --plugin prettier-plugin-tailwindcss --check .",
     "openapi:generate": "openapi2ts && prettier --plugin prettier-plugin-tailwindcss --write src/api",
-    "openapi:check": "node scripts/check-openapi.mjs"
+    "openapi:check": "pnpm openapi:generate && git diff --exit-code HEAD -- src/api && test -z \"$(git ls-files --others --exclude-standard -- src/api)\"",
+    "docs:index": "node tests/docs/index.mjs",
+    "docs:check": "node tests/docs/check.mjs"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
@@ -50,12 +52,18 @@
     "@umijs/openapi": "^1.14.1",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
+    "github-slugger": "2.0.0",
     "happy-dom": "^20.14.5",
     "prettier": "^3.9.7",
     "prettier-plugin-tailwindcss": "^0.8.1",
+    "remark-gfm": "4.0.1",
+    "remark-parse": "11.0.0",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "5.0.1"
+    "unified": "11.0.5",
+    "unist-util-visit": "5.0.0",
+    "vitest": "5.0.1",
+    "yaml": "2.8.1"
   },
   "packageManager": "pnpm@12.3.4"
 }
