@@ -1,6 +1,6 @@
 """Persistent Codex announcement use case, ported from AIHOT monitor/* and admin/monitor.ts.
 
-The source is MIT licensed; see THIRD_PARTY_NOTICES.md. Ripplesight keeps its own
+The source is MIT licensed; see LICENSE. Ripplesight keeps its own
 transactions, AiService receipts, Kafka jobs and official X authorization.
 """
 

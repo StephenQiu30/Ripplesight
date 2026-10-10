@@ -1,6 +1,6 @@
 """Bounded, persistent scan orchestration over official source-domain contracts.
 
-AIHOT monitor/scan.ts semantic port; MIT notice in THIRD_PARTY_NOTICES.md.
+AIHOT monitor/scan.ts semantic port; MIT notice in LICENSE.
 No provider, credentials, model SDK or delivery transport is created here.
 """
 

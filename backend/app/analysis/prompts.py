@@ -13,7 +13,7 @@ ANALYSIS_PROMPT_VERSION = "analysis.annotate.v1"
 
 # Editorial templates and include/version semantics are adapted from AIHOT
 # 035f7b7f6e26cf203562ddd6065ff7adc1bb0c07, editorial/prompts.ts.
-# Copyright (c) 2026 数字生命卡兹克. MIT: root THIRD_PARTY_NOTICES.md.
+# Copyright (c) 2026 数字生命卡兹克. MIT: root LICENSE.
 _EDITORIAL_PROMPT_DIR = Path(__file__).with_name("prompt_templates")
 _EDITORIAL_NAME = re.compile(r"[a-z][a-z0-9-]*")
 _EDITORIAL_TOKEN = re.compile(r"\{\{(>\s*)?([A-Za-z][\w.-]*)\s*\}\}")

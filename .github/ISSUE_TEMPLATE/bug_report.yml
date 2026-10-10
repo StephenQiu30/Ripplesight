@@ -5,7 +5,7 @@ labels: [bug]
 body:
   - type: markdown
     attributes:
-      value: "请先查阅 README 和 BACKLOG。不要在公开 Issue 中填写 Token、Cookie、真实用户内容或漏洞细节；安全问题请阅读 SECURITY.md。"
+      value: "请先查阅 README 和 BACKLOG。不要在公开 Issue 中填写 Token、Cookie、真实用户内容或漏洞细节；安全问题请通过 GitHub 的 Private Vulnerability Reporting 私下报告。"
   - type: dropdown
     id: area
     attributes:

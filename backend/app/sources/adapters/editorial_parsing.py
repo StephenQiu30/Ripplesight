@@ -1,4 +1,4 @@
-"""Bounded parsing rules adapted from AIHOT sources (MIT, THIRD_PARTY_NOTICES.md)."""
+"""Bounded parsing rules adapted from AIHOT sources (MIT, LICENSE)."""
 
 from __future__ import annotations
 

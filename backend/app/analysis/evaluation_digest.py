@@ -1,7 +1,7 @@
 """Offline story-digest comparison, using controlled outputs and existing bench scoring.
 
 Adapted from AIHOT 9acad0c story-digest-evaluation and eval-story-digests-core.
-Copyright (c) 2026 数字生命卡兹克. MIT: root THIRD_PARTY_NOTICES.md.
+Copyright (c) 2026 数字生命卡兹克. MIT: root LICENSE.
 """
 
 from __future__ import annotations

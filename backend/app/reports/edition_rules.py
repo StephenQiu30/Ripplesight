@@ -92,7 +92,7 @@ def section_of(entry: ReportPublicationCandidate) -> str:
     return SECTIONS.get(entry.category or "industry", SECTIONS["industry"])
 
 
-# Adapted from AIHOT 9acad0c reports/edition.ts; MIT: THIRD_PARTY_NOTICES.md.
+# Adapted from AIHOT 9acad0c reports/edition.ts; MIT: LICENSE.
 RULE_VERSION = "edition-rules-v2"
 COMMENTARY = frozenset({"tip", "opinion"})
 

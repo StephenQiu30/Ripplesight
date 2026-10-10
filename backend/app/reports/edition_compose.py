@@ -22,7 +22,7 @@ from reports.edition_schemas import (
     EditionThemeView,
 )
 
-# Adapted from AIHOT 9acad0c reports/compose.ts (MIT; THIRD_PARTY_NOTICES.md).
+# Adapted from AIHOT 9acad0c reports/compose.ts (MIT; LICENSE).
 PLAIN_TERMS = frozenset({"ai", "api", "llm", "gpu", "agi", "ceo", "ipo", "hotkey"})
 COMPANY_NAMES = tuple(
     tuple(

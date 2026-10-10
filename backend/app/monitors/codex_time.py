@@ -1,4 +1,4 @@
-"""AIHOT monitor/time.ts semantic port; see THIRD_PARTY_NOTICES.md for MIT notice."""
+"""AIHOT monitor/time.ts semantic port; see LICENSE for MIT notice."""
 
 from __future__ import annotations
 

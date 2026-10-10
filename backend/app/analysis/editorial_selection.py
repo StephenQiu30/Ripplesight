@@ -1,6 +1,6 @@
 """One occurrence, one representative; grounded developments must add information.
 
-Adapted from AIHOT 9acad0c selection step 6 (MIT; THIRD_PARTY_NOTICES.md).
+Adapted from AIHOT 9acad0c selection step 6 (MIT; LICENSE).
 Relations and structure are existing evidence, not new model calls or title similarity.
 """
 

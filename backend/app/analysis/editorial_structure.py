@@ -1,7 +1,7 @@
 """Ground structure quotes against the fixed original portions sent to the model.
 
 Adapted from AIHOT 9acad0c editorial/analyze.ts; provenance and MIT license in
-THIRD_PARTY_NOTICES.md. Ripplesight records field-level discard reasons in the original
+LICENSE. Ripplesight records field-level discard reasons in the original
 stage/result JSONB, without logging rejected material.
 """
 
