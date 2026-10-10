@@ -55,7 +55,6 @@ ripplesight-server/
 │   ├── src/request.ts         # 唯一的 HTTP 传输层
 │   ├── src/proxy.ts           # 会话门禁与 CSP
 │   └── tests/                 # 前端测试
-├── scripts/docs/             # 本机 Markdown 索引与链接校验工具
 └── docs/                     # 唯一项目文档目录，也是 Obsidian vault
     ├── .obsidian/            # 共享链接、模板与核心插件配置
     ├── product/              # prd / plan / pages / reference
@@ -140,7 +139,7 @@ Web 外壳使用 `BasicLayout → PageContainer`：前者管理侧栏、移动�
 
 ## 10. 配置与部署
 
-- **项目文档**：普通 Markdown 唯一原文在 docs/，Obsidian 直接打开 docs；BACKLOG、PROJECT、AGENTS 保持仓库根文件原文。索引与链接校验在 scripts/docs/，不生成网页或数据库正文副本。业务报告的 Obsidian 导出继续使用 knowledge/obsidian.py。
+- **项目文档**：普通 Markdown 唯一原文在 docs/，Obsidian 直接打开 docs；BACKLOG、PROJECT、AGENTS 保持仓库根文件原文。索引与链接校验复用 frontend 的依赖与测试入口，实现在 frontend/tests/docs/，通过 pnpm docs:index、pnpm docs:check 执行，不维护独立 scripts/docs 包，不生成网页或数据库正文副本。业务报告的 Obsidian 导出继续使用 knowledge/obsidian.py。
 - 环境文件只放在仓库根目录：本机用 `.env`，生产用 `.env.prod`，模板是 `.env.example`。所有进程都读这一份，进程注入的环境变量优先。
 - `docker-compose.yml` 定义应用（API、Web，以及按需启用的 Worker / Scheduler / CLI）；`docker-compose-env.yml` 只在需要全新的 PostgreSQL/Redis/Kafka 时使用；`docker-compose-prod.yml` 通过 include 复用应用定义。
 - Web 生产构建为 standalone，以非 root 用户和只读文件系统运行；每个请求生成独立的 CSP nonce。

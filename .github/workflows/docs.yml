@@ -5,7 +5,9 @@ on:
   pull_request:
     paths:
       - 'docs/**'
-      - 'scripts/docs/**'
+      - 'frontend/tests/docs/**'
+      - 'frontend/package.json'
+      - 'frontend/pnpm-lock.yaml'
       - 'BACKLOG.md'
       - 'PROJECT.md'
       - 'AGENTS.md'
@@ -14,7 +16,9 @@ on:
     branches: [main]
     paths:
       - 'docs/**'
-      - 'scripts/docs/**'
+      - 'frontend/tests/docs/**'
+      - 'frontend/package.json'
+      - 'frontend/pnpm-lock.yaml'
       - 'BACKLOG.md'
       - 'PROJECT.md'
       - 'AGENTS.md'
@@ -32,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: scripts/docs
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -42,8 +46,9 @@ jobs:
         with:
           node-version: '24.19.0'
           cache: pnpm
-          cache-dependency-path: scripts/docs/pnpm-lock.yaml
+          cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: pnpm index
-      - run: git diff --exit-code -- ../../docs/index.md
-      - run: pnpm check
+      - run: pnpm docs:index
+      - run: git diff --exit-code -- ../docs/index.md
+      - run: pnpm docs:check
+      - run: pnpm test tests/docs/documents.test.ts

@@ -10,15 +10,15 @@
 
 ## 索引与校验
 
-无需文档网站、账号、快照或发布流程。在 `scripts/docs/` 执行：
+无需文档网站、账号、快照或发布流程。复用 `frontend/` 的依赖和检查入口，在该目录执行：
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm index
-pnpm check
+pnpm docs:index
+pnpm docs:check
 ```
 
-工具仅更新 `docs/index.md` 的生成索引，并检查元数据、编号、关联、相对链接和章节锚点；不生成网页、Pagefind、raw 或 llms 导出。Obsidian 的检索、图谱和 Bases 直接使用原文件。模板、看板、设计参考与本 README 不进入需求索引。
+`frontend/tests/docs/` 中的检查仅更新 `docs/index.md` 的生成索引，并检查元数据、编号、关联、相对链接和章节锚点；不生成网页、Pagefind、raw 或 llms 导出。Obsidian 的检索、图谱和 Bases 直接使用原文件。模板、看板、设计参考与本 README 不进入需求索引。
 
 ## 旧资料
 
