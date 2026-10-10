@@ -90,8 +90,8 @@ export function ThemeMenuItems() {
   if (!context) throw new Error("ThemeMenuItems requires ThemeProvider");
   const { theme, changeTheme } = context;
   return (
-    <DropdownMenuGroup>
-      <DropdownMenuLabel>主题</DropdownMenuLabel>
+    <DropdownMenuGroup aria-label="外观">
+      <DropdownMenuLabel>外观</DropdownMenuLabel>
       <DropdownMenuRadioGroup
         value={theme}
         onValueChange={(value) => {
