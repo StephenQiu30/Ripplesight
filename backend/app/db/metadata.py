@@ -1,4 +1,4 @@
-"""Register runtime mappings; database/schema.sql owns DDL."""
+"""Register runtime mappings; sql/schema.sql owns DDL."""
 
 import ai.capability_models as _ai_capability_models  # noqa: F401
 import ai.models as _ai_models  # noqa: F401

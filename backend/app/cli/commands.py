@@ -500,7 +500,7 @@ def create_backup_candidate(
             object_inspector=object_store,
             object_archiver=object_store,
             evidence_bucket=settings.minio_bucket,
-            schema_path=Path(__file__).resolve().parents[2] / "database" / "schema.sql",
+            schema_path=Path(__file__).resolve().parents[2] / "sql" / "schema.sql",
         ).create_candidate(destination)
     except (BackupError, BackupToolError, ObjectArchiveError, ObjectInventoryError) as error:
         typer.echo(f"Backup candidate failed: {error}", err=True)
@@ -548,7 +548,7 @@ def verify_backup_restore(
         result = BackupRestoreService(
             source_database_url=settings.database_url.get_secret_value(),
             isolation_database_url=isolation_url,
-            schema_path=Path(__file__).resolve().parents[2] / "database" / "schema.sql",
+            schema_path=Path(__file__).resolve().parents[2] / "sql" / "schema.sql",
             evidence_restore_verifier=MinioEvidenceRestoreVerifier(minio, settings.minio_bucket),
         ).verify(candidate)
     except BackupRestoreError as error:

@@ -25,7 +25,7 @@ from core.config import Settings
 
 def test_ai_failure_enum_is_accepted_by_canonical_ddl_and_runtime_constraint():
     codes = {code.value for code in AiFailureCode}
-    ddl = (Path(__file__).resolve().parents[2] / "database" / "schema.sql").read_text()
+    ddl = (Path(__file__).resolve().parents[2] / "sql" / "schema.sql").read_text()
     ai_table = ddl.split("CREATE TABLE ai_calls (", 1)[1].split("CREATE TABLE", 1)[0]
     allowed = re.search(r"failure_code IN \(([^)]+)\)", ai_table)
     assert allowed is not None

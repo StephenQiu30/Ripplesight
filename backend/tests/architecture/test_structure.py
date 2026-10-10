@@ -203,14 +203,14 @@ def test_public_api_uses_the_single_stable_namespace() -> None:
 
 
 def test_schema_sql_is_the_only_ddl_source() -> None:
-    assert _sql_files(REPOSITORY) == {BACKEND / "database" / "schema.sql"}
+    assert _sql_files(REPOSITORY) == {BACKEND / "sql" / "schema.sql"}
     assert not (BACKEND / "alembic.ini").exists()
     assert not (BACKEND / "migrations").exists()
     assert "alembic" not in (BACKEND / "pyproject.toml").read_text().lower()
 
 
 def test_schema_is_a_complete_definition_without_merge_fragments() -> None:
-    source = (BACKEND / "database" / "schema.sql").read_text().lower()
+    source = (BACKEND / "sql" / "schema.sql").read_text().lower()
     comments = "\n".join(line for line in source.splitlines() if line.lstrip().startswith("--"))
     for marker in (
         "merge-only fragment",
@@ -225,12 +225,12 @@ def test_schema_is_a_complete_definition_without_merge_fragments() -> None:
 
 
 def test_ddl_boundary_rejects_an_additional_sql_file(tmp_path: Path) -> None:
-    schema = tmp_path / "backend" / "database" / "schema.sql"
+    schema = tmp_path / "backend" / "sql" / "schema.sql"
     schema.parent.mkdir(parents=True)
     schema.touch()
-    extra = tmp_path / "backend" / "database" / "patch.sql"
+    extra = tmp_path / "backend" / "sql" / "patch.sql"
     extra.touch()
-    checkout_schema = tmp_path / ".worktrees" / "parallel" / "backend" / "database" / "schema.sql"
+    checkout_schema = tmp_path / ".worktrees" / "parallel" / "backend" / "sql" / "schema.sql"
     checkout_schema.parent.mkdir(parents=True)
     checkout_schema.touch()
     assert _sql_files(tmp_path) - {schema} == {extra}

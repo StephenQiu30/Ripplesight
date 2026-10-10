@@ -395,7 +395,7 @@ def test_annotation_model_declares_owner_scoped_unique_and_foreign_keys() -> Non
 
 
 def test_schema_sql_contains_annotation_table_and_owner_scoped_ai_reference() -> None:
-    schema = (Path(__file__).resolve().parents[2] / "database" / "schema.sql").read_text()
+    schema = (Path(__file__).resolve().parents[2] / "sql" / "schema.sql").read_text()
 
     assert "CREATE TABLE content_annotations" in schema
     assert "content_annotations_owner_version_topic_rule_prompt_key" in schema

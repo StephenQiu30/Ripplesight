@@ -61,7 +61,7 @@ docker compose --env-file .env --profile worker up --detach scheduler
 docker compose --env-file .env -f docker-compose-env.yml up --detach --wait
 ```
 
-它只会在全新的空数据卷上初始化 `backend/database/schema.sql`。不要在已有业务库上执行这个脚本，升级方法见 [PROJECT §6](PROJECT.md#6-数据库)。
+它只会在全新的空数据卷上初始化 `backend/sql/schema.sql`。不要在已有业务库上执行这个脚本，升级方法见 [PROJECT §6](PROJECT.md#6-数据库)。
 
 新数据卷以当前 Compose 项目名为前缀。复用已有环境卷时，在 `.env` 中将 `HOTKEY_POSTGRES_VOLUME_NAME`、`HOTKEY_REDIS_VOLUME_NAME`、`HOTKEY_KAFKA_VOLUME_NAME` 设置为原卷名，保持现有数据存储。
 
