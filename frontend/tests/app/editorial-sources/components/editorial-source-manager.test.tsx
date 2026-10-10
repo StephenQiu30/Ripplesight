@@ -7,7 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { EditorialSourceManager } from "@/app/editorial-sources/components/editorial-source-manager";
+import { EditorialSourceManager } from "@/app/sources/editorial/components/editorial-source-manager";
 
 const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
 vi.mock("sonner", () => ({ toast: notifications }));

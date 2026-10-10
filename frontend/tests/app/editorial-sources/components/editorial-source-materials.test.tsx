@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ApiRequestError } from "@/request";
-import { EditorialSourceMaterials } from "@/app/editorial-sources/components/editorial-source-materials";
+import { EditorialSourceMaterials } from "@/app/sources/editorial/components/editorial-source-materials";
 const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
 vi.mock("sonner", () => ({ toast: notifications }));
 

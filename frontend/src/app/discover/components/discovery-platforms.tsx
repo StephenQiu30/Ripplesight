@@ -1,4 +1,6 @@
 "use client";
+import { AuthLink } from "@/components/auth/auth-link";
+import { Button } from "@/components/ui/button";
 import { useId } from "react";
 import { useRouter } from "next/navigation";
 import { Content, Heading, Text } from "@/components/ui/content";
@@ -8,7 +10,9 @@ import { discoveryHref } from "./discovery-data";
 export function DiscoveryPlatforms({
   sources,
   params,
+  failed = false,
 }: {
+  failed?: boolean;
   sources: { key: string; name: string }[];
   params: Record<string, string | undefined>;
 }) {
@@ -17,8 +21,11 @@ export function DiscoveryPlatforms({
   return (
     <Content as="section" layout="stack">
       <Heading level={2} appearance="sidebar">
-        平台
+        信息来源
       </Heading>
+      <Text size="sm" tone="muted">
+        公开来源由站点配置，勾选可筛选当前结果。
+      </Text>
       <FieldGroup className="gap-3">
         {sources.length ? (
           sources.map((source) => (
@@ -42,10 +49,13 @@ export function DiscoveryPlatforms({
           ))
         ) : (
           <Text size="sm" tone="muted">
-            暂无可筛选的平台。
+            {failed ? "来源列表暂时无法读取。" : "站点尚未配置公开来源。"}
           </Text>
         )}
       </FieldGroup>
+      <Button asChild variant="outline" size="sm" className="self-start">
+        <AuthLink href="/sources/personal">管理我的来源</AuthLink>
+      </Button>
     </Content>
   );
 }

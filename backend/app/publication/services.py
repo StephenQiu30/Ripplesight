@@ -74,7 +74,9 @@ class PublicationService:
         now: datetime | None = None,
     ) -> SourcePolicyView:
         self._lock(owner_id)
-        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", source_key):
+        if source_key.startswith("ed_personal_") or not re.fullmatch(
+            r"[a-z0-9][a-z0-9_-]{0,63}", source_key
+        ):
             raise ApplicationError("invalid_publication_input")
         at = now or datetime.now(UTC)
         digest = fingerprint(

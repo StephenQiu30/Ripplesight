@@ -49,22 +49,8 @@ export function discoveryHref(params: DiscoveryParams, cursor?: string | null) {
 }
 
 export function discoverySources(page: HotKeyAPI.PublicItemsPage | null) {
-  return Array.from(
-    new Map([
-      ...(page?.source_status ?? []).map(
-        (source) =>
-          [
-            source.source_key,
-            { key: source.source_key, name: source.name },
-          ] as const,
-      ),
-      ...(page?.items ?? []).map(
-        (item) =>
-          [
-            item.source.key,
-            { key: item.source.key, name: item.source.name },
-          ] as const,
-      ),
-    ]).values(),
-  );
+  return (page?.source_status ?? []).map((source) => ({
+    key: source.source_key,
+    name: source.name,
+  }));
 }

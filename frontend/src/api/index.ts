@@ -28,6 +28,7 @@ import * as gongkaikanwumulu from "./gongkaikanwumulu";
 import * as fabumeiti from "./fabumeiti";
 import * as zhandiziliao from "./zhandiziliao";
 import * as laiyuannengli from "./laiyuannengli";
+import * as gerenlaiyuan from "./gerenlaiyuan";
 import * as gongkaifenfa from "./gongkaifenfa";
 export default {
   gerentufagaojing,
@@ -56,5 +57,6 @@ export default {
   fabumeiti,
   zhandiziliao,
   laiyuannengli,
+  gerenlaiyuan,
   gongkaifenfa,
 };

@@ -29,9 +29,17 @@ export default async function SourcesPage() {
           }
         />
       </UI.Content>
-      <Button asChild variant="outline" className="self-start">
-        <AuthLink href="/monitors/new">设置关键词并选择平台</AuthLink>
-      </Button>
+      <UI.Content className="flex flex-wrap gap-3">
+        <Button asChild variant="outline" className="self-start">
+          <AuthLink href="/monitors/new">设置关键词并选择平台</AuthLink>
+        </Button>
+        <Button asChild variant="outline">
+          <AuthLink href="/sources/personal">我的来源</AuthLink>
+        </Button>
+        <Button asChild variant="ghost">
+          <AuthLink href="/sources/editorial">站点来源管理</AuthLink>
+        </Button>
+      </UI.Content>
       <Suspense
         fallback={
           <Skeleton aria-label="正在准备来源设置" className="h-64 w-full" />

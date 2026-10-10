@@ -52,6 +52,7 @@ def setup(
     session: Session,
     *,
     kind: str = "rss",
+    personal: bool = False,
     external_token: bool = False,
     owner_id: UUID | None = None,
     configuration: dict | None = None,
@@ -71,7 +72,7 @@ def setup(
         )
     )
     service = EditorialSourceService(session, clock=lambda: NOW)
-    profile = service.save_profile(owner_id=owner, command=command)
+    profile = service.save_profile(owner_id=owner, command=command, personal=personal)
     policy = uuid4()
     fields = {
         k: "Controlled evidence purpose"
@@ -120,7 +121,9 @@ def setup(
     command = command.model_copy(
         update=dict(operation_id=uuid4(), expected_revision=1, enabled=True)
     )
-    profile = service.save_profile(owner_id=owner, profile_id=profile.id, command=command)
+    profile = service.save_profile(
+        owner_id=owner, profile_id=profile.id, command=command, personal=personal
+    )
     if external_token:
         service = EditorialSourceService(
             session, clock=lambda: NOW, external_tokens={profile.id: SecretStr("controlled-token")}
@@ -861,3 +864,137 @@ def test_operator_can_revise_returned_self_connection_binding_but_not_stale_vers
             )
         assert stale.value.code == "connection_version_conflict"
         assert service.get_profile(owner_id=owner, profile_id=profile.id) == saved
+
+
+def test_personal_source_ingests_with_existing_content_contract_and_icon_identity(engine):
+    from connections.editorial_icon_services import enqueue_due_source_icons_in_transaction
+    from connections.editorial_topic_sources import list_editorial_topic_sources_in_transaction
+    from publication.schemas import SourcePolicyInput
+    from publication.services import PublicationService
+    from sources.icons_schemas import SourceIconSeed
+
+    with Session(engine, expire_on_commit=False) as s:
+        service, owner, p, _ = setup(s, personal=True)
+        assert p.source_key.startswith("ed_personal_rss_")
+        assert service.list_profiles(owner_id=owner) == ()
+        assert service.list_profiles(owner_id=owner, personal=True)[0].id == p.id
+        j, op = job(s, owner, p)
+        prepared = begin(service, owner, p, j, op)
+        service.stage_page(owner_id=owner, run_id=prepared.result.run_id, page=page(material()))
+        applied = service.apply_page(owner_id=owner, run_id=prepared.result.run_id)
+        assert applied.status == "succeeded" and applied.created == 1
+        SourceIconSeed(
+            owner_id=owner,
+            profile_id=p.id,
+            source_key=p.source_key,
+            configuration_version=p.configuration_version,
+            profile_revision=p.revision,
+            policy_version=p.policy_version,
+            connection_id=p.connection_id,
+            connection_version=p.connection_version,
+            configuration=p.configuration,
+            scheduled_for_at=NOW,
+        )
+        with s.begin():
+            choices = list_editorial_topic_sources_in_transaction(s, owner_id=owner, now=NOW)
+            assert len(choices) == 1 and choices[0].selectable
+            enqueue_due_source_icons_in_transaction(s, now=NOW, enabled=True)
+        with pytest.raises(ApplicationError, match="invalid_publication_input"), s.begin():
+            PublicationService(s).save_source_policy_in_transaction(
+                owner_id=owner,
+                actor_id=owner,
+                source_key=p.source_key,
+                command=SourcePolicyInput(
+                    operation_id=uuid4(),
+                    expected_revision=0,
+                    participation_mode="editorial",
+                    license_name="Controlled test",
+                    reason="Personal sources cannot be made public",
+                ),
+            )
+
+
+def test_personal_http_configuration_is_session_owned_csrf_protected_and_idempotent(engine):
+    from fastapi.testclient import TestClient
+    from tests.conftest import authenticate_test_client
+
+    from connections.editorial_schemas import PersonalSourceInput
+    from core.config import Settings
+    from main import create_app
+
+    app = create_app(
+        Settings(
+            _env_file=None,
+            environment="test",
+            log_level="WARNING",
+            database_url=engine.url.render_as_string(hide_password=False),
+        )
+    )
+    command = PersonalSourceInput(
+        operation_id=uuid4(),
+        name="My feed",
+        configuration={
+            "kind": "rss",
+            "feed_url": "https://example.com/feed",
+            "allowed_hosts": ["example.com"],
+        },
+    )
+    body = command.model_dump(mode="json")
+    path = "/api/sources/personal"
+    with TestClient(app) as client:
+        assert client.get(path).status_code == 401
+        assert client.post(path, json=body).status_code == 401
+        owner = authenticate_test_client(client)
+        assert client.post(path, json=body).status_code == 403
+        headers = {"X-HotKey-CSRF": client.cookies["hotkey_csrf"]}
+        assert client.get(path).json() == []
+        created = client.post(path, json=body, headers=headers)
+        assert created.status_code == 201, created.text
+        profile = created.json()
+        assert not profile["enabled"] and profile["source_key"].startswith("ed_personal_rss_")
+        assert client.post(path, json=body, headers=headers).json()["id"] == profile["id"]
+        assert (
+            client.post(path, json={**body, "name": "Changed"}, headers=headers).status_code == 409
+        )
+        update = {**body, "operation_id": str(uuid4()), "expected_revision": 1, "name": "New name"}
+        assert (
+            client.put(f"{path}/{profile['id']}", json=update, headers=headers).status_code == 200
+        )
+        stale = {**update, "operation_id": str(uuid4())}
+        assert client.put(f"{path}/{profile['id']}", json=stale, headers=headers).status_code == 409
+        enable = {**update, "operation_id": str(uuid4()), "expected_revision": 2, "enabled": True}
+        assert (
+            client.put(f"{path}/{profile['id']}", json=enable, headers=headers).status_code == 409
+        )
+        with app.state.session_factory() as s:
+            assert s.scalar(text("SELECT count(*) FROM jobs")) == 0
+            assert s.scalar(text("SELECT count(*) FROM content_records")) == 0
+            site_cmd = command.model_copy(update={"operation_id": uuid4()}).editorial_input()
+            site = EditorialSourceService(s).save_profile(owner_id=owner, command=site_cmd)
+        assert len(client.get(path).json()) == 1
+        assert (
+            client.put(
+                f"{path}/{site.id}", json={**update, "operation_id": str(uuid4())}, headers=headers
+            ).status_code
+            == 404
+        )
+        replay_site = site_cmd.model_dump(
+            mode="json",
+            exclude={
+                "reason",
+                "participation_mode",
+                "tier",
+                "first_party",
+                "connection_id",
+                "connection_version",
+            },
+        )
+        assert client.post(path, json=replay_site, headers=headers).status_code == 404
+        authenticate_test_client(client)
+        headers = {"X-HotKey-CSRF": client.cookies["hotkey_csrf"]}
+        assert client.get(path).json() == []
+        assert (
+            client.put(f"{path}/{profile['id']}", json=update, headers=headers).status_code == 404
+        )
+        paid = {**body, "operation_id": str(uuid4()), "configuration": {"kind": "external"}}
+        assert client.post(path, json=paid, headers=headers).status_code == 422

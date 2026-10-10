@@ -71,7 +71,7 @@ it("keeps every existing query field and safely encodes cursors for first/next p
   expect(first.searchParams.get("q")).toBe(params.q);
 });
 
-it("deduplicates source names from health data and visible items without losing offline sources", () => {
+it("uses only configured source names, including paused sources, without adding item sources", () => {
   expect(
     discoverySources({
       items: [publicItem, publicItem],
@@ -96,8 +96,15 @@ it("deduplicates source names from health data and visible items without losing 
     }),
   ).toEqual([
     { key: "offline", name: "暂停来源" },
-    { key: "rss", name: "公开来源" },
+    { key: "rss", name: "较旧的名称" },
   ]);
+  expect(
+    discoverySources({
+      items: [publicItem],
+      next_cursor: null,
+      snapshot_at: "2026-10-06T08:00:00Z",
+    }),
+  ).toEqual([]);
   expect(discoverySources(null)).toEqual([]);
 });
 

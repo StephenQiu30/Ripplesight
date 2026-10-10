@@ -156,7 +156,11 @@ it("retains selected timeline filters and the grouped reports/developments", asy
     topic: "research",
     cursor: "timeline-cursor",
   });
-  expect(api.items).not.toHaveBeenCalled();
+  expect(api.items).toHaveBeenCalledWith({
+    mode: "all",
+    window: "24h",
+    limit: 1,
+  });
   expect(api.timeline).toHaveBeenCalledWith({
     window: "7d",
     category: "paper",

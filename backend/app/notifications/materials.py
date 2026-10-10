@@ -72,7 +72,7 @@ def load_notification_material_in_transaction(
             fingerprint=material.sha256,
             title=f"Codex 额度公告 · {labels[intent.action]}",
             text=material.post.translation_zh or material.post.text,
-            reading_url="/codex-resets",
+            reading_url="/alerts",
             expires_at=intent.content_at + timedelta(hours=36),
             locator=locator,
         )

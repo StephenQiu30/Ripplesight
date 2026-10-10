@@ -56,6 +56,30 @@ class EditorialProfileInput(EditorialContract):
         return self
 
 
+class PersonalSourceInput(EditorialContract):
+    operation_id: UUID
+    expected_revision: int = Field(default=0, ge=0)
+    name: str = Field(min_length=1, max_length=128)
+    enabled: bool = False
+    configuration: EditorialSourceConfiguration
+    policy_version: int = Field(default=1, ge=1)
+    interval_minutes: int = Field(default=30, ge=1, le=360)
+
+    @model_validator(mode="after")
+    def personal_source_kind(self) -> Self:
+        if self.configuration.kind not in {"rss", "web_list", "json_list"}:
+            raise ValueError("personal sources support RSS, web lists and JSON lists")
+        return self
+
+    def editorial_input(self) -> EditorialProfileInput:
+        return EditorialProfileInput(
+            **self.model_dump(),
+            reason="用户保存个人来源配置",
+            participation_mode="editorial",
+            tier="T3",
+        )
+
+
 class EditorialRunReviewInput(EditorialContract):
     operation_id: UUID
     expected_revision: int = Field(ge=1)

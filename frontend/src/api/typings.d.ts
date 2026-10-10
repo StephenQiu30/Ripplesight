@@ -4609,6 +4609,22 @@ declare namespace HotKeyAPI {
     sources: number;
   };
 
+  type PersonalSourceInput = {
+    /** Operation Id */
+    operation_id: string;
+    /** Expected Revision */
+    expected_revision?: number;
+    /** Name */
+    name: string;
+    /** Enabled */
+    enabled?: boolean;
+    configuration: EditorialSourceConfiguration;
+    /** Policy Version */
+    policy_version?: number;
+    /** Interval Minutes */
+    interval_minutes?: number;
+  };
+
   type pollCodexResetMonitorParams = {
     monitor_id: string;
   };
@@ -6834,6 +6850,10 @@ declare namespace HotKeyAPI {
 
   type updateOperatorFeedbackParams = {
     feedback_id: string;
+  };
+
+  type updatePersonalSourceParams = {
+    profile_id: string;
   };
 
   type updateSourceConnectionParams = {
