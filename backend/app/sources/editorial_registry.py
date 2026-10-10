@@ -1,6 +1,6 @@
 """Six editable collectors composed through explicit, admitted provider boundaries.
 
-Ports AIHOT collection semantics at commit 035f7b7f (MIT; THIRD_PARTY_NOTICES).
+Ports AIHOT collection semantics at commit 035f7b7f (MIT; LICENSE).
 No model, database, credential discovery, or default network admission is performed here.
 """
 

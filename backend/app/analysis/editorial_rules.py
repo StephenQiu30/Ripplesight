@@ -1,7 +1,7 @@
 """AIHOT editorial/selection/writing semantics adapted to strict Python DTOs.
 
 Upstream 035f7b7f6e26cf203562ddd6065ff7adc1bb0c07. Copyright (c) 2026
-数字生命卡兹克. MIT license and modification provenance: THIRD_PARTY_NOTICES.md.
+数字生命卡兹克. MIT license and upstream attribution: root LICENSE.
 """
 
 from __future__ import annotations

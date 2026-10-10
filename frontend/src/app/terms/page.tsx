@@ -18,7 +18,7 @@ export default async function TermsPage() {
       </UI.Text>
       <UI.Text>
         源码许可与内容许可分别适用。AIHOT 移植源码的 MIT 版权和出处保存在仓库
-        THIRD_PARTY_NOTICES；来源正文、图像、标识及数据不因代码许可自动获得再分发权限。
+        LICENSE；来源正文、图像、标识及数据不因代码许可自动获得再分发权限。
       </UI.Text>
       <UI.Text>
         摘要、站内全文与全文再分发各有独立许可。下载、RSS、API、MCP
