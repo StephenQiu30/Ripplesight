@@ -7,7 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { EditorialExternalIngress } from "@/app/editorial-sources/components/editorial-external-ingress";
+import { EditorialExternalIngress } from "@/app/sources/editorial/components/editorial-external-ingress";
 
 const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
 vi.mock("sonner", () => ({ toast: notifications }));

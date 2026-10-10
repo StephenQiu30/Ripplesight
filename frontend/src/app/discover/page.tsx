@@ -99,7 +99,7 @@ async function DiscoveryReadingPage({ params }: { params: DiscoveryParams }) {
     topic: params.topic || undefined,
     cursor: params.cursor || undefined,
   };
-  const [reading, topics] = await Promise.allSettled([
+  const [reading, topics, sourceDirectory] = await Promise.allSettled([
     timelineMode
       ? getPublicReadingTimeline({
           ...filters,
@@ -114,6 +114,9 @@ async function DiscoveryReadingPage({ params }: { params: DiscoveryParams }) {
           limit: params.q ? 40 : 30,
         }),
     getPublicTopicDirectory(),
+    timelineMode
+      ? listPublicItems({ mode: "all", window: "24h", limit: 1 })
+      : Promise.resolve(null),
   ]);
   const timeline =
     reading.status === "fulfilled" && "cards" in reading.value
@@ -126,6 +129,10 @@ async function DiscoveryReadingPage({ params }: { params: DiscoveryParams }) {
             items: reading.value.cards.map((card) => card.item),
             next_cursor: reading.value.next_cursor,
             snapshot_at: reading.value.snapshot_at,
+            source_status:
+              sourceDirectory.status === "fulfilled"
+                ? sourceDirectory.value?.source_status
+                : undefined,
           }
         : reading.value
       : null;
@@ -227,6 +234,7 @@ async function DiscoveryReadingPage({ params }: { params: DiscoveryParams }) {
           className="gap-10"
         >
           <DiscoveryPlatforms
+            failed={!page || sourceDirectory.status === "rejected"}
             sources={discoverySources(page)}
             params={params}
           />

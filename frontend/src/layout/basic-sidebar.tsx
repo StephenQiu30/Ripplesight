@@ -129,7 +129,7 @@ const moreDestinations: Destination[] = [
       "/sources",
       "/operations",
       "/publication",
-      "/editorial-sources",
+      "/sources/editorial",
       "/feeds",
       "/hotlists",
       "/account",

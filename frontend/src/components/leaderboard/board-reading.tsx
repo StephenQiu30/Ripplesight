@@ -127,15 +127,6 @@ export function BoardReading({
               </Text>
             </CardContent>
           </Card>
-          <Content as="section" layout="stack">
-            <Heading level={2} appearance="sidebar">
-              Codex 公告
-            </Heading>
-            <Text size="sm" tone="muted">
-              公告可在 Codex 动态页阅读。
-            </Text>
-            <TextLink href="/codex-resets">查看全部公告 →</TextLink>
-          </Content>
         </Content>
       </Content>
     </BoardPageFrame>

@@ -164,7 +164,7 @@ describe("Figma reading shell", () => {
     "/content/content",
     "/operations/models",
     "/publication/manage",
-    "/editorial-sources/source",
+    "/sources/editorial/source",
     "/feeds",
     "/hotlists",
     "/account",

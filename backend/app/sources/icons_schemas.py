@@ -33,7 +33,10 @@ class SourceIconSeed(EditorialContract):
     def bounded_seed(self) -> Self:
         if self.scheduled_for_at.utcoffset() is None:
             raise ValueError("source icon scheduling requires an aware timestamp")
-        if self.source_key != f"ed_{self.configuration.kind}_{self.profile_id.hex}":
+        if self.source_key not in {
+            f"ed_{self.configuration.kind}_{self.profile_id.hex}",
+            f"ed_personal_{self.configuration.kind}_{self.profile_id.hex}",
+        }:
             raise ValueError("icon cache needs its original source identity")
         for url in (*self.article_urls, *([self.avatar_url] if self.avatar_url else [])):
             public_url(url)

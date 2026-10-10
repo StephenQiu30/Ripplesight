@@ -46,7 +46,8 @@ const groups = [
       ["/hotlists", "来源热榜", "查看原生榜单和快照"],
       ["/jobs", "采集记录", "检查进度、覆盖与失败原因"],
       ["/sources", "来源设置", "管理连接与来源授权"],
-      ["/editorial-sources", "编辑来源", "管理资讯来源和材料"],
+      ["/sources/editorial", "站点来源", "管理站点资讯来源和材料"],
+      ["/sources/personal", "我的来源", "添加 RSS、网页与 JSON 来源"],
     ],
   },
   {
@@ -57,8 +58,6 @@ const groups = [
       ["/operations", "运营与通知", "设置周报通知和投递渠道"],
       ["/operations/models", "模型配置", "查看能力、用量与预算"],
       ["/site/manage", "站点设置", "维护公开联系资料"],
-      ["/codex-resets", "Codex 公告", "查看本账户的公告监控"],
-      ["/codex-resets/manage", "公告管理", "管理公告扫描配置"],
       ["/feeds", "RSS 订阅", "查看认证后可用的订阅出口"],
       ["/agent", "Agent 接入", "查看认证后的数据接入方式"],
       ["/feedback", "反馈", "提交问题与改进建议"],

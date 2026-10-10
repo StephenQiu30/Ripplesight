@@ -932,7 +932,7 @@ class PublicationApplicationService:
                 "Codex 公告",
                 "额度重置的公开证据",
                 "时间窗口、适用范围和原始公告",
-                "/codex-resets",
+                "/leaderboard",
             ),
             "about": ("关于", "关于 Ripplesight", "项目范围、出处与当前使用边界", "/about"),
             "terms": (

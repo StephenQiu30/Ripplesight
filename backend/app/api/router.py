@@ -18,6 +18,7 @@ from api.routers.monitor_topics import router as monitor_topics_router
 from api.routers.notifications import router as notifications_router
 from api.routers.operations import feedback_router
 from api.routers.operations import router as operations_router
+from api.routers.personal_sources import router as personal_sources_router
 from api.routers.private_exports import router as private_exports_router
 from api.routers.publication import router as publication_router
 from api.routers.publication_editions import router as publication_editions_router
@@ -59,3 +60,5 @@ api_router.include_router(publication_media_router)
 api_router.include_router(site_router)
 api_router.include_router(source_capabilities_router, responses={401: {"model": ErrorView}})
 api_router.include_router(source_connections_router, responses={401: {"model": ErrorView}})
+
+api_router.include_router(personal_sources_router)

@@ -21,7 +21,7 @@ updated: 2026-10-08
 ## 3. 做法
 
 - 模型榜在 `leaderboard` 领域，计算方法参考 AIHOT，署名见 THIRD_PARTY_NOTICES；页面在 `/leaderboard`。
-- Codex 公告页面在 `/codex-resets`；公告来源是 X，按 [03](03-每日社媒热点.md) 的方案 B 用本人账号读取，不用官方 API。
+- 2026-10-10 用户撤销 Codex 重置公告统计和管理界面；下方原公告目标保留为历史，不再自动实施。
 
 ## 4. 现状
 

@@ -251,12 +251,21 @@ class EditorialSourceService:
         self._external_tokens = external_tokens or {}
         self._ingress_hmac_secret = ingress_hmac_secret
 
-    def list_profiles(self, *, owner_id: UUID) -> tuple[EditorialProfileView, ...]:
+    def list_profiles(
+        self, *, owner_id: UUID, personal: bool = False
+    ) -> tuple[EditorialProfileView, ...]:
         self._session.rollback()
         with self._session.begin():
             rows = self._session.scalars(
                 select(EditorialSourceProfile)
-                .where(EditorialSourceProfile.owner_id == owner_id)
+                .where(
+                    EditorialSourceProfile.owner_id == owner_id,
+                    EditorialSourceProfile.source_key.startswith("ed_personal_", autoescape=True)
+                    if personal
+                    else ~EditorialSourceProfile.source_key.startswith(
+                        "ed_personal_", autoescape=True
+                    ),
+                )
                 .order_by(EditorialSourceProfile.name, EditorialSourceProfile.id)
             ).all()
             return tuple(self._view(p) for p in rows)
@@ -376,13 +385,25 @@ class EditorialSourceService:
         return result
 
     def save_profile(
-        self, *, owner_id: UUID, command: EditorialProfileInput, profile_id: UUID | None = None
+        self,
+        *,
+        owner_id: UUID,
+        command: EditorialProfileInput,
+        profile_id: UUID | None = None,
+        personal: bool = False,
     ) -> EditorialProfileView:
         self._session.rollback()
-        with self._session.begin():
-            return self.save_profile_in_transaction(
-                owner_id=owner_id, command=command, profile_id=profile_id
-            )
+        try:
+            with self._session.begin():
+                return self.save_profile_in_transaction(
+                    owner_id=owner_id, command=command, profile_id=profile_id, personal=personal
+                )
+        except (SourceAccessUnavailableError, RetentionPolicyUnavailableError) as error:
+            if not personal:
+                raise
+            raise ApplicationError(
+                "editorial_source_unavailable", context={"reason": "source_policy_unavailable"}
+            ) from error
 
     def approve_rsshub(
         self, *, owner_id: UUID, profile_id: UUID, command: EditorialRsshubApprovalInput
@@ -411,7 +432,12 @@ class EditorialSourceService:
             )
 
     def save_profile_in_transaction(
-        self, *, owner_id: UUID, command: EditorialProfileInput, profile_id: UUID | None = None
+        self,
+        *,
+        owner_id: UUID,
+        command: EditorialProfileInput,
+        profile_id: UUID | None = None,
+        personal: bool = False,
     ) -> EditorialProfileView:
         if not self._session.in_transaction():
             raise RuntimeError("editorial operator writes require caller transaction")
@@ -427,7 +453,10 @@ class EditorialSourceService:
                 profile_id is not None and replay.profile_id != profile_id
             ):
                 raise ApplicationError("idempotency_conflict")
-            return self._view(self._profile(owner_id, replay.profile_id))
+            profile = self._profile(owner_id, replay.profile_id)
+            if personal != profile.source_key.startswith("ed_personal_"):
+                raise ApplicationError("resource_not_found")
+            return self._view(profile)
         now = self._clock()
         before_state: dict[str, object] = {"configured": False}
         if profile_id is None:
@@ -440,7 +469,10 @@ class EditorialSourceService:
             p = EditorialSourceProfile(
                 id=profile_id,
                 owner_id=owner_id,
-                source_key=f"ed_{command.configuration.kind}_{profile_id.hex}",
+                source_key=(
+                    f"{'ed_personal' if personal else 'ed'}_"
+                    f"{command.configuration.kind}_{profile_id.hex}"
+                ),
                 name=command.name,
                 enabled=False,
                 current_version=1,
@@ -459,6 +491,8 @@ class EditorialSourceService:
             self._session.flush()
         else:
             p = self._profile(owner_id, profile_id, lock=True)
+            if personal != p.source_key.startswith("ed_personal_"):
+                raise ApplicationError("resource_not_found")
             old = self._version(p)
             before_state = self._view(p).model_dump(mode="json")
             if p.revision != command.expected_revision:
