@@ -29,11 +29,11 @@ API 进程不跑定时器，也不消费消息。同一时间只运行一个 Wor
 
 Compose 本机项目名为 `ripplesight`，生产项目名为 `ripplesight-prod`，容器、网络和自有镜像使用 `ripplesight` 前缀；后端容器用户也使用 `ripplesight`，UID 保持 10001。应用继续使用本机已有数据库及 `HOTKEY_*` 配置。可选环境栈的新数据卷跟随当前 Compose 项目名，已有卷可通过 `HOTKEY_POSTGRES_VOLUME_NAME`、`HOTKEY_REDIS_VOLUME_NAME`、`HOTKEY_KAFKA_VOLUME_NAME` 显式复用；改名不复制、删除或初始化已有数据。
 
-本机默认加载 `docker-compose.override.yml` 开启热更新：API 只读挂载 `backend/app`，由 Uvicorn 重载；Web 只读挂载 `frontend/src`、`public` 与开发配置，使用 Next.js 默认 Turbopack 开发服务器。Web 开发缓存使用独立命名卷，不放入计入容器内存的 tmpfs；开发容器上限 3GiB、Node 堆上限 1536MiB、2 CPU，配合 Turbopack 避免 webpack 持续累积编译内存导致开发子进程重启。更新依赖或 Next.js 版本时可单独清理该缓存卷，业务数据卷不受影响。生产和 CI 显式选择基础 Compose 文件，继续使用只读的生产镜像；环境变量、依赖及数据库结构变化仍按原流程处理。
+Compose 使用 `docker-compose.yml` 中的构建镜像。修改源码或依赖后重新构建对应服务；需要热更新时，按 backend/README.md 或 frontend/README.md 在宿主机启动开发服务。环境变量和数据库结构变化分别按配置与数据库流程处理。
 
 ## 3. 目录
 
-本机父工作区为 `Ripplesight/`，其中 `ripplesight-server/` 是下方的主仓库，`ripplesight-app/` 是尚未初始化的冻结客户端仓库。目录已按新名称迁移；旧名称的符号链接仅为已有工具与会话保留，新配置应使用新路径。
+本机父工作区为 `Ripplesight/`，其中 `ripplesight-server/` 是下方的主仓库，`ripplesight-app/` 是尚未初始化的冻结客户端仓库。工具和配置统一使用这两个仓库路径。
 
 ```text
 ripplesight-server/
@@ -56,15 +56,14 @@ ripplesight-server/
 │   ├── src/proxy.ts           # 会话门禁与 CSP
 │   └── tests/                 # 前端测试
 └── docs/                     # 唯一项目文档目录，也是 Obsidian vault
-    ├── .obsidian/            # 共享链接、模板与核心插件配置
-    ├── product/              # prd / plan / pages / reference
-    ├── capabilities/         # 能力规格与状态
-    ├── decisions/            # 生效与历史决策
-    ├── records/              # 验收记录
-    ├── research/             # 调研依据
-    ├── templates/            # 文档模板
-    ├── views/                # Obsidian Bases 看板
-    └── designs/              # 设计参考
+    ├── index.md              # 知识库入口与使用说明
+    ├── requirement/          # 当前页面和功能需求
+    ├── design/               # 现行视觉、布局与交互规范
+    ├── prd/                  # 产品目标、边界与验收标准
+    ├── plan/                 # 当前执行顺序与交付门槛
+    ├── templates/            # 四类可选模板
+    ├── views/文档.base       # Obsidian 文档视图
+    └── .obsidian/            # 共享配置；个人布局与缓存继续忽略
 ```
 
 Web 外壳使用 `BasicLayout → PageContainer`：前者管理侧栏、移动导航和会话，后者统一有限高度的正文滚动区与宽度，页脚仅登录页使用；页内标题由页面提供。`LayoutContainer` 只负责横向对齐。滚动引用指向 `PageContainer` 的正文区，路由切换、阅读定位和跳到正文共用该节点；打印恢复自然文档流。全站只保留一个 main，业务页面不另建全屏滚动容器。
@@ -89,7 +88,7 @@ Web 外壳使用 `BasicLayout → PageContainer`：前者管理侧栏、移动�
 | events | 事件归并、事实与进展、热度、向量 |
 | reports | 个人日报/周报、公开刊物、导出 |
 | notifications | 订阅、投递、告警 |
-| knowledge | Obsidian 业务导出、检索与问答；项目文档切片规划见 §11 |
+| knowledge | Obsidian 业务报告导出、检索与问答 |
 | publication | 公开内容的许可、投影与撤回（对外分发部分已冻结） |
 | leaderboard | 模型榜 |
 | operations | 运营权限、站点设置、反馈、心跳、维护 |
@@ -127,7 +126,7 @@ Web 外壳使用 `BasicLayout → PageContainer`：前者管理侧栏、移动�
 - RSSHub/SearXNG 聚合服务只连接本机实例，主机只能是 `127.0.0.1`（宿主机）或 `host.docker.internal`（Compose）。平台直连和聚合服务是不同路径；各 HTTP 适配器均强制目标主机白名单，并校验每一次重定向。
 - MediaCrawler 作为宿主机子进程运行，使用独立的浏览器和本人账号；浏览器资料目录权限为 700、文件权限为 600；遇到验证码、登录失效或限流就停用。
 - 模型只走本机 Codex app-server：每个分析任务启动一个子进程，只读、不需要审批、只传最小环境变量、使用空的工作目录。模型输入一律视为不可信文本，输出必须是结构化结果并经过校验；数字、排序和引用由程序计算。
-- 费用、账号、许可等产品边界见 [决策](docs/index.md#决策)。
+- 费用、账号、许可等产品边界见 [产品边界](docs/prd/PRD.md#产品边界)。
 
 ## 9. API 与身份
 
@@ -139,65 +138,46 @@ Web 外壳使用 `BasicLayout → PageContainer`：前者管理侧栏、移动�
 
 ## 10. 配置与部署
 
-- **项目文档**：普通 Markdown 唯一原文在 docs/，Obsidian 直接打开 docs；BACKLOG、PROJECT、AGENTS 保持仓库根文件原文。索引与链接校验复用 frontend 的依赖与测试入口，实现在 frontend/tests/docs/，通过 pnpm docs:index、pnpm docs:check 执行，不维护独立 scripts/docs 包，不生成网页或数据库正文副本。业务报告的 Obsidian 导出继续使用 knowledge/obsidian.py。
+- **项目文档**：docs/ 是 Markdown 唯一原文和 Obsidian vault；文档按 requirement、design、prd、plan 四个目录维护，进度和技术约定仍在根目录 BACKLOG、PROJECT、AGENTS。链接与锚点检查复用 frontend/tests/docs/ 的 pnpm docs:check，不强制编号、元数据或生成索引。业务报告的 Obsidian 导出继续使用 knowledge/obsidian.py。
 - 环境文件只放在仓库根目录：本机用 `.env`，生产用 `.env.prod`，模板是 `.env.example`。所有进程都读这一份，进程注入的环境变量优先。
 - `docker-compose.yml` 定义应用（API、Web，以及按需启用的 Worker / Scheduler / CLI）；`docker-compose-env.yml` 只在需要全新的 PostgreSQL/Redis/Kafka 时使用；`docker-compose-prod.yml` 通过 include 复用应用定义。
-- 2026-10-10 按用户要求移除无业务采集消费者的独立 browser/browser-egress 服务、远程浏览器适配器与探测命令。浏览器会话凭据兼容合同及报告导出的 Playwright 用途保留，后者不依赖已移除的远程服务。
+- 浏览器采集由宿主机来源适配器执行；报告导出使用 Playwright，不部署独立的远程 browser 服务。
 - Web 生产构建为 standalone，以非 root 用户和只读文件系统运行；每个请求生成独立的 CSP nonce。
 
-## 11. 项目文档知识库接入方案（待审查）
+## 11. 项目文档
 
-2026-10-08 用户撤销在线项目知识库，恢复 docs 下的 Markdown/Git 管理并保留 Obsidian。原 Nextra 文档站、Pagefind/AI 站点导出、Editor.js 网页编辑、项目文档 API、专用副本与快照发布工具退役；不再新增账号或发布流程。旧专项 PRD 与 PLAN 标为废弃，历史证据保留供追溯。
+[文档入口](docs/index.md) 连接四类原文：requirement 说明页面和功能需要什么；design 说明视觉和交互；prd 说明产品目标、范围与验收；plan 说明执行顺序和交付门槛。每类先维护一份文档，确有独立主题时再拆分，不强制编号、frontmatter 或相互配套的任务卡。
 
-Obsidian 直接编辑 docs 中的原文，保留 frontmatter、标准 Markdown 相对链接、templates、views 与共享 .obsidian 配置。根文件只保留指针，仍在仓库根目录修改；不另存可编辑正文副本。index.md 由本机索引脚本更新，Git diff 负责审阅变化。索引和检查命令见 docs/README.md。
+Obsidian 直接打开 docs，共享配置、Templates 与文档视图保留；进度仅在根目录 BACKLOG，工程约定仅在 PROJECT 和 AGENTS。API 与数据库直接查代码和唯一 schema。当前文档只维护有效要求与使用说明，不保存历史文档、归档副本或已完成事项流水。业务报告的 Obsidian 导出独立于项目文档。
 
-业务报告、资讯和评论的 Obsidian 导出属于产品能力，与项目文档网站分离，保留现有 knowledge/obsidian.py、配置、CLI 与测试。已有 .tools/workspace 的私密来源、草稿和本机历史不自动迁入公开 docs，也不删除；如有本机状态，按 docs/README 的说明手工审阅。
+## 12. 关键词监控运行链
 
-## 12. 关键词监控工程设计（提案）
-
-本节只保留当前运行链与历史demo接入证据。此前通用候选、四档相关性、扩展适配器和完整分析平台的详细提案已由[页面驱动的收敛方案](docs/product/reference/14-页面驱动的收敛方案.md)替换，不作为当前实施前置。
-
-| 当前链路 | 复用职责 |
+| 当前链路 | 职责 |
 |---|---|
-| 主题/来源配置 | 现有monitor_topics/versions、source_connections/versions，编辑比较版本，准入由服务校验 |
-| 运行/调度 | 原jobs/outbox、租约、预算、到期窗口；页面读取回执和任务，不重建批次平台 |
-| 材料/评论 | content身份、正文版本、观察、threads；原文时间和抓取时间分离 |
-| 分析/展示 | 当前annotations合同、公开许可投影、事件热度与报告引用；没有数据不编造统计 |
+| 主题与来源配置 | monitor_topics/versions、source_connections/versions；编辑比较版本，来源准入由服务校验 |
+| 运行与调度 | jobs/outbox、租约、预算和到期窗口；页面读取任务与回执 |
+| 材料与评论 | content 身份、正文版本、观察记录和 threads；来源发布时间与采集时间分离 |
+| 分析与展示 | annotations、公开许可投影、事件热度和报告引用；缺失数据使用真实空态 |
 
-字段、键与查询见[页面数据库设计](docs/product/reference/09-全站页面数据库设计.md)，接口见[当前页面合同](docs/product/reference/08-全站页面接口设计.md)。独立库验证、真实平台和自然小时运行仍分别验收。
+B 站 Chrome 来源使用 `bilibili` 来源键与固定 API 地址 `https://api.bilibili.com`，通过 SourceAdapter 接入 `keyword.search` 和 `source.comments`。适配器版本写入任务冻结的 `jobs.scope.source_adapter_version`，主题、任务、内容、预算与覆盖复用业务数据库。登录由本机 cookie-source 提供，仅对显式绑定的 owner 生效；凭据只驻留宿主进程内存，验证码、登录失效或限流时停止。
 
-### 12.7 Chrome 登录复用的首个可运行 demo
+来源预设为每小时一轮、每日 60 次请求、单页两帖、每帖最多 20 条根评论、00–08 点静默、保留 30 天；搜索与评论共用预算。有界单机执行器按 owner 与来源限定任务，复用 JobExecutionService 的租约、幂等和完成流程。抽样始终标为部分覆盖，真实增量、自然持续运行和模型质量分别验收。
 
-最新用户授权启动真实定时 POC。为隔离既有积压 Job，首轮采用宿主 `cli.keyword_demo` 有界运行器，复用 sources 契约输出；不启动全局 Worker，不修改业务数据库结构。来源适配器只访问 B 站固定 HTTPS 端点，登录来自已部署的本机 Framefetch cookie-source（127.0.0.1），每轮重新获取、只驻留内存、不打印或落盘。桥接 token 仅保存在本机私有 .env 中。桥接断开、登录失效、验证码或限流停止并记录原因，不自动换身份或代理。
-
-POC 数据存于 git 忽略的私有 `.tools/keyword-demo`，原子写入 JSON 状态、按平台 ID 去重并输出转义后的本机 HTML 阅读报告；它是独立验收产物，不是第三份 PRD 或正式业务数据库。首次即运行，此后默认每小时轮询一次，每日最多 60 次来源请求、单轮最多 4 次（登录、搜索、最多两个帖的评论），一次只取一页、窗口 72 小时，结果明确标注抽样与关键词基线。持久化下一次时间、请求预算和停止原因，进程重启不补发密集积压；文件锁防止并行运行。正式账号下的 monitor/Job 集成、语义四档及其他平台不据此标为完成。
+字段与约束见唯一 [schema](backend/sql/schema.sql)，接口以 [生成客户端](frontend/src/api) 与 [后端路由](backend/app/api/routers) 为准。
 
 
-### 12.8 Chrome demo 接入现有工作台（2026-10-07 授权实施）
+## 13. 页面与服务的边界
 
-用户要求 demo 跑通后接入真实前后端。本切片保留 `bilibili` 来源键，通过连接版本的固定 API 地址 `https://api.bilibili.com` 区分旧 MediaCrawler 网页入口。Chrome 适配器实现现有 SourceAdapter，搜索与新鲜根评论分别进入 keyword.search / source.comments；继续用 PostgreSQL 的主题、任务、内容、预算与覆盖表，无新表、无第二份正文库。原生适配器版本写入既有 `jobs.scope.source_adapter_version`，由服务端按当次组件政策冻结；旧 MediaCrawler SHA 字段与约束保持不变，不需要 DDL 或业务库迁移。仅按本机显式绑定的 owner UUID 使用 Chrome，会话只在宿主进程内存中短暂存在。
+页面需求与视觉规范集中在 [PRD](docs/prd/PRD.md) 和 [DESIGN](docs/design/DESIGN.md)。页面需要的字段由现有客户端和后端合同核对；查询派生值、本机状态与持久业务事实分开。每个新增结构必须有实际读写方，不能为路由、卡片或计数复制一套数据。
 
-来源设置页提供当前账号应用 Chrome 预设的受保护写接口；未绑定账号拒绝执行。预设每小时、每日 60 次网络请求、单页两帖与每帖最多 20 根评论、00–08 点静默、30 天保留；搜索和评论共用来源预算。实际抓取受取消、连接版本、登录和风控停止约束；小样本始终报告部分覆盖。
+`/topics`、`/monitors/[topicId]` 和 `/workspace` 共用 TopicsWorkspace。权限、公开许可、版本、任务租约与 outbox 等现有运行职责保留；物理删表须先核对消费者、历史数据和外键，再按 §6 在独立库完成恢复与迁移验证。
 
-单机接管可限定 owner + bilibili，仅扫描该账号的主题日程和评论候选，并从现有 jobs/outbox 执行对应任务，复用 JobExecutionService 的租约、幂等、预算和完成流程，不启动其他账号历史任务。标准 Kafka Worker 保持兼容。原独立 demo 调度在真实链路接管时停止，旧 JSON/页面只保留验收证据。
+## 14. CI 检查
 
+CI 验证当前锁定运行栈。frontend执行完整静态检查、交互回归与构建；contract仅执行同提交运行API的生成客户端漂移及传输层专项，不重复全套Web测试；backend使用隔离hotkey_test_*库、唯一schema和实际Redis/Kafka/MinIO做全量回归；runtime使用生产镜像验证依赖、HTTP代理、会话/CSRF、动态CSP、Worker及非root只读边界。项目文档仅保留本地链接与锚点校验、检查工具测试，镜像测试使用隔离Git夹具而不依赖Docker上下文携带仓库元数据。CI成功不替代Figma视觉、真实提供方和长期服务验收。
 
-## 13. 全站页面需求与契约设计（2026-10-08）
+## 15. 页面路由约定
 
-本人最新纠正：当前前端视觉实现属于历史冗余，必须从 layout、组件和页面按 Figma 桌面稿重新复现；已有页面文档仅作为接口与数据依赖清单。文档数量、接口数量和表数量均不是交付目标。[页面专项 PRD](docs/product/prd/03-PRD-全站页面需求.md)及单页需求是当前实施入口，旧设计中的扩展不能自动进入实施范围。
-
-[接口设计](docs/product/reference/08-全站页面接口设计.md)按页面读取和提交路径组织；[数据库设计](docs/product/reference/09-全站页面数据库设计.md)逐项说明哪些字段持久化、哪些由查询计算、哪些仅为浏览器状态。撤销上一版预设云收藏、事件关注、独立阅读回执、运行批次、情感快照和告警已读等新表的实施建议。当前 UI 可以使用既有存储，不为每个路由、卡片或计数建表。
-
-阅读主流程、监控闭环、辅助管理与冻结功能分别维护；保留当前调用需要的历史存储，不以“页面不直接读表”为由删除任务、权限、许可、版本或审计。物理删表必须先验证服务、任务、外键与历史数据迁移，按§6在独立库恢复和验证。§12中的四档相关性、候选关联等尚未实现的扩展只作为历史讨论，不是本轮默认前置。
-
-现有 `/topics`、`/monitors/[topicId]`、`/workspace` 共享 TopicsWorkspace，保持一套主题数据和编辑流程。Figma 外壳只由 PageContainer 管理正文滚动和登录页脚，删除无调用者的旧固定 header 插槽；不重新引入全局位置栏。具体取舍、删除证据与后续清理门槛见[页面驱动的收敛方案](docs/product/reference/14-页面驱动的收敛方案.md)。
-
-### CI生产底线（2026-10-08）
-
-CI只验证当前锁定运行栈，不扩展旧版本、旧卷名或多系统兼容矩阵。frontend执行完整静态检查、交互回归与构建；contract仅执行同提交运行API的生成客户端漂移及传输层专项，不重复全套Web测试；backend使用隔离hotkey_test_*库、唯一schema和实际Redis/Kafka/MinIO做全量回归；runtime使用生产镜像验证依赖、HTTP代理、会话/CSRF、动态CSP、Worker及非root只读边界。公开文档保留内容校验、工具测试、构建与发布，镜像测试使用隔离Git夹具而不依赖Docker上下文携带仓库元数据。CI成功不替代Figma视觉、真实提供方和长期服务验收。
-
-## 2026-10-10 页面路由约定
-
-页面的静态路径用斜线表达层级，不使用连字符拼接多个层级：来源维护为 `/sources/editorial`；Codex 重置公告统计及管理页面按用户要求退出产品界面。动态标识和日期仍保留其业务格式。公开来源由发布账号配置，个人配置继续按会话账号隔离；不得把个人来源自动公开。
+页面的静态路径用斜线表达层级，不使用连字符拼接多个层级：来源维护为 `/sources/editorial`。动态标识和日期仍保留其业务格式。公开来源由发布账号配置，个人配置继续按会话账号隔离；不得把个人来源自动公开。
 
 个人 RSS/网页/JSON 来源复用 `editorial_source_profiles` 及其不可变版本、连接与审计，不建第二套来源表。服务端生成 `ed_personal_` 命名空间的 source_key，个人接口只访问会话 owner 下此命名空间；站点运营列表读取原 `ed_` 来源。个人命名空间拒绝配置公开发布策略，即使该用户也是发布账号也不能自动进入公开页面。创建默认关闭，不发起外部请求；启用继续核验原来源许可和保留策略。个人配置接口位于 `/api/sources/personal`，页面位于 `/sources/personal`。

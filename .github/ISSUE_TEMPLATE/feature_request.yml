@@ -5,7 +5,7 @@ labels: [enhancement]
 body:
   - type: markdown
     attributes:
-      value: "先查看 BACKLOG 与 docs/README.md，确认建议是否已在计划中。"
+      value: "先查看 BACKLOG 与 docs/index.md，按 PRD 和 Design 确认建议范围。"
   - type: textarea
     id: problem
     attributes:
