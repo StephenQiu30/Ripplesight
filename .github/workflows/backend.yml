@@ -205,19 +205,8 @@ jobs:
           result = subprocess.run([sys.executable, "-m", "pytest", *selected,
                                    "-ra", "--junitxml=test-results.xml"], check=False)
           report = ET.parse("test-results.xml")
-          live_browser_names = {
-              "test_dedicated_proxy_allows_only_the_canary_and_blocks_loopback",
-              "test_dynamic_actions_have_a_bounded_end_and_contexts_are_isolated",
-              "test_endless_pagination_stops_at_the_explicit_limit",
-              "test_public_root_ws_path_is_rejected",
-              "test_supervisor_cancellation_releases_child_browser_context",
-              "test_timeout_and_cancellation_close_remote_contexts",
-          }
           unexpected = [test.get("classname", "") + "." + test.get("name", "")
-                        for test in report.iter("testcase") if test.find("skipped") is not None
-                        and not (test.get("classname") ==
-                                 "tests.integration.test_browser_collection.BrowserCollectionLiveTests"
-                                 and test.get("name") in live_browser_names)]
+                        for test in report.iter("testcase") if test.find("skipped") is not None]
           if unexpected:
               print("Unexpected skipped baseline tests: " + ", ".join(unexpected))
           raise SystemExit(result.returncode or bool(unexpected))

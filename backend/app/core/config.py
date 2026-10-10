@@ -16,9 +16,6 @@ from ai.capability_schemas import AI_CAPABILITIES, AiModelServerSpec
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 _REPOSITORY_ROOT = _BACKEND_ROOT.parent
-BROWSER_EXECUTION_TIMEOUT_MAX_SECONDS = 45
-BROWSER_CLOSE_TIMEOUT_SECONDS = 5
-BROWSER_CLOSE_STEP_COUNT = 3
 JOB_PROCESS_STARTUP_TIMEOUT_SECONDS = 3
 JOB_PROCESS_HANDLER_SETUP_MARGIN_SECONDS = 5
 JOB_PROCESS_TERMINATE_GRACE_SECONDS = 2
@@ -152,14 +149,6 @@ class Settings(BaseSettings):
     firecrawl_timeout_seconds: int = Field(default=20, ge=1, le=20)
     firecrawl_max_response_bytes: int = Field(default=2 * 1024 * 1024, ge=1024, le=2 * 1024 * 1024)
 
-    browser_enabled: bool = False
-    browser_ws_url: SecretStr = SecretStr("")
-    browser_connect_timeout_seconds: int = Field(default=5, ge=1, le=10)
-    browser_execution_timeout_seconds: int = Field(
-        default=BROWSER_EXECUTION_TIMEOUT_MAX_SECONDS,
-        ge=1,
-        le=BROWSER_EXECUTION_TIMEOUT_MAX_SECONDS,
-    )
     browser_state_dir: Path | None = None
 
     bilibili_chrome_owner_id: UUID | None = None
@@ -573,12 +562,6 @@ class Settings(BaseSettings):
         if kind != "webpage.collect":
             raise ValueError(f"unsupported job kind: {kind}")
         execution_seconds = self.firecrawl_timeout_seconds if self.firecrawl_enabled else 0
-        if self.browser_enabled:
-            browser_execution_seconds = (
-                self.browser_execution_timeout_seconds
-                + BROWSER_CLOSE_TIMEOUT_SECONDS * BROWSER_CLOSE_STEP_COUNT
-            )
-            execution_seconds = max(execution_seconds, browser_execution_seconds)
         return execution_seconds + JOB_PROCESS_HANDLER_SETUP_MARGIN_SECONDS
 
     @field_validator("firecrawl_base_url")
@@ -601,30 +584,6 @@ class Settings(BaseSettings):
         ):
             raise ValueError("invalid Firecrawl base URL")
         return value.removesuffix("/")
-
-    @field_validator("browser_ws_url")
-    @classmethod
-    def validate_browser_ws_url(cls, value: SecretStr, info: ValidationInfo) -> SecretStr:
-        endpoint = value.get_secret_value()
-        if not endpoint and not info.data.get("browser_enabled", False):
-            return value
-        try:
-            parsed = urlsplit(endpoint)
-            port = parsed.port
-        except ValueError as error:
-            raise ValueError("invalid browser WS URL") from error
-        if (
-            parsed.scheme not in {"ws", "wss"}
-            or parsed.hostname is None
-            or parsed.username is not None
-            or parsed.password is not None
-            or re.fullmatch(r"/ws/[0-9a-f]{48}", parsed.path) is None
-            or parsed.query
-            or parsed.fragment
-            or port is None
-        ):
-            raise ValueError("invalid browser WS URL")
-        return value
 
     @field_validator("browser_state_dir", mode="before")
     @classmethod

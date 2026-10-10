@@ -1,5 +1,9 @@
 # 文档验证记录
 
+## 2026-10-10 独立浏览器退役与SQL目录改名
+
+核查远程BrowserRuntime仅有探测CLI与专用测试调用，业务采集没有消费者。按用户要求移除独立browser/browser-egress及相关运行时、配置、探测和专用测试；保留会话凭据兼容及报告导出Playwright用途。backend/database改为backend/sql，schema逐字一致，Docker、初始化、维护/CLI备份恢复、CI、测试和现行文档引用已同步。ruff、format、mypy、普通pytest1606通过/954跳过；另用独立PostgreSQL18空库和临时MinIO完成schema及备份恢复10项测试，零跳过，资源已清理。开发/生产Compose一致性与凭据隔离断言、后端镜像构建和独立审查通过。详情与验证边界见[验收记录](records/2026-10-10-独立浏览器退役与SQL目录改名.md)。
+
 ## 2026-10-10 旧脚本删除与检查入口整合
 
 用户确认保留7个旧文件删除并调整检查入口。ESLint设计规则并入配置；文档工具迁到frontend/tests/docs共用前端依赖与锁文件；openapi:check直接重新生成并拒绝HEAD差异、暂存变化和未跟踪文件。原工作区lint、typecheck、format:check、build及128文件1037项测试通过；本机独立API仅导出当前源码的契约，关闭lifespan且不访问业务数据库，客户端无漂移。首次全量测试与契约生成并行，生成器重写API目录时造成一个套件导入失败；生成结束后顺序全量复跑通过。独立复审通过，文档检查入口和CI路径已同步。未改业务UI、接口或数据库，未重跑浏览器及后端验收。详见[验收记录](records/2026-10-10-旧脚本删除与检查入口整合.md)。

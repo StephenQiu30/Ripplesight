@@ -91,7 +91,7 @@ jobs:
               local = config("docker-compose.yml", development)
               prod = config("docker-compose-prod.yml", production)
               infra = config("docker-compose-env.yml", development)
-              assert set(local["services"]) == {"backend", "frontend", "worker", "scheduler", "browser", "browser-egress", "cli"}
+              assert set(local["services"]) == {"backend", "frontend", "worker", "scheduler", "cli"}
               assert set(infra["services"]) == {"postgres", "redis", "kafka"}
               for volume in ("postgres-data", "redis-data", "kafka-data"):
                   assert infra["volumes"][volume]["name"] == "ripplesight-parity_" + volume
@@ -123,14 +123,12 @@ jobs:
               (isolated / ".env").write_text(
                   template.replace("HOTKEY_SOURCE_CREDENTIALS={}",
                                    'HOTKEY_SOURCE_CREDENTIALS={"x":"development_canary"}')
-                          .replace("HOTKEY_BROWSER_WS_URL=", "HOTKEY_BROWSER_WS_URL=ws://development-canary")
               )
               isolated_production = isolated / ".env.prod"
               isolated_production.write_text("HOTKEY_DATABASE_URL=postgresql+psycopg://fake:fake@postgres:5432/prod\n")
               isolated_config = config(str(isolated / "docker-compose-prod.yml"), isolated_production)
               isolated_env = isolated_config["services"]["backend"]["environment"]
               assert isolated_env["HOTKEY_SOURCE_CREDENTIALS"] == "{}"
-              assert isolated_env["HOTKEY_BROWSER_WS_URL"] == ""
           print("Application parity, infrastructure separation, and production secret isolation passed")
           PY
 
