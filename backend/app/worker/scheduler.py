@@ -1020,11 +1020,10 @@ def run_scheduler_round(
                 scan.after_commit(now)
             results[scan.name] = count
         except Exception as error:
-            logger.error(
+            logger.exception(
                 "scheduler_scan_failed",
                 scan=scan.name,
                 error_type=type(error).__name__,
-                exc_info=True,
             )
     return results
 

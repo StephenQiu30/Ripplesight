@@ -50,7 +50,23 @@ src = ["app", "tests"]
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+select = [
+    "E", "W", "F", "I", "N", "UP", "B", "SIM", "RUF",
+    "D", "G", "LOG", "TID252", "PLE", "PLW0127", "PLW1509", "PGH003", "PGH004",
+]
+# Existing missing docstrings migrate through review; validate all present docstrings.
+# New/changed public interfaces still require documentation under AGENTS.md §3.
+ignore = ["D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [tool.mypy]
 python_version = "3.12"
@@ -58,15 +74,20 @@ files = ["app"]
 plugins = ["pydantic.mypy"]
 strict = true
 warn_unreachable = true
+show_error_codes = true
+enable_error_code = ["ignore-without-code", "unused-awaitable"]
 
 [[tool.mypy.overrides]]
+# Binary Kafka client has no bundled typing; application callers remain strict.
 module = ["confluent_kafka.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# Feedparser has no bundled typing; application callers remain strict.
 module = ["feedparser.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# APScheduler 3.x has no bundled typing; scheduler application code remains strict.
 module = ["apscheduler.*"]
 ignore_missing_imports = true

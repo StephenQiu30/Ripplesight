@@ -93,6 +93,7 @@
 ### [11 质量评测与验收](docs/requirement/11-质量评测与验收.md) · [设计](docs/design/11-质量评测与验收.md) · [计划](docs/plan/11-质量评测与验收.md)
 
 - **已实现（源码核对）**：SelectBench 有标注导入、混淆指标和阈值评估；采集/分析时效、应执行窗口和覆盖回执有计算基础，现有受控测试可复用。[evaluation_services.py](backend/app/analysis/evaluation_services.py#L97)；[metrics.py](backend/app/jobs/metrics.py#L49)
+- **Python 工程规范与检查**：[AGENTS §3](AGENTS.md#python-规范与自动检查) 明确 Google Python 规范及项目调整、文档迁移和人工审查范围；[pyproject.toml](backend/pyproject.toml) 补充 Google docstring、日志、绝对导入、忽略项错误码及 Pylint 错误规则，保留 mypy 全量生产源码 strict。[后端 CI](.github/workflows/backend.yml) 将原测试分片中的 Ruff/mypy 拆为无需集成服务的独立 quality 任务，使用锁定开发依赖，并在工程规范变更时触发；调度异常日志改用 `logger.exception`。仅本次提交内容独立导出后，Ruff lint/format（718 文件）、mypy（439 份源码）、actionlint 和185份Markdown链接检查通过；pytest 为1608通过、982跳过、2个第三方依赖弃用警告，未配置独立 PostgreSQL/Kafka/Redis/MinIO 集成依赖，跳过不计通过。临时反例确认 D205/G004/TID252/PGH004 和返回值类型错误会导致检查失败。只读独立审查无阻断项，并独立复跑 lint/format/mypy 和20项 scheduler 测试通过。远端 CI 以对应提交的 Actions 结果为准；远端必需检查设置未验证，路径过滤下的必需检查限制已写入规范，不据工程核验关闭真实能力验收。
 - **待补齐/待核对**：编辑精选评测不等于关键词 bool、事件归并和持续运行的独立验收。补分层真实样本、校准/保留样本分离、正式阈值及证据记录；先测基线，再冻结质量、运行成功率与延迟阈值，不能自行编固定目标。
 - **待验收**：两轮真实采集、独立相关性/事件评测、七日自然运行及本人收到首次热点提醒均待验收；硬门槛失败阻止通过。工程测试、固定样本、真实平台、自然时间、用户体验和独立审查分别报告。
 
