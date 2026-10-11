@@ -298,10 +298,10 @@ def archive_monitor_topic(
     response_model=MonitorTopicRunView,
     status_code=status.HTTP_202_ACCEPTED,
     summary="立即运行监控主题来源",
-    description="按当前主题规则和已应用来源预设创建搜索任务。重复操作标识返回原受理结果。",
+    description="按当前规则与来源预设判定受理。全部跳过保存回执而不创建任务。重放返回冻结结果。",
     responses={
         **_WRITE_RESPONSES,
-        200: {"model": MonitorTopicRunView, "description": "同一次操作已受理"},
+        200: {"model": MonitorTopicRunView, "description": "全部来源跳过或原操作结果重放"},
     },
 )
 def run_monitor_topic(
@@ -312,6 +312,10 @@ def run_monitor_topic(
     scope_id: UserWriteScopeDependency,
 ) -> MonitorTopicRunView:
     result = service.run(owner_id=scope_id, topic_id=topic_id, command=payload)
-    response.status_code = status.HTTP_200_OK if result.replayed else status.HTTP_202_ACCEPTED
+    response.status_code = (
+        status.HTTP_202_ACCEPTED
+        if not result.replayed and any(source.job_ids for source in result.view.sources)
+        else status.HTTP_200_OK
+    )
     response.headers["cache-control"] = "no-store"
     return result.view

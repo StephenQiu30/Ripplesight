@@ -123,7 +123,7 @@ export async function resumeMonitorTopic(
   });
 }
 
-/** 立即运行监控主题来源 按当前主题规则和已应用来源预设创建搜索任务。重复操作标识返回原受理结果。 POST /api/topics/${param0}/runs */
+/** 立即运行监控主题来源 按当前规则与来源预设判定受理。全部跳过保存回执而不创建任务。重放返回冻结结果。 POST /api/topics/${param0}/runs */
 export async function runMonitorTopic(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: HotKeyAPI.runMonitorTopicParams,

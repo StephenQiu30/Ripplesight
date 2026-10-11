@@ -189,7 +189,7 @@ export function TopicRunActions({
       if (cause instanceof ApiRequestError) {
         toast.error(
           cause.code === "topic_not_ready"
-            ? "当前所选来源均未受理。请检查来源就绪状态、静默时段和预算。"
+            ? "主题当前不可运行，请刷新确认主题状态。"
             : cause.code === "idempotency_conflict"
               ? "请求编号与先前的来源选择冲突，请重新选择后再试。"
               : cause.message,

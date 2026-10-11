@@ -117,3 +117,75 @@ it.each(["paused", "archived"] as const)(
     expect(api.run).not.toHaveBeenCalled();
   },
 );
+
+it("shows all-skipped query evidence without jobs or zero hits and requires an explicit new round", async () => {
+  const skipped: HotKeyAPI.MonitorTopicRunView = {
+    ...result,
+    sources: [
+      {
+        source_key: "hackernews",
+        job_ids: [],
+        skip_reason: "budget",
+        query_plan: {
+          version: 1,
+          topic_version: 2,
+          max_queries: null,
+          collection: null,
+          queries: [
+            {
+              query_index: 0,
+              query: "任一词",
+              admitted: false,
+              skip_reason: "budget",
+            },
+          ],
+        },
+      },
+    ],
+  };
+  api.run.mockResolvedValue(skipped);
+  render(
+    <TopicRunActions
+      topic={{ ...topic, source_keys: ["hackernews"] }}
+      sourceNames={sourceNames}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "立即采集" }));
+  await screen.findByText("冻结主题版本：v2");
+  expect(screen.getByText("任一词")).toBeTruthy();
+  expect(screen.getByText(/未受理（预算不足）/)).toBeTruthy();
+  expect(screen.queryByRole("link", { name: /查看任务/ })).toBeNull();
+  expect(screen.queryByText(/已受理 0|命中 0|采集完成/)).toBeNull();
+  expect(
+    (screen.getByRole("switch", { name: "Hacker News" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  const operation = api.run.mock.calls[0][1].operation_id;
+  fireEvent.click(screen.getByRole("button", { name: "发起新一轮" }));
+  expect(screen.getByText("本页尚无手动运行结果。")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "立即采集" }));
+  await screen.findByText("冻结主题版本：v2");
+  expect(api.run).toHaveBeenCalledTimes(2);
+  expect(api.run.mock.calls[1][1].operation_id).not.toBe(operation);
+});
+
+it("distinguishes a topic that stopped running from source admission skips", async () => {
+  api.run.mockRejectedValue(
+    new ApiRequestError({
+      kind: "http",
+      code: "topic_not_ready",
+      status: 409,
+      message: "not ready",
+    }),
+  );
+  render(<TopicRunActions topic={topic} sourceNames={sourceNames} />);
+  fireEvent.click(screen.getByRole("button", { name: "立即采集" }));
+  await waitFor(() =>
+    expect(api.error).toHaveBeenCalledWith(
+      "主题当前不可运行，请刷新确认主题状态。",
+      { description: undefined },
+    ),
+  );
+  expect(screen.queryByText(/冻结主题版本/)).toBeNull();
+  expect(api.success).not.toHaveBeenCalled();
+});

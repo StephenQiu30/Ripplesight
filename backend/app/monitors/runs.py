@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import cast
 from uuid import UUID, uuid5
 
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -39,7 +41,7 @@ from jobs.services import (
     try_lock_source_collection_in_transaction,
 )
 from monitors.collection_config import TopicCollectionConfig
-from monitors.models import MonitorTopic, MonitorTopicVersion
+from monitors.models import MonitorTopic, MonitorTopicRunSkip, MonitorTopicVersion
 from monitors.schemas import (
     MonitorTopicRunInput,
     MonitorTopicRunSourceView,
@@ -73,6 +75,23 @@ class MonitorTopicRunService:
     def run(
         self, *, owner_id: UUID, topic_id: UUID, command: MonitorTopicRunInput
     ) -> MonitorTopicRunResult:
+        """Freeze one manual admission decision, including when every source skips.
+
+        Args:
+            owner_id: Authenticated owner of the topic and operation.
+            topic_id: Requested topic; a replay must retain this identity.
+            command: Stable operation identifier and selected source set.
+
+        Returns:
+            The original frozen decision on replay, or a new decision committed
+            atomically with its Jobs or all-skipped receipt. This sends no requests.
+
+        Raises:
+            ApplicationError: The topic is inaccessible, not runnable, the source
+                selection is invalid, or the operation conflicts with prior input.
+            RuntimeError: Persisted configuration or receipt evidence is invalid.
+            ValueError: The supplied clock has no timezone.
+        """
         now = self._clock()
         if now.utcoffset() is None:
             raise ValueError("manual run time must be timezone-aware")
@@ -85,6 +104,14 @@ class MonitorTopicRunService:
             # delays an unrelated request; it cannot give that request access.
             lock_key = int.from_bytes(command.operation_id.bytes[:8], "big", signed=True)
             self._session.scalar(select(func.pg_advisory_xact_lock(lock_key)))
+            skipped_run = self._session.get(MonitorTopicRunSkip, (owner_id, command.operation_id))
+            if skipped_run is not None:
+                view = self._read_skip_receipt(skipped_run)
+                if view.topic_id != topic_id or [item.source_key for item in view.sources] != list(
+                    requested
+                ):
+                    raise ApplicationError("idempotency_conflict")
+                return MonitorTopicRunResult(view=view, replayed=True)
             existing = self._existing_jobs(owner_id=owner_id, operation_id=command.operation_id)
             if existing:
                 return MonitorTopicRunResult(
@@ -238,7 +265,36 @@ class MonitorTopicRunService:
                 planned.append((source_key, tuple(source_jobs)))
 
             if not planned:
-                raise ApplicationError("topic_not_ready")
+                view = MonitorTopicRunView(
+                    operation_id=command.operation_id,
+                    topic_id=topic_id,
+                    topic_version=version.version,
+                    sources=[
+                        MonitorTopicRunSourceView(
+                            source_key=key,
+                            job_ids=[],
+                            skip_reason=skipped[key],
+                            query_plan=build_keyword_query_plan(
+                                queries,
+                                max_queries=None,
+                                skip_reason=skipped[key],
+                                topic_version=version.version,
+                            ),
+                        )
+                        for key in requested
+                    ],
+                )
+                self._session.add(
+                    MonitorTopicRunSkip(
+                        owner_id=owner_id,
+                        operation_id=command.operation_id,
+                        topic_id=topic_id,
+                        topic_version=version.version,
+                        receipt=view.model_dump(mode="json"),
+                        recorded_at=now,
+                    )
+                )
+                return MonitorTopicRunResult(view=view, replayed=False)
             skip_snapshot = ",".join(f"{key}:{reason}" for key, reason in sorted(skipped.items()))
             accepted: dict[str, list[UUID]] = {key: [] for key in requested}
             job_service = JobService(self._session, clock=lambda: now)
@@ -276,6 +332,33 @@ class MonitorTopicRunService:
                 ),
                 replayed=False,
             )
+
+    @staticmethod
+    def _read_skip_receipt(row: MonitorTopicRunSkip) -> MonitorTopicRunView:
+        try:
+            view = MonitorTopicRunView.model_validate_json(json.dumps(row.receipt))
+        except ValidationError as error:
+            raise RuntimeError("all-skipped manual operation receipt is invalid") from error
+        if (
+            view.operation_id != row.operation_id
+            or view.topic_id != row.topic_id
+            or view.topic_version != row.topic_version
+            or not view.sources
+            or [item.source_key for item in view.sources]
+            != sorted({item.source_key for item in view.sources})
+            or any(
+                item.job_ids
+                or item.skip_reason is None
+                or item.query_plan is None
+                or item.query_plan.topic_version != row.topic_version
+                or item.query_plan.max_queries is not None
+                or item.query_plan.collection is not None
+                or any(query.skip_reason != item.skip_reason for query in item.query_plan.queries)
+                for item in view.sources
+            )
+        ):
+            raise RuntimeError("all-skipped manual operation receipt is inconsistent")
+        return view
 
     def _existing_jobs(self, *, owner_id: UUID, operation_id: UUID) -> tuple[Job, ...]:
         return tuple(

@@ -76,6 +76,37 @@ def test_ai_failure_constraint_covers_stable_output_truncation(schema_engine: En
     assert set(re.findall(r"'([a-z_]+)'", failure_check)) == {code.value for code in AiFailureCode}
 
 
+def test_manual_skip_receipts_have_owner_version_and_jsonb_constraints(
+    schema_engine: Engine,
+) -> None:
+    inspector = inspect(schema_engine)
+    table = "monitor_topic_run_skips"
+    assert inspector.get_pk_constraint(table)["constrained_columns"] == ["owner_id", "operation_id"]
+    columns = {item["name"]: item for item in inspector.get_columns(table)}
+    assert set(columns) == {
+        "owner_id",
+        "operation_id",
+        "topic_id",
+        "topic_version",
+        "receipt",
+        "recorded_at",
+    }
+    assert str(columns["receipt"]["type"]) == "JSONB" and not columns["receipt"]["nullable"]
+    assert columns["recorded_at"]["type"].timezone is True
+    checks = {item["name"]: item["sqltext"] for item in inspector.get_check_constraints(table)}
+    assert "jsonb_typeof(receipt)" in checks["monitor_topic_run_skips_receipt_check"]
+    foreign_keys = {item["name"]: item for item in inspector.get_foreign_keys(table)}
+    assert foreign_keys["monitor_topic_run_skips_owner_topic_fkey"]["constrained_columns"] == [
+        "owner_id",
+        "topic_id",
+    ]
+    assert foreign_keys["monitor_topic_run_skips_version_fkey"]["constrained_columns"] == [
+        "topic_id",
+        "topic_version",
+    ]
+    assert all(item["options"]["ondelete"] == "CASCADE" for item in foreign_keys.values())
+
+
 def test_editorial_topic_matches_have_frozen_owner_scoped_structure(schema_engine: Engine) -> None:
     inspector = inspect(schema_engine)
     assert "editorial_profile_ids" in {

@@ -121,6 +121,24 @@ CREATE TABLE monitor_topic_versions (
 CREATE INDEX monitor_topic_versions_created_by_idx
     ON monitor_topic_versions (created_by);
 
+CREATE TABLE monitor_topic_run_skips (
+    owner_id UUID NOT NULL,
+    operation_id UUID NOT NULL,
+    topic_id UUID NOT NULL,
+    topic_version INTEGER NOT NULL,
+    receipt JSONB NOT NULL CONSTRAINT monitor_topic_run_skips_receipt_check
+        CHECK (jsonb_typeof(receipt) = 'object'),
+    recorded_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (owner_id, operation_id),
+    CONSTRAINT monitor_topic_run_skips_owner_topic_fkey FOREIGN KEY (owner_id, topic_id)
+        REFERENCES monitor_topics (owner_id, id) ON DELETE CASCADE,
+    CONSTRAINT monitor_topic_run_skips_version_fkey FOREIGN KEY (topic_id, topic_version)
+        REFERENCES monitor_topic_versions (topic_id, version) ON DELETE CASCADE
+);
+
+CREATE INDEX monitor_topic_run_skips_owner_topic_idx
+    ON monitor_topic_run_skips (owner_id, topic_id);
+
 CREATE TABLE monitor_topic_status_events (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL,

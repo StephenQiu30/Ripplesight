@@ -5,7 +5,7 @@ import os
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, tzinfo
 from threading import Event
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -26,8 +26,10 @@ from tests.integration.test_monitor_topics import (
 from connections.presets import SOURCE_PRESETS
 from connections.services import SourcePresetService
 from core.config import Settings
+from jobs.schemas import BudgetWindowUsageView
 from jobs.services import try_lock_source_collection_in_transaction
 from main import create_app
+from monitors import runs
 from monitors.runs import MonitorTopicRunService
 from monitors.schemas import MonitorTopicRunInput
 from worker import scheduler
@@ -135,7 +137,7 @@ def test_manual_run_replays_one_job_and_outbox(monitor_topic_client: TestClient)
 
 
 @pytest.mark.parametrize("budget_key", ["source.hackernews.network.daily", "missing_global"])
-def test_manual_run_requires_csrf_and_rejects_all_skipped(
+def test_manual_run_requires_csrf_and_persists_all_skipped(
     monitor_topic_client: TestClient, budget_key: str
 ) -> None:
     location = _ready_topic(monitor_topic_client, source_keys=("hackernews",))
@@ -159,11 +161,19 @@ def test_manual_run_requires_csrf_and_rejects_all_skipped(
     response = monitor_topic_client.post(
         location + "/runs", headers=_csrf_headers(monitor_topic_client), json=payload
     )
-    assert response.status_code == 409
-    assert response.json()["code"] == "topic_not_ready"
+    assert response.status_code == 200, response.json()
+    assert response.json()["sources"][0]["skip_reason"] == "budget"
+    assert response.json()["sources"][0]["job_ids"] == []
+    assert (
+        monitor_topic_client.post(
+            location + "/runs", headers=_csrf_headers(monitor_topic_client), json=payload
+        ).json()
+        == response.json()
+    )
     with monitor_topic_client.app.state.session_factory() as session:
         assert session.scalar(text("SELECT count(*) FROM jobs")) == 0
         assert session.scalar(text("SELECT count(*) FROM outbox_messages")) == 0
+        assert session.scalar(text("SELECT count(*) FROM monitor_topic_run_skips")) == 1
 
 
 def test_source_minimum_interval_wins_over_topic_interval(
@@ -187,6 +197,325 @@ def test_source_minimum_interval_wins_over_topic_interval(
             {"topic_id": location.rsplit("/", 1)[1]},
         )
     assert interval == 1800
+
+
+@pytest.mark.parametrize("reason", ["disabled", "quiet", "budget", "rate_limited", "unavailable"])
+def test_manual_all_skipped_freezes_full_queries_and_replays_after_changes(
+    monitor_topic_client: TestClient, monkeypatch: pytest.MonkeyPatch, reason: str
+) -> None:
+    client = monitor_topic_client
+    now = datetime.now(UTC)
+
+    class FrozenRunTime(datetime):
+        @classmethod
+        def now(cls, tz: tzinfo | None = None) -> datetime:
+            return now.astimezone(tz) if tz is not None else now.replace(tzinfo=None)
+
+    monkeypatch.setattr(runs, "datetime", FrozenRunTime)
+    preset = SOURCE_PRESETS["hackernews"]
+    if reason in {"quiet", "rate_limited"}:
+        policy_data = preset.execution_policy.model_dump(mode="json")
+        if reason == "rate_limited":
+            policy_data["min_interval_seconds"] = 600
+        else:
+            policy_data["quiet_windows"] = [
+                {
+                    "timezone": "UTC",
+                    "start": f"{now.hour:02d}:00",
+                    "end": f"{(now.hour + 1) % 24:02d}:00",
+                }
+            ]
+        preset = replace(
+            preset, execution_policy=type(preset.execution_policy).model_validate(policy_data)
+        )
+        presets = {**SOURCE_PRESETS, "hackernews": preset}
+        monkeypatch.setattr("connections.services.SOURCE_PRESETS", presets)
+        monkeypatch.setattr("tests.integration.test_topic_runs.SOURCE_PRESETS", presets)
+    location = _ready_topic(
+        client,
+        source_keys=("hackernews",),
+        source_min_interval=600 if reason == "rate_limited" else None,
+    )
+    topic_id = UUID(location.rsplit("/", 1)[1])
+    factory = client.app.state.session_factory
+    edited = client.patch(
+        location,
+        headers=_csrf_headers(client),
+        json={
+            **_topic_payload(),
+            "source_keys": ["hackernews"],
+            "expected_version": 1,
+            "match_any": ["Brand", "Other"],
+        },
+    )
+    assert edited.status_code == 200, edited.json()
+    if reason == "rate_limited":
+        assert (
+            client.post(
+                location + "/runs",
+                headers=_csrf_headers(client),
+                json={"operation_id": str(uuid4()), "source_keys": ["hackernews"]},
+            ).status_code
+            == 202
+        )
+    readiness = runs.load_source_access_readiness
+    if reason == "unavailable":
+        monkeypatch.setattr(runs, "load_source_access_readiness", lambda *args, **kwargs: {})
+    with factory.begin() as session:
+        owner = authenticated_owner_id(session)
+        original_policy = session.scalar(
+            text("SELECT execution_policy FROM source_connection_versions")
+        )
+        if reason == "disabled":
+            session.execute(
+                text(
+                    "UPDATE source_connection_versions SET execution_policy="
+                    "jsonb_set(execution_policy, '{enabled}', 'false'::jsonb)"
+                )
+            )
+        elif reason == "budget":
+            session.execute(text("UPDATE resource_budget_policies SET enabled=false"))
+        before = tuple(
+            session.scalar(text(f"SELECT count(*) FROM {table}"))
+            for table in (
+                "jobs",
+                "outbox_messages",
+                "resource_budget_reservations",
+                "resource_usage_attempts",
+            )
+        )
+    payload = {"operation_id": str(uuid4()), "source_keys": ["hackernews"]}
+    first = client.post(location + "/runs", headers=_csrf_headers(client), json=payload)
+    assert first.status_code == 200, first.json()
+    frozen = first.json()
+    source = frozen["sources"][0]
+    expected = "source_unavailable" if reason in {"disabled", "unavailable"} else reason
+    assert source["job_ids"] == [] and source["skip_reason"] == expected
+    assert frozen["topic_version"] == source["query_plan"]["topic_version"] == 2
+    assert source["query_plan"]["max_queries"] is None
+    assert source["query_plan"]["collection"] is None
+    assert [
+        (q["query_index"], q["query"], q["admitted"], q["skip_reason"])
+        for q in source["query_plan"]["queries"]
+    ] == [(0, "Brand", False, expected), (1, "Other", False, expected)]
+    with factory() as session:
+        assert session.scalar(text("SELECT receipt FROM monitor_topic_run_skips")) == frozen
+        after = tuple(
+            session.scalar(text(f"SELECT count(*) FROM {table}"))
+            for table in (
+                "jobs",
+                "outbox_messages",
+                "resource_budget_reservations",
+                "resource_usage_attempts",
+            )
+        )
+        assert after == before
+    monkeypatch.setattr(runs, "load_source_access_readiness", readiness)
+    with factory.begin() as session:
+        session.execute(
+            text("UPDATE source_connection_versions SET execution_policy=CAST(:policy AS jsonb)"),
+            {"policy": json.dumps(original_policy)},
+        )
+        session.execute(text("UPDATE resource_budget_policies SET enabled=true"))
+    edited = client.patch(
+        location,
+        headers=_csrf_headers(client),
+        json={
+            **_topic_payload(),
+            "source_keys": ["hackernews"],
+            "expected_version": 2,
+            "match_any": ["Changed"],
+        },
+    )
+    assert edited.status_code == 200, edited.json()
+    # A new service/session models a committed response lost before the client saw it.
+    with factory() as session:
+        replay = MonitorTopicRunService(
+            session, client.app.state.settings, clock=lambda: now + timedelta(hours=1)
+        ).run(owner_id=owner, topic_id=topic_id, command=MonitorTopicRunInput(**payload))
+        assert replay.replayed and replay.view.model_dump(mode="json") == frozen
+    assert client.post(location + "/pause", headers=_csrf_headers(client)).status_code == 200
+    assert (
+        client.post(location + "/runs", headers=_csrf_headers(client), json=payload).json()
+        == frozen
+    )
+    fresh = {**payload, "operation_id": str(uuid4())}
+    rejected = client.post(location + "/runs", headers=_csrf_headers(client), json=fresh)
+    assert rejected.status_code == 409 and rejected.json()["code"] == "topic_not_ready"
+    assert client.post(location + "/resume", headers=_csrf_headers(client)).status_code == 200
+    with factory() as session:
+        fresh_result = MonitorTopicRunService(
+            session, client.app.state.settings, clock=lambda: now + timedelta(hours=1)
+        ).run(owner_id=owner, topic_id=topic_id, command=MonitorTopicRunInput(**fresh))
+        assert not fresh_result.replayed
+        assert fresh_result.view.topic_version == 3
+        assert len(fresh_result.view.sources[0].job_ids) == 1
+    with factory() as session:
+        assert session.scalar(text("SELECT count(*) FROM monitor_topic_run_skips")) == 1
+
+
+def test_all_skipped_operation_conflicts_owner_isolation_constraints_and_cleanup(
+    monitor_topic_client: TestClient,
+) -> None:
+    client = monitor_topic_client
+    location = _ready_topic(client, source_keys=("hackernews", "google_news"))
+    other = _ready_topic(client, source_keys=("hackernews", "google_news"))
+    factory = client.app.state.session_factory
+    with factory.begin() as session:
+        session.execute(text("UPDATE resource_budget_policies SET enabled=false"))
+    payload = {"operation_id": str(uuid4()), "source_keys": ["hackernews", "google_news"]}
+    first = client.post(location + "/runs", headers=_csrf_headers(client), json=payload)
+    assert first.status_code == 200, first.json()
+    reverse = {**payload, "source_keys": list(reversed(payload["source_keys"]))}
+    assert (
+        client.post(location + "/runs", headers=_csrf_headers(client), json=reverse).json()
+        == first.json()
+    )
+    for path, body in [
+        (other + "/runs", payload),
+        (location + "/runs", {**payload, "source_keys": ["hackernews"]}),
+    ]:
+        response = client.post(path, headers=_csrf_headers(client), json=body)
+        assert response.status_code == 409 and response.json()["code"] == "idempotency_conflict"
+    with TestClient(client.app) as outsider:
+        other_owner = authenticate_test_client(outsider, owner_id=uuid4())
+        denied = outsider.post(location + "/runs", headers=_csrf_headers(outsider), json=payload)
+        assert denied.status_code == 404
+        with factory.begin() as session:
+            _seed_network_budget(session, other_owner)
+            SourcePresetService(session).apply_in_transaction(
+                owner_id=other_owner, preset=SOURCE_PRESETS["hackernews"]
+            )
+        created = outsider.post(
+            "/api/topics",
+            headers=_csrf_headers(outsider),
+            json={**_topic_payload(), "source_keys": ["hackernews"]},
+        )
+        assert created.status_code == 201, created.json()
+        other_location = created.headers["location"]
+        assert (
+            outsider.post(other_location + "/resume", headers=_csrf_headers(outsider)).status_code
+            == 200
+        )
+        with factory.begin() as session:
+            session.execute(
+                text("UPDATE resource_budget_policies SET enabled=false WHERE owner_id=:owner"),
+                {"owner": other_owner},
+            )
+        independent = outsider.post(
+            other_location + "/runs",
+            headers=_csrf_headers(outsider),
+            json={**payload, "source_keys": ["hackernews"]},
+        )
+        assert independent.status_code == 200, independent.json()
+        assert independent.json()["topic_id"] == other_location.rsplit("/", 1)[1]
+        assert independent.json()["sources"][0]["skip_reason"] == "budget"
+        assert independent.json()["sources"][0]["job_ids"] == []
+    assert (
+        client.post(location + "/runs", headers=_csrf_headers(client), json=payload).json()
+        == first.json()
+    )
+    for assignment, params, constraint in [
+        ("receipt='[]'::jsonb", {}, "monitor_topic_run_skips_receipt_check"),
+        ("owner_id=:owner", {"owner": uuid4()}, "monitor_topic_run_skips_owner_topic_fkey"),
+        ("topic_version=999", {}, "monitor_topic_run_skips_version_fkey"),
+    ]:
+        with pytest.raises(IntegrityError, match=constraint), factory.begin() as session:
+            session.execute(
+                text(f"UPDATE monitor_topic_run_skips SET {assignment} WHERE topic_id=:topic"),
+                {**params, "topic": UUID(location.rsplit("/", 1)[1])},
+            )
+    with factory.begin() as session:
+        session.execute(
+            text("DELETE FROM monitor_topics WHERE id=:id"),
+            {"id": UUID(location.rsplit("/", 1)[1])},
+        )
+        assert (
+            session.scalar(
+                text("SELECT count(*) FROM monitor_topic_run_skips WHERE topic_id=:id"),
+                {"id": UUID(location.rsplit("/", 1)[1])},
+            )
+            == 0
+        )
+        assert session.scalar(text("SELECT count(*) FROM monitor_topic_run_skips")) == 1
+
+
+def test_concurrent_all_skipped_retries_persist_one_decision(
+    monitor_topic_client: TestClient,
+) -> None:
+    client = monitor_topic_client
+    location = _ready_topic(client, source_keys=("hackernews",))
+    factory = client.app.state.session_factory
+    with factory.begin() as session:
+        owner = authenticated_owner_id(session)
+        session.execute(text("UPDATE resource_budget_policies SET enabled=false"))
+    command = MonitorTopicRunInput(operation_id=uuid4(), source_keys=["hackernews"])
+
+    def run_once(_: int) -> tuple[bool, dict[str, object]]:
+        with factory() as session:
+            result = MonitorTopicRunService(session, client.app.state.settings).run(
+                owner_id=owner, topic_id=UUID(location.rsplit("/", 1)[1]), command=command
+            )
+            return result.replayed, result.view.model_dump(mode="json")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(run_once, range(2)))
+    assert sorted(result[0] for result in results) == [False, True]
+    assert results[0][1] == results[1][1]
+    with factory() as session:
+        assert session.scalar(text("SELECT count(*) FROM monitor_topic_run_skips")) == 1
+        for table in (
+            "jobs",
+            "outbox_messages",
+            "resource_budget_reservations",
+            "resource_usage_attempts",
+        ):
+            assert session.scalar(text(f"SELECT count(*) FROM {table}")) == 0
+
+
+def test_budget_restore_during_same_operation_does_not_admit_replay(
+    monitor_topic_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = monitor_topic_client
+    location = _ready_topic(client, source_keys=("hackernews",))
+    factory = client.app.state.session_factory
+    with factory.begin() as session:
+        owner = authenticated_owner_id(session)
+        session.execute(text("UPDATE resource_budget_policies SET enabled=false"))
+    decided, proceed = Event(), Event()
+    original = MonitorTopicRunService._has_budget
+
+    def delayed_budget(budgets: tuple[BudgetWindowUsageView, ...], source_key: str) -> bool:
+        assert not original(budgets, source_key)
+        decided.set()
+        assert proceed.wait(10)
+        return False
+
+    monkeypatch.setattr(MonitorTopicRunService, "_has_budget", staticmethod(delayed_budget))
+    command = MonitorTopicRunInput(operation_id=uuid4(), source_keys=["hackernews"])
+
+    def request_once() -> tuple[bool, dict[str, object]]:
+        with factory() as session:
+            result = MonitorTopicRunService(session, client.app.state.settings).run(
+                owner_id=owner, topic_id=UUID(location.rsplit("/", 1)[1]), command=command
+            )
+            return result.replayed, result.view.model_dump(mode="json")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(request_once)
+        try:
+            assert decided.wait(10)
+            with factory.begin() as session:
+                session.execute(text("UPDATE resource_budget_policies SET enabled=true"))
+            second = pool.submit(request_once)
+        finally:
+            proceed.set()
+        a, b = first.result(timeout=10), second.result(timeout=10)
+    assert not a[0] and b[0] and a[1] == b[1]
+    with factory() as session:
+        assert session.scalar(text("SELECT count(*) FROM monitor_topic_run_skips")) == 1
+        assert session.scalar(text("SELECT count(*) FROM jobs")) == 0
+        assert session.scalar(text("SELECT count(*) FROM outbox_messages")) == 0
 
 
 def test_shared_source_rotates_topics_across_due_windows(
@@ -306,7 +635,9 @@ def test_manual_and_scheduled_admission_share_source_lock(
             headers=_csrf_headers(monitor_topic_client),
             json={"operation_id": str(uuid4()), "source_keys": ["hackernews"]},
         )
-        assert response.status_code == 409, response.json()
+        assert response.status_code == 200, response.json()
+        assert response.json()["sources"][0]["skip_reason"] == "rate_limited"
+        assert response.json()["sources"][0]["job_ids"] == []
         with factory.begin() as session:
             assert enqueue_due_collections_in_transaction(session, now) == 0
             assert session.scalar(text("SELECT count(*) FROM jobs")) == 0

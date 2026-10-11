@@ -167,6 +167,38 @@ class MonitorTopic(Base):
     updated_at: Mapped[datetime]
 
 
+class MonitorTopicRunSkip(Base):
+    """Persist an all-skipped manual operation without creating collection work."""
+
+    __tablename__ = "monitor_topic_run_skips"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["owner_id", "topic_id"],
+            ["monitor_topics.owner_id", "monitor_topics.id"],
+            ondelete="CASCADE",
+            name="monitor_topic_run_skips_owner_topic_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["topic_id", "topic_version"],
+            ["monitor_topic_versions.topic_id", "monitor_topic_versions.version"],
+            ondelete="CASCADE",
+            name="monitor_topic_run_skips_version_fkey",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(receipt) = 'object'",
+            name="monitor_topic_run_skips_receipt_check",
+        ),
+        Index("monitor_topic_run_skips_owner_topic_idx", "owner_id", "topic_id"),
+    )
+
+    owner_id: Mapped[UUID] = mapped_column(primary_key=True)
+    operation_id: Mapped[UUID] = mapped_column(primary_key=True)
+    topic_id: Mapped[UUID]
+    topic_version: Mapped[int] = mapped_column(Integer)
+    receipt: Mapped[dict[str, object]] = mapped_column(JSONB)
+    recorded_at: Mapped[datetime]
+
+
 class MonitorTopicVersion(Base):
     __tablename__ = "monitor_topic_versions"
     __table_args__ = (
