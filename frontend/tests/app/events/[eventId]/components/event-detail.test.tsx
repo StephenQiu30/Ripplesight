@@ -7,6 +7,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -83,6 +84,9 @@ describe("fixed event member reading", () => {
     expectOnePageHeading();
     expect(api.members).not.toHaveBeenCalled();
     expect(api.related).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("region", { name: "当前事件的证据范围" }),
+    ).toBeNull();
   });
 
   it.each([401, 403])(
@@ -107,6 +111,9 @@ describe("fixed event member reading", () => {
       expect(api.members).not.toHaveBeenCalled();
       expect(api.facts).not.toHaveBeenCalled();
       expect(api.related).not.toHaveBeenCalled();
+      expect(
+        screen.queryByRole("region", { name: "当前事件的证据范围" }),
+      ).toBeNull();
     },
   );
 
@@ -122,6 +129,9 @@ describe("fixed event member reading", () => {
     render(<EventDetail eventId="failed" />);
     await screen.findByRole("heading", { name: "无法读取事件" });
     expect(screen.getByText("event_read_unavailable · 503")).toBeTruthy();
+    expect(
+      screen.queryByRole("region", { name: "当前事件的证据范围" }),
+    ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "重试事件详情" }));
     await waitFor(() => expect(api.detail).toHaveBeenCalledTimes(2));
   });
@@ -153,6 +163,11 @@ describe("fixed event member reading", () => {
     });
     render(<EventDetail eventId="event" />);
     const reference = await screen.findByRole("link", { name: "来源 2" });
+    const scope = within(
+      screen.getByRole("region", { name: "当前事件的证据范围" }),
+    );
+    expect(scope.getByText("多材料关联")).toBeTruthy();
+    expect(scope.getByText(/可读成员 2 \/ 此修订成员总数 2/)).toBeTruthy();
     expect(
       document.getElementById(reference.getAttribute("href")!.slice(1))
         ?.textContent,
@@ -342,6 +357,12 @@ describe("fixed event member reading", () => {
       ),
     );
     expect(await screen.findByText("当前展示历史成员")).toBeTruthy();
+    const scope = within(
+      screen.getByRole("region", { name: "当前事件的证据范围" }),
+    );
+    expect(scope.getByText("当前事件修订 2")).toBeTruthy();
+    expect(scope.getByText("多材料关联")).toBeTruthy();
+    expect(scope.getByText(/可读成员 2 \/ 此修订成员总数 2/)).toBeTruthy();
   });
 
   it("shows unreadable events as 404 and retries through the generated API", async () => {
@@ -357,6 +378,9 @@ describe("fixed event member reading", () => {
     expect(
       await screen.findByRole("heading", { name: "事件不存在或暂不可读" }),
     ).toBeTruthy();
+    expect(
+      screen.queryByRole("region", { name: "当前事件的证据范围" }),
+    ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "重试事件详情" }));
     await waitFor(() => expect(api.detail).toHaveBeenCalledTimes(2));
     expect(api.members).not.toHaveBeenCalled();

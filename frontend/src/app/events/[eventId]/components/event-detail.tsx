@@ -31,6 +31,7 @@ import { EventFacts } from "./event-facts";
 import { EventMemberList } from "./event-member-list";
 import { EventCorrections } from "./event-corrections";
 import { EventRelated } from "./event-related";
+import { EventEvidence } from "./event-evidence";
 
 type DetailState =
   | { status: "loading" }
@@ -208,15 +209,7 @@ function EventReading({
           </Button>
         }
       />
-      <UI.Text size="sm" tone="muted">
-        <UI.InlineCode>
-          {event.readable_member_count} / {event.member_count}
-        </UI.InlineCode>{" "}
-        条成员可读。来源分布：
-        {Object.entries(event.source_counts)
-          .map(([source, count]) => `${source} ${count} 条`)
-          .join(" · ") || "尚无来源"}
-      </UI.Text>
+      <EventEvidence event={event} />
       {event.revision > 1 ? (
         <UI.Form onSubmit={selectRevision}>
           <FieldGroup className="flex flex-row flex-wrap items-end gap-4">
