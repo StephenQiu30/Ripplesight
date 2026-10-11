@@ -25,6 +25,9 @@ export function QueryPlan({
       className="flex min-w-0 flex-col gap-2"
       aria-label="查询受理范围"
     >
+      {plan.topic_version != null ? (
+        <UI.Text size="sm">冻结主题版本：v{plan.topic_version}</UI.Text>
+      ) : null}
       {plan.collection ? (
         <UI.Content className="flex min-w-0 flex-col gap-1">
           <UI.Text size="sm">

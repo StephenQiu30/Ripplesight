@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import IntegrityError
 from tests.conftest import authenticate_test_client, authenticated_owner_id
 from tests.integration.test_monitor_topics import (
     _TRUNCATE,
@@ -381,6 +382,7 @@ def test_manual_run_keeps_partial_admission_on_retry(monitor_topic_client: TestC
         "skip_reason": "budget",
         "query_plan": {
             "version": 1,
+            "topic_version": None,
             "max_queries": None,
             "collection": None,
             "queries": [
@@ -473,6 +475,7 @@ def test_query_limit_receipt_is_frozen_and_readable_without_extra_jobs(
             {"query_index": 2, "query": "产品", "admitted": False, "skip_reason": "query_limit"},
         ],
     }
+    expected["topic_version"] = 2 if scheduled else None
     expected["collection"] = detail.json()["query_plan"]["collection"]
     assert expected["collection"]["topic"]["search_language"] == "any"
     assert detail.json()["query_plan"] == expected
@@ -744,3 +747,264 @@ def test_paused_topic_does_not_accept_due_collection(monitor_topic_client: TestC
     with factory() as session:
         assert session.scalar(text("SELECT count(*) FROM jobs")) == 0
         assert session.scalar(text("SELECT count(*) FROM outbox_messages")) == 0
+
+
+@pytest.mark.parametrize("reason", ["disabled", "quiet", "budget", "rate_limited", "unavailable"])
+def test_scheduled_source_skip_freezes_queries_without_additional_work(
+    monitor_topic_client: TestClient, monkeypatch: pytest.MonkeyPatch, reason: str
+) -> None:
+    client = monitor_topic_client
+    preset = SOURCE_PRESETS["hackernews"]
+    if reason == "rate_limited":
+        preset = replace(
+            preset,
+            execution_policy=preset.execution_policy.model_copy(
+                update={"min_interval_seconds": 600}
+            ),
+        )
+        monkeypatch.setattr(
+            "connections.services.SOURCE_PRESETS", {**SOURCE_PRESETS, "hackernews": preset}
+        )
+    location = _ready_topic(
+        client,
+        source_keys=("hackernews",),
+        source_min_interval=600 if reason == "rate_limited" else None,
+    )
+    topic_id = location.rsplit("/", 1)[1]
+    edited = client.patch(
+        location,
+        headers=_csrf_headers(client),
+        json={
+            **_topic_payload(),
+            "expected_version": 1,
+            "source_keys": ["hackernews"],
+            "match_any": ["Brand", "Other"],
+        },
+    )
+    assert edited.status_code == 200, edited.json()
+    if reason == "rate_limited":
+        accepted = client.post(
+            location + "/runs",
+            headers=_csrf_headers(client),
+            json={"operation_id": str(uuid4()), "source_keys": ["hackernews"]},
+        )
+        assert accepted.status_code == 202, accepted.json()
+    if reason == "unavailable":
+        monkeypatch.setattr(scheduler, "load_source_access_readiness", lambda *args, **kwargs: {})
+    now = datetime.now(UTC) + timedelta(seconds=1)
+    factory = client.app.state.session_factory
+    with factory.begin() as session:
+        session.execute(
+            text("UPDATE monitor_schedules SET next_run_at=:now WHERE topic_id=:topic"),
+            {"now": now, "topic": topic_id},
+        )
+        if reason == "disabled":
+            session.execute(
+                text(
+                    "UPDATE source_connection_versions SET execution_policy="
+                    "jsonb_set(execution_policy, '{enabled}', 'false'::jsonb)"
+                )
+            )
+        elif reason == "quiet":
+            quiet = [
+                {
+                    "timezone": "UTC",
+                    "start": f"{now.hour:02d}:00",
+                    "end": f"{(now.hour + 1) % 24:02d}:00",
+                }
+            ]
+            session.execute(
+                text(
+                    "UPDATE source_connection_versions SET execution_policy="
+                    "jsonb_set(execution_policy, '{quiet_windows}', CAST(:quiet AS jsonb))"
+                ),
+                {"quiet": json.dumps(quiet)},
+            )
+        elif reason == "budget":
+            session.execute(text("UPDATE resource_budget_policies SET enabled=false"))
+        before = tuple(
+            session.scalar(text(f"SELECT count(*) FROM {table}"))
+            for table in (
+                "jobs",
+                "outbox_messages",
+                "resource_budget_reservations",
+                "resource_usage_attempts",
+            )
+        )
+        assert enqueue_due_collections_in_transaction(session, now) == 0
+    with factory() as session:
+        window_id, stored = session.execute(
+            text("SELECT id, query_plan FROM collection_due_windows")
+        ).one()
+        assert stored["topic_version"] == 2
+        assert stored["max_queries"] is None and stored["collection"] is None
+        expected_reason = "source_unavailable" if reason in {"disabled", "unavailable"} else reason
+        assert stored["queries"] == [
+            {"query_index": i, "query": query, "admitted": False, "skip_reason": expected_reason}
+            for i, query in enumerate(("Brand", "Other"))
+        ]
+    with factory.begin() as session:
+        with pytest.raises(IntegrityError), session.begin_nested():
+            session.execute(
+                text("UPDATE collection_due_windows SET query_plan='[]'::jsonb WHERE id=:id"),
+                {"id": window_id},
+            )
+        with pytest.raises(IntegrityError), session.begin_nested():
+            session.execute(
+                text("UPDATE collection_due_windows SET capability='hotlist' WHERE id=:id"),
+                {"id": window_id},
+            )
+    if reason == "disabled":
+        with factory.begin() as session:
+            SourcePresetService(
+                session, clock=lambda: now + timedelta(seconds=2)
+            ).apply_in_transaction(
+                owner_id=authenticated_owner_id(session), preset=SOURCE_PRESETS["hackernews"]
+            )
+    elif reason == "quiet":
+        with factory() as session:
+            policy = session.scalar(text("SELECT execution_policy FROM source_connection_versions"))
+        monkeypatch.setattr(
+            "connections.services.SOURCE_PRESETS",
+            {
+                **SOURCE_PRESETS,
+                "hackernews": replace(
+                    preset, execution_policy=preset.execution_policy.model_validate(policy)
+                ),
+            },
+        )
+    response = client.get(f"/api/collection-coverage/{window_id}")
+    assert response.status_code == 200, response.json()
+    frozen = response.json()
+    assert frozen["query_plan"] == stored
+    assert frozen["coverage_status"] == "not_attempted" and frozen["job_id"] is None
+    assert frozen["observed_count"] is None and frozen["inserted_count"] is None
+    edited = client.patch(
+        location,
+        headers=_csrf_headers(client),
+        json={
+            **_topic_payload(),
+            "expected_version": 2,
+            "source_keys": ["hackernews"],
+            "match_any": ["Changed"],
+        },
+    )
+    assert edited.status_code == 200, edited.json()
+    with factory.begin() as session:
+        session.execute(
+            text("UPDATE monitor_schedules SET next_run_at=:now WHERE topic_id=:topic"),
+            {"now": now, "topic": topic_id},
+        )
+        assert enqueue_due_collections_in_transaction(session, now) == 0
+        after = tuple(
+            session.scalar(text(f"SELECT count(*) FROM {table}"))
+            for table in (
+                "jobs",
+                "outbox_messages",
+                "resource_budget_reservations",
+                "resource_usage_attempts",
+            )
+        )
+        assert after == before
+    replay = client.get(f"/api/collection-coverage/{window_id}")
+    assert replay.status_code == 200, replay.json()
+    assert replay.json()["query_plan"] == frozen["query_plan"]
+    assert replay.json()["job_id"] is None and replay.json()["observed_count"] is None
+    with TestClient(client.app) as other:
+        authenticate_test_client(other)
+        assert other.get(f"/api/collection-coverage/{window_id}").status_code == 404
+
+
+@pytest.mark.parametrize("quiet", [True, False])
+def test_recovery_and_existing_skipped_windows_do_not_invent_query_history(
+    monitor_topic_client: TestClient, quiet: bool
+) -> None:
+    client = monitor_topic_client
+    location = _ready_topic(client, source_keys=("hackernews",), interval=600)
+    topic_id = location.rsplit("/", 1)[1]
+    now = datetime.now(UTC) + timedelta(hours=1)
+    first_due = now - timedelta(seconds=1200)
+    factory = client.app.state.session_factory
+    with factory.begin() as session:
+        session.execute(
+            text(
+                "UPDATE monitor_schedules SET interval_seconds=600, next_run_at=:due "
+                "WHERE topic_id=:topic"
+            ),
+            {"due": first_due, "topic": topic_id},
+        )
+        if quiet:
+            session.execute(
+                text(
+                    "UPDATE source_connection_versions SET execution_policy="
+                    "jsonb_set(execution_policy, '{enabled}', 'false'::jsonb)"
+                )
+            )
+        else:
+            session.execute(text("UPDATE resource_budget_policies SET enabled=false"))
+        assert enqueue_due_collections_in_transaction(session, now) == 0
+    with factory() as session:
+        windows = session.execute(
+            text(
+                "SELECT id, admission_state, query_plan FROM collection_due_windows ORDER BY due_at"
+            )
+        ).all()
+        assert len(windows) == 3
+        assert all(row.query_plan is None for row in windows[:-1])
+        assert [row.admission_state for row in windows[:-1]] == (
+            ["skipped", "skipped"] if quiet else ["missed", "missed"]
+        )
+        assert windows[-1].query_plan["topic_version"] == 1
+        window_id = windows[-1].id
+    # Simulate a pre-upgrade skipped row. Replaying it must not backfill current rules.
+    with factory.begin() as session:
+        session.execute(
+            text("UPDATE collection_due_windows SET query_plan=NULL WHERE id=:id"),
+            {"id": window_id},
+        )
+        session.execute(
+            text("UPDATE monitor_schedules SET next_run_at=:due WHERE topic_id=:topic"),
+            {"due": now, "topic": topic_id},
+        )
+        assert enqueue_due_collections_in_transaction(session, now) == 0
+    detail = client.get(f"/api/collection-coverage/{window_id}")
+    assert detail.status_code == 200, detail.json()
+    assert detail.json()["query_plan"] is None
+
+
+def test_recovery_across_batches_freezes_only_latest_actual_query_decision(
+    monitor_topic_client: TestClient,
+) -> None:
+    client = monitor_topic_client
+    location = _ready_topic(client, source_keys=("hackernews",), interval=600)
+    first_due = datetime.now(UTC) + timedelta(seconds=1)
+    now = first_due + timedelta(seconds=600 * 1001)
+    factory = client.app.state.session_factory
+    with factory.begin() as session:
+        session.execute(
+            text("UPDATE monitor_schedules SET interval_seconds=600, next_run_at=:due"),
+            {"due": first_due},
+        )
+        session.execute(
+            text(
+                "UPDATE source_connection_versions SET execution_policy="
+                "jsonb_set(execution_policy, '{enabled}', 'false'::jsonb)"
+            )
+        )
+        assert enqueue_due_collections_in_transaction(session, now) == 0
+    with factory() as session:
+        assert session.scalar(text("SELECT count(*) FROM collection_due_windows")) == 1002
+        plans = session.execute(
+            text(
+                "SELECT due_at, query_plan FROM collection_due_windows WHERE query_plan IS NOT NULL"
+            )
+        ).all()
+        assert len(plans) == 1 and plans[0].due_at == now
+        assert plans[0].query_plan["topic_version"] == 1
+        assert all(
+            item["skip_reason"] == "source_unavailable" for item in plans[0].query_plan["queries"]
+        )
+        assert session.scalar(text("SELECT count(*) FROM jobs")) == 0
+        assert session.scalar(text("SELECT count(*) FROM outbox_messages")) == 0
+    detail = client.get(f"/api/topics/{location.rsplit('/', 1)[1]}")
+    assert detail.status_code == 200

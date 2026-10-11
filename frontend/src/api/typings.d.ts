@@ -769,6 +769,7 @@ declare namespace HotKeyAPI {
     admission_state: DueAdmissionState;
     /** Admission Reason */
     admission_reason: string | null;
+    query_plan?: KeywordQueryPlanView | null;
     /** Current Connection Version */
     current_connection_version: number | null;
     /** Job Connection Version */
@@ -3860,6 +3861,8 @@ declare namespace HotKeyAPI {
     version?: number;
     /** Max Queries */
     max_queries: number | null;
+    /** Topic Version */
+    topic_version?: number | null;
     /** Queries */
     queries: KeywordQueryAdmissionView[];
     collection?: KeywordCollectionSnapshot | null;

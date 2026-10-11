@@ -32,6 +32,7 @@ from jobs.models import (
     ResourceBudgetReservation,
     ResourceUsageAttempt,
 )
+from jobs.query_plans import read_keyword_query_plan
 from jobs.schemas import (
     AnalysisJobFactView,
     CollectionCoverageAnalysisView,
@@ -52,6 +53,7 @@ from jobs.schemas import (
     DueSkipReason,
     HotlistBucketMetricView,
     JobStatus,
+    KeywordQueryPlanView,
 )
 from sources.contracts import SourceCapability
 
@@ -146,11 +148,29 @@ class CollectionDueWindowService:
         self._clock = clock or (lambda: datetime.now(UTC))
 
     def record_due_in_transaction(
-        self, command: CollectionDueWindowInput
+        self,
+        command: CollectionDueWindowInput,
+        *,
+        skipped_query_plan: KeywordQueryPlanView | None = None,
     ) -> CollectionDueWindowView:
+        """Insert immutable due facts without backfilling an existing query receipt.
+
+        Args:
+            command: Owner-scoped due instant and frozen source policy.
+            skipped_query_plan: Optional evidence for a new automatic search skip.
+
+        Returns:
+            The inserted or previously recorded due window.
+
+        Raises:
+            CollectionDueConflictError: Frozen facts or skip evidence conflict.
+            RuntimeError: The caller has no transaction.
+        """
         self._require_transaction()
         now = _as_utc(self._clock())
         skip = _automatic_skip(command)
+        if skipped_query_plan is not None:
+            self._validate_skip_plan(command, skip, skipped_query_plan)
         self._session.execute(
             insert(CollectionDueWindow)
             .values(
@@ -171,6 +191,11 @@ class CollectionDueWindowService:
                 ),
                 admission_state=(DueAdmissionState.SKIPPED if skip else DueAdmissionState.PENDING),
                 reason=skip.value if skip else None,
+                query_plan=(
+                    skipped_query_plan.model_dump(mode="json")
+                    if skipped_query_plan is not None
+                    else None
+                ),
                 recorded_at=now,
             )
             .on_conflict_do_nothing(constraint="collection_due_windows_owner_schedule_due_key")
@@ -200,8 +225,28 @@ class CollectionDueWindowService:
         interval_seconds: int,
         through_at: datetime,
         snapshot_at: Callable[[datetime], tuple[int | None, SourceExecutionPolicy | None]],
+        latest_skipped_query_plan: Callable[[DueSkipReason], KeywordQueryPlanView] | None = None,
     ) -> tuple[CollectionDueWindowView, ...]:
-        """Replay deterministic due instants after a stopped scan, without inventing jobs."""
+        """Replay due instants without inventing historical query admission decisions.
+
+        Args:
+            first_due: Initial instant and range for the recovery cadence.
+            interval_seconds: Positive cadence, at most one day.
+            through_at: Last recovery instant, inclusive.
+            snapshot_at: Read-only lookup of source policy evidence at each instant.
+            latest_skipped_query_plan: Pure factory for the latest automatic skip.
+                Omit this until the final batch. It may run before INSERT detects
+                a conflict, so it must not write or send requests. Earlier points
+                retain only policy evidence, and existing plans are never replaced.
+
+        Returns:
+            Recorded windows in cadence order, including existing replayed rows.
+
+        Raises:
+            CollectionDueConflictError: Existing facts conflict with this cadence.
+            ValueError: The cadence, cutoff or batch size is outside the bounds.
+            RuntimeError: The caller has no transaction.
+        """
         self._require_transaction()
         through = _as_utc(through_at)
         if not 1 <= interval_seconds <= 86_400 or first_due.due_at > through:
@@ -241,7 +286,17 @@ class CollectionDueWindowService:
                     "policy_snapshot": policy_snapshot,
                 }
             )
-            recorded = self.record_due_in_transaction(command)
+            automatic_skip = _automatic_skip(command)
+            recorded = self.record_due_in_transaction(
+                command,
+                skipped_query_plan=(
+                    latest_skipped_query_plan(automatic_skip)
+                    if index == count - 1
+                    and automatic_skip is not None
+                    and latest_skipped_query_plan is not None
+                    else None
+                ),
+            )
             if recorded.admission_state is DueAdmissionState.PENDING and index < count - 1:
                 recorded = self.mark_missed_in_transaction(
                     owner_id=command.owner_id,
@@ -293,16 +348,56 @@ class CollectionDueWindowService:
         schedule_key: UUID,
         due_at: datetime,
         reason: DueSkipReason,
+        query_plan: KeywordQueryPlanView | None = None,
     ) -> CollectionDueWindowView:
+        """Freeze a pending admission decision atomically, preserving prior skips.
+
+        Args:
+            owner_id: Owner of the due window.
+            schedule_key: Stable schedule identity.
+            due_at: Exact scheduled instant.
+            reason: Source-level reason no work was admitted.
+            query_plan: Optional frozen query evidence for this search decision.
+
+        Returns:
+            The frozen skip, including unchanged evidence on an identical replay.
+
+        Raises:
+            CollectionDueConflictError: State, reason or query evidence conflict.
+            RuntimeError: The caller has no transaction.
+        """
         self._require_transaction()
         model = self._lock(owner_id, schedule_key, due_at)
         if model.admission_state == DueAdmissionState.SKIPPED and model.reason == reason.value:
             return self._view(model)
         if model.admission_state != DueAdmissionState.PENDING:
             raise CollectionDueConflictError("only a pending due may be skipped")
+        if query_plan is not None:
+            self._validate_skip_plan(model, reason, query_plan)
         model.admission_state = DueAdmissionState.SKIPPED.value
         model.reason = reason.value
+        model.query_plan = query_plan.model_dump(mode="json") if query_plan is not None else None
         return self._view(model)
+
+    @staticmethod
+    def _validate_skip_plan(
+        window: CollectionDueWindowInput | CollectionDueWindow,
+        reason: DueSkipReason | None,
+        plan: KeywordQueryPlanView,
+    ) -> None:
+        expected_reason = "source_unavailable" if reason is DueSkipReason.DISABLED else reason
+        if (
+            reason is None
+            or window.capability != SourceCapability.SEARCH
+            or window.topic_id is None
+            or plan.topic_version is None
+            or plan.max_queries is not None
+            or plan.collection is not None
+            or any(item.admitted or item.skip_reason != expected_reason for item in plan.queries)
+        ):
+            raise CollectionDueConflictError(
+                "query plan must describe this skipped search decision"
+            )
 
     def mark_missed_in_transaction(
         self, *, owner_id: UUID, schedule_key: UUID, due_at: datetime
@@ -498,6 +593,11 @@ class CollectionDueWindowService:
             operation_id=model.operation_id,
             job_id=model.job_id,
             recorded_at=_as_utc(model.recorded_at),
+            query_plan=(
+                KeywordQueryPlanView.model_validate_json(json.dumps(model.query_plan))
+                if model.query_plan is not None
+                else None
+            ),
         )
 
 
@@ -1304,6 +1404,13 @@ class CollectionCoverageQueryService:
             window_end=_as_utc(due.window_end),
             admission_state=DueAdmissionState(due.admission_state),
             admission_reason=due.reason,
+            query_plan=(
+                read_keyword_query_plan(job.scope)
+                if job is not None and due.capability == SourceCapability.SEARCH
+                else KeywordQueryPlanView.model_validate_json(json.dumps(due.query_plan))
+                if due.query_plan is not None
+                else None
+            ),
             current_connection_version=current_connection_version,
             job_connection_version=(
                 job.scope.get("connection_version")

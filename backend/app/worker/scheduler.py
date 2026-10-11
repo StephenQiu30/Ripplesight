@@ -56,6 +56,8 @@ from jobs.schemas import (
     JobAcceptanceInput,
     JobObservationContext,
     KeywordCollectionSnapshot,
+    KeywordQueryPlanView,
+    QuerySourceSkipReason,
 )
 from jobs.services import (
     JobService,
@@ -426,6 +428,7 @@ def _accept_collection_schedule(
     accepted_ids: list[UUID] = []
     query_plan = build_keyword_query_plan(
         schedule.search_queries,
+        topic_version=schedule.topic_version,
         max_queries=min(policy.max_queries, config.max_queries),
         collection=collection,
     )
@@ -530,6 +533,20 @@ def _process_collection_schedule(
         )
         return version, policy
 
+    def skipped_query_plan(reason: DueSkipReason) -> KeywordQueryPlanView:
+        source_reasons: dict[DueSkipReason, QuerySourceSkipReason] = {
+            DueSkipReason.DISABLED: "source_unavailable",
+            DueSkipReason.QUIET: "quiet",
+            DueSkipReason.BUDGET: "budget",
+            DueSkipReason.RATE_LIMITED: "rate_limited",
+        }
+        return build_keyword_query_plan(
+            schedule.search_queries,
+            max_queries=None,
+            skip_reason=source_reasons[reason],
+            topic_version=schedule.topic_version,
+        )
+
     first_version, first_policy = snapshot_at(schedule.next_run_at)
     first_due = CollectionDueWindowInput(
         owner_id=schedule.owner_id,
@@ -554,6 +571,8 @@ def _process_collection_schedule(
             interval_seconds=schedule.interval_seconds,
             through_at=through,
             snapshot_at=snapshot_at,
+            # Earlier recovery points have no actual query admission decision.
+            latest_skipped_query_plan=skipped_query_plan if through == now else None,
         )
         if through == now:
             break
@@ -573,6 +592,7 @@ def _process_collection_schedule(
                 schedule_key=schedule_key,
                 due_at=latest.due_at,
                 reason=reason,
+                query_plan=skipped_query_plan(reason),
             )
         MonitorScheduleService(session).advance_collection_in_transaction(
             schedule=schedule, job_id=None, next_run_at=next_run_at, updated_at=now

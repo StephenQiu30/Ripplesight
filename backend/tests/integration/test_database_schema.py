@@ -182,3 +182,25 @@ def test_annotation_constraint_allows_missing_sentiment_for_valid_relevance(
     assert "sentiment IS NOT NULL" not in check
     assert "sentiment IS NULL" in check
     assert "relevant" in check and "unanalyzed" in check and "relevance_reason" in check
+
+
+def test_scheduled_query_plan_is_nullable_and_limited_to_skipped_search(
+    schema_engine: Engine,
+) -> None:
+    inspector = inspect(schema_engine)
+    columns = {column["name"]: column for column in inspector.get_columns("collection_due_windows")}
+    assert columns["query_plan"]["nullable"] is True
+    assert str(columns["query_plan"]["type"]) == "JSONB"
+    checks = {
+        item["name"]: item["sqltext"]
+        for item in inspector.get_check_constraints("collection_due_windows")
+    }
+    check = checks["collection_due_windows_query_plan_check"]
+    for fragment in (
+        "query_plan IS NULL",
+        "jsonb_typeof",
+        "search",
+        "skipped",
+        "topic_id IS NOT NULL",
+    ):
+        assert fragment in check

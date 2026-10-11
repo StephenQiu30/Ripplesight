@@ -3,6 +3,7 @@ import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
 import Link from "next/link";
 
+import { QueryPlan } from "@/components/monitors/query-plan";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -187,6 +188,18 @@ export function CoverageWindowDetail({
         <Fact label="关联 Job 状态" value={row.job_status ?? "未知"} />
         <Fact label="主题 ID" value={row.topic_id ?? "未知"} />
       </UI.Content>
+      {row.capability === "search" ? (
+        <UI.Content
+          as="section"
+          aria-label="查询受理回执"
+          className="mt-8 flex flex-col gap-4"
+        >
+          <UI.Heading level={4} className="font-medium">
+            查询受理回执
+          </UI.Heading>
+          <QueryPlan plan={row.query_plan} />
+        </UI.Content>
+      ) : null}
       <CoverageIdentityCounts row={row} />
       <UI.Content className="mt-8 grid gap-8 sm:grid-cols-2">
         <UI.Content>

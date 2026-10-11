@@ -675,6 +675,12 @@ class CollectionDueWindow(Base):
             "AND operation_id IS NULL AND job_id IS NULL)",
             name="collection_due_windows_admission_pair_check",
         ),
+        CheckConstraint(
+            "query_plan IS NULL OR (jsonb_typeof(query_plan) = 'object' "
+            "AND capability = 'search' AND admission_state = 'skipped' "
+            "AND topic_id IS NOT NULL)",
+            name="collection_due_windows_query_plan_check",
+        ),
         Index("collection_due_windows_owner_due_idx", "owner_id", "due_at"),
     )
 
@@ -689,6 +695,7 @@ class CollectionDueWindow(Base):
     window_end: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     connection_version: Mapped[int | None] = mapped_column(BigInteger)
     policy_snapshot: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    query_plan: Mapped[dict[str, object] | None] = mapped_column(JSONB(none_as_null=True))
     admission_state: Mapped[str] = mapped_column(String(16), server_default=text("'pending'"))
     reason: Mapped[str | None] = mapped_column(String(64))
     operation_id: Mapped[UUID | None]

@@ -327,3 +327,55 @@ describe("coverage identity accounting display", () => {
     expect(screen.queryByText("14 个身份")).toBeNull();
   });
 });
+
+describe("scheduled skipped query receipts", () => {
+  it.each(["source_unavailable", "quiet", "budget", "rate_limited"] as const)(
+    "shows frozen queries and version for %s without claiming collection",
+    (reason) => {
+      render(
+        createElement(CoverageWindowDetail, {
+          row: {
+            ...windowRow,
+            capability: "search",
+            query_plan: {
+              version: 1,
+              topic_version: 2,
+              max_queries: null,
+              collection: null,
+              queries: ["Brand", "Other"].map((query, query_index) => ({
+                query_index,
+                query,
+                admitted: false,
+                skip_reason: reason,
+              })),
+            },
+          },
+          onClose: vi.fn(),
+        }),
+      );
+      const receipt = within(
+        screen.getByRole("region", { name: "查询受理回执" }),
+      );
+      expect(receipt.getByText("冻结主题版本：v2")).toBeTruthy();
+      expect(receipt.getByText("Brand")).toBeTruthy();
+      expect(receipt.getByText("Other")).toBeTruthy();
+      expect(receipt.getAllByText(/未受理（/)).toHaveLength(2);
+      expect(receipt.getByText(/未受理查询不计为零结果/)).toBeTruthy();
+      expect(receipt.queryByText(/已受理/)).toBeNull();
+      expect(screen.queryByRole("link", { name: /查看任务/ })).toBeNull();
+    },
+  );
+  it("preserves unknown historical receipts and excludes non-search capabilities", () => {
+    const view = render(
+      createElement(CoverageWindowDetail, {
+        row: { ...windowRow, capability: "search" },
+        onClose: vi.fn(),
+      }),
+    );
+    expect(screen.getByText("此次运行未保存逐查询受理记录。")).toBeTruthy();
+    view.rerender(
+      createElement(CoverageWindowDetail, { row: windowRow, onClose: vi.fn() }),
+    );
+    expect(screen.queryByRole("region", { name: "查询受理回执" })).toBeNull();
+  });
+});

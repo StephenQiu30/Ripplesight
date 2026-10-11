@@ -1258,6 +1258,7 @@ CREATE TABLE collection_due_windows (
         CHECK (connection_version >= 1),
     policy_snapshot JSONB CONSTRAINT collection_due_windows_policy_object_check
         CHECK (policy_snapshot IS NULL OR jsonb_typeof(policy_snapshot) = 'object'),
+    query_plan JSONB,
     admission_state VARCHAR(16) NOT NULL DEFAULT 'pending'
         CONSTRAINT collection_due_windows_state_check
         CHECK (admission_state IN ('pending', 'accepted', 'skipped', 'missed')),
@@ -1265,6 +1266,10 @@ CREATE TABLE collection_due_windows (
     operation_id UUID,
     job_id UUID,
     recorded_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT collection_due_windows_query_plan_check CHECK (
+        query_plan IS NULL OR (jsonb_typeof(query_plan) = 'object'
+        AND capability = 'search' AND admission_state = 'skipped' AND topic_id IS NOT NULL)
+    ),
     CONSTRAINT collection_due_windows_owner_schedule_due_key
         UNIQUE (owner_id, schedule_key, due_at),
     CONSTRAINT collection_due_windows_owner_job_key UNIQUE (owner_id, job_id),

@@ -128,6 +128,80 @@ class DueSkipReason(StrEnum):
     BUDGET = "budget"
 
 
+class KeywordQueryAdmissionView(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+
+    query_index: int = Field(ge=0)
+    query: str = Field(min_length=1, max_length=5100)
+    admitted: bool
+    skip_reason: (
+        Literal["query_limit", "source_unavailable", "quiet", "budget", "rate_limited"] | None
+    )
+
+    @model_validator(mode="after")
+    def require_admission_reason(self) -> KeywordQueryAdmissionView:
+        if self.admitted != (self.skip_reason is None):
+            raise ValueError("query admission and skip reason disagree")
+        return self
+
+
+class KeywordCollectionSnapshot(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+
+    topic: TopicCollectionConfig
+    starts_at: datetime
+    ends_at: datetime
+    max_items_per_query: int = Field(ge=1, le=2000)
+    max_requests_per_query: int = Field(ge=1, le=100)
+
+    @model_validator(mode="after")
+    def require_bounded_config(self) -> KeywordCollectionSnapshot:
+        if (
+            self.starts_at.utcoffset() != timedelta(0)
+            or self.ends_at.utcoffset() != timedelta(0)
+            or not self.starts_at < self.ends_at
+            or (self.ends_at - self.starts_at).total_seconds() > self.topic.search_window_seconds
+            or self.max_items_per_query > self.topic.max_items_per_query
+            or self.max_requests_per_query > self.topic.max_requests_per_query
+        ):
+            raise ValueError("collection snapshot exceeds the topic settings")
+        return self
+
+
+class KeywordQueryPlanView(BaseModel):
+    """Frozen query admission evidence; absent topic versions remain unknown."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+
+    version: Literal[1] = 1
+    max_queries: int | None = Field(ge=1, le=128)
+    topic_version: int | None = Field(default=None, ge=1)
+    queries: tuple[KeywordQueryAdmissionView, ...] = Field(min_length=1, max_length=50)
+    collection: KeywordCollectionSnapshot | None = None
+
+    @model_validator(mode="after")
+    def require_complete_query_sequence(self) -> KeywordQueryPlanView:
+        if [item.query_index for item in self.queries] != list(range(len(self.queries))):
+            raise ValueError("query plan requires a complete ordered sequence")
+        if (
+            self.collection is not None
+            and self.max_queries is not None
+            and self.max_queries > self.collection.topic.max_queries
+        ):
+            raise ValueError("query plan exceeds the topic query limit")
+        for item in self.queries:
+            if self.max_queries is None:
+                if item.admitted or item.skip_reason == "query_limit":
+                    raise ValueError("skipped source cannot claim a query limit")
+            elif item.admitted != (item.query_index < self.max_queries) or (
+                not item.admitted and item.skip_reason != "query_limit"
+            ):
+                raise ValueError("query plan does not match its frozen limit")
+        if self.max_queries is None and len({item.skip_reason for item in self.queries}) != 1:
+            raise ValueError("skipped source requires one frozen reason")
+        return self
+
+
 class CollectionDueWindowInput(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
@@ -163,6 +237,7 @@ class CollectionDueWindowView(CollectionDueWindowInput):
     operation_id: UUID | None
     job_id: UUID | None
     recorded_at: datetime
+    query_plan: KeywordQueryPlanView | None = None
 
 
 class CollectionExecutionFactView(BaseModel):
@@ -240,6 +315,7 @@ class CollectionCoverageView(BaseModel):
     window_end: datetime
     admission_state: DueAdmissionState
     admission_reason: str | None
+    query_plan: KeywordQueryPlanView | None = None
     current_connection_version: int | None
     job_connection_version: int | None
     job_id: UUID | None
@@ -1185,77 +1261,6 @@ class SourceFreshnessView(BaseModel):
     delay_reason: JobDelayReason | None
     delay_since_at: datetime | None
     delay_duration_us: int | None = Field(ge=0)
-
-
-class KeywordQueryAdmissionView(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
-
-    query_index: int = Field(ge=0)
-    query: str = Field(min_length=1, max_length=5100)
-    admitted: bool
-    skip_reason: (
-        Literal["query_limit", "source_unavailable", "quiet", "budget", "rate_limited"] | None
-    )
-
-    @model_validator(mode="after")
-    def require_admission_reason(self) -> KeywordQueryAdmissionView:
-        if self.admitted != (self.skip_reason is None):
-            raise ValueError("query admission and skip reason disagree")
-        return self
-
-
-class KeywordCollectionSnapshot(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
-
-    topic: TopicCollectionConfig
-    starts_at: datetime
-    ends_at: datetime
-    max_items_per_query: int = Field(ge=1, le=2000)
-    max_requests_per_query: int = Field(ge=1, le=100)
-
-    @model_validator(mode="after")
-    def require_bounded_config(self) -> KeywordCollectionSnapshot:
-        if (
-            self.starts_at.utcoffset() != timedelta(0)
-            or self.ends_at.utcoffset() != timedelta(0)
-            or not self.starts_at < self.ends_at
-            or (self.ends_at - self.starts_at).total_seconds() > self.topic.search_window_seconds
-            or self.max_items_per_query > self.topic.max_items_per_query
-            or self.max_requests_per_query > self.topic.max_requests_per_query
-        ):
-            raise ValueError("collection snapshot exceeds the topic settings")
-        return self
-
-
-class KeywordQueryPlanView(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
-
-    version: Literal[1] = 1
-    max_queries: int | None = Field(ge=1, le=128)
-    queries: tuple[KeywordQueryAdmissionView, ...] = Field(min_length=1, max_length=50)
-    collection: KeywordCollectionSnapshot | None = None
-
-    @model_validator(mode="after")
-    def require_complete_query_sequence(self) -> KeywordQueryPlanView:
-        if [item.query_index for item in self.queries] != list(range(len(self.queries))):
-            raise ValueError("query plan requires a complete ordered sequence")
-        if (
-            self.collection is not None
-            and self.max_queries is not None
-            and self.max_queries > self.collection.topic.max_queries
-        ):
-            raise ValueError("query plan exceeds the topic query limit")
-        for item in self.queries:
-            if self.max_queries is None:
-                if item.admitted or item.skip_reason == "query_limit":
-                    raise ValueError("skipped source cannot claim a query limit")
-            elif item.admitted != (item.query_index < self.max_queries) or (
-                not item.admitted and item.skip_reason != "query_limit"
-            ):
-                raise ValueError("query plan does not match its frozen limit")
-        if self.max_queries is None and len({item.skip_reason for item in self.queries}) != 1:
-            raise ValueError("skipped source requires one frozen reason")
-        return self
 
 
 class JobStatusView(BaseModel):

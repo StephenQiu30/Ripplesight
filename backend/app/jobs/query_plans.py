@@ -17,12 +17,14 @@ def build_keyword_query_plan(
     max_queries: int | None,
     skip_reason: QuerySourceSkipReason | None = None,
     collection: KeywordCollectionSnapshot | None = None,
+    topic_version: int | None = None,
 ) -> KeywordQueryPlanView:
     """Describe admission only; this never submits work or claims collection success."""
     if skip_reason is None and max_queries is None:
         raise ValueError("admitted queries require a frozen source limit")
     return KeywordQueryPlanView(
         max_queries=max_queries,
+        topic_version=topic_version,
         collection=collection,
         queries=tuple(
             KeywordQueryAdmissionView(

@@ -15,6 +15,8 @@
 | 本机外部服务 | RSSHub（1200）、SearXNG（8888）、Firecrawl（3002）、MediaCrawler（宿主子进程）、Codex app-server（宿主子进程） |
 | 质量工具 | 后端 Ruff、mypy、pytest；Web 端 ESLint、Prettier、tsc、Vitest、生产构建 |
 
+关键词定时整来源跳过的逐查询受理计划保存在既有collection_due_windows.query_plan可空JSONB，包含本轮最新准入判定时已领取的主题版本、完整候选与来源原因；历史无快照与恢复中的较早跳过/漏轮保持未知，不创建假Job或第二套采集账本。仅规范SQL全新独立测试库执行新增列与约束，业务库升级仍按§6。
+
 ## 2. 进程与端口
 
 | 进程 | 启动方式（在 `backend/app` 或 `frontend`） | 本机端口 |
