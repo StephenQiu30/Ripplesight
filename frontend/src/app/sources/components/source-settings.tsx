@@ -2,6 +2,7 @@
 import * as UI from "@/components/ui/content";
 
 import { PageState } from "@/components/system/page-state";
+import { SourceSearchContract } from "@/components/monitors/source-search-contract";
 import { toast } from "sonner";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -393,6 +394,13 @@ export function SourceSettings() {
                         value={capability.scheduled}
                       />
                     </UI.Content>
+                    {capability.capability === "search" ? (
+                      <SourceSearchContract
+                        sourceName={selected.display_name}
+                        contract={selected.search_contract}
+                        connectionVersion={selected.connection_version}
+                      />
+                    ) : null}
                   </UI.Content>
                 ))}
               </TabsContent>

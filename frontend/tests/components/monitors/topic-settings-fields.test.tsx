@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { KeywordGroupField } from "@/components/monitors/keyword-group-field";
+import { searchContract } from "./search-contract-fixture";
 import {
   selectableTopicSources,
   TopicSettingsFields,
@@ -44,6 +45,20 @@ function source(
 }
 
 describe("topic source settings", () => {
+  it("forwards the API contract and connection version without inventing missing descriptions", () => {
+    const platform = {
+      ...source("pending_verification"),
+      search_contract: searchContract,
+    };
+    const options = selectableTopicSources([platform], ["missing"]);
+    expect(options[0].searchContract).toBe(searchContract);
+    expect(options[0].connectionVersion).toBe(1);
+    expect(options[1].searchContract).toBeUndefined();
+    expect(
+      selectableTopicSources([source("pending_verification")])[0]
+        .searchContract,
+    ).toBeUndefined();
+  });
   it("distinguishes a selectable pending source from restricted and missing sources", () => {
     const pending = selectableTopicSources([source("pending_verification")]);
     expect(pending[0].selectable).toBe(true);

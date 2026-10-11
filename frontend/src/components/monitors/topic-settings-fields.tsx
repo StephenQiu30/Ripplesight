@@ -36,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { KeywordGroupField } from "./keyword-group-field";
+import { SourceSearchContract } from "./source-search-contract";
 import { type TopicFieldErrors } from "./topic-validation";
 
 export type TopicSourceOption = {
@@ -44,6 +45,8 @@ export type TopicSourceOption = {
   selectable: boolean;
   reason: string;
   capabilities?: string;
+  searchContract?: HotKeyAPI.SourceSearchContractView | null;
+  connectionVersion?: number | null;
 };
 
 export function selectableTopicSources(
@@ -65,6 +68,8 @@ export function selectableTopicSources(
         sourceKey: platform.source_key,
         displayName: platform.display_name,
         selectable,
+        searchContract: platform.search_contract,
+        connectionVersion: platform.connection_version,
         capabilities: platform.capabilities
           .map((capability) => capability.display_name)
           .join(" · "),
@@ -155,6 +160,11 @@ export function TopicSettingsFields({
                     aria-describedby={`source-${source.sourceKey}-description`}
                   />
                 </Field>
+                <SourceSearchContract
+                  sourceName={source.displayName}
+                  contract={source.searchContract}
+                  connectionVersion={source.connectionVersion}
+                />
               </FieldGroup>
             );
           })}

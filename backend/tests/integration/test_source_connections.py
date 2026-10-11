@@ -91,6 +91,52 @@ def _user_scope(client: TestClient) -> UUID:
         return authenticated_owner_id(session)
 
 
+def test_search_contracts_are_owner_scoped_versioned_descriptions_without_creating_work(
+    source_connection_client: TestClient,
+) -> None:
+    client = source_connection_client
+    owner = _user_scope(client)
+    factory = client.app.state.session_factory
+    with factory() as session, session.begin():
+        service = SourcePresetService(session)
+        service.apply_in_transaction(owner_id=owner, preset=SOURCE_PRESETS["hackernews"])
+        service.apply_in_transaction(owner_id=owner, preset=BILIBILI_CHROME_PRESET)
+    statement = text(
+        "SELECT (SELECT count(*) FROM jobs), (SELECT count(*) FROM outbox_messages), "
+        "(SELECT count(*) FROM source_connections), "
+        "(SELECT count(*) FROM resource_usage_attempts), "
+        "(SELECT count(*) FROM resource_budget_reservations)"
+    )
+    with factory() as session:
+        before = session.execute(statement).one()
+    response = client.get("/api/source-capabilities")
+    assert response.status_code == 200 and response.headers["cache-control"] == "no-store"
+    platforms = {item["source_key"]: item for item in response.json()["items"]}
+    for key in ("hackernews", "bilibili"):
+        assert platforms[key]["connection_version"] == 1
+        assert platforms[key]["search_contract"]["basis"] == "connection"
+        assert platforms[key]["search_contract"]["query_mode"] == "seed_queries"
+        assert platforms[key]["search_contract"]["version"] == "keyword-search.v1"
+        assert platforms[key]["status"] != "available"
+    assert platforms["google_news"]["search_contract"]["basis"] == "preset"
+    assert platforms["x"]["search_contract"]["query_mode"] == "unsupported"
+    assert platforms["hotlist_bilibili"]["search_contract"] is None
+    assert platforms["web"]["search_contract"] is None
+    authenticate_test_client(client, owner_id=uuid4())
+    other = client.get("/api/source-capabilities")
+    assert other.status_code == 200
+    other_bilibili = next(
+        item for item in other.json()["items"] if item["source_key"] == "bilibili"
+    )
+    assert other_bilibili["connection_version"] is None
+    assert other_bilibili["search_contract"]["basis"] == "preset"
+    assert other_bilibili["search_contract"]["query_mode"] == "unsupported"
+    client.cookies.clear()
+    assert client.get("/api/source-capabilities").status_code == 401
+    with factory() as session:
+        assert session.execute(statement).one() == before
+
+
 def test_public_platform_catalog_requires_session_and_does_not_create_work(
     source_connection_client: TestClient,
 ) -> None:

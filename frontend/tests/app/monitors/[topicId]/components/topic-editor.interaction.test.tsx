@@ -48,6 +48,7 @@ vi.mock("@/components/monitors/topic-alerts", () => ({
 }));
 
 import { TopicEditor } from "@/app/monitors/[topicId]/components/topic-editor";
+import { searchPlatform } from "../../../../components/monitors/search-contract-fixture";
 
 const topic: HotKeyAPI.MonitorTopicView = {
   id: "topic-1",
@@ -86,6 +87,22 @@ afterEach(() => {
 });
 
 describe("Demo topic editing", () => {
+  it("explains the current source connection without rewriting the topic or its frozen jobs", async () => {
+    api.sources.mockResolvedValue({
+      items: [searchPlatform],
+      next_cursor: null,
+    });
+    render(<TopicEditor topicId={topic.id} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "编辑主题设置" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Hacker News查询范围与筛选" }),
+    );
+    expect(screen.getByText("当前连接 v7")).toBeTruthy();
+    expect(screen.getByText("语言 · 仅本地精筛")).toBeTruthy();
+    expect(api.update).not.toHaveBeenCalled();
+  });
   it("reopens hidden report fields for invalid drafts without writing", async () => {
     render(<TopicEditor topicId={topic.id} />);
     fireEvent.click(

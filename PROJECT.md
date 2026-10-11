@@ -137,6 +137,8 @@ Web 外壳使用 `BasicLayout → PageContainer`：前者管理侧栏、移动�
 
 ## 9. API 与身份
 
+来源能力API的search_contract是connections领域派生的当前路径说明，包含预设/连接依据、查询种子方式、三组词/语言/窗口的处理与范围限制；不保存为新账本、不改变任务请求或倒填旧Job。主题新建/编辑与来源页复用此合同，准入及真实完成仍由原能力状态与任务回执证明。
+
 - FastAPI 路由注解加 Pydantic 是唯一的接口契约，运行时生成 `/openapi.json`；Web 客户端由它生成，不手写 OpenAPI 或客户端 DTO。
 - 每个接口声明唯一的 `operation_id`、中文 summary 和 tag、成功响应模型和实际可能返回的错误。成功时返回资源 DTO、`PageView[T]`（`items` / `next_cursor`）或 `JobAcceptedView`；失败时统一返回 `ErrorView(code, message, request_id, details)`。
 - 路径统一是 `/api/*`，不带版本号。日志只记录方法、路由模板、状态码和耗时，不记录 URL 参数、正文、Cookie 或 Token。

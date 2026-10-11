@@ -6648,6 +6648,7 @@ declare namespace HotKeyAPI {
     allowed_hosts: string[];
     /** Capabilities */
     capabilities: SourceCapabilityView[];
+    search_contract?: SourceSearchContractView | null;
   };
 
   type SourcePolicyInput = {
@@ -6728,6 +6729,34 @@ declare namespace HotKeyAPI {
     configuration_label: string;
     /** Excluded */
     excluded: string | null;
+  };
+
+  type SourceSearchConditionView = {
+    /** Condition */
+    condition: "match_any" | "match_all" | "exclude" | "language" | "window";
+    /** Handling */
+    handling: "upstream_and_local" | "local_only" | "unsupported";
+    /** Explanation */
+    explanation: string;
+  };
+
+  type SourceSearchContractView = {
+    /** Version */
+    version?: string;
+    /** Basis */
+    basis: "connection" | "preset" | "unconfigured";
+    /** Path Label */
+    path_label: string;
+    /** Query Mode */
+    query_mode: "seed_queries" | "feed_snapshot" | "unsupported";
+    /** Query Description */
+    query_description: string;
+    /** Scope Description */
+    scope_description: string;
+    /** Conditions */
+    conditions: SourceSearchConditionView[];
+    /** Limitations */
+    limitations: string[];
   };
 
   type SourceStopReason =

@@ -43,6 +43,7 @@ from connections.schemas import (
     SourcePresetApplyView,
     SourceRolloutRole,
 )
+from connections.search_contracts import build_source_search_contract
 from core.errors import ApplicationError
 from evidence.schemas import (
     AccessBasis,
@@ -1283,6 +1284,14 @@ class SourceConnectionService:
                 else []
             ),
             capabilities=capability_views,
+            search_contract=(
+                build_source_search_contract(
+                    catalog.source_key,
+                    current_version.config if current_version is not None else None,
+                )
+                if SourceCapability.SEARCH in catalog.capabilities
+                else None
+            ),
         )
 
     @staticmethod

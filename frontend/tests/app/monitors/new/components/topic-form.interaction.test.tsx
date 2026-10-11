@@ -32,6 +32,7 @@ vi.mock("@/components/monitors/topic-rule-preview", () => ({
 }));
 import { ApiRequestError } from "@/request";
 import { TopicForm } from "@/app/monitors/new/components/topic-form";
+import { searchPlatform } from "../../../../components/monitors/search-contract-fixture";
 beforeEach(() => vi.resetAllMocks());
 afterEach(() => {
   if (document.body.textContent) expectOnePageHeading();
@@ -39,6 +40,24 @@ afterEach(() => {
 });
 
 describe("core topic creation", () => {
+  it("explains current source filters without saving or collecting", async () => {
+    api.sources.mockResolvedValue({
+      items: [searchPlatform],
+      next_cursor: null,
+    });
+    render(<TopicForm />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Hacker News查询范围与筛选" }),
+    );
+    expect(screen.getByText("当前连接 v7")).toBeTruthy();
+    expect(screen.getByText("全部包含 · 仅本地精筛")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("switch", { name: "Hacker News" })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+    expect(api.create).not.toHaveBeenCalled();
+  });
   it("keeps the draft editable when sources fail and retries without erasing inputs", async () => {
     api.sources
       .mockRejectedValueOnce(

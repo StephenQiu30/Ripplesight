@@ -332,6 +332,27 @@ class SourceCapabilityView(OutputModel):
     scheduled: SourceEntryPointView
 
 
+class SourceSearchConditionView(OutputModel):
+    """Explain one keyword condition on the described collection path."""
+
+    condition: Literal["match_any", "match_all", "exclude", "language", "window"]
+    handling: Literal["upstream_and_local", "local_only", "unsupported"]
+    explanation: str
+
+
+class SourceSearchContractView(OutputModel):
+    """Describe current code semantics, independently of admission or success."""
+
+    version: Literal["keyword-search.v1"] = "keyword-search.v1"
+    basis: Literal["connection", "preset", "unconfigured"]
+    path_label: str
+    query_mode: Literal["seed_queries", "feed_snapshot", "unsupported"]
+    query_description: str
+    scope_description: str
+    conditions: tuple[SourceSearchConditionView, ...]
+    limitations: tuple[str, ...]
+
+
 class SourcePlatformView(OutputModel):
     source_key: str
     display_name: str
@@ -348,3 +369,4 @@ class SourcePlatformView(OutputModel):
     credential_update_available: bool
     allowed_hosts: list[str]
     capabilities: list[SourceCapabilityView]
+    search_contract: SourceSearchContractView | None = None

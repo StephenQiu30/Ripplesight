@@ -27,6 +27,7 @@ import {
 import { ApiRequestError } from "@/request";
 
 import { SourceSettings } from "@/app/sources/components/source-settings";
+import { searchContract } from "../../../components/monitors/search-contract-fixture";
 
 const entry: HotKeyAPI.SourceEntryPointView = {
   status: "pending_verification",
@@ -70,6 +71,34 @@ afterEach(() => {
 });
 
 describe("source settings", () => {
+  it("shows the same current query contract only in search capability details", async () => {
+    vi.mocked(listSourceCapabilities).mockResolvedValue({
+      items: [{ ...source, search_contract: searchContract }],
+      next_cursor: null,
+    });
+    render(<SourceSettings />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "管理Hacker News" }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Hacker News查询范围与筛选" }),
+    ).toBeNull();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "能力详情" }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Hacker News查询范围与筛选" }),
+    );
+    expect(screen.getByText("当前连接 v1")).toBeTruthy();
+    expect(
+      screen
+        .getAllByRole("term")
+        .filter((item) => item.textContent?.includes("本地精筛")),
+    ).toHaveLength(4);
+    expect(connectBilibiliChrome).not.toHaveBeenCalled();
+    expect(listSourceCapabilities).toHaveBeenCalledTimes(1);
+  });
   it("keeps technical capability records behind the source detail tab", async () => {
     render(<SourceSettings />);
     const manage = await screen.findByRole("button", {
