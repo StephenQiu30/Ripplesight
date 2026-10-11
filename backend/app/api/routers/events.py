@@ -242,7 +242,10 @@ def list_event_members(
     response_model=EventFactPageView,
     status_code=status.HTTP_200_OK,
     summary="读取事件事实与直接进展",
-    description="按事件修订返回事实身份、根与进展关系及固定成员版本; 不可读派生事实文本隐藏。",
+    description=(
+        "按事件修订返回事实身份、根与进展关系、固定成员版本及已记录的自动归并差分; "
+        "缺历史回执不倒填,不可读证据的差分转未知并隐藏派生理由。"
+    ),
     responses={
         404: {"model": ErrorView, "description": "事件或可读事实成员不存在"},
         **_READ_RESPONSES,
@@ -255,6 +258,7 @@ def list_event_facts(
     scope_id: UserScopeDependency,
     revision: Annotated[int | None, Query(ge=1)] = None,
 ) -> EventFactPageView:
+    """Read fixed facts and the selected automatic revision receipt without side effects."""
     result = service.list_facts(owner_id=scope_id, event_id=event_id, revision=revision)
     response.headers["cache-control"] = "no-store"
     return result

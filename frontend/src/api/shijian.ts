@@ -34,7 +34,7 @@ export async function getEvent(
   });
 }
 
-/** 读取事件事实与直接进展 按事件修订返回事实身份、根与进展关系及固定成员版本; 不可读派生事实文本隐藏。 GET /api/events/${param0}/facts */
+/** 读取事件事实与直接进展 按事件修订返回事实身份、根与进展关系、固定成员版本及已记录的自动归并差分; 缺历史回执不倒填,不可读证据的差分转未知并隐藏派生理由。 GET /api/events/${param0}/facts */
 export async function listEventFacts(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: HotKeyAPI.listEventFactsParams,

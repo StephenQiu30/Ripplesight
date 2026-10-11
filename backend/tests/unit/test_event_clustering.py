@@ -525,3 +525,60 @@ def test_rework_old_event_uses_recent_member_dto(monkeypatch) -> None:
     assert calls[0]["since"] == since
     assert calls[0]["members"] == [member]
     assert targets[0].event_id == target.id and targets[0].members == (recent,)
+
+
+def test_model_output_schema_resolves_nested_change_references_from_root():
+    from events.clustering import EVENT_OUTPUT_SCHEMA
+
+    references = []
+
+    def visit(value):
+        if isinstance(value, dict):
+            if "$ref" in value:
+                reference = value["$ref"]
+                assert reference.startswith("#/")
+                target = EVENT_OUTPUT_SCHEMA
+                for token in reference[2:].split("/"):
+                    target = target[token.replace("~1", "/").replace("~0", "~")]
+                assert isinstance(target, dict)
+                references.append(reference)
+            for nested in value.values():
+                visit(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                visit(nested)
+
+    visit(EVENT_OUTPUT_SCHEMA)
+    assert "#/$defs/EventEvidenceChangeDecision" in references
+
+
+@pytest.mark.parametrize("kind", ["supplement", "repeat", "unknown"])
+def test_model_output_accepts_per_material_judgment_and_rejects_outside_identity(kind):
+    import json
+
+    version, fact = uuid4(), uuid4()
+    value = {
+        "same_event": True,
+        "member_version_ids": [str(version)],
+        "title": "事件",
+        "summary": "摘要",
+        "facts": [
+            {
+                "member_version_ids": [str(version)],
+                "title": "既有事实",
+                "summary": "发生",
+                "relation": "same_occurrence",
+                "existing_fact_id": str(fact),
+                "evidence_changes": [
+                    {"member_version_id": str(version), "kind": kind, "reason": "可核对的理由"}
+                ],
+            }
+        ],
+    }
+    assert (
+        EventDecision.model_validate_json(json.dumps(value)).facts[0].evidence_changes[0].kind
+        == kind
+    )
+    value["facts"][0]["evidence_changes"][0]["member_version_id"] = str(uuid4())
+    with pytest.raises(ValidationError):
+        EventDecision.model_validate_json(json.dumps(value))

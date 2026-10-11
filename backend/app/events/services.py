@@ -639,7 +639,7 @@ def _load_candidate_inputs(
 def _candidate_material_matches(
     session: Session, *, candidate: EventCandidate, members: Sequence[EventInput]
 ) -> bool:
-    if candidate.prompt_version != EVENT_PROMPT_VERSION:
+    if not candidate.prompt_version.startswith(("events-cluster-v4-", "events-cluster-v5-")):
         return True
     requests = {
         str(row.content_id): str(row.operation_id)
@@ -656,6 +656,7 @@ def _candidate_material_matches(
         candidate_fingerprint(
             topic_id=candidate.topic_id,
             members=members,
+            prompt_version=candidate.prompt_version,
             expected_event_revisions=candidate.expected_event_revisions,
             regroup_requests=requests,
         )
@@ -1221,6 +1222,8 @@ class EventClusterExecutor:
                     )
                     fact_context = assessment.input_snapshot
                 else:
+                    if candidate.prompt_version != EVENT_PROMPT_VERSION:
+                        raise self._failure("event_input_changed", JobFailureCategory.INVALID_INPUT)
                     fact_context = freeze_fact_context_in_transaction(
                         session, candidate=candidate, now=self._clock()
                     )
@@ -1231,10 +1234,15 @@ class EventClusterExecutor:
                     )
                     assert assessment is not None
                     assessment.error_code, assessment.updated_at = "request_started", self._clock()
-                prompt = build_event_prompt(
-                    members,
-                    context_version_ids=tuple(member.content_version_id for member in context),
-                    fact_context=fact_context,
+                # Saved output belongs to its frozen prompt; recovery needs no new prompt.
+                prompt = (
+                    build_event_prompt(
+                        members,
+                        context_version_ids=tuple(member.content_version_id for member in context),
+                        fact_context=fact_context,
+                    )
+                    if completion is None
+                    else ""
                 )
         except JobExecutionFailure as error:
             if error.error_code == "event_input_changed":

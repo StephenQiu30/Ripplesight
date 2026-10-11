@@ -1,3 +1,5 @@
+"""Commit fixed fact associations and their revision delta in the caller transaction."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -15,6 +17,7 @@ from events.fact_models import (
     EventGroupingAssessment,
     EventGroupingOverride,
 )
+from events.fact_schemas import EventMaterialChange, EventRevisionDeltaReceipt
 from events.models import Event, EventCandidate, EventMember
 from events.schemas import EventDecision, EventFactDecision
 
@@ -94,6 +97,7 @@ def load_fact_context_in_transaction(
 def freeze_fact_context_in_transaction(
     session: Session, *, candidate: EventCandidate, now: datetime
 ) -> dict[str, object]:
+    """Freeze candidate comparison inputs, clearing any unapplied output on replay."""
     snapshot = load_fact_context_in_transaction(session, candidate=candidate)
     assessment = session.scalar(
         select(EventGroupingAssessment).where(
@@ -112,6 +116,7 @@ def freeze_fact_context_in_transaction(
                 input_fingerprint=candidate.input_fingerprint,
                 input_snapshot=snapshot,
                 decisions=[],
+                applied_result=None,
                 status="pending",
                 confidence=None,
                 ai_call_id=None,
@@ -124,6 +129,7 @@ def freeze_fact_context_in_transaction(
     else:
         assessment.input_snapshot, assessment.status = snapshot, "pending"
         assessment.decisions, assessment.error_code = [], None
+        assessment.applied_result = None
         assessment.updated_at = now
     session.flush()
     return snapshot
@@ -142,6 +148,11 @@ def record_candidate_facts_in_transaction(
     input_frames: dict[UUID, dict[str, object] | None] | None = None,
     input_scopes: dict[UUID, Literal["single", "composite", "unknown"] | None] | None = None,
 ) -> None:
+    """Apply fact groups and freeze actual new members with their explicit baseline.
+
+    The caller owns topic/event locks and the transaction. Context members are
+    excluded; legacy, mention and non-progress groups never imply new facts.
+    """
     if not session.in_transaction():
         raise RuntimeError("fact writer requires caller transaction")
     assessment = session.scalar(
@@ -225,7 +236,9 @@ def record_candidate_facts_in_transaction(
             )
     created_by_version: dict[UUID, UUID] = {}
     new_fact_groups: list[tuple[EventFact, EventFactDecision]] = []
+    changes: list[EventMaterialChange] = []
     for group in groups:
+        fact_relation: str = group.relation
         scopes = {input_scopes.get(identity) for identity in group.member_version_ids}
         if "unknown" in scopes:
             raise FactGroupingConflictError("scope_unknown")
@@ -237,6 +250,7 @@ def record_candidate_facts_in_transaction(
             )
             if existing is None:
                 raise FactGroupingConflictError("fact_target_changed")
+            fact_relation = existing.relation
             target_fact = session.get(EventFact, existing.fact_id)
             assert target_fact is not None
             if "composite" in scopes and (
@@ -318,6 +332,14 @@ def record_candidate_facts_in_transaction(
                 ),
             )
         ):
+            role = (
+                "mention"
+                if member.content_version_id in signal_version_ids
+                or (input_scopes or {}).get(member.content_version_id) == "composite"
+                else "primary"
+                if not has_primary and index == 0
+                else "report"
+            )
             session.add(
                 EventFactMember(
                     id=uuid4(),
@@ -328,16 +350,39 @@ def record_candidate_facts_in_transaction(
                     event_member_id=member.id,
                     content_id=member.content_id,
                     content_version_id=member.content_version_id,
-                    role="mention"
-                    if member.content_version_id in signal_version_ids
-                    or (input_scopes or {}).get(member.content_version_id) == "composite"
-                    else "primary"
-                    if not has_primary and index == 0
-                    else "report",
+                    role=role,
                     assignment_origin="model",
                     added_revision=target_fact.revision,
                     removed_revision=None,
                     created_at=now,
+                )
+            )
+            judgment = next(
+                (
+                    change
+                    for change in group.evidence_changes
+                    if change.member_version_id == member.content_version_id
+                ),
+                None,
+            )
+            kind: Literal["new_fact", "supplement", "repeat", "unknown"] = "unknown"
+            reason: str | None = None
+            if decision.facts and target_fact.status == "confirmed" and role != "mention":
+                if group.existing_fact_id is None and group.relation in {"root", "development"}:
+                    kind = "new_fact"
+                elif (
+                    group.existing_fact_id is not None
+                    and fact_relation in {"root", "development"}
+                    and judgment is not None
+                ):
+                    kind, reason = judgment.kind, judgment.reason.strip()
+            changes.append(
+                EventMaterialChange(
+                    event_member_id=member.id,
+                    content_version_id=member.content_version_id,
+                    fact_id=target_fact.id,
+                    kind=kind,
+                    reason=reason,
                 )
             )
     new_roots = [
@@ -376,4 +421,11 @@ def record_candidate_facts_in_transaction(
     assessment.status = "valid" if decision.facts else "degraded"
     assessment.error_code = None if decision.facts else "legacy_fact_semantics"
     assessment.ai_call_id, assessment.updated_at = ai_call_id, now
+    assessment.applied_result = EventRevisionDeltaReceipt(
+        version="fact_delta_v1",
+        event_id=event.id,
+        baseline_event_revision=candidate.expected_event_revisions.get(str(event.id), 0),
+        event_revision=event.revision,
+        material_changes=changes,
+    ).model_dump(mode="json")
     session.flush()

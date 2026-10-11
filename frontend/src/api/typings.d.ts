@@ -2591,6 +2591,9 @@ declare namespace HotKeyAPI {
     event_revision: number;
     /** Facts */
     facts: EventFactView[];
+    /** Delta State */
+    delta_state?: "available" | "not_recorded" | "invalid" | "ambiguous";
+    delta?: EventRevisionDeltaView | null;
   };
 
   type EventFactView = {
@@ -2643,6 +2646,21 @@ declare namespace HotKeyAPI {
     current_increment?: number | null;
     /** Baseline Increment */
     baseline_increment?: number | null;
+  };
+
+  type EventMaterialChange = {
+    /** Event Member Id */
+    event_member_id: string;
+    /** Content Version Id */
+    content_version_id: string;
+    /** Fact Id */
+    fact_id: string;
+    /** Kind */
+    kind: "new_fact" | "supplement" | "repeat" | "unknown";
+    /** Reason */
+    reason?: string | null;
+    /** Unavailable */
+    unavailable?: boolean;
   };
 
   type EventMemberPageView = {
@@ -2750,6 +2768,31 @@ declare namespace HotKeyAPI {
     event_id: string;
     /** Items */
     items: EventRelatedItemView[];
+  };
+
+  type EventRevisionDeltaView = {
+    /** Version */
+    version: string;
+    /** Event Id */
+    event_id: string;
+    /** Baseline Event Revision */
+    baseline_event_revision: number;
+    /** Event Revision */
+    event_revision: number;
+    /** Material Changes */
+    material_changes: EventMaterialChange[];
+    /** New Fact Count */
+    new_fact_count: number;
+    /** Material Count */
+    material_count: number;
+    /** New Fact Material Count */
+    new_fact_material_count: number;
+    /** Supplement Count */
+    supplement_count: number;
+    /** Repeat Count */
+    repeat_count: number;
+    /** Unknown Count */
+    unknown_count: number;
   };
 
   type EvidenceGroupView = {

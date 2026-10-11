@@ -43,7 +43,26 @@ class EventTarget:
     members: tuple[EventInput, ...]
 
 
+class EventEvidenceChangeDecision(BaseModel):
+    """Classify one fixed material against the existing occurrence, never count it."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    member_version_id: UUID
+    kind: Literal["supplement", "repeat", "unknown"]
+    reason: str = Field(min_length=1, max_length=600)
+
+    @model_validator(mode="after")
+    def require_reason(self) -> Self:
+        """Reject blank explanations while preserving explicit uncertainty."""
+        if not self.reason.strip():
+            raise ValueError("evidence change requires a reason")
+        return self
+
+
 class EventFactDecision(BaseModel):
+    """Partition candidate versions into fact targets and optional material changes."""
+
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
     member_version_ids: list[UUID] = Field(min_length=1, max_length=20)
@@ -55,9 +74,11 @@ class EventFactDecision(BaseModel):
     existing_fact_id: UUID | None = None
     root_fact_id: UUID | None = None
     root_member_version_id: UUID | None = None
+    evidence_changes: list[EventEvidenceChangeDecision] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
     def validate_fact_relation(self) -> Self:
+        """Validate target identity, roots and each material classification's scope."""
         if not self.title.strip() or not self.summary.strip():
             raise ValueError("fact requires nonblank derived text")
         if len(set(self.member_version_ids)) != len(self.member_version_ids):
@@ -72,6 +93,13 @@ class EventFactDecision(BaseModel):
                 raise ValueError("development requires exactly one direct root reference")
         elif self.root_fact_id is not None or self.root_member_version_id is not None:
             raise ValueError("only developments can have a root reference")
+        change_ids = [change.member_version_id for change in self.evidence_changes]
+        if len(change_ids) != len(set(change_ids)) or not set(change_ids) <= set(
+            self.member_version_ids
+        ):
+            raise ValueError("evidence changes require unique versions within the fact group")
+        if self.existing_fact_id is None and self.evidence_changes:
+            raise ValueError("evidence changes compare an existing fact only")
         return self
 
 

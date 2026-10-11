@@ -157,10 +157,88 @@ class EventFactView(OutputModel):
     members: list[EventFactMemberView]
 
 
+class EventMaterialChange(BaseModel):
+    """One applied member classification, with derived reasons gated at read time."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    event_member_id: UUID
+    content_version_id: UUID
+    fact_id: UUID
+    kind: Literal["new_fact", "supplement", "repeat", "unknown"]
+    reason: str | None = Field(default=None, max_length=2000)
+    unavailable: bool = False
+
+    @model_validator(mode="after")
+    def validate_explanation(self) -> Self:
+        """Keep classified evidence explainable and withdrawn conclusions hidden."""
+        if self.kind in {"supplement", "repeat"} and (
+            self.reason is None or not self.reason.strip()
+        ):
+            raise ValueError("classified evidence requires a reason")
+        if self.unavailable and (self.kind != "unknown" or self.reason is not None):
+            raise ValueError("unavailable evidence cannot retain a conclusion")
+        return self
+
+
+class EventRevisionDeltaReceipt(BaseModel):
+    """Immutable result of one atomic automatic grouping revision, not a time bucket."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    version: Literal["fact_delta_v1"]
+    event_id: UUID
+    baseline_event_revision: int = Field(ge=0, strict=True)
+    event_revision: int = Field(ge=1, strict=True)
+    material_changes: list[EventMaterialChange] = Field(min_length=1, max_length=20)
+
+    @model_validator(mode="after")
+    def validate_revision_and_members(self) -> Self:
+        """Verify the explicit baseline and an exclusive fixed-member partition."""
+        if self.event_revision != self.baseline_event_revision + 1:
+            raise ValueError("applied revision must follow its frozen baseline")
+        for identities in (
+            [item.event_member_id for item in self.material_changes],
+            [item.content_version_id for item in self.material_changes],
+        ):
+            if len(identities) != len(set(identities)):
+                raise ValueError("applied material identities must be unique")
+        return self
+
+
+class EventRevisionDeltaView(EventRevisionDeltaReceipt):
+    """Compute counts from the permission-gated material partition, never model numbers."""
+
+    new_fact_count: int = Field(ge=0)
+    material_count: int = Field(ge=1)
+    new_fact_material_count: int = Field(ge=0)
+    supplement_count: int = Field(ge=0)
+    repeat_count: int = Field(ge=0)
+    unknown_count: int = Field(ge=0)
+
+    @classmethod
+    def from_receipt(cls, receipt: EventRevisionDeltaReceipt) -> Self:
+        """Compute distinct facts and exclusive material counts from a gated receipt."""
+        changes = receipt.material_changes
+        return cls(
+            **receipt.model_dump(),
+            new_fact_count=len({item.fact_id for item in changes if item.kind == "new_fact"}),
+            material_count=len(changes),
+            new_fact_material_count=sum(item.kind == "new_fact" for item in changes),
+            supplement_count=sum(item.kind == "supplement" for item in changes),
+            repeat_count=sum(item.kind == "repeat" for item in changes),
+            unknown_count=sum(item.kind == "unknown" for item in changes),
+        )
+
+
 class EventFactPageView(OutputModel):
+    """Read fixed event facts and an optional verifiable automatic revision delta."""
+
     event_id: UUID
     event_revision: int
     facts: list[EventFactView]
+    delta_state: Literal["available", "not_recorded", "invalid", "ambiguous"] = "not_recorded"
+    delta: EventRevisionDeltaView | None = None
 
 
 @dataclass(frozen=True, slots=True)

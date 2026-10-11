@@ -288,3 +288,32 @@ def test_fact_writer_independently_rejects_a_root_using_the_persisted_scope(scop
             now=item.first_seen_at,
             input_times={item.content_version_id: (item.first_seen_at, "published")},
         )
+
+
+def test_composite_partition_cannot_carry_an_evidence_change_into_its_mention():
+    from events.schemas import EventEvidenceChangeDecision, EventFactDecision
+
+    single, composite = _input(3), _input(4, "composite")
+    group = EventFactDecision(
+        member_version_ids=[single.content_version_id, composite.content_version_id],
+        title="已知发生",
+        summary="同一事实",
+        relation="same_occurrence",
+        existing_fact_id=UUID(int=99),
+        evidence_changes=[
+            EventEvidenceChangeDecision(
+                member_version_id=item.content_version_id,
+                kind="supplement",
+                reason="model judgment",
+            )
+            for item in (single, composite)
+        ],
+    )
+    decision = _decision(single, composite).model_copy(update={"facts": [group]})
+    result = constrain_event_decision(decision, (single, composite), root_fact_id=UUID(int=99))
+    assert result.facts[0].member_version_ids == [single.content_version_id]
+    assert [change.member_version_id for change in result.facts[0].evidence_changes] == [
+        single.content_version_id
+    ]
+    assert result.facts[1].member_version_ids == [composite.content_version_id]
+    assert result.facts[1].evidence_changes == []

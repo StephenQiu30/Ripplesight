@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from content.event_reading import load_event_member_content_in_transaction
 from core.errors import ApplicationError
+from events.fact_delta import load_revision_delta_in_transaction
 from events.fact_models import (
     EventDerivedContent,
     EventFact,
@@ -319,12 +320,15 @@ def invalidate_event_derived_in_transaction(
 
 
 class EventFactReadService:
+    """Read fixed facts and revision changes under the current ALL-input gate."""
+
     def __init__(self, session: Session) -> None:
         self._session = session
 
     def list_facts(
         self, *, owner_id: UUID, event_id: UUID, revision: int | None = None
     ) -> EventFactPageView:
+        """Read selected event membership and its recorded delta without writing history."""
         now = datetime.now(UTC)
         self._session.rollback()
         with self._session.begin():
@@ -433,4 +437,18 @@ class EventFactReadService:
                         ],
                     )
                 )
-            return EventFactPageView(event_id=event.id, event_revision=selected, facts=result)
+            delta_state, delta = load_revision_delta_in_transaction(
+                self._session,
+                event=event,
+                revision=selected,
+                facts=result,
+                assignments=assignments,
+                members=list({member.id: member for _, member in member_rows}.values()),
+            )
+            return EventFactPageView(
+                event_id=event.id,
+                event_revision=selected,
+                facts=result,
+                delta_state=delta_state,
+                delta=delta,
+            )

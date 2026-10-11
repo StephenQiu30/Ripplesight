@@ -1,3 +1,5 @@
+"""Freeze candidate identities and construct bounded, versioned grouping prompts."""
+
 from __future__ import annotations
 
 import hashlib
@@ -14,7 +16,7 @@ from analysis.prompts import editorial_prompt_version, render_editorial_prompt
 from events.schemas import EventFactDecision, EventInput, EventTarget
 
 EVENT_PROMPT_VERSION = (
-    "events-cluster-v4-scope@"
+    "events-cluster-v5-fact-delta@"
     + editorial_prompt_version("group-definitions", "group-method").split("@")[-1]
 )
 EVENT_WINDOW = timedelta(hours=72)
@@ -22,8 +24,10 @@ NATIVE_SIGNAL_WINDOW = timedelta(hours=48)
 MAX_CANDIDATE_MEMBERS = 20
 MAX_PROMPT_CHARACTERS = 24_000
 TITLE_SIMILARITY_THRESHOLD = 0.4
+_FACT_OUTPUT_SCHEMA = EventFactDecision.model_json_schema()
 
 EVENT_OUTPUT_SCHEMA: dict[str, object] = {
+    "$defs": _FACT_OUTPUT_SCHEMA.get("$defs", {}),
     "type": "object",
     "properties": {
         "same_event": {"type": "boolean"},
@@ -35,7 +39,11 @@ EVENT_OUTPUT_SCHEMA: dict[str, object] = {
         },
         "title": {"anyOf": [{"type": "string", "maxLength": 200}, {"type": "null"}]},
         "summary": {"anyOf": [{"type": "string", "maxLength": 2000}, {"type": "null"}]},
-        "facts": {"type": "array", "maxItems": 20, "items": EventFactDecision.model_json_schema()},
+        "facts": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {key: value for key, value in _FACT_OUTPUT_SCHEMA.items() if key != "$defs"},
+        },
     },
     "required": ["same_event", "member_version_ids", "title", "summary"],
     "additionalProperties": False,
@@ -50,6 +58,7 @@ def candidate_fingerprint(
     expected_event_revisions: Mapping[str, int] | None = None,
     regroup_requests: Mapping[str, str] | None = None,
 ) -> bytes:
+    """Hash fixed material and target revisions under the specified prompt contract."""
     if not members or len(members) > MAX_CANDIDATE_MEMBERS:
         raise ValueError("candidate must have 1 to 20 members")
     ordered = sorted(members, key=lambda item: item.content_version_id.hex)
@@ -104,6 +113,7 @@ def build_event_prompt(
     context_version_ids: Sequence[UUID] = (),
     fact_context: dict[str, object] | None = None,
 ) -> str:
+    """Build the current grouping prompt without treating external text as instructions."""
     data = [
         {
             "content_version_id": str(item.content_version_id),
@@ -151,6 +161,12 @@ def build_event_prompt(
         "scope=unknown 保持待复核,same_event=false。"
         "盘点roundup不是综合资料创建事件的许可。"
         "无法给出可靠事实关系用unreviewed,不得编造。facts每项需标题、摘要和关系。"
+        "既有same_occurrence事实的每条新增材料在evidence_changes中返回member_version_id、"
+        "kind(supplement/repeat/unknown)和可核对原文的简短reason。"
+        "supplement表示对既有发生提供额外证据;repeat表示仅转述既有信息,不含新事实;"
+        "来源不同、措辞变化或正文更长不能直接认定补证;不足以判断时unknown。"
+        "上下文不是新增材料,不为上下文填写变化;新事实不填写evidence_changes。"
+        "不输出计数,计数由程序按实际提交的身份计算。"
     )
     if fact_context is not None:
         prompt += "\n冻结的事实身份和根关系:" + json.dumps(

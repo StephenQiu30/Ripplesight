@@ -108,7 +108,18 @@ def constrain_event_decision(
             identity for identity in group.member_version_ids if identity not in composite_ids
         ]
         if remaining:
-            groups.append(group.model_copy(update={"member_version_ids": remaining}))
+            groups.append(
+                group.model_copy(
+                    update={
+                        "member_version_ids": remaining,
+                        "evidence_changes": [
+                            change
+                            for change in group.evidence_changes
+                            if change.member_version_id in remaining
+                        ],
+                    }
+                )
+            )
     if not decision.facts and singles:
         groups.append(
             EventFactDecision(

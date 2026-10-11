@@ -14,6 +14,7 @@ import {
   FactSummary,
 } from "@/components/events/event-reading";
 import type { EventSource } from "@/components/events/reading-model";
+import { EventFactDelta } from "./event-fact-delta";
 import { ApiRequestError } from "@/request";
 
 const relationLabels = {
@@ -40,7 +41,8 @@ export function EventFacts({
   onFactsLoaded: (facts: HotKeyAPI.EventFactView[]) => void;
 }) {
   const fieldId = useId();
-  const [facts, setFacts] = useState<HotKeyAPI.EventFactView[] | null>(null);
+  const [page, setPage] = useState<HotKeyAPI.EventFactPageView | null>(null);
+  const facts = page?.facts ?? null;
   const [failure, setFailure] = useState<{ error: unknown } | null>(null);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
@@ -51,7 +53,7 @@ export function EventFacts({
     )
       .then((page) => {
         if (controller.signal.aborted) return;
-        setFacts(page.facts);
+        setPage(page);
         onFactsLoaded(page.facts);
       })
       .catch((error: unknown) => {
@@ -79,7 +81,7 @@ export function EventFacts({
           error={failure.error}
           retry={() => {
             setFailure(null);
-            setFacts(null);
+            setPage(null);
             setRetry((value) => value + 1);
           }}
         />
@@ -88,58 +90,64 @@ export function EventFacts({
           aria-label="正在读取事实"
           className="h-24 w-full motion-reduce:animate-none"
         />
-      ) : !facts.length ? (
-        <EventEmpty>当前事件尚无细分事实关系。</EventEmpty>
       ) : (
-        <ItemGroup>
-          {facts.map((fact) => (
-            <FactSummary
-              key={fact.id}
-              title={fact.title ?? "事实文本待复核或不可读"}
-              summary={fact.summary}
-              sources={sources.filter((source) =>
-                fact.members.some(
-                  (member) => member.event_member_id === source.id,
-                ),
-              )}
-            >
-              <UI.Content className="flex flex-wrap items-center gap-3">
-                {onToggleFact ? (
-                  <Field orientation="horizontal" className="w-auto">
-                    <Checkbox
-                      checked={selectedFactIds.includes(fact.id)}
-                      onCheckedChange={() => onToggleFact(fact.id)}
-                      id={`${fieldId}-${fact.id}`}
-                    />
-                    <FieldLabel htmlFor={`${fieldId}-${fact.id}`}>
-                      选择事实
-                    </FieldLabel>
-                  </Field>
-                ) : null}
-                <Badge variant="secondary">
-                  {relationLabels[fact.relation]}
-                </Badge>
-                <UI.Text size="sm" tone="muted">
-                  <UI.InlineCode>{fact.members.length}</UI.InlineCode>{" "}
-                  份固定证据 · 事实修订{" "}
-                  <UI.InlineCode>{fact.revision}</UI.InlineCode>
-                </UI.Text>
-              </UI.Content>
-              {fact.root_fact_id ? (
-                <UI.Text size="sm" tone="muted">
-                  直接关联根事实：
-                  {facts.find((candidate) => candidate.id === fact.root_fact_id)
-                    ?.title ?? fact.root_fact_id}
-                </UI.Text>
-              ) : null}
-              {fact.evidence_state === "partial" ? (
-                <UI.Text size="sm" tone="muted">
-                  部分固定证据已不可读，派生事实文本隐藏。
-                </UI.Text>
-              ) : null}
-            </FactSummary>
-          ))}
-        </ItemGroup>
+        <>
+          {page ? <EventFactDelta page={page} sources={sources} /> : null}
+          {!facts.length ? (
+            <EventEmpty>当前事件尚无细分事实关系。</EventEmpty>
+          ) : (
+            <ItemGroup>
+              {facts.map((fact) => (
+                <FactSummary
+                  key={fact.id}
+                  title={fact.title ?? "事实文本待复核或不可读"}
+                  summary={fact.summary}
+                  sources={sources.filter((source) =>
+                    fact.members.some(
+                      (member) => member.event_member_id === source.id,
+                    ),
+                  )}
+                >
+                  <UI.Content className="flex flex-wrap items-center gap-3">
+                    {onToggleFact ? (
+                      <Field orientation="horizontal" className="w-auto">
+                        <Checkbox
+                          checked={selectedFactIds.includes(fact.id)}
+                          onCheckedChange={() => onToggleFact(fact.id)}
+                          id={`${fieldId}-${fact.id}`}
+                        />
+                        <FieldLabel htmlFor={`${fieldId}-${fact.id}`}>
+                          选择事实
+                        </FieldLabel>
+                      </Field>
+                    ) : null}
+                    <Badge variant="secondary">
+                      {relationLabels[fact.relation]}
+                    </Badge>
+                    <UI.Text size="sm" tone="muted">
+                      <UI.InlineCode>{fact.members.length}</UI.InlineCode>{" "}
+                      份固定证据 · 事实修订{" "}
+                      <UI.InlineCode>{fact.revision}</UI.InlineCode>
+                    </UI.Text>
+                  </UI.Content>
+                  {fact.root_fact_id ? (
+                    <UI.Text size="sm" tone="muted">
+                      直接关联根事实：
+                      {facts.find(
+                        (candidate) => candidate.id === fact.root_fact_id,
+                      )?.title ?? fact.root_fact_id}
+                    </UI.Text>
+                  ) : null}
+                  {fact.evidence_state === "partial" ? (
+                    <UI.Text size="sm" tone="muted">
+                      部分固定证据已不可读，派生事实文本隐藏。
+                    </UI.Text>
+                  ) : null}
+                </FactSummary>
+              ))}
+            </ItemGroup>
+          )}
+        </>
       )}
     </UI.Content>
   );

@@ -2524,6 +2524,7 @@ CREATE TABLE event_grouping_assessments (
     input_fingerprint BYTEA NOT NULL,
     input_snapshot JSONB NOT NULL,
     decisions JSONB NOT NULL,
+    applied_result JSONB,
     status VARCHAR(16) NOT NULL,
     confidence FLOAT,
     ai_call_id UUID,
@@ -2539,6 +2540,7 @@ CREATE TABLE event_grouping_assessments (
     CONSTRAINT event_grouping_assessments_hash_check CHECK (octet_length(input_fingerprint) = 32),
     CONSTRAINT event_grouping_assessments_status_check CHECK (status IN ('pending','valid','degraded','stale','failed')),
     CONSTRAINT event_grouping_assessments_json_check CHECK (jsonb_typeof(input_snapshot) = 'object' AND jsonb_typeof(decisions) = 'array'),
+    CONSTRAINT event_grouping_assessments_applied_check CHECK (applied_result IS NULL OR jsonb_typeof(applied_result) = 'object'),
     CONSTRAINT event_grouping_assessments_confidence_check CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 1)
 );
 

@@ -344,6 +344,8 @@ class EventDerivedContent(Base):
 
 
 class EventGroupingAssessment(Base):
+    """Own frozen grouping inputs, model decisions and the atomic applied delta."""
+
     __tablename__ = "event_grouping_assessments"
     __table_args__ = (
         ForeignKeyConstraint(
@@ -381,6 +383,10 @@ class EventGroupingAssessment(Base):
             name="event_grouping_assessments_json_check",
         ),
         CheckConstraint(
+            "applied_result IS NULL OR jsonb_typeof(applied_result) = 'object'",
+            name="event_grouping_assessments_applied_check",
+        ),
+        CheckConstraint(
             "confidence IS NULL OR confidence BETWEEN 0 AND 1",
             name="event_grouping_assessments_confidence_check",
         ),
@@ -393,6 +399,7 @@ class EventGroupingAssessment(Base):
     input_fingerprint: Mapped[bytes] = mapped_column(LargeBinary(32))
     input_snapshot: Mapped[dict[str, object]] = mapped_column(JSONB)
     decisions: Mapped[list[dict[str, object]]] = mapped_column(JSONB)
+    applied_result: Mapped[dict[str, object] | None] = mapped_column(JSONB(none_as_null=True))
     status: Mapped[str] = mapped_column(String(16))
     confidence: Mapped[float | None] = mapped_column(Float)
     ai_call_id: Mapped[UUID | None]

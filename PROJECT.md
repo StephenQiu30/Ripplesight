@@ -76,6 +76,8 @@ Web 外壳使用 `BasicLayout → PageContainer`：前者管理侧栏、移动�
 
 采集身份计量由content服务基于保留观察历史计算，jobs仅投影DTO；Web复用`components/collection/identity-counts.tsx`供覆盖详情与关键词/评论任务详情消费，不复制统计账本。
 
+事件修订差分由events领域在既有分组评估记录的可空JSONB结果中原子冻结，关联实际事件修订、此前修订及新成员/事实身份；不建立第二份材料或事实账本。事实读取在当前许可下投影差分，统计由程序从冻结分类计算。旧记录无结果不倒填；模型补证/重复判断及实际可读证据分别核对。
+
 普通页头复用 `components/system/page-header.tsx` 的 `PageHeader`，统一标题、可选说明、操作与详情面包屑；面包屑直接组合现有 shadcn 基础组件。空状态由 `PageState` 组合 `Empty`，说明与操作均按当前场景提供，不自动添加无关跳转或技术诊断。刊物报头与登录表单保留专用排版。
 
 ## 4. 业务领域
