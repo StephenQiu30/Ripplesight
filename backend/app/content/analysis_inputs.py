@@ -49,7 +49,25 @@ def freeze_analysis_observation_inputs_in_transaction(
     post_observations: dict[UUID, UUID],
     comment_observations: dict[UUID, UUID],
     now: datetime,
+    context_signature: str | None = None,
 ) -> AnalysisObservationManifest:
+    """Freeze exact kinds and the ALL permission closure of every supplied observation.
+
+    Args:
+        session: Caller-owned active transaction.
+        owner_id: Owner whose observation permissions must all remain readable.
+        post_observations: Exact original-post versions and observations.
+        comment_observations: Exact target/parent comment versions and observations.
+        now: Aware time used for retention and authorization checks.
+        context_signature: Optional comment-context digest; None preserves legacy signatures.
+
+    Returns:
+        An immutable manifest binding every root and transitive dependency.
+
+    Raises:
+        RuntimeError: The transaction or aware clock is missing.
+        ApplicationError: A supplied version, kind, observation or dependency is unavailable.
+    """
     if not session.in_transaction() or now.utcoffset() is None:
         raise RuntimeError("analysis inputs require caller transaction and aware time")
     roots = tuple(sorted({*post_observations.values(), *comment_observations.values()}, key=str))
@@ -62,6 +80,7 @@ def freeze_analysis_observation_inputs_in_transaction(
             sorted(comment_observations.items(), key=lambda pair: str(pair[0]))
         ),
         input_observation_ids=closure,
+        context_signature=context_signature,
     )
     _require_exact_roots(session, owner_id=owner_id, manifest=manifest)
     return manifest

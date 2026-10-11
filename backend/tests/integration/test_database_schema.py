@@ -168,3 +168,17 @@ def test_topic_collection_version_columns_have_bounded_constraints(schema_engine
         assert columns[key]["nullable"] is False
         assert columns[key]["default"] is not None
         assert key in checks[f"monitor_topic_versions_{key}_check"]
+
+
+def test_annotation_constraint_allows_missing_sentiment_for_valid_relevance(
+    schema_engine: Engine,
+) -> None:
+    checks = inspect(schema_engine).get_check_constraints("content_annotations")
+    check = next(
+        item["sqltext"]
+        for item in checks
+        if item["name"] == "content_annotations_output_status_check"
+    )
+    assert "sentiment IS NOT NULL" not in check
+    assert "sentiment IS NULL" in check
+    assert "relevant" in check and "unanalyzed" in check and "relevance_reason" in check

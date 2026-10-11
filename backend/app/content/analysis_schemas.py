@@ -18,6 +18,10 @@ class AnalysisObservationManifest(BaseModel):
     comment_observations: dict[UUID, UUID] = Field(default_factory=dict, max_length=1530)
     input_observation_ids: tuple[UUID, ...] = Field(min_length=1, max_length=2000)
 
+    context_signature: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$", exclude_if=lambda value: value is None
+    )
+
     @model_validator(mode="after")
     def exact_distinct_inputs(self) -> Self:
         roots = {*self.post_observations.values(), *self.comment_observations.values()}
@@ -32,5 +36,7 @@ class AnalysisObservationManifest(BaseModel):
 
     @property
     def signature(self) -> str:
-        canonical = json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+        canonical = json.dumps(
+            self.model_dump(mode="json", exclude_none=True), sort_keys=True, separators=(",", ":")
+        )
         return hashlib.sha256(canonical.encode()).hexdigest()

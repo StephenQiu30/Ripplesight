@@ -16,7 +16,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 from tests.conftest import create_test_account
 
-from analysis.prompts import ANALYSIS_PROMPT_VERSION
+from analysis.prompts import ANALYSIS_PROMPT_VERSION, LEGACY_ANALYSIS_PROMPT_VERSION
 from analysis.schemas import (
     AnalysisJobScope,
     AnnotationResultState,
@@ -887,3 +887,170 @@ def _post(case: AnalysisCase):
         title="HotKey 产品讨论",
         body="原正文",
     )
+
+
+@pytest.mark.parametrize(
+    "prompt_version", [ANALYSIS_PROMPT_VERSION, LEGACY_ANALYSIS_PROMPT_VERSION]
+)
+def test_valid_relevance_without_required_sentiment_persists_and_is_not_recomputed(
+    analysis_case: AnalysisCase,
+    prompt_version: str,
+) -> None:
+    from analysis.reads import load_current_annotation_states_in_transaction
+    from analysis.services import list_relevant_event_annotation_refs_in_transaction
+
+    case = analysis_case
+    job_id = _scan(case)[0]
+    call = uuid4()
+    _seed_ai_call(case, call)
+    results = resolve_annotation_results(
+        expected_content_version_ids=(case.version_id,),
+        raw_items=[
+            {
+                "content_version_id": str(case.version_id),
+                "relevant": True,
+                "relevance_reason": "讨论产品发布",
+                "sentiment": None if prompt_version == ANALYSIS_PROMPT_VERSION else "neutral",
+                "summary": "产品发布",
+                "viewpoints": [],
+            }
+        ],
+        ai_call_id=call,
+        prompt_version=prompt_version,
+    )
+    with case.sessions() as session, session.begin():
+        AnalysisService(session).persist_results_in_transaction(
+            owner_id=case.owner_id,
+            topic_id=case.topic_id,
+            topic_rule_version=1,
+            prompt_version=prompt_version,
+            posts={case.version_id: _observed_post(case)},
+            results=results,
+            created_at=case.now,
+            input_manifest=_input_manifest(session, job_id),
+        )
+    with case.sessions() as session, session.begin():
+        row = session.execute(
+            text("SELECT relevant,sentiment,result_state,prompt_version FROM content_annotations")
+        ).one()
+        assert row.relevant and row.result_state == "valid" and row.prompt_version == prompt_version
+        assert row.sentiment == (None if prompt_version == ANALYSIS_PROMPT_VERSION else "neutral")
+        state = load_current_annotation_states_in_transaction(
+            session,
+            owner_id=case.owner_id,
+            topic_id=case.topic_id,
+            topic_rule_version=1,
+            prompt_version=ANALYSIS_PROMPT_VERSION,
+            content_version_ids={case.version_id},
+            now=case.now,
+        )
+        assert state[case.version_id] == (AnnotationResultState.VALID, True)
+        refs = list_relevant_event_annotation_refs_in_transaction(
+            session,
+            since=case.now - timedelta(hours=1),
+            version_ids=(case.version_id,),
+            now=case.now,
+        )
+        assert len(refs.items) == 1
+    assert _scan(case) == ()
+
+
+def test_frozen_legacy_job_and_compensation_retain_prompt_version(
+    analysis_case: AnalysisCase,
+) -> None:
+    case = analysis_case
+    job_id = _scan(case)[0]
+    with case.sessions() as session, session.begin():
+        raw = session.execute(
+            text("SELECT scope FROM jobs WHERE id=:id"), {"id": job_id}
+        ).scalar_one()
+        scope = AnalysisJobScope.from_job_scope(raw).model_copy(
+            update={"prompt_version": LEGACY_ANALYSIS_PROMPT_VERSION}
+        )
+        operation = analysis_operation_id(
+            topic_id=scope.topic_id,
+            topic_rule_version=1,
+            content_version_ids=scope.content_version_ids,
+            prompt_version=scope.prompt_version,
+            input_signature=scope.input_manifest.signature,
+        )
+        session.execute(
+            text(
+                "UPDATE jobs SET scope=CAST(:scope AS jsonb),operation_id=:operation WHERE id=:id"
+            ),
+            {
+                "scope": json.dumps({**raw, **scope.to_job_scope()}),
+                "operation": operation,
+                "id": job_id,
+            },
+        )
+    message = JobAcceptedMessage(
+        schema_version=2,
+        message_id=uuid4(),
+        event_type="job.accepted.v2",
+        job_id=job_id,
+        owner_id=case.owner_id,
+        operation_id=operation,
+        kind="analysis.annotate",
+        configuration_ref=f"topic:{case.topic_id}",
+        configuration_version=1,
+    )
+    executor = AnalysisAnnotateExecutor(
+        case.sessions,
+        Settings(database_url=os.environ["HOTKEY_TEST_DATABASE_URL"]),
+        clock=lambda: case.now,
+    )
+    assert executor._load_execution(message)[0].prompt_version == LEGACY_ANALYSIS_PROMPT_VERSION
+    assert _scan(case) == ()
+    call = uuid4()
+    _seed_ai_call(case, call)
+    with case.sessions() as session, session.begin():
+        session.execute(
+            text("UPDATE jobs SET status='partially_succeeded' WHERE id=:id"), {"id": job_id}
+        )
+        AnalysisService(session).persist_results_in_transaction(
+            owner_id=case.owner_id,
+            topic_id=case.topic_id,
+            topic_rule_version=1,
+            prompt_version=LEGACY_ANALYSIS_PROMPT_VERSION,
+            posts={case.version_id: _observed_post(case)},
+            results=(
+                AnnotationWrite(
+                    content_version_id=case.version_id,
+                    ai_call_id=call,
+                    status=AnnotationStatus.UNANALYZED,
+                    result_state=AnnotationResultState.INVALID,
+                    error_code="analysis_output_missing",
+                ),
+            ),
+            created_at=case.now,
+            input_manifest=_input_manifest(session, job_id),
+        )
+    # A different-version historical retry must not select or block the v1 compensation.
+    with case.sessions() as session, session.begin():
+        session.execute(
+            text(
+                "INSERT INTO jobs "
+                "(id,owner_id,operation_id,kind,configuration_ref,configuration_version,source_key,"
+                "source_capability,scope,request_fingerprint,status,created_at,updated_at) "
+                "SELECT :id,owner_id,:operation,kind,configuration_ref,configurati"
+                "on_version,source_key,"
+                "source_capability,jsonb_set(jsonb_set(scope,'{prompt_version}',to"
+                "_jsonb(CAST(:prompt AS text))),"
+                "'{retry_index}','1'::jsonb),request_fingerprint,'failed',created_"
+                "at,updated_at FROM jobs WHERE id=:original"
+            ),
+            {
+                "id": uuid4(),
+                "operation": uuid4(),
+                "prompt": ANALYSIS_PROMPT_VERSION,
+                "original": job_id,
+            },
+        )
+    retry = _scan(case)
+    assert len(retry) == 1 and retry[0] != job_id
+    with case.sessions() as session, session.begin():
+        raw = session.execute(
+            text("SELECT scope FROM jobs WHERE id=:id"), {"id": retry[0]}
+        ).scalar_one()
+        assert raw["prompt_version"] == LEGACY_ANALYSIS_PROMPT_VERSION and raw["retry_index"] == 1

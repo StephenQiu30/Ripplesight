@@ -120,13 +120,24 @@ class ContentAnnotation(Base):
             "AND relevant IS NOT NULL AND relevance_reason IS NOT NULL "
             "AND btrim(relevance_reason) <> '' AND summary IS NOT NULL "
             "AND btrim(summary) <> '' AND ai_call_id IS NOT NULL AND error_code IS NULL "
-            "AND ((relevant AND sentiment IS NOT NULL) OR (NOT relevant AND sentiment IS NULL))) "
+            "AND (relevant OR sentiment IS NULL)) "
             "OR (status = 'unanalyzed' AND result_state IN ('pending', 'failed', 'invalid') "
             "AND relevant IS NULL AND relevance_reason IS NULL AND sentiment IS NULL "
             "AND summary IS NULL AND viewpoints = '[]'::jsonb "
             "AND ((result_state = 'pending' AND ai_call_id IS NULL AND error_code IS NULL) "
             "OR (result_state IN ('failed', 'invalid') AND ai_call_id IS NOT NULL "
-            "AND error_code IS NOT NULL AND btrim(error_code) <> '')))",
+            "AND error_code IS NOT NULL AND btrim(error_code) <> '')))"
+            "OR (status = 'unanalyzed' AND result_state IN ('insufficient', 'unknown') "
+            "AND relevant IS NULL AND relevance_reason IS NOT NULL "
+            "AND btrim(relevance_reason) <> '' "
+            "AND sentiment IS NULL AND summary IS NULL AND viewpoints = '[]'::jsonb "
+            "AND ai_call_id IS NOT NULL AND (error_code IS NULL "
+            "OR (result_state = 'unknown' AND btrim(error_code) <> '')) "
+            "AND prompt_version = 'analysis.comment.v1') "
+            "OR (status = 'unanalyzed' AND result_state = 'deferred' AND relevant IS NULL "
+            "AND relevance_reason IS NULL AND sentiment IS NULL AND summary IS NULL "
+            "AND viewpoints = '[]'::jsonb AND error_code = 'analysis_rate_limited' "
+            "AND prompt_version = 'analysis.comment.v1')",
             name="content_annotations_output_status_check",
         ),
         CheckConstraint(
@@ -174,4 +185,30 @@ class ContentAnnotation(Base):
     )
     first_valid_at: Mapped[datetime | None]
     created_at: Mapped[datetime]
+    updated_at: Mapped[datetime]
+
+
+class CommentAnalysisScanCursor(Base):
+    """Persist bounded fair progress, independent of analysis completion."""
+
+    __tablename__ = "analysis_comment_scan_cursors"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["owner_id", "topic_id"],
+            ["monitor_topics.owner_id", "monitor_topics.id"],
+            ondelete="CASCADE",
+            name="analysis_comment_scan_cursors_topic_fkey",
+        ),
+        CheckConstraint("topic_rule_version >= 1", name="analysis_comment_scan_cursors_rule_check"),
+        CheckConstraint(
+            "after_comment_id IS NULL OR after_post_version_id IS NOT NULL",
+            name="analysis_comment_scan_cursors_position_check",
+        ),
+    )
+    owner_id: Mapped[UUID] = mapped_column(primary_key=True)
+    topic_id: Mapped[UUID] = mapped_column(primary_key=True)
+    topic_rule_version: Mapped[int]
+    after_post_version_id: Mapped[UUID | None]
+    after_comment_id: Mapped[UUID | None]
+    after_invalid_annotation_id: Mapped[UUID | None]
     updated_at: Mapped[datetime]

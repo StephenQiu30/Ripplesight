@@ -296,7 +296,14 @@ declare namespace HotKeyAPI {
     reason: string | null;
   };
 
-  type AnnotationResultState = "pending" | "failed" | "invalid" | "valid";
+  type AnnotationResultState =
+    | "pending"
+    | "failed"
+    | "invalid"
+    | "valid"
+    | "insufficient"
+    | "unknown"
+    | "deferred";
 
   type AnnotationStatus = "annotated" | "unanalyzed";
 
@@ -946,6 +953,8 @@ declare namespace HotKeyAPI {
     error_code: string | null;
     /** Updated At */
     updated_at: string;
+    /** Created At */
+    created_at?: string | null;
   };
 
   type ContentCommentView = {

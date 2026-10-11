@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, func, select, true
+from sqlalchemy import Select, and_, func, select, true
 from sqlalchemy.orm import Session
 
 from connections.services import (
@@ -202,6 +202,11 @@ def list_active_editorial_topic_rules_in_transaction(
         )
         for topic, version in rows
     )
+
+
+def current_topic_rule_identities_query() -> Select[tuple[UUID, UUID, int]]:
+    """Domain-owned projection for filtering annotation reads before ranking and paging."""
+    return select(MonitorTopic.owner_id, MonitorTopic.id, MonitorTopic.current_version)
 
 
 def list_topic_analysis_rule_identities_in_transaction(

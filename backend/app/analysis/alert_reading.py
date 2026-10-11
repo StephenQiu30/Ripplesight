@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from analysis.models import ContentAnnotation
+from analysis.prompts import COMMENT_ANALYSIS_PROMPT_VERSION
 from analysis.reads import annotation_inputs_readable_in_transaction
 from content.alert_reading import freeze_alert_content_inputs_in_transaction
 from content.analysis_schemas import AnalysisObservationManifest
@@ -32,6 +33,17 @@ def load_negative_alert_facts_in_transaction(
     end: datetime,
     now: datetime,
 ) -> NegativeAlertFacts:
+    """Count explicit negative labels only when the bounded readable window is complete.
+
+    Missing sentiment yields an unknown fact with a reason and no usable manifest;
+    this read never launches analysis or a notification.
+
+    Returns:
+        An explicit count and frozen inputs, or an unknown value and its blocker.
+
+    Raises:
+        ValueError: There is no caller transaction or either window boundary is naive.
+    """
     if not session.in_transaction() or start.utcoffset() is None or end.utcoffset() is None:
         raise ValueError("alert sentiment reads require aware caller transaction")
     rows = tuple(
@@ -41,6 +53,7 @@ def load_negative_alert_facts_in_transaction(
                 ContentAnnotation.owner_id == owner_id,
                 ContentAnnotation.topic_id == topic_id,
                 ContentAnnotation.topic_rule_version == topic_rule_version,
+                ContentAnnotation.prompt_version != COMMENT_ANALYSIS_PROMPT_VERSION,
                 ContentAnnotation.first_valid_at >= start,
                 ContentAnnotation.first_valid_at < end,
             )
@@ -81,9 +94,15 @@ def load_negative_alert_facts_in_transaction(
             row.status != "annotated"
             or row.result_state != "valid"
             or row.relevant is None
-            or (row.relevant and row.sentiment not in ("positive", "neutral", "negative"))
+            or (
+                row.relevant
+                and row.sentiment is not None
+                and row.sentiment not in ("positive", "neutral", "negative")
+            )
         ):
             return NegativeAlertFacts(None, "alert_sentiment_invalid", {})
+        if row.relevant and row.sentiment is None:
+            return NegativeAlertFacts(None, "alert_sentiment_missing", {})
         analysis_inputs = analysis_manifest.input_observation_ids if analysis_manifest else ()
         all_inputs.update((*original.observation_ids, *analysis_inputs))
         if len(all_inputs) > 2000:

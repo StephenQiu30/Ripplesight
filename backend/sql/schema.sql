@@ -2005,7 +2005,7 @@ CREATE TABLE content_annotations (
 	CONSTRAINT content_annotations_viewpoints_check CHECK (jsonb_typeof(viewpoints) = 'array' AND jsonb_array_length(viewpoints) <= 5),
 	CONSTRAINT content_annotations_diagnostic_history_check CHECK (jsonb_typeof(diagnostic_history) = 'array'),
 	CONSTRAINT content_annotations_status_check CHECK (status IN ('annotated', 'unanalyzed')),
-	CONSTRAINT content_annotations_output_status_check CHECK ((status = 'annotated' AND result_state = 'valid' AND relevant IS NOT NULL AND relevance_reason IS NOT NULL AND btrim(relevance_reason) <> '' AND summary IS NOT NULL AND btrim(summary) <> '' AND ai_call_id IS NOT NULL AND error_code IS NULL AND ((relevant AND sentiment IS NOT NULL) OR (NOT relevant AND sentiment IS NULL))) OR (status = 'unanalyzed' AND result_state IN ('pending', 'failed', 'invalid') AND relevant IS NULL AND relevance_reason IS NULL AND sentiment IS NULL AND summary IS NULL AND viewpoints = '[]'::jsonb AND ((result_state = 'pending' AND ai_call_id IS NULL AND error_code IS NULL) OR (result_state IN ('failed', 'invalid') AND ai_call_id IS NOT NULL AND error_code IS NOT NULL AND btrim(error_code) <> '')))),
+	CONSTRAINT content_annotations_output_status_check CHECK ((status = 'annotated' AND result_state = 'valid' AND relevant IS NOT NULL AND relevance_reason IS NOT NULL AND btrim(relevance_reason) <> '' AND summary IS NOT NULL AND btrim(summary) <> '' AND ai_call_id IS NOT NULL AND error_code IS NULL AND (relevant OR sentiment IS NULL)) OR (status = 'unanalyzed' AND result_state IN ('pending', 'failed', 'invalid') AND relevant IS NULL AND relevance_reason IS NULL AND sentiment IS NULL AND summary IS NULL AND viewpoints = '[]'::jsonb AND ((result_state = 'pending' AND ai_call_id IS NULL AND error_code IS NULL) OR (result_state IN ('failed', 'invalid') AND ai_call_id IS NOT NULL AND error_code IS NOT NULL AND btrim(error_code) <> ''))) OR (status = 'unanalyzed' AND result_state IN ('insufficient', 'unknown') AND relevant IS NULL AND relevance_reason IS NOT NULL AND btrim(relevance_reason) <> '' AND sentiment IS NULL AND summary IS NULL AND viewpoints = '[]'::jsonb AND ai_call_id IS NOT NULL AND (error_code IS NULL OR (result_state = 'unknown' AND btrim(error_code) <> '')) AND prompt_version = 'analysis.comment.v1') OR (status = 'unanalyzed' AND result_state = 'deferred' AND relevant IS NULL AND relevance_reason IS NULL AND sentiment IS NULL AND summary IS NULL AND viewpoints = '[]'::jsonb AND error_code = 'analysis_rate_limited' AND prompt_version = 'analysis.comment.v1')),
 	CONSTRAINT content_annotations_updated_at_check CHECK (created_at <= updated_at),
 	CONSTRAINT content_annotations_first_valid_at_check CHECK ((result_state = 'valid') = (first_valid_at IS NOT NULL))
 );
@@ -3453,5 +3453,22 @@ ALTER TABLE editorial_source_profiles
     FOREIGN KEY (owner_id, id, current_version)
     REFERENCES editorial_source_profile_versions (owner_id, profile_id, version)
     DEFERRABLE INITIALLY DEFERRED;
+
+CREATE TABLE analysis_comment_scan_cursors (
+    owner_id UUID NOT NULL,
+    topic_id UUID NOT NULL,
+    topic_rule_version INTEGER NOT NULL,
+    after_post_version_id UUID,
+    after_comment_id UUID,
+    after_invalid_annotation_id UUID,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (owner_id, topic_id),
+    CONSTRAINT analysis_comment_scan_cursors_topic_fkey FOREIGN KEY (owner_id, topic_id)
+        REFERENCES monitor_topics (owner_id, id) ON DELETE CASCADE,
+    CONSTRAINT analysis_comment_scan_cursors_rule_check CHECK (topic_rule_version >= 1),
+    CONSTRAINT analysis_comment_scan_cursors_position_check CHECK (
+        after_comment_id IS NULL OR after_post_version_id IS NOT NULL
+    )
+);
 
 COMMIT;

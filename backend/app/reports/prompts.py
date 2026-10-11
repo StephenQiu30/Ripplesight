@@ -73,6 +73,9 @@ def build_report_prompt(data: DailyReportData) -> str:
         "metrics": report_metrics(data),
         "platform_distribution": data.overview.platform_distribution,
         "sentiment_distribution": data.overview.sentiment_distribution,
+        "sentiment_analyzed_count": sum(data.overview.sentiment_distribution.values()),
+        "sentiment_unanalyzed_count": data.overview.posts.current
+        - sum(data.overview.sentiment_distribution.values()),
         "top_contents": [
             {
                 "citation": item.citation,

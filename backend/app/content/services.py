@@ -2678,7 +2678,9 @@ class ContentService:
             visibility_history=visibility_history,
             analysis_topics=analysis_topics or [],
             annotations=annotations or [],
-            analysis_prompt_version=ANALYSIS_PROMPT_VERSION,
+            analysis_prompt_version="analysis.comment.v1"
+            if content.object_type == "comment"
+            else ANALYSIS_PROMPT_VERSION,
         )
 
 
@@ -3144,12 +3146,23 @@ def load_post_versions_for_analysis_scan(
     topic_rule_version: int | None = None,
     as_of: datetime | None = None,
     readable_at: datetime | None = None,
+    candidate_version_ids: set[UUID] | None = None,
 ) -> tuple[AnalysisPostContentView, ...]:
-    """Read selected search posts or versions from a matched hotlist observation."""
+    """Read selected posts, optionally restricted to fifty raw pagination candidates.
+
+    Raises:
+        RuntimeError: The caller has no transaction.
+        ValueError: The cutoff is naive or the candidate page exceeds fifty versions.
+    """
     if not session.in_transaction():
         raise RuntimeError("analysis content reads require the caller's transaction")
     if as_of is not None and as_of.tzinfo is None:
         raise ValueError("analysis scan cutoff must be timezone-aware")
+    if candidate_version_ids is not None and len(candidate_version_ids) > 50:
+        raise ValueError("analysis candidate pages allow at most fifty versions")
+    candidate_conditions = (
+        (ContentVersion.id.in_(candidate_version_ids),) if candidate_version_ids is not None else ()
+    )
     receipt_cutoff = (
         (ContentObservation.received_at < as_of.astimezone(UTC),) if as_of is not None else ()
     )
@@ -3233,6 +3246,7 @@ def load_post_versions_for_analysis_scan(
         .where(
             ContentVersion.owner_id == owner_id,
             ContentRecord.object_type == "post",
+            *candidate_conditions,
             or_(ContentRecord.source_key.in_(source_keys), matched_hotlist_version),
         )
         .order_by(recent_versions.c.occurred_at, ContentVersion.id)
@@ -3246,6 +3260,7 @@ def load_post_versions_for_analysis_scan(
         owner_id=owner_id,
         topic_id=topic_id,
         topic_rule_version=topic_rule_version,
+        content_version_ids=candidate_version_ids,
         now=readable_at or as_of or datetime.now(UTC),
         as_of=as_of,
     )

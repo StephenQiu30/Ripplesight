@@ -124,3 +124,134 @@ describe("content annotation reading", () => {
     expect(html).not.toContain("<img");
   });
 });
+
+it("retains valid v1 and prefers valid v2 even when a v1 arrives later", () => {
+  const legacy: HotKeyAPI.ContentAnnotationReadView = {
+    ...pending,
+    prompt_version: "analysis.annotate.v1",
+    status: "annotated",
+    result_state: "valid",
+    relevant: true,
+    relevance_reason: "旧有效判断",
+    summary: "旧摘要",
+    updated_at: "2026-10-10T00:00:00Z",
+  };
+  const current: HotKeyAPI.ContentAnnotationReadView = {
+    ...legacy,
+    id: "f20e7260-1cab-4766-b40c-bb0a8157b666",
+    prompt_version: "analysis.annotate.v2",
+    relevant: false,
+    updated_at: "2026-10-09T00:00:00Z",
+  };
+  expect(
+    selectedAnnotation(
+      [legacy],
+      topic,
+      pending.content_version_id,
+      "analysis.annotate.v2",
+    ).current,
+  ).toEqual(legacy);
+  expect(
+    selectedAnnotation(
+      [legacy, current],
+      topic,
+      pending.content_version_id,
+      "analysis.annotate.v2",
+    ).current,
+  ).toEqual(current);
+  expect(
+    selectedAnnotation(
+      [legacy, { ...current, result_state: "pending", relevant: null }],
+      topic,
+      pending.content_version_id,
+      "analysis.annotate.v2",
+    ).current,
+  ).toEqual(legacy);
+  expect(
+    selectedAnnotation(
+      [{ ...legacy, prompt_version: "unknown" }],
+      topic,
+      pending.content_version_id,
+      "analysis.annotate.v2",
+    ).current,
+  ).toBeNull();
+});
+
+it("shows valid relevance with unanalyzed sentiment without a neutral label", () => {
+  const html = renderToStaticMarkup(
+    createElement(AnnotationResult, {
+      historical: false,
+      annotation: {
+        ...pending,
+        status: "annotated",
+        result_state: "valid",
+        relevant: true,
+        relevance_reason: "直接讨论主题",
+        summary: "产品发布",
+        sentiment: null,
+      },
+    }),
+  );
+  expect(html).toContain("相关");
+  expect(html).toContain("情感：未分析");
+  expect(html).not.toContain("情感：中性");
+});
+
+it("preserves comment insufficient, unknown and deferred without a false conclusion", () => {
+  for (const [state, label] of [
+    ["insufficient", "信息不足"],
+    ["unknown", "未知"],
+    ["deferred", "限流延后"],
+  ] as const) {
+    const html = renderToStaticMarkup(
+      createElement(AnnotationResult, {
+        annotation: {
+          ...pending,
+          prompt_version: "analysis.comment.v1",
+          result_state: state,
+          relevance_reason:
+            state === "deferred" ? null : "原帖和可得父评论不足以解释指代",
+          error_code: state === "deferred" ? "analysis_rate_limited" : null,
+        },
+        historical: false,
+      }),
+    );
+    expect(html).toContain(label);
+    expect(html).not.toContain("不相关");
+    expect(html).not.toContain("情感：");
+    expect(html).toContain(
+      state === "deferred" ? "冻结输入" : "不足以解释指代",
+    );
+  }
+});
+
+it("shows the newer comment context outcome instead of inheriting an older valid result", () => {
+  const previous: HotKeyAPI.ContentAnnotationReadView = {
+    ...pending,
+    prompt_version: "analysis.comment.v1",
+    status: "annotated",
+    result_state: "valid",
+    relevant: true,
+    created_at: "2026-09-27T08:00:00Z",
+    updated_at: "2026-09-30T08:00:00Z",
+    relevance_reason: "旧父链结论",
+    summary: "旧摘要",
+  };
+  const newer: HotKeyAPI.ContentAnnotationReadView = {
+    ...pending,
+    id: "new-context",
+    prompt_version: "analysis.comment.v1",
+    result_state: "insufficient",
+    relevance_reason: "父评论版本已变更，当前信息不足",
+    created_at: "2026-09-29T08:00:00Z",
+    updated_at: "2026-09-29T08:00:00Z",
+  };
+  const result = selectedAnnotation(
+    [previous, newer],
+    topic,
+    pending.content_version_id,
+    "analysis.comment.v1",
+  );
+  expect(result.current).toEqual(newer);
+  expect(result.historical).toEqual([previous]);
+});

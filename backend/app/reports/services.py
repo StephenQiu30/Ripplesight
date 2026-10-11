@@ -269,7 +269,7 @@ def _report_data(
             content_version_id=post.content_version_id,
             title=post.title or _excerpt(post.body or "无标题", maximum=80),
             summary=cast(str, post.summary),
-            sentiment=cast(ReportSentiment, post.sentiment),
+            sentiment=post.sentiment,
             source_key=post.source_key,
             url=post.url,
             interaction_count=post.metrics.interaction_count,

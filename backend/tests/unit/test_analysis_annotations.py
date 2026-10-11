@@ -15,6 +15,7 @@ from analysis.models import ContentAnnotation
 from analysis.prompts import (
     ANALYSIS_OUTPUT_SCHEMA,
     ANALYSIS_PROMPT_VERSION,
+    LEGACY_ANALYSIS_PROMPT_VERSION,
     build_analysis_prompt,
     serialize_analysis_data,
 )
@@ -417,3 +418,125 @@ def test_worker_registers_analysis_handler() -> None:
     handlers = _registered_job_handlers(sessionmaker(), settings)
 
     assert "analysis.annotate" in handlers
+
+
+@pytest.mark.parametrize(
+    "prompt_version", [ANALYSIS_PROMPT_VERSION, LEGACY_ANALYSIS_PROMPT_VERSION]
+)
+def test_relevance_only_output_respects_frozen_prompt_contract(prompt_version: str) -> None:
+    identifier = uuid4()
+    result = resolve_annotation_results(
+        expected_content_version_ids=(identifier,),
+        raw_items=[
+            {
+                "content_version_id": str(identifier),
+                "relevant": True,
+                "relevance_reason": "直接讨论产品发布",
+                "sentiment": None,
+                "summary": "产品发布",
+                "viewpoints": [],
+            }
+        ],
+        ai_call_id=uuid4(),
+        prompt_version=prompt_version,
+    )[0]
+    assert result.sentiment is None
+    if prompt_version == ANALYSIS_PROMPT_VERSION:
+        assert result.result_state is AnnotationResultState.VALID
+        assert result.relevant is True and result.viewpoints == ()
+    else:
+        assert result.result_state is AnnotationResultState.INVALID
+        assert result.relevant is None and result.error_code == "analysis_output_invalid"
+
+
+def test_unknown_analysis_prompt_does_not_fall_back() -> None:
+    with pytest.raises(ValueError, match="unsupported"):
+        build_analysis_prompt(
+            items=(), match_any=(), match_all=(), exclude=(), prompt_version="analysis.annotate.v99"
+        )
+    with pytest.raises(ValueError, match="unsupported"):
+        resolve_annotation_results(
+            expected_content_version_ids=(),
+            raw_items=(),
+            ai_call_id=uuid4(),
+            prompt_version="analysis.annotate.v99",
+        )
+
+
+@pytest.mark.parametrize(
+    "prompt_version", [ANALYSIS_PROMPT_VERSION, LEGACY_ANALYSIS_PROMPT_VERSION]
+)
+def test_executor_dispatches_frozen_prompt_and_output_policy(
+    monkeypatch: pytest.MonkeyPatch,
+    prompt_version: str,
+) -> None:
+    item = _prompt_item()
+    scope = AnalysisJobScope(
+        topic_id=uuid4(),
+        topic_rule_version=1,
+        prompt_version=prompt_version,
+        content_version_ids=(item.content_version_id,),
+    )
+    saved: list[AnnotationWrite] = []
+
+    class FakeClient:
+        def close(self) -> None:
+            pass
+
+    def complete(*args: object, **kwargs: object) -> AiCompletion:
+        assert kwargs["prompt_version"] == prompt_version
+        prompt = str(kwargs["prompt"])
+        assert ("不要求执行情感分析" in prompt) == (prompt_version == ANALYSIS_PROMPT_VERSION)
+        return AiCompletion(
+            provider="test",
+            model="test",
+            call_id=uuid4(),
+            output={
+                "items": [
+                    {
+                        "content_version_id": str(item.content_version_id),
+                        "relevant": True,
+                        "relevance_reason": "讨论主题",
+                        "sentiment": None,
+                        "summary": "主题更新",
+                        "viewpoints": [],
+                    }
+                ]
+            },
+            usage=AiTokenUsage(),
+            duration_ms=1,
+        )
+
+    executor = AnalysisAnnotateExecutor(
+        sessionmaker(create_engine("postgresql+psycopg://test:test@127.0.0.1/hotkey_test")),
+        Settings(database_url="postgresql+psycopg://test:test@127.0.0.1/hotkey_test"),
+    )
+    monkeypatch.setattr(
+        executor,
+        "_load_execution",
+        lambda message: (
+            scope,
+            NormalizedMonitorRules(match_any=(), match_all=(), exclude=()),
+            {},
+            (item,),
+        ),
+    )
+    monkeypatch.setattr(executor, "_persist_results", lambda **kw: saved.extend(kw["results"]))
+    monkeypatch.setattr("analysis.services.create_ai_client", lambda settings: FakeClient())
+    monkeypatch.setattr("analysis.services.AiService.complete", complete)
+    message = JobAcceptedMessage(
+        schema_version=2,
+        message_id=uuid4(),
+        event_type="job.accepted.v2",
+        job_id=uuid4(),
+        owner_id=uuid4(),
+        operation_id=uuid4(),
+        kind="analysis.annotate",
+        configuration_ref=f"topic:{scope.topic_id}",
+        configuration_version=1,
+    )
+    executor.execute(message)
+    assert len(saved) == 1
+    assert (saved[0].result_state is AnnotationResultState.VALID) == (
+        prompt_version == ANALYSIS_PROMPT_VERSION
+    )

@@ -111,6 +111,10 @@ def render_daily_report(data: DailyReportData) -> str:
                     ReportSentiment.NEGATIVE,
                 )
             ),
+            "- 情感覆盖：已分析 "
+            f"{sum(data.overview.sentiment_distribution.values())}/{data.overview.posts.current}；"
+            "未分析 "
+            f"{data.overview.posts.current - sum(data.overview.sentiment_distribution.values())}",
         ]
     )
     lines = [
@@ -137,7 +141,7 @@ def render_daily_report(data: DailyReportData) -> str:
             (
                 f"{index}. [{item.citation}] {_link(item.title, item.url)}",
                 f"   - 平台：{item.source_key}；"
-                f"情感：{_SENTIMENT_LABELS[item.sentiment]}；"
+                f"情感：{_SENTIMENT_LABELS[item.sentiment] if item.sentiment else '未分析'}；"
                 f"互动量：{interaction}"
                 + ("（仅已知指标合计）" if len(item.interaction_fields) < 4 else ""),
                 f"   - 摘要：{_inline(item.summary)}",

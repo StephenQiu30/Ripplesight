@@ -9,6 +9,11 @@ from sqlalchemy.orm import Session
 
 from ai.analysis_reading import load_legacy_analysis_call_job_in_transaction
 from analysis.models import ContentAnnotation
+from analysis.prompts import (
+    ANALYSIS_PROMPT_VERSION,
+    COMMENT_ANALYSIS_PROMPT_VERSION,
+    SUPPORTED_ANALYSIS_PROMPT_VERSIONS,
+)
 from analysis.schemas import AnalysisJobScope, AnnotationResultState, ContentAnnotationReadView
 from content.analysis_inputs import (
     analysis_observation_manifests_readable_in_transaction,
@@ -92,7 +97,12 @@ def annotation_inputs_readable_in_transaction(
     try:
         manifest = AnalysisObservationManifest.model_validate(annotation.input_manifest)
         if (
-            annotation.content_version_id not in manifest.post_observations
+            annotation.content_version_id
+            not in (
+                manifest.comment_observations
+                if annotation.prompt_version == COMMENT_ANALYSIS_PROMPT_VERSION
+                else manifest.post_observations
+            )
             or manifest.signature != annotation.input_signature
         ):
             return False
@@ -123,9 +133,10 @@ def readable_annotation_ids_in_transaction(
             try:
                 manifest = AnalysisObservationManifest.model_validate(row.input_manifest)
                 signature = manifest.signature
-                if (
-                    signature != row.input_signature
-                    or row.content_version_id not in manifest.post_observations
+                if signature != row.input_signature or row.content_version_id not in (
+                    manifest.comment_observations
+                    if row.prompt_version == COMMENT_ANALYSIS_PROMPT_VERSION
+                    else manifest.post_observations
                 ):
                     continue
             except (ValidationError, ValueError, TypeError):
@@ -338,7 +349,7 @@ def load_report_annotation_observation_ids_in_transaction(
     return tuple(sorted(inputs, key=str))
 
 
-def load_current_annotation_states_in_transaction(
+def load_preferred_annotation_states_in_transaction(
     session: Session,
     *,
     owner_id: UUID,
@@ -347,8 +358,16 @@ def load_current_annotation_states_in_transaction(
     prompt_version: str,
     content_version_ids: set[UUID],
     now: datetime | None = None,
-) -> dict[UUID, tuple[AnnotationResultState, bool | None]]:
-    """Project only the selected topic's current rule and prompt for visible versions."""
+) -> dict[UUID, tuple[AnnotationResultState, bool | None, str]]:
+    """Read preferred results without recomputation inside the caller's transaction.
+
+    Returns:
+        State, relevance and the selected prompt version for each readable body version.
+        Valid supported legacy results remain eligible when the current result is absent.
+
+    Raises:
+        RuntimeError: The caller has not started a transaction.
+    """
     if not session.in_transaction():
         raise RuntimeError("annotation reads require the caller's transaction")
     if not content_version_ids:
@@ -359,22 +378,53 @@ def load_current_annotation_states_in_transaction(
             ContentAnnotation.owner_id == owner_id,
             ContentAnnotation.topic_id == topic_id,
             ContentAnnotation.topic_rule_version == topic_rule_version,
-            ContentAnnotation.prompt_version == prompt_version,
+            ContentAnnotation.prompt_version.in_(
+                SUPPORTED_ANALYSIS_PROMPT_VERSIONS
+                if prompt_version == ANALYSIS_PROMPT_VERSION
+                else (prompt_version,)
+            ),
             ContentAnnotation.content_version_id.in_(content_version_ids),
         )
         .order_by(
             (ContentAnnotation.result_state == AnnotationResultState.VALID.value).desc(),
+            (ContentAnnotation.prompt_version == prompt_version).desc(),
             ContentAnnotation.created_at.desc(),
             ContentAnnotation.id.desc(),
         )
     ).all()
-    result: dict[UUID, tuple[AnnotationResultState, bool | None]] = {}
+    result: dict[UUID, tuple[AnnotationResultState, bool | None, str]] = {}
     readable = readable_annotation_ids_in_transaction(
         session, annotations=tuple(rows), now=now or datetime.now(UTC)
     )
     for row in rows:
         if row.id in readable:
             result.setdefault(
-                row.content_version_id, (AnnotationResultState(row.result_state), row.relevant)
+                row.content_version_id,
+                (AnnotationResultState(row.result_state), row.relevant, row.prompt_version),
             )
     return result
+
+
+def load_current_annotation_states_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    topic_id: UUID,
+    topic_rule_version: int,
+    prompt_version: str,
+    content_version_ids: set[UUID],
+    now: datetime | None = None,
+) -> dict[UUID, tuple[AnnotationResultState, bool | None]]:
+    """Project readable preferred results into the existing state/relevance contract."""
+    return {
+        identifier: (state, relevant)
+        for identifier, (state, relevant, _) in load_preferred_annotation_states_in_transaction(
+            session,
+            owner_id=owner_id,
+            topic_id=topic_id,
+            topic_rule_version=topic_rule_version,
+            prompt_version=prompt_version,
+            content_version_ids=content_version_ids,
+            now=now,
+        ).items()
+    }

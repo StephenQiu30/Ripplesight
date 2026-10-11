@@ -39,12 +39,32 @@ export function selectedAnnotation(
     (item) =>
       item.topic_id === topic.topic_id && item.content_version_id === versionId,
   );
+  const supported =
+    promptVersion === "analysis.annotate.v2"
+      ? [promptVersion, "analysis.annotate.v1"]
+      : [promptVersion];
   const current =
-    scoped.find(
-      (item) =>
-        item.topic_rule_version === topic.current_rule_version &&
-        item.prompt_version === promptVersion,
-    ) ?? null;
+    scoped
+      .filter(
+        (item) =>
+          item.topic_rule_version === topic.current_rule_version &&
+          supported.includes(item.prompt_version),
+      )
+      .sort(
+        (left, right) =>
+          (promptVersion === "analysis.comment.v1"
+            ? 0
+            : Number(right.result_state === "valid") -
+              Number(left.result_state === "valid")) ||
+          supported.indexOf(left.prompt_version) -
+            supported.indexOf(right.prompt_version) ||
+          (promptVersion === "analysis.comment.v1"
+            ? (right.created_at ?? right.updated_at).localeCompare(
+                left.created_at ?? left.updated_at,
+              )
+            : right.updated_at.localeCompare(left.updated_at)) ||
+          right.id.localeCompare(left.id),
+      )[0] ?? null;
   return {
     current,
     historical: scoped.filter((item) => item.id !== current?.id),
@@ -55,7 +75,7 @@ function sentimentLabel(value: Annotation["sentiment"]): string {
   if (value === "positive") return "正向";
   if (value === "negative") return "负向";
   if (value === "neutral") return "中性";
-  return "未标注";
+  return "未分析";
 }
 
 export function AnnotationResult({
@@ -83,9 +103,15 @@ export function AnnotationResult({
         : "不相关"
       : annotation.result_state === "pending"
         ? "等待标注"
-        : annotation.result_state === "failed"
-          ? "标注失败"
-          : "标注无效";
+        : annotation.result_state === "insufficient"
+          ? "信息不足"
+          : annotation.result_state === "unknown"
+            ? "未知"
+            : annotation.result_state === "deferred"
+              ? "限流延后"
+              : annotation.result_state === "failed"
+                ? "标注失败"
+                : "标注无效";
 
   return (
     <UI.Content as="article" className="mt-6 py-4">
@@ -132,7 +158,11 @@ export function AnnotationResult({
         <UI.Text className="text-muted-foreground mt-3 text-sm leading-6">
           {annotation.result_state === "pending"
             ? "分析任务尚未产生有效结论。"
-            : `没有有效相关性结论${annotation.error_code ? `，原因代码：${annotation.error_code}` : ""}。`}
+            : annotation.result_state === "deferred"
+              ? "模型限流，保留原帖和父评论的冻结输入，等待原任务重试。"
+              : annotation.relevance_reason
+                ? `尚无相关性结论：${annotation.relevance_reason}`
+                : `没有有效相关性结论${annotation.error_code ? `，原因代码：${annotation.error_code}` : ""}。`}
         </UI.Text>
       )}
       <UI.Text className="text-muted-foreground mt-3 text-xs">
@@ -182,7 +212,9 @@ export function AnnotationPanel({
         主题分析
       </UI.Heading>
       <UI.Text className="text-muted-foreground mt-2 text-sm leading-6">
-        仅当前正文、主题规则与提示词版本一致的有效标注可作为当前结论。页面读取不会发起模型请求。
+        {content.analysis_prompt_version === "analysis.comment.v1"
+          ? "结合原帖和可得父评论逐条判断；信息不足、未知和限流延后均保留状态。读取页面不会发起模型请求。"
+          : "展示所选主题和正文版本的有效判断；情感未分析不影响相关性。读取页面不会发起模型请求。"}
       </UI.Text>
       {content.analysis_topics.length === 0 ? (
         <UI.Text className="text-muted-foreground mt-4 text-sm">
@@ -256,7 +288,7 @@ export function AnnotationPanel({
                 <Collapsible className="mt-6">
                   <CollapsibleTrigger asChild>
                     <Button variant="ghost">
-                      旧规则或提示词结果
+                      历史分析结果
                       <ChevronDownIcon data-icon="inline-end" />
                     </Button>
                   </CollapsibleTrigger>

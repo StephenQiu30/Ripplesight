@@ -22,12 +22,19 @@ from analysis.models import (
 from analysis.prompts import (
     ANALYSIS_OUTPUT_SCHEMA,
     ANALYSIS_PROMPT_VERSION,
+    COMMENT_ANALYSIS_OUTPUT_SCHEMA,
+    COMMENT_ANALYSIS_PROMPT_VERSION,
+    EXECUTABLE_ANALYSIS_PROMPT_VERSIONS,
+    LEGACY_ANALYSIS_PROMPT_VERSION,
+    SUPPORTED_ANALYSIS_PROMPT_VERSIONS,
     build_analysis_prompt,
+    build_comment_analysis_prompt,
     serialize_analysis_data,
 )
 from analysis.reads import (
     analysis_scope_inputs_readable_in_transaction,
     load_current_annotation_states_in_transaction,
+    load_preferred_annotation_states_in_transaction,
     readable_annotation_ids_in_transaction,
 )
 from analysis.runtime import PromptRuntimeWindow, project_prompt_runtime_origin
@@ -41,6 +48,7 @@ from analysis.schemas import (
     AnnotationResultState,
     AnnotationStatus,
     AnnotationWrite,
+    CommentAnnotationOutputItem,
     EventAnnotationRef,
     WindowAnnotationCountView,
 )
@@ -49,6 +57,7 @@ from content.analysis_inputs import (
     require_analysis_observation_inputs_in_transaction,
 )
 from content.analysis_schemas import AnalysisObservationManifest
+from content.comment_analysis import require_frozen_comment_context_in_transaction
 from content.editorial_reading import require_analysis_content_permissions_in_transaction
 from content.schemas import AnalysisPostContentView
 from content.services import (
@@ -80,6 +89,7 @@ from jobs.services import (
 from monitors.services import (
     MonitorTopicService,
     NormalizedMonitorRules,
+    current_topic_rule_identities_query,
     evaluate_monitor_rules,
     list_topic_analysis_rule_identities_in_transaction,
     load_topic_analysis_rule_timeline_in_transaction,
@@ -174,7 +184,13 @@ def _load_prompt_versions_in_transaction(
             .distinct()
         )
     )
-    return tuple(sorted(version for version in versions if version and len(version) <= 128))
+    return tuple(
+        sorted(
+            version
+            for version in versions
+            if version and len(version) <= 128 and version != COMMENT_ANALYSIS_PROMPT_VERSION
+        )
+    )
 
 
 def build_analysis_need_ledger_in_transaction(
@@ -567,7 +583,23 @@ def resolve_annotation_results(
     raw_items: Sequence[Any],
     ai_call_id: UUID,
     retry_index: int = 0,
+    prompt_version: str = ANALYSIS_PROMPT_VERSION,
 ) -> tuple[AnnotationWrite, ...]:
+    """Validate one result per frozen input under its original prompt contract.
+
+    Missing, duplicate or malformed results remain invalid rather than guessed;
+    v1 requires sentiment for relevant material while v2 allows it to be unanalysed.
+    Comment v1 preserves insufficient/unknown as non-conclusions with no boolean
+    fallback. Invalid output permits one compensation, then becomes exhausted.
+
+    Returns:
+        One typed result for each expected version under the frozen contract.
+
+    Raises:
+        ValueError: The prompt version or bounded retry index is unsupported.
+    """
+    if prompt_version not in EXECUTABLE_ANALYSIS_PROMPT_VERSIONS:
+        raise ValueError("unsupported analysis prompt version")
     if retry_index not in (0, 1):
         raise ValueError("analysis retry index must be zero or one")
     grouped: dict[UUID, list[Any]] = {}
@@ -587,11 +619,41 @@ def resolve_annotation_results(
     for content_version_id in expected_content_version_ids:
         candidates = grouped.get(content_version_id, [])
         if len(candidates) == 1:
+            if prompt_version == COMMENT_ANALYSIS_PROMPT_VERSION:
+                try:
+                    comment = CommentAnnotationOutputItem.model_validate(candidates[0])
+                except ValidationError:
+                    comment = None
+                if comment is not None:
+                    valid = comment.state == "valid"
+                    resolved.append(
+                        AnnotationWrite(
+                            content_version_id=content_version_id,
+                            relevant=comment.relevant,
+                            relevance_reason=comment.relevance_reason,
+                            summary=comment.summary,
+                            ai_call_id=ai_call_id,
+                            status=AnnotationStatus.ANNOTATED
+                            if valid
+                            else AnnotationStatus.UNANALYZED,
+                            result_state=AnnotationResultState(comment.state),
+                        )
+                    )
+                    continue
             try:
                 output = AnnotationOutputItem.model_validate(candidates[0])
             except ValidationError:
                 output = None
-            if output is not None and output.content_version_id == content_version_id:
+            if (
+                output is not None
+                and prompt_version != COMMENT_ANALYSIS_PROMPT_VERSION
+                and output.content_version_id == content_version_id
+                and not (
+                    prompt_version == LEGACY_ANALYSIS_PROMPT_VERSION
+                    and output.relevant
+                    and output.sentiment is None
+                )
+            ):
                 resolved.append(
                     AnnotationWrite(
                         content_version_id=content_version_id,
@@ -1047,7 +1109,7 @@ class AnalysisService:
         )
         if not matched:
             return ()
-        annotations: dict[UUID, str] = {}
+        annotations: dict[UUID, tuple[AnnotationResultState, bool | None, str]] = {}
         for start in range(0, len(matched), _ANNOTATION_READ_BATCH_SIZE):
             version_ids = {
                 item.content_version_id
@@ -1055,8 +1117,8 @@ class AnalysisService:
             }
             annotations.update(
                 {
-                    version_id: state.value
-                    for version_id, (state, _) in load_current_annotation_states_in_transaction(
+                    version_id: result
+                    for version_id, result in load_preferred_annotation_states_in_transaction(
                         self._session,
                         owner_id=owner_id,
                         topic_id=topic_id,
@@ -1067,7 +1129,7 @@ class AnalysisService:
                     ).items()
                 }
             )
-        jobs_by_version: dict[UUID, list[tuple[JobStatus, int, bool]]] = {}
+        jobs_by_version: dict[UUID, list[tuple[JobStatus, int, bool, str]]] = {}
         for job in CollectionDueWindowService(self._session).list_analysis_jobs_in_transaction(
             owner_id=owner_id, topic_ids={topic_id}
         ):
@@ -1089,7 +1151,7 @@ class AnalysisService:
             if (
                 scope.topic_id != topic_id
                 or scope.topic_rule_version != rule_version
-                or scope.prompt_version != ANALYSIS_PROMPT_VERSION
+                or scope.prompt_version not in SUPPORTED_ANALYSIS_PROMPT_VERSIONS
             ):
                 continue
             if not malformed and not analysis_scope_inputs_readable_in_transaction(
@@ -1107,11 +1169,13 @@ class AnalysisService:
                             not item.comments or item.comment_version_ids is not None
                             for item in scope.prompt_items
                         ),
+                        scope.prompt_version,
                     )
                 )
 
         fresh: list[AnalysisPostContentView] = []
         retry: list[AnalysisPostContentView] = []
+        retry_versions: dict[UUID, str] = {}
         terminal = {
             JobStatus.SUCCEEDED,
             JobStatus.PARTIALLY_SUCCEEDED,
@@ -1119,25 +1183,33 @@ class AnalysisService:
             JobStatus.CANCELLED,
         }
         for item in matched:
-            state = annotations.get(item.content_version_id)
+            annotation = annotations.get(item.content_version_id)
+            state = annotation[0].value if annotation is not None else None
             attempts = jobs_by_version.get(item.content_version_id, [])
+            if annotation is not None:
+                attempts = [attempt for attempt in attempts if attempt[3] == annotation[2]]
             if state in {AnnotationResultState.VALID.value, AnnotationResultState.FAILED.value}:
                 continue
-            if state == AnnotationResultState.INVALID.value:
-                if any(index == 1 for _, index, _ in attempts) or any(
-                    status not in terminal for status, _, _ in attempts
+            if state == AnnotationResultState.INVALID.value and annotation is not None:
+                if any(index == 1 for _, index, _, _ in attempts) or any(
+                    status not in terminal for status, _, _, _ in attempts
                 ):
                     continue
                 retry.append(item)
+                retry_versions[item.content_version_id] = annotation[2]
             elif (
                 attempts
-                and all(status in terminal for status, _, _ in attempts)
-                and any(not frozen for _, _, frozen in attempts)
-                and not any(index == 1 for _, index, _ in attempts)
+                and all(status in terminal for status, _, _, _ in attempts)
+                and any(not frozen for _, _, frozen, _ in attempts)
+                and not any(index == 1 for _, index, _, _ in attempts)
             ):
                 # Old Jobs cannot recover their unfrozen comments. Admit a distinct
                 # replacement only after their terminal failure; never reinterpret them.
+                versions = {attempt[3] for attempt in attempts}
+                if len(versions) != 1:
+                    continue
                 retry.append(item)
+                retry_versions[item.content_version_id] = versions.pop()
             elif not attempts:
                 fresh.append(item)
 
@@ -1163,18 +1235,22 @@ class AnalysisService:
         }
         accepted: list[JobView] = []
         planned = [
-            (batch, 1)
+            (
+                batch,
+                1,
+                retry_versions[item.content_version_id],
+            )
             for item in retry
             for batch in pack_prompt_batches((prompt_items[item.content_version_id],))
         ]
         planned.extend(
-            (batch, 0)
+            (batch, 0, ANALYSIS_PROMPT_VERSION)
             for batch in pack_prompt_batches(
                 tuple(prompt_items[item.content_version_id] for item in fresh)
             )
         )
         job_service = JobService(self._session, clock=lambda: now)
-        for batch, retry_index in planned[:_MAX_SCAN_BATCHES]:
+        for batch, retry_index, prompt_version in planned[:_MAX_SCAN_BATCHES]:
             content_version_ids = tuple(
                 sorted((item.content_version_id for item in batch), key=str)
             )
@@ -1213,7 +1289,7 @@ class AnalysisService:
                 topic_id=topic_id,
                 topic_rule_version=rule_version,
                 content_version_ids=content_version_ids,
-                prompt_version=ANALYSIS_PROMPT_VERSION,
+                prompt_version=prompt_version,
                 retry_index=retry_index,
                 input_signature=manifest.signature,
             )
@@ -1235,7 +1311,7 @@ class AnalysisService:
                             **AnalysisJobScope(
                                 topic_id=topic_id,
                                 topic_rule_version=rule_version,
-                                prompt_version=ANALYSIS_PROMPT_VERSION,
+                                prompt_version=prompt_version,
                                 content_version_ids=content_version_ids,
                                 prompt_items=batch,
                                 retry_index=retry_index,
@@ -1270,7 +1346,7 @@ class AnalysisService:
                     ContentAnnotation.topic_rule_version == topic_rule_version,
                     ContentAnnotation.prompt_version == prompt_version,
                     ContentAnnotation.content_version_id.in_(content_version_ids),
-                    ContentAnnotation.result_state == AnnotationResultState.VALID.value,
+                    ContentAnnotation.result_state.in_(("valid", "insufficient", "unknown")),
                     ContentAnnotation.input_signature == input_signature
                     if input_signature is not None
                     else ContentAnnotation.input_signature == "legacy",
@@ -1291,6 +1367,16 @@ class AnalysisService:
         created_at: datetime,
         input_manifest: AnalysisObservationManifest | None = None,
     ) -> None:
+        """Upsert typed outcomes against exact readable inputs without replacing accepted time.
+
+        Comment targets use the manifest's comment map; post targets use its post map.
+        Non-conclusions retain their reason and never acquire a guessed boolean.
+
+        Raises:
+            RuntimeError: There is no caller-owned active transaction.
+            ValueError: The clock is naive or a result is outside the frozen scope.
+            ApplicationError: An exact observation or dependency is no longer readable.
+        """
         if not self._session.in_transaction():
             raise RuntimeError("analysis writes require the caller's transaction")
         if created_at.tzinfo is None:
@@ -1305,7 +1391,11 @@ class AnalysisService:
             if post is None:
                 raise ValueError("analysis result references an unfrozen content version")
             if input_manifest is not None and (
-                input_manifest.post_observations.get(result.content_version_id)
+                (
+                    input_manifest.comment_observations
+                    if prompt_version == COMMENT_ANALYSIS_PROMPT_VERSION
+                    else input_manifest.post_observations
+                ).get(result.content_version_id)
                 != post.observation_id
             ):
                 raise ApplicationError("editorial_material_unavailable")
@@ -1433,6 +1523,15 @@ class AnalysisAnnotateExecutor:
     def execute(
         self, message: JobMessage, lease: ExecutionLease | None = None
     ) -> AnalysisExecutionResult:
+        """Execute one frozen prompt contract and persist only authorized exact inputs.
+
+        Returns:
+            Job completion and processed input count, including settled non-conclusions.
+
+        Raises:
+            JobExecutionFailure: Inputs are invalid/unreadable, an outcome is unresolved,
+                or execution fails; rate limits retain deferred state for delayed retry.
+        """
         scope, rules, posts, items = self._load_execution(message)
         if not items:
             return AnalysisExecutionResult(
@@ -1453,6 +1552,26 @@ class AnalysisAnnotateExecutor:
         try:
             client = create_ai_client(self._settings)
         except AiCallError as error:
+            if (
+                scope.prompt_version == COMMENT_ANALYSIS_PROMPT_VERSION
+                and error.code is AiFailureCode.RATE_LIMITED
+            ):
+                self._persist_results(
+                    message=message,
+                    scope=scope,
+                    posts=posts,
+                    guard=admission_guard,
+                    results=tuple(
+                        AnnotationWrite(
+                            content_version_id=item.content_version_id,
+                            ai_call_id=error.call_id,
+                            status=AnnotationStatus.UNANALYZED,
+                            result_state=AnnotationResultState.DEFERRED,
+                            error_code="analysis_rate_limited",
+                        )
+                        for item in items
+                    ),
+                )
             raise analysis_failure(error, now=self._clock()) from error
         try:
             try:
@@ -1487,13 +1606,24 @@ class AnalysisAnnotateExecutor:
                             job_id=message.job_id,
                             purpose="analysis.annotate",
                             prompt_version=scope.prompt_version,
-                            prompt=build_analysis_prompt(
+                            prompt=(
+                                build_comment_analysis_prompt
+                                if scope.prompt_version == COMMENT_ANALYSIS_PROMPT_VERSION
+                                else build_analysis_prompt
+                            )(
                                 items=items,
                                 match_any=rules.match_any,
                                 match_all=rules.match_all,
                                 exclude=rules.exclude,
+                                **(
+                                    {"prompt_version": scope.prompt_version}
+                                    if scope.prompt_version != COMMENT_ANALYSIS_PROMPT_VERSION
+                                    else {}
+                                ),
                             ),
-                            output_schema=ANALYSIS_OUTPUT_SCHEMA,
+                            output_schema=COMMENT_ANALYSIS_OUTPUT_SCHEMA
+                            if scope.prompt_version == COMMENT_ANALYSIS_PROMPT_VERSION
+                            else ANALYSIS_OUTPUT_SCHEMA,
                         )
                     )
             except AiCallError as error:
@@ -1508,13 +1638,30 @@ class AnalysisAnnotateExecutor:
                             ai_call_id=error.call_id,
                             status=AnnotationStatus.UNANALYZED,
                             result_state=(
-                                AnnotationResultState.FAILED
+                                AnnotationResultState.DEFERRED
+                                if scope.prompt_version == COMMENT_ANALYSIS_PROMPT_VERSION
+                                and error.code is AiFailureCode.RATE_LIMITED
+                                else AnnotationResultState.UNKNOWN
+                                if scope.prompt_version == COMMENT_ANALYSIS_PROMPT_VERSION
+                                and error.outcome_unknown
+                                and error.call_id is not None
+                                else AnnotationResultState.FAILED
                                 if error.call_id is not None
                                 else AnnotationResultState.PENDING
                             ),
+                            relevance_reason="模型调用结果未知, 保留冻结输入等待核对。"
+                            if scope.prompt_version == COMMENT_ANALYSIS_PROMPT_VERSION
+                            and error.outcome_unknown
+                            and error.call_id is not None
+                            and error.code is not AiFailureCode.RATE_LIMITED
+                            else None,
                             error_code=(
                                 f"analysis_{error.code.value}"
                                 if error.call_id is not None
+                                or (
+                                    scope.prompt_version == COMMENT_ANALYSIS_PROMPT_VERSION
+                                    and error.code is AiFailureCode.RATE_LIMITED
+                                )
                                 else None
                             ),
                         )
@@ -1563,6 +1710,7 @@ class AnalysisAnnotateExecutor:
                 raw_items=envelope.items,
                 ai_call_id=completion.call_id,
                 retry_index=scope.retry_index,
+                prompt_version=scope.prompt_version,
             )
             self._persist_results(
                 message=message,
@@ -1571,7 +1719,10 @@ class AnalysisAnnotateExecutor:
                 results=results,
                 guard=admission_guard,
             )
-            invalid_count = sum(result.status is AnnotationStatus.UNANALYZED for result in results)
+            invalid_count = sum(
+                result.result_state in {AnnotationResultState.INVALID, AnnotationResultState.FAILED}
+                for result in results
+            )
             job_completion = (
                 JobCompletion(status=JobStatus.SUCCEEDED)
                 if invalid_count == 0
@@ -1708,7 +1859,7 @@ class AnalysisAnnotateExecutor:
             or configuration.observation.configuration_ref != f"topic:{scope.topic_id}"
             or configuration.observation.configuration_version != scope.topic_rule_version
             or configuration.observation.source_key is not None
-            or scope.prompt_version != ANALYSIS_PROMPT_VERSION
+            or scope.prompt_version not in EXECUTABLE_ANALYSIS_PROMPT_VERSIONS
             or tuple(sorted(scope.content_version_ids, key=str)) != scope.content_version_ids
         ):
             raise self._configuration_failure("analysis_scope_mismatch")
@@ -1723,6 +1874,26 @@ class AnalysisAnnotateExecutor:
             topic_id=scope.topic_id,
             version=scope.topic_rule_version,
         )
+        if (
+            scope.prompt_version == COMMENT_ANALYSIS_PROMPT_VERSION
+            and session.scalar(
+                select(ContentAnnotation.id)
+                .where(
+                    ContentAnnotation.owner_id == message.owner_id,
+                    ContentAnnotation.topic_id == scope.topic_id,
+                    ContentAnnotation.topic_rule_version == scope.topic_rule_version,
+                    ContentAnnotation.prompt_version == scope.prompt_version,
+                    ContentAnnotation.input_signature
+                    == (scope.input_manifest.signature if scope.input_manifest else "legacy"),
+                    ContentAnnotation.content_version_id.in_(scope.content_version_ids),
+                    ContentAnnotation.result_state == AnnotationResultState.UNKNOWN.value,
+                    ContentAnnotation.error_code.is_not(None),
+                )
+                .limit(1)
+            )
+            is not None
+        ):
+            raise self._configuration_failure("analysis_outcome_unknown")
         missing_ids = AnalysisService(session).missing_content_version_ids_in_transaction(
             owner_id=message.owner_id,
             topic_id=scope.topic_id,
@@ -1731,6 +1902,31 @@ class AnalysisAnnotateExecutor:
             content_version_ids=scope.content_version_ids,
             input_signature=scope.input_manifest.signature if scope.input_manifest else None,
         )
+        if scope.prompt_version == COMMENT_ANALYSIS_PROMPT_VERSION:
+            frozen = {item.content_version_id: item for item in scope.prompt_items}
+            items = tuple(frozen[identifier] for identifier in missing_ids)
+            posts = {}
+            for item in items:
+                context = item.comment_context
+                if context is None:
+                    raise self._configuration_failure("analysis_frozen_input_missing")
+                try:
+                    require_frozen_comment_context_in_transaction(
+                        session,
+                        owner_id=message.owner_id,
+                        context=context,
+                        now=self._clock(),
+                    )
+                except ValueError as error:
+                    raise self._configuration_failure("analysis_frozen_content_mismatch") from error
+                posts[item.content_version_id] = AnalysisPostContentView(
+                    content_id=item.content_id,
+                    content_version_id=item.content_version_id,
+                    title=None,
+                    body=item.body,
+                    observation_id=context.target.observation_id,
+                )
+            return scope, rules, posts, items
         loaded_posts = load_post_versions_for_analysis(
             session,
             owner_id=message.owner_id,
@@ -1841,28 +2037,40 @@ def list_relevant_event_annotation_refs_in_transaction(
     latest = (
         select(ContentAnnotation.id)
         .where(
-            ContentAnnotation.prompt_version == ANALYSIS_PROMPT_VERSION,
+            tuple_(
+                ContentAnnotation.owner_id,
+                ContentAnnotation.topic_id,
+                ContentAnnotation.topic_rule_version,
+            ).in_(current_topic_rule_identities_query()),
+            ContentAnnotation.prompt_version.in_(SUPPORTED_ANALYSIS_PROMPT_VERSIONS),
             ContentAnnotation.status == AnnotationStatus.ANNOTATED.value,
             ContentAnnotation.result_state == AnnotationResultState.VALID.value,
-            ContentAnnotation.relevant.is_(True),
-            ContentAnnotation.created_at >= since,
         )
         .distinct(
             ContentAnnotation.owner_id,
             ContentAnnotation.topic_id,
+            ContentAnnotation.topic_rule_version,
             ContentAnnotation.content_id,
+            ContentAnnotation.content_version_id,
             ContentAnnotation.input_signature,
         )
         .order_by(
             ContentAnnotation.owner_id,
             ContentAnnotation.topic_id,
+            ContentAnnotation.topic_rule_version,
             ContentAnnotation.content_id,
+            ContentAnnotation.content_version_id,
             ContentAnnotation.input_signature,
+            (ContentAnnotation.prompt_version == ANALYSIS_PROMPT_VERSION).desc(),
             ContentAnnotation.created_at.desc(),
             ContentAnnotation.id.desc(),
         )
     )
-    statement = select(ContentAnnotation).where(ContentAnnotation.id.in_(latest))
+    statement = select(ContentAnnotation).where(
+        ContentAnnotation.id.in_(latest),
+        ContentAnnotation.relevant.is_(True),
+        ContentAnnotation.created_at >= since,
+    )
     if version_ids is not None:
         statement = statement.where(ContentAnnotation.content_version_id.in_(version_ids))
     if after is not None:

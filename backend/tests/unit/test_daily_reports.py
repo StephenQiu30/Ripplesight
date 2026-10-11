@@ -253,6 +253,7 @@ def test_fixed_dataset_renders_expected_daily_markdown() -> None:
 - 评论：3（较前一日 +2）
 - 平台分布：google_news 1、hackernews 1
 - 情感分布：正面 1、中性 0、负面 1
+- 情感覆盖：已分析 2/2；未分析 0
 
 ## 重点内容 Top 10
 
@@ -504,3 +505,37 @@ def test_weekly_iso_window_crosses_year_and_has_independent_operation_identity()
             window_start=start + timedelta(hours=1),
             window_end=end + timedelta(hours=1),
         )
+
+
+def test_relevant_posts_without_sentiment_remain_in_report_with_explicit_coverage() -> None:
+    dataset = _dataset()
+    posts = tuple(
+        ReportPostInput.model_validate({**post.model_dump(), "sentiment": None})
+        if post.relevant
+        else post
+        for post in dataset.posts
+    )
+    prepared = _prepare(dataset.model_copy(update={"posts": posts}))
+    assert prepared.data.overview.posts.current == 2
+    assert len(prepared.data.top_contents) == 2
+    assert all(item.sentiment is None for item in prepared.data.top_contents)
+    assert sum(prepared.data.overview.sentiment_distribution.values()) == 0
+    rendered = render_daily_report(prepared.data)
+    assert "情感覆盖：已分析 0/2；未分析 2" in rendered
+    assert rendered.count("情感：未分析") == 2
+    assert not prepared.data.risks
+
+
+def test_mixed_sentiment_report_counts_only_explicit_classifications() -> None:
+    dataset = _dataset()
+    posts = tuple(
+        ReportPostInput.model_validate({**post.model_dump(), "sentiment": None})
+        if post.content_id == dataset.posts[0].content_id
+        else post
+        for post in dataset.posts
+    )
+    data = _prepare(dataset.model_copy(update={"posts": posts})).data
+    assert data.overview.posts.current == 2
+    assert sum(data.overview.sentiment_distribution.values()) == 1
+    assert "情感覆盖：已分析 1/2；未分析 1" in render_daily_report(data)
+    assert not data.risks

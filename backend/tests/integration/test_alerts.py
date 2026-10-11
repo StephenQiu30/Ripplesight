@@ -624,3 +624,76 @@ def test_history_rechecks_original_all_without_rewriting_trigger_audit(engine, c
         with session.begin():
             original = session.scalar(select(AlertEvaluation))
             assert original.status == "triggered" and original.value == 1
+
+
+@pytest.mark.parametrize("mixed", [False, True])
+def test_missing_sentiment_is_unknown_and_never_a_partial_negative_count(engine, mixed):
+    from analysis.alert_reading import load_negative_alert_facts_in_transaction
+
+    with Session(engine, expire_on_commit=False) as session:
+        owner, profile, topic, _, _, _, _, _ = _seed(session)
+        if mixed:
+            from tests.integration.test_editorial_source_profiles import begin, job, material, page
+
+            from connections.editorial_services import EditorialSourceService
+
+            service = EditorialSourceService(session, clock=lambda: NOW)
+            accepted, operation = job(session, owner, profile)
+            prepared = begin(service, owner, profile, accepted, operation)
+            second = material("Second model release").model_copy(
+                update={
+                    "url": "https://example.com/second",
+                    "identity_key": "url:https://example.com/second",
+                }
+            )
+            service.stage_page(owner_id=owner, run_id=prepared.result.run_id, page=page(second))
+            assert (
+                service.apply_page(owner_id=owner, run_id=prepared.result.run_id).status
+                == "succeeded"
+            )
+        with session.begin():
+            original = session.scalar(select(ContentAnnotation))
+            if mixed:
+                version = session.scalar(
+                    select(ContentVersion).where(ContentVersion.id != original.content_version_id)
+                )
+                assert version is not None and version.content_id != original.content_id
+                session.add(
+                    ContentAnnotation(
+                        id=uuid4(),
+                        owner_id=owner,
+                        content_id=version.content_id,
+                        content_version_id=version.id,
+                        topic_id=topic.id,
+                        topic_rule_version=1,
+                        prompt_version="relevance-only-controlled",
+                        **_analysis_inputs(session, owner, version),
+                        relevant=True,
+                        relevance_reason="主题相关, 情感未分析",
+                        sentiment=None,
+                        summary="产品发布",
+                        viewpoints=[],
+                        ai_call_id=original.ai_call_id,
+                        status="annotated",
+                        result_state="valid",
+                        error_code=None,
+                        diagnostic_history=[],
+                        first_valid_at=NOW + timedelta(minutes=3),
+                        created_at=NOW,
+                        updated_at=NOW + timedelta(minutes=3),
+                    )
+                )
+            else:
+                original.sentiment = None
+        with session.begin():
+            facts = load_negative_alert_facts_in_transaction(
+                session,
+                owner_id=owner,
+                topic_id=topic.id,
+                topic_rule_version=1,
+                start=NOW - timedelta(hours=1),
+                end=NOW + timedelta(minutes=10),
+                now=NOW + timedelta(minutes=10),
+            )
+            assert facts.value is None and facts.reason == "alert_sentiment_missing"
+            assert not facts.manifest

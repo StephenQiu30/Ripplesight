@@ -2,7 +2,7 @@
 
 需求、设计和计划按 [00–58 同编号目录](docs/index.md) 维护。本文记录当前实现依据、缺口、待办和验收边界，不记录完成流水。
 
-实现核对基于本地 `main` / `0e807182` 及现有工作区文件，覆盖59组编号文档；暂停保护已在当前main的`9eeb8b19`中，当前工作区包含01/02/47查询受理回执、旧CI样本修正、主题采集配置切片；09/04相关性与逐评论实现仍在共享工作区，未包含在本关键词交付中。“已实现”指已找到服务/接口/页面实现路径，**不代表本轮工程检查通过或能力可用**。“待补齐”是已确认的合同或行为差距；“待核对”是尚不能下结论的全路径范围；“待验收”需要独立环境、真实数据、自然时间或浏览器证据。
+实现核对以本地主仓库main及本次交付文件为依据，覆盖59组编号文档；暂停保护已有主线实现，本轮分别交付01/02/47关键词查询回执与冻结配置、09/04相关性与情感解耦及逐评论分析切片。“已实现”表示已有实现路径与下文工程证据，**不代表全部编号需求或真实能力已经验收**。“待补齐”是已确认的合同或行为差距；“待核对”是尚不能下结论的全路径范围；“待验收”需要独立环境、真实数据、自然时间或浏览器证据。
 
 暂停保护、查询回执、主题采集配置、分析解耦与逐评论分析均未调用真实平台、模型、通知或业务库，未启动/改动业务服务；后端与页面核验只使用独立测试库和临时服务。工程检查、独立审查与清理结果见01/06/09。其余条目的源码依据不等于需求验收通过。
 
@@ -19,7 +19,8 @@
 - [x] **06/10/47 暂停保护（代码与固定样本）**：搜索/评论任务冻结主题状态序号，领取、逐请求、取消探测、心跳及重试复核；暂停恢复不复活旧任务。父进程补取消覆盖和在途用量结算，保留已提交材料/已确认窗口。独立审查已完成；工程检查与真实验收边界见06。
 - [ ] **01/02/33/44 查询合同**：已补手动/定时查询受理回执、主题语言/窗口/上限的版本读写及冻结执行，验证边界见01；继续逐条件列出上游支持、本地精筛和不支持。手动全部跳过、定时整来源跳过的逐查询快照仍待补；保留三组词与本地预览。
 - [ ] **03/36/46 增量与覆盖**：复用身份/版本/观察/窗口回执，补新增、完全重复、旧帖更新的互斥计数与分母；明确B站根评论/回复及单页上限，不宣称全量。
-- [ ] **09/04 相关性与情感解耦（待交付）**：有效相关性不依赖情感，保留冻结v1与新v2版本、事件消费、报告未分析覆盖及负面告警未知；工程核验与真实边界见09。
+- [x] **09/04 相关性与情感解耦（代码与固定样本）**：有效相关性不依赖情感，保留冻结v1与新v2版本、事件消费、报告未分析覆盖及负面告警未知；工程核验与真实边界见09。
+- [x] **09 逐评论相关性（代码与固定样本）**：已采评论结合实际原帖及可得直接父链独立判断，冻结上下文、主题/提示/模型版本，保留信息不足、未知、失败和限流延后；有界扫描与补偿均轮转，详情可读。工程核验与真实验收边界见09。
 - [ ] **04/05/38/39 事件解释**：复用候选、原生/语义召回与修订，补用户可见线索/候选状态、本轮新增/补证/重复差分及进入热点理由；单材料候选已有实现，不重复建设。
 - [ ] **07/12/32 趋势统计**：补24小时唯一相关帖/可识别作者/新事实与24小时桶，标明窗口、规则、来源覆盖和不可比；保留现有48小时attention及刊物日窗口计数。
 - [ ] **07/35 首次热点提醒**：补首次达标合同、事件+规则版本去重，复用冷却/通知/未知发送核对；免费渠道实际送达是独立门槛。
@@ -94,8 +95,16 @@
 ### [09 模型分析](docs/requirement/09-模型分析.md) · [设计](docs/design/09-模型分析.md) · [计划](docs/plan/09-模型分析.md)
 
 - **已实现（源码核对）**：本机 Codex app-server 的结构化输出与禁工具执行、prompt/主题版本、分析需要账本及限流延后可复用；兼容模型路由源码存在，默认开关关闭，不代表 OpenRouter 已配置启用。[codex_app_server.py](backend/app/ai/adapters/codex_app_server.py#L68)；[services.py](backend/app/analysis/services.py#L632)；[capability_routing.py](backend/app/ai/capability_routing.py#L18)
-- **待补齐/待核对**：普通关键词主题的 relevant=true 强制 sentiment 非空，并由有效 annotation 进入事件，违背情感P2不阻塞核心的要求；内部编辑主题有单独路径，不能推广为所有事件都耦合。[schemas.py](backend/app/analysis/schemas.py#L235)。另：目前只分析 post，读取最多51条评论（含截断哨兵），实际 prompt 最多50条且受总字符预算约束；评论作为平铺样本，缺逐评论结合原帖/父链的独立相关性合同。[services.py](backend/app/content/services.py#L3359)；[services.py](backend/app/analysis/services.py#L1151)；[prompts.py](backend/app/analysis/prompts.py#L118)
-- **待验收**：先解除相关性与情感强耦合，验证 bool/理由/未知/失败/延后；用分层真实样本评测。评论上下文范围明确后单独验收；情感/观点和200条样本评测留P2，不伪装已经完成。
+- **已补齐（相关性独立）**：新受理使用`analysis.annotate.v2`，只要求真实bool、理由与摘要，情感未分析为null、观点未分析为空数组；相关材料缺情感仍可有效持久化、进入候选并确认事件。不相关材料仍禁止情感；非法输出、pending/invalid/failed不推断结论。[schemas.py](backend/app/analysis/schemas.py)；[prompts.py](backend/app/analysis/prompts.py)；[schema.sql](backend/sql/schema.sql)
+- **已补齐（版本与消费）**：冻结v1任务继续使用原v1提示词与严格情感校验，v1提示词已与HEAD原文按受控输入逐字核对；重试/自动补偿不换版本，未知版本拒绝，已有有效v1不自动重算。读取在当前规则/正文/输入内优先有效v2，再有效v1，之后才筛相关；事件在分页前过滤当前规则并保留有界游标，旧结果不能占用当前结果名额。缺标注且历史版本歧义时停止猜选。详情显示实际版本，缺情感显示“未分析”。[services.py](backend/app/analysis/services.py)；[reads.py](backend/app/analysis/reads.py)；[annotation-panel.tsx](frontend/src/app/content/[contentId]/components/annotation-panel.tsx)
+- **已补齐（统计与告警边界）**：报告保留情感未分析的相关材料，三类分布仅统计明确标签，按冻结相关数量与三类计数展示已分析分母/未分析数，不重写旧快照。负面窗口中任一相关材料缺情感返回`alert_sentiment_missing`未知，不以部分计数冒充完整0或负面量。[render.py](backend/app/reports/render.py)；[alert_reading.py](backend/app/analysis/alert_reading.py)
+- **已补齐（逐评论独立执行）**：独立`analysis.comment.v1`复用`analysis.annotate`任务、AI准入/预算/调用账本与现有标注表。content领域分页提供实际原帖、目标评论及最多8层直接父链，保留缺失、不可读、未解析、循环、深度上限及逐段截断；短回复不再按关键词字面筛掉，也不继承原帖相关性。每段至多1500字，实际转义JSON超过24k时受理前收紧。新任务只选择原帖最新可读版本，历史版本仍推进扫描游标；已受理任务不替换冻结原帖。原帖/目标/父链的精确版本、observation及ALL依赖权限被冻结并在请求前、写入和读取时复核；上下文完整性变化形成新输入签名。[comments.py](backend/app/analysis/comments.py)；[comment_analysis.py](backend/app/content/comment_analysis.py)；[comment_analysis_schemas.py](backend/app/content/comment_analysis_schemas.py)
+- **已补齐（状态、重试和消费）**：模型有效输出独立bool/理由/摘要；`insufficient`和`unknown`保留理由、relevant=null，不当作不相关或中性。限流保留`deferred`并沿用原任务/输入/模型延后；准入前限流不编造AI调用ID。传输结果未知保留调用账本，重放拒绝再请求；缺项/非法输出最多补偿一次且不换输入/模型，耗尽显式失败。每轮最多50个原帖版本、500个原始评论节点、20个新任务；正常扫描与invalid补偿各有持久轮转游标，跳过取消/失权记录仍推进。评论prompt在帖子候选、事件和告警分页前隔离，不充当帖子情感或报告分母。[services.py](backend/app/analysis/services.py)；[models.py](backend/app/analysis/models.py)；[alert_reading.py](backend/app/analysis/alert_reading.py)
+- **已补齐（详情）**：评论节点可进入单评论分析与记录；评论详情使用独立提示版本，显示信息不足、未知和限流延后。当前结果按上下文受理时间选择，旧任务迟到留作历史，不覆盖新上下文；页面读取不采集、不调用模型。[annotation-panel.tsx](frontend/src/app/content/[contentId]/components/annotation-panel.tsx)；[comment-thread-list.tsx](frontend/src/app/content/[contentId]/components/comment-thread-list.tsx)
+- **工程核验**：最终完整候选全量回归2693个唯一测试，2671通过、22跳过，无失败/错误；跳过来自未配置Redis/MinIO依赖，未记作通过。覆盖评论解析/持久化/读取/重放、8层父链与缺失/失权/循环、权限中途撤销、限流/未知、冻结补偿、53条分页、550条不可读历史轮转、取消补偿后的可达性、最新原帖选择、旧manifest形状/哈希、帖子流水线/事件/报告/告警与SQL结构。旧输入兼容修复和自定义帖子提示版本告警均已纳入本次完整回归。Ruff检查/格式（728份文件）、mypy（444份源码）通过；Web129个文件1049项测试、lint/typecheck/format/build与185份Markdown检查通过。同代码API生成30份客户端字节一致，独立提交候选的openapi:check通过。只读独立审查发现的扫描饥饿、escaped预算、迟到结果选择及兼容问题已修复并复核；审核对话对完整共享候选的188项定向用例，合并环境修正补跑后187通过、1跳过（Kafka未配置），无剩余确认缺陷。首次29项环境失败是遗漏HOTKEY_DATABASE_URL，补齐后分析与告警重跑通过，不计作业务缺陷或单次全量通过。
+- **受控页面核验**：独立测试库/临时API和Web/无Worker，两份原帖与父链冻结上下文通过受控模型实际持久化并由详情API读回；浏览器证明新上下文有效结论不被迟到的旧信息不足覆盖，历史仍可展开。1440px/390px分别覆盖正常、空、暂缓API加载、阻断请求错误与未登录跳转；固定API响应补信息不足、未知及限流延后，未伪称真实模型结果。评论树→单评论详情入口、Enter/Escape选择器、Tab与历史键盘展开已核对；200% CSS缩放与减少动态效果无横向溢出。证据为本机`/tmp/ripplesight-comment-*.png`，不等于真实来源、模型质量或Figma逐像素验收。临时API/Web和浏览器已关闭，历史评论专题测试库及认证文件已删除；本次完整候选使用的三份独立测试库已核实删除。按计划交付至本地main，保留并行主线提交，未推送；真实来源、模型与业务库升级仍待验收。
+- **待补齐/待核对**：规范SQL新增评论扫描游标及评论状态约束，仅在全新独立测试库执行；未升级业务库，上线前须按PROJECT §6核对备份、结构升级及回滚，不能直接在旧结构启动新代码。现有帖子prompt的平铺评论样本仍只作帖子辅助上下文，与本次逐评论任务分别执行；不宣称来源评论已采全或历史已分析完。
+- **待验收**：用分层真实样本独立评测逐评论bool/理由、缺父与短回复、未知/失败/限流延后及上下文更新后的质量；固定样本不证明真实模型准确率、真实采集或自然持续运行。情感/观点和200条样本评测留P2。
 
 ### [10 权限与数据生命周期](docs/requirement/10-权限与数据生命周期.md) · [设计](docs/design/10-权限与数据生命周期.md) · [计划](docs/plan/10-权限与数据生命周期.md)
 
@@ -149,7 +158,7 @@
 | [34 监控主题详情](docs/requirement/34-监控主题详情.md) · [设计](docs/design/34-监控主题详情.md) · [计划](docs/plan/34-监控主题详情.md) | 指定主题复用同一TopicsWorkspace与编辑/读取链。 [page.tsx](frontend/src/app/monitors/[topicId]/page.tsx#L5) | 与32共用数据缺口，不另建一套详情实现。 | 动态topicId、跨owner、不存在、冲突与恢复。 |
 | [35 个人告警](docs/requirement/35-个人告警.md) · [设计](docs/design/35-个人告警.md) · [计划](docs/plan/35-个人告警.md) | 主题/事件选项翻页、规则/版本/目标编辑与最多50条历史。 [alerts-workspace.tsx](frontend/src/app/alerts/components/alerts-workspace.tsx#L429) | 首次热点触发/去重见07；已读无写合同，不能假写成功。 | 冷却、重复评估、目标修订、未知发送与本人实际收到。 |
 | [36 私有资料列表](docs/requirement/36-私有资料列表.md) · [设计](docs/design/36-私有资料列表.md) · [计划](docs/plan/36-私有资料列表.md) | q/来源/主题/日期/分析状态筛选、20条游标，网页采集为显式任务。 [content-list.tsx](frontend/src/app/content/components/content-list.tsx#L140) | 每轮新增/重复/更新及命中范围依赖01/03；未分析不等于不相关。 | 字面搜索、UTC边界、cursor上下文、owner与只读不采集。 |
-| [37 私有资料与评论](docs/requirement/37-私有资料与评论.md) · [设计](docs/design/37-私有资料与评论.md) · [计划](docs/plan/37-私有资料与评论.md) | 版本/观察/来源、分析面板与评论根/回复分页，缺父与未加载状态可辨；评论刷新显式受理。 [content-detail.tsx](frontend/src/app/content/[contentId]/components/content-detail.tsx#L369) | B站根评论限制见02；父链已能存/展，但逐评论上下文相关性分析缺合同，见09。 | 回复先到、缺根/父、20条分页、版本引用与评论复采停止。 |
+| [37 私有资料与评论](docs/requirement/37-私有资料与评论.md) · [设计](docs/design/37-私有资料与评论.md) · [计划](docs/plan/37-私有资料与评论.md) | 版本/观察/来源、分析面板与评论根/回复分页，缺父与未加载状态可辨；评论刷新显式受理。 [content-detail.tsx](frontend/src/app/content/[contentId]/components/content-detail.tsx#L369) | B站根评论限制见02；已补评论独立分析/记录入口及非结论状态、上下文迟到排序，见09；真实模型质量待验收。 | 回复先到、缺根/父、20条分页、版本引用与评论复采停止。 |
 | [38 个人事件列表](docs/requirement/38-个人事件列表.md) · [设计](docs/design/38-个人事件列表.md) · [计划](docs/plan/38-个人事件列表.md) | 个人事件20条分页、热事件独立读取与owner作用域。 [event-list.tsx](frontend/src/app/events/components/event-list.tsx#L52) | 线索/候选用户可见状态见04，24h组合指标见07。 | 筛选与排序、边界材料、跨owner及空/错/未知。 |
 | [39 个人事件分析](docs/requirement/39-个人事件分析.md) · [设计](docs/design/39-个人事件分析.md) · [计划](docs/plan/39-个人事件分析.md) | 当前/固定修订、20条成员、事实、热度快照和带expected_revision/理由的纠错。 [event-detail.tsx](frontend/src/app/events/[eventId]/components/event-detail.tsx#L40) | 本轮事实差分见05；现有热度不能替代24h作者/帖子/新事实指标。 | 真实事实追溯、并发纠错、撤材料与热度不可比。 |
 | [40 平台热榜快照](docs/requirement/40-平台热榜快照.md) · [设计](docs/design/40-平台热榜快照.md) · [计划](docs/plan/40-平台热榜快照.md) | 平台热榜快照与条目各20条，保留原生时间和数值字段。 [hotlist-workspace.tsx](frontend/src/app/hotlists/components/hotlist-workspace.tsx#L113) | 只提供榜单发现，不能替代关键词搜索或跨平台可比热度。 | 真实零/部分、原生单位、来源时间和快照不可变。 |

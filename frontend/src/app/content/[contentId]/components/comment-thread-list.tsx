@@ -212,6 +212,14 @@ export function CommentCard({
           {formatMetric(observation.metrics.like_count)}
         </UI.Text>
       ) : null}
+      {observation?.content_version ? (
+        <UI.TextLink
+          className="mt-3 inline-flex text-sm underline underline-offset-4"
+          href={`/content/${comment.content_id}`}
+        >
+          查看评论分析与记录
+        </UI.TextLink>
+      ) : null}
       {externalHref ? (
         <UI.TextLink
           className="mt-3 inline-flex items-center gap-1 text-sm underline underline-offset-4"

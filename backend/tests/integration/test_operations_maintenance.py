@@ -56,6 +56,7 @@ def _accept(client, owner, action, *, backup_id=None):
 
 def test_actual_heartbeat_and_external_watchdog_complete_original_job_without_worker(
     event_read_client,
+    monkeypatch,
 ):
     owner = _user_scope(event_read_client)
     factory = event_read_client.app.state.session_factory
@@ -63,6 +64,12 @@ def test_actual_heartbeat_and_external_watchdog_complete_original_job_without_wo
     reporter.beat()
     settings = event_read_client.app.state.settings.model_copy(
         update={"operations_maintenance_enabled": True}
+    )
+    # The operation ID is minute-scoped; keep both calls in the same minute
+    # even when the real clock crosses a boundary during a busy test run.
+    operation_time = datetime.now(UTC)
+    monkeypatch.setattr(
+        "operations.watchdog.datetime", SimpleNamespace(now=lambda _tz: operation_time)
     )
     assert run_watchdog_once(factory, settings)
     assert not run_watchdog_once(factory, settings)

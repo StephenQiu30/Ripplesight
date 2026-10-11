@@ -16,6 +16,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from analysis.comments import CommentAnalysisService
 from analysis.editorial_services import EditorialService
 from analysis.prompts import ANALYSIS_PROMPT_VERSION
 from analysis.services import AnalysisService
@@ -731,6 +732,15 @@ def enqueue_due_comments_in_transaction(session: Session, now: datetime) -> int:
 
 
 def enqueue_due_analysis_in_transaction(session: Session, now: datetime) -> int:
+    """Accept separate post and bounded comment analysis for active topics when AI is enabled.
+
+    Returns:
+        Number of newly accepted jobs; per-topic failures leave other scans independent.
+
+    Raises:
+        RuntimeError: There is no caller-owned active transaction.
+        ValueError: The scan clock is naive.
+    """
     if not session.in_transaction():
         raise RuntimeError("analysis scan requires the caller's transaction")
     if now.tzinfo is None:
@@ -760,6 +770,24 @@ def enqueue_due_analysis_in_transaction(session: Session, now: datetime) -> int:
             )
             continue
         accepted += len(jobs)
+        try:
+            with session.begin_nested():
+                comment_jobs = CommentAnalysisService(
+                    session, settings=get_settings()
+                ).enqueue_due_in_transaction(
+                    owner_id=topic.owner_id,
+                    topic_id=topic.topic_id,
+                    now=now.astimezone(UTC),
+                )
+            accepted += len(comment_jobs)
+        except Exception as error:
+            logger.warning(
+                "scheduler_comment_analysis_topic_failed",
+                owner_id=str(topic.owner_id),
+                topic_id=str(topic.topic_id),
+                error_type=type(error).__name__,
+                exc_info=True,
+            )
     return accepted
 
 

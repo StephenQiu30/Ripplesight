@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ai.models import AiCall
 from ai.schemas import AiCallError, AiCompletion, AiFailureCode, AiTokenUsage
-from analysis.prompts import ANALYSIS_PROMPT_VERSION
+from analysis.prompts import ANALYSIS_PROMPT_VERSION, LEGACY_ANALYSIS_PROMPT_VERSION
 from core.config import Settings
 from events.clustering import EVENT_PROMPT_VERSION, candidate_fingerprint
 from events.models import Event, EventCandidate, EventMember
@@ -175,8 +175,10 @@ def _seed_reading_evidence(session, owner, topic, version_ids, now):
             session.execute(
                 text(
                     "INSERT INTO source_access_policies "
-                    "(id,owner_id,source_key,capability,status,enabled,access_basis,terms_reference,"
-                    "processing_purpose,component_name,component_version,component_license,field_purposes,"
+                    "(id,owner_id,source_key,capability,status,enabled,access_basis,te"
+                    "rms_reference,"
+                    "processing_purpose,component_name,component_version,component_lic"
+                    "ense,field_purposes,"
                     "reviewed_at,created_at,updated_at) "
                     "VALUES (:id,:owner,:source,'search','approved',true,"
                     "'manual_import','controlled PG fixture','事件固定阅读测试',"
@@ -237,7 +239,8 @@ def _seed_reading_evidence(session, owner, topic, version_ids, now):
         session.execute(
             text(
                 "INSERT INTO content_observations "
-                "(id,owner_id,content_id,content_version_id,job_id,source_operation_id,observed_at,received_at)"
+                "(id,owner_id,content_id,content_version_id,job_id,source_operatio"
+                "n_id,observed_at,received_at)"
                 " VALUES (:id,:owner,:content,:version,:job,:operation,:seen,:seen)"
             ),
             values,
@@ -246,7 +249,8 @@ def _seed_reading_evidence(session, owner, topic, version_ids, now):
             text(
                 "INSERT INTO evidence_resources "
                 "(id,owner_id,resource_type,resource_id,source_policy_id,source_policy_version,"
-                "retention_policy_id,retention_policy_version,data_class,collected_at,expires_at,created_at)"
+                "retention_policy_id,retention_policy_version,data_class,collected"
+                "_at,expires_at,created_at)"
                 " VALUES (:evidence,:owner,'content_observation',:id,:policy,1,:retention,1,"
                 "'structured',"
                 ":seen,:expires,:seen)"
@@ -256,7 +260,8 @@ def _seed_reading_evidence(session, owner, topic, version_ids, now):
         session.execute(
             text(
                 "INSERT INTO content_visibility_observations "
-                "(id,owner_id,content_id,job_id,source_operation_id,observed_at,received_at,status,basis)"
+                "(id,owner_id,content_id,job_id,source_operation_id,observed_at,re"
+                "ceived_at,status,basis)"
                 " VALUES (gen_random_uuid(),:owner,:content,:job,:operation,:seen,:seen,'visible',"
                 "'content_returned')"
             ),
@@ -1405,3 +1410,156 @@ def test_cluster_revocation_after_prepare_denies_ai_and_budget_reservation(
             session.execute(text("SELECT count(*) FROM resource_budget_reservations")).scalar()
             == reservations
         )
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_event_pipeline_accepts_relevance_without_sentiment_and_retains_legacy(
+    event_context,
+    legacy: bool,
+) -> None:
+    sessions, owner, _, versions, call, now = event_context
+    with sessions() as session, session.begin():
+        session.execute(
+            text("UPDATE content_annotations SET sentiment=NULL WHERE content_version_id=:id"),
+            {"id": versions[0]},
+        )
+        if legacy:
+            session.execute(
+                text(
+                    "UPDATE content_annotations SET prompt_version=:prompt "
+                    "WHERE content_version_id=:id"
+                ),
+                {"prompt": LEGACY_ANALYSIS_PROMPT_VERSION, "id": versions[1]},
+            )
+        assert (
+            EventCandidateService(session).enqueue_due_in_transaction(now=now, ai_enabled=False)
+            == 0
+        )
+        candidate = _candidate_for_versions(session, owner, versions[:2])
+        event_id = EventCandidateService(session).confirm_in_transaction(
+            candidate_id=candidate.id,
+            owner_id=owner,
+            decision=_decision(versions[:2]),
+            ai_call_id=call,
+            now=now,
+        )
+        assert event_id is not None
+        members = session.scalars(select(EventMember).where(EventMember.event_id == event_id)).all()
+        assert len(members) == 2
+
+
+@pytest.mark.parametrize("new_relevant", [False, True])
+def test_event_selection_prefers_v2_before_relevance_and_ignores_late_v1(
+    event_context, new_relevant
+):
+    sessions, _owner, _topic, versions, _, now = event_context
+    with sessions() as session, session.begin():
+        original = (
+            session.execute(
+                text("SELECT * FROM content_annotations WHERE content_version_id=:id"),
+                {"id": versions[0]},
+            )
+            .mappings()
+            .one()
+        )
+        session.execute(
+            text("UPDATE content_annotations SET relevant=:relevant,sentiment=NULL WHERE id=:id"),
+            {"id": original["id"], "relevant": new_relevant},
+        )
+        session.execute(
+            text(
+                "INSERT INTO content_annotations "
+                "(id,owner_id,content_id,content_version_id,topic_id,topic_rule_ve"
+                "rsion,prompt_version,"
+                "input_manifest,input_signature,relevant,relevance_reason,sentimen"
+                "t,summary,viewpoints,"
+                "ai_call_id,status,result_state,first_valid_at,created_at,updated_at) "
+                "SELECT :id,owner_id,content_id,content_version_id,topic_id,topic_"
+                "rule_version,:prompt,"
+                "input_manifest,input_signature,:relevant,relevance_reason,CASE WH"
+                "EN :relevant THEN 'neutral' ELSE NULL END,"
+                "summary,viewpoints,ai_call_id,status,result_state,:at,:at,:at FRO"
+                "M content_annotations WHERE id=:original"
+            ),
+            {
+                "id": uuid4(),
+                "prompt": LEGACY_ANALYSIS_PROMPT_VERSION,
+                "relevant": not new_relevant,
+                "at": now + timedelta(seconds=1),
+                "original": original["id"],
+            },
+        )
+        inputs = load_relevant_event_inputs_in_transaction(
+            session,
+            since=now - timedelta(hours=72),
+            version_ids=(versions[0],),
+            now=now + timedelta(seconds=2),
+        )
+        assert bool(inputs) == new_relevant
+
+
+def test_event_prompt_preference_stays_within_legacy_body_version(event_context, monkeypatch):
+    from analysis.models import ContentAnnotation
+    from analysis.services import list_relevant_event_annotation_refs_in_transaction
+    from content.models import ContentVersion
+
+    sessions, _, _, versions, _, now = event_context
+    with sessions() as session, session.begin():
+        original = session.scalar(
+            select(ContentAnnotation).where(ContentAnnotation.content_version_id == versions[0])
+        )
+        assert original is not None
+        body = session.get(ContentVersion, versions[0])
+        assert body is not None
+        other_id = uuid4()
+        session.add(
+            ContentVersion(
+                id=other_id,
+                owner_id=body.owner_id,
+                content_id=body.content_id,
+                fingerprint=b"q" * 32,
+                text_scope=body.text_scope,
+                text_origin=body.text_origin,
+                title="Acme new body",
+                body="Different body version",
+                created_at=now,
+            )
+        )
+        original.input_manifest = None
+        original.input_signature = "legacy"
+        original.relevant = False
+        original.sentiment = None
+        session.flush()
+        session.add(
+            ContentAnnotation(
+                id=uuid4(),
+                owner_id=original.owner_id,
+                content_id=original.content_id,
+                content_version_id=other_id,
+                topic_id=original.topic_id,
+                topic_rule_version=original.topic_rule_version,
+                prompt_version=LEGACY_ANALYSIS_PROMPT_VERSION,
+                input_signature="legacy",
+                relevant=True,
+                relevance_reason="The other body discusses Acme",
+                sentiment="neutral",
+                summary="Other body",
+                viewpoints=[],
+                ai_call_id=original.ai_call_id,
+                status="annotated",
+                result_state="valid",
+                first_valid_at=now,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.flush()
+        # Isolate ranking from the separately tested legacy job/permission proof.
+        monkeypatch.setattr(
+            "analysis.services.readable_annotation_ids_in_transaction",
+            lambda session, *, annotations, now: {row.id for row in annotations},
+        )
+        refs = list_relevant_event_annotation_refs_in_transaction(
+            session, since=now - timedelta(hours=72), version_ids=(other_id,), now=now
+        )
+        assert [ref.content_version_id for ref in refs.items] == [other_id]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime
@@ -10,6 +11,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from content.analysis_schemas import AnalysisObservationManifest
+from content.comment_analysis_schemas import CommentAnalysisContext
 from core.schemas import OutputModel
 
 
@@ -41,6 +43,9 @@ class AnnotationResultState(StrEnum):
     FAILED = "failed"
     INVALID = "invalid"
     VALID = "valid"
+    INSUFFICIENT = "insufficient"
+    UNKNOWN = "unknown"
+    DEFERRED = "deferred"
 
 
 class ContentAnnotationReadView(OutputModel):
@@ -58,6 +63,7 @@ class ContentAnnotationReadView(OutputModel):
     viewpoints: list[str]
     error_code: str | None
     updated_at: datetime
+    created_at: datetime | None = None
 
 
 class WindowAnnotationCountView(BaseModel):
@@ -114,6 +120,9 @@ class AnalysisPromptItem(BaseModel):
     comment_version_ids: tuple[UUID, ...] | None = Field(default=None, max_length=51)
     body_truncated: bool = False
     comments_truncated: bool = False
+    comment_context: CommentAnalysisContext | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def require_text(self) -> Self:
@@ -130,6 +139,13 @@ class AnalysisPromptItem(BaseModel):
 
 
 class AnalysisJobScope(BaseModel):
+    """Freeze input identities, prompt contract and the single compensation index.
+
+    Comment jobs require an exact post/target/parent context and its signed ALL
+    observation manifest; post v1/v2 jobs preserve their separate legacy contract.
+    Validation rejects a mismatched target, context digest or observation mapping.
+    """
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     topic_id: UUID
@@ -155,18 +171,68 @@ class AnalysisJobScope(BaseModel):
             or any(len(item.comments) > 50 for item in self.prompt_items)
         ):
             raise ValueError("frozen analysis items must match the content version scope")
-        if self.input_manifest is not None and (
-            set(self.input_manifest.post_observations) != set(self.content_version_ids)
-            or self.prompt_items is None
-            or any(item.comments and item.comment_version_ids is None for item in self.prompt_items)
-            or set(self.input_manifest.comment_observations)
-            != {
-                identifier
-                for item in self.prompt_items
-                for identifier in (item.comment_version_ids or ())
-            }
-        ):
-            raise ValueError("analysis observation manifest must match the actual prompt batch")
+        if self.prompt_items is not None:
+            comment_mode = self.prompt_version == "analysis.comment.v1"
+            if any(
+                (item.comment_context is not None) != comment_mode for item in self.prompt_items
+            ):
+                raise ValueError("comment context requires its independent prompt version")
+        if self.input_manifest is not None:
+            contexts = tuple(
+                item.comment_context
+                for item in self.prompt_items or ()
+                if item.comment_context is not None
+            )
+            if contexts:
+                expected_posts = {
+                    c.post.content_version_id: c.post.observation_id for c in contexts
+                }
+                expected_comments = {
+                    t.content_version_id: t.observation_id
+                    for c in contexts
+                    for t in (c.target, *c.parents)
+                }
+                digest = hashlib.sha256(
+                    json.dumps(
+                        [c.model_dump(mode="json") for c in contexts],
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode()
+                ).hexdigest()
+                if (
+                    self.input_manifest.post_observations != expected_posts
+                    or self.input_manifest.comment_observations != expected_comments
+                    or self.input_manifest.context_signature != digest
+                    or any(
+                        item.comment_context is None
+                        or item.content_version_id != item.comment_context.target.content_version_id
+                        or item.content_id != item.comment_context.target.content_id
+                        or item.body != item.comment_context.target.text
+                        or item.body_truncated != item.comment_context.target.truncated
+                        or item.title is not None
+                        or item.comments
+                        or item.comment_version_ids not in (None, ())
+                        for item in self.prompt_items or ()
+                    )
+                ):
+                    raise ValueError("comment manifest must match its frozen context")
+            elif (
+                set(self.input_manifest.post_observations) != set(self.content_version_ids)
+                or self.prompt_items is None
+                or self.input_manifest.context_signature is not None
+                or any(
+                    item.comments and item.comment_version_ids is None for item in self.prompt_items
+                )
+                or set(self.input_manifest.comment_observations)
+                != {
+                    identifier
+                    for item in self.prompt_items
+                    for identifier in (item.comment_version_ids or ())
+                }
+            ):
+                raise ValueError("analysis observation manifest must match the actual prompt batch")
+        elif self.prompt_version == "analysis.comment.v1":
+            raise ValueError("comment analysis requires exact observation inputs")
         return self
 
     def to_job_scope(self) -> dict[str, str | int]:
@@ -265,10 +331,39 @@ class AnnotationOutputItem(BaseModel):
 
     @model_validator(mode="after")
     def validate_sentiment_relevance(self) -> Self:
-        if self.relevant and self.sentiment is None:
-            raise ValueError("relevant content requires sentiment")
         if not self.relevant and self.sentiment is not None:
             raise ValueError("irrelevant content must not declare sentiment")
+        return self
+
+
+class CommentAnnotationOutputItem(BaseModel):
+    """Explicit comment outcome; unknown and insufficient never carry a bool."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    content_version_id: UUID
+    state: Literal["valid", "insufficient", "unknown"]
+    summary: str | None = Field(min_length=1, max_length=60)
+    relevant: bool | None
+    relevance_reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("relevant", mode="before")
+    @classmethod
+    def strict_boolean(cls, value: object) -> object:
+        """Reject coercions such as strings and integers."""
+        if value is not None and not isinstance(value, bool):
+            raise ValueError("comment relevance requires a real boolean")
+        return value
+
+    @model_validator(mode="after")
+    def consistent_outcome(self) -> Self:
+        """Require a reason and precisely one known or non-conclusive outcome."""
+        if (
+            not self.relevance_reason.strip()
+            or ((self.state == "valid") != (self.relevant is not None))
+            or ((self.state == "valid") != (self.summary is not None))
+            or (self.summary is not None and not self.summary.strip())
+        ):
+            raise ValueError("comment outcome is inconsistent")
         return self
 
 
@@ -297,14 +392,17 @@ class AnnotationWrite(BaseModel):
             or not self.summary.strip()
             or self.ai_call_id is None
             or self.error_code is not None
-            or (self.relevant and self.sentiment is None)
             or (not self.relevant and self.sentiment is not None)
         ):
             raise ValueError("annotated rows require consistent structured output")
         if self.status is AnnotationStatus.UNANALYZED and (
             self.result_state is AnnotationResultState.VALID
             or self.relevant is not None
-            or self.relevance_reason is not None
+            or (
+                self.relevance_reason is not None
+                and self.result_state
+                not in {AnnotationResultState.INSUFFICIENT, AnnotationResultState.UNKNOWN}
+            )
             or self.sentiment is not None
             or self.summary is not None
             or self.viewpoints
@@ -318,4 +416,22 @@ class AnnotationWrite(BaseModel):
             self.ai_call_id is None or self.error_code is None
         ):
             raise ValueError("failed and invalid rows require an AI call and error code")
+        if self.result_state in {
+            AnnotationResultState.INSUFFICIENT,
+            AnnotationResultState.UNKNOWN,
+        } and (
+            self.ai_call_id is None
+            or not self.relevance_reason
+            or not self.relevance_reason.strip()
+            or (
+                self.result_state is AnnotationResultState.INSUFFICIENT
+                and self.error_code is not None
+            )
+        ):
+            raise ValueError("insufficient and unknown require an explicit reason and AI call")
+        if (
+            self.result_state is AnnotationResultState.DEFERRED
+            and self.error_code != "analysis_rate_limited"
+        ):
+            raise ValueError("deferred analysis requires a rate-limit reason")
         return self

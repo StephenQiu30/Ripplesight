@@ -125,8 +125,6 @@ class ReportPostInput(BaseModel):
         if self.annotation_state is AnnotationState.ANNOTATED:
             if self.relevant is None or self.summary is None or self.relevance_reason is None:
                 raise ValueError("annotated report inputs require complete output")
-            if self.relevant and self.sentiment is None:
-                raise ValueError("relevant report inputs require sentiment")
             if not self.relevant and self.sentiment is not None:
                 raise ValueError("irrelevant report inputs cannot carry sentiment")
         elif any(
@@ -251,7 +249,7 @@ class ReportContentItem(BaseModel):
     content_version_id: UUID
     title: str
     summary: str
-    sentiment: ReportSentiment
+    sentiment: ReportSentiment | None
     source_key: str
     url: str | None
     interaction_count: int | None = Field(default=None, ge=0)

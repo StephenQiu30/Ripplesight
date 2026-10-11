@@ -4,6 +4,7 @@
 
 ## 1. 技术栈
 
+逐评论analysis.comment.v1复用analysis.annotate Job与content_annotations。content领域负责已采评论分页、原帖/直接父链冻结及版本复核，analysis只消费纯DTO。观察manifest的post_observations记录实际原帖，comment_observations记录目标与可得祖先；评论独立状态含insufficient/unknown/deferred，非有效结论保持relevant=null。canonical schema只用于全新独立测试库，本次不升级业务库。帖子事件、报告、告警保持帖子提示版本范围。analysis_comment_scan_cursors只保存主题规则、原帖版本/评论分页游标与invalid补偿轮转位置，每轮最多50个原帖版本、500个评论节点、20个新任务，循环扫描上下文变更，不保存正文。
 
 | 部分 | 技术 |
 |---|---|
@@ -171,6 +172,7 @@ B 站 Chrome 来源使用 `bilibili` 来源键与固定 API 地址 `https://api.
 
 主题关键词采集的语言、搜索窗口、查询/候选/实际请求上限保存在 `monitor_topic_versions` 的显式列；改变配置生成不可变新版本。运行的有效配置连同UTC边界冻结在既有 `jobs.scope.query_plan`，执行读取该快照；候选跨页累计复用 checkpoint，实际请求复用逐请求准入。结构升级仍遵守 §6，不直接修改业务库。
 
+普通关键词分析默认使用相关性优先的 `analysis.annotate.v2`；冻结v1任务仍按原提示词/校验执行，已有效旧结果不因切版自动重算。`content_annotations_output_status_check`允许相关且情感未分析，未知保留NULL；事件不以情感作为准入条件，报告与告警各自说明情感覆盖。数据库约束升级仍按 §6 在新库恢复核对，不直接修改业务库。
 
 ## 13. 页面与服务的边界
 
