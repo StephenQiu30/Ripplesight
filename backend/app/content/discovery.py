@@ -29,6 +29,7 @@ from jobs.execution import (
     JobProgress,
     resource_attempt_id,
 )
+from jobs.query_plans import read_keyword_query_plan
 from jobs.schemas import (
     BudgetContext,
     BudgetDecisionStatus,
@@ -50,6 +51,7 @@ from jobs.services import (
     ResourceBudgetService,
     load_job_execution_configuration,
 )
+from monitors.collection_config import language_matches
 from monitors.services import MonitorTopicService, evaluate_monitor_rules
 from sources.contracts import (
     HotlistPage,
@@ -58,6 +60,7 @@ from sources.contracts import (
     SourcePageState,
     SourcePost,
     SourceSort,
+    SourceStopReason,
 )
 
 _SEARCH_STAGE = "search.request"
@@ -463,6 +466,28 @@ class KeywordDiscoveryPageCommitService:
             self._session.rollback()
             raise
 
+        plan = read_keyword_query_plan(configuration.scope)
+        collection = plan.collection if plan is not None else None
+        observed_items = len(page.items)
+        language_unknown_items = 0
+        if collection is not None:
+            observed = lease.checkpoint.get("collection.observed_count", 0)
+            if type(observed) is not int or observed < 0:
+                raise ValueError("invalid observed item checkpoint")
+            remaining = max(0, collection.max_items_per_query - observed)
+            if len(page.items) > remaining or (
+                len(page.items) == remaining and page.state is SourcePageState.MORE
+            ):
+                page = page.model_copy(
+                    update={
+                        "items": page.items[:remaining],
+                        "state": SourcePageState.PARTIAL if remaining else SourcePageState.STOPPED,
+                        "next_page_token": None,
+                        "stop_reason": SourceStopReason.BUDGET_EXHAUSTED,
+                        "terminal_evidence": None,
+                    }
+                )
+                page = SourcePage.model_validate(page.model_dump())
         policy = SourceAccessPolicyService(self._session, clock=self._clock)
         candidates: list[SourcePost] = []
         seen: set[str] = set()
@@ -471,6 +496,18 @@ class KeywordDiscoveryPageCommitService:
             if not isinstance(item, SourcePost):
                 self._session.rollback()
                 raise ValueError("keyword search page can contain only posts")
+            if collection is not None and not language_matches(
+                item.language, collection.topic.search_language
+            ):
+                language_unknown_items += int(item.language is None)
+                filtered_items += 1
+                continue
+            if collection is not None and (
+                item.published_at is None
+                or not window.starts_at <= item.published_at < window.ends_at
+            ):
+                filtered_items += 1
+                continue
             if (
                 window.source_key != "bilibili"
                 and item.published_at is not None
@@ -561,7 +598,8 @@ class KeywordDiscoveryPageCommitService:
                 next_token=page.next_page_token,
                 stop_reason=page.stop_reason,
                 job_progress=JobProgress(stage=JobStage.SAVE, items_saved=saved_items),
-                observed_items=len(page.items),
+                observed_items=observed_items,
+                language_unknown_items=language_unknown_items if collection is not None else None,
                 source_observed_at=page.observed_at,
                 source_feed_updated_at=page.source_feed_updated_at,
                 source_engine=page.source_engine,

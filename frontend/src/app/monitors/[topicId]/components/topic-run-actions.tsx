@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { PlayIcon } from "lucide-react";
 
 import { runMonitorTopic } from "@/api/jiankongzhuti";
+import { QueryPlan } from "@/components/monitors/query-plan";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -130,6 +131,7 @@ export function TopicRunResult({
                   </Link>
                 </Button>
               ))}
+              <QueryPlan plan={source.query_plan} />
             </ItemContent>
           </Item>
         ))}

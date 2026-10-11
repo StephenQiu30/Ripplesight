@@ -246,8 +246,10 @@ class KeywordDiscoveryRunInput(InputModel):
             len(queries) > 3
             or self.page_size > 5
             or self.latest_max_pages != 1
-            or self.latest_max_requests
-            < (2 if self.search_sort is SourceSort.LATEST else 6 + 4 * self.page_size)
+            or (
+                self.search_sort is not SourceSort.LATEST
+                and self.latest_max_requests < 6 + 4 * self.page_size
+            )
             or self.max_seconds > 220
         ):
             raise ValueError("Bilibili search must stay within the source risk limits")

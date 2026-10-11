@@ -389,3 +389,28 @@ it.each([401, 403])("renders a forbidden topic for %s", async (status) => {
 vi.mock("@/app/monitors/[topicId]/components/topic-results", () => ({
   TopicResults: () => null,
 }));
+
+it("reads versioned collection settings and preserves them through save", async () => {
+  const config = {
+    search_language: "en" as const,
+    search_window_seconds: 1200,
+    max_queries: 2,
+    max_items_per_query: 7,
+    max_requests_per_query: 1,
+  };
+  api.get.mockResolvedValueOnce({ ...topic, ...config });
+  api.update.mockResolvedValueOnce({ ...topic, ...config, current_version: 2 });
+  render(<TopicEditor topicId={topic.id} />);
+  fireEvent.click(await screen.findByRole("button", { name: "编辑主题设置" }));
+  expect(
+    (screen.getByLabelText("搜索窗口（秒）") as HTMLInputElement).value,
+  ).toBe("1200");
+  expect(screen.getByLabelText("材料语言").textContent).toContain("英文");
+  fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+  await waitFor(() =>
+    expect(api.update).toHaveBeenCalledWith(
+      { topic_id: topic.id },
+      expect.objectContaining({ ...config, expected_version: 1 }),
+    ),
+  );
+});

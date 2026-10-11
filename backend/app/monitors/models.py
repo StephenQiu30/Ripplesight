@@ -196,6 +196,25 @@ class MonitorTopicVersion(Base):
             "collection_interval_seconds BETWEEN 600 AND 86400",
             name="monitor_topic_versions_collection_interval_check",
         ),
+        CheckConstraint(
+            "search_language IN ('any', 'zh', 'en')",
+            name="monitor_topic_versions_search_language_check",
+        ),
+        CheckConstraint(
+            "search_window_seconds BETWEEN 600 AND 2592000",
+            name="monitor_topic_versions_search_window_seconds_check",
+        ),
+        CheckConstraint(
+            "max_queries BETWEEN 1 AND 50", name="monitor_topic_versions_max_queries_check"
+        ),
+        CheckConstraint(
+            "max_items_per_query BETWEEN 1 AND 2000",
+            name="monitor_topic_versions_max_items_per_query_check",
+        ),
+        CheckConstraint(
+            "max_requests_per_query BETWEEN 1 AND 100",
+            name="monitor_topic_versions_max_requests_per_query_check",
+        ),
         Index("monitor_topic_versions_created_by_idx", "created_by"),
     )
 
@@ -213,6 +232,11 @@ class MonitorTopicVersion(Base):
         JSONB, server_default=text("'[]'::jsonb")
     )
     collection_interval_seconds: Mapped[int] = mapped_column(Integer, server_default=text("3600"))
+    search_language: Mapped[str] = mapped_column(String(8), server_default=text("'any'"))
+    search_window_seconds: Mapped[int] = mapped_column(Integer, server_default=text("86400"))
+    max_queries: Mapped[int] = mapped_column(Integer, server_default=text("50"))
+    max_items_per_query: Mapped[int] = mapped_column(Integer, server_default=text("100"))
+    max_requests_per_query: Mapped[int] = mapped_column(Integer, server_default=text("100"))
     created_at: Mapped[datetime]
 
 

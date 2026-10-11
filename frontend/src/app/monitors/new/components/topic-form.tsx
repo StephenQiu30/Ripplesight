@@ -16,6 +16,11 @@ import {
   KeywordGroupField,
   parseKeywordLines,
 } from "@/components/monitors/keyword-group-field";
+import {
+  TopicCollectionFields,
+  DEFAULT_TOPIC_COLLECTION,
+  validateTopicCollection,
+} from "@/components/monitors/topic-collection-fields";
 import { TopicRulePreview } from "@/components/monitors/topic-rule-preview";
 import {
   selectableTopicSources,
@@ -105,6 +110,9 @@ export function TopicForm({
   const [editorialProfileIds, setEditorialProfileIds] = useState<string[]>([]);
   const [collectionIntervalSeconds, setCollectionIntervalSeconds] =
     useState(3600);
+  const [collectionConfig, setCollectionConfig] = useState(
+    DEFAULT_TOPIC_COLLECTION,
+  );
   const [reportTime, setReportTime] = useState("08:00:00");
   const [weeklyReportEnabled, setWeeklyReportEnabled] = useState(true);
   const [notificationTargetNames, setNotificationTargetNames] = useState<
@@ -176,7 +184,7 @@ export function TopicForm({
     if (!tryBeginTopicSubmission(submittingRef)) return;
     const any = parseKeywordLines(matchAny);
     const all = parseKeywordLines(matchAll);
-    const fields: TopicFieldErrors = {};
+    const fields: TopicFieldErrors = validateTopicCollection(collectionConfig);
     if (!name.trim()) fields.name = "请填写关注名称。";
     if (!any.length && !all.length)
       fields.match_any = "至少填写一个包含关键词。";
@@ -197,6 +205,7 @@ export function TopicForm({
     setFieldErrors({});
     try {
       const payload: HotKeyAPI.MonitorTopicCreateInput = {
+        ...collectionConfig,
         name: name.trim(),
         match_any: any,
         match_all: all,
@@ -351,6 +360,12 @@ export function TopicForm({
                 }
               />
             )}
+            <TopicCollectionFields
+              value={collectionConfig}
+              onChange={setCollectionConfig}
+              disabled={isSubmitting}
+              fieldErrors={fieldErrors}
+            />
             <EditorialTopicSources
               selectedProfileIds={editorialProfileIds}
               onChange={setEditorialProfileIds}
@@ -381,6 +396,7 @@ export function TopicForm({
               className="flex-wrap justify-between gap-3"
             >
               <TopicRulePreview
+                collectionKey={JSON.stringify(collectionConfig)}
                 matchAny={matchAny}
                 matchAll={matchAll}
                 exclude={exclude}

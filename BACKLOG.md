@@ -2,18 +2,24 @@
 
 需求、设计和计划按 [00–58 同编号目录](docs/index.md) 维护。本文记录当前实现依据、缺口、待办和验收边界，不记录完成流水。
 
-实现核对基于本地 `main` / `b8795786` 及现有工作区文件，覆盖59组编号文档；本轮另按REQ-06 MON-01修复暂停保护。“已实现”指已找到服务/接口/页面实现路径，**不代表本轮工程检查通过或能力可用**。“待补齐”是已确认的合同或行为差距；“待核对”是尚不能下结论的全路径范围；“待验收”需要独立环境、真实数据、自然时间或浏览器证据。
+实现核对基于本地 `main` / `0e807182` 及现有工作区文件，覆盖59组编号文档；暂停保护已在当前main的`9eeb8b19`中，当前工作区包含01/02/47查询受理回执、旧CI样本修正、主题采集配置切片；09/04相关性与逐评论实现仍在共享工作区，未包含在本关键词交付中。“已实现”指已找到服务/接口/页面实现路径，**不代表本轮工程检查通过或能力可用**。“待补齐”是已确认的合同或行为差距；“待核对”是尚不能下结论的全路径范围；“待验收”需要独立环境、真实数据、自然时间或浏览器证据。
 
-暂停保护改动包含主题采集保护、对应固定样本测试、旧MediaCrawler搜索安全拒绝及PROJECT/06设计/计划与本文件；未调用真实平台、模型、通知或业务库，未启动/改动业务服务。后端测试仅连接独立测试库，两份本轮测试库均已删除；工程检查与独立审查结果见06。其余条目的源码依据不等于需求验收通过。
+暂停保护、查询回执、主题采集配置、分析解耦与逐评论分析均未调用真实平台、模型、通知或业务库，未启动/改动业务服务；后端与页面核验只使用独立测试库和临时服务。工程检查、独立审查与清理结果见01/06/09。其余条目的源码依据不等于需求验收通过。
+
+## 实施与独立审核
+
+按requirement、design、prd和plan核对范围与依赖，每次交付一个可独立验证的计划切片；先完成工程检查和只读独立审查，再更新本文件、精确暂存本任务源码/测试/生成物及文档并提交本地main。提交后复核工作区，其他任务的修改原样保留；推送、真实请求和业务库升级分别遵守授权与验收门槛。
+
+实施对话按小时检查可继续的P0切片，独立审核对话每小时只读核对新提交及测试证据；确认的问题进入当前对应编号，由实施方修复、补回归并单独提交。无新提交或重要状态变化时保持安静，不以审核任务替代真实验收。本轮先分别交付01关键词冻结配置/回执、09独立相关性/逐评论分析，再推进查询语义与03增量口径等P0缺口。
 
 ## P0 当前执行队列
 
 按保护 → 配置与采集 → 相关性与事件 → 持续监测 → 提醒的依赖推进；可并行准备无需外部请求的样本和合同。
 
 - [x] **06/10/47 暂停保护（代码与固定样本）**：搜索/评论任务冻结主题状态序号，领取、逐请求、取消探测、心跳及重试复核；暂停恢复不复活旧任务。父进程补取消覆盖和在途用量结算，保留已提交材料/已确认窗口。独立审查已完成；工程检查与真实验收边界见06。
-- [ ] **01/02/33/44 查询合同**：补主题语言、窗口、上限与版本读回；逐词列出上游支持、本地精筛、不支持和因上限未执行的条件，保留三组词与本地预览。
+- [ ] **01/02/33/44 查询合同**：已补手动/定时查询受理回执、主题语言/窗口/上限的版本读写及冻结执行，验证边界见01；继续逐条件列出上游支持、本地精筛和不支持。手动全部跳过、定时整来源跳过的逐查询快照仍待补；保留三组词与本地预览。
 - [ ] **03/36/46 增量与覆盖**：复用身份/版本/观察/窗口回执，补新增、完全重复、旧帖更新的互斥计数与分母；明确B站根评论/回复及单页上限，不宣称全量。
-- [ ] **09/04 核心分析解耦**：解除普通关键词相关性对情感输出的强制依赖；明确逐评论结合原帖/父链的独立相关性执行范围，保留未知/错误/限流延后。
+- [ ] **09/04 相关性与情感解耦（待交付）**：有效相关性不依赖情感，保留冻结v1与新v2版本、事件消费、报告未分析覆盖及负面告警未知；工程核验与真实边界见09。
 - [ ] **04/05/38/39 事件解释**：复用候选、原生/语义召回与修订，补用户可见线索/候选状态、本轮新增/补证/重复差分及进入热点理由；单材料候选已有实现，不重复建设。
 - [ ] **07/12/32 趋势统计**：补24小时唯一相关帖/可识别作者/新事实与24小时桶，标明窗口、规则、来源覆盖和不可比；保留现有48小时attention及刊物日窗口计数。
 - [ ] **07/35 首次热点提醒**：补首次达标合同、事件+规则版本去重，复用冷却/通知/未知发送核对；免费渠道实际送达是独立门槛。
@@ -31,7 +37,13 @@
 ### [01 关键词配置](docs/requirement/01-关键词配置.md) · [设计](docs/design/01-关键词配置.md) · [计划](docs/plan/01-关键词配置.md)
 
 - **已实现（源码核对）**：任一词/必含词/排除词、NFKC 与大小写归一、稳定去重、跨组冲突校验、词边界精筛、规则版本、草稿预览已有实现。[services.py](backend/app/monitors/services.py)；[topic-rule-preview.tsx](frontend/src/components/monitors/topic-rule-preview.tsx#L52)
-- **待补齐/待核对**：主题输入没有语言、搜索窗口和主题级采集上限。现有来源策略有上限，但查询直接按 max_queries 截断，未逐词解释未执行项；补配置读写、冻结版本及逐查询回执，不重写三组词。[schemas.py](backend/app/monitors/schemas.py#L41)；[runs.py](backend/app/monitors/runs.py#L163)
+- **已补齐（查询上限回执）**：手动与定时共用查询规划，保留规范化、稳定去重后的全部候选，逐项记录序号、原查询、受理与查询上限原因；在既有任务scope冻结，不新增表或假任务。手动部分受理同时保留其他来源的跳过原因；操作重放和任务详情读取冻结快照，改词/来源变化不改写旧回执，多候选任务按数值序号重放。超限项不创建任务、Outbox或用量；执行器在适配器/预算前验证受理快照。[query_plans.py](backend/app/jobs/query_plans.py)；[runs.py](backend/app/monitors/runs.py)；[scheduler.py](backend/app/worker/scheduler.py)。运行结果和任务详情复用[查询回执组件](frontend/src/components/monitors/query-plan.tsx)，明确受理不等于请求或采集完成、未受理不计零结果；历史缺少快照保持未知。
+- **已补齐（主题采集配置）**：主题版本新增语言（不限/中文/英文）、搜索窗口（默认24小时，600秒至30天）、每来源每轮查询上限（默认50，1–50）、每查询候选处理上限（默认100，1–2000）和每查询每轮平台请求上限（默认100，1–100）；创建、读回、编辑、复制与CAS更新共用版本合同。旧客户端更新遗漏字段保留当前值，显式修改才改变配置版本。新建与编辑复用[采集配置表单](frontend/src/components/monitors/topic-collection-fields.tsx)，保存和规则预览不触发采集。
+- **已补齐（冻结执行）**：手动用受理时刻减搜索窗口，定时用既有增量起点与配置窗口起点的较晚者；UTC边界、主题原配置与来源收紧后的有效上限冻结到逐查询回执。后续编辑、来源上限变化、操作重放及旧job恢复不扩大配置。执行前核验快照与任务scope一致，跨页保持冻结page_size，候选在精筛前累计；重复、窗口外、语言未知均占额度。超量末页只处理剩余额度，观察数保留真实返回数；因候选或实际平台请求上限而停止时记partial/budget_exhausted，不宣称完整采集。人工重试可开启新请求cycle，候选额度按原job累计。[collection_config.py](backend/app/monitors/collection_config.py)；[discovery_execution.py](backend/app/content/discovery_execution.py)；[discovery.py](backend/app/content/discovery.py)
+- **语言与窗口边界**：语言按来源返回元数据本地精筛，zh-CN/zh-Hant、en-US归主语言；未知不猜测，指定语言时排除并记录checkpoint计数。HN/B站/RSS等路径常缺语言，选择中文/英文可能过滤全部材料；页面已解释，不能称平台无相关信息。新快照下发布时间未知或不在[start,end)排除；短窗口可能留下采集间隔。历史无配置快照显示未知，沿用原任务合同，不能用当前主题倒填。
+- **工程核验**：最终关键词提交快照独立全量回归2637个唯一测试，2615通过、22跳过，无失败/错误；跳过来自未配置Redis/MinIO依赖，未记作通过。覆盖配置版本/复制/冲突/遗漏字段兼容、手动与定时冻结、逐查询上限回执和重放、跨页语言/时间过滤、候选及实际请求上限、原生HN固定HTTP分页/B站低额度、暂停、任务重放及规范SQL结构；不依赖尚未交付的分析切片。Ruff检查/格式（723份文件）、mypy（441份源码）通过；Web129个文件1045项测试、lint/typecheck/format/build与185份Markdown检查通过。同代码API生成30份客户端文件字节一致，独立提交候选的openapi:check通过；此前未提交生成类型相对HEAD的差异不再作为通过依据。独立只读审查确认提交依赖完整，无剩余阻断项；分析专用查询helper保留在09交付中。
+- **受控页面核验**：独立测试库、临时API/Web、无Worker，浏览器实际创建和编辑保存后刷新读回配置；1440px/390px覆盖表单正常、空来源、加载、错误和未登录五状态，验证冻结任务回执、键盘语言选择/Tab、200% CSS缩放及减少动态效果，无横向溢出。加载/错误通过暂缓XHR及阻断请求模拟，未登录转登录且不展示表单。证据为本机`/tmp/ripplesight-topic-config-*.png`；不等于真实平台搜索或Figma逐像素验收。临时API/Web及浏览器会话已关闭，历史专题测试库与临时认证文件已删除；本次关键词提交使用的三份独立测试库已核实删除。按计划交付至本地main，未推送；业务库未升级。
+- **待补齐/待核对**：三组词的逐平台上游支持/本地精筛/不支持说明待补。手动全部来源跳过仍返回未就绪、没有逐查询快照；定时整来源跳过仍只有来源级应执行窗口原因。新增五列仅在全新独立测试库执行[规范schema](backend/sql/schema.sql)并验证约束；未升级业务库，上线前须按PROJECT §6核对备份、结构升级与回滚，不能直接在旧结构启动新代码。
 - **待验收**：上游可支持条件、本地精筛条件和不支持条件逐平台对照；检验中英文、短词、同形词、规则切换和冲突。已有本地预览不证明真实搜索覆盖。
 
 ### [02 关键词采集](docs/requirement/02-关键词采集.md) · [设计](docs/design/02-关键词采集.md) · [计划](docs/plan/02-关键词采集.md)
@@ -49,7 +61,7 @@
 ### [04 热点事件识别](docs/requirement/04-热点事件识别.md) · [设计](docs/design/04-热点事件识别.md) · [计划](docs/plan/04-热点事件识别.md)
 
 - **已实现（源码核对）**：普通主题从有效相关性标注承接材料，标题/时间/关键词召回与模型关系判断分层，原生/语义召回及事件修订已有路径。单材料在可接纳证据条件下已能形成候选，不应重建。[services.py](backend/app/events/services.py#L104)；[clustering.py](backend/app/events/clustering.py#L237)
-- **待补齐/待核对**：事件读取合同只有 active/merged 与 active/watching/settled 等阶段，缺少用户可辨的线索/候选状态及进入热点的解释。[schemas.py](backend/app/events/schemas.py#L107)。普通关键词路径对情感的强制依赖见09；先解除，再校准事件质量。
+- **待补齐/待核对**：事件读取合同只有 active/merged 与 active/watching/settled 等阶段，缺少用户可辨的线索/候选状态及进入热点的解释。[schemas.py](backend/app/events/schemas.py#L107)。普通关键词路径已解除对情感的强制依赖，当前规则和正文/输入内优先有效v2再有效v1，先选结论再筛相关；迟到v1不绕过v2无关判断。仍须校准真实事件质量，见09。
 - **待验收**：独立标注同事件/不同事件，覆盖同主体多事件、旧闻重发、传闻与确认、跨平台转载、单材料及信息不足；冻结误合并/漏合并阈值后用保留样本评测。原生召回和标题相似不是判定通过。
 
 ### [05 事件证据与新事实](docs/requirement/05-事件证据与新事实.md) · [设计](docs/design/05-事件证据与新事实.md) · [计划](docs/plan/05-事件证据与新事实.md)
@@ -63,7 +75,8 @@
 - **已实现（源码核对）**：低频调度、应执行窗口、稳定操作 ID、租约/outbox、预算与准入、任务取消、连接版本检查、有限补轮和失败恢复已有实现；页面刷新只是读取。[scheduler.py](backend/app/worker/scheduler.py#L90)；[execution.py](backend/app/jobs/execution.py)；[discovery.py](backend/app/content/discovery.py)
 - **已修复（暂停保护）**：关键词搜索与评论受理时服务端冻结主题状态事件序号；同 owner 的 active 状态与序号在一个数据库快照中读取，领取/预算前/逐请求/取消探测/心跳/手动重试复核。暂停、归档或自动暂停后旧任务安全取消；同一时间暂停后恢复不会复活旧任务，缺少序号的历史任务拒绝执行，幂等重放不重绑。[collection_topics.py](backend/app/jobs/collection_topics.py)；[execution.py](backend/app/jobs/execution.py)；[services.py](backend/app/monitors/services.py)。父进程在终止子进程后记录 partial/cancelled 覆盖并保守结算 STARTED 请求，重投不重复扣量；已提交材料、checkpoint 和 confirmed 窗口保留，损坏 scope 不造覆盖。[collection_cancellation.py](backend/app/content/collection_cancellation.py)；[app.py](backend/app/worker/app.py)。
 - **停止边界**：暂停提交后进入请求准入检查的新请求被拒绝；暂停前已获准的请求按在途处理，可能结束或被父进程终止，尚未提交的响应不承诺入库。排队旧任务在领取时、运行旧任务在下一次检查时落取消回执；暂停接口不批量改写全部历史任务，也不自动补发旧操作。非主题热榜和其他主题/账号不受该主题暂停影响。旧 MediaCrawler 搜索桥只有整批预扣与子进程轮询，不能保证逐HTTP暂停，线上工厂已在启动前拒绝并返回不可重试的 `search_request_guard_unavailable`；Chrome逐请求方式、本地样本及缓存评论保留。
-- **受控验证与工程检查**：`ruff check`、`ruff format --check`、`mypy`（439份源码）与185份Markdown文档检查通过；最终补充回归142通过/1跳过（Kafka未配置），其中暂停专项28项全通过。后端全量回归2550通过/33跳过（Kafka、Redis、MinIO未配置）；后续新增保护与测试已由上述补充回归覆盖。跳过项未记作通过；未改变API/数据库结构/UI，Web构建与浏览器验收不属于本次变更。专项覆盖搜索/评论排队与执行、同时间暂停恢复、无新预算/请求、在途与分页材料保留、旧失败重试/幂等重放、归档/自动暂停、跨 owner/其他主题/热榜、主题行锁不阻塞准入，以及实际 dispatcher + 受控 supervisor 的取消、在途结算、损坏旧 scope、checkpoint/confirmed 保留和已受理MediaCrawler任务在计费/子进程前拒绝。[test_topic_collection_pause.py](backend/tests/integration/test_topic_collection_pause.py)。只读独立审查提出的父进程收尾和损坏旧 scope 问题已修复并复核，无剩余阻断项。
+- **CI样本修正**：`5420e32c` 的远端后端检查有5例失败：HN/Google News/新闻搜索重放样本仍手工创建暂停主题，B站安全暂停样本仍调用已拒绝的MediaCrawler路径。现改为active主题和已有Chrome逐请求路径，并让API/执行器共享同一测试settings；保留风控停止、零请求/用量、连接版本、本人确认及跨账号断言，不放宽生产保护。该样本修复纳入本轮 CI 失败项修复，验证范围及远端结果入口见11。[test_source_connections.py](backend/tests/integration/test_source_connections.py)
+- **暂停保护专项验证**：`ruff check`、`ruff format --check`、`mypy`（439份源码）与185份Markdown文档检查通过；最终补充回归142通过/1跳过（Kafka未配置），其中暂停专项28项全通过。后端全量回归2550通过/33跳过（Kafka、Redis、MinIO未配置）；后续新增保护与测试已由上述补充回归覆盖。跳过项未记作通过；该暂停修复未改变API/数据库结构/UI，查询回执的Web构建与浏览器核验另见01。专项覆盖搜索/评论排队与执行、同时间暂停恢复、无新预算/请求、在途与分页材料保留、旧失败重试/幂等重放、归档/自动暂停、跨 owner/其他主题/热榜、主题行锁不阻塞准入，以及实际 dispatcher + 受控 supervisor 的取消、在途结算、损坏旧 scope、checkpoint/confirmed 保留和已受理MediaCrawler任务在计费/子进程前拒绝。[test_topic_collection_pause.py](backend/tests/integration/test_topic_collection_pause.py)。只读独立审查提出的父进程收尾和损坏旧 scope 问题已修复并复核，无剩余阻断项。
 - **待补齐/待验收**：如需恢复MediaCrawler线上搜索，先补逐实际HTTP请求的准入桥和受控验证，不能靠轮询宣称停止保证。暂停代码与固定样本结果不代替真实平台；到期、验证码/限流、超时未知、重启与模型积压仍需各自核验，再连续至少七个自然日观察，至少两轮自然成功并有事件更新。逐应执行窗口解释成功/部分/失败/漏轮、延迟和人工干预。
 
 ### [07 趋势与告警](docs/requirement/07-趋势与告警.md) · [设计](docs/design/07-趋势与告警.md) · [计划](docs/plan/07-趋势与告警.md)
@@ -132,7 +145,7 @@
 | [30 账户与订阅设置](docs/requirement/30-账户与订阅设置.md) · [设计](docs/design/30-账户与订阅设置.md) · [计划](docs/plan/30-账户与订阅设置.md) | 个人资料/头像读写、凭据、身份连接和报告邮件订阅入口。 [account-settings.tsx](frontend/src/app/account/components/account-settings.tsx#L55) | 本轮未确认新的必补功能；真实账号挑战与送达未验收。 | 冲突/失败保留输入、凭据变更撤会话、真实邮箱/SMTP。 |
 | [31 个人工作台入口](docs/requirement/31-个人工作台入口.md) · [设计](docs/design/31-个人工作台入口.md) · [计划](docs/plan/31-个人工作台入口.md) | 登录工作台复用TopicsWorkspace并保留其他业务入口。 [page.tsx](frontend/src/app/workspace/page.tsx#L23) | 仍有/feeds、/agent等冻结功能入口，按00核对后清理。 | 个人会话隔离、入口可达及窄屏导航。 |
 | [32 监控主题工作区](docs/requirement/32-监控主题工作区.md) · [设计](docs/design/32-监控主题工作区.md) · [计划](docs/plan/32-监控主题工作区.md) | 全宽主题列表位于详情上方、默认展开可收起；连续主区与次级结果/运行/设置复用。 [topics-workspace.tsx](frontend/src/app/topics/components/topics-workspace.tsx#L19) | 缺24小时命中桶、平台最近成功/条数摘要与告警已读合同；配置缺口见01、暂停见06。 | 仅主题区布局、旧tab深链接、草稿/版本冲突与1440px/390px五状态。 |
-| [33 新建监控主题](docs/requirement/33-新建监控主题.md) · [设计](docs/design/33-新建监控主题.md) · [计划](docs/plan/33-新建监控主题.md) | 三组词、来源能力、频率/报告配置、q预填和本地预览；新建默认暂停。 [topic-form.tsx](frontend/src/app/monitors/new/components/topic-form.tsx#L84) | 语言/窗口/上限及逐词执行说明见01；保存不能隐式采集。 | q长度、默认状态、草稿保留、重复提交与来源不可用。 |
+| [33 新建监控主题](docs/requirement/33-新建监控主题.md) · [设计](docs/design/33-新建监控主题.md) · [计划](docs/plan/33-新建监控主题.md) | 三组词、来源能力、频率/报告配置、语言/窗口/采集上限、q预填和本地预览；新建默认暂停。 [topic-form.tsx](frontend/src/app/monitors/new/components/topic-form.tsx#L84) | 配置已接入共用表单；逐平台条件说明与整来源跳过快照缺口见01；保存不能隐式采集。 | q长度、默认状态、草稿保留、重复提交与来源不可用。 |
 | [34 监控主题详情](docs/requirement/34-监控主题详情.md) · [设计](docs/design/34-监控主题详情.md) · [计划](docs/plan/34-监控主题详情.md) | 指定主题复用同一TopicsWorkspace与编辑/读取链。 [page.tsx](frontend/src/app/monitors/[topicId]/page.tsx#L5) | 与32共用数据缺口，不另建一套详情实现。 | 动态topicId、跨owner、不存在、冲突与恢复。 |
 | [35 个人告警](docs/requirement/35-个人告警.md) · [设计](docs/design/35-个人告警.md) · [计划](docs/plan/35-个人告警.md) | 主题/事件选项翻页、规则/版本/目标编辑与最多50条历史。 [alerts-workspace.tsx](frontend/src/app/alerts/components/alerts-workspace.tsx#L429) | 首次热点触发/去重见07；已读无写合同，不能假写成功。 | 冷却、重复评估、目标修订、未知发送与本人实际收到。 |
 | [36 私有资料列表](docs/requirement/36-私有资料列表.md) · [设计](docs/design/36-私有资料列表.md) · [计划](docs/plan/36-私有资料列表.md) | q/来源/主题/日期/分析状态筛选、20条游标，网页采集为显式任务。 [content-list.tsx](frontend/src/app/content/components/content-list.tsx#L140) | 每轮新增/重复/更新及命中范围依赖01/03；未分析不等于不相关。 | 字面搜索、UTC边界、cursor上下文、owner与只读不采集。 |
@@ -143,10 +156,10 @@
 | [41 个人报告列表](docs/requirement/41-个人报告列表.md) · [设计](docs/design/41-个人报告列表.md) · [计划](docs/plan/41-个人报告列表.md) | 日/周、主题/日期URL筛选、主题选项翻页、20条报告游标及详情入口。 [report-list.tsx](frontend/src/app/reports/components/report-list.tsx#L79) | 本轮未确认新的必补功能；实际生成、自然日报与投递待验收。 | owner、冻结材料、最新修订、日期边界及真实连续生成。 |
 | [42 刊期生产档案](docs/requirement/42-刊期生产档案.md) · [设计](docs/design/42-刊期生产档案.md) · [计划](docs/plan/42-刊期生产档案.md) | 内部刊期20条、类型/before_key和显式生产请求，操作ID与版本受理。 [edition-list.tsx](frontend/src/app/editions/components/edition-list.tsx#L23) | 本轮未确认新的必补功能；生产可靠性待验收，优先级在核心之后。 | 幂等/未知受理、窗口重复、失败恢复及任务追溯。 |
 | [43 刊期内部详情与修订](docs/requirement/43-刊期内部详情与修订.md) · [设计](docs/design/43-刊期内部详情与修订.md) · [计划](docs/plan/43-刊期内部详情与修订.md) | 固定修订读取、编辑新修订、expected version/操作ID/理由及冲突重读。 [edition-detail.tsx](frontend/src/app/editions/components/edition-detail.tsx#L253) | 本轮未确认新的必补功能。 | 并发修订不覆旧刊、材料撤回、公开/内部边界。 |
-| [44 来源连接与采集覆盖](docs/requirement/44-来源连接与采集覆盖.md) · [设计](docs/design/44-来源连接与采集覆盖.md) · [计划](docs/plan/44-来源连接与采集覆盖.md) | 来源能力/连接、Chrome、预算、覆盖窗口与详情/下一步操作。 [sources-workspace.tsx](frontend/src/app/sources/components/sources-workspace.tsx#L12) | 逐词未执行、增量口径、主题暂停保护见01/03/06；目录可见不等于准入或已采集。 | 真实连接版本、到期/风控、应执行分母/漏轮与来源失败隔离。 |
+| [44 来源连接与采集覆盖](docs/requirement/44-来源连接与采集覆盖.md) · [设计](docs/design/44-来源连接与采集覆盖.md) · [计划](docs/plan/44-来源连接与采集覆盖.md) | 来源能力/连接、Chrome、预算、覆盖窗口与详情/下一步操作。 [sources-workspace.tsx](frontend/src/app/sources/components/sources-workspace.tsx#L12) | 查询受理及冻结配置回执已在运行/任务详情补齐；来源页逐条件说明、增量口径见01/03，暂停保护见06；目录可见不等于准入或已采集。 | 真实连接版本、到期/风控、应执行分母/漏轮与来源失败隔离。 |
 | [45 编辑来源配置](docs/requirement/45-编辑来源配置.md) · [设计](docs/design/45-编辑来源配置.md) · [计划](docs/plan/45-编辑来源配置.md) | 运营令牌内存持有、来源表单/CAS/操作ID、材料/运行读取与显式预览。 [editorial-source-manager.tsx](frontend/src/app/sources/editorial/components/editorial-source-manager.tsx#L95) | 首个来源所需配置先P0；其他编辑来源扩展后置，不默认启用外部预览。 | 准入/预算、草稿冲突、未知写入读回与显式请求边界。 |
 | [46 任务记录](docs/requirement/46-任务记录.md) · [设计](docs/design/46-任务记录.md) · [计划](docs/plan/46-任务记录.md) | 20条任务游标、独立连续失败汇总、真实阶段/数量。 [job-history.tsx](frontend/src/app/jobs/components/job-history.tsx#L81) | 逐查询与更新计数见01/03；不能把active主题当执行中任务。 | 真实排队/执行/失败/取消、漏轮汇总及只读不发请求。 |
-| [47 任务详情与恢复](docs/requirement/47-任务详情与恢复.md) · [设计](docs/design/47-任务详情与恢复.md) · [计划](docs/plan/47-任务详情与恢复.md) | 任务详情/刷新、持久取消与按资格手动重试，冻结任务输入和幂等恢复。 [job-detail.tsx](frontend/src/app/jobs/[jobId]/components/job-detail.tsx#L150) | 主题暂停已按06复核旧采集任务并拒绝旧任务重试；新代次使用新操作，各类未知结果仍需按原操作ID核对。 | 排队立即取消、执行中停止新请求、lease失效、原job重试与冻结配置。 |
+| [47 任务详情与恢复](docs/requirement/47-任务详情与恢复.md) · [设计](docs/design/47-任务详情与恢复.md) · [计划](docs/plan/47-任务详情与恢复.md) | 任务详情/刷新、持久取消与按资格手动重试，冻结任务输入和幂等恢复；关键词任务保存查询受理、语言/UTC窗口/有效上限快照，历史未知。 [job-detail.tsx](frontend/src/app/jobs/[jobId]/components/job-detail.tsx#L150) | 主题暂停已按06复核旧采集任务并拒绝旧任务重试；新代次使用新操作，各类未知结果仍需按原操作ID核对。 | 排队立即取消、执行中停止新请求、lease失效、原job重试与冻结配置。 |
 | [48 公开许可与发布管理](docs/requirement/48-公开许可与发布管理.md) · [设计](docs/design/48-公开许可与发布管理.md) · [计划](docs/plan/48-公开许可与发布管理.md) | 运营令牌+会话、来源许可/CAS/理由、覆盖发布与媒体任务/纠错入口。 [publication-manager.tsx](frontend/src/app/publication/manage/components/publication-manager.tsx#L41) | 本轮未确认新的必补功能；全投影当前许可与撤回待逐链验证。 | 许可收紧、旧修订/媒体/导出失效、公开账号与个人源隔离。 |
 | [49 运营工作区](docs/requirement/49-运营工作区.md) · [设计](docs/design/49-运营工作区.md) · [计划](docs/plan/49-运营工作区.md) | 健康/预算/维护、反馈/审计/字典、通知与评测面板已有实现。 [operations-workspace.tsx](frontend/src/app/operations/components/operations-workspace.tsx#L917) | 关键词/事件/自然运行评测覆盖缺口见11；不能以健康绿灯认定核心可用。 | 实际权限、持久读写、并发版本/操作ID及故障恢复。 |
 | [50 模型配置与成本](docs/requirement/50-模型配置与成本.md) · [设计](docs/design/50-模型配置与成本.md) · [计划](docs/plan/50-模型配置与成本.md) | 模型能力配置/CAS/审计、原币种账本、失败/未知和熔断确认。 [model-manager.tsx](frontend/src/app/operations/models/components/model-manager.tsx#L265) | 本机实际模型名/会话未验收；兼容/付费默认禁用不代表没有相关源码，也不代表OpenRouter已启用。 | 获授权本机模型、切换只影响新任务、限流延后与费用未知不补零。 |
@@ -189,4 +202,4 @@
 
 准入、预算、owner隔离、证据可读、身份去重、停止与恢复是硬门槛；停止后出现新请求等失败必须修复并重验受影响阶段。受控时间推进不替代七日自然观察，手动触发不替代自然调度；自然期未出现的异常由受控验证单独补证，不伪造自然故障。至少两轮自然成功、有事件更新且提醒本人实际收到；无自然提醒则继续观察，七日最低长度不是已达到长期SLA。
 
-源码核对、工程检查、固定样本、独立环境、真实平台、自然时间、用户体验和独立审查分别报告。实现改动按AGENTS执行对应检查；本轮代码与固定样本结论仅覆盖06暂停保护及受影响链路，不能据此关闭01–58其他缺口或真实业务验收。
+源码核对、工程检查、固定样本、独立环境、真实平台、自然时间、用户体验和独立审查分别报告。实现改动按AGENTS执行对应检查；当前代码与固定样本结论覆盖06暂停保护、01主题配置/查询受理、09相关性与情感解耦及受影响链路，不能据此关闭01–58其他缺口或真实业务验收。

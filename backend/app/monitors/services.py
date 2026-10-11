@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unicodedata
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from uuid import UUID, uuid4
@@ -18,6 +18,7 @@ from core.errors import ApplicationError
 from evidence.services import load_source_access_readiness
 from jobs.schemas import BudgetMetric, BudgetScopeKind
 from jobs.services import ResourceBudgetService
+from monitors.collection_config import TopicCollectionConfig
 from monitors.editorial_events import editorial_event_topic_id, reject_internal_editorial_topic
 from monitors.models import (
     FollowedAccount,
@@ -332,6 +333,7 @@ class DueCollectionSchedule:
     interval_seconds: int
     next_run_at: datetime
     last_job_id: UUID | None
+    collection_config: TopicCollectionConfig = field(default_factory=TopicCollectionConfig)
 
 
 @dataclass(frozen=True, slots=True)
@@ -507,6 +509,9 @@ class MonitorScheduleService:
                 owner_id=schedule.owner_id,
                 topic_id=schedule.topic_id,
                 topic_version=version.version,
+                collection_config=TopicCollectionConfig(
+                    **{key: getattr(version, key) for key in TopicCollectionConfig.model_fields}
+                ),
                 search_queries=scheduled_collection_queries(
                     normalize_monitor_rules(
                         match_any=version.match_any,
@@ -887,6 +892,11 @@ class MonitorTopicService:
                 source_keys=list(source_keys),
                 editorial_profile_ids=[str(value) for value in profile_ids],
                 collection_interval_seconds=command.collection_interval_seconds,
+                search_language=command.search_language,
+                search_window_seconds=command.search_window_seconds,
+                max_queries=command.max_queries,
+                max_items_per_query=command.max_items_per_query,
+                max_requests_per_query=command.max_requests_per_query,
                 created_at=now,
             )
             self._session.add(topic)
@@ -1104,6 +1114,11 @@ class MonitorTopicService:
                 source_keys=list(source_keys),
                 editorial_profile_ids=[str(value) for value in profile_ids],
                 collection_interval_seconds=source.collection_interval_seconds,
+                search_language=source_version.search_language,
+                search_window_seconds=source_version.search_window_seconds,
+                max_queries=source_version.max_queries,
+                max_items_per_query=source_version.max_items_per_query,
+                max_requests_per_query=source_version.max_requests_per_query,
                 created_at=now,
             )
             self._session.add(clone)
@@ -1175,6 +1190,13 @@ class MonitorTopicService:
                 self._session, owner_id=owner_id, profile_ids=profile_ids, now=now
             )
             current = self._find_version(topic)
+            command = command.model_copy(
+                update={
+                    key: getattr(current, key)
+                    for key in TopicCollectionConfig.model_fields
+                    if key not in command.model_fields_set
+                }
+            )
             rules_changed = (
                 tuple(current.match_any) != rules.match_any
                 or tuple(current.match_all) != rules.match_all
@@ -1186,6 +1208,11 @@ class MonitorTopicService:
                 or tuple(current.editorial_profile_ids)
                 != tuple(str(value) for value in profile_ids)
                 or current.collection_interval_seconds != command.collection_interval_seconds
+                or current.search_language != command.search_language
+                or current.search_window_seconds != command.search_window_seconds
+                or current.max_queries != command.max_queries
+                or current.max_items_per_query != command.max_items_per_query
+                or current.max_requests_per_query != command.max_requests_per_query
             )
             if (
                 topic.status == MonitorTopicStatus.ACTIVE.value
@@ -1211,6 +1238,11 @@ class MonitorTopicService:
                     source_keys=list(source_keys),
                     editorial_profile_ids=[str(value) for value in profile_ids],
                     collection_interval_seconds=command.collection_interval_seconds,
+                    search_language=command.search_language,
+                    search_window_seconds=command.search_window_seconds,
+                    max_queries=command.max_queries,
+                    max_items_per_query=command.max_items_per_query,
+                    max_requests_per_query=command.max_requests_per_query,
                     created_at=now,
                 )
                 self._session.add(current)
@@ -1543,6 +1575,13 @@ class MonitorTopicService:
             ),
             source_keys=list(source_keys),
             editorial_profile_ids=[UUID(value) for value in version.editorial_profile_ids],
+            search_language=TopicCollectionConfig.model_validate(
+                version, from_attributes=True
+            ).search_language,
+            search_window_seconds=version.search_window_seconds,
+            max_queries=version.max_queries,
+            max_items_per_query=version.max_items_per_query,
+            max_requests_per_query=version.max_requests_per_query,
             collection_interval_seconds=topic.collection_interval_seconds,
             report_time=topic.report_time,
             report_timezone="Asia/Shanghai",

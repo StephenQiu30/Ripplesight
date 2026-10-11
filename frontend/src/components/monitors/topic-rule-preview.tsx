@@ -36,6 +36,7 @@ type TopicRulePreviewProps = {
   matchAll: string;
   exclude: string;
   sourceKeys?: string[];
+  collectionKey?: string;
   disabled?: boolean;
 };
 
@@ -57,6 +58,7 @@ export function TopicRulePreview(props: TopicRulePreviewProps) {
         props.matchAll,
         props.exclude,
         props.sourceKeys,
+        props.collectionKey,
       ])}
       {...props}
     />

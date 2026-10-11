@@ -379,8 +379,34 @@ def test_manual_run_keeps_partial_admission_on_retry(monitor_topic_client: TestC
         "source_key": "google_news",
         "job_ids": [],
         "skip_reason": "budget",
+        "query_plan": {
+            "version": 1,
+            "max_queries": None,
+            "collection": None,
+            "queries": [
+                {"query_index": 0, "query": "Brand", "admitted": False, "skip_reason": "budget"}
+            ],
+        },
     }
     assert len(sources["hackernews"]["job_ids"]) == 1
+    with factory.begin() as session:
+        session.execute(
+            text(
+                "UPDATE resource_budget_policies SET enabled = true "
+                "WHERE budget_key = 'source.google_news.network.daily'"
+            )
+        )
+    edited = monitor_topic_client.patch(
+        location,
+        headers=_csrf_headers(monitor_topic_client),
+        json={
+            **_topic_payload(),
+            "source_keys": ["google_news", "hackernews"],
+            "expected_version": 1,
+            "match_any": ["Changed query"],
+        },
+    )
+    assert edited.status_code == 200, edited.json()
     replay = monitor_topic_client.post(
         runs, headers=_csrf_headers(monitor_topic_client), json=payload
     )
@@ -392,6 +418,111 @@ def test_manual_run_keeps_partial_admission_on_retry(monitor_topic_client: TestC
     )
     assert changed.status_code == 409
     assert changed.json()["code"] == "idempotency_conflict"
+
+
+@pytest.mark.parametrize("scheduled", [False, True])
+def test_query_limit_receipt_is_frozen_and_readable_without_extra_jobs(
+    monitor_topic_client: TestClient, monkeypatch: pytest.MonkeyPatch, scheduled: bool
+) -> None:
+    client = monitor_topic_client
+    preset = SOURCE_PRESETS["hackernews"]
+    limited = replace(
+        preset,
+        execution_policy=preset.execution_policy.model_copy(
+            update={"max_queries": 1, "min_interval_seconds": 0}
+        ),
+    )
+    presets = {**SOURCE_PRESETS, "hackernews": limited}
+    monkeypatch.setattr("connections.services.SOURCE_PRESETS", presets)
+    monkeypatch.setattr("tests.integration.test_topic_runs.SOURCE_PRESETS", presets)
+    location = _ready_topic(client, source_keys=("hackernews",))
+    edited = client.patch(
+        location,
+        headers=_csrf_headers(client),
+        json={
+            **_topic_payload(),
+            "source_keys": ["hackernews"],
+            "expected_version": 1,
+            "match_any": ["\uff21\uff29", "AI", "模型", "产品"],
+        },
+    )
+    assert edited.status_code == 200, edited.json()
+    payload = {"operation_id": str(uuid4()), "source_keys": ["hackernews"]}
+    sessions = client.app.state.session_factory
+    if scheduled:
+        now = datetime.now(UTC) + timedelta(seconds=1)
+        with sessions.begin() as session:
+            session.execute(text("UPDATE monitor_schedules SET next_run_at=:now"), {"now": now})
+            assert enqueue_due_collections_in_transaction(session, now) == 1
+        with sessions() as session:
+            job_id = str(session.scalar(text("SELECT id FROM jobs WHERE kind='keyword.search'")))
+    else:
+        accepted = client.post(location + "/runs", headers=_csrf_headers(client), json=payload)
+        assert accepted.status_code == 202, accepted.json()
+        source = accepted.json()["sources"][0]
+        assert len(source["job_ids"]) == 1
+        job_id = source["job_ids"][0]
+    detail = client.get(f"/api/jobs/{job_id}")
+    assert detail.status_code == 200, detail.json()
+    expected = {
+        "version": 1,
+        "max_queries": 1,
+        "queries": [
+            {"query_index": 0, "query": "AI", "admitted": True, "skip_reason": None},
+            {"query_index": 1, "query": "模型", "admitted": False, "skip_reason": "query_limit"},
+            {"query_index": 2, "query": "产品", "admitted": False, "skip_reason": "query_limit"},
+        ],
+    }
+    expected["collection"] = detail.json()["query_plan"]["collection"]
+    assert expected["collection"]["topic"]["search_language"] == "any"
+    assert detail.json()["query_plan"] == expected
+    if not scheduled:
+        assert source["query_plan"] == expected
+    updated = client.patch(
+        location,
+        headers=_csrf_headers(client),
+        json={
+            **_topic_payload(),
+            "source_keys": ["hackernews"],
+            "expected_version": 2,
+            "match_any": ["新规则"],
+        },
+    )
+    assert updated.status_code == 200, updated.json()
+    assert client.get(f"/api/jobs/{job_id}").json()["query_plan"] == expected
+    if not scheduled:
+        replay = client.post(location + "/runs", headers=_csrf_headers(client), json=payload)
+        assert replay.status_code == 200 and replay.json() == accepted.json()
+    with sessions() as session:
+        assert session.scalar(text("SELECT count(*) FROM jobs")) == 1
+        assert session.scalar(text("SELECT count(*) FROM outbox_messages")) == 1
+        assert session.scalar(text("SELECT count(*) FROM resource_usage_attempts")) == 0
+
+
+def test_manual_run_replay_preserves_numeric_query_order(monitor_topic_client: TestClient) -> None:
+    client = monitor_topic_client
+    location = _ready_topic(client, source_keys=("hackernews",))
+    queries = [f"query-{index}" for index in range(12)]
+    edited = client.patch(
+        location,
+        headers=_csrf_headers(client),
+        json={
+            **_topic_payload(),
+            "source_keys": ["hackernews"],
+            "expected_version": 1,
+            "match_any": queries,
+        },
+    )
+    assert edited.status_code == 200, edited.json()
+    payload = {"operation_id": str(uuid4()), "source_keys": ["hackernews"]}
+    first = client.post(location + "/runs", headers=_csrf_headers(client), json=payload)
+    replay = client.post(location + "/runs", headers=_csrf_headers(client), json=payload)
+    assert first.status_code == 202, first.json()
+    assert replay.status_code == 200, replay.json()
+    assert first.json() == replay.json()
+    source = first.json()["sources"][0]
+    assert len(source["job_ids"]) == len(queries)
+    assert [item["query"] for item in source["query_plan"]["queries"]] == queries
 
 
 def test_concurrent_manual_retries_create_one_job(monitor_topic_client: TestClient) -> None:

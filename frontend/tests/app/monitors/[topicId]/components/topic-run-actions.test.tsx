@@ -12,7 +12,24 @@ const accepted: HotKeyAPI.MonitorTopicRunView = {
   topic_id: "topic-1",
   topic_version: 2,
   sources: [
-    { source_key: "hackernews", job_ids: ["job-1"], skip_reason: null },
+    {
+      source_key: "hackernews",
+      job_ids: ["job-1"],
+      skip_reason: null,
+      query_plan: {
+        version: 1,
+        max_queries: 1,
+        queries: [
+          { query_index: 0, query: "AI", admitted: true, skip_reason: null },
+          {
+            query_index: 1,
+            query: "模型",
+            admitted: false,
+            skip_reason: "query_limit",
+          },
+        ],
+      },
+    },
     { source_key: "google_news", job_ids: [], skip_reason: "budget" },
   ],
 };
@@ -75,5 +92,7 @@ describe("manual topic run", () => {
     expect(html).toContain('href="/jobs/job-1"');
     expect(html).toContain("Google 新闻");
     expect(html).toContain("预算不足");
+    expect(html).toContain("模型");
+    expect(html).toContain("未受理（查询上限 1 项）");
   });
 });

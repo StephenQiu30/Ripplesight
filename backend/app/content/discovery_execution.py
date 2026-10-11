@@ -27,6 +27,11 @@ from jobs.execution import (
     JobLeaseUnavailableError,
     StaleExecutionLeaseError,
 )
+from jobs.query_plans import (
+    QUERY_PLAN_SCOPE_KEY,
+    read_keyword_query_plan,
+    require_planned_keyword_query,
+)
 from jobs.schemas import CoverageWindowInput, JobFailureCategory, JobMessage, JobStatus
 from jobs.services import (
     BudgetPolicyUnavailableError,
@@ -179,9 +184,13 @@ class KeywordDiscoveryExecutor:
         scope = {
             key: value
             for key, value in configuration.scope.items()
-            if key not in {"source_adapter_version", TOPIC_COLLECTION_SEQUENCE}
+            if key
+            not in {"source_adapter_version", TOPIC_COLLECTION_SEQUENCE, QUERY_PLAN_SCOPE_KEY}
         }
         try:
+            require_planned_keyword_query(configuration.scope)
+            plan = read_keyword_query_plan(configuration.scope)
+            collection = plan.collection if plan is not None else None
             source_key = configuration.observation.source_key
             if source_key is None:
                 raise ValueError("search source is missing")
@@ -276,6 +285,13 @@ class KeywordDiscoveryExecutor:
                 or scope["scan_kind"] != "new_scan"
             ):
                 raise ValueError("search scope limits are invalid")
+            if collection is not None and (
+                collection.starts_at != window.starts_at
+                or collection.ends_at != window.ends_at
+                or max_requests != collection.max_requests_per_query
+                or page_size > collection.max_items_per_query
+            ):
+                raise ValueError("search scope disagrees with the frozen topic configuration")
             SearchRequest(
                 source_key=window.source_key,
                 query=query,
@@ -439,6 +455,22 @@ class KeywordDiscoveryExecutor:
                     )
                 except CursorBudgetExhaustedError:
                     return lease, self._partial("budget_exhausted")
+                remaining_items = page_size
+                if collection is not None:
+                    observed = lease.checkpoint.get("collection.observed_count", 0)
+                    if type(observed) is not int or observed < 0:
+                        raise ValueError("invalid observed item checkpoint")
+                    remaining_items = collection.max_items_per_query - observed
+                    if remaining_items <= 0:
+                        self._mark_local_stop(
+                            session,
+                            lease=lease,
+                            window=window,
+                            reason=SourceStopReason.BUDGET_EXHAUSTED,
+                        )
+                        return lease, self._partial(
+                            "budget_exhausted", code="search_item_limit_reached"
+                        )
                 request = SearchRequest(
                     source_key=window.source_key,
                     query=query,
@@ -545,6 +577,8 @@ class KeywordDiscoveryExecutor:
                         )
                     return lease, JobCompletion(status=JobStatus.SUCCEEDED)
                 reason = result.coverage.stop_reason or "unverified_terminal"
+                if reason == SourceStopReason.BUDGET_EXHAUSTED.value:
+                    return lease, self._partial(reason)
                 if (
                     result.progress.state is SourcePageState.STOPPED
                     and result.saved_items == 0

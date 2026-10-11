@@ -187,6 +187,7 @@ def test_internal_job_status_is_readable_after_refresh(
         "created_at": body["created_at"],
         "source_freshness": freshness,
         "coverage_windows": [],
+        "query_plan": None,
     }
     assert body["queue_wait_us"] is not None and body["queue_wait_us"] >= 0
     assert freshness == {

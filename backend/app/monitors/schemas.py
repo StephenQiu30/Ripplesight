@@ -8,6 +8,8 @@ from uuid import UUID
 from pydantic import ConfigDict, Field, field_validator
 
 from core.schemas import InputModel, OutputModel
+from jobs.schemas import KeywordQueryPlanView
+from monitors.collection_config import TopicCollectionConfig
 
 type KeywordInput = Annotated[str, Field(min_length=1, max_length=100)]
 type PreviewSampleInput = Annotated[str, Field(min_length=1, max_length=500)]
@@ -38,7 +40,9 @@ class MonitorRuleSetInput(InputModel):
     exclude: list[KeywordInput] = Field(max_length=50)
 
 
-class MonitorTopicCreateInput(MonitorRuleSetInput):
+class MonitorTopicCreateInput(MonitorRuleSetInput, TopicCollectionConfig):
+    model_config = ConfigDict(frozen=False)
+
     name: str = Field(min_length=1, max_length=80)
     source_keys: list[SourceKeyInput] = Field(default_factory=list, max_length=32)
     editorial_profile_ids: list[UUID] = Field(default_factory=list, max_length=32)
@@ -124,7 +128,7 @@ class MonitorTopicPreviewView(OutputModel):
     expansion: MonitorExpansionPreviewView
 
 
-class MonitorTopicView(OutputModel):
+class MonitorTopicView(OutputModel, TopicCollectionConfig):
     id: UUID
     name: str
     status: MonitorTopicStatus
@@ -172,6 +176,7 @@ class MonitorTopicRunSourceView(OutputModel):
     source_key: str
     job_ids: list[UUID]
     skip_reason: Literal["source_unavailable", "quiet", "budget", "rate_limited"] | None
+    query_plan: KeywordQueryPlanView | None = None
 
 
 class MonitorTopicRunView(OutputModel):

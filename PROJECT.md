@@ -4,6 +4,7 @@
 
 ## 1. 技术栈
 
+
 | 部分 | 技术 |
 |---|---|
 | 后端 | Python 3.12、FastAPI、Pydantic 2、SQLAlchemy 2、psycopg 3；依赖用 uv 管理（`pyproject.toml` + `uv.lock`） |
@@ -164,6 +165,11 @@ B 站 Chrome 来源使用 `bilibili` 来源键与固定 API 地址 `https://api.
 来源预设为每小时一轮、每日 60 次请求、单页两帖、每帖最多 20 条根评论、00–08 点静默、保留 30 天；搜索与评论共用预算。有界单机执行器按 owner 与来源限定任务，复用 JobExecutionService 的租约、幂等和完成流程。抽样始终标为部分覆盖，真实增量、自然持续运行和模型质量分别验收。
 
 字段与约束见唯一 [schema](backend/sql/schema.sql)，接口以 [生成客户端](frontend/src/api) 与 [后端路由](backend/app/api/routers) 为准。
+
+
+关键词查询受理复用 jobs.scope，`query_plan` 保存版本化 JSON 文本，包含有序候选、来源查询上限和逐项受理/跳过原因。手动与定时运行使用同一规划函数，未受理候选不创建任务、Outbox 或预算用量；任务详情和手动运行重放读取冻结快照，历史任务缺少快照时返回未知。它描述受理范围，不代表实际请求、命中或覆盖完成；不新增采集表或账本。
+
+主题关键词采集的语言、搜索窗口、查询/候选/实际请求上限保存在 `monitor_topic_versions` 的显式列；改变配置生成不可变新版本。运行的有效配置连同UTC边界冻结在既有 `jobs.scope.query_plan`，执行读取该快照；候选跨页累计复用 checkpoint，实际请求复用逐请求准入。结构升级仍遵守 §6，不直接修改业务库。
 
 
 ## 13. 页面与服务的边界

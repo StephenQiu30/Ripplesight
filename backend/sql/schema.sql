@@ -109,6 +109,11 @@ CREATE TABLE monitor_topic_versions (
     collection_interval_seconds INTEGER NOT NULL DEFAULT 3600 CHECK (
         collection_interval_seconds BETWEEN 600 AND 86400
     ),
+    search_language VARCHAR(8) NOT NULL DEFAULT 'any' CONSTRAINT monitor_topic_versions_search_language_check CHECK (search_language IN ('any', 'zh', 'en')),
+    search_window_seconds INTEGER NOT NULL DEFAULT 86400 CONSTRAINT monitor_topic_versions_search_window_seconds_check CHECK (search_window_seconds BETWEEN 600 AND 2592000),
+    max_queries INTEGER NOT NULL DEFAULT 50 CONSTRAINT monitor_topic_versions_max_queries_check CHECK (max_queries BETWEEN 1 AND 50),
+    max_items_per_query INTEGER NOT NULL DEFAULT 100 CONSTRAINT monitor_topic_versions_max_items_per_query_check CHECK (max_items_per_query BETWEEN 1 AND 2000),
+    max_requests_per_query INTEGER NOT NULL DEFAULT 100 CONSTRAINT monitor_topic_versions_max_requests_per_query_check CHECK (max_requests_per_query BETWEEN 1 AND 100),
     created_at TIMESTAMPTZ NOT NULL,
     PRIMARY KEY (topic_id, version)
 );

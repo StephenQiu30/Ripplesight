@@ -36,6 +36,12 @@ import {
   KeywordGroupField,
   parseKeywordLines,
 } from "@/components/monitors/keyword-group-field";
+import {
+  TopicCollectionFields,
+  DEFAULT_TOPIC_COLLECTION,
+  readTopicCollection,
+  validateTopicCollection,
+} from "@/components/monitors/topic-collection-fields";
 import { TopicRulePreview } from "@/components/monitors/topic-rule-preview";
 import {
   selectableTopicSources,
@@ -189,6 +195,9 @@ export function TopicEditor({
   const [editorialProfileIds, setEditorialProfileIds] = useState<string[]>([]);
   const [collectionIntervalSeconds, setCollectionIntervalSeconds] =
     useState(3600);
+  const [collectionConfig, setCollectionConfig] = useState(
+    DEFAULT_TOPIC_COLLECTION,
+  );
   const [reportTime, setReportTime] = useState("08:00:00");
   const [weeklyReportEnabled, setWeeklyReportEnabled] = useState(true);
   const [notificationTargetNames, setNotificationTargetNames] = useState<
@@ -217,6 +226,7 @@ export function TopicEditor({
       setSourceKeys(value.source_keys);
       setEditorialProfileIds(value.editorial_profile_ids ?? []);
       setCollectionIntervalSeconds(value.collection_interval_seconds);
+      setCollectionConfig(readTopicCollection(value));
       setReportTime(value.report_time);
       setWeeklyReportEnabled(value.weekly_report_enabled);
       setNotificationTargetNames(value.notification_target_names);
@@ -357,10 +367,18 @@ export function TopicEditor({
       return;
     }
 
+    const collectionErrors = validateTopicCollection(collectionConfig);
+    if (Object.keys(collectionErrors).length) {
+      setFieldErrors(collectionErrors);
+      toast.error(Object.values(collectionErrors).join(" "));
+      pendingActionRef.current = false;
+      return;
+    }
     setPendingAction("save");
     setFieldErrors({});
     try {
       const payload: HotKeyAPI.MonitorTopicUpdateInput = {
+        ...collectionConfig,
         name: name.trim(),
         match_any: any,
         match_all: all,
@@ -784,6 +802,12 @@ export function TopicEditor({
                     disabled={formDisabled}
                     fieldErrors={fieldErrors}
                   />
+                  <TopicCollectionFields
+                    value={collectionConfig}
+                    onChange={setCollectionConfig}
+                    disabled={formDisabled}
+                    fieldErrors={fieldErrors}
+                  />
                   <EditorialTopicSources
                     selectedProfileIds={editorialProfileIds}
                     onChange={setEditorialProfileIds}
@@ -818,6 +842,7 @@ export function TopicEditor({
                     data-disabled={formDisabled}
                   >
                     <TopicRulePreview
+                      collectionKey={JSON.stringify(collectionConfig)}
                       matchAny={matchAny}
                       matchAll={matchAll}
                       exclude={exclude}

@@ -45,6 +45,7 @@ from events.signals import EventSignalService
 from evidence.services import load_source_access_readiness
 from jobs.coverage import CollectionDueWindowService
 from jobs.models import CollectionDueWindow, Job
+from jobs.query_plans import QUERY_PLAN_SCOPE_KEY, build_keyword_query_plan
 from jobs.schemas import (
     BudgetMetric,
     BudgetScopeKind,
@@ -53,6 +54,7 @@ from jobs.schemas import (
     DueSkipReason,
     JobAcceptanceInput,
     JobObservationContext,
+    KeywordCollectionSnapshot,
 )
 from jobs.services import (
     JobService,
@@ -403,12 +405,33 @@ def _accept_collection_schedule(
         previous_end=_previous_collection_end(session, schedule=schedule),
         lookback_seconds=get_settings().collection_lookback_seconds,
     )
+    config = schedule.collection_config
+    window_start = max(window_start, due_at - timedelta(seconds=config.search_window_seconds))
+    collection = KeywordCollectionSnapshot(
+        topic=config,
+        starts_at=window_start,
+        ends_at=due_at,
+        max_items_per_query=min(config.max_items_per_query, policy.max_items_per_query),
+        max_requests_per_query=min(
+            config.max_requests_per_query,
+            policy.max_requests,
+            26 if schedule.source_key == "bilibili" else _COLLECTION_MAX_REQUESTS,
+        ),
+    )
     schedule_operation_id = collection_operation_id(schedule, due_at, connection_version)
     applied = load_applied_source_presets_in_transaction(
         session, owner_id=schedule.owner_id, source_keys=(schedule.source_key,)
     ).get(schedule.source_key)
     accepted_ids: list[UUID] = []
-    for query in schedule.search_queries[: policy.max_queries]:
+    query_plan = build_keyword_query_plan(
+        schedule.search_queries,
+        max_queries=min(policy.max_queries, config.max_queries),
+        collection=collection,
+    )
+    for item in query_plan.queries:
+        if not item.admitted:
+            continue
+        query = item.query
         operation_id = uuid5(schedule_operation_id, f"query:{query}")
         is_bilibili = schedule.source_key == "bilibili"
         command = plan_scheduled_keyword_discovery(
@@ -426,14 +449,11 @@ def _accept_collection_schedule(
                 starts_at=window_start,
                 ends_at=due_at,
                 page_size=min(
-                    policy.max_items_per_query,
+                    collection.max_items_per_query,
                     5 if is_bilibili else _COLLECTION_PAGE_SIZE,
                 ),
                 latest_max_pages=1 if is_bilibili else _COLLECTION_MAX_PAGES,
-                latest_max_requests=min(
-                    policy.max_requests,
-                    26 if is_bilibili else _COLLECTION_MAX_REQUESTS,
-                ),
+                latest_max_requests=collection.max_requests_per_query,
                 top_max_pages=1,
                 top_max_requests=1,
                 max_seconds=min(
@@ -450,6 +470,7 @@ def _accept_collection_schedule(
                     **command.scope,
                     "schedule_key": str(collection_schedule_id(schedule)),
                     "due_at": _utc_text(due_at),
+                    QUERY_PLAN_SCOPE_KEY: query_plan.model_dump_json(),
                 }
             }
         )

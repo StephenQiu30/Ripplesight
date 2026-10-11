@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from uuid import UUID, uuid5
 
 from sqlalchemy import func, select
@@ -19,12 +20,25 @@ from core.config import Settings
 from core.errors import ApplicationError
 from evidence.services import load_source_access_readiness
 from jobs.models import Job
-from jobs.schemas import BudgetMetric, BudgetScopeKind, BudgetWindowUsageView, JobAcceptanceInput
+from jobs.query_plans import (
+    QUERY_PLAN_SCOPE_KEY,
+    build_keyword_query_plan,
+    read_keyword_query_plan,
+)
+from jobs.schemas import (
+    BudgetMetric,
+    BudgetScopeKind,
+    BudgetWindowUsageView,
+    JobAcceptanceInput,
+    KeywordCollectionSnapshot,
+    QuerySourceSkipReason,
+)
 from jobs.services import (
     JobService,
     ResourceBudgetService,
     try_lock_source_collection_in_transaction,
 )
+from monitors.collection_config import TopicCollectionConfig
 from monitors.models import MonitorTopic, MonitorTopicVersion
 from monitors.schemas import (
     MonitorTopicRunInput,
@@ -110,9 +124,12 @@ class MonitorTopicRunService:
                 match_all=version.match_all,
                 exclude=version.exclude,
             )
+            collection_config = TopicCollectionConfig(
+                **{key: getattr(version, key) for key in TopicCollectionConfig.model_fields}
+            )
             queries = scheduled_collection_queries(rules)
             planned: list[tuple[str, tuple[JobAcceptanceInput, ...]]] = []
-            skipped: dict[str, str] = {}
+            skipped: dict[str, QuerySourceSkipReason] = {}
             for source_key in requested:
                 preset = applied.get(source_key)
                 if (
@@ -160,11 +177,26 @@ class MonitorTopicRunService:
                     skipped[source_key] = "rate_limited"
                     continue
 
-                source_queries = queries[: policy.max_queries]
-                interval = max(topic.collection_interval_seconds, policy.min_interval_seconds)
-                starts_at = now - timedelta(
-                    seconds=interval + self._settings.collection_lookback_seconds
+                starts_at = now - timedelta(seconds=collection_config.search_window_seconds)
+                collection = KeywordCollectionSnapshot(
+                    topic=collection_config,
+                    starts_at=starts_at,
+                    ends_at=now,
+                    max_items_per_query=min(
+                        collection_config.max_items_per_query, policy.max_items_per_query
+                    ),
+                    max_requests_per_query=min(
+                        collection_config.max_requests_per_query,
+                        policy.max_requests,
+                        26 if source_key == "bilibili" else 3,
+                    ),
                 )
+                query_plan = build_keyword_query_plan(
+                    queries,
+                    max_queries=min(policy.max_queries, collection_config.max_queries),
+                    collection=collection,
+                )
+                source_queries = tuple(item.query for item in query_plan.queries if item.admitted)
                 source_jobs: list[JobAcceptanceInput] = []
                 for index, query in enumerate(source_queries):
                     is_bilibili = source_key == "bilibili"
@@ -181,9 +213,9 @@ class MonitorTopicRunService:
                         primary_query=query,
                         starts_at=starts_at,
                         ends_at=now,
-                        page_size=min(policy.max_items_per_query, 5 if is_bilibili else 100),
+                        page_size=min(collection.max_items_per_query, 5 if is_bilibili else 100),
                         latest_max_pages=1 if is_bilibili else 3,
-                        latest_max_requests=min(policy.max_requests, 26 if is_bilibili else 3),
+                        latest_max_requests=collection.max_requests_per_query,
                         top_max_pages=1,
                         top_max_requests=1,
                         max_seconds=min(policy.max_seconds, 220 if is_bilibili else 90),
@@ -198,6 +230,7 @@ class MonitorTopicRunService:
                                     "manual_request_id": str(command.operation_id),
                                     "manual_source_keys": request_sources,
                                     "manual_query_index": index,
+                                    QUERY_PLAN_SCOPE_KEY: query_plan.model_dump_json(),
                                 }
                             }
                         )
@@ -226,6 +259,17 @@ class MonitorTopicRunService:
                             source_key=key,
                             job_ids=accepted[key],
                             skip_reason=skipped.get(key),
+                            query_plan=build_keyword_query_plan(
+                                queries, max_queries=None, skip_reason=skipped[key]
+                            )
+                            if key in skipped
+                            else read_keyword_query_plan(
+                                next(
+                                    commands[0].scope
+                                    for source, commands in planned
+                                    if source == key
+                                )
+                            ),
                         )
                         for key in requested
                     ],
@@ -268,11 +312,15 @@ class MonitorTopicRunService:
             assert job.source_key is not None
             grouped[job.source_key].append(job)
         skip_snapshot = first.scope.get("manual_skips")
-        skipped = (
-            dict(item.split(":", 1) for item in skip_snapshot.split(","))
-            if isinstance(skip_snapshot, str) and skip_snapshot
-            else {}
+        skipped = cast(
+            dict[str, QuerySourceSkipReason],
+            (
+                dict(item.split(":", 1) for item in skip_snapshot.split(","))
+                if isinstance(skip_snapshot, str) and skip_snapshot
+                else {}
+            ),
         )
+        first_plan = read_keyword_query_plan(first.scope)
         return MonitorTopicRunView(
             operation_id=operation_id,
             topic_id=topic_id,
@@ -284,10 +332,21 @@ class MonitorTopicRunService:
                         job.id
                         for job in sorted(
                             grouped[key],
-                            key=lambda item: str(item.scope["manual_query_index"]),
+                            key=lambda item: int(str(item.scope["manual_query_index"])),
                         )
                     ],
                     skip_reason=skipped.get(key),
+                    query_plan=read_keyword_query_plan(grouped[key][0].scope)
+                    if grouped[key]
+                    else (
+                        build_keyword_query_plan(
+                            tuple(item.query for item in first_plan.queries),
+                            max_queries=None,
+                            skip_reason=skipped[key],
+                        )
+                        if first_plan is not None and key in skipped
+                        else None
+                    ),
                 )
                 for key in grouped
             ],

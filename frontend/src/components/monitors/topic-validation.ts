@@ -7,6 +7,12 @@ const TOPIC_FIELDS = [
   "exclude",
   "source_keys",
   "collection_interval_seconds",
+  "search_language",
+  "search_window_seconds",
+  "max_queries",
+  "max_items_per_query",
+  "max_requests_per_query",
+
   "report_time",
   "notification_target_names",
 ] as const;

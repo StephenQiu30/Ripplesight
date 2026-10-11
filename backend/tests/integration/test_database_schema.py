@@ -149,3 +149,22 @@ def test_export_cancellation_preserves_owner_fkeys_and_partial_result_dedup(sche
         and fk["referred_columns"] == ["owner_id", "id"]
         for fk in inspector.get_foreign_keys("report_exports")
     )
+
+
+def test_topic_collection_version_columns_have_bounded_constraints(schema_engine: Engine) -> None:
+    inspector = inspect(schema_engine)
+    columns = {column["name"]: column for column in inspector.get_columns("monitor_topic_versions")}
+    checks = {
+        check["name"]: check["sqltext"]
+        for check in inspector.get_check_constraints("monitor_topic_versions")
+    }
+    for key in (
+        "search_language",
+        "search_window_seconds",
+        "max_queries",
+        "max_items_per_query",
+        "max_requests_per_query",
+    ):
+        assert columns[key]["nullable"] is False
+        assert columns[key]["default"] is not None
+        assert key in checks[f"monitor_topic_versions_{key}_check"]

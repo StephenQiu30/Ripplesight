@@ -3777,6 +3777,7 @@ declare namespace HotKeyAPI {
     source_freshness?: SourceFreshnessView | null;
     /** Coverage Windows */
     coverage_windows?: CoverageWindowView[];
+    query_plan?: KeywordQueryPlanView | null;
   };
 
   type JobView = {
@@ -3802,7 +3803,46 @@ declare namespace HotKeyAPI {
 
   type JsonValue = Record<string, any>;
 
+  type KeywordCollectionSnapshot = {
+    topic: TopicCollectionConfig;
+    /** Starts At */
+    starts_at: string;
+    /** Ends At */
+    ends_at: string;
+    /** Max Items Per Query */
+    max_items_per_query: number;
+    /** Max Requests Per Query */
+    max_requests_per_query: number;
+  };
+
   type KeywordInput = string;
+
+  type KeywordQueryAdmissionView = {
+    /** Query Index */
+    query_index: number;
+    /** Query */
+    query: string;
+    /** Admitted */
+    admitted: boolean;
+    /** Skip Reason */
+    skip_reason:
+      | "query_limit"
+      | "source_unavailable"
+      | "quiet"
+      | "budget"
+      | "rate_limited"
+      | null;
+  };
+
+  type KeywordQueryPlanView = {
+    /** Version */
+    version?: number;
+    /** Max Queries */
+    max_queries: number | null;
+    /** Queries */
+    queries: KeywordQueryAdmissionView[];
+    collection?: KeywordCollectionSnapshot | null;
+  };
 
   type listAlertHistoryParams = {
     rule_id: string;
@@ -4236,6 +4276,16 @@ declare namespace HotKeyAPI {
   };
 
   type MonitorTopicCreateInput = {
+    /** Search Language */
+    search_language?: "any" | "zh" | "en";
+    /** Search Window Seconds */
+    search_window_seconds?: number;
+    /** Max Queries */
+    max_queries?: number;
+    /** Max Items Per Query */
+    max_items_per_query?: number;
+    /** Max Requests Per Query */
+    max_requests_per_query?: number;
     /** Match Any */
     match_any: KeywordInput[];
     /** Match All */
@@ -4294,6 +4344,7 @@ declare namespace HotKeyAPI {
     /** Skip Reason */
     skip_reason:
       "source_unavailable" | "quiet" | "budget" | "rate_limited" | null;
+    query_plan?: KeywordQueryPlanView | null;
   };
 
   type MonitorTopicRunView = {
@@ -4310,6 +4361,16 @@ declare namespace HotKeyAPI {
   type MonitorTopicStatus = "paused" | "active" | "archived";
 
   type MonitorTopicUpdateInput = {
+    /** Search Language */
+    search_language?: "any" | "zh" | "en";
+    /** Search Window Seconds */
+    search_window_seconds?: number;
+    /** Max Queries */
+    max_queries?: number;
+    /** Max Items Per Query */
+    max_items_per_query?: number;
+    /** Max Requests Per Query */
+    max_requests_per_query?: number;
     /** Match Any */
     match_any: KeywordInput[];
     /** Match All */
@@ -4335,6 +4396,16 @@ declare namespace HotKeyAPI {
   };
 
   type MonitorTopicView = {
+    /** Search Language */
+    search_language?: "any" | "zh" | "en";
+    /** Search Window Seconds */
+    search_window_seconds?: number;
+    /** Max Queries */
+    max_queries?: number;
+    /** Max Items Per Query */
+    max_items_per_query?: number;
+    /** Max Requests Per Query */
+    max_requests_per_query?: number;
     /** Id */
     id: string;
     /** Name */
@@ -6784,6 +6855,19 @@ declare namespace HotKeyAPI {
     subscriptions: NotificationSubjectKind[];
     /** Created At */
     created_at: string;
+  };
+
+  type TopicCollectionConfig = {
+    /** Search Language */
+    search_language?: "any" | "zh" | "en";
+    /** Search Window Seconds */
+    search_window_seconds?: number;
+    /** Max Queries */
+    max_queries?: number;
+    /** Max Items Per Query */
+    max_items_per_query?: number;
+    /** Max Requests Per Query */
+    max_requests_per_query?: number;
   };
 
   type TranslationRequestInput = {

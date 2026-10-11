@@ -49,6 +49,7 @@ from jobs.models import (
     ResourceComponentPolicy,
     ResourceUsageAttempt,
 )
+from jobs.query_plans import read_keyword_query_plan
 from jobs.schemas import (
     AiTokenCostQuote,
     BudgetContext,
@@ -288,6 +289,7 @@ class CoverageWindowService:
         evidence: CoverageTerminalEvidence | None = None,
         job_progress: JobProgress | None = None,
         observed_items: int | None = None,
+        language_unknown_items: int | None = None,
         source_observed_at: datetime | None = None,
         source_feed_updated_at: datetime | None = None,
         source_engine: str | None = None,
@@ -318,6 +320,17 @@ class CoverageWindowService:
             if type(previous) is not int or previous < 0:
                 raise CoverageWindowConflictError("invalid observed item checkpoint")
             progress.checkpoint["collection.observed_count"] = previous + observed_items
+        if language_unknown_items is not None:
+            previous_unknown = lease.checkpoint.get("collection.language_unknown_count", 0)
+            if (
+                type(previous_unknown) is not int
+                or previous_unknown < 0
+                or language_unknown_items < 0
+            ):
+                raise CoverageWindowConflictError("invalid language unknown checkpoint")
+            progress.checkpoint["collection.language_unknown_count"] = (
+                previous_unknown + language_unknown_items
+            )
         if source_observed_at is not None:
             if source_observed_at.tzinfo is None:
                 raise ValueError("source observation time must be timezone-aware")
@@ -3195,6 +3208,9 @@ class JobService:
             created_at=model.created_at.astimezone(UTC),
             source_freshness=self._source_freshness(model, now=now),
             coverage_windows=self._coverage_windows(model),
+            query_plan=read_keyword_query_plan(model.scope)
+            if model.kind == "keyword.search"
+            else None,
         )
 
     @staticmethod

@@ -100,6 +100,11 @@ describe("core topic creation", () => {
     fireEvent.click(save);
     expect(api.create).toHaveBeenCalledTimes(1);
     expect(api.create.mock.calls[0][0]).toEqual({
+      search_language: "any",
+      search_window_seconds: 86400,
+      max_queries: 50,
+      max_items_per_query: 100,
+      max_requests_per_query: 100,
       name: "AI 工具",
       match_any: ["AI", "Agent"],
       match_all: [],
@@ -172,4 +177,48 @@ it("refreshes platform choices after connection without losing the keyword draft
     (screen.getByLabelText("想关注的关键词") as HTMLTextAreaElement).value,
   ).toBe("我自己的关键词");
   expect(api.create).not.toHaveBeenCalled();
+});
+
+it("saves custom collection bounds and rejects invalid drafts without requests", async () => {
+  api.sources.mockResolvedValue({ items: [], next_cursor: null });
+  api.create.mockResolvedValue({ id: "custom-topic" });
+  render(<TopicForm />);
+  fireEvent.change(screen.getByLabelText("主题名称"), {
+    target: { value: "限制测试" },
+  });
+  fireEvent.change(screen.getByLabelText("想关注的关键词"), {
+    target: { value: "AI" },
+  });
+  fireEvent.change(screen.getByLabelText("搜索窗口（秒）"), {
+    target: { value: "599" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "保存关注" }));
+  expect(api.create).not.toHaveBeenCalled();
+  expect(
+    screen.getByLabelText("搜索窗口（秒）").getAttribute("aria-invalid"),
+  ).toBe("true");
+  fireEvent.change(screen.getByLabelText("搜索窗口（秒）"), {
+    target: { value: "1800" },
+  });
+  fireEvent.change(screen.getByLabelText("每来源每轮查询上限"), {
+    target: { value: "2" },
+  });
+  fireEvent.change(screen.getByLabelText("每查询候选处理上限"), {
+    target: { value: "8" },
+  });
+  fireEvent.change(screen.getByLabelText("每查询每轮平台请求上限"), {
+    target: { value: "1" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "保存关注" }));
+  await waitFor(() =>
+    expect(api.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        search_language: "any",
+        search_window_seconds: 1800,
+        max_queries: 2,
+        max_items_per_query: 8,
+        max_requests_per_query: 1,
+      }),
+    ),
+  );
 });

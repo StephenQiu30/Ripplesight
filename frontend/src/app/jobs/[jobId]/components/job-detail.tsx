@@ -29,6 +29,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { PageState } from "@/components/system/page-state";
+import { QueryPlan } from "@/components/monitors/query-plan";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/request";
@@ -749,6 +750,11 @@ export function JobDetail({ jobId }: JobDetailProps) {
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent>
+          {job.kind === "keyword.search" ? (
+            <UI.Content className="mt-6">
+              <QueryPlan plan={job.query_plan} />
+            </UI.Content>
+          ) : null}
           <JobCycleTiming job={job} />
           {job.source_freshness ? (
             <JobSourceFreshness freshness={job.source_freshness} />
