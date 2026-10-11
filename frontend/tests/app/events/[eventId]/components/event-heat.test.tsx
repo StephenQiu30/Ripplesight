@@ -20,6 +20,24 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 describe("event source heat", () => {
+  it("keeps qualification separate from incomplete coverage and incomparable trend participants", async () => {
+    api.heat.mockResolvedValue({
+      ...heat(),
+      formula_version: "attention-v1-48h-halflife24h",
+      complete: false,
+      comparable_participant_count: 0,
+      uncomparable_participant_count: 2,
+    });
+    api.history.mockResolvedValue({ items: [] });
+    render(<EventHeat eventId="event" eventRevision={1} />);
+    await screen.findByText("满足当前48小时热榜条件");
+    expect(screen.getByText(/部分来源尚未完成及时采集/)).toBeTruthy();
+    expect(screen.getByText(/2 个参与者因新增或采集时钟不足/)).toBeTruthy();
+    expect(screen.getByText("趋势待确定")).toBeTruthy();
+    expect(screen.queryByText(/^未满足原因/)).toBeNull();
+    expect(api.heat).toHaveBeenCalledTimes(1);
+    expect(api.history).toHaveBeenCalledTimes(1);
+  });
   it("keeps the current heat readable when history fails and displays its error code with retry", async () => {
     api.heat.mockResolvedValue(heat());
     api.history

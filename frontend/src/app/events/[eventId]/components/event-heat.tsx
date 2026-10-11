@@ -32,6 +32,7 @@ import {
 import { HeatHistory } from "@/components/events/heat-history";
 import { eventTime } from "@/components/events/reading-model";
 import { ApiRequestError } from "@/request";
+import { EventQualification } from "./event-qualification";
 
 const trends = {
   new: "新出现",
@@ -179,14 +180,12 @@ export function EventHeat({
           <UI.Text size="sm" tone="muted">
             编辑来源 {data.editorial_participant_count} 个，讨论来源{" "}
             {data.signal_participant_count} 个。
-            {data.eligible
-              ? "满足热榜条件。"
-              : "至少两个独立参与者且含一个编辑来源后进入热榜。"}
             {data.complete ? "" : " 部分来源尚未完成及时采集。"}
             {data.uncomparable_participant_count
               ? ` ${data.uncomparable_participant_count} 个参与者因新增或采集时钟不足未用于趋势比较。`
               : ""}
           </UI.Text>
+          <EventQualification data={data} />
           {data.interaction ? (
             <UI.Content className="flex flex-col gap-2">
               <UI.Text size="sm">
