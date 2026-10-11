@@ -23,6 +23,7 @@ import { ApiRequestError } from "@/request";
 import { STATUS_LABELS, capabilityLabel, formatTime } from "./job-presenters";
 
 import { JobHealthSummary } from "./job-health-summary";
+import { JobCollectionCounts } from "./job-collection-counts";
 
 type HistoryState =
   | { status: "loading" }
@@ -61,6 +62,10 @@ function jobKindLabel(kind: string): string {
       return "网页采集";
     case "source.hotlist":
       return "热榜采集";
+    case "keyword.search":
+      return "关键词采集";
+    case "source.comments":
+      return "评论采集";
     default:
       return kind;
   }
@@ -80,41 +85,49 @@ function statusVariant(
 
 export function JobHistoryCard({ job }: { job: HotKeyAPI.JobHistoryItemView }) {
   return (
-    <UI.Content
-      as="article"
-      className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-8"
-    >
-      <UI.Content className="min-w-0">
-        <UI.Content className="flex flex-wrap items-center gap-2">
-          <UI.Heading level={2} className="text-lg font-medium">
-            {jobKindLabel(job.kind)}
-          </UI.Heading>
-          <Badge variant={statusVariant(job.status)}>
-            {STATUS_LABELS[job.status]}
-          </Badge>
-          {job.source_key ? (
-            <UI.Text as="span" className="text-muted-foreground text-xs">
-              {job.source_key}
-              {job.source_capability
-                ? ` · ${capabilityLabel(job.source_capability)}`
-                : ""}
-            </UI.Text>
-          ) : null}
+    <UI.Content as="article" className="flex min-w-0 flex-col gap-4 py-4">
+      <UI.Content className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-8">
+        <UI.Content className="min-w-0">
+          <UI.Content className="flex flex-wrap items-center gap-2">
+            <UI.Heading level={2} className="text-lg font-medium">
+              {jobKindLabel(job.kind)}
+            </UI.Heading>
+            <Badge variant={statusVariant(job.status)}>
+              {STATUS_LABELS[job.status]}
+            </Badge>
+            {job.source_key ? (
+              <UI.Text as="span" className="text-muted-foreground text-xs">
+                {job.source_key}
+                {job.source_capability
+                  ? ` · ${capabilityLabel(job.source_capability)}`
+                  : ""}
+              </UI.Text>
+            ) : null}
+          </UI.Content>
+          <UI.Text className="text-muted-foreground mt-3 text-sm">
+            创建于 {formatTime(job.created_at)}
+          </UI.Text>
+          <UI.Text className="text-muted-foreground mt-1 text-xs">
+            请求 {job.requests_sent} 次 · 已保存 {job.items_saved} 条
+            {job.next_run_at
+              ? ` · 下次运行 ${formatTime(job.next_run_at)}`
+              : ""}
+          </UI.Text>
         </UI.Content>
-        <UI.Text className="text-muted-foreground mt-3 text-sm">
-          创建于 {formatTime(job.created_at)}
-        </UI.Text>
-        <UI.Text className="text-muted-foreground mt-1 text-xs">
-          请求 {job.requests_sent} 次 · 已保存 {job.items_saved} 条
-          {job.next_run_at ? ` · 下次运行 ${formatTime(job.next_run_at)}` : ""}
-        </UI.Text>
+        <Button asChild variant="ghost" size="sm" className="self-start">
+          <Link href={`/jobs/${job.id}`}>
+            查看详情
+            <ArrowRightIcon data-icon="inline-end" />
+          </Link>
+        </Button>
       </UI.Content>
-      <Button asChild variant="ghost" size="sm" className="self-start">
-        <Link href={`/jobs/${job.id}`}>
-          查看详情
-          <ArrowRightIcon data-icon="inline-end" />
-        </Link>
-      </Button>
+      {job.kind === "keyword.search" || job.kind === "source.comments" ? (
+        <JobCollectionCounts
+          key={`${job.id}:${job.kind}`}
+          jobId={job.id}
+          kind={job.kind}
+        />
+      ) : null}
     </UI.Content>
   );
 }

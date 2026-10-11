@@ -10,9 +10,12 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-const api = vi.hoisted(() => ({ list: vi.fn() }));
+const api = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn() }));
 const toasts = vi.hoisted(() => ({ error: vi.fn() }));
-vi.mock("@/api/caijirenwu", () => ({ listCollectionJobs: api.list }));
+vi.mock("@/api/caijirenwu", () => ({
+  listCollectionJobs: api.list,
+  getCollectionJob: api.get,
+}));
 vi.mock("sonner", () => ({ toast: toasts }));
 vi.mock("@/app/jobs/components/job-health-summary", () => ({
   JobHealthSummary: () => null,
@@ -45,6 +48,32 @@ const job: HotKeyAPI.JobHistoryItemView = {
 };
 
 describe("job history card", () => {
+  it.each(["keyword.search", "source.comments"])(
+    "offers lazy counts for %s without reading a detail receipt on first render",
+    (kind) => {
+      const html = renderToStaticMarkup(
+        createElement(JobHistoryCard, { job: { ...job, kind } }),
+      );
+      expect(html).toContain("查看累计计量");
+      expect(html).toContain('aria-expanded="false"');
+      expect(html).toContain('href="/jobs/job-1"');
+      expect(api.get).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    "monitor.collect",
+    "webpage.collect",
+    "source.hotlist",
+    "analysis.annotate",
+  ])("keeps the counting basis away from %s", (kind) => {
+    const html = renderToStaticMarkup(
+      createElement(JobHistoryCard, { job: { ...job, kind } }),
+    );
+    expect(html).not.toContain("累计计量");
+    expect(api.get).not.toHaveBeenCalled();
+  });
+
   it("shows a localized status, persisted progress, and a detail link", () => {
     const html = renderToStaticMarkup(createElement(JobHistoryCard, { job }));
 
