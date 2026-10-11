@@ -571,6 +571,11 @@ def test_coverage_http_deduplicates_content_and_keeps_source_budget_separate(
     assert view["content_ids"] == [str(content_id)]
     assert view["inserted_count"] == 0
     assert view["deduplicated_count"] == 1
+    assert view["stored_observation_count"] == view["unique_content_count"] == 1
+    assert view["identity_count_basis"] == "retained_receipt_identity_v1"
+    assert view["updated_count"] == 0
+    assert view["unchanged_count"] == 0
+    assert view["unclassified_count"] == 1
     assert view["analysis"] is None
     assert view["last_success_at"] is None
     assert {item["budget_key"]: item["consumed_units"] for item in view["budgets"]} == {

@@ -254,9 +254,21 @@ class CollectionCoverageView(BaseModel):
     request_count: int | None = Field(ge=0)
     request_attempt_count: int | None = Field(ge=0)
     page_count: int | None = Field(ge=0)
-    observed_count: int | None = Field(ge=0)
-    inserted_count: int | None = Field(ge=0)
-    deduplicated_count: int | None = Field(ge=0)
+    observed_count: int | None = Field(ge=0, description="上游返回数,精筛前;未知为NULL")
+    stored_observation_count: int | None = Field(
+        ge=0, description="本任务精筛后持久观察数,同身份可出现多次,操作重放不增加"
+    )
+    unique_content_count: int | None = Field(ge=0, description="本任务持久观察的唯一内容身份数")
+    identity_count_basis: Literal["retained_receipt_identity_v1"] | None
+    inserted_count: int | None = Field(ge=0, description="首次保留观察属于本任务的唯一身份数")
+    updated_count: int | None = Field(ge=0, description="已有身份出现已知正文版本或指标变化的数量")
+    unchanged_count: int | None = Field(ge=0, description="已有身份的已存正文版本与指标未变的数量")
+    unclassified_count: int | None = Field(
+        ge=0, description="已有身份无已知变化,但缺正文版本或指标可得性变化,无法比较的数量"
+    )
+    deduplicated_count: int | None = Field(
+        ge=0, description="兼容旧口径:持久观察数减新增身份数,含更新;不是完全重复身份数"
+    )
     analysis: CollectionCoverageAnalysisView | None
     budgets: tuple[CollectionCoverageBudgetView, ...] | None
     gaps: tuple[CollectionCoverageGapView, ...]

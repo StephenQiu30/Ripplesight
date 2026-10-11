@@ -34,6 +34,7 @@ from connections.services import (
     SourceCapabilityEvidenceService,
     load_applied_source_presets_in_transaction,
 )
+from content.collection_counts import classify_collection_identities
 from content.models import (
     ContentDiscovery,
     ContentObservation,
@@ -624,6 +625,9 @@ class ContentService:
                 ingested_count=fact.ingested_count,
                 first_ingested_count=fact.first_ingested_count,
                 deduplicated_count=fact.deduplicated_count,
+                updated_count=fact.updated_count,
+                unchanged_count=fact.unchanged_count,
+                unclassified_count=fact.unclassified_count,
                 content_version_ids=fact.content_version_ids,
             )
             for fact in self.collection_facts_in_transaction(owner_id=owner_id, job_ids=job_ids)
@@ -632,47 +636,51 @@ class ContentService:
     def collection_facts_in_transaction(
         self, *, owner_id: UUID, job_ids: tuple[UUID, ...]
     ) -> tuple[CollectionContentFactView, ...]:
-        """Return per-Job observation facts and stable IDs in two owner-scoped reads."""
+        """Return owner-scoped counts and IDs from one consistent statement snapshot.
+
+        Args:
+            owner_id: Owner whose retained observations may be read.
+            job_ids: Jobs to project in the requested order.
+
+        Returns:
+            Facts for each requested Job, including zero counts for absent Jobs.
+            Identity categories partition the unique content denominator and use
+            retained receipt history, which may change after lifecycle deletion.
+
+        Raises:
+            RuntimeError: The caller has not opened a transaction.
+        """
         if not self._session.in_transaction():
             raise RuntimeError("collection fact reads require the caller's transaction")
         if not job_ids:
             return ()
-        observations = self._session.scalars(
+        candidate_ids = select(ContentObservation.content_id).where(
+            ContentObservation.owner_id == owner_id,
+            ContentObservation.job_id.in_(job_ids),
+        )
+        # Running Jobs can append receipts during this read. A single statement
+        # keeps the identity partition and its observation denominator consistent.
+        history = self._session.scalars(
             select(ContentObservation).where(
                 ContentObservation.owner_id == owner_id,
-                ContentObservation.job_id.in_(job_ids),
+                ContentObservation.content_id.in_(candidate_ids),
             )
         ).all()
         by_job: dict[UUID, list[ContentObservation]] = {job_id: [] for job_id in job_ids}
-        for item in observations:
-            by_job[item.job_id].append(item)
-        candidate_ids = {item.content_id for item in observations}
-        first_by_content: dict[UUID, ContentObservation] = {}
-        if candidate_ids:
-            history = self._session.scalars(
-                select(ContentObservation).where(
-                    ContentObservation.owner_id == owner_id,
-                    ContentObservation.content_id.in_(candidate_ids),
-                )
-            ).all()
-            for item in history:
-                previous = first_by_content.get(item.content_id)
-                if previous is None or (item.received_at, item.id) < (
-                    previous.received_at,
-                    previous.id,
-                ):
-                    first_by_content[item.content_id] = item
-        first_ingested_by_job = {job_id: 0 for job_id in job_ids}
-        for first in first_by_content.values():
-            if first.job_id in first_ingested_by_job:
-                first_ingested_by_job[first.job_id] += 1
+        for item in history:
+            if item.job_id in by_job:
+                by_job[item.job_id].append(item)
+        identities = classify_collection_identities(history, job_ids=job_ids)
         return tuple(
             CollectionContentFactView(
                 job_id=job_id,
                 observation_count=len(by_job[job_id]),
                 ingested_count=len({item.content_id for item in by_job[job_id]}),
-                first_ingested_count=first_ingested_by_job[job_id],
-                deduplicated_count=len(by_job[job_id]) - first_ingested_by_job[job_id],
+                first_ingested_count=identities[job_id].new,
+                deduplicated_count=len(by_job[job_id]) - identities[job_id].new,
+                updated_count=identities[job_id].updated,
+                unchanged_count=identities[job_id].unchanged,
+                unclassified_count=identities[job_id].unclassified,
                 content_version_ids=tuple(
                     sorted(
                         {

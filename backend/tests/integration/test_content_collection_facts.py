@@ -81,14 +81,16 @@ def _seed_observation(
     content_id: UUID,
     version_id: UUID | None,
     observed_at: datetime,
+    *,
+    like_count: int | None = None,
 ) -> None:
     session.execute(
         text(
             "INSERT INTO content_observations "
             "(id, owner_id, content_id, job_id, source_operation_id, "
-            "content_version_id, observed_at, received_at) VALUES "
+            "content_version_id, observed_at, received_at, like_count) VALUES "
             "(:id, :owner_id, :content_id, :job_id, :operation_id, "
-            ":version_id, :observed_at, :observed_at)"
+            ":version_id, :observed_at, :observed_at, :like_count)"
         ),
         {
             "id": uuid4(),
@@ -98,6 +100,7 @@ def _seed_observation(
             "operation_id": uuid4(),
             "version_id": version_id,
             "observed_at": observed_at,
+            "like_count": like_count,
         },
     )
 
@@ -154,7 +157,7 @@ def test_collection_facts_batch_preserves_job_identity_and_first_ingestion(
             finally:
                 event.remove(engine, "before_cursor_execute", count_selects)
 
-            assert len(select_statements) == 2
+            assert len(select_statements) == 1
             assert [item.job_id for item in facts] == [
                 second_job,
                 empty_job,
@@ -165,6 +168,9 @@ def test_collection_facts_batch_preserves_job_identity_and_first_ingestion(
             assert facts[0].ingested_count == 2
             assert facts[0].first_ingested_count == 1
             assert facts[0].deduplicated_count == 2
+            assert facts[0].updated_count == 0
+            assert facts[0].unchanged_count == 0
+            assert facts[0].unclassified_count == 1
             assert facts[0].content_ids == tuple(sorted((shared_content, new_content), key=str))
             assert facts[0].analysis_targets_complete is False
             assert facts[1].analysis_targets_complete is True
@@ -175,6 +181,8 @@ def test_collection_facts_batch_preserves_job_identity_and_first_ingestion(
             assert facts[2].ingested_count == 1
             assert facts[2].first_ingested_count == 1
             assert facts[2].deduplicated_count == 1
+            assert facts[2].updated_count == facts[2].unchanged_count == 0
+            assert facts[2].unclassified_count == 0
             assert facts[2].content_ids == (shared_content,)
             assert facts[2].content_version_ids == tuple(sorted((shared_v1, shared_v2), key=str))
             assert facts[3].observation_count == 0
@@ -185,15 +193,144 @@ def test_collection_facts_batch_preserves_job_identity_and_first_ingestion(
             )
             assert all(item.observation_count == 0 for item in other_owner_facts)
             assert all(item.content_ids == () for item in other_owner_facts)
+            assert all(
+                item.updated_count == item.unchanged_count == 0 for item in other_owner_facts
+            )
+            assert all(item.unclassified_count == 0 for item in other_owner_facts)
 
             old_counts = ContentService(session).collection_counts_in_transaction(
                 owner_id=owner_id, job_ids=(first_job, second_job)
             )
             assert old_counts[0].first_ingested_count == 1
             assert old_counts[1].deduplicated_count == 2
+            assert old_counts[1].unclassified_count == 1
             assert "content_ids" not in old_counts[0].model_dump()
         finally:
             session.rollback()
+
+
+def test_collection_identity_counts_partition_updates_duplicates_and_unknowns(
+    content_fact_sessions: sessionmaker[Session],
+) -> None:
+    owner, first_job, second_job = uuid4(), uuid4(), uuid4()
+    changed, metric_changed, duplicate, unknown, added = (uuid4() for _ in range(5))
+    versions = {
+        content: (uuid4(), uuid4())
+        for content in (changed, metric_changed, duplicate, unknown, added)
+    }
+    now = datetime(2026, 10, 11, tzinfo=UTC)
+    with content_fact_sessions() as session, session.begin():
+        try:
+            for job in (first_job, second_job):
+                _seed_job(session, owner, job, now)
+            for content, version_ids in versions.items():
+                _seed_content(session, owner, content, version_ids, now)
+            for index, content in enumerate((changed, metric_changed, duplicate, unknown)):
+                _seed_observation(
+                    session,
+                    owner,
+                    first_job,
+                    content,
+                    versions[content][0],
+                    now + timedelta(seconds=index),
+                    like_count=0,
+                )
+            for index, (content, version, likes) in enumerate(
+                (
+                    (changed, versions[changed][1], 1),
+                    (metric_changed, versions[metric_changed][0], 1),
+                    (duplicate, versions[duplicate][0], 0),
+                    (duplicate, versions[duplicate][0], 0),
+                    (unknown, None, None),
+                    (added, versions[added][0], 0),
+                    (added, versions[added][1], 1),
+                ),
+                start=10,
+            ):
+                _seed_observation(
+                    session,
+                    owner,
+                    second_job,
+                    content,
+                    version,
+                    now + timedelta(seconds=index),
+                    like_count=likes,
+                )
+            service = ContentService(session)
+            facts = service.collection_facts_in_transaction(owner_id=owner, job_ids=(second_job,))
+            fact = facts[0]
+            assert fact.observation_count == 7
+            assert fact.ingested_count == 5
+            assert (fact.first_ingested_count, fact.updated_count) == (1, 2)
+            assert (fact.unchanged_count, fact.unclassified_count) == (1, 1)
+            assert (
+                fact.first_ingested_count
+                + fact.updated_count
+                + fact.unchanged_count
+                + fact.unclassified_count
+            ) == fact.ingested_count
+            assert fact.deduplicated_count == 6  # Legacy observation denominator is different.
+            # Read-only replay preserves accounting and does not create more observations.
+            assert (
+                service.collection_facts_in_transaction(owner_id=owner, job_ids=(second_job,))
+                == facts
+            )
+        finally:
+            session.rollback()
+
+
+def test_collection_identity_denominator_stays_consistent_while_running_job_appends(
+    content_fact_sessions: sessionmaker[Session],
+) -> None:
+    owner, running_job, baseline_job, content, v1, v2 = (uuid4() for _ in range(6))
+    now = datetime(2026, 10, 11, tzinfo=UTC)
+    with content_fact_sessions() as session, session.begin():
+        for job in (running_job, baseline_job):
+            _seed_job(session, owner, job, now)
+        _seed_content(session, owner, content, (v1, v2), now)
+        _seed_observation(session, owner, baseline_job, content, v1, now)
+
+    appended = False
+    reads = 0
+
+    def append_after_snapshot(
+        _connection: object,
+        _cursor: object,
+        statement: str,
+        _parameters: object,
+        _context: object,
+        _executemany: bool,
+    ) -> None:
+        nonlocal appended, reads
+        if not statement.lstrip().lower().startswith("select"):
+            return
+        reads += 1
+        if appended:
+            return
+        appended = True
+        with content_fact_sessions() as writer, writer.begin():
+            _seed_observation(writer, owner, running_job, content, v2, now + timedelta(seconds=1))
+
+    with content_fact_sessions() as session, session.begin():
+        engine = session.get_bind()
+        event.listen(engine, "after_cursor_execute", append_after_snapshot)
+        try:
+            facts = ContentService(session).collection_facts_in_transaction(
+                owner_id=owner, job_ids=(running_job, baseline_job)
+            )
+        finally:
+            event.remove(engine, "after_cursor_execute", append_after_snapshot)
+        assert appended and reads == 1
+        assert facts[0].ingested_count == facts[0].updated_count == 0
+        assert facts[0].content_ids == ()
+        assert facts[1].ingested_count == facts[1].first_ingested_count == 1
+        latest = ContentService(session).collection_facts_in_transaction(
+            owner_id=owner, job_ids=(running_job,)
+        )[0]
+        assert latest.ingested_count == latest.updated_count == 1
+        assert (
+            latest.first_ingested_count == latest.unchanged_count == latest.unclassified_count == 0
+        )
 
 
 def test_collection_snapshot_facts_distinguish_empty_snapshot_from_absence(

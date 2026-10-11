@@ -795,11 +795,23 @@ declare namespace HotKeyAPI {
     request_attempt_count: number | null;
     /** Page Count */
     page_count: number | null;
-    /** Observed Count */
+    /** Observed Count 上游返回数,精筛前;未知为NULL */
     observed_count: number | null;
-    /** Inserted Count */
+    /** Stored Observation Count 本任务精筛后持久观察数,同身份可出现多次,操作重放不增加 */
+    stored_observation_count: number | null;
+    /** Unique Content Count 本任务持久观察的唯一内容身份数 */
+    unique_content_count: number | null;
+    /** Identity Count Basis */
+    identity_count_basis: string | null;
+    /** Inserted Count 首次保留观察属于本任务的唯一身份数 */
     inserted_count: number | null;
-    /** Deduplicated Count */
+    /** Updated Count 已有身份出现已知正文版本或指标变化的数量 */
+    updated_count: number | null;
+    /** Unchanged Count 已有身份的已存正文版本与指标未变的数量 */
+    unchanged_count: number | null;
+    /** Unclassified Count 已有身份无已知变化,但缺正文版本或指标可得性变化,无法比较的数量 */
+    unclassified_count: number | null;
+    /** Deduplicated Count 兼容旧口径:持久观察数减新增身份数,含更新;不是完全重复身份数 */
     deduplicated_count: number | null;
     analysis: CollectionCoverageAnalysisView | null;
     /** Budgets */

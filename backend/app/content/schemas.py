@@ -75,11 +75,16 @@ class HotlistSourceView(OutputModel):
 
 
 class CollectionContentCountView(OutputModel):
+    """Retained observations and identity counts; legacy deduplication may overlap updates."""
+
     job_id: UUID
     observation_count: int = Field(ge=0)
     ingested_count: int = Field(ge=0)
     first_ingested_count: int = Field(ge=0)
     deduplicated_count: int = Field(ge=0)
+    updated_count: int = Field(ge=0)
+    unchanged_count: int = Field(ge=0)
+    unclassified_count: int = Field(ge=0)
     content_version_ids: tuple[UUID, ...]
 
 
