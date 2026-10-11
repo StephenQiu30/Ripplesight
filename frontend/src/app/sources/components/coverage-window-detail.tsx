@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { CoverageIdentityCounts } from "./coverage-identity-counts";
 
 import {
   admissionLabel,
@@ -105,7 +106,7 @@ export function CoverageWindowDetail({
       as="section"
       id="coverage-detail"
       aria-labelledby="coverage-detail-heading"
-      className="flex flex-col"
+      className="flex min-w-0 flex-col wrap-anywhere"
     >
       <UI.Content className="flex flex-wrap items-start justify-between gap-4">
         <UI.Content>
@@ -183,12 +184,10 @@ export function CoverageWindowDetail({
           value={coverageCount(row.request_attempt_count)}
         />
         <Fact label="采集页数" value={coverageCount(row.page_count)} />
-        <Fact label="观察条数" value={coverageCount(row.observed_count)} />
-        <Fact label="入库条数" value={coverageCount(row.inserted_count)} />
-        <Fact label="去重条数" value={coverageCount(row.deduplicated_count)} />
         <Fact label="关联 Job 状态" value={row.job_status ?? "未知"} />
         <Fact label="主题 ID" value={row.topic_id ?? "未知"} />
       </UI.Content>
+      <CoverageIdentityCounts row={row} />
       <UI.Content className="mt-8 grid gap-8 sm:grid-cols-2">
         <UI.Content>
           <UI.Heading level={4} className="font-medium">

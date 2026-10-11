@@ -1,6 +1,12 @@
+// @vitest-environment happy-dom
+
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import { CoverageIdentityCounts } from "@/app/sources/components/coverage-identity-counts";
+
+afterEach(cleanup);
 
 vi.mock("@/api/caijifugai", () => ({
   getCollectionCoverage: vi.fn(),
@@ -200,5 +206,124 @@ describe("coverage facts", () => {
       }),
       { signal: controller.signal },
     );
+  });
+});
+
+describe("coverage identity accounting display", () => {
+  const mixed: HotKeyAPI.CollectionCoverageView = {
+    ...windowRow,
+    identity_count_basis: "retained_receipt_identity_v1",
+    observed_count: 20,
+    stored_observation_count: 12,
+    unique_content_count: 8,
+    inserted_count: 2,
+    updated_count: 3,
+    unchanged_count: 2,
+    unclassified_count: 1,
+    deduplicated_count: 10,
+  };
+
+  function fact(label: string) {
+    const group = screen.getByText(label, { selector: "dt" }).parentElement;
+    if (group === null) throw new Error("definition group missing");
+    return within(group);
+  }
+
+  it("keeps raw returns, stored observations and unique identities as separate denominators", () => {
+    render(createElement(CoverageIdentityCounts, { row: mixed }));
+    expect(fact("上游返回").getByText("20 条")).toBeDefined();
+    expect(fact("持久观察").getByText("12 条")).toBeDefined();
+    expect(fact("唯一身份").getByText("8 个唯一身份")).toBeDefined();
+    for (const [label, count] of [
+      ["新增", 2],
+      ["更新", 3],
+      ["未变", 2],
+      ["无法比较", 1],
+    ]) {
+      expect(fact(String(label)).getByText(`${count} 个身份`)).toBeDefined();
+      expect(fact(String(label)).getByText("分母：8 个唯一身份")).toBeDefined();
+    }
+    expect(fact("旧口径重复观察").getByText("10 条")).toBeDefined();
+    expect(
+      fact("旧口径重复观察").getByText(/不能作为未变数或与四类相加/),
+    ).toBeDefined();
+    expect(screen.getByText(/删除历史后可能改变/)).toBeDefined();
+  });
+
+  it("shows explicit zero identities with a zero denominator without inventing a percentage", () => {
+    const row = {
+      ...mixed,
+      observed_count: 0,
+      stored_observation_count: 0,
+      unique_content_count: 0,
+      inserted_count: 0,
+      updated_count: 0,
+      unchanged_count: 0,
+      unclassified_count: 0,
+      deduplicated_count: 0,
+    };
+    const { container } = render(
+      createElement(CoverageIdentityCounts, { row }),
+    );
+    expect(screen.getAllByText("0 个身份")).toHaveLength(4);
+    expect(screen.getAllByText("分母：0 个唯一身份")).toHaveLength(4);
+    expect(container.textContent).not.toMatch(/NaN|Infinity|%/);
+  });
+
+  it("preserves unknown numerators and denominator independently from known zeros", () => {
+    render(
+      createElement(CoverageIdentityCounts, {
+        row: {
+          ...mixed,
+          unique_content_count: null,
+          updated_count: null,
+          unchanged_count: 0,
+          unclassified_count: null,
+        },
+      }),
+    );
+    expect(fact("新增").getByText("2 个身份")).toBeDefined();
+    expect(fact("更新").getByText("未知")).toBeDefined();
+    expect(fact("未变").getByText("0 个身份")).toBeDefined();
+    expect(screen.getAllByText("分母：未知")).toHaveLength(4);
+  });
+
+  it.each([null, "retained_receipt_identity_v2"])(
+    "does not infer categories for unsupported basis %s",
+    (basis) => {
+      render(
+        createElement(CoverageIdentityCounts, {
+          row: { ...mixed, identity_count_basis: basis },
+        }),
+      );
+      expect(screen.getByText(/未提供可核对的身份计量口径/)).toBeDefined();
+      for (const label of ["新增", "更新", "未变", "无法比较"]) {
+        expect(fact(label).getByText("未知")).toBeDefined();
+        expect(fact(label).getByText("分母：未知")).toBeDefined();
+      }
+      expect(fact("旧口径重复观察").getByText("10 条")).toBeDefined();
+      expect(screen.queryByText("10 个身份")).toBeNull();
+    },
+  );
+
+  it("handles older responses missing the new fields without showing undefined or using legacy inserted counts", () => {
+    const row = { ...windowRow, inserted_count: 14, deduplicated_count: 7 };
+    for (const field of [
+      "identity_count_basis",
+      "stored_observation_count",
+      "unique_content_count",
+      "updated_count",
+      "unchanged_count",
+      "unclassified_count",
+    ])
+      Reflect.deleteProperty(row, field);
+    const { container } = render(
+      createElement(CoverageIdentityCounts, { row }),
+    );
+    expect(fact("持久观察").getByText("未知")).toBeDefined();
+    expect(fact("新增").getByText("未知")).toBeDefined();
+    expect(fact("旧口径重复观察").getByText("7 条")).toBeDefined();
+    expect(container.textContent).not.toContain("undefined");
+    expect(screen.queryByText("14 个身份")).toBeNull();
   });
 });
