@@ -8,11 +8,13 @@ from uuid import uuid4
 import httpx
 import pytest
 from pydantic import SecretStr
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import make_url
+from tests.conftest import validate_test_database_url
 from tests.integration.test_content_records import _user_scope
 from tests.integration.test_event_reading import event_read_client  # noqa: F401
 
+from core.config import Settings
 from db.metadata import metadata
 from jobs.execution import JobExecutionFailure, JobExecutionService, MessageReference
 from jobs.models import Job, OutboxMessage
@@ -233,17 +235,30 @@ def restore_database_url() -> Iterator[SecretStr]:
     source_url = os.getenv("HOTKEY_TEST_DATABASE_URL")
     if source_url is None:
         pytest.skip("isolated PostgreSQL test database is required")
+    validate_test_database_url(source_url)
     parsed = make_url(source_url)
-    name = f"hotkey_restore_{uuid4().hex}"
+    name = f"hotkey_test_restore_{uuid4().hex}"
     engine = create_engine(parsed.set(database="postgres"), isolation_level="AUTOCOMMIT")
     try:
         with engine.connect() as connection:
+            assert (
+                connection.scalar(
+                    text("SELECT 1 FROM pg_database WHERE datname=:name"), {"name": name}
+                )
+                is None
+            )
             connection.exec_driver_sql(f'CREATE DATABASE "{name}"')
         try:
             yield SecretStr(parsed.set(database=name).render_as_string(hide_password=False))
         finally:
             with engine.connect() as connection:
-                connection.exec_driver_sql(f'DROP DATABASE "{name}"')
+                connection.exec_driver_sql(f'DROP DATABASE "{name}" WITH (FORCE)')
+                assert (
+                    connection.scalar(
+                        text("SELECT 1 FROM pg_database WHERE datname=:name"), {"name": name}
+                    )
+                    is None
+                )
     finally:
         engine.dispose()
 
@@ -253,8 +268,9 @@ def test_backup_and_isolated_restore_verify_real_dump_and_all_registered_tables(
 ):
     owner = _user_scope(event_read_client)
     factory = event_read_client.app.state.session_factory
-    settings = event_read_client.app.state.settings.model_copy(
-        update={
+    settings = Settings.model_validate(
+        {
+            **event_read_client.app.state.settings.model_dump(),
             "operations_maintenance_enabled": True,
             "operations_backup_directory": tmp_path,
             "operations_restore_database_url": restore_database_url,

@@ -412,22 +412,35 @@ class Settings(BaseSettings):
     def validate_operations_restore_database_url(
         cls, value: SecretStr | None, info: ValidationInfo
     ) -> SecretStr | None:
+        """Require a separate local restore entry, including test-only names."""
         if value is None:
             return None
         parsed = urlsplit(value.get_secret_value())
         database_name = parsed.path.removeprefix("/")
         business_url = info.data.get("database_url")
+        source = urlsplit(business_url.get_secret_value()) if business_url is not None else None
+        is_test = info.data.get("environment") == "test"
+        prefix = "hotkey_test_restore_" if is_test else "hotkey_restore_"
+        max_suffix = 63 - len(prefix) if is_test else 48
+        if is_test and (
+            source is None
+            or source.scheme != "postgresql+psycopg"
+            or source.hostname not in {"localhost", "127.0.0.1", "::1"}
+            or not re.fullmatch(r"hotkey_test_[a-z0-9_]{1,51}", source.path.removeprefix("/"))
+            or source.query
+            or source.fragment
+        ):
+            raise ValueError("test restore verification requires a local hotkey_test source")
         if (
-            parsed.scheme not in {"postgresql", "postgresql+psycopg"}
+            parsed.scheme
+            not in ({"postgresql+psycopg"} if is_test else {"postgresql", "postgresql+psycopg"})
             or parsed.hostname not in {"localhost", "127.0.0.1", "::1"}
-            or not re.fullmatch(r"hotkey_restore_[a-z0-9_]{1,48}", database_name)
+            or not re.fullmatch(rf"{prefix}[a-z0-9_]{{1,{max_suffix}}}", database_name)
             or parsed.query
             or parsed.fragment
             or (business_url is not None and value == business_url)
         ):
-            raise ValueError(
-                "restore verification requires a separate local hotkey_restore database"
-            )
+            raise ValueError(f"restore verification requires a separate local {prefix} database")
         if business_url is not None:
             business = urlsplit(business_url.get_secret_value())
             if (

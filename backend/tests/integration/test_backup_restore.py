@@ -304,7 +304,10 @@ def test_restore_candidate_in_isolated_database_and_remove_it(
             before = {
                 row[0]
                 for row in connection.execute(
-                    text("SELECT datname FROM pg_database WHERE datname LIKE 'hotkey_restore_%'")
+                    text(
+                        "SELECT datname FROM pg_database "
+                        "WHERE datname ~ '^hotkey_test_restore_[a-z0-9_]+$'"
+                    )
                 )
             }
         with pytest.raises(BackupRestoreError, match="another database"):
@@ -329,7 +332,10 @@ def test_restore_candidate_in_isolated_database_and_remove_it(
             after = {
                 row[0]
                 for row in connection.execute(
-                    text("SELECT datname FROM pg_database WHERE datname LIKE 'hotkey_restore_%'")
+                    text(
+                        "SELECT datname FROM pg_database "
+                        "WHERE datname ~ '^hotkey_test_restore_[a-z0-9_]+$'"
+                    )
                 )
             }
         assert after == before
@@ -443,7 +449,10 @@ def test_missing_evidence_object_rejects_restore_before_creating_target(
         assert candidate.manifest.evidence_objects[0].state is EvidenceObjectState.MISSING
         with engine.connect() as connection:
             before = connection.execute(
-                text("SELECT count(*) FROM pg_database WHERE datname LIKE 'hotkey_restore_%'")
+                text(
+                    "SELECT count(*) FROM pg_database "
+                    "WHERE datname ~ '^hotkey_test_restore_[a-z0-9_]+$'"
+                )
             ).scalar_one()
         with pytest.raises(BackupRestoreError, match="missing evidence objects"):
             BackupRestoreService(
@@ -454,7 +463,10 @@ def test_missing_evidence_object_rejects_restore_before_creating_target(
             ).verify(candidate.directory)
         with engine.connect() as connection:
             after = connection.execute(
-                text("SELECT count(*) FROM pg_database WHERE datname LIKE 'hotkey_restore_%'")
+                text(
+                    "SELECT count(*) FROM pg_database "
+                    "WHERE datname ~ '^hotkey_test_restore_[a-z0-9_]+$'"
+                )
             ).scalar_one()
         assert after == before
         assert candidate.directory.exists()

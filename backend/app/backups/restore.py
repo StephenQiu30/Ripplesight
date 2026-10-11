@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import stat
 import time
 from dataclasses import dataclass
@@ -40,6 +41,8 @@ class BackupRestoreResult:
 
 
 class BackupRestoreService:
+    """Verify a candidate in a disposable database, preserving test isolation."""
+
     def __init__(
         self,
         *,
@@ -48,6 +51,18 @@ class BackupRestoreService:
         schema_path: Path,
         evidence_restore_verifier: EvidenceRestoreVerifier | None = None,
     ) -> None:
+        """Validate connection identities before any database I/O.
+
+        Args:
+            source_database_url: Candidate source identity, never a restore target.
+            isolation_database_url: Administrative entry for a new disposable target.
+            schema_path: Canonical schema used to reconcile the candidate.
+            evidence_restore_verifier: Optional verifier for archived object content.
+
+        Raises:
+            BackupRestoreError: URLs are invalid or a test source uses an unsafe
+                location, name, or connection parameters.
+        """
         try:
             self._source_url = make_url(source_database_url)
             self._isolation_url = make_url(isolation_database_url)
@@ -58,10 +73,36 @@ class BackupRestoreService:
             for url in (self._source_url, self._isolation_url)
         ):
             raise BackupRestoreError("PostgreSQL source and isolation databases are required")
+        self._test_source = (self._source_url.database or "").startswith("hotkey_test_")
+        if self._test_source and any(
+            url.host not in {"localhost", "127.0.0.1", "::1"}
+            or bool(url.query)
+            or (
+                not re.fullmatch(r"hotkey_test_[a-z0-9_]{1,51}", url.database or "")
+                and not (url is self._isolation_url and url.database == "postgres")
+            )
+            for url in (self._source_url, self._isolation_url)
+        ):
+            raise BackupRestoreError("test restore verification requires local isolated test URLs")
         self._schema_path = schema_path
         self._evidence_restore_verifier = evidence_restore_verifier
 
     def verify(self, candidate: Path) -> BackupRestoreResult:
+        """Restore and reconcile a candidate without writing to the source.
+
+        Args:
+            candidate: Existing candidate directory with a validated manifest.
+
+        Returns:
+            Verification evidence after the disposable target has been removed.
+            Test sources use hotkey_test_restore_ targets; other sources retain
+            hotkey_restore_ targets. Existing databases are never reused.
+
+        Raises:
+            BackupRestoreError: Validation, restoration, reconciliation, or
+                cleanup failed. Cleanup is attempted for every created target;
+                a cleanup failure is reported rather than claimed as removed.
+        """
         started = time.monotonic()
         manifest, archive = self._check_candidate(candidate)
         if any(item.state is EvidenceObjectState.MISSING for item in manifest.evidence_objects):
@@ -77,7 +118,8 @@ class BackupRestoreService:
         if evidence_count and self._evidence_restore_verifier is None:
             raise BackupRestoreError("MinIO evidence restore verification is required")
 
-        database_name = f"hotkey_restore_{uuid4().hex}"
+        prefix = "hotkey_test_restore_" if self._test_source else "hotkey_restore_"
+        database_name = f"{prefix}{uuid4().hex}"
         admin_engine = create_engine(self._isolation_url)
         created = False
         try:

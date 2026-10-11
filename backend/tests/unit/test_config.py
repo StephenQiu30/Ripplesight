@@ -292,6 +292,84 @@ def test_restore_cannot_target_business_database_using_another_loopback_alias() 
         )
 
 
+@pytest.mark.parametrize(
+    ("environment", "source", "target", "accepted"),
+    [
+        ("test", "hotkey_test_source", "hotkey_test_restore_target", True),
+        ("test", "hotkey_test_source", "hotkey_restore_target", False),
+        ("test", "hotkey", "hotkey_test_restore_target", False),
+        ("test", "hotkey_test_", "hotkey_test_restore_target", False),
+        ("test", "hotkey_test_UPPER", "hotkey_test_restore_target", False),
+        ("test", "hotkey_test_source", "hotkey_test_source", False),
+        ("test", "hotkey_test_restore_same", "hotkey_test_restore_same", False),
+        ("test", "hotkey_test_source", "hotkey_test_restore_" + "a" * 43, True),
+        ("test", "hotkey_test_source", "hotkey_test_restore_" + "a" * 44, False),
+        ("production", "hotkey", "hotkey_restore_target", True),
+        ("production", "hotkey", "hotkey_test_restore_target", False),
+        ("development", "hotkey", "hotkey_restore_" + "a" * 48, True),
+        ("development", "hotkey", "hotkey_restore_" + "a" * 49, False),
+    ],
+)
+def test_restore_entry_names_preserve_test_and_normal_boundaries(
+    environment: str, source: str, target: str, accepted: bool
+) -> None:
+    values = {
+        "environment": environment,
+        "web_origin": "https://example.com",
+        "database_url": f"postgresql+psycopg://test:test@localhost:5432/{source}",
+        "operations_restore_database_url": (
+            f"postgresql+psycopg://test:test@127.0.0.1:5432/{target}"
+        ),
+    }
+    if accepted:
+        settings = Settings(**values)
+        assert settings.operations_restore_database_url is not None
+    else:
+        with pytest.raises(ValidationError):
+            Settings(**values)
+
+
+@pytest.mark.parametrize(
+    ("source", "target"),
+    [
+        ("remote.example/hotkey_test_source", "127.0.0.1/hotkey_test_restore_target"),
+        ("127.0.0.1/hotkey_test_source?sslmode=disable", "127.0.0.1/hotkey_test_restore_target"),
+        ("127.0.0.1/hotkey_test_source", "remote.example/hotkey_test_restore_target"),
+        ("127.0.0.1/hotkey_test_source", "127.0.0.1/hotkey_test_restore_target?sslmode=disable"),
+        ("127.0.0.1/hotkey_test_source", "127.0.0.1/hotkey_test_restore_target#fragment"),
+    ],
+)
+def test_test_restore_configuration_rejects_unsafe_urls(source: str, target: str) -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            environment="test",
+            database_url=f"postgresql+psycopg://test:test@{source}",
+            operations_restore_database_url=f"postgresql+psycopg://test:test@{target}",
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "scheme"),
+    [
+        ("database_url", "mysql"),
+        ("database_url", "postgresql"),
+        ("operations_restore_database_url", "postgresql"),
+    ],
+)
+def test_test_restore_configuration_requires_the_runtime_postgresql_driver(
+    field: str, scheme: str
+) -> None:
+    values = {
+        "database_url": "postgresql+psycopg://test:test@127.0.0.1/hotkey_test_source",
+        "operations_restore_database_url": (
+            "postgresql+psycopg://test:test@127.0.0.1/hotkey_test_restore_target"
+        ),
+    }
+    values[field] = values[field].replace("postgresql+psycopg", scheme)
+    with pytest.raises(ValidationError):
+        Settings(environment="test", **values)
+
+
 def test_media_long_job_extends_derived_kafka_window_and_rejects_explicit_short_window() -> None:
     url = "postgresql+psycopg://test:test@127.0.0.1/hotkey_test"
     settings = Settings(database_url=url, media_mirror_enabled=True)

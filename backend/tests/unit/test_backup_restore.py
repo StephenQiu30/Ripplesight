@@ -7,12 +7,14 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
 from sqlalchemy.engine import URL
 
+from backups import restore
 from backups.adapters.minio import MinioEvidenceRestoreVerifier, MinioObjectInventory
 from backups.adapters.postgres import BackupToolError, PostgresDumpAdapter
 from backups.schemas import (
@@ -30,6 +32,90 @@ from backups.services import archive_evidence_objects, inventory_evidence_object
 from evidence.schemas import DeletionStatus, EvidenceBackupObjectRef
 
 NOW = datetime(2026, 9, 21, 14, tzinfo=UTC)
+
+
+@pytest.mark.parametrize("test_source", [True, False])
+@pytest.mark.parametrize("failure", [None, "create", "restore", "reconcile", "cleanup"])
+def test_restore_namespace_and_cleanup_preserve_database_ownership(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, test_source: bool, failure: str | None
+) -> None:
+    source = URL.create(
+        "postgresql+psycopg",
+        host="127.0.0.1",
+        database="hotkey_test_source" if test_source else "hotkey",
+    )
+    admin, target, connection = MagicMock(), MagicMock(), MagicMock()
+    admin.connect.return_value.execution_options.return_value.__enter__.return_value = connection
+    engines = [admin, target]
+    monkeypatch.setattr(restore, "create_engine", lambda _: engines.pop(0))
+    adapter = MagicMock()
+    monkeypatch.setattr(restore, "PostgresDumpAdapter", lambda _: adapter)
+    service = restore.BackupRestoreService(
+        source_database_url=source,
+        isolation_database_url=source.set(database="postgres"),
+        schema_path=tmp_path / "schema.sql",
+    )
+    monkeypatch.setattr(service, "_check_candidate", lambda _: (_manifest(), tmp_path / "dump"))
+    reconcile = MagicMock()
+    monkeypatch.setattr(service, "_check_restored_data", reconcile)
+    if failure == "create":
+        connection.exec_driver_sql.side_effect = restore.SQLAlchemyError(
+            "controlled create failure"
+        )
+    elif failure == "restore":
+        adapter.restore_archive.side_effect = BackupToolError("controlled restore failure")
+    elif failure == "reconcile":
+        reconcile.side_effect = restore.BackupRestoreError("controlled reconciliation failure")
+    elif failure == "cleanup":
+        connection.exec_driver_sql.side_effect = [
+            None,
+            restore.SQLAlchemyError("controlled cleanup"),
+        ]
+    if failure is None:
+        assert service.verify(tmp_path).database_restored
+    else:
+        with pytest.raises(restore.BackupRestoreError):
+            service.verify(tmp_path)
+    statements = [call.args[0] for call in connection.exec_driver_sql.call_args_list]
+    prefix = "hotkey_test_restore_" if test_source else "hotkey_restore_"
+    name = statements[0].split('"')[1]
+    assert name.startswith(prefix) and len(name.removeprefix(prefix)) == 32
+    assert len(name.encode()) <= 63
+    assert statements == (
+        [f'CREATE DATABASE "{name}"']
+        if failure == "create"
+        else [f'CREATE DATABASE "{name}"', f'DROP DATABASE "{name}"']
+    )
+    admin.dispose.assert_called_once()
+    if failure in {None, "reconcile", "cleanup"}:
+        target.dispose.assert_called_once()
+    else:
+        target.dispose.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("source", "isolation"),
+    [
+        ("remote.example/hotkey_test_source", "remote.example/postgres"),
+        ("127.0.0.1/hotkey_test_source?sslmode=disable", "127.0.0.1/postgres"),
+        ("127.0.0.1/hotkey_test_source", "127.0.0.1/postgres?sslmode=disable"),
+        ("127.0.0.1/hotkey_test_source", "127.0.0.1/hotkey"),
+        ("127.0.0.1/hotkey_test_", "127.0.0.1/postgres"),
+        ("127.0.0.1/hotkey_test_UPPER", "127.0.0.1/postgres"),
+    ],
+)
+def test_direct_restore_rejects_unsafe_test_urls_before_creating_an_engine(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, source: str, isolation: str
+) -> None:
+    engine = MagicMock()
+    monkeypatch.setattr(restore, "create_engine", engine)
+    with pytest.raises(restore.BackupRestoreError, match="local isolated test URLs"):
+        restore.BackupRestoreService(
+            source_database_url=f"postgresql+psycopg://test:test@{source}",
+            isolation_database_url=f"postgresql+psycopg://test:test@{isolation}",
+            schema_path=tmp_path / "schema.sql",
+        )
+    engine.assert_not_called()
 
 
 def _manifest(**changes: object) -> BackupManifest:
