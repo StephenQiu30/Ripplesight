@@ -52,7 +52,7 @@ def test_hackernews_pages_are_persisted_once_after_kafka_redelivery() -> None:
                     "INSERT INTO monitor_topics "
                     "(id, owner_id, name, status, readiness_status, current_version, "
                     "created_at, updated_at) VALUES "
-                    "(:id, :owner_id, 'HN Kafka replay', 'paused', "
+                    "(:id, :owner_id, 'HN Kafka replay', 'active', "
                     "'pending_source_selection', 1, :now, :now)"
                 ),
                 {"id": topic_id, "owner_id": owner_id, "now": now},

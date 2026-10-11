@@ -19,7 +19,7 @@ from typer.testing import CliRunner
 
 from cli.commands import app as cli_app
 from connections.adapters.local_secrets import BrowserStateError, BrowserStateStore
-from connections.presets import SOURCE_PRESETS
+from connections.presets import BILIBILI_CHROME_PRESET, SOURCE_PRESETS
 from connections.schemas import (
     ConnectionEvidenceOutcome,
     PersistedReadEvidenceInput,
@@ -1142,9 +1142,10 @@ def test_bilibili_safety_pause_requires_owner_review_and_records_versions(
     factory = client.app.state.session_factory
     with factory.begin() as session:
         applied = SourcePresetService(session).apply_in_transaction(
-            owner_id=owner_id, preset=SOURCE_PRESETS["bilibili"]
+            owner_id=owner_id, preset=BILIBILI_CHROME_PRESET
         )
-    settings = client.app.state.settings.model_copy(update={"mediacrawler_enabled": True})
+    settings = client.app.state.settings
+    settings.bilibili_chrome_owner_id = owner_id
     monkeypatch.setattr("content.discovery_execution.get_settings", lambda: settings)
     adapter_factory = KeywordDiscoveryExecutor(
         factory, lease_seconds=60

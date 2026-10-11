@@ -148,7 +148,7 @@ def test_google_news_kafka_replay_and_second_rule_version_keep_one_identity() ->
                     "INSERT INTO monitor_topics "
                     "(id, owner_id, name, status, readiness_status, current_version, "
                     "created_at, updated_at) VALUES "
-                    "(:id, :owner_id, 'Google News replay', 'paused', "
+                    "(:id, :owner_id, 'Google News replay', 'active', "
                     "'pending_source_selection', 1, :now, :now)"
                 ),
                 {"id": topic_id, "owner_id": owner_id, "now": end},

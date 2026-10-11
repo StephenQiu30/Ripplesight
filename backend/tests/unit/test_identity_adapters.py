@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ssl
+from queue import Empty, Queue
 from threading import Event
 from time import monotonic
 
@@ -114,17 +115,51 @@ def test_smtp_checks_tls_before_authentication_and_delivery(monkeypatch) -> None
     assert calls == ["connect", "ehlo", "tls", "ehlo", "auth", "send", "close"]
 
 
-def test_smtp_deadline_prevents_a_late_dns_result_from_sending(monkeypatch) -> None:
-    monkeypatch.setattr(email_module, "_DELIVERY_DEADLINE_SECONDS", 0.02)
+@pytest.mark.parametrize("blocked_stage", ["tls_context", "dns"])
+def test_smtp_deadline_prevents_late_setup_from_sending(
+    monkeypatch: pytest.MonkeyPatch, blocked_stage: str
+) -> None:
+    """A timeout can occur before or after an SMTP connection is constructed."""
+    clock = [100.0]
+    monkeypatch.setattr(email_module, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(email_module, "_DELIVERY_DEADLINE_SECONDS", 10)
+    setup_started = Event()
     release = Event()
-    closed = Event()
+    finished = Event()
+    connected: list[object] = []
+    closed: list[object] = []
     sent: list[object] = []
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+
+    def block_setup() -> None:
+        setup_started.set()
+        assert release.wait(timeout=5), "test did not release SMTP setup"
+
+    def create_context() -> ssl.SSLContext:
+        if blocked_stage == "tls_context":
+            block_setup()
+        return context
+
+    class DeadlineQueue(Queue[bool]):
+        def get(self, block: bool = True, timeout: float | None = None) -> bool:
+            # Establish which setup stage is blocked before expiring the caller's wait.
+            # This avoids depending on thread scheduling or trust-store load time.
+            assert setup_started.wait(timeout=5), "SMTP worker did not reach the setup stage"
+            assert timeout == pytest.approx(10)
+            clock[0] += 10
+            raise Empty
+
+        def put(self, item: bool, block: bool = True, timeout: float | None = None) -> None:
+            super().put(item, block=block, timeout=timeout)
+            finished.set()
 
     class SMTP:
         sock = None
 
         def __init__(self, **kwargs: object) -> None:
-            release.wait(timeout=1)
+            connected.append(self)
+            if blocked_stage == "dns":
+                block_setup()
 
         def ehlo(self) -> None:
             pass
@@ -137,18 +172,20 @@ def test_smtp_deadline_prevents_a_late_dns_result_from_sending(monkeypatch) -> N
             return {}
 
         def close(self) -> None:
-            closed.set()
+            closed.append(self)
 
+    monkeypatch.setattr(email_module.ssl, "create_default_context", create_context)
+    monkeypatch.setattr(email_module, "Queue", DeadlineQueue)
     monkeypatch.setattr(email_module.smtplib, "SMTP", SMTP)
     adapter = SmtpEmailAdapter(
         "smtp.example.com", 587, "starttls", None, None, "sender@example.com"
     )
-    started = monotonic()
     try:
         with pytest.raises(ApplicationError, match="email_delivery_unavailable"):
             adapter.send_code("user@example.com", "123456")
-        assert monotonic() - started < 0.5
     finally:
         release.set()
-    assert closed.wait(timeout=1)
+    assert finished.wait(timeout=5)
+    assert len(connected) == (1 if blocked_stage == "dns" else 0)
+    assert closed == connected
     assert sent == []

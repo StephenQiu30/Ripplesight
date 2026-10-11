@@ -176,7 +176,7 @@ def test_news_search_kafka_replay_preserves_normalized_identity_and_partial_cove
                     "INSERT INTO monitor_topics "
                     "(id, owner_id, name, status, readiness_status, current_version, "
                     "created_at, updated_at) VALUES "
-                    "(:id, :owner_id, 'SearXNG replay', 'paused', "
+                    "(:id, :owner_id, 'SearXNG replay', 'active', "
                     "'pending_source_selection', 1, :now, :now)"
                 ),
                 {"id": topic_id, "owner_id": owner_id, "now": end},
