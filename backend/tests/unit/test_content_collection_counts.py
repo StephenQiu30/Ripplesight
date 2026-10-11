@@ -5,7 +5,10 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from content.collection_counts import classify_collection_identities
+from content.collection_counts import (
+    classify_collection_execution_identities,
+    classify_collection_identities,
+)
 from content.models import ContentObservation
 
 
@@ -122,3 +125,18 @@ def test_equal_received_times_use_stable_id_and_ignore_source_publication_order(
     later.observed_at = datetime(2000, 1, 1, tzinfo=UTC)
     counts = classify_collection_identities([later, old], job_ids=(second, first))
     assert counts[first].new == counts[second].unchanged == 1
+
+
+def test_explicit_execution_attribution_compares_prior_rounds_not_count_subtraction() -> None:
+    job, content, version = uuid4(), uuid4(), uuid4()
+    first = _observation(job, content, version, 0, execution_epoch=1)
+    second = _observation(job, content, version, 1, execution_epoch=2)
+    unassigned = _observation(job, content, None, 2)
+    third = _observation(job, content, version, 3, execution_epoch=3)
+    counts = classify_collection_execution_identities(
+        [third, unassigned, second, first], job_id=job, epochs=(1, 2, 3, 4)
+    )
+    assert counts[1].new == 1
+    assert counts[2].new == 0 and counts[2].unchanged == 1
+    assert counts[3].unclassified == 1
+    assert counts[4].new == counts[4].updated == counts[4].unchanged == counts[4].unclassified == 0

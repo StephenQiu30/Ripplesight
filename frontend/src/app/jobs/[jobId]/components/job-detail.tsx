@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/collapsible";
 import { PageState } from "@/components/system/page-state";
 import { QueryPlan } from "@/components/monitors/query-plan";
+import { JobExecutionCounts } from "./job-execution-counts";
 import { CollectionIdentityCounts } from "@/components/collection/identity-counts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,7 +45,13 @@ type DetailState =
   | { status: "loading" }
   | { status: "ready"; job: HotKeyAPI.JobStatusView }
   | { status: "not-found" }
-  | { status: "error"; message: string; requestId?: string };
+  | {
+      status: "error";
+      message: string;
+      requestId?: string;
+      httpStatus?: number;
+      errorCode?: string;
+    };
 
 const STAGE_LABELS: Record<HotKeyAPI.JobStage, string> = {
   request: "请求来源",
@@ -105,6 +112,8 @@ function toErrorState(
       status: "error",
       message: error.message,
       requestId: error.requestId,
+      httpStatus: error.status,
+      errorCode: error.code,
     };
   }
   return { status: "error", message: "任务状态加载失败，请稍后重试。" };
@@ -461,6 +470,16 @@ export function JobDetail({ jobId }: JobDetailProps) {
       if (error instanceof ApiRequestError && error.kind === "cancelled")
         return;
       if (controller.signal.aborted) return;
+      if (
+        error instanceof ApiRequestError &&
+        (error.status === 401 || error.status === 403 || error.status === 404)
+      ) {
+        setIsStale(false);
+        setState(
+          error.status === 404 ? { status: "not-found" } : toErrorState(error),
+        );
+        return;
+      }
       setIsStale(true);
       toast.error(
         error instanceof ApiRequestError ? error.message : "刷新失败，请重试。",
@@ -588,9 +607,19 @@ export function JobDetail({ jobId }: JobDetailProps) {
   if (state.status === "error") {
     return (
       <PageState
-        state="error"
+        state={
+          state.httpStatus === 401 || state.httpStatus === 403
+            ? "forbidden"
+            : "error"
+        }
+        errorCode={state.errorCode}
+        httpStatus={state.httpStatus}
         eyebrow="加载失败"
-        title="暂时无法读取任务"
+        title={
+          state.httpStatus === 401 || state.httpStatus === 403
+            ? "暂时无法访问任务"
+            : "暂时无法读取任务"
+        }
         description="请重新加载任务状态。"
         action={
           <Button
@@ -752,6 +781,7 @@ export function JobDetail({ jobId }: JobDetailProps) {
           <UI.Text className="text-muted-foreground mt-4 text-sm">
             本任务累计，包含全部重试轮次，不是当前重试轮次的新增量。已保存结果不等于唯一身份；任务进度与材料计量可能先后更新。
           </UI.Text>
+          <JobExecutionCounts job={job} />
         </UI.Content>
       ) : null}
       <Collapsible className="mt-10">

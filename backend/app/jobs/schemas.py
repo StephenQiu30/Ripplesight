@@ -1279,6 +1279,19 @@ class JobCollectionCountsView(BaseModel):
     deduplicated_count: int = Field(ge=0)
 
 
+class JobCollectionExecutionView(BaseModel):
+    """One actual lease execution, distinct from its shared collection budget cycle."""
+
+    model_config = ConfigDict(frozen=True)
+
+    execution_epoch: int = Field(ge=1)
+    collection_cycle_no: int = Field(ge=1)
+    started_at: datetime
+    finished_at: datetime | None
+    outcome: Literal["expired", "succeeded", "cancelled", "delayed", "failed"] | None
+    counts: JobCollectionCountsView | None
+
+
 class JobStatusView(BaseModel):
     """Owner-scoped task receipt with optional retained, whole-job material counts."""
 
@@ -1313,6 +1326,8 @@ class JobStatusView(BaseModel):
     coverage_windows: tuple[CoverageWindowView, ...] = ()
     query_plan: KeywordQueryPlanView | None = None
     collection_counts: JobCollectionCountsView | None = None
+    collection_executions: tuple[JobCollectionExecutionView, ...] | None = None
+    collection_executions_has_more: bool = False
 
 
 class JobHistoryItemView(BaseModel):

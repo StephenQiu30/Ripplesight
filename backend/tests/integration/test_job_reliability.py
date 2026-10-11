@@ -22,6 +22,8 @@ from structlog.contextvars import get_contextvars
 from tests.conftest import TEST_DATABASE_TRUNCATE
 from tests.process_targets import _controlled_long_child
 
+from connections.presets import SOURCE_PRESETS
+from connections.services import SourcePresetService
 from core.config import Settings
 from core.errors import ApplicationError
 from jobs.execution import (
@@ -380,15 +382,36 @@ def test_lost_response_retry_returns_the_original_job_and_one_outbox(
     }
 
 
+@pytest.mark.parametrize("kind", ["monitor.collect", "keyword.search"])
 def test_manual_retry_opens_budget_cycle_only_when_reacquired(
     job_context: JobTestContext,
+    kind: str,
 ) -> None:
+    command = _command()
+    if kind == "keyword.search":
+        with job_context.sessions() as session, session.begin():
+            applied = SourcePresetService(session).apply_in_transaction(
+                owner_id=job_context.owner_id, preset=SOURCE_PRESETS["hackernews"]
+            )
+        command = command.model_copy(
+            update={
+                "kind": kind,
+                "observation": command.observation.model_copy(update={"source_key": "hackernews"}),
+                "scope": {
+                    "connection_id": str(applied.connection_id),
+                    "connection_version": applied.connection_version,
+                },
+            }
+        )
     with job_context.sessions() as session:
-        job = JobService(session).accept(owner_id=job_context.owner_id, command=_command())
+        job = JobService(session).accept(owner_id=job_context.owner_id, command=command)
     first_at = job.created_at + timedelta(seconds=1)
     with job_context.sessions() as session:
         execution = JobExecutionService(session, lease_seconds=60, clock=lambda: first_at)
         lease = execution.acquire(job_id=job.id, worker_id="cycle-first")
+        lease = execution.save_checkpoint(
+            lease, sequence=1, checkpoint={"collection.observed_count": 3}, observed_items=3
+        )
         lease, allowed = execution.begin_request(lease)
         assert allowed
         execution.record_failure(
@@ -425,6 +448,9 @@ def test_manual_retry_opens_budget_cycle_only_when_reacquired(
         renewed = execution.acquire(job_id=job.id, worker_id="cycle-second")
         with pytest.raises(StaleExecutionLeaseError):
             execution.begin_request(lease)
+        renewed = execution.save_checkpoint(
+            renewed, sequence=2, checkpoint={"collection.observed_count": 5}, observed_items=2
+        )
         renewed, allowed = execution.begin_request(renewed)
         assert allowed
     with job_context.engine.connect() as connection:
@@ -450,6 +476,15 @@ def test_manual_retry_opens_budget_cycle_only_when_reacquired(
     assert tuple(current) == (2, next_at, 1, first_at, 2)
     assert attempts == [(1, first_at), (2, next_at)]
     assert outbox_count == 2
+
+    if kind == "keyword.search":
+        with job_context.sessions() as session:
+            view = JobService(session).get_status(owner_id=job_context.owner_id, job_id=job.id)
+        assert view.collection_executions is not None
+        second, first = view.collection_executions
+        assert second.collection_cycle_no == 2 and first.collection_cycle_no == 1
+        assert second.counts is not None and first.counts is not None
+        assert second.counts.observed_count == 2 and first.counts.observed_count == 3
 
 
 def test_concurrent_manual_retry_clicks_create_one_new_cycle_and_outbox(

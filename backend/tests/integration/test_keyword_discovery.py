@@ -776,6 +776,16 @@ def test_36kr_feed_replay_keeps_source_time_and_separate_budget() -> None:
             "deduplicated_count": 1,
         }
         assert retry_view.progress.requests_sent == 2
+        assert retry_view.collection_executions is not None
+        second_execution, first_execution = retry_view.collection_executions
+        assert second_execution.collection_cycle_no == first_execution.collection_cycle_no
+        assert first_execution.outcome == "delayed" and first_execution.counts is not None
+        assert first_execution.counts.observed_count is None
+        assert first_execution.counts.unique_content_count == 0
+        assert second_execution.counts is not None
+        assert second_execution.counts.observed_count == 3
+        assert second_execution.counts.stored_observation_count == 1
+        assert second_execution.counts.unchanged_count == 1
 
         with Session(engine) as session:
             records = session.scalars(

@@ -440,3 +440,67 @@ def test_collection_snapshot_facts_distinguish_empty_snapshot_from_absence(
             assert other_owner_facts[0].snapshot_id is None
         finally:
             session.rollback()
+
+
+def test_execution_denominators_use_one_snapshot_while_new_receipt_arrives(
+    content_fact_sessions: sessionmaker[Session],
+) -> None:
+    owner, job, baseline, content, version = (uuid4() for _ in range(5))
+    now = datetime(2026, 10, 12, tzinfo=UTC)
+    with content_fact_sessions() as session, session.begin():
+        for identifier in (job, baseline):
+            _seed_job(session, owner, identifier, now)
+        _seed_content(session, owner, content, (version,), now)
+        _seed_observation(session, owner, baseline, content, version, now)
+        session.execute(
+            text(
+                "INSERT INTO job_attempts (id,job_id,lease_epoch,collection_cycle_no,worker_id,"
+                "queued_at,started_at,lease_expires_at,collection_counts_tracked) "
+                "VALUES (:id,:job,1,1,'test',:now,:now,:expires,true)"
+            ),
+            {"id": uuid4(), "job": job, "now": now, "expires": now + timedelta(seconds=60)},
+        )
+    reads = 0
+
+    def append_after_snapshot(
+        _connection: object,
+        _cursor: object,
+        statement: str,
+        _parameters: object,
+        _context: object,
+        _executemany: bool,
+    ) -> None:
+        nonlocal reads
+        if not statement.lstrip().lower().startswith("select"):
+            return
+        reads += 1
+        if reads > 1:
+            return
+        with content_fact_sessions() as writer, writer.begin():
+            _seed_observation(writer, owner, job, content, version, now + timedelta(seconds=1))
+            writer.execute(
+                text("UPDATE content_observations SET execution_epoch=1 WHERE job_id=:job"),
+                {"job": job},
+            )
+
+    with content_fact_sessions() as session, session.begin():
+        engine = session.get_bind()
+        event.listen(engine, "after_cursor_execute", append_after_snapshot)
+        try:
+            counts = ContentService(session).collection_execution_counts_in_transaction(
+                owner_id=owner, job_id=job, epochs=(1, 2)
+            )
+        finally:
+            event.remove(engine, "after_cursor_execute", append_after_snapshot)
+        assert reads == 1
+        assert all(item.ingested_count == item.observation_count == 0 for item in counts)
+        latest = ContentService(session).collection_execution_counts_in_transaction(
+            owner_id=owner, job_id=job, epochs=(1, 2)
+        )
+        assert latest[0].ingested_count == latest[0].unchanged_count == 1
+        assert latest[0].content_version_ids == (version,)
+        assert latest[1].ingested_count == 0
+        denied = ContentService(session).collection_execution_counts_in_transaction(
+            owner_id=uuid4(), job_id=job, epochs=(1,)
+        )
+        assert denied[0].ingested_count == 0

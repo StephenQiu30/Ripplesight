@@ -88,6 +88,12 @@ class CollectionContentCountView(OutputModel):
     content_version_ids: tuple[UUID, ...]
 
 
+class CollectionExecutionContentCountView(CollectionContentCountView):
+    """Retained facts attributed to one actual execution lease."""
+
+    execution_epoch: int = Field(ge=1)
+
+
 class CollectionContentFactView(CollectionContentCountView):
     content_ids: tuple[UUID, ...]
     analysis_targets_complete: bool
@@ -280,6 +286,7 @@ def _validate_opaque_identifier(value: str | None, *, field_name: str) -> str | 
 class PersistContentPostInput(InputModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
 
+    execution_epoch: int | None = Field(default=None, ge=1)
     job_id: UUID
     source_operation_id: UUID
     connection_id: UUID

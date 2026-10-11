@@ -76,6 +76,7 @@ from jobs.schemas import (
     JobAcceptanceInput,
     JobCancellationView,
     JobCollectionCountsView,
+    JobCollectionExecutionView,
     JobContinuousFailureIssueView,
     JobControlStatus,
     JobDelayReason,
@@ -367,6 +368,19 @@ class CoverageWindowService:
             sequence=lease.checkpoint_sequence + 1,
             checkpoint=progress.checkpoint,
             progress=job_progress,
+            observed_items=(
+                observed_items
+                if observed_items is not None
+                and (
+                    observed_items > 0
+                    or (
+                        page_state
+                        in {SourcePageState.EMPTY, SourcePageState.COMPLETE, SourcePageState.MORE}
+                        and stop_reason is None
+                    )
+                )
+                else None
+            ),
         )
         view = self.record_page_in_transaction(
             lease=updated,
@@ -3172,6 +3186,7 @@ class JobService:
         ):
             deadline = model.collection_cycle_started_at + timedelta(seconds=budget_limit)
             budget_remaining_us = max(0, _duration_us(model.completed_at or now, deadline) or 0)
+        collection_executions, executions_has_more = self._collection_executions(model)
         return JobStatusView(
             id=model.id,
             operation_id=model.operation_id,
@@ -3210,10 +3225,67 @@ class JobService:
             source_freshness=self._source_freshness(model, now=now),
             coverage_windows=self._coverage_windows(model),
             collection_counts=self._collection_counts(model),
+            collection_executions=collection_executions,
+            collection_executions_has_more=executions_has_more,
             query_plan=read_keyword_query_plan(model.scope)
             if model.kind == "keyword.search"
             else None,
         )
+
+    def _collection_executions(
+        self, model: Job
+    ) -> tuple[tuple[JobCollectionExecutionView, ...] | None, bool]:
+        if model.kind not in {"keyword.search", "source.comments"}:
+            return None, False
+        # Defer the content service import to the established jobs/content boundary.
+        from content.services import ContentService
+
+        attempts = self._session.scalars(
+            select(JobAttempt)
+            .where(JobAttempt.job_id == model.id)
+            .order_by(JobAttempt.lease_epoch.desc())
+            .limit(21)
+        ).all()
+        visible = attempts[:20]
+        facts = {
+            fact.execution_epoch: fact
+            for fact in ContentService(self._session).collection_execution_counts_in_transaction(
+                owner_id=model.owner_id,
+                job_id=model.id,
+                epochs=tuple(
+                    item.lease_epoch for item in visible if item.collection_counts_tracked
+                ),
+            )
+        }
+        result = []
+        for item in visible:
+            fact = facts.get(item.lease_epoch)
+            counts = (
+                JobCollectionCountsView(
+                    observed_count=item.collection_observed_count,
+                    stored_observation_count=fact.observation_count,
+                    unique_content_count=fact.ingested_count,
+                    identity_count_basis="retained_receipt_identity_v1",
+                    inserted_count=fact.first_ingested_count,
+                    updated_count=fact.updated_count,
+                    unchanged_count=fact.unchanged_count,
+                    unclassified_count=fact.unclassified_count,
+                    deduplicated_count=fact.deduplicated_count,
+                )
+                if fact is not None
+                else None
+            )
+            result.append(
+                JobCollectionExecutionView(
+                    execution_epoch=item.lease_epoch,
+                    collection_cycle_no=item.collection_cycle_no,
+                    started_at=item.started_at,
+                    finished_at=item.finished_at,
+                    outcome=item.outcome,
+                    counts=counts,
+                )
+            )
+        return tuple(result), len(attempts) > 20
 
     def _collection_counts(self, model: Job) -> JobCollectionCountsView | None:
         if model.kind not in {"keyword.search", "source.comments"}:

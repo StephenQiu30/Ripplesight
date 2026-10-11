@@ -795,6 +795,14 @@ class JobAttempt(Base):
     __table_args__ = (
         UniqueConstraint("job_id", "lease_epoch", name="job_attempts_job_epoch_key"),
         CheckConstraint("lease_epoch >= 1", name="job_attempts_lease_epoch_check"),
+        CheckConstraint(
+            "collection_observed_count IS NULL OR collection_observed_count >= 0",
+            name="job_attempts_observed_count_check",
+        ),
+        CheckConstraint(
+            "collection_counts_tracked OR collection_observed_count IS NULL",
+            name="job_attempts_untracked_count_check",
+        ),
         CheckConstraint("collection_cycle_no >= 1", name="job_attempts_cycle_no_check"),
         CheckConstraint("queued_at <= started_at", name="job_attempts_queue_wait_check"),
         CheckConstraint(
@@ -821,6 +829,8 @@ class JobAttempt(Base):
     job_id: Mapped[UUID] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"))
     lease_epoch: Mapped[int] = mapped_column(BigInteger)
     collection_cycle_no: Mapped[int] = mapped_column(BigInteger)
+    collection_counts_tracked: Mapped[bool] = mapped_column(server_default=text("false"))
+    collection_observed_count: Mapped[int | None] = mapped_column(BigInteger)
     worker_id: Mapped[str] = mapped_column(String(128))
     queued_at: Mapped[datetime]
     started_at: Mapped[datetime]

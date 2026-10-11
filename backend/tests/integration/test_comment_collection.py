@@ -19,7 +19,7 @@ from tests.integration.test_topic_runs import monitor_topic_client as _topic_cli
 
 from content.comments_execution import CommentsExecutor
 from jobs.execution import JobCompletion
-from jobs.services import OutboxEnvelope
+from jobs.services import JobService, OutboxEnvelope
 from sources.adapters.hackernews import HackerNewsAdapter
 from worker.app import JobExecutionContext, create_job_message_handler
 from worker.messaging import MessageHandler, process_message, publish_outbox
@@ -176,6 +176,16 @@ def test_manual_comments_kafka_redelivery_keeps_threads_budget_and_offset(
         assert committed[0].offset == offset + 2
         assert len(requested) == 1
         with sessions() as session:
+            owner_id = session.scalar(
+                text("SELECT owner_id FROM jobs WHERE id=:id"), {"id": job_id}
+            )
+            assert owner_id is not None
+            view = JobService(session).get_status(owner_id=owner_id, job_id=job_id)
+            assert view.collection_executions is not None and len(view.collection_executions) == 1
+            counts = view.collection_executions[0].counts
+            assert counts is not None
+            assert counts.observed_count == counts.stored_observation_count == 2
+            assert counts.inserted_count == counts.unique_content_count == 2
             assert session.execute(
                 text("SELECT status, requests_sent, items_saved FROM jobs WHERE id = :job_id"),
                 {"job_id": job_id},

@@ -300,6 +300,7 @@ class JobExecutionService:
                     job_id=model.id,
                     lease_epoch=model.lease_epoch,
                     collection_cycle_no=model.collection_cycle_no,
+                    collection_counts_tracked=model.kind in {"keyword.search", "source.comments"},
                     worker_id=worker_id,
                     queued_at=queued_at,
                     started_at=now,
@@ -318,6 +319,7 @@ class JobExecutionService:
         sequence: int,
         checkpoint: Mapping[str, CheckpointValue],
         progress: JobProgress | None = None,
+        observed_items: int | None = None,
     ) -> ExecutionLease:
         self._session.rollback()
         with self._session.begin():
@@ -326,6 +328,7 @@ class JobExecutionService:
                 sequence=sequence,
                 checkpoint=checkpoint,
                 progress=progress,
+                observed_items=observed_items,
             )
 
     def require_current_lease_in_transaction(self, lease: ExecutionLease) -> ExecutionLease:
@@ -404,6 +407,34 @@ class JobExecutionService:
             collection_cycle=model.collection_cycle_requests_sent,
         )
 
+    def _record_collection_observed(
+        self, model: Job, checkpoint: dict[str, CheckpointValue], observed_items: int | None
+    ) -> None:
+        """Add only a newly committed page's upstream delta to its fenced attempt."""
+        if model.kind not in {"keyword.search", "source.comments"} or observed_items is None:
+            return
+        current = checkpoint.get("collection.observed_count")
+        previous = model.checkpoint.get("collection.observed_count", 0)
+        if (
+            type(current) is not int
+            or type(previous) is not int
+            or previous < 0
+            or current < previous
+            or type(observed_items) is not int
+            or observed_items < 0
+            or current - previous != observed_items
+        ):
+            raise CheckpointConflictError("observed count must be nonnegative and monotonic")
+        attempt = self._session.scalar(
+            select(JobAttempt).where(
+                JobAttempt.job_id == model.id, JobAttempt.lease_epoch == model.lease_epoch
+            )
+        )
+        if attempt is not None and attempt.collection_counts_tracked:
+            attempt.collection_observed_count = (
+                (attempt.collection_observed_count or 0) + current - previous
+            )
+
     def save_checkpoint_in_transaction(
         self,
         lease: ExecutionLease,
@@ -411,6 +442,7 @@ class JobExecutionService:
         sequence: int,
         checkpoint: Mapping[str, CheckpointValue],
         progress: JobProgress | None = None,
+        observed_items: int | None = None,
     ) -> ExecutionLease:
         """Persist one fenced checkpoint inside an existing outer transaction."""
         stored_checkpoint = _validate_checkpoint(checkpoint)
@@ -429,6 +461,7 @@ class JobExecutionService:
         elif sequence == model.checkpoint_sequence + 1:
             if progress is not None and progress.items_saved < model.items_saved:
                 raise CheckpointConflictError("saved item count cannot decrease")
+            self._record_collection_observed(model, stored_checkpoint, observed_items)
             model.checkpoint_sequence = sequence
             model.checkpoint = stored_checkpoint
             if progress is not None:

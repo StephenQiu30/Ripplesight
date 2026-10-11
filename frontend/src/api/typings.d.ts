@@ -3707,6 +3707,21 @@ declare namespace HotKeyAPI {
     deduplicated_count: number;
   };
 
+  type JobCollectionExecutionView = {
+    /** Execution Epoch */
+    execution_epoch: number;
+    /** Collection Cycle No */
+    collection_cycle_no: number;
+    /** Started At */
+    started_at: string;
+    /** Finished At */
+    finished_at: string | null;
+    /** Outcome */
+    outcome:
+      "expired" | "succeeded" | "cancelled" | "delayed" | "failed" | null;
+    counts: JobCollectionCountsView | null;
+  };
+
   type JobContinuousFailureIssueView = {
     /** Source Key */
     source_key: string;
@@ -3865,6 +3880,10 @@ declare namespace HotKeyAPI {
     coverage_windows?: CoverageWindowView[];
     query_plan?: KeywordQueryPlanView | null;
     collection_counts?: JobCollectionCountsView | null;
+    /** Collection Executions */
+    collection_executions?: JobCollectionExecutionView[] | null;
+    /** Collection Executions Has More */
+    collection_executions_has_more?: boolean;
   };
 
   type JobView = {

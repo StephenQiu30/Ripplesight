@@ -768,6 +768,7 @@ class CommentPageCommitService:
                     owner_id=owner_id,
                     command=PersistContentPostInput(
                         job_id=lease.job_id,
+                        execution_epoch=lease.epoch,
                         source_operation_id=uuid5(page_operation_id, item.external_id),
                         connection_id=connection_id,
                         connection_version=connection_version,

@@ -38,6 +38,7 @@ function CountFact({
 export function CollectionIdentityCounts({
   row,
   headingLevel = 4,
+  scope = "job",
 }: {
   row: Partial<
     Pick<
@@ -54,14 +55,16 @@ export function CollectionIdentityCounts({
     >
   >;
   headingLevel?: 2 | 4;
+  scope?: "job" | "execution";
 }) {
+  const scopeLabel = scope === "execution" ? "本执行轮" : "本任务";
   const supported = row.identity_count_basis === "retained_receipt_identity_v1";
   const denominator = quantity(row.unique_content_count, "个唯一身份");
   const categories = [
     {
       label: "新增",
       count: row.inserted_count,
-      explanation: "首次保留观察属于本任务。",
+      explanation: `首次保留观察属于${scopeLabel}。`,
     },
     {
       label: "更新",
@@ -91,9 +94,13 @@ export function CollectionIdentityCounts({
       </UI.Heading>
       <UI.Content as="dl" className="grid grid-cols-2 gap-6 sm:grid-cols-3">
         <CountFact
-          label="上游返回"
+          label={scope === "execution" ? "已记录上游返回" : "上游返回"}
           value={quantity(row.observed_count, "条")}
-          explanation="精筛前返回的条数，可能含重复及窗口外材料。"
+          explanation={
+            scope === "execution"
+              ? "原子提交页面的精筛前返回条数；未提交响应不在此计量内。"
+              : "精筛前返回的条数，可能含重复及窗口外材料。"
+          }
         />
         <CountFact
           label="持久观察"
@@ -103,11 +110,12 @@ export function CollectionIdentityCounts({
         <CountFact
           label="唯一身份"
           value={denominator}
-          explanation="本任务持久观察按内容身份去重，是下列四类的共同分母。"
+          explanation={`${scopeLabel}持久观察按内容身份去重，是下列四类的共同分母。`}
         />
       </UI.Content>
       <UI.Text className="text-muted-foreground text-sm">
-        四类互斥，合计为本任务唯一身份数。不同分母不相加，不表示全平台覆盖率。
+        四类互斥，合计为{scopeLabel}
+        唯一身份数。不同分母不相加，不表示全平台覆盖率。
       </UI.Text>
       {!supported ? (
         <UI.Text className="text-muted-foreground text-sm">
@@ -129,11 +137,12 @@ export function CollectionIdentityCounts({
         <CountFact
           label="旧口径重复观察"
           value={quantity(row.deduplicated_count, "条")}
-          explanation="持久观察数减新增身份数，包含旧帖更新及同任务多次观察，不能作为未变数或与四类相加。"
+          explanation={`持久观察数减新增身份数，包含旧帖更新及${scopeLabel}多次观察，不能作为未变数或与四类相加。`}
         />
       </UI.Content>
       <UI.Text className="text-muted-foreground text-xs">
-        分类依据当前保留的观察历史；删除历史后可能改变。新增身份在本任务内更新仍只记新增，正文与指标同时变化只记一次更新。未知不当零，不计算百分比。
+        分类依据当前保留的观察历史；删除历史后可能改变。新增身份在{scopeLabel}
+        内更新仍只记新增，正文与指标同时变化只记一次更新。未知不当零，不计算百分比。
       </UI.Text>
     </UI.Content>
   );

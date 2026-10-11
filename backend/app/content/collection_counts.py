@@ -83,3 +83,41 @@ def _compare_observations(
         if (before is None) != (after is None):
             missing = True
     return _IdentityState.UNCLASSIFIED if missing else _IdentityState.UNCHANGED
+
+
+def classify_collection_execution_identities(
+    history: Sequence[ContentObservation], *, job_id: UUID, epochs: tuple[int, ...]
+) -> dict[int, CollectionIdentityCounts]:
+    """Partition explicitly attributed identities using retained earlier receipts.
+
+    Args:
+        history: Owner-scoped history for identities observed in the selected rounds.
+        job_id: Task whose explicit execution provenance is selected.
+        epochs: Actual lease epochs, distinct from shared collection budget cycles.
+
+    Returns:
+        One mutually exclusive identity partition per requested epoch. Unattributed
+        receipts remain comparison context but never count in a guessed round.
+        Deleting retained history can change subsequent classifications.
+    """
+    states: dict[int, dict[UUID, _IdentityState]] = {epoch: {} for epoch in epochs}
+    previous_by_content: dict[UUID, ContentObservation] = {}
+    for current in sorted(history, key=lambda item: (item.received_at, item.id)):
+        previous = previous_by_content.get(current.content_id)
+        previous_by_content[current.content_id] = current
+        if current.job_id != job_id or current.execution_epoch not in states:
+            continue
+        values = states[current.execution_epoch]
+        values[current.content_id] = max(
+            _compare_observations(previous, current),
+            values.get(current.content_id, _IdentityState.UNCHANGED),
+        )
+    return {
+        epoch: CollectionIdentityCounts(
+            new=sum(state == _IdentityState.NEW for state in values.values()),
+            updated=sum(state == _IdentityState.UPDATED for state in values.values()),
+            unchanged=sum(state == _IdentityState.UNCHANGED for state in values.values()),
+            unclassified=sum(state == _IdentityState.UNCLASSIFIED for state in values.values()),
+        )
+        for epoch, values in states.items()
+    }

@@ -338,6 +338,16 @@ class ContentVersionRelation(Base):
 class ContentObservation(Base):
     __tablename__ = "content_observations"
     __table_args__ = (
+        CheckConstraint(
+            "execution_epoch IS NULL OR execution_epoch >= 1",
+            name="content_observations_execution_epoch_check",
+        ),
+        ForeignKeyConstraint(
+            ["job_id", "execution_epoch"],
+            ["job_attempts.job_id", "job_attempts.lease_epoch"],
+            ondelete="RESTRICT",
+            name="content_observations_execution_fkey",
+        ),
         UniqueConstraint("owner_id", "id", name="content_observations_owner_id_key"),
         UniqueConstraint(
             "owner_id",
@@ -445,6 +455,7 @@ class ContentObservation(Base):
     owner_id: Mapped[UUID]
     content_id: Mapped[UUID]
     job_id: Mapped[UUID]
+    execution_epoch: Mapped[int | None] = mapped_column(BigInteger)
     source_operation_id: Mapped[UUID]
     source_key: Mapped[str | None] = mapped_column(String(64))
     source_native_scope: Mapped[str | None] = mapped_column(String(512))

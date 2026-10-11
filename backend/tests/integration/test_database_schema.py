@@ -235,3 +235,23 @@ def test_scheduled_query_plan_is_nullable_and_limited_to_skipped_search(
         "topic_id IS NOT NULL",
     ):
         assert fragment in check
+
+
+def test_collection_execution_attribution_constraints(schema_engine: Engine) -> None:
+    inspector = inspect(schema_engine)
+    foreign_keys = inspector.get_foreign_keys("content_observations")
+    attribution = next(
+        item for item in foreign_keys if item["name"] == "content_observations_execution_fkey"
+    )
+    assert attribution["constrained_columns"] == ["job_id", "execution_epoch"]
+    assert attribution["referred_table"] == "job_attempts"
+    assert attribution["referred_columns"] == ["job_id", "lease_epoch"]
+    attempt_checks = {item["name"] for item in inspector.get_check_constraints("job_attempts")}
+    assert {
+        "job_attempts_observed_count_check",
+        "job_attempts_untracked_count_check",
+    } <= attempt_checks
+    observation_checks = {
+        item["name"] for item in inspector.get_check_constraints("content_observations")
+    }
+    assert "content_observations_execution_epoch_check" in observation_checks

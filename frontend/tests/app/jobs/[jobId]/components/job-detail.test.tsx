@@ -13,6 +13,8 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ApiRequestError } from "@/request";
+
 const toasts = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
 vi.mock("sonner", () => ({ toast: toasts }));
 afterEach(() => vi.clearAllMocks());
@@ -448,3 +450,54 @@ describe("job detail controls", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 });
+
+it.each([401, 403, 404])(
+  "clears both count scopes when refresh loses access (%s)",
+  async (status) => {
+    const counts: HotKeyAPI.JobCollectionCountsView = {
+      identity_count_basis: "retained_receipt_identity_v1",
+      observed_count: 12,
+      stored_observation_count: 9,
+      unique_content_count: 4,
+      inserted_count: 1,
+      updated_count: 1,
+      unchanged_count: 1,
+      unclassified_count: 1,
+      deduplicated_count: 8,
+    };
+    api.get
+      .mockResolvedValueOnce({
+        ...baseJob,
+        kind: "keyword.search",
+        collection_counts: counts,
+        collection_executions: [
+          {
+            execution_epoch: 1,
+            collection_cycle_no: 1,
+            started_at: baseJob.created_at,
+            finished_at: null,
+            outcome: null,
+            counts,
+          },
+        ],
+      })
+      .mockRejectedValueOnce(
+        new ApiRequestError({
+          kind: "http",
+          status,
+          code: status === 404 ? "resource_not_found" : "permission_denied",
+          message: "拒绝",
+        }),
+      );
+    render(createElement(JobDetail, { jobId: baseJob.id }));
+    await screen.findByRole("region", { name: "单轮执行差分" });
+    expect(screen.getAllByRole("region", { name: "采集计量" })).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "刷新状态" }));
+    await screen.findByText(
+      status === 404 ? "没有找到这个任务" : "暂时无法访问任务",
+    );
+    expect(screen.queryByRole("region", { name: "单轮执行差分" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "采集计量" })).toBeNull();
+    cleanup();
+  },
+);

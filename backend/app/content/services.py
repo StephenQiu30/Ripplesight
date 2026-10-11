@@ -34,7 +34,10 @@ from connections.services import (
     SourceCapabilityEvidenceService,
     load_applied_source_presets_in_transaction,
 )
-from content.collection_counts import classify_collection_identities
+from content.collection_counts import (
+    classify_collection_execution_identities,
+    classify_collection_identities,
+)
 from content.models import (
     ContentDiscovery,
     ContentObservation,
@@ -65,6 +68,7 @@ from content.schemas import (
     AnalysisPostContentView,
     CollectionContentCountView,
     CollectionContentFactView,
+    CollectionExecutionContentCountView,
     CollectionSnapshotFactView,
     CommentCollectionRunInput,
     ContentAnalysisTopicView,
@@ -633,6 +637,68 @@ class ContentService:
             for fact in self.collection_facts_in_transaction(owner_id=owner_id, job_ids=job_ids)
         )
 
+    def collection_execution_counts_in_transaction(
+        self, *, owner_id: UUID, job_id: UUID, epochs: tuple[int, ...]
+    ) -> tuple[CollectionExecutionContentCountView, ...]:
+        """Project executions from one owner-scoped observation statement snapshot.
+
+        Args:
+            owner_id: Owner allowed to read this task's retained observations.
+            job_id: Task whose explicit execution provenance is selected.
+            epochs: Requested lease epochs in presentation order.
+
+        Returns:
+            Counts in the requested order, including known zero observations.
+            The jobs caller must separately mark historical untracked attempts
+            unknown; absence of observations cannot establish attribution coverage.
+
+        Raises:
+            RuntimeError: The caller has not opened a transaction.
+        """
+        if not self._session.in_transaction():
+            raise RuntimeError("collection execution reads require the caller's transaction")
+        if not epochs:
+            return ()
+        candidates = select(ContentObservation.content_id).where(
+            ContentObservation.owner_id == owner_id,
+            ContentObservation.job_id == job_id,
+            ContentObservation.execution_epoch.in_(epochs),
+        )
+        history = self._session.scalars(
+            select(ContentObservation).where(
+                ContentObservation.owner_id == owner_id,
+                ContentObservation.content_id.in_(candidates),
+            )
+        ).all()
+        identities = classify_collection_execution_identities(history, job_id=job_id, epochs=epochs)
+        grouped: dict[int, list[ContentObservation]] = {epoch: [] for epoch in epochs}
+        for item in history:
+            if item.job_id == job_id and item.execution_epoch in grouped:
+                grouped[item.execution_epoch].append(item)
+        return tuple(
+            CollectionExecutionContentCountView(
+                job_id=job_id,
+                execution_epoch=epoch,
+                observation_count=len(grouped[epoch]),
+                ingested_count=len({item.content_id for item in grouped[epoch]}),
+                first_ingested_count=identities[epoch].new,
+                deduplicated_count=len(grouped[epoch]) - identities[epoch].new,
+                updated_count=identities[epoch].updated,
+                unchanged_count=identities[epoch].unchanged,
+                unclassified_count=identities[epoch].unclassified,
+                content_version_ids=tuple(
+                    sorted(
+                        {
+                            item.content_version_id
+                            for item in grouped[epoch]
+                            if item.content_version_id is not None
+                        }
+                    )
+                ),
+            )
+            for epoch in epochs
+        )
+
     def collection_facts_in_transaction(
         self, *, owner_id: UUID, job_ids: tuple[UUID, ...]
     ) -> tuple[CollectionContentFactView, ...]:
@@ -1176,6 +1242,9 @@ class ContentService:
             source_operation_id=command.source_operation_id,
             observed_at=command.admission.collected_at,
             received_at=now,
+            execution_epoch=command.execution_epoch
+            if isinstance(command, PersistContentPostInput)
+            else None,
             values=observation_values,
         )
         self._find_or_create_visibility_observation(
@@ -2020,6 +2089,7 @@ class ContentService:
         source_operation_id: UUID,
         observed_at: datetime,
         received_at: datetime,
+        execution_epoch: int | None,
         values: Mapping[str, object],
     ) -> ContentObservation:
         observation_id = uuid4()
@@ -2030,6 +2100,7 @@ class ContentService:
                 owner_id=owner_id,
                 content_id=content_id,
                 job_id=job_id,
+                execution_epoch=execution_epoch,
                 source_operation_id=source_operation_id,
                 observed_at=observed_at,
                 received_at=received_at,
@@ -2044,6 +2115,7 @@ class ContentService:
                 owner_id=owner_id,
                 content_id=content_id,
                 job_id=job_id,
+                execution_epoch=execution_epoch,
                 source_operation_id=source_operation_id,
                 observed_at=observed_at,
                 received_at=received_at,

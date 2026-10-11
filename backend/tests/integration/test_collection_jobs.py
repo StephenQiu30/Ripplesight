@@ -304,6 +304,8 @@ def test_internal_job_status_is_readable_after_refresh(
         "coverage_windows": [],
         "query_plan": None,
         "collection_counts": None,
+        "collection_executions": None,
+        "collection_executions_has_more": False,
     }
     assert body["queue_wait_us"] is not None and body["queue_wait_us"] >= 0
     assert freshness == {
@@ -950,3 +952,256 @@ def test_job_openapi_contract_is_generated_from_runtime_routes(
         assert create_operation["responses"][status_code]["content"]["application/json"][
             "schema"
         ] == {"$ref": "#/components/schemas/ErrorView"}
+
+
+@pytest.mark.parametrize("kind", ["keyword.search", "source.comments"])
+@pytest.mark.parametrize("outcome", [None, "failed", "cancelled", "expired", "succeeded"])
+def test_execution_counts_partition_each_round_and_keep_cumulative_distinct(
+    collection_job_client: TestClient, kind: str, outcome: str | None
+) -> None:
+    client = collection_job_client
+    owner = _user_scope(client)
+    job = uuid4()
+    now = datetime(2026, 10, 1, tzinfo=UTC)
+    factory = client.app.state.session_factory
+    with factory.begin() as session:
+        _seed_job(session, owner, job, now)
+        session.execute(text("UPDATE jobs SET kind=:kind WHERE id=:id"), {"kind": kind, "id": job})
+        for epoch in (1, 2):
+            session.execute(
+                text(
+                    "INSERT INTO job_attempts (id,job_id,lease_epoch,collection_cycle_no,worker_id,"
+                    "queued_at,started_at,lease_expires_at,finished_at,outcome,"
+                    "collection_counts_tracked,collection_observed_count) VALUES "
+                    "(:id,:job,:epoch,1,'test',:now,:now,:expires,:finished,:outcome,true,:observed)"
+                ),
+                {
+                    "id": uuid4(),
+                    "job": job,
+                    "epoch": epoch,
+                    "now": now,
+                    "expires": now + timedelta(seconds=60),
+                    "finished": now if epoch == 1 or outcome else None,
+                    "outcome": "failed" if epoch == 1 else outcome,
+                    "observed": 6 if epoch == 1 else 8,
+                },
+            )
+        # Round two: one new, one updated, one unchanged, one insufficient identity.
+        for index in range(4):
+            content, v1, v2 = uuid4(), uuid4(), uuid4()
+            _seed_content(session, owner, content, (v1, v2), now)
+            if index != 0:
+                _seed_observation(session, owner, job, content, None if index == 3 else v1, now)
+                session.execute(
+                    text("UPDATE content_observations SET execution_epoch=1 WHERE content_id=:id"),
+                    {"id": content},
+                )
+            for offset in (1, 2):
+                _seed_observation(
+                    session,
+                    owner,
+                    job,
+                    content,
+                    None if index == 3 else v2 if index == 1 else v1,
+                    now + timedelta(seconds=offset),
+                )
+            session.execute(
+                text(
+                    "UPDATE content_observations SET execution_epoch=2 "
+                    "WHERE content_id=:id AND received_at>:now"
+                ),
+                {"id": content, "now": now},
+            )
+        before = (
+            session.execute(
+                text("SELECT row_to_json(a)::text FROM job_attempts a ORDER BY lease_epoch")
+            )
+            .scalars()
+            .all()
+        )
+    response = client.get(f"/api/jobs/{job}")
+    assert response.status_code == 200, response.json()
+    body = response.json()
+    second, first = body["collection_executions"]
+    assert second["execution_epoch"] == 2 and second["collection_cycle_no"] == 1
+    assert second["outcome"] == outcome
+    counts = second["counts"]
+    assert counts["observed_count"] == 8 and counts["stored_observation_count"] == 8
+    assert counts["unique_content_count"] == 4
+    assert [
+        counts[name]
+        for name in ("inserted_count", "updated_count", "unchanged_count", "unclassified_count")
+    ] == [1, 1, 1, 1]
+    assert first["counts"]["inserted_count"] == 3
+    assert body["collection_counts"]["inserted_count"] == 4
+    assert body["collection_counts"]["updated_count"] == 0
+    assert body["collection_executions_has_more"] is False
+    assert (
+        client.get(f"/api/jobs/{job}").json()["collection_executions"]
+        == body["collection_executions"]
+    )
+    with factory() as session:
+        assert (
+            session.execute(
+                text("SELECT row_to_json(a)::text FROM job_attempts a ORDER BY lease_epoch")
+            )
+            .scalars()
+            .all()
+            == before
+        )
+    authenticate_test_client(client)
+    assert client.get(f"/api/jobs/{job}").status_code == 404
+
+
+def test_execution_history_is_bounded_and_legacy_counts_remain_unknown(
+    collection_job_client: TestClient,
+) -> None:
+    client = collection_job_client
+    owner, job = _user_scope(client), uuid4()
+    now = datetime(2026, 10, 1, tzinfo=UTC)
+    factory = client.app.state.session_factory
+    with factory.begin() as session:
+        _seed_job(session, owner, job, now)
+    assert client.get(f"/api/jobs/{job}").json()["collection_executions"] == []
+    with factory.begin() as session:
+        for epoch in range(1, 23):
+            session.execute(
+                text(
+                    "INSERT INTO job_attempts (id,job_id,lease_epoch,collection_cycle_no,worker_id,"
+                    "queued_at,started_at,lease_expires_at,collection_counts_tracked) "
+                    "VALUES (:id,:job,:epoch,1,'test',:now,:now,:expires,:tracked)"
+                ),
+                {
+                    "id": uuid4(),
+                    "job": job,
+                    "epoch": epoch,
+                    "now": now,
+                    "expires": now + timedelta(seconds=60),
+                    "tracked": epoch != 21,
+                },
+            )
+    body = client.get(f"/api/jobs/{job}").json()
+    assert len(body["collection_executions"]) == 20
+    assert body["collection_executions_has_more"] is True
+    assert body["collection_executions"][0]["execution_epoch"] == 22
+    assert body["collection_executions"][-1]["execution_epoch"] == 3
+    assert body["collection_executions"][1]["counts"] is None
+    counts = body["collection_executions"][0]["counts"]
+    assert counts["observed_count"] is None
+    assert counts["unique_content_count"] == counts["stored_observation_count"] == 0
+
+
+def test_fenced_execution_checkpoint_delta_replay_expiry_and_zero(
+    collection_job_client: TestClient,
+) -> None:
+    from jobs.execution import (
+        CheckpointConflictError,
+        JobExecutionService,
+        StaleExecutionLeaseError,
+    )
+
+    client = collection_job_client
+    owner, job = _user_scope(client), uuid4()
+    now = [datetime.now(UTC)]
+    factory = client.app.state.session_factory
+    with factory.begin() as session:
+        _seed_job(session, owner, job, now[0])
+    with factory() as session:
+        execution = JobExecutionService(session, lease_seconds=5, clock=lambda: now[0])
+        first = execution.acquire(job_id=job, worker_id="first")
+        first = execution.save_checkpoint(
+            first, sequence=1, checkpoint={"collection.observed_count": 3}, observed_items=3
+        )
+        replay = execution.save_checkpoint(first, sequence=1, checkpoint=first.checkpoint)
+        assert replay.checkpoint_sequence == 1
+        now[0] += timedelta(seconds=6)
+        second = execution.acquire(job_id=job, worker_id="second")
+        with pytest.raises(StaleExecutionLeaseError):
+            execution.save_checkpoint(
+                first, sequence=2, checkpoint={"collection.observed_count": 99}
+            )
+        with pytest.raises(CheckpointConflictError):
+            execution.save_checkpoint(
+                second, sequence=2, checkpoint={"collection.observed_count": 2}, observed_items=0
+            )
+        second = execution.save_checkpoint(
+            second, sequence=2, checkpoint={"collection.observed_count": 3}, observed_items=0
+        )
+        second = execution.save_checkpoint(
+            second, sequence=3, checkpoint={"collection.observed_count": 5}, observed_items=2
+        )
+    body = client.get(f"/api/jobs/{job}").json()
+    second_view, first_view = body["collection_executions"]
+    assert second_view["collection_cycle_no"] == first_view["collection_cycle_no"] == 1
+    assert second_view["counts"]["observed_count"] == 2
+    assert first_view["counts"]["observed_count"] == 3
+    assert first_view["outcome"] == "expired"
+
+
+def test_observation_replay_preserves_original_execution_and_rejects_unknown_epoch(
+    collection_job_client: TestClient,
+) -> None:
+    from sqlalchemy.exc import IntegrityError
+
+    from content.services import ContentService
+
+    client = collection_job_client
+    owner, job, content, version, operation = (uuid4() for _ in range(5))
+    owner = _user_scope(client)
+    now = datetime(2026, 10, 1, tzinfo=UTC)
+    factory = client.app.state.session_factory
+    with factory.begin() as session:
+        _seed_job(session, owner, job, now)
+        _seed_content(session, owner, content, (version,), now)
+        for epoch in (1, 2):
+            session.execute(
+                text(
+                    "INSERT INTO job_attempts (id,job_id,lease_epoch,collection_cycle_no,worker_id,"
+                    "queued_at,started_at,lease_expires_at,collection_counts_tracked) "
+                    "VALUES (:id,:job,:epoch,1,'test',:now,:now,:expires,true)"
+                ),
+                {
+                    "id": uuid4(),
+                    "job": job,
+                    "epoch": epoch,
+                    "now": now,
+                    "expires": now + timedelta(seconds=60),
+                },
+            )
+        service = ContentService(session)
+        first = service._find_or_create_observation(
+            owner_id=owner,
+            content_id=content,
+            job_id=job,
+            source_operation_id=operation,
+            observed_at=now,
+            received_at=now,
+            execution_epoch=1,
+            values={"content_version_id": version},
+        )
+        replay = service._find_or_create_observation(
+            owner_id=owner,
+            content_id=content,
+            job_id=job,
+            source_operation_id=operation,
+            observed_at=now,
+            received_at=now + timedelta(seconds=1),
+            execution_epoch=2,
+            values={"content_version_id": version},
+        )
+        assert first.id == replay.id and replay.execution_epoch == 1
+        with pytest.raises(IntegrityError), session.begin_nested():
+            service._find_or_create_observation(
+                owner_id=owner,
+                content_id=content,
+                job_id=job,
+                source_operation_id=uuid4(),
+                observed_at=now,
+                received_at=now,
+                execution_epoch=99,
+                values={"content_version_id": version},
+            )
+    body = client.get(f"/api/jobs/{job}").json()
+    second, first = body["collection_executions"]
+    assert second["counts"]["unique_content_count"] == 0
+    assert first["counts"]["unique_content_count"] == 1
