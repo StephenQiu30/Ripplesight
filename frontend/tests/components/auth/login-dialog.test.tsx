@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -124,4 +125,79 @@ it("preserves native modified clicks and does not prompt for public reading", ()
   fireEvent.click(screen.getByRole("link", { name: "继续阅读" }));
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(mocks.options).not.toHaveBeenCalled();
+});
+
+it.each([
+  [true, false, false],
+  [false, true, false],
+  [false, false, true],
+  [true, true, false],
+  [true, false, true],
+  [false, true, true],
+  [true, true, true],
+  [false, false, false],
+])(
+  "keeps one initially focused close control for options %s/%s/%s",
+  async (password, email, github) => {
+    mocks.options.mockResolvedValue({ password, email, github });
+    render(<Reader />);
+    const trigger = screen.getByRole("link", { name: "设置关键词" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    await screen.findByRole("toolbar", { name: "登录方式" });
+    const close = screen.getByRole("button", { name: "关闭" });
+    await waitFor(() => expect(document.activeElement).toBe(close));
+    expect(screen.getAllByRole("button", { name: "关闭" })).toHaveLength(1);
+    fireEvent.click(close);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(trigger);
+    expect(mocks.password).not.toHaveBeenCalled();
+    expect(mocks.replace).not.toHaveBeenCalled();
+  },
+);
+
+it("can close while options are pending without a late response reopening login", async () => {
+  let resolveOptions!: (options: {
+    password: boolean;
+    email: boolean;
+    github: boolean;
+  }) => void;
+  mocks.options.mockReturnValue(
+    new Promise((resolve) => {
+      resolveOptions = resolve;
+    }),
+  );
+  render(<Reader />);
+  fireEvent.change(screen.getByLabelText("阅读筛选"), {
+    target: { value: "保留筛选" },
+  });
+  const trigger = screen.getByRole("link", { name: "设置关键词" });
+  trigger.focus();
+  fireEvent.click(trigger);
+  await screen.findByRole("status", { name: "正在读取登录方式" });
+  fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  await act(async () => {
+    resolveOptions({ password: true, email: true, github: true });
+  });
+  await waitFor(() => expect(document.activeElement).toBe(trigger));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect((screen.getByLabelText("阅读筛选") as HTMLInputElement).value).toBe(
+    "保留筛选",
+  );
+  expect(mocks.password).not.toHaveBeenCalled();
+});
+
+it("can continue reading after the login options fail", async () => {
+  mocks.options.mockRejectedValue(new Error("unavailable"));
+  render(<Reader />);
+  const trigger = screen.getByRole("link", { name: "平台接入" });
+  trigger.focus();
+  fireEvent.click(trigger);
+  await screen.findByText("登录方式暂时不可用");
+  fireEvent.click(screen.getByRole("button", { name: "暂不登录，继续浏览" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(document.activeElement).toBe(trigger);
+  expect(mocks.password).not.toHaveBeenCalled();
+  expect(mocks.replace).not.toHaveBeenCalled();
 });

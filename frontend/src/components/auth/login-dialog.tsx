@@ -1,5 +1,6 @@
 "use client";
 
+import { XIcon } from "lucide-react";
 import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
 import {
@@ -46,6 +47,7 @@ export function LoginDialog({
       }}
     >
       <DialogContent
+        showCloseButton={false}
         className="max-h-[calc(100dvh-2rem)] max-w-md overflow-y-auto p-6 sm:p-8"
         onCloseAutoFocus={
           onRestoreFocus
@@ -56,6 +58,18 @@ export function LoginDialog({
             : undefined
         }
       >
+        {/* Let reverse Tab leave the roving login-method group. */}
+        <DialogClose asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            className="absolute top-2 right-2"
+            size="icon-sm"
+            aria-label="关闭"
+          >
+            <XIcon data-icon="inline-start" />
+          </Button>
+        </DialogClose>
         <DialogHeader>
           <DialogTitle className="text-2xl">登录 Ripplesight</DialogTitle>
           <DialogDescription>
