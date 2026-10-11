@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -10,6 +11,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 from tests.conftest import TEST_DATABASE_TRUNCATE, authenticate_test_client, authenticated_owner_id
+from tests.integration.test_content_collection_facts import (
+    _seed_content,
+    _seed_job,
+    _seed_observation,
+)
 
 from core.config import Settings
 from jobs.schemas import JobAcceptanceInput
@@ -46,6 +52,115 @@ def collection_job_client() -> Iterator[TestClient]:
 def _user_scope(client: TestClient) -> UUID:
     with client.app.state.session_factory() as session:
         return authenticated_owner_id(session)
+
+
+@pytest.mark.parametrize("kind", ["keyword.search", "source.comments"])
+def test_job_detail_counts_retained_identities_across_retries_without_writes(
+    collection_job_client: TestClient, kind: str
+) -> None:
+    client = collection_job_client
+    owner = _user_scope(client)
+    prior, current = uuid4(), uuid4()
+    now = datetime(2026, 10, 1, tzinfo=UTC)
+    factory = client.app.state.session_factory
+    with factory.begin() as session:
+        for job_id in (prior, current):
+            _seed_job(session, owner, job_id, now)
+        session.execute(
+            text(
+                "UPDATE jobs SET kind=:kind, retry_count=2, checkpoint=:checkpoint, "
+                "items_saved=99, progress_stage='save', progress_updated_at=created_at WHERE id=:id"
+            ),
+            {
+                "id": current,
+                "kind": kind,
+                "checkpoint": json.dumps({"collection.observed_count": 8}),
+            },
+        )
+        for index in range(4):
+            content, version, changed = uuid4(), uuid4(), uuid4()
+            _seed_content(session, owner, content, (version, changed), now)
+            if index < 3:
+                _seed_observation(session, owner, prior, content, version, now)
+            _seed_observation(
+                session,
+                owner,
+                current,
+                content,
+                changed if index == 0 else None if index == 2 else version,
+                now + timedelta(minutes=1),
+            )
+            if index == 3:
+                _seed_observation(
+                    session, owner, current, content, changed, now + timedelta(minutes=2)
+                )
+
+    def stored_state() -> tuple[object, ...]:
+        with factory() as session:
+            return tuple(
+                session.execute(text(f"SELECT * FROM {table} ORDER BY id")).all()
+                for table in (
+                    "jobs",
+                    "content_observations",
+                    "outbox_messages",
+                    "resource_usage_attempts",
+                )
+            )
+
+    before = stored_state()
+    response = client.get(f"/api/jobs/{current}")
+    assert response.status_code == 200
+    counts = response.json()["collection_counts"]
+    assert counts == {
+        "observed_count": 8,
+        "stored_observation_count": 5,
+        "unique_content_count": 4,
+        "identity_count_basis": "retained_receipt_identity_v1",
+        "inserted_count": 1,
+        "updated_count": 1,
+        "unchanged_count": 1,
+        "unclassified_count": 1,
+        "deduplicated_count": 4,
+    }
+    assert response.json()["progress"]["items_saved"] == 99
+    assert client.get(f"/api/jobs/{current}").json()["collection_counts"] == counts
+    assert stored_state() == before
+    authenticate_test_client(client, owner_id=uuid4())
+    denied = client.get(f"/api/jobs/{current}")
+    assert denied.status_code == 404
+    assert "collection_counts" not in denied.json()
+
+
+@pytest.mark.parametrize("observed", [None, -1, True, "3", 0, 3])
+def test_job_detail_empty_receipts_do_not_infer_upstream_zero(
+    collection_job_client: TestClient, observed: object
+) -> None:
+    client = collection_job_client
+    owner, job_id = _user_scope(client), uuid4()
+    with client.app.state.session_factory.begin() as session:
+        _seed_job(session, owner, job_id, datetime(2026, 10, 1, tzinfo=UTC))
+        session.execute(
+            text("UPDATE jobs SET checkpoint=:checkpoint WHERE id=:id"),
+            {"id": job_id, "checkpoint": json.dumps({"collection.observed_count": observed})},
+        )
+    response = client.get(f"/api/jobs/{job_id}")
+    assert response.status_code == 200
+    counts = response.json()["collection_counts"]
+    assert counts["observed_count"] == (
+        observed if type(observed) is int and observed >= 0 else None
+    )
+    assert all(
+        counts[key] == 0
+        for key in (
+            "stored_observation_count",
+            "unique_content_count",
+            "inserted_count",
+            "updated_count",
+            "unchanged_count",
+            "unclassified_count",
+            "deduplicated_count",
+        )
+    )
 
 
 def _payload(
@@ -188,6 +303,7 @@ def test_internal_job_status_is_readable_after_refresh(
         "source_freshness": freshness,
         "coverage_windows": [],
         "query_plan": None,
+        "collection_counts": None,
     }
     assert body["queue_wait_us"] is not None and body["queue_wait_us"] >= 0
     assert freshness == {

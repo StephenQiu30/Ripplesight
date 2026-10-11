@@ -3643,6 +3643,27 @@ declare namespace HotKeyAPI {
     timed_out: boolean;
   };
 
+  type JobCollectionCountsView = {
+    /** Observed Count */
+    observed_count: number | null;
+    /** Stored Observation Count */
+    stored_observation_count: number;
+    /** Unique Content Count */
+    unique_content_count: number;
+    /** Identity Count Basis */
+    identity_count_basis: string;
+    /** Inserted Count */
+    inserted_count: number;
+    /** Updated Count */
+    updated_count: number;
+    /** Unchanged Count */
+    unchanged_count: number;
+    /** Unclassified Count */
+    unclassified_count: number;
+    /** Deduplicated Count */
+    deduplicated_count: number;
+  };
+
   type JobContinuousFailureIssueView = {
     /** Source Key */
     source_key: string;
@@ -3800,6 +3821,7 @@ declare namespace HotKeyAPI {
     /** Coverage Windows */
     coverage_windows?: CoverageWindowView[];
     query_plan?: KeywordQueryPlanView | null;
+    collection_counts?: JobCollectionCountsView | null;
   };
 
   type JobView = {

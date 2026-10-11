@@ -35,10 +35,25 @@ function CountFact({
   );
 }
 
-export function CoverageIdentityCounts({
+export function CollectionIdentityCounts({
   row,
+  headingLevel = 4,
 }: {
-  row: HotKeyAPI.CollectionCoverageView;
+  row: Partial<
+    Pick<
+      HotKeyAPI.CollectionCoverageView,
+      | "identity_count_basis"
+      | "observed_count"
+      | "stored_observation_count"
+      | "unique_content_count"
+      | "inserted_count"
+      | "updated_count"
+      | "unchanged_count"
+      | "unclassified_count"
+      | "deduplicated_count"
+    >
+  >;
+  headingLevel?: 2 | 4;
 }) {
   const supported = row.identity_count_basis === "retained_receipt_identity_v1";
   const denominator = quantity(row.unique_content_count, "个唯一身份");
@@ -71,7 +86,7 @@ export function CoverageIdentityCounts({
       aria-label="采集计量"
       className="mt-8 flex flex-col gap-5"
     >
-      <UI.Heading level={4} className="font-medium">
+      <UI.Heading level={headingLevel} className="font-medium">
         采集计量
       </UI.Heading>
       <UI.Content as="dl" className="grid grid-cols-2 gap-6 sm:grid-cols-3">

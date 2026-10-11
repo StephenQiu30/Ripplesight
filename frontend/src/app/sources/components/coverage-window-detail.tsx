@@ -7,7 +7,7 @@ import { QueryPlan } from "@/components/monitors/query-plan";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { CoverageIdentityCounts } from "./coverage-identity-counts";
+import { CollectionIdentityCounts } from "@/components/collection/identity-counts";
 
 import {
   admissionLabel,
@@ -200,7 +200,7 @@ export function CoverageWindowDetail({
           <QueryPlan plan={row.query_plan} />
         </UI.Content>
       ) : null}
-      <CoverageIdentityCounts row={row} />
+      <CollectionIdentityCounts row={row} />
       <UI.Content className="mt-8 grid gap-8 sm:grid-cols-2">
         <UI.Content>
           <UI.Heading level={4} className="font-medium">

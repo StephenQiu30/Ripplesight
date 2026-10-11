@@ -75,6 +75,7 @@ from jobs.schemas import (
     FreshnessTimelineView,
     JobAcceptanceInput,
     JobCancellationView,
+    JobCollectionCountsView,
     JobContinuousFailureIssueView,
     JobControlStatus,
     JobDelayReason,
@@ -3208,9 +3209,32 @@ class JobService:
             created_at=model.created_at.astimezone(UTC),
             source_freshness=self._source_freshness(model, now=now),
             coverage_windows=self._coverage_windows(model),
+            collection_counts=self._collection_counts(model),
             query_plan=read_keyword_query_plan(model.scope)
             if model.kind == "keyword.search"
             else None,
+        )
+
+    def _collection_counts(self, model: Job) -> JobCollectionCountsView | None:
+        if model.kind not in {"keyword.search", "source.comments"}:
+            return None
+        # ContentService consumes job contracts; defer this import to avoid that cycle.
+        from content.services import ContentService
+
+        counts = ContentService(self._session).collection_counts_in_transaction(
+            owner_id=model.owner_id, job_ids=(model.id,)
+        )[0]
+        observed = model.checkpoint.get("collection.observed_count")
+        return JobCollectionCountsView(
+            observed_count=observed if type(observed) is int and observed >= 0 else None,
+            stored_observation_count=counts.observation_count,
+            unique_content_count=counts.ingested_count,
+            identity_count_basis="retained_receipt_identity_v1",
+            inserted_count=counts.first_ingested_count,
+            updated_count=counts.updated_count,
+            unchanged_count=counts.unchanged_count,
+            unclassified_count=counts.unclassified_count,
+            deduplicated_count=counts.deduplicated_count,
         )
 
     @staticmethod

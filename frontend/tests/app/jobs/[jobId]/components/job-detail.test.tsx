@@ -9,6 +9,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -278,6 +279,107 @@ afterEach(() => {
 });
 
 describe("job detail controls", () => {
+  const counts: HotKeyAPI.JobCollectionCountsView = {
+    identity_count_basis: "retained_receipt_identity_v1",
+    observed_count: 8,
+    stored_observation_count: 5,
+    unique_content_count: 4,
+    inserted_count: 1,
+    updated_count: 1,
+    unchanged_count: 1,
+    unclassified_count: 1,
+    deduplicated_count: 4,
+  };
+
+  it.each(["keyword.search", "source.comments"])(
+    "shows cumulative identities and denominators for %s, independently of saved progress",
+    async (kind) => {
+      api.get.mockResolvedValue({
+        ...baseJob,
+        kind,
+        retry_count: 2,
+        collection_counts: counts,
+        progress: { ...baseJob.progress, items_saved: 99 },
+      });
+      render(createElement(JobDetail, { jobId: baseJob.id }));
+      const panel = await screen.findByRole("region", { name: "采集计量" });
+      expect(within(panel).getByRole("heading", { level: 2 })).toBeDefined();
+      expect(within(panel).getByText("8 条")).toBeDefined();
+      expect(within(panel).getByText("5 条")).toBeDefined();
+      expect(within(panel).getAllByText("分母：4 个唯一身份")).toHaveLength(4);
+      expect(within(panel).getAllByText("1 个身份")).toHaveLength(4);
+      expect(within(panel).queryByText("99 个身份")).toBeNull();
+      expect(screen.getByText(/本任务累计，包含全部重试轮次/)).toBeDefined();
+      expect(api.cancel).not.toHaveBeenCalled();
+      expect(api.retry).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([undefined, null])(
+    "keeps missing job metrics %s unknown",
+    async (collection_counts) => {
+      api.get.mockResolvedValue({
+        ...baseJob,
+        kind: "keyword.search",
+        collection_counts,
+        progress: { ...baseJob.progress, items_saved: 99 },
+      });
+      render(createElement(JobDetail, { jobId: baseJob.id }));
+      const panel = await screen.findByRole("region", { name: "采集计量" });
+      expect(within(panel).getAllByText("未知")).toHaveLength(8);
+      expect(within(panel).getAllByText("分母：未知")).toHaveLength(4);
+      expect(within(panel).queryByText(/99|0 个身份/)).toBeNull();
+    },
+  );
+
+  it("preserves known zero material counts with an unknown upstream return", async () => {
+    api.get.mockResolvedValue({
+      ...baseJob,
+      kind: "source.comments",
+      collection_counts: {
+        ...counts,
+        observed_count: null,
+        stored_observation_count: 0,
+        unique_content_count: 0,
+        inserted_count: 0,
+        updated_count: 0,
+        unchanged_count: 0,
+        unclassified_count: 0,
+        deduplicated_count: 0,
+      },
+    });
+    render(createElement(JobDetail, { jobId: baseJob.id }));
+    const panel = await screen.findByRole("region", { name: "采集计量" });
+    expect(within(panel).getAllByText("未知")).toHaveLength(1);
+    expect(within(panel).getAllByText("分母：0 个唯一身份")).toHaveLength(4);
+    expect(panel.textContent).not.toMatch(/NaN|Infinity|%/);
+  });
+
+  it("retains old counts after a failed refresh and replaces them after a successful read", async () => {
+    const job = {
+      ...baseJob,
+      kind: "keyword.search",
+      collection_counts: counts,
+    };
+    api.get
+      .mockResolvedValueOnce(job)
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({
+        ...job,
+        collection_counts: { ...counts, observed_count: 12 },
+      });
+    render(createElement(JobDetail, { jobId: baseJob.id }));
+    await screen.findByText("8 条");
+    fireEvent.click(screen.getByRole("button", { name: "刷新状态" }));
+    await screen.findByText("状态待刷新");
+    expect(screen.getByText("8 条")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "刷新状态" }));
+    await screen.findByText("12 条");
+    expect(screen.queryByText("状态待刷新")).toBeNull();
+    expect(api.get).toHaveBeenCalledTimes(3);
+    expect(api.retry).not.toHaveBeenCalled();
+  });
+
   it("accepts a manual retry once and renders the returned queued state", async () => {
     const failedJob = {
       ...baseJob,

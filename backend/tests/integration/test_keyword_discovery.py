@@ -758,6 +758,25 @@ def test_36kr_feed_replay_keeps_source_time_and_separate_budget() -> None:
         )
         assert retry_urls == ["http://127.0.0.1:1200/36kr/newsflashes"] * 2
 
+        # Read the same public projection after a real controlled failure/acquire/retry chain.
+        with Session(engine) as session:
+            retry_view = JobService(session, clock=lambda: retry_at).get_status(
+                owner_id=owner_id, job_id=retry_job.id
+            )
+        assert retry_view.collection_counts is not None
+        assert retry_view.collection_counts.model_dump() == {
+            "observed_count": 3,
+            "stored_observation_count": 1,
+            "unique_content_count": 1,
+            "identity_count_basis": "retained_receipt_identity_v1",
+            "inserted_count": 0,
+            "updated_count": 0,
+            "unchanged_count": 1,
+            "unclassified_count": 0,
+            "deduplicated_count": 1,
+        }
+        assert retry_view.progress.requests_sent == 2
+
         with Session(engine) as session:
             records = session.scalars(
                 select(ContentRecord).where(ContentRecord.owner_id == owner_id)

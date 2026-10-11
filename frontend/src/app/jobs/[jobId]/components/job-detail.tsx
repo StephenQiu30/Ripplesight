@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/collapsible";
 import { PageState } from "@/components/system/page-state";
 import { QueryPlan } from "@/components/monitors/query-plan";
+import { CollectionIdentityCounts } from "@/components/collection/identity-counts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError } from "@/request";
@@ -742,6 +743,17 @@ export function JobDetail({ jobId }: JobDetailProps) {
         savedDescription={savedDescription}
         updatedAt={job.progress.updated_at}
       />
+      {job.kind === "keyword.search" || job.kind === "source.comments" ? (
+        <UI.Content>
+          <CollectionIdentityCounts
+            row={job.collection_counts ?? {}}
+            headingLevel={2}
+          />
+          <UI.Text className="text-muted-foreground mt-4 text-sm">
+            本任务累计，包含全部重试轮次，不是当前重试轮次的新增量。已保存结果不等于唯一身份；任务进度与材料计量可能先后更新。
+          </UI.Text>
+        </UI.Content>
+      ) : null}
       <Collapsible className="mt-10">
         <CollapsibleTrigger asChild>
           <Button variant="ghost">

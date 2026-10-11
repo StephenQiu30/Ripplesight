@@ -1263,7 +1263,25 @@ class SourceFreshnessView(BaseModel):
     delay_duration_us: int | None = Field(ge=0)
 
 
+class JobCollectionCountsView(BaseModel):
+    """Retained content identity counts for the whole job, across retry cycles."""
+
+    model_config = ConfigDict(frozen=True)
+
+    observed_count: int | None = Field(ge=0)
+    stored_observation_count: int = Field(ge=0)
+    unique_content_count: int = Field(ge=0)
+    identity_count_basis: Literal["retained_receipt_identity_v1"]
+    inserted_count: int = Field(ge=0)
+    updated_count: int = Field(ge=0)
+    unchanged_count: int = Field(ge=0)
+    unclassified_count: int = Field(ge=0)
+    deduplicated_count: int = Field(ge=0)
+
+
 class JobStatusView(BaseModel):
+    """Owner-scoped task receipt with optional retained, whole-job material counts."""
+
     model_config = ConfigDict(frozen=True)
 
     id: UUID
@@ -1294,6 +1312,7 @@ class JobStatusView(BaseModel):
     source_freshness: SourceFreshnessView | None = None
     coverage_windows: tuple[CoverageWindowView, ...] = ()
     query_plan: KeywordQueryPlanView | None = None
+    collection_counts: JobCollectionCountsView | None = None
 
 
 class JobHistoryItemView(BaseModel):

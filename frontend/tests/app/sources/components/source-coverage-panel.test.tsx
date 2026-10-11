@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
-import { CoverageIdentityCounts } from "@/app/sources/components/coverage-identity-counts";
+import { CollectionIdentityCounts } from "@/components/collection/identity-counts";
 
 afterEach(cleanup);
 
@@ -230,7 +230,7 @@ describe("coverage identity accounting display", () => {
   }
 
   it("keeps raw returns, stored observations and unique identities as separate denominators", () => {
-    render(createElement(CoverageIdentityCounts, { row: mixed }));
+    render(createElement(CollectionIdentityCounts, { row: mixed }));
     expect(fact("上游返回").getByText("20 条")).toBeDefined();
     expect(fact("持久观察").getByText("12 条")).toBeDefined();
     expect(fact("唯一身份").getByText("8 个唯一身份")).toBeDefined();
@@ -263,7 +263,7 @@ describe("coverage identity accounting display", () => {
       deduplicated_count: 0,
     };
     const { container } = render(
-      createElement(CoverageIdentityCounts, { row }),
+      createElement(CollectionIdentityCounts, { row }),
     );
     expect(screen.getAllByText("0 个身份")).toHaveLength(4);
     expect(screen.getAllByText("分母：0 个唯一身份")).toHaveLength(4);
@@ -272,7 +272,7 @@ describe("coverage identity accounting display", () => {
 
   it("preserves unknown numerators and denominator independently from known zeros", () => {
     render(
-      createElement(CoverageIdentityCounts, {
+      createElement(CollectionIdentityCounts, {
         row: {
           ...mixed,
           unique_content_count: null,
@@ -292,7 +292,7 @@ describe("coverage identity accounting display", () => {
     "does not infer categories for unsupported basis %s",
     (basis) => {
       render(
-        createElement(CoverageIdentityCounts, {
+        createElement(CollectionIdentityCounts, {
           row: { ...mixed, identity_count_basis: basis },
         }),
       );
@@ -318,7 +318,7 @@ describe("coverage identity accounting display", () => {
     ])
       Reflect.deleteProperty(row, field);
     const { container } = render(
-      createElement(CoverageIdentityCounts, { row }),
+      createElement(CollectionIdentityCounts, { row }),
     );
     expect(fact("持久观察").getByText("未知")).toBeDefined();
     expect(fact("新增").getByText("未知")).toBeDefined();
