@@ -29,6 +29,80 @@ function fixture() {
   return { repo, root, page };
 }
 
+function specificationFixture() {
+  const result = fixture();
+  for (const folder of ["requirement", "prd", "design", "plan"]) {
+    mkdirSync(path.join(result.root, folder));
+    writeFileSync(path.join(result.root, folder, "00-目标.md"), "# 00 目标\n");
+  }
+  return result;
+}
+
+it("accepts aligned specifications and research outside the numbered set", () => {
+  const { repo, root } = specificationFixture();
+  mkdirSync(path.join(root, "research"));
+  writeFileSync(path.join(root, "research", "调研.md"), "# 调研证据\n");
+  expect(checkDocuments(root, repo).errors).toEqual([]);
+});
+
+it("rejects a missing human developer handoff", () => {
+  const { repo, root } = specificationFixture();
+  rmSync(path.join(root, "prd"), { recursive: true });
+  expect(checkDocuments(root, repo).errors.join("\n")).toContain(
+    "缺少规格目录",
+  );
+});
+
+it("rejects a renamed specification in only one directory", () => {
+  const { repo, root } = specificationFixture();
+  writeFileSync(path.join(root, "plan", "01-另一任务.md"), "# 01 另一任务\n");
+  expect(checkDocuments(root, repo).errors.join("\n")).toContain(
+    "四目录须使用同编号、同名称文件",
+  );
+});
+
+it.each(["# 00 别名\n", "# 00 目标\n\n# 另一个标题\n", "## 00 目标\n"])(
+  "rejects mismatched, duplicated or missing specification titles: %s",
+  (content) => {
+    const { repo, root } = specificationFixture();
+    writeFileSync(path.join(root, "prd", "00-目标.md"), content);
+    expect(checkDocuments(root, repo).errors.join("\n")).toContain(
+      "规格H1须唯一且与编号名称一致",
+    );
+  },
+);
+
+it("rejects aligned specifications with a numbering gap", () => {
+  const { repo, root } = specificationFixture();
+  for (const folder of ["requirement", "prd", "design", "plan"]) {
+    writeFileSync(path.join(root, folder, "02-跳号.md"), "# 02 跳号\n");
+  }
+  expect(checkDocuments(root, repo).errors.join("\n")).toContain(
+    "规格编号须从00连续",
+  );
+});
+
+it("accepts continuous specification numbers through 100", () => {
+  const { repo, root } = specificationFixture();
+  for (const folder of ["requirement", "prd", "design", "plan"]) {
+    for (let number = 1; number <= 100; number++) {
+      const id = String(number).padStart(2, "0");
+      writeFileSync(path.join(root, folder, `${id}-业务.md`), `# ${id} 业务\n`);
+    }
+  }
+  expect(checkDocuments(root, repo).errors).toEqual([]);
+});
+
+it("rejects two names for the same specification number", () => {
+  const { repo, root } = specificationFixture();
+  for (const folder of ["requirement", "prd", "design", "plan"]) {
+    writeFileSync(path.join(root, folder, "00-另名.md"), "# 00 另名\n");
+  }
+  expect(checkDocuments(root, repo).errors.join("\n")).toContain(
+    "规格编号须从00连续",
+  );
+});
+
 it("validates the actual core documents and templates", () => {
   const result = checkDocuments();
   expect(result.errors).toEqual([]);

@@ -6,6 +6,7 @@ filters:
         - file.inFolder("design")
         - file.inFolder("prd")
         - file.inFolder("plan")
+        - file.inFolder("research")
 views:
   - type: table
     name: 当前文档

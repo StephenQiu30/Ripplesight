@@ -18,6 +18,57 @@ const body = (file) =>
     .readFileSync(file, "utf8")
     .replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, "");
 
+const specificationFolders = ["requirement", "prd", "design", "plan"];
+
+function checkSpecificationSet(root, fail) {
+  // Plain Markdown workspaces remain valid; numbered product specifications
+  // use one shared traceability key across all four handoff documents.
+  if (
+    !specificationFolders.some((folder) =>
+      fs.existsSync(path.join(root, folder)),
+    )
+  )
+    return;
+  const sets = specificationFolders.map((folder) => {
+    const directory = path.join(root, folder);
+    if (!fs.existsSync(directory) || !fs.statSync(directory).isDirectory()) {
+      fail(directory, "缺少规格目录");
+      return new Set();
+    }
+    return new Set(
+      documents(directory).map((file) => path.relative(directory, file)),
+    );
+  });
+  const names = [...new Set(sets.flatMap((set) => [...set]))].sort(
+    (left, right) =>
+      Number.parseInt(left, 10) - Number.parseInt(right, 10) ||
+      left.localeCompare(right),
+  );
+  if (!names.length) fail(root, "规格目录不能为空");
+  names.forEach((name, index) => {
+    const match = /^(\d{2,})-([^/\\]+)\.md$/.exec(name);
+    if (!match || Number(match[1]) !== index)
+      fail(
+        path.join(root, "requirement", name),
+        "规格编号须从00连续且每编号唯一",
+      );
+    specificationFolders.forEach((folder, folderIndex) => {
+      const file = path.join(root, folder, name);
+      if (!sets[folderIndex].has(name)) {
+        fail(file, "四目录须使用同编号、同名称文件");
+        return;
+      }
+      const tree = markdown.parse(body(file));
+      const titles = tree.children.filter(
+        (node) => node.type === "heading" && node.depth === 1,
+      );
+      const expected = match ? `${match[1]} ${match[2]}` : "";
+      if (titles.length !== 1 || text(titles[0]) !== expected)
+        fail(file, "规格H1须唯一且与编号名称一致");
+    });
+  });
+}
+
 function documents(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     if (entry.name.startsWith(".")) return [];
@@ -38,6 +89,8 @@ export function checkDocuments(root = contentRoot, sourceRepoRoot = repoRoot) {
   const headings = new Map();
   const fail = (file, message) =>
     errors.push(`${path.relative(root, file)}：${message}`);
+
+  checkSpecificationSet(root, fail);
 
   for (const origin of files) {
     visit(markdown.parse(body(origin)), (node) => {
@@ -91,7 +144,9 @@ if (
       console.error(errors.join("\n"));
       process.exitCode = 1;
     } else
-      console.log(`文档检查通过：${count} 份 Markdown，本地链接与锚点有效。`);
+      console.log(
+        `文档检查通过：${count} 份 Markdown，四类规格结构、本地链接与锚点有效。`,
+      );
   } catch (error) {
     console.error(`文档检查失败：${error.message}`);
     process.exitCode = 1;

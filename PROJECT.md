@@ -63,10 +63,11 @@ ripplesight-server/
 │   └── tests/                 # 前端测试
 └── docs/                     # 唯一项目文档目录，也是 Obsidian vault
     ├── index.md              # 知识库入口与使用说明
-    ├── requirement/          # 当前页面和功能需求
+    ├── requirement/          # 原始意图、详细业务要求与验收依据
     ├── design/               # 目标架构、数据/接口/事务及交互设计
-    ├── prd/                  # 产品问题、用户价值、目标与范围取舍
-    ├── plan/                 # 当前执行顺序与交付门槛
+    ├── prd/                  # 面向开发人员的产品交接：价值、流程、故事和验收
+    ├── plan/                 # 面向 agent 的任务、依赖、验证及停止条件
+    ├── research/             # 调研证据与限制；不代替需求或开发交接
     ├── templates/            # 四类可选模板
     ├── views/文档.base       # Obsidian 文档视图
     └── .obsidian/            # 共享配置；个人布局与缓存继续忽略
@@ -155,7 +156,7 @@ Web 外壳使用 `BasicLayout → PageContainer`：前者管理侧栏、移动�
 
 ## 10. 配置与部署
 
-- **项目文档**：docs/ 是 Markdown 唯一原文和 Obsidian vault；文档按 requirement、design、prd、plan 四个目录维护，进度和技术约定仍在根目录 BACKLOG、PROJECT、AGENTS。链接与锚点检查复用 frontend/tests/docs/ 的 pnpm docs:check，需求、设计和计划同编号同名称，不强制元数据或生成索引。业务报告的 Obsidian 导出继续使用 knowledge/obsidian.py。
+- **项目文档**：docs/ 是 Markdown 唯一原文和 Obsidian vault；requirement、design、prd、plan 四目录同编号同名称，职责与交接门槛统一见 docs/index.md。进度和技术约定仍在根目录 BACKLOG、PROJECT、AGENTS；research 只保留与当前决策相关的调研依据。链接、锚点和四目录结构检查复用 frontend/tests/docs/ 的 pnpm docs:check，不强制元数据或生成索引。业务报告的 Obsidian 导出继续使用 knowledge/obsidian.py。
 - 环境文件只放在仓库根目录：本机用 `.env`，生产用 `.env.prod`，模板是 `.env.example`。所有进程都读这一份，进程注入的环境变量优先。
 - `docker-compose.yml` 定义应用（API、Web，以及按需启用的 Worker / Scheduler / CLI）；`docker-compose-env.yml` 只在需要全新的 PostgreSQL/Redis/Kafka 时使用；`docker-compose-prod.yml` 通过 include 复用应用定义。
 - 浏览器采集由宿主机来源适配器执行；报告导出使用 Playwright，不部署独立的远程 browser 服务。
@@ -163,7 +164,7 @@ Web 外壳使用 `BasicLayout → PageContainer`：前者管理侧栏、移动�
 
 ## 11. 项目文档
 
-[文档入口](docs/index.md) 连接四类编号文档：requirement 逐项维护原始需求、功能约束与验收；design 与 plan 按 requirement 逐项对应，使用相同编号和文件名，分别维护目标架构、数据库/接口/事务、交互及用户故事、业务任务与交付门槛；prd 维护产品定位与研究依据。目录从 00 开始连续编号，不保留统一正文；新增或调整需求同步维护三目录与引用，不强制 frontmatter 或额外任务卡。
+[文档入口](docs/index.md#需求驱动的交付规范) 按 pm-execution 统一需求拆解与交接：原始意图先形成详细 requirement，产品经理据此组织面向开发人员的 PRD；设计人员从需求和 PRD 推导目标设计，开发交接时 PRD 引用已评审设计；agent 再据同一规格拆 PLAN。四目录从 00 开始连续编号，文件名与 H1 一致，编号是追踪键，不规定页面、服务、表或开发任务的数量。用户故事只维护在 PRD，任务只维护在 PLAN，业务 AC 只维护在 requirement；不用重复正文制造多份规则。
 
 Obsidian 直接打开 docs，共享配置、Templates 与文档视图保留；进度仅在根目录 BACKLOG，工程约定仅在 PROJECT 和 AGENTS。API 与数据库直接查代码和唯一 schema。当前文档只维护有效要求与使用说明，不保存历史文档、归档副本或已完成事项流水。业务报告的 Obsidian 导出独立于项目文档。
 
@@ -208,7 +209,7 @@ CI 验证当前锁定运行栈。frontend执行完整静态检查、交互回归
 
 ## 13. 需求驱动的目标设计评审
 
-本轮文档按用户要求从核心闭环重新推导；当前实现和旧设计可能有误，不能据现状限制需求。docs/requirement维护原始意图/功能/非功能/业务规则/验收，docs/design同编号维护目标架构、ER、字段/键/索引/生命周期、接口/事务与体验，docs/plan维护故事、专属工作包、依赖和退出门槛。具体入口见[文档规格导航](docs/index.md)。
+本轮文档按用户要求从核心闭环重新推导；当前实现和旧设计可能有误，不能据现状限制需求。requirement 维护原始意图/功能/非功能/业务规则/验收，PRD 面向开发人员交接用户价值、流程、故事与范围，design 维护目标架构、ER、字段/键/索引/生命周期、接口/事务与体验，PLAN 面向 agent 维护执行输入、专属工作包、依赖、验证及停止条件。具体门槛见[需求驱动的交付规范](docs/index.md#需求驱动的交付规范)。
 
 这些是待评审目标方案，不是本架构文件所述运行系统已经变更。新增候选表不自动授权替换现有schema、启动服务或升级业务库；结构实施前须按§6核对消费者、DDL/ORM/结构断言及恢复回退。旧“必须复用某表/队列/组件”等实施选择可以重评，安全、费用及授权边界仍按现行规范执行。
 
