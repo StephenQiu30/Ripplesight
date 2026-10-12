@@ -201,10 +201,12 @@ def test_invalid_or_missing_items_become_unanalyzed_without_discarding_valid_ite
     assert by_id[first_id].result_state is AnnotationResultState.VALID
     assert by_id[first_id].sentiment is Sentiment.NEGATIVE
     assert by_id[first_id].ai_call_id == call_id
-    assert by_id[second_id].status is AnnotationStatus.UNANALYZED
-    assert by_id[second_id].result_state is AnnotationResultState.INVALID
-    assert by_id[second_id].error_code == "analysis_output_invalid"
-    assert by_id[second_id].relevant is None
+    assert by_id[second_id].status is AnnotationStatus.ANNOTATED
+    assert by_id[second_id].result_state is AnnotationResultState.VALID
+    assert by_id[second_id].error_code is None
+    assert by_id[second_id].relevant is False
+    assert by_id[second_id].dimension_results is not None
+    assert by_id[second_id].dimension_results.sentiment.state == "invalid"
     assert by_id[missing_id].status is AnnotationStatus.UNANALYZED
     assert by_id[missing_id].error_code == "analysis_output_missing"
 

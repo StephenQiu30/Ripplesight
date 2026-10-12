@@ -25,7 +25,7 @@ from analysis.schemas import (
     AnnotationStatus,
     AnnotationWrite,
 )
-from analysis.services import AnalysisService, analysis_operation_id
+from analysis.services import AnalysisService, analysis_operation_id, resolve_annotation_results
 from content.analysis_inputs import freeze_analysis_observation_inputs_in_transaction
 from content.analysis_schemas import AnalysisObservationManifest
 from content.schemas import AnalysisPostContentView
@@ -832,3 +832,196 @@ def test_unproven_legacy_result_stays_pending_and_unreadable(
         )
     assert (counts.annotated_count, counts.pending_count) == (0, 1)
     assert visible == []
+
+
+def _dimension_result(context, call_id, **changes):
+    post = context[3]
+    raw = dict(
+        content_version_id=str(post.content_version_id),
+        relevant=True,
+        relevance_reason="固定样本理由",
+        summary="固定摘要",
+        sentiment="neutral",
+        viewpoints=["保留观点"],
+    )
+    raw.update(changes)
+    (result,) = resolve_annotation_results(
+        expected_content_version_ids=(post.content_version_id,), raw_items=[raw], ai_call_id=call_id
+    )
+    return result
+
+
+def _persist_dimensions(context, result, *, at=None):
+    sessions, owner, topic, post, _, _, now = context
+    with sessions() as session, session.begin():
+        manifest = freeze_analysis_observation_inputs_in_transaction(
+            session,
+            owner_id=owner,
+            post_observations={post.content_version_id: post.observation_id},
+            comment_observations={},
+            now=at or now,
+        )
+        job_id = _seed_analysis_job(
+            session,
+            owner_id=owner,
+            topic_id=topic,
+            posts=(post,),
+            now=now,
+            prompt_version="analysis.annotate.v2",
+            input_manifest=manifest,
+        )
+        session.execute(
+            text(
+                "UPDATE ai_calls SET job_id=:job,prompt_version='analysis.annotate.v2' "
+                "WHERE owner_id=:owner AND id=:call"
+            ),
+            dict(job=job_id, owner=owner, call=result.ai_call_id),
+        )
+        AnalysisService(session).persist_results_in_transaction(
+            owner_id=owner,
+            topic_id=topic,
+            topic_rule_version=1,
+            prompt_version="analysis.annotate.v2",
+            posts={post.content_version_id: post},
+            results=(result,),
+            input_manifest=manifest,
+            created_at=at or now,
+        )
+
+
+def test_dimensions_round_trip_merge_and_replay(annotation_context):
+    context = annotation_context
+    sessions, owner, _, _, first_call, next_call, now = context
+    first = _dimension_result(context, first_call, relevant="true")
+    _persist_dimensions(context, first, at=now + timedelta(seconds=10))
+    second = _dimension_result(context, next_call, sentiment="invalid", viewpoints=[""])
+    _persist_dimensions(context, second, at=now + timedelta(seconds=5))
+    with sessions() as session:
+        row = session.scalar(select(ContentAnnotation).where(ContentAnnotation.owner_id == owner))
+        assert row.relevant is True and row.sentiment == "neutral"
+        assert row.viewpoints == ["保留观点"]
+        assert row.dimension_results["relevance"]["ai_call_id"] == str(next_call)
+        assert row.dimension_results["sentiment"]["ai_call_id"] == str(first_call)
+        assert row.first_valid_at == now + timedelta(seconds=5)
+        original = row.dimension_results
+        stamp = row.updated_at
+        views = load_content_annotations_in_transaction(
+            session,
+            owner_id=owner,
+            content_id=context[3].content_id,
+            readable_version_ids={context[3].content_version_id},
+            now=now + timedelta(seconds=20),
+        )
+        assert views[0].dimension_results.relevance.value is True
+        assert (
+            load_content_annotations_in_transaction(
+                session,
+                owner_id=uuid4(),
+                content_id=context[3].content_id,
+                readable_version_ids={context[3].content_version_id},
+                now=now + timedelta(seconds=20),
+            )
+            == []
+        )
+    _persist_dimensions(context, second, at=now + timedelta(seconds=30))
+    with sessions() as session:
+        row = session.scalar(select(ContentAnnotation).where(ContentAnnotation.owner_id == owner))
+        assert row.dimension_results == original and row.updated_at == stamp
+
+
+def test_dimensions_core_valid_survives_other_failure_and_concurrent_results(annotation_context):
+    context = annotation_context
+    first = _dimension_result(context, context[4], sentiment="invalid", viewpoints=[""])
+    second = _dimension_result(context, context[5], relevant="true")
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(_persist_dimensions, context, result) for result in (first, second)]
+        for future in futures:
+            future.result()
+    with context[0]() as session:
+        row = session.scalar(
+            select(ContentAnnotation).where(ContentAnnotation.owner_id == context[1])
+        )
+        assert row.relevant is True and row.sentiment == "neutral"
+        assert row.dimension_results["relevance"]["state"] == "valid"
+        assert row.dimension_results["sentiment"]["state"] == "valid"
+        assert row.dimension_results["viewpoints"]["state"] == "valid"
+
+
+def test_dimensions_reject_unbound_calls_and_bad_json_shape(annotation_context):
+    context = annotation_context
+    sessions, owner, topic, post, call, _, now = context
+    result = _dimension_result(context, call)
+    with (
+        sessions() as session,
+        pytest.raises(ValueError, match="frozen analysis scope"),
+        session.begin(),
+    ):
+        manifest = freeze_analysis_observation_inputs_in_transaction(
+            session,
+            owner_id=owner,
+            post_observations={post.content_version_id: post.observation_id},
+            comment_observations={},
+            now=now,
+        )
+        AnalysisService(session).persist_results_in_transaction(
+            owner_id=owner,
+            topic_id=topic,
+            topic_rule_version=1,
+            prompt_version="analysis.annotate.v2",
+            posts={post.content_version_id: post},
+            results=(result,),
+            input_manifest=manifest,
+            created_at=now,
+        )
+    _persist_dimensions(context, result)
+    with (
+        sessions() as session,
+        pytest.raises(IntegrityError, match="dimensions_check"),
+        session.begin(),
+    ):
+        session.execute(
+            text("UPDATE content_annotations SET dimension_results='{}'::jsonb WHERE owner_id=:o"),
+            {"o": owner},
+        )
+
+
+def test_legacy_valid_dimensions_are_not_backfilled(annotation_context):
+    context = annotation_context
+    result = _dimension_result(context, context[4])
+    _persist_dimensions(context, result)
+    with context[0]() as session, session.begin():
+        session.execute(
+            text("UPDATE content_annotations SET dimension_results=NULL WHERE owner_id=:o"),
+            {"o": context[1]},
+        )
+    _persist_dimensions(context, _dimension_result(context, context[5], sentiment="invalid"))
+    with context[0]() as session:
+        row = session.scalar(
+            select(ContentAnnotation).where(ContentAnnotation.owner_id == context[1])
+        )
+        assert row.relevant is True and row.dimension_results is None
+
+
+def test_dimensions_revalidate_internal_copies_before_writing(annotation_context):
+    context = annotation_context
+    result = _dimension_result(context, context[4])
+    forged = result.model_copy(
+        update={
+            "dimension_results": result.dimension_results.model_copy(
+                update={
+                    "sentiment": result.dimension_results.sentiment.model_copy(
+                        update={"ai_call_id": context[5]}
+                    )
+                }
+            )
+        }
+    )
+    with pytest.raises(ValueError, match="actual common call"):
+        _persist_dimensions(context, forged)
+    with context[0]() as session:
+        assert (
+            session.scalar(
+                select(ContentAnnotation).where(ContentAnnotation.owner_id == context[1])
+            )
+            is None
+        )

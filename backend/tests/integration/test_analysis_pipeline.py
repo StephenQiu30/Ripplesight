@@ -566,20 +566,21 @@ def test_analysis_scan_uses_selected_source_or_exact_hotlist_topic_version(
     }
 
 
-def _seed_ai_call(case: AnalysisCase, call_id: UUID) -> None:
+def _seed_ai_call(case: AnalysisCase, call_id: UUID, *, job_id: UUID | None = None) -> None:
     with case.sessions() as session, session.begin():
         session.execute(
             text(
                 "INSERT INTO ai_calls "
-                "(id, owner_id, purpose, provider, model, prompt_version, "
+                "(id, owner_id, job_id, purpose, provider, model, prompt_version, "
                 "input_fingerprint, status, input_tokens, cached_input_tokens, "
                 "output_tokens, reasoning_output_tokens, duration_ms, created_at) "
-                "VALUES (:id, :owner, 'analysis.annotate', 'test', 'test-model', :prompt, "
+                "VALUES (:id, :owner, :job, 'analysis.annotate', 'test', 'test-model', :prompt, "
                 ":fingerprint, 'succeeded', 0, 0, 0, 0, 0, :now)"
             ),
             {
                 "id": call_id,
                 "owner": case.owner_id,
+                "job": job_id,
                 "prompt": ANALYSIS_PROMPT_VERSION,
                 "fingerprint": call_id.bytes * 2,
                 "now": case.now,
@@ -900,11 +901,20 @@ def _post(case: AnalysisCase):
 
 
 @pytest.mark.parametrize(
-    "prompt_version", [ANALYSIS_PROMPT_VERSION, LEGACY_ANALYSIS_PROMPT_VERSION]
+    ("prompt_version", "sentiment", "viewpoints"),
+    [
+        (ANALYSIS_PROMPT_VERSION, None, []),
+        (LEGACY_ANALYSIS_PROMPT_VERSION, "neutral", []),
+        (ANALYSIS_PROMPT_VERSION, "invalid", []),
+        (ANALYSIS_PROMPT_VERSION, None, [""]),
+        (ANALYSIS_PROMPT_VERSION, "invalid", [""]),
+    ],
 )
-def test_valid_relevance_without_required_sentiment_persists_and_is_not_recomputed(
+def test_valid_relevance_without_optional_success_persists_and_is_not_recomputed(
     analysis_case: AnalysisCase,
     prompt_version: str,
+    sentiment: str | None,
+    viewpoints: list[str],
 ) -> None:
     from analysis.reads import load_current_annotation_states_in_transaction
     from analysis.services import list_relevant_event_annotation_refs_in_transaction
@@ -912,7 +922,7 @@ def test_valid_relevance_without_required_sentiment_persists_and_is_not_recomput
     case = analysis_case
     job_id = _scan(case)[0]
     call = uuid4()
-    _seed_ai_call(case, call)
+    _seed_ai_call(case, call, job_id=job_id if prompt_version == ANALYSIS_PROMPT_VERSION else None)
     results = resolve_annotation_results(
         expected_content_version_ids=(case.version_id,),
         raw_items=[
@@ -920,9 +930,9 @@ def test_valid_relevance_without_required_sentiment_persists_and_is_not_recomput
                 "content_version_id": str(case.version_id),
                 "relevant": True,
                 "relevance_reason": "讨论产品发布",
-                "sentiment": None if prompt_version == ANALYSIS_PROMPT_VERSION else "neutral",
+                "sentiment": sentiment,
                 "summary": "产品发布",
-                "viewpoints": [],
+                "viewpoints": viewpoints,
             }
         ],
         ai_call_id=call,

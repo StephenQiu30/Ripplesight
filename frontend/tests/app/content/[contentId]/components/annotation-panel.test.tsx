@@ -255,3 +255,112 @@ it("shows the newer comment context outcome instead of inheriting an older valid
   expect(result.current).toEqual(newer);
   expect(result.historical).toEqual([previous]);
 });
+
+const independent: HotKeyAPI.ContentAnnotationReadView = {
+  ...pending,
+  prompt_version: "analysis.annotate.v2",
+  status: "annotated",
+  result_state: "valid",
+  relevant: true,
+  relevance_reason: "原帖明确讨论主题",
+  summary: "主题摘要",
+  dimension_results: {
+    schema_version: 1,
+    relevance: {
+      state: "valid",
+      value: true,
+      reason: "原帖明确讨论主题",
+      summary: "主题摘要",
+      ai_call_id: "00000000-0000-0000-0000-000000000002",
+    },
+    sentiment: {
+      state: "invalid",
+      value: null,
+      error_code: "analysis_sentiment_invalid",
+      ai_call_id: "00000000-0000-0000-0000-000000000002",
+    },
+    viewpoints: {
+      state: "failed",
+      value: null,
+      error_code: "analysis_viewpoints_invalid",
+      ai_call_id: "00000000-0000-0000-0000-000000000002",
+    },
+  },
+};
+
+it("keeps valid relevance visible when independent optional dimensions fail", () => {
+  const html = renderToStaticMarkup(
+    createElement(AnnotationResult, {
+      annotation: independent,
+      historical: false,
+    }),
+  );
+  expect(html).toContain("原帖明确讨论主题");
+  expect(html).toContain("逐维分析结果");
+  expect(html).toContain("结果无效");
+  expect(html).toContain("校验失败");
+  expect(html).not.toContain("情感：未分析");
+  expect(html).not.toContain("中性</p>");
+});
+
+it("retains valid optional values without inventing a relevance conclusion", () => {
+  const annotation: HotKeyAPI.ContentAnnotationReadView = {
+    ...independent,
+    status: "unanalyzed",
+    result_state: "invalid",
+    relevant: null,
+    relevance_reason: null,
+    summary: null,
+    dimension_results: {
+      ...independent.dimension_results!,
+      relevance: {
+        state: "invalid",
+        value: null,
+        error_code: "analysis_output_invalid",
+        ai_call_id: "call",
+      },
+      sentiment: { state: "valid", value: "negative", ai_call_id: "call" },
+      viewpoints: {
+        state: "valid",
+        value: ["独立保留的观点"],
+        ai_call_id: "call",
+      },
+    },
+  };
+  const html = renderToStaticMarkup(
+    createElement(AnnotationResult, { annotation, historical: false }),
+  );
+  expect(html).toContain("没有有效相关性结论");
+  expect(html).toContain("独立保留的观点");
+  expect(html).toContain("负向");
+  expect(html).not.toContain("判断理由");
+});
+
+it("distinguishes explicit not analysed from legacy unknown dimension evidence", () => {
+  const annotation = {
+    ...independent,
+    dimension_results: {
+      ...independent.dimension_results!,
+      sentiment: {
+        state: "not_analyzed" as const,
+        value: null,
+        ai_call_id: "call",
+      },
+      viewpoints: {
+        state: "not_analyzed" as const,
+        value: null,
+        ai_call_id: "call",
+      },
+    },
+  };
+  const explicit = renderToStaticMarkup(
+    createElement(AnnotationResult, { annotation, historical: false }),
+  );
+  expect(explicit).toContain("本次未分析此维度");
+  expect(explicit).not.toContain("逐维结果未知");
+  const legacy = renderToStaticMarkup(
+    createElement(AnnotationResult, { annotation: pending, historical: false }),
+  );
+  expect(legacy).toContain("逐维结果未知");
+  expect(legacy).not.toContain("本次未分析此维度");
+});

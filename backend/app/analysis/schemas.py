@@ -48,6 +48,72 @@ class AnnotationResultState(StrEnum):
     DEFERRED = "deferred"
 
 
+class AnnotationDimensionResult(BaseModel):
+    """Keep a validated dimension and its actual call independently of its siblings."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    state: Literal["valid", "invalid", "failed", "not_analyzed"]
+    value: bool | str | tuple[str, ...] | None = None
+    reason: str | None = Field(default=None, min_length=1, max_length=500)
+    summary: str | None = Field(default=None, min_length=1, max_length=60)
+    error_code: str | None = Field(default=None, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
+    ai_call_id: UUID
+
+    @model_validator(mode="after")
+    def consistent_state(self) -> Self:
+        """Never carry an inferred value or turn malformed output into unanalysed output."""
+        if (self.state == "valid") != (self.value is not None):
+            raise ValueError("dimension value requires a valid outcome")
+        if (self.state in {"invalid", "failed"}) != (self.error_code is not None):
+            raise ValueError("dimension failures require an error code")
+        if self.state != "valid" and (self.reason is not None or self.summary is not None):
+            raise ValueError("non-conclusions cannot carry a reason or summary value")
+        return self
+
+
+class AnnotationDimensions(BaseModel):
+    """Version the three independently validated results in one frozen input row."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    schema_version: Literal[1] = 1
+    relevance: AnnotationDimensionResult
+    sentiment: AnnotationDimensionResult
+    viewpoints: AnnotationDimensionResult
+
+    @model_validator(mode="after")
+    def typed_values(self) -> Self:
+        """Enforce dimension-specific types even when reading persisted JSON."""
+        relevance = self.relevance
+        if relevance.state == "not_analyzed":
+            raise ValueError("this contract always requests relevance")
+        if relevance.state == "valid" and (
+            not isinstance(relevance.value, bool)
+            or not relevance.reason
+            or not relevance.reason.strip()
+            or not relevance.summary
+            or not relevance.summary.strip()
+        ):
+            raise ValueError("valid relevance requires a real boolean, reason and summary")
+        if self.sentiment.state == "valid" and (
+            not isinstance(self.sentiment.value, str)
+            or self.sentiment.value not in {"positive", "neutral", "negative"}
+        ):
+            raise ValueError("invalid sentiment value")
+        value = self.viewpoints.value
+        if self.viewpoints.state == "valid" and (
+            not isinstance(value, tuple)
+            or not 1 <= len(value) <= 5
+            or any(not item.strip() or len(item) > 200 for item in value)
+        ):
+            raise ValueError("invalid viewpoint value")
+        if any(
+            item.reason is not None or item.summary is not None
+            for item in (self.sentiment, self.viewpoints)
+        ):
+            raise ValueError("optional dimensions have no model-provided reason or summary")
+        return self
+
+
 class ContentAnnotationReadView(OutputModel):
     id: UUID
     topic_id: UUID
@@ -61,6 +127,7 @@ class ContentAnnotationReadView(OutputModel):
     sentiment: Sentiment | None
     summary: str | None
     viewpoints: list[str]
+    dimension_results: AnnotationDimensions | None = None
     error_code: str | None
     updated_at: datetime
     created_at: datetime | None = None
@@ -379,10 +446,36 @@ class AnnotationWrite(BaseModel):
     ai_call_id: UUID | None = None
     status: AnnotationStatus
     result_state: AnnotationResultState
+    dimension_results: AnnotationDimensions | None = None
     error_code: str | None = Field(default=None, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
 
     @model_validator(mode="after")
     def validate_status_fields(self) -> Self:
+        if self.dimension_results is not None:
+            dimensions = self.dimension_results
+            if any(
+                item.ai_call_id != self.ai_call_id
+                for item in (dimensions.relevance, dimensions.sentiment, dimensions.viewpoints)
+            ):
+                raise ValueError("new dimension results require their actual common call")
+            relevance = dimensions.relevance
+            if (
+                relevance.state != self.result_state.value
+                or (relevance.value if relevance.state == "valid" else None) != self.relevant
+                or relevance.reason != self.relevance_reason
+                or relevance.summary != self.summary
+                or relevance.error_code != self.error_code
+            ):
+                raise ValueError("flat relevance must project the independent result")
+            valid = relevance.state == "valid"
+            if self.sentiment != (
+                dimensions.sentiment.value if valid else None
+            ) or self.viewpoints != (
+                dimensions.viewpoints.value
+                if valid and isinstance(dimensions.viewpoints.value, tuple)
+                else ()
+            ):
+                raise ValueError("flat optional values must project independent results")
         if self.status is AnnotationStatus.ANNOTATED and (
             self.result_state is not AnnotationResultState.VALID
             or self.relevant is None

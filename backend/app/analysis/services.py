@@ -12,8 +12,10 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
 from ai.capability_services import freeze_ai_job_scope_in_transaction
+from ai.models import AiCall
 from ai.schemas import AiCallError, AiFailureCode
 from ai.services import AiService, create_ai_client
+from analysis.dimensions import merge_post_dimensions, resolve_post_dimensions
 from analysis.models import (
     AnalysisPromptActivation,
     AnalysisPromptRuntimeSession,
@@ -43,6 +45,7 @@ from analysis.schemas import (
     AnalysisNeedLedgerRowView,
     AnalysisNeedLedgerView,
     AnalysisPromptItem,
+    AnnotationDimensions,
     AnnotationOutputEnvelope,
     AnnotationOutputItem,
     AnnotationResultState,
@@ -619,6 +622,16 @@ def resolve_annotation_results(
     for content_version_id in expected_content_version_ids:
         candidates = grouped.get(content_version_id, [])
         if len(candidates) == 1:
+            if prompt_version == ANALYSIS_PROMPT_VERSION:
+                resolved.append(
+                    resolve_post_dimensions(
+                        candidates[0],
+                        content_version_id=content_version_id,
+                        ai_call_id=ai_call_id,
+                        retry_index=retry_index,
+                    )
+                )
+                continue
             if prompt_version == COMMENT_ANALYSIS_PROMPT_VERSION:
                 try:
                     comment = CommentAnnotationOutputItem.model_validate(candidates[0])
@@ -1387,9 +1400,44 @@ class AnalysisService:
             )
         signature = input_manifest.signature if input_manifest is not None else "legacy"
         for result in results:
+            # Recheck copies made by internal callers before trusting embedded call references.
+            result = AnnotationWrite.model_validate(result.model_dump())
             post = posts.get(result.content_version_id)
             if post is None:
                 raise ValueError("analysis result references an unfrozen content version")
+            if result.dimension_results is not None:
+                call = self._session.scalar(
+                    select(AiCall).where(
+                        AiCall.id == result.ai_call_id,
+                        AiCall.owner_id == owner_id,
+                        AiCall.purpose == "analysis.annotate",
+                        AiCall.prompt_version == prompt_version,
+                        AiCall.status == "succeeded",
+                    )
+                )
+                job = (
+                    self._session.scalar(
+                        select(Job).where(
+                            Job.id == call.job_id,
+                            Job.owner_id == owner_id,
+                            Job.kind == "analysis.annotate",
+                        )
+                    )
+                    if call is not None and call.job_id is not None
+                    else None
+                )
+                scope = AnalysisJobScope.from_job_scope(job.scope) if job is not None else None
+                if (
+                    prompt_version != ANALYSIS_PROMPT_VERSION
+                    or input_manifest is None
+                    or scope is None
+                    or scope.topic_id != topic_id
+                    or scope.topic_rule_version != topic_rule_version
+                    or scope.prompt_version != prompt_version
+                    or result.content_version_id not in scope.content_version_ids
+                    or scope.input_manifest != input_manifest
+                ):
+                    raise ValueError("dimension call is outside its frozen analysis scope")
             if input_manifest is not None and (
                 (
                     input_manifest.comment_observations
@@ -1418,6 +1466,9 @@ class AnalysisService:
                     sentiment=result.sentiment.value if result.sentiment is not None else None,
                     summary=result.summary,
                     viewpoints=list(result.viewpoints),
+                    dimension_results=result.dimension_results.model_dump(mode="json")
+                    if result.dimension_results is not None
+                    else None,
                     ai_call_id=result.ai_call_id,
                     status=result.status.value,
                     result_state=result.result_state.value,
@@ -1459,6 +1510,48 @@ class AnalysisService:
                 "recorded_at": created_at.astimezone(UTC).isoformat(),
             }
             history = list(current.diagnostic_history)
+            if current.dimension_results is not None:
+                if result.dimension_results is not None:
+                    merged = merge_post_dimensions(
+                        AnnotationDimensions.model_validate(current.dimension_results),
+                        result.dimension_results,
+                        incoming_is_late=created_at < current.updated_at,
+                    )
+                    if merged.model_dump(mode="json") != current.dimension_results:
+                        relevance = merged.relevance
+                        current.dimension_results = merged.model_dump(mode="json")
+                        current.relevant = (
+                            relevance.value if isinstance(relevance.value, bool) else None
+                        )
+                        current.relevance_reason = relevance.reason
+                        current.summary = relevance.summary
+                        current.ai_call_id = relevance.ai_call_id
+                        current.result_state = relevance.state
+                        current.error_code = relevance.error_code
+                        valid = relevance.state == "valid"
+                        current.status = "annotated" if valid else "unanalyzed"
+                        current.sentiment = (
+                            merged.sentiment.value
+                            if valid
+                            and current.relevant
+                            and isinstance(merged.sentiment.value, str)
+                            else None
+                        )
+                        current.viewpoints = (
+                            list(merged.viewpoints.value)
+                            if valid and isinstance(merged.viewpoints.value, tuple)
+                            else []
+                        )
+                        if valid and current.first_valid_at is None:
+                            current.first_valid_at = created_at
+                        current.updated_at = max(current.updated_at, created_at)
+                if result.result_state is not AnnotationResultState.VALID and not any(
+                    entry.get("ai_call_id") == diagnostic["ai_call_id"]
+                    and entry.get("result_state") == diagnostic["result_state"]
+                    for entry in history
+                ):
+                    current.diagnostic_history = [*history, diagnostic]
+                continue
             if current.result_state == AnnotationResultState.VALID.value:
                 if result.result_state is not AnnotationResultState.VALID and not any(
                     entry.get("ai_call_id") == diagnostic["ai_call_id"]
@@ -1503,6 +1596,11 @@ class AnalysisService:
             current.sentiment = result.sentiment.value if result.sentiment else None
             current.summary = result.summary
             current.viewpoints = list(result.viewpoints)
+            current.dimension_results = (
+                result.dimension_results.model_dump(mode="json")
+                if result.dimension_results is not None
+                else None
+            )
             if result.result_state is AnnotationResultState.VALID:
                 current.first_valid_at = created_at
             current.updated_at = max(current.updated_at, created_at)

@@ -112,6 +112,18 @@ class ContentAnnotation(Base):
             name="content_annotations_diagnostic_history_check",
         ),
         CheckConstraint(
+            "dimension_results IS NULL OR (prompt_version = 'analysis.annotate.v2' "
+            "AND jsonb_typeof(dimension_results) = 'object' "
+            "AND dimension_results->'schema_version' = '1'::jsonb "
+            "AND dimension_results ?& ARRAY['schema_version','relevance','sentiment','viewpoints'] "
+            "AND dimension_results - 'schema_version' - 'relevance' - 'sentiment' - 'viewpoints' "
+            "= '{}'::jsonb AND octet_length(dimension_results::text) <= 16384 "
+            "AND jsonb_typeof(dimension_results->'relevance') = 'object' "
+            "AND jsonb_typeof(dimension_results->'sentiment') = 'object' "
+            "AND jsonb_typeof(dimension_results->'viewpoints') = 'object')",
+            name="content_annotations_dimensions_check",
+        ),
+        CheckConstraint(
             "status IN ('annotated', 'unanalyzed')",
             name="content_annotations_status_check",
         ),
@@ -176,6 +188,7 @@ class ContentAnnotation(Base):
     sentiment: Mapped[str | None] = mapped_column(String(16))
     summary: Mapped[str | None] = mapped_column(String(60))
     viewpoints: Mapped[list[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    dimension_results: Mapped[dict[str, object] | None] = mapped_column(JSONB(none_as_null=True))
     ai_call_id: Mapped[UUID | None]
     status: Mapped[str] = mapped_column(String(16))
     result_state: Mapped[str] = mapped_column(String(16))

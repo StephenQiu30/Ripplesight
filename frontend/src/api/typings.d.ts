@@ -296,6 +296,29 @@ declare namespace HotKeyAPI {
     reason: string | null;
   };
 
+  type AnnotationDimensionResult = {
+    /** State */
+    state: "valid" | "invalid" | "failed" | "not_analyzed";
+    /** Value */
+    value?: boolean | string | string[] | null;
+    /** Reason */
+    reason?: string | null;
+    /** Summary */
+    summary?: string | null;
+    /** Error Code */
+    error_code?: string | null;
+    /** Ai Call Id */
+    ai_call_id: string;
+  };
+
+  type AnnotationDimensions = {
+    /** Schema Version */
+    schema_version?: number;
+    relevance: AnnotationDimensionResult;
+    sentiment: AnnotationDimensionResult;
+    viewpoints: AnnotationDimensionResult;
+  };
+
   type AnnotationResultState =
     | "pending"
     | "failed"
@@ -960,6 +983,7 @@ declare namespace HotKeyAPI {
     summary: string | null;
     /** Viewpoints */
     viewpoints: string[];
+    dimension_results?: AnnotationDimensions | null;
     /** Error Code */
     error_code: string | null;
     /** Updated At */

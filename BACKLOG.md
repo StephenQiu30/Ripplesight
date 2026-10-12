@@ -16,7 +16,7 @@
 
 ## 决策与实施边界
 
-当前受控实施切片为CORE-05原帖独立相关性，按[PLAN-09逐维SPEC](docs/plan/09-模型分析.md#原帖逐维校验与独立相关性切片spec)先冻结、再实现与验证。只用固定样本和独立测试库，自行审查后提交本地main；不派发任务、不推送、不调用真实平台/模型/通知或业务库。
+本轮已完成CORE-05原帖独立相关性的受控实现，按[PLAN-09逐维SPEC](docs/plan/09-模型分析.md#原帖逐维校验与独立相关性切片spec)提交`58205b98`冻结后实施；代码与固定样本验证见CORE-05，真实能力待验收。按本人指示自行审查，不称独立审查；仅提交本地main，不派发任务、不推送、不调用真实平台/模型/通知或业务库。其余切片按各自就绪门槛继续准备。
 
 - [ ] **GOV-00-01～03 / VR-11-01**：评审原始意图登记、FR/BR、18类NFR及AC；补充尚未找回的原始要求。核心优先，其余保留重审。数据库逐实体选择复用、改造或替换，先证明约束再决定表名，不按“55张候选表”机械建表。
 - [ ] **FR-08-03**：冻结国内主流平台POC清单及逐平台能力/免费准入依据。单个B站切片不能代表国内主流覆盖；HN仅作合同对照，不能替代国内POC。X/Instagram等目标保留，费用不明、权限未准入或风控时不得请求。
@@ -57,13 +57,13 @@
 | 来源能力/准入：FR-08-01～03 | [类型合同](backend/app/sources/contracts.py)、[B站适配器](backend/app/sources/adapters/bilibili_chrome.py)有搜索/评论及停止结果；已有[Chrome管线样本](backend/tests/integration/test_chrome_monitor.py) | 把关键词/详情/全文/根评论/回复/分页/回补/删除证据分别投影支持、受限、不支持或未知并附依据日期；冻结国内平台范围与准入，不用目录标签或样本代替真实证明 |
 | 冻结查询及增量：FR-01、02-01/03、03、46 | [主题规则与受理](backend/app/monitors/services.py)、[发现与请求预算](backend/app/content/discovery.py)、[冻结回执分类](backend/app/content/collection_counts.py)及任务/列表单轮摘要 | 继续复用规则/窗口/上限/连接版本和实际执行轮；未知语言、匹配语义及完整窗口分母须按对应SPEC证明，不能凭累计或首屏结果补造完整性 |
 | 原帖/旧帖讨论：FR-02-02/04 | [评论请求执行](backend/app/content/comments_execution.py)、[自动候选扫描](backend/app/content/services.py)和原生父链/版本可复用 | 自动扫描按建档年龄/近期观察选候选，不是用户显式持久跟踪；补纳入/退出/到期/频率上限及版本，窗口外旧帖新评论可发现，退出后逐请求停止；回复和缺父不能标成已完整采集 |
-| 独立相关性与排序：FR-04-01、09、36 | [评论原帖/父链冻结与复核](backend/app/content/comment_analysis.py)、[分析输入/提交](backend/app/analysis/services.py)、[本机调用门禁](backend/app/ai/services.py)可复用 | 原帖输出仍整项校验[AnnotationOutputItem](backend/app/analysis/schemas.py)：非法情感/观点会使有效相关性一并无效；先拆独立维度状态，保留不足/未知/延后，再验证相关性与新鲜度排序、稳定cursor和解释；不以互动或任意相似度代替 |
+| 独立相关性与排序：FR-04-01、09、36 | [评论原帖/父链冻结与复核](backend/app/content/comment_analysis.py)、[分析输入/提交](backend/app/analysis/services.py)、[本机调用门禁](backend/app/ai/services.py)可复用 | 原帖v2已通过[逐维解析](backend/app/analysis/dimensions.py)保留有效相关性，情感/观点各自记录状态；旧无逐维回执仍未知，评论不足/未知/延后保留。排序、稳定cursor、引文与独立评测仍待补齐；不以互动或任意相似度代替 |
 | 事件与新事实：FR-04-02/03、05-01/02 | [归并与事实写入](backend/app/events/fact_writer.py)、[纠错输入](backend/app/events/fact_schemas.py)已有事件/事实修订、预期版本和来源引用 | [事实模型](backend/app/events/fact_models.py)的confirmed/unreviewed/merged不能证明说法、支持/确认/反证/撤回和规范事件谱系继承已完整；按真实输入与当前许可逐项验收，重复报道不加新事实、线索不冒充证实 |
 | 自然监测/停止/预算：FR-06、46/47/50 | [请求前围栏](backend/app/jobs/execution.py)、[逐请求准入/预算](backend/app/content/discovery.py)及现有调度/回执可复用；停止检查调用主题生命周期围栏 | 完整调度生效区间和启停历史、跨改频/删来源的应执行分母、独立采集/分析/发送授权、预算停用/改版额度、模型停用与未知用量仍须具体SPEC及反例；已存在围栏不重建或撤销 |
 | 热点/关注/提醒：FR-05-03、07、35 | [目标版本/资格门禁](backend/app/notifications/alert_services.py)、[外发准备及unknown保护](backend/app/notifications/executor.py)可复用 | `_target_reason`仍以同目标修订provider accepted历史作为就绪依据；补具体地址版本显式验证、静默、规范事件/事实进展去重与取消继承；冻结可比窗口/热点规则和提醒批次，三类核心提醒均保留，不用提供方接受代替本人收到 |
 | 本人隔离/附件/提交/外发：FR-10、NFR-06/07/15 | [会话/写入门禁](backend/app/api/dependencies.py)、[完整资料依赖候选](backend/app/content/authority_reading.py)、[当前资源许可](backend/app/evidence/services.py)及上述冻结输入门禁可复用 | 逐一列实际开放入口的owner、当前许可、ALL依赖、ID/cursor及间接引用反例；完整详情已接入独立权威须保持强制拒绝与锁外复核，不能推广为所有列表/分析/附件/外发均已接齐。附件/导出/派生及写方本轮未做全路径验证；恢复目标未证明前保持隔离，不把完整账本迁移强加为全部核心前置 |
 
-源码与测试文件存在只证明可定位实现，本轮没有重跑后端业务测试、模型或平台，因此不新增上述能力通过项。读入口、模型输入及结果提交、附件、任务控制和发送分别核查；费用/账号不明只阻塞对应真实验收，当前BACKLOG记录的代码暂停与待评审SPEC是另一层门槛。后续先确认一个国内来源及受限范围、代表主题/关键词，再按PLAN-08为确定查询/未知语言、显式旧帖跟踪、独立相关性和事实状态分别冻结最小SPEC；不自动接续B1b-2，不扩大到辅助页面或完整灾备。本准备不改变全部核心未关闭状态。
+上述国内来源就绪准备只定位实现，不新增真实能力通过项；本轮原帖逐维切片的代码验证见CORE-05。读入口、模型输入及结果提交、附件、任务控制和发送分别核查；费用/账号不明只阻塞对应真实验收，其余代码切片仍须满足就绪及SPEC门槛。后续先确认一个国内来源及受限范围、代表主题/关键词，再按PLAN-08为确定查询/未知语言、显式旧帖跟踪、相关性排序和事实状态分别冻结最小SPEC；不自动接续B1b-2，不扩大到辅助页面或完整灾备。本准备不改变全部核心未关闭状态。
 
 ## 源码依据与差距
 
@@ -99,8 +99,9 @@
 
 ### CORE-05～06：分析、事件和事实
 
-- **已有及确定差距**：v2允许情感为空，已采评论有独立相关性、不足/未知/延后及冻结原帖/父链；但帖子[AnnotationOutputItem](backend/app/analysis/schemas.py#L301)仍强制bool并同对象校验情感/观点，[解析](backend/app/analysis/services.py#L644)会因非法其他维度使整对象失效。[读取](backend/app/analysis/schemas.py#L50)仅单一result_state。已有null容忍切片不能等同FR-04-01/09-01各维独立状态、引用及版本完成。
-- **受控反例已复现，尚未修复**：基于已提交`7772c68a`，对实际`resolve_annotation_results`运行12个纯函数固定样本；非法情感、空观点、两者同时非法及补偿后非法情感4例均丢失有效相关性（前三例invalid、补偿后failed），违反FR/AC-09-01的维度隔离反例。有效全维、未分析情感/观点、字符串布尔、缺项、重复项及评论valid/unknown/insufficient共8例对照保持预期；不据此声称完整独立状态、限流、引用或持久化链已验收。探针禁止连接网络/数据库及读取.env，实际禁止访问尝试为0；未创建数据库、未调用模型或平台、未改产品代码。本机复现脚本、输入结果及源码指纹位于`~/.codex/visualizations/2026/10/12/ripplesight-relevance-readiness-7772c68a/`。本片隔离候选通过242份文档检查及19项文档工具测试，已自行核对，不称独立审查。本项只补就绪证据，不构成恢复代码实现的授权；实施仍须遵守当前暂停/就绪门槛并先冻结PLAN-09具体切片SPEC。
+- **原帖逐维隔离切片代码完成，能力待验收**：按`58205b98`冻结的PLAN-09 SPEC实施US/FR/AC-09-01维度隔离子集、T-09-02/04。[逐维解析](backend/app/analysis/dimensions.py)独立验证严格bool/理由/摘要、情感与观点，非法可选维度不作废有效相关性、不触发相关性补偿；反向保留有效可选结果。复用[content_annotations](backend/app/analysis/models.py)的可空dimension_results，与[平面投影/合并](backend/app/analysis/services.py)同事务写入，各维首个有效值及实际调用出处不降级；本人、冻结任务/输入及调用一致性强制复核。旧NULL不由平面值倒填，v1/comment.v1不改合同。[资料分析面板](frontend/src/app/content/[contentId]/components/annotation-panel.tsx)只读展示逐维有效/无效/失败/未分析，并区分旧未知；已有评论不足/未知/限流延后及主题/历史正文选择保留。
+- **受控验证及自行审查通过**：原12例纯函数探针的4个隔离反例已修复，8个对照仍符合预期，禁止网络/数据库/.env访问尝试为0。后端三分片全量回归3121项通过、22项依赖跳过；新建独立Redis/MinIO补跑22项全部通过，最终pipeline文件23项复跑覆盖新增3例；以最终收集清单逐项核对共3146个不同测试全部通过、无剩余跳过。全量Ruff/格式及453文件mypy通过；新建hotkey_test_库执行规范SQL并覆盖结构、本人隔离、双向隔离、事件消费者不重排队、伪造调用拒绝、并发/重放/迟到及旧未知，所有自建库成功失败均验证删除。Web 1235项测试及lint/types/format/build、同版本隔离API的openapi:check无漂移；文档242份及19项工具回归通过。生产Web真实资料路由经独立HTTP样本在1440/390验证43场景，含五态/恢复、键盘主题与版本切换、历史未知和评论状态；脚本日志无错误，样本API仅GET。首跑Web默认并发曾有2个5000ms超时，未放宽阈值，限制2 workers的全量与最终门禁通过；依赖回归完成后，默认并发最终复跑亦1235项全部通过。按本人授权自行审查，无剩余本片阻断，不派发任务。完整证据、源码指纹和逐项覆盖表在本机`~/.codex/visualizations/2026/10/12/ripplesight-independent-relevance/`。
+- **仍待补齐/验收**：原帖不足/未知的新输出合同、真实引文定位、相关性/相似度/新鲜度排序及稳定游标、事件关系维度、P2情感/观点独立受理调度、正式保留集质量评测仍开放。本轮只在新独立测试库执行规范SQL，未升级业务库、部署或证明真实模型/平台与完整权限消费链可用；不关闭整个FR-09、CORE-05或核心闭环。
 - **已有及确定差距**：候选冻结输入、单材料路径和修订冲突检查已有；[EventDecision](backend/app/events/schemas.py#L106)仅same_event布尔，缺不足暂缓及支持/反对理由；[用户状态](backend/app/events/schemas.py#L139)只有active/merged，没有候选读取消费。成员数量线索提示不能替代候选解释。
 - **确定差距**：资料已在服务端本人可读集合检索，未仅搜索当前页；但[列表排序](backend/app/content/services.py#L1553)按UUID，[事件读取](backend/app/events/reads.py#L191)按first_seen过滤/倒序，旧事件今日更新不能表达最近变化。补跨页相关性/新鲜度排序、采用时间字段及稳定游标，区分相似度、相关性和热度并公开组合排序依据。
 - **已有及确定差距**：稳定事实身份、材料版本、自动归并delta及CAS纠错已有，[fact_delta.py](backend/app/events/fact_delta.py#L95)、[corrections.py](backend/app/events/corrections.py#L36)。但[事实状态](backend/app/events/fact_models.py#L45)只有confirmed/unreviewed/merged，[写入](backend/app/events/fact_writer.py#L273)按归组关系置confirmed，不能表示来源声称/确认/争议/反证/撤回。旧事件修订仍[读取当前事实内容](backend/app/events/facts.py#L400)，纠错[before/after](backend/app/events/corrections.py#L500)不冻结事实内容状态。补不可变事实修订和支持/反证关系；自动归并差分不等于人工纠错/24小时变化或事实真伪确认。

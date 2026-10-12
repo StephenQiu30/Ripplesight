@@ -71,11 +71,90 @@ export function selectedAnnotation(
   };
 }
 
-function sentimentLabel(value: Annotation["sentiment"]): string {
+function sentimentLabel(value: unknown): string {
   if (value === "positive") return "正向";
   if (value === "negative") return "负向";
   if (value === "neutral") return "中性";
   return "未分析";
+}
+
+function DimensionResults({ annotation }: { annotation: Annotation }) {
+  const dimensions = annotation.dimension_results;
+  if (!dimensions) {
+    return (
+      <UI.Text className="mt-4 text-sm" tone="muted">
+        逐维结果未知：此记录没有本版逐维回执；已有相关性记录仍可读，不推断情感和观点的独立校验状态。
+      </UI.Text>
+    );
+  }
+  const names = {
+    relevance: "相关性",
+    sentiment: "情感",
+    viewpoints: "观点",
+  } as const;
+  const states = {
+    valid: "有效",
+    invalid: "结果无效",
+    failed: "校验失败",
+    not_analyzed: "未分析",
+  } as const;
+  return (
+    <UI.Content
+      as="section"
+      aria-label="独立分析维度"
+      className="mt-5 flex min-w-0 flex-col gap-4"
+    >
+      <UI.Heading level={3}>逐维分析结果</UI.Heading>
+      <UI.Text size="sm" tone="muted">
+        各维分别校验，有效结果独立保留。未分析不表示中性，某维失败不代表其他维失败。
+      </UI.Text>
+      {(["relevance", "sentiment", "viewpoints"] as const).map((key) => {
+        const result = dimensions[key];
+        return (
+          <UI.Content key={key} className="flex min-w-0 flex-col gap-2">
+            <UI.Content className="flex flex-wrap items-center gap-2">
+              <UI.Heading level={4}>{names[key]}</UI.Heading>
+              <Badge
+                variant={result.state === "valid" ? "secondary" : "outline"}
+              >
+                {states[result.state]}
+              </Badge>
+            </UI.Content>
+            {result.state === "valid" ? (
+              key === "viewpoints" && Array.isArray(result.value) ? (
+                <UI.ContentList className="flex list-disc flex-col gap-1 pl-5 text-sm">
+                  {result.value.map((value, index) => (
+                    <UI.ContentListItem
+                      key={`${index}-${value}`}
+                      className="break-words"
+                    >
+                      {value}
+                    </UI.ContentListItem>
+                  ))}
+                </UI.ContentList>
+              ) : (
+                <UI.Text size="sm">
+                  {key === "relevance"
+                    ? result.value === true
+                      ? "相关"
+                      : "不相关"
+                    : sentimentLabel(result.value)}
+                </UI.Text>
+              )
+            ) : result.state === "not_analyzed" ? (
+              <UI.Text size="sm" tone="muted">
+                本次未分析此维度。
+              </UI.Text>
+            ) : (
+              <UI.Text size="sm" tone="muted">
+                此维输出未通过校验，不能作为有效结论；其他有效维度仍保留。
+              </UI.Text>
+            )}
+          </UI.Content>
+        );
+      })}
+    </UI.Content>
+  );
 }
 
 export function AnnotationResult({
@@ -136,12 +215,12 @@ export function AnnotationResult({
           <UI.Text className="mt-2 text-sm leading-6 break-words whitespace-pre-wrap">
             摘要：{annotation.summary}
           </UI.Text>
-          {annotation.relevant ? (
+          {annotation.relevant && !annotation.dimension_results ? (
             <UI.Text className="text-muted-foreground mt-2 text-sm">
               情感：{sentimentLabel(annotation.sentiment)}
             </UI.Text>
           ) : null}
-          {annotation.viewpoints.length > 0 ? (
+          {!annotation.dimension_results && annotation.viewpoints.length > 0 ? (
             <UI.ContentList className="mt-3 flex list-disc flex-col gap-1 pl-5 text-sm leading-6">
               {annotation.viewpoints.map((viewpoint, index) => (
                 <UI.ContentListItem
@@ -165,6 +244,7 @@ export function AnnotationResult({
                 : `没有有效相关性结论${annotation.error_code ? `，原因代码：${annotation.error_code}` : ""}。`}
         </UI.Text>
       )}
+      <DimensionResults annotation={annotation} />
       <UI.Text className="text-muted-foreground mt-3 text-xs">
         最近更新 {formatTime(annotation.updated_at)}
       </UI.Text>
@@ -214,7 +294,7 @@ export function AnnotationPanel({
       <UI.Text className="text-muted-foreground mt-2 text-sm leading-6">
         {content.analysis_prompt_version === "analysis.comment.v1"
           ? "结合原帖和可得父评论逐条判断；信息不足、未知和限流延后均保留状态。读取页面不会发起模型请求。"
-          : "展示所选主题和正文版本的有效判断；情感未分析不影响相关性。读取页面不会发起模型请求。"}
+          : "展示所选主题和正文版本的判断；各维分别校验，情感或观点失败不影响有效相关性。读取页面不会发起模型请求。"}
       </UI.Text>
       {content.analysis_topics.length === 0 ? (
         <UI.Text className="text-muted-foreground mt-4 text-sm">
