@@ -11,16 +11,16 @@ import pytest
 from typer.testing import CliRunner
 
 from backups import restore
-from backups.recovery import (
+from backups.schemas import EvidenceObjectInventory, EvidenceObjectState
+from cli import commands
+from core.config import Settings
+from evidence.journal_contract import (
     RecoveryLedgerError,
     RecoverySnapshot,
     entry_digest,
     genesis_digest,
     verify_recovery_inputs,
 )
-from backups.schemas import EvidenceObjectInventory, EvidenceObjectState
-from cli import commands
-from core.config import Settings
 from tests.recovery_fixtures import recovery_sample
 from tests.unit.test_backup_restore import NOW, _manifest
 
@@ -139,7 +139,7 @@ def test_bad_export_rejected_before_creating_any_engine(
         isolation_database_url="postgresql+psycopg://127.0.0.1/postgres",
         schema_path=tmp_path / "schema.sql",
     )
-    monkeypatch.setattr(service, "_check_candidate", lambda _: (manifest, tmp_path / "dump"))
+    monkeypatch.setattr(service, "check_candidate", lambda _: (manifest, tmp_path / "dump"))
     with pytest.raises(restore.BackupRestoreError) as error:
         service.verify_replay(
             tmp_path,
@@ -206,7 +206,7 @@ def test_replay_rejects_even_inventory_only_objects_before_database_or_object_io
         schema_path=tmp_path / "schema.sql",
         evidence_restore_verifier=objects,
     )
-    monkeypatch.setattr(service, "_check_candidate", lambda _: (manifest, tmp_path / "dump"))
+    monkeypatch.setattr(service, "check_candidate", lambda _: (manifest, tmp_path / "dump"))
     with pytest.raises(restore.BackupRestoreError, match="without objects"):
         service.verify_replay(tmp_path, snapshot_path=tmp_path / "absent.json", checkpoint_json="")
     engine.assert_not_called()

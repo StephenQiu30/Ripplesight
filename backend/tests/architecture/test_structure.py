@@ -202,8 +202,11 @@ def test_public_api_uses_the_single_stable_namespace() -> None:
     assert api_router.prefix == "/api"
 
 
-def test_schema_sql_is_the_only_ddl_source() -> None:
-    assert _sql_files(REPOSITORY) == {BACKEND / "sql" / "schema.sql"}
+def test_each_database_has_one_owned_ddl_source() -> None:
+    assert _sql_files(REPOSITORY) == {
+        BACKEND / "sql" / "schema.sql",
+        BACKEND / "sql" / "journal.sql",
+    }
     assert not (BACKEND / "alembic.ini").exists()
     assert not (BACKEND / "migrations").exists()
     assert "alembic" not in (BACKEND / "pyproject.toml").read_text().lower()

@@ -2,6 +2,7 @@ import json
 import os
 from datetime import UTC, datetime
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Annotated
 from uuid import UUID
 
@@ -44,6 +45,7 @@ from db.owners import require_owner_id
 from db.session import create_db_engine, create_session_factory
 from evidence.adapters.cache import RedisCacheCleanup
 from evidence.adapters.minio import MinioObjectCleanup
+from evidence.journal import JournalError, RestrictionJournal
 from evidence.schemas import CleanupTargetKind
 from evidence.services import CleanupProcessor, LifecycleService
 from notifications.schemas import NotificationChannel, TargetInput
@@ -561,6 +563,68 @@ def verify_backup_replay(
         raise typer.Exit(code=1) from error
     typer.echo(
         f"Resource replay verified: {result.backup_id}; ledger: {result.ledger_id}; "
+        f"epoch: {result.ledger_epoch}; through sequence: {result.replayed_sequence}; "
+        f"head: {result.head_digest}; matched resources: {result.matched_resources}; "
+        f"duration seconds: {result.duration_seconds:.3f}; service open permitted: false"
+    )
+
+
+@backup_app.command("verify-journal")
+def verify_backup_journal(
+    candidate: Annotated[Path, typer.Option("--candidate", exists=True, file_okay=False)],
+    ledger_id: Annotated[UUID, typer.Option("--ledger-id")],
+    epoch: Annotated[int, typer.Option("--epoch", min=1)],
+    journal_url_env: Annotated[str, typer.Option("--journal-url-env")],
+    isolation_url_env: Annotated[str, typer.Option("--isolation-url-env")],
+) -> None:
+    """Read an independent pinned authority and rehearse R1, never open service."""
+    for name in (journal_url_env, isolation_url_env):
+        if not name.isascii() or not name.isidentifier() or name.upper() != name:
+            typer.echo("Journal verification failed: invalid environment variable name", err=True)
+            raise typer.Exit(code=1)
+    journal_url, isolation_url = os.getenv(journal_url_env), os.getenv(isolation_url_env)
+    if not journal_url or not isolation_url:
+        typer.echo("Journal verification failed: independent inputs are missing", err=True)
+        raise typer.Exit(code=1)
+    settings = get_settings()
+    journal = None
+    try:
+        service = BackupRestoreService(
+            source_database_url=settings.database_url.get_secret_value(),
+            isolation_database_url=isolation_url,
+            schema_path=Path(__file__).resolve().parents[2] / "sql" / "schema.sql",
+        )
+        manifest, _ = service.check_candidate(candidate)
+        if manifest.evidence_objects:
+            raise BackupRestoreError("resource replay requires a candidate without objects")
+        journal = RestrictionJournal(
+            database_url=journal_url,
+            source_database_url=settings.database_url.get_secret_value(),
+            ledger_id=ledger_id,
+            epoch=epoch,
+        )
+        recovery = journal.export(manifest)
+        with TemporaryDirectory(prefix="ripplesight-journal-") as directory:
+            path = Path(directory) / "snapshot.json"
+            descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(descriptor, "w") as handle:
+                handle.write(recovery.snapshot.model_dump_json())
+            result = service.verify_replay(
+                candidate,
+                snapshot_path=path,
+                checkpoint_json=recovery.checkpoint.model_dump_json(),
+            )
+    except (JournalError, BackupRestoreError, OSError) as error:
+        # OS errors may include paths; keep all boundary failures redacted.
+        typer.echo(
+            "Journal verification failed: authority or isolated rehearsal unavailable", err=True
+        )
+        raise typer.Exit(code=1) from error
+    finally:
+        if journal is not None:
+            journal.close()
+    typer.echo(
+        f"Independent journal replay verified: {result.backup_id}; ledger: {result.ledger_id}; "
         f"epoch: {result.ledger_epoch}; through sequence: {result.replayed_sequence}; "
         f"head: {result.head_digest}; matched resources: {result.matched_resources}; "
         f"duration seconds: {result.duration_seconds:.3f}; service open permitted: false"

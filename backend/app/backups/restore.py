@@ -18,9 +18,9 @@ from sqlalchemy.orm import Session
 
 from backups.adapters.minio import ObjectArchiveError
 from backups.adapters.postgres import BackupToolError, PostgresDumpAdapter
-from backups.recovery import RecoveryLedgerError, VerifiedRecovery, verify_recovery_inputs
 from backups.schemas import BackupManifest, EvidenceObjectState
 from db.metadata import metadata
+from evidence.journal_contract import RecoveryLedgerError, VerifiedRecovery, verify_recovery_inputs
 from evidence.services import LifecycleConflictError, LifecycleService
 
 _RESTORE_PROBE_SCOPE_ID = UUID("00000000-0000-4000-8000-000000000001")
@@ -144,7 +144,7 @@ class BackupRestoreService:
         checkpoint_json: str | None = None,
     ) -> BackupRestoreResult:
         started = time.monotonic()
-        manifest, archive = self._check_candidate(candidate)
+        manifest, archive = self.check_candidate(candidate)
         recovery = None
         if snapshot_path is not None:
             if manifest.evidence_objects:
@@ -282,7 +282,12 @@ class BackupRestoreService:
         except (LifecycleConflictError, ValueError) as error:
             raise BackupRestoreError("resource replay conflicts with restored data") from error
 
-    def _check_candidate(self, candidate: Path) -> tuple[BackupManifest, Path]:
+    def check_candidate(self, candidate: Path) -> tuple[BackupManifest, Path]:
+        """Validate candidate identity/integrity before any authority or restore I/O.
+
+        Returns the bounded manifest and validated archive path. The caller
+        still must bind the independent checkpoint and keep targets isolated.
+        """
         try:
             if not candidate.is_dir() or candidate.is_symlink():
                 raise BackupRestoreError("candidate directory is invalid")

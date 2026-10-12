@@ -22,9 +22,9 @@ from tests.recovery_fixtures import recovery_sample
 from tests.unit.test_backup_restore import _manifest
 
 from backups.adapters.postgres import PostgresDumpAdapter
-from backups.recovery import verify_recovery_inputs
 from backups.restore import BackupRestoreError, BackupRestoreService
 from backups.services import BackupService
+from evidence.journal_contract import verify_recovery_inputs
 from evidence.models import DeletionDirective
 from evidence.schemas import AccessPolicyStatus, DataClass, DeletionReason, RetentionPolicyInput
 from evidence.services import (

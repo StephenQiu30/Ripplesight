@@ -4,14 +4,14 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from backups.recovery import (
+from backups.schemas import BackupManifest
+from evidence.journal_contract import (
     RecoveryCheckpoint,
     RecoveryEntry,
     RecoverySnapshot,
     entry_digest,
     genesis_digest,
 )
-from backups.schemas import BackupManifest
 from evidence.schemas import DeletionReason
 
 

@@ -13,16 +13,35 @@ import stat
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Protocol
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from backups.schemas import BackupManifest
 from evidence.schemas import DeletionReason
 
 _MAX_BYTES = 16 * 1024 * 1024
 _DIGEST = r"^[0-9a-f]{64}$"
+
+
+class RecoveryDatabaseBinding(Protocol):
+    """Only the immutable archive/schema identities needed by the contract."""
+
+    @property
+    def archive_sha256(self) -> str: ...
+
+    @property
+    def schema_sha256(self) -> str: ...
+
+
+class RecoveryCandidateBinding(Protocol):
+    """A backup identity supplied without a dependency on the backups domain."""
+
+    @property
+    def backup_id(self) -> UUID: ...
+
+    @property
+    def database(self) -> RecoveryDatabaseBinding: ...
 
 
 class RecoveryLedgerError(RuntimeError):
@@ -34,7 +53,7 @@ class RecoveryEntry(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    sequence: int = Field(ge=1, le=10000)
+    sequence: int = Field(ge=1, le=9223372036854775807)
     operation_id: UUID
     owner_id: UUID
     action: Literal["deny_resource"]
@@ -64,6 +83,13 @@ class RecoverySnapshot(BaseModel):
     epoch: int = Field(ge=1)
     normalization_version: Literal["resource_uuid.v1"]
     entries: tuple[RecoveryEntry, ...] = Field(max_length=10000)
+
+    @model_validator(mode="after")
+    def bounded_export(self) -> RecoverySnapshot:
+        """Keep the R1 export bound separate from the online event range."""
+        if any(entry.sequence > 10000 for entry in self.entries):
+            raise ValueError("R1 export sequence exceeds its bound")
+        return self
 
 
 class RecoveryCheckpoint(BaseModel):
@@ -149,7 +175,7 @@ def _read_snapshot(path: Path) -> bytes:
 
 
 def verify_recovery_inputs(
-    *, snapshot_path: Path, checkpoint_json: str, manifest: BackupManifest
+    *, snapshot_path: Path, checkpoint_json: str, manifest: RecoveryCandidateBinding
 ) -> VerifiedRecovery:
     """Reject malformed, incomplete or wrongly bound inputs before creating a DB.
 
@@ -162,6 +188,16 @@ def verify_recovery_inputs(
     except (OSError, ValueError) as error:
         # Pydantic errors may contain submitted data; never propagate them to CLI.
         raise RecoveryLedgerError("recovery inputs are invalid or unavailable") from error
+    return verify_recovery_snapshot(snapshot=snapshot, checkpoint=checkpoint, manifest=manifest)
+
+
+def verify_recovery_snapshot(
+    *,
+    snapshot: RecoverySnapshot,
+    checkpoint: RecoveryCheckpoint,
+    manifest: RecoveryCandidateBinding,
+) -> VerifiedRecovery:
+    """Verify the same complete chain for file and independent database consumers."""
     if (
         checkpoint.ledger_id != snapshot.ledger_id
         or checkpoint.epoch != snapshot.epoch

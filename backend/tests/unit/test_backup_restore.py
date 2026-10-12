@@ -57,7 +57,7 @@ def test_restore_namespace_and_cleanup_preserve_database_ownership(
         isolation_database_url=source.set(database="postgres"),
         schema_path=tmp_path / "schema.sql",
     )
-    monkeypatch.setattr(service, "_check_candidate", lambda _: (_manifest(), tmp_path / "dump"))
+    monkeypatch.setattr(service, "check_candidate", lambda _: (_manifest(), tmp_path / "dump"))
     reconcile = MagicMock()
     monkeypatch.setattr(service, "_check_restored_data", reconcile)
     if failure == "create":
