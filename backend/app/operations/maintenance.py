@@ -822,7 +822,9 @@ class OperationsMaintenanceExecutor:
             "table_count": result.table_count,
             "evidence_objects_verified": result.evidence_objects_verified,
             "duration_seconds": result.duration_seconds,
-            "restore_verified": result.database_restored,
+            "integrity_verified": result.database_restored,
+            "replay_verified": result.replay_verified,
+            "service_open_permitted": result.service_open_permitted,
             "production_restore": False,
         }
 

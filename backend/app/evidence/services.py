@@ -939,6 +939,71 @@ class LifecycleService:
             view = self._deletion_view(model, resource)
         return view
 
+    def replay_denial_in_transaction(
+        self,
+        *,
+        owner_id: UUID,
+        operation_id: UUID,
+        resource_type: str,
+        resource_id: UUID,
+        reason: DeletionReason,
+        occurred_at: datetime,
+    ) -> bool:
+        """Project a validated denial inside an isolated caller-owned transaction.
+
+        This does not authenticate a user, commit, or perform physical cleanup.
+        The recovery caller must keep the entire target isolated. Missing targets
+        are idempotent only after checking operation identity conflicts.
+        """
+        if not self._session.in_transaction() or occurred_at.utcoffset() is None:
+            raise ValueError("denial replay requires an aware caller transaction")
+        self._validate_resource_type(resource_type)
+        operation = self._session.scalar(
+            select(DeletionDirective)
+            .where(
+                DeletionDirective.owner_id == owner_id,
+                DeletionDirective.operation_id == operation_id,
+            )
+            .with_for_update()
+        )
+        resource = self._session.scalar(
+            select(EvidenceResource)
+            .where(
+                EvidenceResource.owner_id == owner_id,
+                EvidenceResource.resource_type == resource_type,
+                EvidenceResource.resource_id == resource_id,
+            )
+            .with_for_update()
+        )
+        if operation is not None and (
+            resource is None or operation.resource_record_id != resource.id
+        ):
+            raise LifecycleConflictError("recovery operation identifies another resource")
+        if resource is None:
+            return False
+        existing = self._session.scalar(
+            select(DeletionDirective.id).where(
+                DeletionDirective.owner_id == owner_id,
+                DeletionDirective.resource_record_id == resource.id,
+            )
+        )
+        if existing is None:
+            directive = self._create_deletion(
+                resource=resource, operation_id=operation_id, reason=reason, now=occurred_at
+            )
+            # No cleanup in a rehearsal, including when the old registry lists
+            # zero targets. Absence of targets is not proof of physical erasure.
+            directive.status, directive.completed_at = DeletionStatus.PENDING.value, None
+            self._session.flush()
+        readable = self._session.scalar(
+            readable_resource_ids_query(
+                owner_id=owner_id, resource_type=resource_type, now=self._clock()
+            ).where(EvidenceResource.resource_id == resource_id)
+        )
+        if readable is not None:
+            raise RuntimeError("recovery denial did not close lifecycle access")
+        return True
+
     def expire_due(self, *, limit: int) -> list[DeletionView]:
         if not 1 <= limit <= 1000:
             raise ValueError("limit must be between 1 and 1000")

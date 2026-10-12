@@ -292,7 +292,10 @@ def test_backup_and_isolated_restore_verify_real_dump_and_all_registered_tables(
     executor.execute(restore_message)
     with factory() as session:
         proof = session.get(OperatorAuditOperation, restore_accepted.audit_id)
-        assert proof.after_state["restore_verified"]
+        assert proof.after_state["integrity_verified"]
+        assert "restore_verified" not in proof.after_state
+        assert not proof.after_state["replay_verified"]
+        assert not proof.after_state["service_open_permitted"]
         assert proof.after_state["table_count"] == len(metadata.tables)
         assert proof.after_state["evidence_objects_verified"] == 0
         assert not proof.after_state["production_restore"]

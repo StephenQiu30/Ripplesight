@@ -529,7 +529,41 @@ def verify_backup_restore(
         f"Database restore verified: {result.backup_id}; tables: {result.table_count}; "
         f"evidence objects round-trip verified: {result.evidence_objects_verified}; "
         f"duration seconds: {result.duration_seconds:.3f}; "
-        "complete backup verified: false"
+        "integrity verified: true; replay verified: false; service open permitted: false"
+    )
+
+
+@backup_app.command("verify-replay")
+def verify_backup_replay(
+    candidate: Annotated[Path, typer.Option("--candidate", exists=True, file_okay=False)],
+    snapshot: Annotated[Path, typer.Option("--ledger-snapshot", exists=True, file_okay=True)],
+    checkpoint_env: Annotated[str, typer.Option("--checkpoint-env")],
+    isolation_url_env: Annotated[str, typer.Option("--isolation-url-env")],
+) -> None:
+    """Rehearse a pinned denial ledger in a disposable, quarantined target."""
+    for name in (checkpoint_env, isolation_url_env):
+        if not name.isascii() or not name.isidentifier() or name.upper() != name:
+            typer.echo("Replay verification failed: invalid environment variable name", err=True)
+            raise typer.Exit(code=1)
+    checkpoint, isolation_url = os.getenv(checkpoint_env), os.getenv(isolation_url_env)
+    if not checkpoint or not isolation_url:
+        typer.echo("Replay verification failed: independent inputs are missing", err=True)
+        raise typer.Exit(code=1)
+    settings = get_settings()
+    try:
+        result = BackupRestoreService(
+            source_database_url=settings.database_url.get_secret_value(),
+            isolation_database_url=isolation_url,
+            schema_path=Path(__file__).resolve().parents[2] / "sql" / "schema.sql",
+        ).verify_replay(candidate, snapshot_path=snapshot, checkpoint_json=checkpoint)
+    except BackupRestoreError as error:
+        typer.echo(f"Replay verification failed: {error}", err=True)
+        raise typer.Exit(code=1) from error
+    typer.echo(
+        f"Resource replay verified: {result.backup_id}; ledger: {result.ledger_id}; "
+        f"epoch: {result.ledger_epoch}; through sequence: {result.replayed_sequence}; "
+        f"head: {result.head_digest}; matched resources: {result.matched_resources}; "
+        f"duration seconds: {result.duration_seconds:.3f}; service open permitted: false"
     )
 
 

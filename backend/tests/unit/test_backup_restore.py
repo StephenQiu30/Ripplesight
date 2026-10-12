@@ -35,7 +35,9 @@ NOW = datetime(2026, 9, 21, 14, tzinfo=UTC)
 
 
 @pytest.mark.parametrize("test_source", [True, False])
-@pytest.mark.parametrize("failure", [None, "create", "restore", "reconcile", "cleanup"])
+@pytest.mark.parametrize(
+    "failure", [None, "create", "revoke", "enable", "restore", "reconcile", "cleanup"]
+)
 def test_restore_namespace_and_cleanup_preserve_database_ownership(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, test_source: bool, failure: str | None
 ) -> None:
@@ -62,12 +64,19 @@ def test_restore_namespace_and_cleanup_preserve_database_ownership(
         connection.exec_driver_sql.side_effect = restore.SQLAlchemyError(
             "controlled create failure"
         )
+    elif failure in {"revoke", "enable"}:
+        connection.exec_driver_sql.side_effect = [None] * (1 if failure == "revoke" else 2) + [
+            restore.SQLAlchemyError("controlled quarantine failure"),
+            None,
+        ]
     elif failure == "restore":
         adapter.restore_archive.side_effect = BackupToolError("controlled restore failure")
     elif failure == "reconcile":
         reconcile.side_effect = restore.BackupRestoreError("controlled reconciliation failure")
     elif failure == "cleanup":
         connection.exec_driver_sql.side_effect = [
+            None,
+            None,
             None,
             restore.SQLAlchemyError("controlled cleanup"),
         ]
@@ -81,10 +90,14 @@ def test_restore_namespace_and_cleanup_preserve_database_ownership(
     name = statements[0].split('"')[1]
     assert name.startswith(prefix) and len(name.removeprefix(prefix)) == 32
     assert len(name.encode()) <= 63
-    assert statements == (
-        [f'CREATE DATABASE "{name}"']
-        if failure == "create"
-        else [f'CREATE DATABASE "{name}"', f'DROP DATABASE "{name}"']
+    quarantine = [
+        f'CREATE DATABASE "{name}" WITH ALLOW_CONNECTIONS false',
+        f'REVOKE ALL ON DATABASE "{name}" FROM PUBLIC',
+        f'ALTER DATABASE "{name}" ALLOW_CONNECTIONS true',
+    ]
+    attempts = {"create": 1, "revoke": 2, "enable": 3}.get(failure, 3)
+    assert statements == quarantine[:attempts] + (
+        [] if failure == "create" else [f'DROP DATABASE "{name}"']
     )
     admin.dispose.assert_called_once()
     if failure in {None, "reconcile", "cleanup"}:

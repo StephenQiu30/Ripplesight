@@ -38,7 +38,10 @@ def test_real_restore_targets_use_test_names_and_are_removed_on_every_outcome(
 
     def guard_create(_connection, _cursor, statement, _parameters, _context, _many):
         if statement.startswith("CREATE DATABASE"):
-            assert re.fullmatch(r'CREATE DATABASE "hotkey_test_restore_[a-f0-9]{32}"', statement)
+            assert re.fullmatch(
+                r'CREATE DATABASE "hotkey_test_restore_[a-f0-9]{32}" WITH ALLOW_CONNECTIONS false',
+                statement,
+            )
 
     def record_create(_connection, _cursor, statement, _parameters, _context, _many):
         if statement.startswith("CREATE DATABASE"):

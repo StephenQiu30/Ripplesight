@@ -11,14 +11,17 @@ from typing import Protocol
 from uuid import UUID, uuid4
 
 from pydantic import ValidationError
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import Connection, create_engine, func, select, text
 from sqlalchemy.engine import URL, Engine, make_url
 from sqlalchemy.exc import ArgumentError, SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from backups.adapters.minio import ObjectArchiveError
 from backups.adapters.postgres import BackupToolError, PostgresDumpAdapter
+from backups.recovery import RecoveryLedgerError, VerifiedRecovery, verify_recovery_inputs
 from backups.schemas import BackupManifest, EvidenceObjectState
 from db.metadata import metadata
+from evidence.services import LifecycleConflictError, LifecycleService
 
 _RESTORE_PROBE_SCOPE_ID = UUID("00000000-0000-4000-8000-000000000001")
 
@@ -33,11 +36,28 @@ class EvidenceRestoreVerifier(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class BackupRestoreResult:
+    """Integrity and optional finite replay evidence, never permission to serve."""
+
     backup_id: UUID
     table_count: int
     duration_seconds: float
     database_restored: bool
     evidence_objects_verified: int
+    ledger_id: UUID | None = None
+    ledger_epoch: int | None = None
+    replayed_sequence: int | None = None
+    head_digest: str | None = None
+    matched_resources: int | None = None
+
+    @property
+    def service_open_permitted(self) -> bool:
+        """Disposable rehearsals cannot authorize any service to open."""
+        return False
+
+    @property
+    def replay_verified(self) -> bool:
+        """Whether the specifically pinned finite resource batch was committed."""
+        return self.ledger_id is not None
 
 
 class BackupRestoreService:
@@ -103,8 +123,40 @@ class BackupRestoreService:
                 cleanup failed. Cleanup is attempted for every created target;
                 a cleanup failure is reported rather than claimed as removed.
         """
+        return self._verify(candidate)
+
+    def verify_replay(
+        self, candidate: Path, *, snapshot_path: Path, checkpoint_json: str
+    ) -> BackupRestoreResult:
+        """Rehearse a complete pinned resource batch without opening the target.
+
+        The checkpoint must come from an independent trusted channel. Caller
+        claims cannot establish production authority; even success never grants
+        permission to serve, run jobs, or restore objects.
+        """
+        return self._verify(candidate, snapshot_path=snapshot_path, checkpoint_json=checkpoint_json)
+
+    def _verify(
+        self,
+        candidate: Path,
+        *,
+        snapshot_path: Path | None = None,
+        checkpoint_json: str | None = None,
+    ) -> BackupRestoreResult:
         started = time.monotonic()
         manifest, archive = self._check_candidate(candidate)
+        recovery = None
+        if snapshot_path is not None:
+            if manifest.evidence_objects:
+                raise BackupRestoreError("resource replay requires a candidate without objects")
+            if checkpoint_json is None:
+                raise BackupRestoreError("independent recovery checkpoint is required")
+            try:
+                recovery = verify_recovery_inputs(
+                    snapshot_path=snapshot_path, checkpoint_json=checkpoint_json, manifest=manifest
+                )
+            except RecoveryLedgerError as error:
+                raise BackupRestoreError(str(error)) from error
         if any(item.state is EvidenceObjectState.MISSING for item in manifest.evidence_objects):
             raise BackupRestoreError("candidate has missing evidence objects")
         if (self._source_url.host, self._source_url.port) != (
@@ -126,15 +178,26 @@ class BackupRestoreService:
             with admin_engine.connect().execution_options(
                 isolation_level="AUTOCOMMIT"
             ) as connection:
-                connection.exec_driver_sql(f'CREATE DATABASE "{database_name}"')
-            created = True
+                if recovery is not None and not self._test_source:
+                    self._check_replay_role(connection)
+                connection.exec_driver_sql(
+                    f'CREATE DATABASE "{database_name}" WITH ALLOW_CONNECTIONS false'
+                )
+                created = True
+                connection.exec_driver_sql(f'REVOKE ALL ON DATABASE "{database_name}" FROM PUBLIC')
+                connection.exec_driver_sql(
+                    f'ALTER DATABASE "{database_name}" ALLOW_CONNECTIONS true'
+                )
             target_url = self._isolation_url.set(database=database_name)
             PostgresDumpAdapter(target_url.render_as_string(hide_password=False)).restore_archive(
                 archive
             )
             target_engine = create_engine(target_url)
+            matched_resources = None
             try:
                 self._check_restored_data(target_engine, manifest)
+                if recovery is not None:
+                    matched_resources = self._replay_resources(target_engine, recovery)
             finally:
                 target_engine.dispose()
             evidence_objects_verified = 0
@@ -152,6 +215,11 @@ class BackupRestoreService:
                 duration_seconds=time.monotonic() - started,
                 database_restored=True,
                 evidence_objects_verified=evidence_objects_verified,
+                ledger_id=recovery.snapshot.ledger_id if recovery else None,
+                ledger_epoch=recovery.snapshot.epoch if recovery else None,
+                replayed_sequence=recovery.checkpoint.head_sequence if recovery else None,
+                head_digest=recovery.checkpoint.head_digest if recovery else None,
+                matched_resources=matched_resources,
             )
         except (BackupToolError, SQLAlchemyError, OSError) as error:
             raise BackupRestoreError(
@@ -170,6 +238,49 @@ class BackupRestoreService:
                 ) from error
             finally:
                 admin_engine.dispose()
+
+    def _check_replay_role(self, connection: Connection) -> None:
+        source_role = self._source_url.username
+        if not source_role:
+            raise BackupRestoreError("replay requires an explicit separate source role")
+        role = (
+            connection.execute(
+                text(
+                    "SELECT current_user AS maintenance_role, "
+                    "(SELECT rolsuper FROM pg_roles WHERE rolname=:source) AS source_superuser, "
+                    "pg_has_role(:source, current_user, 'MEMBER') AS maintenance_member"
+                ),
+                {"source": source_role},
+            )
+            .mappings()
+            .one()
+        )
+        if (
+            source_role == role["maintenance_role"]
+            or role["source_superuser"] is not False
+            or role["maintenance_member"]
+        ):
+            raise BackupRestoreError("source role can bypass replay isolation")
+
+    @staticmethod
+    def _replay_resources(engine: Engine, recovery: VerifiedRecovery) -> int:
+        matched: set[tuple[UUID, str, UUID]] = set()
+        try:
+            with Session(engine) as session, session.begin():
+                lifecycle = LifecycleService(session)
+                for entry in recovery.snapshot.entries:
+                    if lifecycle.replay_denial_in_transaction(
+                        owner_id=entry.owner_id,
+                        operation_id=entry.operation_id,
+                        resource_type=entry.resource_type,
+                        resource_id=entry.resource_id,
+                        reason=entry.reason,
+                        occurred_at=entry.occurred_at,
+                    ):
+                        matched.add((entry.owner_id, entry.resource_type, entry.resource_id))
+            return len(matched)
+        except (LifecycleConflictError, ValueError) as error:
+            raise BackupRestoreError("resource replay conflicts with restored data") from error
 
     def _check_candidate(self, candidate: Path) -> tuple[BackupManifest, Path]:
         try:
