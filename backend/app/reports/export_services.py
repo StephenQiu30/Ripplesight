@@ -560,7 +560,9 @@ class PrivateExportService:
     def get(self, *, owner_id: UUID, export_id: UUID, kind: ExportKind) -> ExportView:
         self.session.rollback()
         with self.session.begin():
-            return self._view(self._record(owner_id, export_id, kind))
+            record = self._record(owner_id, export_id, kind)
+            document_for_record(self.session, record, self.clock())
+            return self._view(record)
 
     def download(self, *, owner_id: UUID, export_id: UUID, kind: ExportKind) -> ExportDownload:
         if self.storage is None:

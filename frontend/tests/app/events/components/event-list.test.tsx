@@ -52,7 +52,7 @@ describe("confirmed event list", () => {
           id: "event-a",
           title: null,
           summary: null,
-          member_count: 2,
+          member_count: 1,
           readable_member_count: 1,
           evidence_state: "partial",
           source_counts: { hackernews: 1 },
@@ -65,7 +65,7 @@ describe("confirmed event list", () => {
     expect(
       await screen.findByRole("link", { name: "证据暂不可读的事件" }),
     ).toBeTruthy();
-    expect(screen.getByText("1 / 2 条成员可读")).toBeTruthy();
+    expect(screen.getByText("当前可读成员 1 条")).toBeTruthy();
     expect(api.topics).toHaveBeenCalledWith(
       expect.objectContaining({ limit: 50 }),
       expect.anything(),

@@ -46,6 +46,8 @@
 
 ### CORE-01：访问、身份和恢复
 
+- **代码切片已完成，能力待验收**：报告列表先选最新定稿修订再执行全部冻结输入许可检查，过滤后分页且不回退旧版；导出状态与下载共用完整许可门禁；事件当前/固定修订成员、事实引用及游标先过滤不可读输入，标题/摘要/框架和差分按全部输入检查。撤权差分返回`unavailable`，不泄露受限UUID或计数；页面只展示当前可读成员数。独立只读审查无阻断；该切片暂存快照在独立新库全量2895项通过（926/948/1021，无跳过），Web全量1198项及lint/types/format/build、文档链接检查通过；实际同版本API生成契约检查随提交执行。1440px/390px受控HTTP浏览器样本覆盖正常、部分可读、未知、空、加载、错误、403及键盘重试/修订读取。上述为代码及模拟验证，不代表真实撤权、媒体全路径或恢复验收通过；CORE-01继续开放。
+
 - **已有**：服务端会话owner与CSRF/运营边界在[dependencies.py](backend/app/api/dependencies.py#L527)；当前资源删除屏障在[evidence/services.py](backend/app/evidence/services.py#L161)，精确观察依赖清理覆盖报告/告警/公开/事件/分析在[lifecycle.py](backend/app/content/lifecycle.py#L114)。不能重列为完全缺失；仍须逐读路径核对标题、计数、媒体、固定修订及导出是否执行当前许可。
 - **确定差距**：恢复验证只执行隔离dump/restore、表数量与读写核对及对象校验，[restore.py](backend/app/backups/restore.py#L132)未接入备份后删除/撤权重放。当前删除指令与资源同库且FK级联，[models.py](backend/app/evidence/models.py#L236)不能独自提供跨旧备份的独立屏障。补独立最小账本、恢复隔离及重放完成判据；不把现有恢复工具当作安全上线恢复已完成，也不声称当前临时恢复库已对外暴露。
 - **已有及目标差距**：Redis脚本原子一次消费、尝试限制/重发失效已有，[verification_store.py](backend/app/identity/adapters/verification_store.py#L56)；账户与首会话在同一PG事务且邮箱/GitHub有唯一约束，[services.py](backend/app/identity/services.py#L340)。但[邮件消费](backend/app/identity/services.py#L238)先于PG事务，消费后建号/会话提交失败没有跨存储恢复收据，未满足29目标事务合同。应评审同事务或等价可恢复方案，不误报验证码可重放；不因身份存储内嵌而机械新建表。

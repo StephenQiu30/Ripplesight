@@ -2592,7 +2592,8 @@ declare namespace HotKeyAPI {
     /** Facts */
     facts: EventFactView[];
     /** Delta State */
-    delta_state?: "available" | "not_recorded" | "invalid" | "ambiguous";
+    delta_state?:
+      "available" | "not_recorded" | "invalid" | "ambiguous" | "unavailable";
     delta?: EventRevisionDeltaView | null;
   };
 

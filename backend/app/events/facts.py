@@ -396,11 +396,18 @@ class EventFactReadService:
                 fact_ids=tuple(assignment.fact_id for assignment in assignments),
                 now=now,
             )
+            visible_fact_ids = {
+                fm.fact_id
+                for fm, member in member_rows
+                if event_content_reference(member) in readings
+            }
             result = []
             for assignment in assignments:
                 fact = self._session.get(EventFact, assignment.fact_id)
                 if fact is None:
                     raise RuntimeError("scoped fact foreign key missing")
+                if fact.id not in visible_fact_ids:
+                    continue
                 rows = [(fm, member) for fm, member in member_rows if fm.fact_id == fact.id]
                 fact_references = [event_content_reference(member) for _, member in rows]
                 complete = fact.id in fact_inputs and all(
@@ -414,7 +421,9 @@ class EventFactReadService:
                         id=fact.id,
                         revision=fact.revision,
                         relation=cast(FactRelation, assignment.relation),
-                        root_fact_id=assignment.root_fact_id,
+                        root_fact_id=assignment.root_fact_id
+                        if assignment.root_fact_id in visible_fact_ids
+                        else None,
                         title=fact.title if available else None,
                         summary=fact.summary if available else None,
                         evidence=(fact.frame or {}).get("evidence") if available else None,
@@ -429,11 +438,10 @@ class EventFactReadService:
                                 event_member_id=fm.event_member_id,
                                 role=cast("object", fm.role),
                                 assignment_origin=cast("object", fm.assignment_origin),
-                                availability="readable"
-                                if event_content_reference(member) in readings
-                                else "unavailable",
+                                availability="readable",
                             )
                             for fm, member in rows
+                            if event_content_reference(member) in readings
                         ],
                     )
                 )
@@ -442,6 +450,8 @@ class EventFactReadService:
                 event=event,
                 revision=selected,
                 facts=result,
+                inputs_readable=all(reference in readings for reference in references)
+                and all(assignment.fact_id in fact_inputs for assignment in assignments),
                 assignments=assignments,
                 members=list({member.id: member for _, member in member_rows}.values()),
             )

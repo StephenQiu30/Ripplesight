@@ -569,3 +569,71 @@ def test_manual_detach_has_no_automatic_receipt_and_historical_conclusion_is_gat
         change for change in history.delta.material_changes if change.event_member_id == member.id
     )
     assert removed.kind == "unknown" and removed.unavailable and removed.reason is None
+
+
+@pytest.mark.parametrize("relation", ["root", "background"])
+@pytest.mark.parametrize("revision", [None, 1])
+def test_mixed_permission_facts_hide_withdrawn_identity_and_complete_delta(
+    event_context, relation, revision
+):
+    from fastapi.testclient import TestClient
+
+    from api.dependencies import get_user_scope
+    from core.config import Settings
+    from main import create_app
+
+    event_id, _ = _initial(event_context, relation=relation)
+    sessions, owner, _, versions, *_ = event_context
+    # Older fixed members have independent per-version reading gates. Modern
+    # automatically grouped members intentionally share their full input closure.
+    with sessions.begin() as session:
+        session.execute(
+            text(
+                "UPDATE event_members SET observation_id=NULL,observation_source_key=NULL,"
+                "input_manifest=NULL WHERE owner_id=:owner AND event_id=:event"
+            ),
+            {"owner": owner, "event": event_id},
+        )
+    before = _read(event_context, event_id, revision)
+    hidden = next(
+        member
+        for fact in before.facts
+        for member in fact.members
+        if member.content_version_id == versions[0]
+    )
+    hidden_fact = next(fact for fact in before.facts if hidden in fact.members)
+    with sessions.begin() as session:
+        session.execute(
+            text(
+                "UPDATE source_access_policies SET status='blocked',enabled=false "
+                "WHERE owner_id=:owner AND source_key='hackernews'"
+            ),
+            {"owner": owner},
+        )
+    assert _read(event_context, event_id, revision).facts
+    app = create_app(
+        Settings(
+            _env_file=None,
+            environment="test",
+            log_level="WARNING",
+            database_url=sessions.kw["bind"].url.render_as_string(hide_password=False),
+        )
+    )
+    app.dependency_overrides[get_user_scope] = lambda: owner
+    with TestClient(app) as client:
+        response = client.get(
+            f"/api/events/{event_id}/facts",
+            params={} if revision is None else {"revision": revision},
+        )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["delta_state"] == "unavailable" and body["delta"] is None
+    for identity in (hidden.content_id, hidden.content_version_id, hidden.event_member_id):
+        assert str(identity) not in response.text
+    assert len(body["facts"]) == 1 and len(body["facts"][0]["members"]) == 1
+    if relation == "background":
+        assert str(hidden_fact.id) not in response.text
+        assert body["facts"][0]["root_fact_id"] is None
+    else:
+        assert body["facts"][0]["title"] is None
+        assert body["facts"][0]["evidence_state"] == "partial"

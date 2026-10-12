@@ -131,14 +131,17 @@ describe("automatic revision fact delta", () => {
     );
     expect(screen.queryByText(/数量未知/)).toBeNull();
   });
-  it.each(["not_recorded", "invalid", "ambiguous", undefined] as const)(
-    "keeps %s receipts unknown",
-    (delta_state) => {
-      renderPage({ ...page, delta_state, delta: null });
-      expect(screen.getByText(/数量未知/)).toBeTruthy();
-      expect(screen.queryByText(/新增事实 0/)).toBeNull();
-    },
-  );
+  it.each([
+    "not_recorded",
+    "invalid",
+    "ambiguous",
+    "unavailable",
+    undefined,
+  ] as const)("keeps %s receipts unknown", (delta_state) => {
+    renderPage({ ...page, delta_state, delta: null });
+    expect(screen.getByText(/数量未知/)).toBeTruthy();
+    expect(screen.queryByText(/新增事实 0/)).toBeNull();
+  });
   it.each([
     { version: "future" },
     { event_revision: 3 },

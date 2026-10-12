@@ -21,7 +21,7 @@ describe("current event evidence scope", () => {
     });
     expect(section.textContent).toContain("单材料线索");
     expect(section.textContent).toContain("当前事件修订 3");
-    expect(section.textContent).toContain("可读成员 1 / 此修订成员总数 1");
+    expect(section.textContent).toContain("当前可读成员 1 条");
     expect(section.textContent).toContain("controlled 1 条");
     expect(section.textContent).toContain("不代表独立证实或新增事实数");
   });
@@ -42,19 +42,16 @@ describe("current event evidence scope", () => {
       expect(screen.getByText("多材料关联")).toBeTruthy();
       expect(screen.queryByText("单材料线索")).toBeNull();
       expect(screen.getByText(/仍需结合原文核对/)).toBeTruthy();
-      expect(screen.getByText(/可读成员 2 \/ 此修订成员总数 2/)).toBeTruthy();
+      expect(screen.getByText(/当前可读成员 2 条/)).toBeTruthy();
     },
   );
 
-  it("keeps the full denominator when only one of multiple members is readable", () => {
-    render(
-      <EventEvidence
-        event={{ ...receipt, member_count: 3, evidence_state: "partial" }}
-      />,
-    );
+  it("shows only the current readable count without a restricted denominator", () => {
+    render(<EventEvidence event={{ ...receipt, evidence_state: "partial" }} />);
     expect(screen.getByText("部分证据不可读")).toBeTruthy();
     expect(screen.queryByText("单材料线索")).toBeNull();
-    expect(screen.getByText(/可读成员 1 \/ 此修订成员总数 3/)).toBeTruthy();
+    expect(screen.getByText(/当前可读成员 1 条/)).toBeTruthy();
+    expect(screen.queryByText(/此修订成员总数/)).toBeNull();
   });
 
   it.each([0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, undefined])(
@@ -62,9 +59,7 @@ describe("current event evidence scope", () => {
     (member_count) => {
       render(<EventEvidence event={{ ...receipt, member_count }} />);
       expect(screen.getByText("证据范围待确定")).toBeTruthy();
-      expect(
-        screen.getByText(/可读成员 未知 \/ 此修订成员总数 未知/),
-      ).toBeTruthy();
+      expect(screen.getByText(/当前可读成员 未知 条/)).toBeTruthy();
       expect(screen.queryByText("单材料线索")).toBeNull();
     },
   );
@@ -76,7 +71,6 @@ describe("current event evidence scope", () => {
     { revision: undefined },
     { revision: 0 },
     { evidence_state: undefined },
-    { evidence_state: "partial" as const },
     { member_count: 2 },
   ])("does not infer a scope from inconsistent receipts: %j", (patch) => {
     render(<EventEvidence event={{ ...receipt, ...patch }} />);

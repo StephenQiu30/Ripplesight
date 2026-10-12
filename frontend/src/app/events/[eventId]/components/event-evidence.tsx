@@ -21,12 +21,12 @@ export function EventEvidence({ event }: { event: EvidenceReceipt }) {
   const total = event.member_count;
   const readable = event.readable_member_count;
   const countsKnown =
-    positiveCount(total) && positiveCount(readable) && readable <= total;
+    positiveCount(total) && positiveCount(readable) && readable === total;
   const receiptKnown =
     countsKnown &&
     positiveCount(event.revision) &&
     ((event.evidence_state === "complete" && readable === total) ||
-      (event.evidence_state === "partial" && readable < total));
+      event.evidence_state === "partial");
   const title = !receiptKnown
     ? "证据范围待确定"
     : event.evidence_state === "partial"
@@ -57,8 +57,8 @@ export function EventEvidence({ event }: { event: EvidenceReceipt }) {
         </UI.Text>
       </UI.Content>
       <UI.Text size="sm">
-        可读成员 {countsKnown ? readable : "未知"} / 此修订成员总数{" "}
-        {countsKnown ? total : "未知"}。
+        当前可读成员 {countsKnown ? readable : "未知"}{" "}
+        条；不包含无权读取的材料。
       </UI.Text>
       <UI.Text size="sm" tone="muted">
         {!receiptKnown

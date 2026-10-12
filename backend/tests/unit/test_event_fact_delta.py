@@ -17,7 +17,9 @@ from events.fact_schemas import (
 from events.schemas import EventEvidenceChangeDecision, EventFactDecision
 
 
-@pytest.mark.parametrize("gate", ["partial", "removed", "mention", "unlinked", "readable"])
+@pytest.mark.parametrize(
+    "gate", ["partial", "removed", "mention", "unlinked", "readable", "withdrawn"]
+)
 def test_current_gate_hides_frozen_judgment_and_retains_denominator(gate):
     owner, topic, event, fact, member, version, call = (uuid4() for _ in range(7))
     judgment = EventEvidenceChangeDecision(
@@ -99,10 +101,15 @@ def test_current_gate_hides_frozen_judgment_and_retains_denominator(gate):
         session,
         event=SimpleNamespace(owner_id=owner, topic_id=topic, id=event),
         revision=2,
+        inputs_readable=gate != "withdrawn",
         facts=[viewed],
         members=[stored],
         assignments=[assignment],
     )
+    if gate == "withdrawn":
+        assert state == "unavailable" and delta is None
+        session.execute.assert_called_once()
+        return
     assert state == "available" and delta is not None and delta.material_count == 1
     assert delta.supplement_count == (1 if gate == "readable" else 0)
     assert delta.unknown_count == (0 if gate == "readable" else 1)
@@ -121,6 +128,7 @@ def test_missing_or_ambiguous_receipt_is_unknown_without_historical_reconstructi
         session,
         event=SimpleNamespace(owner_id=uuid4(), topic_id=uuid4(), id=uuid4()),
         revision=1,
+        inputs_readable=True,
         facts=[],
         members=[],
         assignments=[],

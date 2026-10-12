@@ -346,8 +346,7 @@ function EventResults({
                       : "已确认"}
                   </Badge>
                   <UI.Text as="span" className="text-muted-foreground text-sm">
-                    {item.readable_member_count} / {item.member_count}{" "}
-                    条成员可读
+                    当前可读成员 {item.readable_member_count} 条
                   </UI.Text>
                 </UI.Content>
                 <ItemTitle className="line-clamp-none w-full">

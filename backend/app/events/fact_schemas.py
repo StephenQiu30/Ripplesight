@@ -237,7 +237,9 @@ class EventFactPageView(OutputModel):
     event_id: UUID
     event_revision: int
     facts: list[EventFactView]
-    delta_state: Literal["available", "not_recorded", "invalid", "ambiguous"] = "not_recorded"
+    delta_state: Literal["available", "not_recorded", "invalid", "ambiguous", "unavailable"] = (
+        "not_recorded"
+    )
     delta: EventRevisionDeltaView | None = None
 
 

@@ -337,17 +337,18 @@ class EventReadService:
                 owner_id=owner_id, events={event.id: selected_revision}, now=now
             )
             all_members = members.get(event.id, [])
-            readable_count = sum(_reference(member) in readings for member in all_members)
+            readable_members = [member for member in all_members if _reference(member) in readings]
+            readable_count = len(readable_members)
             if not readable_count:
                 raise ApplicationError("resource_not_found")
             start = 0
             if cursor_values is not None:
-                identities = [member.id for member in all_members]
+                identities = [member.id for member in readable_members]
                 try:
                     start = identities.index(cursor_values[0]) + 1
                 except ValueError as error:
                     raise ApplicationError("invalid_event_cursor") from error
-            page = all_members[start : start + limit]
+            page = readable_members[start : start + limit]
             items = [
                 EventMemberReadView(
                     id=member.id,
@@ -370,7 +371,7 @@ class EventReadService:
                 evidence_state="complete" if readable_count == len(all_members) else "partial",
                 items=items,
                 next_cursor=_encode_cursor(fingerprint=fingerprint, identity=page[-1].id)
-                if start + limit < len(all_members)
+                if start + limit < len(readable_members)
                 else None,
             )
 
@@ -501,7 +502,7 @@ class EventReadService:
             if derived and complete and derived_available
             else None,
             phase=cast(Literal["active", "watching", "settled"], phase),
-            member_count=len(members),
+            member_count=len(readable),
             readable_member_count=len(readable),
             source_counts=dict(Counter(member.source_key for member in readable)),
             created_at=event.created_at,

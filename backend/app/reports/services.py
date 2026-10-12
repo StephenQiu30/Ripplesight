@@ -496,7 +496,21 @@ class ReportService:
         cursor: UUID | None,
         limit: int,
     ) -> tuple[list[ReportSummaryView], str | None]:
-        """Read only the newest final version of each owner/topic/window."""
+        """Page the newest final reports whose entire frozen input remains readable."""
+        from reports.notification_reading import load_notification_report_in_transaction
+
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        now = self._clock()
+
+        def readable(row: Report) -> bool:
+            return (
+                load_notification_report_in_transaction(
+                    self._session, owner_id=owner_id, report_id=row.id, version=row.version, now=now
+                )
+                is not None
+            )
+
         if date_from is not None and date_to is not None and date_from > date_to:
             raise ValueError("report date_from must not exceed date_to")
         previous = aliased(Report)
@@ -532,7 +546,7 @@ class ReportService:
             anchor = self._session.scalars(
                 select(Report).where(*filters, Report.id == cursor)
             ).first()
-            if anchor is None:
+            if anchor is None or not readable(anchor):
                 raise ApplicationError("resource_not_found")
             filters.append(
                 or_(
@@ -540,14 +554,32 @@ class ReportService:
                     and_(Report.window_start == anchor.window_start, Report.id < anchor.id),
                 )
             )
-        rows = self._session.scalars(
-            select(Report)
-            .where(*filters)
-            .order_by(Report.window_start.desc(), Report.id.desc())
-            .limit(limit + 1)
-        ).all()
-        page = rows[:limit]
-        return [self._summary(row) for row in page], str(page[-1].id) if len(rows) > limit else None
+        selected: list[Report] = []
+        while len(selected) <= limit:
+            rows = self._session.scalars(
+                select(Report)
+                .where(*filters)
+                .order_by(Report.window_start.desc(), Report.id.desc())
+                .limit(100)
+            ).all()
+            for row in rows:
+                if readable(row):
+                    selected.append(row)
+                    if len(selected) > limit:
+                        break
+            if len(rows) < 100:
+                break
+            last = rows[-1]
+            filters.append(
+                or_(
+                    Report.window_start < last.window_start,
+                    and_(Report.window_start == last.window_start, Report.id < last.id),
+                )
+            )
+        page = selected[:limit]
+        return [self._summary(row) for row in page], str(page[-1].id) if len(
+            selected
+        ) > limit else None
 
     def get_report(self, *, owner_id: UUID, report_id: UUID) -> ReportDetailView:
         model = self._session.scalars(

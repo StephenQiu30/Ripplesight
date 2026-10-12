@@ -318,11 +318,8 @@ def test_purpose_not_read_and_pre_generation_withdrawal_no_artifact(editorial_cl
     with pytest.raises(JobExecutionFailure):
         PrivateExportExecutor(sessions, store, clock=lambda: now).execute(message, lease)
     assert not names
-    with sessions() as session:
-        result = PrivateExportService(session, store).get(
-            owner_id=owner, export_id=view.id, kind="content"
-        )
-        assert result.status == "blocked" and result.artifact_size is None
+    with sessions() as session, pytest.raises(ApplicationError):
+        PrivateExportService(session, store).get(owner_id=owner, export_id=view.id, kind="content")
 
 
 def test_missing_locked_pdf_renderer_fails_original_job_without_minio_artifact(
@@ -462,11 +459,8 @@ def test_retention_deletion_removes_real_minio_artifact_and_reference(editorial_
     with pytest.raises(S3Error) as missing:
         delegate.get(name, max_bytes=EXPORT_MAX_BYTES)
     assert missing.value.code in {"NoSuchKey", "NoSuchObject"}
-    with sessions() as session:
-        result = PrivateExportService(session, store).get(
-            owner_id=owner, export_id=view.id, kind="content"
-        )
-        assert result.status == "blocked" and result.artifact_sha256 is None
+    with sessions() as session, pytest.raises(ApplicationError):
+        PrivateExportService(session, store).get(owner_id=owner, export_id=view.id, kind="content")
 
 
 def test_unknown_put_same_object_replay_hash_and_download_expiry(editorial_client, storage):

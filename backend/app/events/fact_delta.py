@@ -98,10 +98,12 @@ def load_revision_delta_in_transaction(
     event: Event,
     revision: int,
     facts: list[EventFactView],
+    inputs_readable: bool,
     members: list[EventMember],
     assignments: list[EventFactAssignment],
 ) -> tuple[
-    Literal["available", "not_recorded", "invalid", "ambiguous"], EventRevisionDeltaView | None
+    Literal["available", "not_recorded", "invalid", "ambiguous", "unavailable"],
+    EventRevisionDeltaView | None,
 ]:
     """Read a verifiable receipt without reconstructing absent historical judgments.
 
@@ -133,6 +135,10 @@ def load_revision_delta_in_transaction(
         return "not_recorded", None
     if len(rows) != 1:
         return "ambiguous", None
+    # A filtered subset cannot stand in for this frozen complete partition.
+    # Suppress its identities and counts together when any input is withdrawn.
+    if not inputs_readable:
+        return "unavailable", None
     assessment, candidate = rows[0]
     try:
         receipt = EventRevisionDeltaReceipt.model_validate(assessment.applied_result)

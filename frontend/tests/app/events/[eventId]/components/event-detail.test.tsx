@@ -167,7 +167,7 @@ describe("fixed event member reading", () => {
       screen.getByRole("region", { name: "当前事件的证据范围" }),
     );
     expect(scope.getByText("多材料关联")).toBeTruthy();
-    expect(scope.getByText(/可读成员 2 \/ 此修订成员总数 2/)).toBeTruthy();
+    expect(scope.getByText(/当前可读成员 2 条/)).toBeTruthy();
     expect(
       document.getElementById(reference.getAttribute("href")!.slice(1))
         ?.textContent,
@@ -362,7 +362,7 @@ describe("fixed event member reading", () => {
     );
     expect(scope.getByText("当前事件修订 2")).toBeTruthy();
     expect(scope.getByText("多材料关联")).toBeTruthy();
-    expect(scope.getByText(/可读成员 2 \/ 此修订成员总数 2/)).toBeTruthy();
+    expect(scope.getByText(/当前可读成员 2 条/)).toBeTruthy();
   });
 
   it("shows unreadable events as 404 and retries through the generated API", async () => {

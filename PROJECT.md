@@ -78,6 +78,8 @@ Web 外壳使用 `BasicLayout → PageContainer`：前者管理侧栏、移动�
 
 单轮执行差分复用job_attempts的job+lease_epoch边界，新领取标记collection_counts_tracked，并以可空collection_observed_count保存已原子提交页面的上游增量。content_observations.execution_epoch可空外键绑定实际执行；重放不改原归属，旧记录不回填。content一次历史查询按明确归属投影最近20轮身份计量，jobs只读输出，Web与整个任务累计分别展示。规范SQL仅用于全新独立测试库，业务库升级遵守§6。
 
+报告列表与详情共用全部冻结输入许可检查，导出状态与下载同样复核当前许可；事件成员列表与计数只包含当前可读集合，partial不携带受限成员引用或数量。
+
 事件修订差分由events领域在既有分组评估记录的可空JSONB结果中原子冻结，关联实际事件修订、此前修订及新成员/事实身份；不建立第二份材料或事实账本。事实读取在当前许可下投影差分，统计由程序从冻结分类计算。旧记录无结果不倒填；模型补证/重复判断及实际可读证据分别核对。
 
 普通页头复用 `components/system/page-header.tsx` 的 `PageHeader`，统一标题、可选说明、操作与详情面包屑；面包屑直接组合现有 shadcn 基础组件。空状态由 `PageState` 组合 `Empty`，说明与操作均按当前场景提供，不自动添加无关跳转或技术诊断。刊物报头与登录表单保留专用排版。

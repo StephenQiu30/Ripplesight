@@ -92,12 +92,22 @@ def test_partial_member_evidence_redacts_derived_text_and_search(
         )
     detail = event_read_client.get(f"/api/events/{event_id}").json()
     assert detail["evidence_state"] == "partial"
-    assert detail["member_count"] == 2 and detail["readable_member_count"] == 1
+    assert detail["member_count"] == 1 and detail["readable_member_count"] == 1
     assert detail["title"] is None and detail["summary"] is None
     assert detail["derived_text_available"] is False
     page = event_read_client.get(f"/api/events/{event_id}/members").json()
-    unavailable = next(member for member in page["items"] if member["content_id"] == str(fixed.id))
-    assert unavailable["content"] is None and unavailable["availability"] == "unavailable"
+    assert [member["content_id"] for member in page["items"]] == [str(other.id)]
+    assert page["next_cursor"] is None
+    for revision in [None, 1]:
+        params = {"limit": 1}
+        if revision is not None:
+            params["revision"] = revision
+        response = event_read_client.get(f"/api/events/{event_id}/members", params=params)
+        assert response.status_code == 200
+        assert str(fixed.id) not in response.text
+        assert str(fixed.latest_observation.content_version.id) not in response.text
+        assert response.json()["items"][0]["content_id"] == str(other.id)
+        assert response.json()["next_cursor"] is None
     assert event_read_client.get("/api/events", params={"query": "固定正文"}).json()["items"] == []
     assert (
         len(event_read_client.get("/api/events", params={"query": "独立正文"}).json()["items"]) == 1
