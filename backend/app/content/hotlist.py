@@ -16,6 +16,7 @@ from connections.services import (
     require_source_connection_version,
 )
 from content.discovery import KeywordDiscoveryPageCommitService, KeywordRequestMeter
+from content.identity_history import lock_owner_history_in_transaction
 from content.models import HotlistEntryRecord, HotlistSnapshot
 from content.schemas import (
     HotlistEntryView,
@@ -151,6 +152,7 @@ class HotlistService:
             raise ValueError("only a completed or empty matching hotlist page may be saved")
         self._session.rollback()
         with self._session.begin():
+            lock_owner_history_in_transaction(self._session, owner_id=owner_id)
             execution = JobExecutionService(
                 self._session, lease_seconds=self._lease_seconds, clock=self._clock
             )

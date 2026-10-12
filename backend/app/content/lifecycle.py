@@ -7,6 +7,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from content.editorial_rendered_models import ContentRenderedMaterial
+from content.identity_history import lock_owner_history_in_transaction
 from content.models import (
     ContentObservation,
     ContentObservationInput,
@@ -21,6 +22,7 @@ def purge_observation_dependants_in_transaction(
 ) -> None:
     if not session.in_transaction() or now.utcoffset() is None:
         raise ValueError("content lifecycle requires aware caller transaction")
+    registration = lock_owner_history_in_transaction(session, owner_id=owner_id)
     original = session.scalar(
         select(ContentObservation).where(
             ContentObservation.owner_id == owner_id, ContentObservation.id == observation_id
@@ -102,6 +104,10 @@ def purge_observation_dependants_in_transaction(
             )
         )
     )
+    if empty_content_ids and registration is not None and registration.state == "complete":
+        registration.state = "unknown"
+        registration.invalidated_at = now
+        session.flush()
     from analysis.content_cleanup import purge_analysis_content_inputs_in_transaction
     from connections.editorial_cleanup import purge_editorial_material_receipts_in_transaction
     from events.content_cleanup import purge_event_content_inputs_in_transaction

@@ -19,6 +19,7 @@ from connections.services import (
     require_web_connection_execution,
     resolve_web_connection_execution,
 )
+from content.identity_history import lock_owner_history_in_transaction
 from content.schemas import (
     ContentRecordDetailView,
     ContentTruncationReason,
@@ -419,6 +420,7 @@ class WebPageCommitService:
         )
         self._session.rollback()
         with self._session.begin():
+            lock_owner_history_in_transaction(self._session, owner_id=owner_id)
             execution.require_current_lease_in_transaction(lease)
             connection = require_web_connection_execution(
                 self._session,

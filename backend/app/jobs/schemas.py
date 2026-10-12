@@ -335,15 +335,14 @@ class CollectionCoverageView(BaseModel):
         ge=0, description="本任务精筛后持久观察数,同身份可出现多次,操作重放不增加"
     )
     unique_content_count: int | None = Field(ge=0, description="本任务持久观察的唯一内容身份数")
-    identity_count_basis: Literal["retained_receipt_identity_v1"] | None
-    inserted_count: int | None = Field(ge=0, description="首次保留观察属于本任务的唯一身份数")
+    identity_count_basis: Literal["frozen_receipt_identity_v2"] | None
+    inserted_count: int | None = Field(
+        ge=0, description="有冻结完整历史依据证明首次出现且归属本任务的唯一身份数"
+    )
     updated_count: int | None = Field(ge=0, description="已有身份出现已知正文版本或指标变化的数量")
     unchanged_count: int | None = Field(ge=0, description="已有身份的已存正文版本与指标未变的数量")
     unclassified_count: int | None = Field(
-        ge=0, description="已有身份无已知变化,但缺正文版本或指标可得性变化,无法比较的数量"
-    )
-    deduplicated_count: int | None = Field(
-        ge=0, description="兼容旧口径:持久观察数减新增身份数,含更新;不是完全重复身份数"
+        ge=0, description="首次身份或精确前驱缺证据、撤权、缺正文或指标可得性变化而无法比较的数量"
     )
     analysis: CollectionCoverageAnalysisView | None
     budgets: tuple[CollectionCoverageBudgetView, ...] | None
@@ -1271,12 +1270,11 @@ class JobCollectionCountsView(BaseModel):
     observed_count: int | None = Field(ge=0)
     stored_observation_count: int = Field(ge=0)
     unique_content_count: int = Field(ge=0)
-    identity_count_basis: Literal["retained_receipt_identity_v1"]
+    identity_count_basis: Literal["frozen_receipt_identity_v2"]
     inserted_count: int = Field(ge=0)
     updated_count: int = Field(ge=0)
     unchanged_count: int = Field(ge=0)
     unclassified_count: int = Field(ge=0)
-    deduplicated_count: int = Field(ge=0)
 
 
 class JobCollectionExecutionView(BaseModel):

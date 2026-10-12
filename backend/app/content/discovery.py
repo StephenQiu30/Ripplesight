@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from connections.schemas import SourceEntryPoint
 from connections.services import require_source_connection_version
+from content.identity_history import lock_owner_history_in_transaction
 from content.models import ContentDiscovery
 from content.schemas import (
     ContentTruncationReason,
@@ -523,6 +524,7 @@ class KeywordDiscoveryPageCommitService:
             self._session, lease_seconds=self._lease_seconds, clock=self._clock
         )
         with self._session.begin():
+            lock_owner_history_in_transaction(self._session, owner_id=owner_id)
             current = execution.require_current_operation_in_transaction(
                 lease,
                 owner_id=owner_id,

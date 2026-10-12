@@ -17,6 +17,7 @@ from content.editorial_rendered import (
     save_editorial_rendered_in_transaction,
 )
 from content.editorial_schemas import EditorialContentInput, EditorialContentResult
+from content.identity_history import lock_owner_history_in_transaction
 from content.schemas import PersistContentPostInput
 from content.services import ContentService
 from content.topic_matches import match_editorial_content_in_transaction
@@ -37,6 +38,7 @@ class EditorialContentIngestService:
     ) -> EditorialContentResult:
         if not self._session.in_transaction():
             raise RuntimeError("editorial content ingestion requires the caller's transaction")
+        lock_owner_history_in_transaction(self._session, owner_id=owner_id)
         m = command.material
         original_body = m.body_text if m.body_status == "ok" else m.excerpt
         original_body = original_body if original_body and original_body.strip() else None

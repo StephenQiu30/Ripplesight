@@ -5,7 +5,7 @@ import json
 import re
 from base64 import b64decode, urlsafe_b64encode
 from binascii import Error as Base64Error
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -38,6 +38,7 @@ from content.collection_counts import (
     classify_collection_execution_identities,
     classify_collection_identities,
 )
+from content.identity_history import lock_owner_history_in_transaction
 from content.models import (
     ContentDiscovery,
     ContentObservation,
@@ -62,6 +63,7 @@ from content.observation_inputs import (
     observation_input_closure_in_transaction,
     save_observation_inputs_in_transaction,
 )
+from content.observation_reading import readable_observation_groups_in_transaction
 from content.schemas import (
     AnalysisCommentContentView,
     AnalysisPostAvailabilityView,
@@ -628,7 +630,6 @@ class ContentService:
                 observation_count=fact.observation_count,
                 ingested_count=fact.ingested_count,
                 first_ingested_count=fact.first_ingested_count,
-                deduplicated_count=fact.deduplicated_count,
                 updated_count=fact.updated_count,
                 unchanged_count=fact.unchanged_count,
                 unclassified_count=fact.unclassified_count,
@@ -670,7 +671,12 @@ class ContentService:
                 ContentObservation.content_id.in_(candidates),
             )
         ).all()
-        identities = classify_collection_execution_identities(history, job_id=job_id, epochs=epochs)
+        identities = classify_collection_execution_identities(
+            history,
+            job_id=job_id,
+            epochs=epochs,
+            readable_ids=self._collection_comparison_readable_ids(owner_id, history),
+        )
         grouped: dict[int, list[ContentObservation]] = {epoch: [] for epoch in epochs}
         for item in history:
             if item.job_id == job_id and item.execution_epoch in grouped:
@@ -682,7 +688,6 @@ class ContentService:
                 observation_count=len(grouped[epoch]),
                 ingested_count=len({item.content_id for item in grouped[epoch]}),
                 first_ingested_count=identities[epoch].new,
-                deduplicated_count=len(grouped[epoch]) - identities[epoch].new,
                 updated_count=identities[epoch].updated,
                 unchanged_count=identities[epoch].unchanged,
                 unclassified_count=identities[epoch].unclassified,
@@ -710,8 +715,9 @@ class ContentService:
 
         Returns:
             Facts for each requested Job, including zero counts for absent Jobs.
-            Identity categories partition the unique content denominator and use
-            retained receipt history, which may change after lifecycle deletion.
+            Identity categories partition the unique content denominator using frozen
+            first-identity and exact predecessor proofs. Missing or unreadable baselines
+            become unknown; deletion never promotes older identities to new.
 
         Raises:
             RuntimeError: The caller has not opened a transaction.
@@ -736,14 +742,17 @@ class ContentService:
         for item in history:
             if item.job_id in by_job:
                 by_job[item.job_id].append(item)
-        identities = classify_collection_identities(history, job_ids=job_ids)
+        identities = classify_collection_identities(
+            history,
+            job_ids=job_ids,
+            readable_ids=self._collection_comparison_readable_ids(owner_id, history),
+        )
         return tuple(
             CollectionContentFactView(
                 job_id=job_id,
                 observation_count=len(by_job[job_id]),
                 ingested_count=len({item.content_id for item in by_job[job_id]}),
                 first_ingested_count=identities[job_id].new,
-                deduplicated_count=len(by_job[job_id]) - identities[job_id].new,
                 updated_count=identities[job_id].updated,
                 unchanged_count=identities[job_id].unchanged,
                 unclassified_count=identities[job_id].unclassified,
@@ -764,6 +773,24 @@ class ContentService:
             )
             for job_id in job_ids
         )
+
+    def _collection_comparison_readable_ids(
+        self, owner_id: UUID, history: Sequence[ContentObservation]
+    ) -> set[UUID]:
+        now = self._clock()
+        history = [item for item in history if item.count_provenance_version == 1]
+        readable: set[UUID] = set()
+        for start in range(0, len(history), 1000):
+            batch = history[start : start + 1000]
+            groups = readable_observation_groups_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                observation_groups={str(item.id): (item.id,) for item in batch},
+                now=now,
+                include_metadata=True,
+            )
+            readable.update(UUID(key) for key, closure in groups.items() if closure is not None)
+        return readable
 
     def collection_snapshot_facts_in_transaction(
         self, *, owner_id: UUID, job_ids: tuple[UUID, ...]
@@ -1159,6 +1186,7 @@ class ContentService:
     ) -> tuple[dict[str, object], str]:
         if now.utcoffset() is None:
             raise ValueError("clock must return a timezone-aware datetime")
+        lock_owner_history_in_transaction(self._session, owner_id=owner_id)
         if command.admission.owner_id != owner_id:
             raise ApplicationError("resource_not_found")
         if command.admission.collected_at > now:
@@ -1251,6 +1279,10 @@ class ContentService:
         identity_proof: EditorialNativeIdentityProof | None = None,
         input_observation_ids: tuple[UUID, ...] | None = None,
     ) -> ContentRecordDetailView:
+        history_registration = lock_owner_history_in_transaction(self._session, owner_id=owner_id)
+        history_complete = (
+            history_registration is not None and history_registration.state == "complete"
+        )
         if representation_fingerprint is not None:
             if len(representation_fingerprint) != 32 or version_values is None:
                 raise ValueError("representation fingerprint requires a version and SHA-256")
@@ -1340,6 +1372,7 @@ class ContentService:
             if isinstance(command, PersistContentPostInput)
             else None,
             values=observation_values,
+            history_complete=history_complete,
         )
         self._find_or_create_visibility_observation(
             owner_id=owner_id,
@@ -2206,7 +2239,48 @@ class ContentService:
         received_at: datetime,
         execution_epoch: int | None,
         values: Mapping[str, object],
+        history_complete: bool,
     ) -> ContentObservation:
+        # Replay freezes the original predecessor and execution epoch.
+        existing_receipt = self._session.scalar(
+            select(ContentObservation).where(
+                ContentObservation.owner_id == owner_id,
+                ContentObservation.content_id == content_id,
+                ContentObservation.source_operation_id == source_operation_id,
+            )
+        )
+        if existing_receipt is not None:
+            if not self._observation_matches(
+                existing_receipt, job_id=job_id, observed_at=observed_at, values=values
+            ):
+                raise ApplicationError("idempotency_conflict")
+            return existing_receipt
+        predecessor = self._session.scalar(
+            select(ContentRecord.last_collection_observation_id).where(
+                ContentRecord.owner_id == owner_id, ContentRecord.id == content_id
+            )
+        )
+        has_legacy_observation = (
+            predecessor is None
+            and self._session.scalar(
+                select(ContentObservation.id)
+                .where(
+                    ContentObservation.owner_id == owner_id,
+                    ContentObservation.content_id == content_id,
+                )
+                .limit(1)
+            )
+            is not None
+        )
+        proof = {
+            "count_provenance_version": 1,
+            "first_identity_state": "confirmed_existing"
+            if predecessor is not None
+            else "confirmed_first"
+            if history_complete and not has_legacy_observation
+            else "unknown",
+            "comparison_predecessor_id": predecessor,
+        }
         observation_id = uuid4()
         inserted_id = self._session.scalar(
             insert(ContentObservation)
@@ -2220,11 +2294,17 @@ class ContentService:
                 observed_at=observed_at,
                 received_at=received_at,
                 **values,
+                **proof,
             )
             .on_conflict_do_nothing(constraint="content_observations_owner_content_operation_key")
             .returning(ContentObservation.id)
         )
         if inserted_id is not None:
+            self._session.execute(
+                update(ContentRecord)
+                .where(ContentRecord.owner_id == owner_id, ContentRecord.id == content_id)
+                .values(last_collection_observation_id=inserted_id)
+            )
             return ContentObservation(
                 id=inserted_id,
                 owner_id=owner_id,
@@ -2235,6 +2315,7 @@ class ContentService:
                 observed_at=observed_at,
                 received_at=received_at,
                 **values,
+                **proof,
             )
         existing = self._session.scalar(
             select(ContentObservation)
@@ -2890,19 +2971,18 @@ class ContentObservationCleanup:
         except ValueError as error:
             raise ValueError("content observation cleanup reference must be a UUID") from error
         with self._sessions() as session, session.begin():
-            observation = session.scalar(
-                select(ContentObservation)
-                .where(ContentObservation.id == observation_id)
-                .with_for_update()
+            owner_id = session.scalar(
+                select(ContentObservation.owner_id).where(ContentObservation.id == observation_id)
             )
-            if observation is None:
+            if owner_id is None:
                 return
+            lock_owner_history_in_transaction(session, owner_id=owner_id)
             from content.lifecycle import purge_observation_dependants_in_transaction
 
             purge_observation_dependants_in_transaction(
                 session,
-                owner_id=observation.owner_id,
-                observation_id=observation.id,
+                owner_id=owner_id,
+                observation_id=observation_id,
                 now=self._clock(),
             )
 

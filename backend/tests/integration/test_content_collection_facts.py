@@ -166,11 +166,10 @@ def test_collection_facts_batch_preserves_job_identity_and_first_ingestion(
             ]
             assert facts[0].observation_count == 3
             assert facts[0].ingested_count == 2
-            assert facts[0].first_ingested_count == 1
-            assert facts[0].deduplicated_count == 2
+            assert facts[0].first_ingested_count == 0
             assert facts[0].updated_count == 0
             assert facts[0].unchanged_count == 0
-            assert facts[0].unclassified_count == 1
+            assert facts[0].unclassified_count == 2
             assert facts[0].content_ids == tuple(sorted((shared_content, new_content), key=str))
             assert facts[0].analysis_targets_complete is False
             assert facts[1].analysis_targets_complete is True
@@ -179,10 +178,9 @@ def test_collection_facts_batch_preserves_job_identity_and_first_ingestion(
             assert facts[1].content_ids == facts[1].content_version_ids == ()
             assert facts[2].observation_count == 2
             assert facts[2].ingested_count == 1
-            assert facts[2].first_ingested_count == 1
-            assert facts[2].deduplicated_count == 1
+            assert facts[2].first_ingested_count == 0
             assert facts[2].updated_count == facts[2].unchanged_count == 0
-            assert facts[2].unclassified_count == 0
+            assert facts[2].unclassified_count == 1
             assert facts[2].content_ids == (shared_content,)
             assert facts[2].content_version_ids == tuple(sorted((shared_v1, shared_v2), key=str))
             assert facts[3].observation_count == 0
@@ -201,9 +199,8 @@ def test_collection_facts_batch_preserves_job_identity_and_first_ingestion(
             old_counts = ContentService(session).collection_counts_in_transaction(
                 owner_id=owner_id, job_ids=(first_job, second_job)
             )
-            assert old_counts[0].first_ingested_count == 1
-            assert old_counts[1].deduplicated_count == 2
-            assert old_counts[1].unclassified_count == 1
+            assert old_counts[0].first_ingested_count == 0
+            assert old_counts[1].unclassified_count == 2
             assert "content_ids" not in old_counts[0].model_dump()
         finally:
             session.rollback()
@@ -261,15 +258,14 @@ def test_collection_identity_counts_partition_updates_duplicates_and_unknowns(
             fact = facts[0]
             assert fact.observation_count == 7
             assert fact.ingested_count == 5
-            assert (fact.first_ingested_count, fact.updated_count) == (1, 2)
-            assert (fact.unchanged_count, fact.unclassified_count) == (1, 1)
+            assert (fact.first_ingested_count, fact.updated_count) == (0, 0)
+            assert (fact.unchanged_count, fact.unclassified_count) == (0, 5)
             assert (
                 fact.first_ingested_count
                 + fact.updated_count
                 + fact.unchanged_count
                 + fact.unclassified_count
             ) == fact.ingested_count
-            assert fact.deduplicated_count == 6  # Legacy observation denominator is different.
             # Read-only replay preserves accounting and does not create more observations.
             assert (
                 service.collection_facts_in_transaction(owner_id=owner, job_ids=(second_job,))
@@ -323,14 +319,12 @@ def test_collection_identity_denominator_stays_consistent_while_running_job_appe
         assert appended and reads == 1
         assert facts[0].ingested_count == facts[0].updated_count == 0
         assert facts[0].content_ids == ()
-        assert facts[1].ingested_count == facts[1].first_ingested_count == 1
+        assert facts[1].ingested_count == facts[1].unclassified_count == 1
         latest = ContentService(session).collection_facts_in_transaction(
             owner_id=owner, job_ids=(running_job,)
         )[0]
-        assert latest.ingested_count == latest.updated_count == 1
-        assert (
-            latest.first_ingested_count == latest.unchanged_count == latest.unclassified_count == 0
-        )
+        assert latest.ingested_count == latest.unclassified_count == 1
+        assert latest.first_ingested_count == latest.unchanged_count == latest.updated_count == 0
 
 
 def test_collection_snapshot_facts_distinguish_empty_snapshot_from_absence(
@@ -497,7 +491,7 @@ def test_execution_denominators_use_one_snapshot_while_new_receipt_arrives(
         latest = ContentService(session).collection_execution_counts_in_transaction(
             owner_id=owner, job_id=job, epochs=(1, 2)
         )
-        assert latest[0].ingested_count == latest[0].unchanged_count == 1
+        assert latest[0].ingested_count == latest[0].unclassified_count == 1
         assert latest[0].content_version_ids == (version,)
         assert latest[1].ingested_count == 0
         denied = ContentService(session).collection_execution_counts_in_transaction(

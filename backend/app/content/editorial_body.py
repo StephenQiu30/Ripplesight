@@ -14,6 +14,7 @@ from content.editorial_rendered import (
     save_editorial_rendered_in_transaction,
 )
 from content.editorial_schemas import EditorialContentResult
+from content.identity_history import lock_owner_history_in_transaction
 from content.models import ContentObservation, ContentRecord, ContentVersion
 from content.observation_context import load_observation_context_in_transaction
 from content.schemas import PersistContentPostInput
@@ -108,6 +109,7 @@ def require_editorial_body_input_in_transaction(
 ) -> None:
     if not session.in_transaction():
         raise RuntimeError("body input checks require the caller transaction")
+    lock_owner_history_in_transaction(session, owner_id=target.owner_id)
     record = session.scalar(
         select(ContentRecord)
         .where(

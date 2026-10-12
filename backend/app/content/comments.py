@@ -15,6 +15,7 @@ from connections.services import (
     load_execution_policy_in_transaction,
     require_source_connection_version,
 )
+from content.identity_history import lock_owner_history_in_transaction
 from content.models import ContentDiscovery, ContentRecord, ContentVersion
 from content.schemas import (
     CommentCollectionRunInput,
@@ -740,6 +741,7 @@ class CommentPageCommitService:
         )
         policy = SourceAccessPolicyService(self._session, clock=self._clock)
         with self._session.begin():
+            lock_owner_history_in_transaction(self._session, owner_id=owner_id)
             current = execution.require_current_operation_in_transaction(
                 lease,
                 owner_id=owner_id,

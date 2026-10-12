@@ -1445,12 +1445,11 @@ class CollectionCoverageQueryService:
             observed_count=observed,
             stored_observation_count=content.observation_count if content is not None else None,
             unique_content_count=content.ingested_count if content is not None else None,
-            identity_count_basis="retained_receipt_identity_v1" if content is not None else None,
+            identity_count_basis="frozen_receipt_identity_v2" if content is not None else None,
             inserted_count=content.first_ingested_count if content is not None else None,
             updated_count=content.updated_count if content is not None else None,
             unchanged_count=content.unchanged_count if content is not None else None,
             unclassified_count=content.unclassified_count if content is not None else None,
-            deduplicated_count=content.deduplicated_count if content is not None else None,
             analysis=CollectionCoverageAnalysisView(
                 pending_count=analysis.pending_count,
                 failed_count=analysis.failed_count,

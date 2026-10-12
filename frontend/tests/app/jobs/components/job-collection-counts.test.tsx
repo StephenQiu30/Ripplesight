@@ -16,7 +16,7 @@ import { JobCollectionCounts } from "@/app/jobs/components/job-collection-counts
 import { ApiRequestError } from "@/request";
 
 const counts = {
-  identity_count_basis: "retained_receipt_identity_v1",
+  identity_count_basis: "frozen_receipt_identity_v2",
   observed_count: 12,
   stored_observation_count: 9,
   unique_content_count: 4,
@@ -24,7 +24,6 @@ const counts = {
   updated_count: 1,
   unchanged_count: 1,
   unclassified_count: 1,
-  deduplicated_count: 8,
 };
 const receipt = {
   id: "job-a",
@@ -74,7 +73,7 @@ it.each(["keyword.search", "source.comments"] as const)(
     expect(within(panel).getByText("4 个唯一身份")).toBeTruthy();
     expect(within(panel).getAllByText("1 个身份")).toHaveLength(4);
     expect(within(panel).getAllByText("分母：4 个唯一身份")).toHaveLength(4);
-    expect(within(panel).getByText("8 条")).toBeTruthy();
+    expect(within(panel).queryByText("旧口径重复观察")).toBeNull();
   },
 );
 
@@ -90,7 +89,6 @@ it("keeps unknown upstream count separate from known zero stored identities", as
       updated_count: 0,
       unchanged_count: 0,
       unclassified_count: 0,
-      deduplicated_count: 0,
     },
   });
   show();
@@ -113,7 +111,7 @@ it.each([null, undefined])(
     expand();
     const panel = await screen.findByRole("region", { name: "采集计量" });
     expect(within(panel).getByText(/未提供可核对的身份计量口径/)).toBeTruthy();
-    expect(within(panel).getAllByText("未知")).toHaveLength(8);
+    expect(within(panel).getAllByText("未知")).toHaveLength(7);
     expect(within(panel).getAllByText("分母：未知")).toHaveLength(4);
     expect(panel.textContent).not.toContain("90");
     expect(panel.textContent).not.toContain("0 个身份");

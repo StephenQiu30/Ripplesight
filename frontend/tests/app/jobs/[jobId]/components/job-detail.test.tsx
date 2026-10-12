@@ -282,7 +282,7 @@ afterEach(() => {
 
 describe("job detail controls", () => {
   const counts: HotKeyAPI.JobCollectionCountsView = {
-    identity_count_basis: "retained_receipt_identity_v1",
+    identity_count_basis: "frozen_receipt_identity_v2",
     observed_count: 8,
     stored_observation_count: 5,
     unique_content_count: 4,
@@ -290,7 +290,6 @@ describe("job detail controls", () => {
     updated_count: 1,
     unchanged_count: 1,
     unclassified_count: 1,
-    deduplicated_count: 4,
   };
 
   it.each(["keyword.search", "source.comments"])(
@@ -328,7 +327,7 @@ describe("job detail controls", () => {
       });
       render(createElement(JobDetail, { jobId: baseJob.id }));
       const panel = await screen.findByRole("region", { name: "采集计量" });
-      expect(within(panel).getAllByText("未知")).toHaveLength(8);
+      expect(within(panel).getAllByText("未知")).toHaveLength(7);
       expect(within(panel).getAllByText("分母：未知")).toHaveLength(4);
       expect(within(panel).queryByText(/99|0 个身份/)).toBeNull();
     },
@@ -347,7 +346,6 @@ describe("job detail controls", () => {
         updated_count: 0,
         unchanged_count: 0,
         unclassified_count: 0,
-        deduplicated_count: 0,
       },
     });
     render(createElement(JobDetail, { jobId: baseJob.id }));
@@ -455,7 +453,7 @@ it.each([401, 403, 404])(
   "clears both count scopes when refresh loses access (%s)",
   async (status) => {
     const counts: HotKeyAPI.JobCollectionCountsView = {
-      identity_count_basis: "retained_receipt_identity_v1",
+      identity_count_basis: "frozen_receipt_identity_v2",
       observed_count: 12,
       stored_observation_count: 9,
       unique_content_count: 4,
@@ -463,7 +461,6 @@ it.each([401, 403, 404])(
       updated_count: 1,
       unchanged_count: 1,
       unclassified_count: 1,
-      deduplicated_count: 8,
     };
     api.get
       .mockResolvedValueOnce({

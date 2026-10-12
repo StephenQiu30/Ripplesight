@@ -51,20 +51,19 @@ export function CollectionIdentityCounts({
       | "updated_count"
       | "unchanged_count"
       | "unclassified_count"
-      | "deduplicated_count"
     >
   >;
   headingLevel?: 2 | 4;
   scope?: "job" | "execution";
 }) {
   const scopeLabel = scope === "execution" ? "本执行轮" : "本任务";
-  const supported = row.identity_count_basis === "retained_receipt_identity_v1";
+  const supported = row.identity_count_basis === "frozen_receipt_identity_v2";
   const denominator = quantity(row.unique_content_count, "个唯一身份");
   const categories = [
     {
       label: "新增",
       count: row.inserted_count,
-      explanation: `首次保留观察属于${scopeLabel}。`,
+      explanation: `完整历史依据证明首次出现，并归属${scopeLabel}。`,
     },
     {
       label: "更新",
@@ -79,7 +78,7 @@ export function CollectionIdentityCounts({
     {
       label: "无法比较",
       count: row.unclassified_count,
-      explanation: "无已知变化，但缺正文版本或指标可得性变化。",
+      explanation: "首次身份或精确前驱缺证据、不可读，或正文与指标无法比较。",
     },
   ];
 
@@ -133,15 +132,9 @@ export function CollectionIdentityCounts({
           />
         ))}
       </UI.Content>
-      <UI.Content as="dl">
-        <CountFact
-          label="旧口径重复观察"
-          value={quantity(row.deduplicated_count, "条")}
-          explanation={`持久观察数减新增身份数，包含旧帖更新及${scopeLabel}多次观察，不能作为未变数或与四类相加。`}
-        />
-      </UI.Content>
       <UI.Text className="text-muted-foreground text-xs">
-        分类依据当前保留的观察历史；删除历史后可能改变。新增身份在{scopeLabel}
+        分类依据冻结的首次身份与精确前驱；缺失或撤权基线保持未知。新增身份在
+        {scopeLabel}
         内更新仍只记新增，正文与指标同时变化只记一次更新。未知不当零，不计算百分比。
       </UI.Text>
     </UI.Content>

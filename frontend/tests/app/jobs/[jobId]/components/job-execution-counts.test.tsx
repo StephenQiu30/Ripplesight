@@ -10,7 +10,7 @@ import { afterEach, expect, it } from "vitest";
 import { JobExecutionCounts } from "@/app/jobs/[jobId]/components/job-execution-counts";
 
 const counts: HotKeyAPI.JobCollectionCountsView = {
-  identity_count_basis: "retained_receipt_identity_v1",
+  identity_count_basis: "frozen_receipt_identity_v2",
   observed_count: 12,
   stored_observation_count: 9,
   unique_content_count: 4,
@@ -18,7 +18,6 @@ const counts: HotKeyAPI.JobCollectionCountsView = {
   updated_count: 1,
   unchanged_count: 1,
   unclassified_count: 1,
-  deduplicated_count: 8,
 };
 const execution: HotKeyAPI.JobCollectionExecutionView = {
   execution_epoch: 2,
@@ -43,7 +42,9 @@ it("uses the execution denominator and separates budget cycle and cumulative rea
   expect(within(panel).getAllByText("分母：4 个唯一身份")).toHaveLength(4);
   expect(within(panel).getByText(/合计为本执行轮唯一身份数/)).toBeTruthy();
   expect(within(panel).getAllByText("1 个身份")).toHaveLength(4);
-  expect(within(panel).getByText(/首次保留观察属于本执行轮/)).toBeTruthy();
+  expect(
+    within(panel).getByText(/完整历史依据证明首次出现，并归属本执行轮/),
+  ).toBeTruthy();
 });
 it.each([undefined, null])(
   "keeps missing execution history unknown (%s)",
@@ -82,7 +83,6 @@ it("preserves unknown upstream and known zero identities", () => {
               updated_count: 0,
               unchanged_count: 0,
               unclassified_count: 0,
-              deduplicated_count: 0,
             },
           },
         ],

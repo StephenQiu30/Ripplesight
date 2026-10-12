@@ -804,16 +804,14 @@ declare namespace HotKeyAPI {
     unique_content_count: number | null;
     /** Identity Count Basis */
     identity_count_basis: string | null;
-    /** Inserted Count 首次保留观察属于本任务的唯一身份数 */
+    /** Inserted Count 有冻结完整历史依据证明首次出现且归属本任务的唯一身份数 */
     inserted_count: number | null;
     /** Updated Count 已有身份出现已知正文版本或指标变化的数量 */
     updated_count: number | null;
     /** Unchanged Count 已有身份的已存正文版本与指标未变的数量 */
     unchanged_count: number | null;
-    /** Unclassified Count 已有身份无已知变化,但缺正文版本或指标可得性变化,无法比较的数量 */
+    /** Unclassified Count 首次身份或精确前驱缺证据、撤权、缺正文或指标可得性变化而无法比较的数量 */
     unclassified_count: number | null;
-    /** Deduplicated Count 兼容旧口径:持久观察数减新增身份数,含更新;不是完全重复身份数 */
-    deduplicated_count: number | null;
     analysis: CollectionCoverageAnalysisView | null;
     /** Budgets */
     budgets: CollectionCoverageBudgetView[] | null;
@@ -3704,8 +3702,6 @@ declare namespace HotKeyAPI {
     unchanged_count: number;
     /** Unclassified Count */
     unclassified_count: number;
-    /** Deduplicated Count */
-    deduplicated_count: number;
   };
 
   type JobCollectionExecutionView = {

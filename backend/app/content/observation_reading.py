@@ -24,6 +24,7 @@ def readable_observation_groups_in_transaction(
     owner_id: UUID,
     observation_groups: dict[str, tuple[UUID, ...]],
     now: datetime,
+    include_metadata: bool = False,
 ) -> dict[str, tuple[UUID, ...] | None]:
     if not session.in_transaction() or now.utcoffset() is None or len(observation_groups) > 2000:
         raise ValueError("bounded ALL reads require aware caller transaction")
@@ -40,11 +41,21 @@ def readable_observation_groups_in_transaction(
             for key, roots in groups.items():
                 result.update(
                     readable_observation_groups_in_transaction(
-                        session, owner_id=owner_id, observation_groups={key: roots}, now=now
+                        session,
+                        owner_id=owner_id,
+                        observation_groups={key: roots},
+                        now=now,
+                        include_metadata=include_metadata,
                     )
                 )
             continue
-        leaf_flags = _readable_leaves(session, owner_id=owner_id, identifiers=identifiers, now=now)
+        leaf_flags = _readable_leaves(
+            session,
+            owner_id=owner_id,
+            identifiers=identifiers,
+            now=now,
+            include_metadata=include_metadata,
+        )
         for key, closure in closures.items():
             result[key] = (
                 closure if closure and all(leaf_flags.get(i, False) for i in closure) else None
@@ -53,9 +64,14 @@ def readable_observation_groups_in_transaction(
 
 
 def _readable_leaves(
-    session: Session, *, owner_id: UUID, identifiers: set[UUID], now: datetime
+    session: Session,
+    *,
+    owner_id: UUID,
+    identifiers: set[UUID],
+    now: datetime,
+    include_metadata: bool,
 ) -> dict[UUID, bool]:
-    rows: list[tuple[ContentObservation, ContentVersion]] = []
+    rows: list[tuple[ContentObservation, ContentVersion | None]] = []
     original_permissions = {}
     ordered = tuple(identifiers)
     for start in range(0, len(ordered), 1000):
@@ -64,7 +80,7 @@ def _readable_leaves(
             (observation, version)
             for observation, version in session.execute(
                 select(ContentObservation, ContentVersion)
-                .join(
+                .outerjoin(
                     ContentVersion,
                     (ContentVersion.owner_id == ContentObservation.owner_id)
                     & (ContentVersion.id == ContentObservation.content_version_id)
@@ -103,6 +119,8 @@ def _readable_leaves(
         )
     result = dict.fromkeys(identifiers, False)
     for observation, version in rows:
+        if version is None and (not include_metadata or observation.content_version_id is not None):
+            continue
         actual = contexts.get(observation.id)
         original = original_permissions.get(observation.id)
         visible = visibility.get(observation.id)
@@ -115,10 +133,27 @@ def _readable_leaves(
         admission = admissions.get((actual.source_key, actual.job.source_capability))
         if admission is None:
             continue
-        payload: dict[str, object] = {
-            field: getattr(version, field) for field in ("title", "body") if getattr(version, field)
-        }
-        if not payload and version.text_scope == "media_only":
+        payload: dict[str, object] = (
+            {
+                field: getattr(version, field)
+                for field in ("title", "body")
+                if getattr(version, field)
+            }
+            if version is not None
+            else {
+                field: getattr(observation, field)
+                for field in (
+                    "like_count",
+                    "comment_count",
+                    "repost_count",
+                    "view_count",
+                    "play_count",
+                    "danmaku_count",
+                )
+                if getattr(observation, field) is not None
+            }
+        )
+        if version is not None and not payload and version.text_scope == "media_only":
             # A media-only record still needs current permission for its stored semantics.
             payload = {"text_scope": version.text_scope, "text_origin": version.text_origin}
         try:

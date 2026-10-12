@@ -1511,6 +1511,19 @@ CREATE TABLE ai_capability_configurations (
 
 -- Content
 
+CREATE TABLE content_identity_history (
+    owner_id UUID PRIMARY KEY,
+    state VARCHAR(16) NOT NULL,
+    registered_at TIMESTAMPTZ NOT NULL,
+    invalidated_at TIMESTAMPTZ,
+    CONSTRAINT content_identity_history_owner_fkey FOREIGN KEY (owner_id)
+        REFERENCES identity_users (id) ON DELETE CASCADE,
+    CONSTRAINT content_identity_history_state_check CHECK (
+        (state = 'complete' AND invalidated_at IS NULL) OR
+        (state = 'unknown' AND invalidated_at IS NOT NULL)
+    )
+);
+
 CREATE TABLE content_records (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL,
@@ -1525,6 +1538,7 @@ CREATE TABLE content_records (
     identity_basis VARCHAR(16) CONSTRAINT content_records_identity_basis_check
         CHECK (identity_basis IN ('guid', 'url_fallback')),
     created_at TIMESTAMPTZ NOT NULL,
+    last_collection_observation_id UUID,
     CONSTRAINT content_records_owner_id_key UNIQUE (owner_id, id),
     CONSTRAINT content_records_owner_id_source_key UNIQUE (owner_id, id, source_key),
     CONSTRAINT content_records_source_identity_key
@@ -1728,6 +1742,9 @@ CREATE TABLE content_observations (
 	job_id UUID NOT NULL,
     execution_epoch BIGINT,
 	source_operation_id UUID NOT NULL,
+    count_provenance_version SMALLINT,
+    first_identity_state VARCHAR(24),
+    comparison_predecessor_id UUID,
 	source_key VARCHAR(64),
 	source_native_scope VARCHAR(512),
 	source_external_id VARCHAR(512),
@@ -1751,6 +1768,13 @@ CREATE TABLE content_observations (
 	play_count BIGINT,
 	danmaku_count BIGINT,
 	PRIMARY KEY (id),
+    CONSTRAINT content_observations_count_provenance_check CHECK (
+        (count_provenance_version IS NULL AND first_identity_state IS NULL AND comparison_predecessor_id IS NULL) OR
+        (count_provenance_version IS NOT NULL AND count_provenance_version = 1 AND first_identity_state IS NOT NULL AND (
+            (first_identity_state IN ('confirmed_first', 'unknown') AND comparison_predecessor_id IS NULL) OR
+            (first_identity_state = 'confirmed_existing' AND comparison_predecessor_id IS NOT NULL AND comparison_predecessor_id <> id)
+        ))
+    ),
 	CONSTRAINT content_observations_owner_id_key UNIQUE (owner_id, id),
 	CONSTRAINT content_observations_owner_identity_version_key UNIQUE (owner_id, id, content_id, content_version_id),
 	CONSTRAINT content_observations_source_context_key UNIQUE (owner_id, id, content_id, content_version_id, source_key),

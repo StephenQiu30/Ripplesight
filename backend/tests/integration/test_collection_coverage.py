@@ -539,11 +539,12 @@ def test_cross_job_same_content_is_counted_once_as_first_ingestion(
         counts = ContentService(session).collection_counts_in_transaction(
             owner_id=owner_id, job_ids=(first_job, second_job)
         )
-    assert counts[0].first_ingested_count == 1
+    assert counts[0].first_ingested_count == 0
+    assert counts[0].unclassified_count == 1
     assert counts[1].observation_count == 2
     assert counts[1].ingested_count == 2
-    assert counts[1].first_ingested_count == 1
-    assert counts[1].deduplicated_count == 1
+    assert counts[1].first_ingested_count == 0
+    assert counts[1].unclassified_count == 2
 
 
 def test_annotation_projection_separates_pending_failed_and_abnormal(

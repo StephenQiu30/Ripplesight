@@ -115,12 +115,11 @@ def test_job_detail_counts_retained_identities_across_retries_without_writes(
         "observed_count": 8,
         "stored_observation_count": 5,
         "unique_content_count": 4,
-        "identity_count_basis": "retained_receipt_identity_v1",
-        "inserted_count": 1,
-        "updated_count": 1,
-        "unchanged_count": 1,
-        "unclassified_count": 1,
-        "deduplicated_count": 4,
+        "identity_count_basis": "frozen_receipt_identity_v2",
+        "inserted_count": 0,
+        "updated_count": 0,
+        "unchanged_count": 0,
+        "unclassified_count": 4,
     }
     assert response.json()["progress"]["items_saved"] == 99
     assert client.get(f"/api/jobs/{current}").json()["collection_counts"] == counts
@@ -158,7 +157,6 @@ def test_job_detail_empty_receipts_do_not_infer_upstream_zero(
             "updated_count",
             "unchanged_count",
             "unclassified_count",
-            "deduplicated_count",
         )
     )
 
@@ -1031,9 +1029,11 @@ def test_execution_counts_partition_each_round_and_keep_cumulative_distinct(
     assert [
         counts[name]
         for name in ("inserted_count", "updated_count", "unchanged_count", "unclassified_count")
-    ] == [1, 1, 1, 1]
-    assert first["counts"]["inserted_count"] == 3
-    assert body["collection_counts"]["inserted_count"] == 4
+    ] == [0, 0, 0, 4]
+    assert first["counts"]["inserted_count"] == 0
+    assert first["counts"]["unclassified_count"] == 3
+    assert body["collection_counts"]["inserted_count"] == 0
+    assert body["collection_counts"]["unclassified_count"] == 4
     assert body["collection_counts"]["updated_count"] == 0
     assert body["collection_executions_has_more"] is False
     assert (
@@ -1170,6 +1170,7 @@ def test_observation_replay_preserves_original_execution_and_rejects_unknown_epo
             )
         service = ContentService(session)
         first = service._find_or_create_observation(
+            history_complete=False,
             owner_id=owner,
             content_id=content,
             job_id=job,
@@ -1180,6 +1181,7 @@ def test_observation_replay_preserves_original_execution_and_rejects_unknown_epo
             values={"content_version_id": version},
         )
         replay = service._find_or_create_observation(
+            history_complete=False,
             owner_id=owner,
             content_id=content,
             job_id=job,
@@ -1192,6 +1194,7 @@ def test_observation_replay_preserves_original_execution_and_rejects_unknown_epo
         assert first.id == replay.id and replay.execution_epoch == 1
         with pytest.raises(IntegrityError), session.begin_nested():
             service._find_or_create_observation(
+                history_complete=False,
                 owner_id=owner,
                 content_id=content,
                 job_id=job,

@@ -12,6 +12,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
+from content.identity_history import register_new_owner_history_in_transaction
 from core.config import Settings
 from core.errors import ApplicationError
 from identity.adapters.email import SmtpEmailAdapter
@@ -378,6 +379,10 @@ class IdentityService:
                                 updated_at=now,
                             )
                             self.session.add(user)
+                            self.session.flush()
+                            register_new_owner_history_in_transaction(
+                                self.session, owner_id=identifier, now=now
+                            )
                         elif github_user_id and user.github_user_id is None:
                             user.github_user_id, user.updated_at = github_user_id, now
                     self.session.flush()
@@ -480,6 +485,10 @@ class IdentityService:
                     )
                 )
                 self.session.flush()
+                if user_id is None:
+                    register_new_owner_history_in_transaction(
+                        self.session, owner_id=identifier, now=now
+                    )
         except IntegrityError:
             raise ApplicationError("username_unavailable") from None
         return identifier

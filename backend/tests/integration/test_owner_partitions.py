@@ -51,7 +51,7 @@ def test_empty_database_has_identity_schema_but_no_automatic_account(owner_engin
     with Session(owner_engine) as session, session.begin():
         assert list_owner_ids_in_transaction(session) == ()
     for table in tables:
-        if table.startswith("identity_"):
+        if table.startswith("identity_") or table == "content_identity_history":
             continue
         assert not any(
             fk["referred_table"] in {"identity_users", "identity_sessions"}

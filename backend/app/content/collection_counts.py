@@ -1,4 +1,4 @@
-"""Classify retained collection observations without new persistence or requests."""
+"""Classify identities only from frozen first-identity and exact predecessor evidence."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -26,27 +26,30 @@ class CollectionIdentityCounts:
 
 
 def classify_collection_identities(
-    history: Sequence[ContentObservation], *, job_ids: tuple[UUID, ...]
+    history: Sequence[ContentObservation],
+    *,
+    job_ids: tuple[UUID, ...],
+    readable_ids: set[UUID] | None = None,
 ) -> dict[UUID, CollectionIdentityCounts]:
-    """Compare adjacent retained receipts and classify each Job/content pair once.
+    """Use each receipt's exact frozen predecessor and classify each Job/content pair once.
 
     Args:
         history: Owner-scoped history for the selected Jobs' content identities.
         job_ids: Jobs to project, including Jobs with no retained observations.
+        readable_ids: Currently readable receipt IDs; None is for pure classification callers.
 
     Returns:
         Counts for every requested Job. New identity takes precedence over update,
         update over insufficient comparison evidence, and unchanged comes last.
-        Results reflect retained history, not an immutable ingestion ledger.
+        Missing or withdrawn exact baselines remain unclassified; older history
+        is never substituted.
     """
     states: dict[UUID, dict[UUID, _IdentityState]] = {job_id: {} for job_id in job_ids}
-    previous_by_content: dict[UUID, ContentObservation] = {}
-    for current in sorted(history, key=lambda item: (item.received_at, item.id)):
-        previous = previous_by_content.get(current.content_id)
-        previous_by_content[current.content_id] = current
+    by_id = {item.id: item for item in history}
+    for current in history:
         if current.job_id not in states:
             continue
-        state = _compare_observations(previous, current)
+        state = _classify_receipt(by_id, current, readable_ids)
         job_states = states[current.job_id]
         job_states[current.content_id] = max(
             state, job_states.get(current.content_id, _IdentityState.UNCHANGED)
@@ -62,11 +65,39 @@ def classify_collection_identities(
     }
 
 
-def _compare_observations(
-    previous: ContentObservation | None, current: ContentObservation
+def _classify_receipt(
+    by_id: dict[UUID, ContentObservation],
+    current: ContentObservation,
+    readable_ids: set[UUID] | None,
 ) -> _IdentityState:
-    if previous is None:
+    if current.count_provenance_version != 1 or (
+        readable_ids is not None and current.id not in readable_ids
+    ):
+        return _IdentityState.UNCLASSIFIED
+    if (
+        current.first_identity_state == "confirmed_first"
+        and current.comparison_predecessor_id is None
+    ):
         return _IdentityState.NEW
+    if current.first_identity_state != "confirmed_existing":
+        return _IdentityState.UNCLASSIFIED
+    previous = (
+        by_id.get(current.comparison_predecessor_id) if current.comparison_predecessor_id else None
+    )
+    if previous is None or (
+        previous.owner_id != current.owner_id
+        or previous.content_id != current.content_id
+        or previous.id == current.id
+        or previous.count_provenance_version != 1
+        or (readable_ids is not None and previous.id not in readable_ids)
+    ):
+        return _IdentityState.UNCLASSIFIED
+    return _compare_observations(previous, current)
+
+
+def _compare_observations(
+    previous: ContentObservation, current: ContentObservation
+) -> _IdentityState:
     missing = previous.content_version_id is None or current.content_version_id is None
     if not missing and previous.content_version_id != current.content_version_id:
         return _IdentityState.UPDATED
@@ -86,30 +117,33 @@ def _compare_observations(
 
 
 def classify_collection_execution_identities(
-    history: Sequence[ContentObservation], *, job_id: UUID, epochs: tuple[int, ...]
+    history: Sequence[ContentObservation],
+    *,
+    job_id: UUID,
+    epochs: tuple[int, ...],
+    readable_ids: set[UUID] | None = None,
 ) -> dict[int, CollectionIdentityCounts]:
-    """Partition explicitly attributed identities using retained earlier receipts.
+    """Partition explicitly attributed identities using frozen comparison evidence.
 
     Args:
         history: Owner-scoped history for identities observed in the selected rounds.
         job_id: Task whose explicit execution provenance is selected.
         epochs: Actual lease epochs, distinct from shared collection budget cycles.
+        readable_ids: Currently readable receipt IDs; None is for pure classification callers.
 
     Returns:
         One mutually exclusive identity partition per requested epoch. Unattributed
         receipts remain comparison context but never count in a guessed round.
-        Deleting retained history can change subsequent classifications.
+        Deleting an exact baseline yields unknown, never a guessed first identity.
     """
     states: dict[int, dict[UUID, _IdentityState]] = {epoch: {} for epoch in epochs}
-    previous_by_content: dict[UUID, ContentObservation] = {}
-    for current in sorted(history, key=lambda item: (item.received_at, item.id)):
-        previous = previous_by_content.get(current.content_id)
-        previous_by_content[current.content_id] = current
+    by_id = {item.id: item for item in history}
+    for current in history:
         if current.job_id != job_id or current.execution_epoch not in states:
             continue
         values = states[current.execution_epoch]
         values[current.content_id] = max(
-            _compare_observations(previous, current),
+            _classify_receipt(by_id, current, readable_ids),
             values.get(current.content_id, _IdentityState.UNCHANGED),
         )
     return {

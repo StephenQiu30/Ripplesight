@@ -67,7 +67,6 @@ const windowRow: HotKeyAPI.CollectionCoverageView = {
   updated_count: null,
   unchanged_count: null,
   unclassified_count: null,
-  deduplicated_count: null,
   analysis: null,
   budgets: null,
   gaps: [
@@ -212,7 +211,7 @@ describe("coverage facts", () => {
 describe("coverage identity accounting display", () => {
   const mixed: HotKeyAPI.CollectionCoverageView = {
     ...windowRow,
-    identity_count_basis: "retained_receipt_identity_v1",
+    identity_count_basis: "frozen_receipt_identity_v2",
     observed_count: 20,
     stored_observation_count: 12,
     unique_content_count: 8,
@@ -220,7 +219,6 @@ describe("coverage identity accounting display", () => {
     updated_count: 3,
     unchanged_count: 2,
     unclassified_count: 1,
-    deduplicated_count: 10,
   };
 
   function fact(label: string) {
@@ -243,11 +241,8 @@ describe("coverage identity accounting display", () => {
       expect(fact(String(label)).getByText(`${count} 个身份`)).toBeDefined();
       expect(fact(String(label)).getByText("分母：8 个唯一身份")).toBeDefined();
     }
-    expect(fact("旧口径重复观察").getByText("10 条")).toBeDefined();
-    expect(
-      fact("旧口径重复观察").getByText(/不能作为未变数或与四类相加/),
-    ).toBeDefined();
-    expect(screen.getByText(/删除历史后可能改变/)).toBeDefined();
+    expect(screen.queryByText("旧口径重复观察")).toBeNull();
+    expect(screen.getByText(/缺失或撤权基线保持未知/)).toBeDefined();
   });
 
   it("shows explicit zero identities with a zero denominator without inventing a percentage", () => {
@@ -260,7 +255,6 @@ describe("coverage identity accounting display", () => {
       updated_count: 0,
       unchanged_count: 0,
       unclassified_count: 0,
-      deduplicated_count: 0,
     };
     const { container } = render(
       createElement(CollectionIdentityCounts, { row }),
@@ -301,13 +295,12 @@ describe("coverage identity accounting display", () => {
         expect(fact(label).getByText("未知")).toBeDefined();
         expect(fact(label).getByText("分母：未知")).toBeDefined();
       }
-      expect(fact("旧口径重复观察").getByText("10 条")).toBeDefined();
       expect(screen.queryByText("10 个身份")).toBeNull();
     },
   );
 
   it("handles older responses missing the new fields without showing undefined or using legacy inserted counts", () => {
-    const row = { ...windowRow, inserted_count: 14, deduplicated_count: 7 };
+    const row = { ...windowRow, inserted_count: 14 };
     for (const field of [
       "identity_count_basis",
       "stored_observation_count",
@@ -322,7 +315,6 @@ describe("coverage identity accounting display", () => {
     );
     expect(fact("持久观察").getByText("未知")).toBeDefined();
     expect(fact("新增").getByText("未知")).toBeDefined();
-    expect(fact("旧口径重复观察").getByText("7 条")).toBeDefined();
     expect(container.textContent).not.toContain("undefined");
     expect(screen.queryByText("14 个身份")).toBeNull();
   });

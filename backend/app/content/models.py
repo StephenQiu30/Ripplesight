@@ -65,6 +65,30 @@ class ContentRecord(Base):
     external_id: Mapped[str] = mapped_column(String(512))
     identity_basis: Mapped[str | None] = mapped_column(String(16))
     created_at: Mapped[datetime]
+    last_collection_observation_id: Mapped[UUID | None]
+
+
+class ContentIdentityHistory(Base):
+    """Owner history completeness without retaining deleted object identifiers."""
+
+    __tablename__ = "content_identity_history"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["owner_id"],
+            ["identity_users.id"],
+            ondelete="CASCADE",
+            name="content_identity_history_owner_fkey",
+        ),
+        CheckConstraint(
+            "(state = 'complete' AND invalidated_at IS NULL) OR "
+            "(state = 'unknown' AND invalidated_at IS NOT NULL)",
+            name="content_identity_history_state_check",
+        ),
+    )
+    owner_id: Mapped[UUID] = mapped_column(primary_key=True)
+    state: Mapped[str] = mapped_column(String(16))
+    registered_at: Mapped[datetime]
+    invalidated_at: Mapped[datetime | None]
 
 
 class ContentNativeIdentity(Base):
@@ -339,6 +363,18 @@ class ContentObservation(Base):
     __tablename__ = "content_observations"
     __table_args__ = (
         CheckConstraint(
+            "(count_provenance_version IS NULL AND first_identity_state IS NULL "
+            "AND comparison_predecessor_id IS NULL) OR "
+            "(count_provenance_version IS NOT NULL AND count_provenance_version = 1 "
+            "AND first_identity_state IS NOT NULL AND ("
+            "(first_identity_state IN ('confirmed_first', 'unknown') "
+            "AND comparison_predecessor_id IS NULL) OR "
+            "(first_identity_state = 'confirmed_existing' "
+            "AND comparison_predecessor_id IS NOT NULL "
+            "AND comparison_predecessor_id <> id)))",
+            name="content_observations_count_provenance_check",
+        ),
+        CheckConstraint(
             "execution_epoch IS NULL OR execution_epoch >= 1",
             name="content_observations_execution_epoch_check",
         ),
@@ -457,6 +493,10 @@ class ContentObservation(Base):
     job_id: Mapped[UUID]
     execution_epoch: Mapped[int | None] = mapped_column(BigInteger)
     source_operation_id: Mapped[UUID]
+    count_provenance_version: Mapped[int | None] = mapped_column(SmallInteger)
+    first_identity_state: Mapped[str | None] = mapped_column(String(24))
+    comparison_predecessor_id: Mapped[UUID | None]
+
     source_key: Mapped[str | None] = mapped_column(String(64))
     source_native_scope: Mapped[str | None] = mapped_column(String(512))
     source_external_id: Mapped[str | None] = mapped_column(String(512))

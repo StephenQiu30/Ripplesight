@@ -114,11 +114,10 @@ function row(sourceKey: string): HotKeyAPI.CollectionCoverageView {
     inserted_count: 1,
     stored_observation_count: 1,
     unique_content_count: 1,
-    identity_count_basis: "retained_receipt_identity_v1",
+    identity_count_basis: "frozen_receipt_identity_v2",
     updated_count: 0,
     unchanged_count: 0,
     unclassified_count: 0,
-    deduplicated_count: 0,
     analysis: null,
     budgets: [],
     gaps: [

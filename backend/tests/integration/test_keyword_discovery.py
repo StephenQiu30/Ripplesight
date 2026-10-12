@@ -768,12 +768,11 @@ def test_36kr_feed_replay_keeps_source_time_and_separate_budget() -> None:
             "observed_count": 3,
             "stored_observation_count": 1,
             "unique_content_count": 1,
-            "identity_count_basis": "retained_receipt_identity_v1",
+            "identity_count_basis": "frozen_receipt_identity_v2",
             "inserted_count": 0,
             "updated_count": 0,
             "unchanged_count": 1,
             "unclassified_count": 0,
-            "deduplicated_count": 1,
         }
         assert retry_view.progress.requests_sent == 2
         assert retry_view.collection_executions is not None
@@ -1622,11 +1621,13 @@ def test_pages_atomically_save_distinct_channel_discoveries_and_unverified_gap()
             counts = ContentService(session).collection_counts_in_transaction(
                 owner_id=owner_id, job_ids=(latest_id, top_id)
             )
-            assert sum(item.first_ingested_count for item in counts) == 4
-            assert (
-                sum(item.deduplicated_count for item in counts)
-                == sum(item.observation_count for item in counts) - 4
-            )
+            assert sum(item.first_ingested_count for item in counts) == 0
+            assert sum(item.unclassified_count for item in counts) == 4
+            # Legacy owner coverage is unknown; the second Job sees a with an exact,
+            # unchanged predecessor, while its newly encountered c is still unknown.
+            assert sum(item.updated_count for item in counts) == 0
+            assert sum(item.unchanged_count for item in counts) == 1
+            assert sum(item.ingested_count for item in counts) == 5
             assert "cursor-1" not in json.dumps(session.get(Job, latest_id).checkpoint)
             top_coverage = session.scalar(
                 select(CoverageWindow).where(

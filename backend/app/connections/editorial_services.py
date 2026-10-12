@@ -61,6 +61,7 @@ from content.editorial_body import (
 )
 from content.editorial_ingest import EditorialContentIngestService
 from content.editorial_schemas import EditorialContentInput, EditorialContentResult
+from content.identity_history import lock_owner_history_in_transaction
 from core.errors import ApplicationError
 from events.heat import record_source_fetch_success_in_transaction
 from evidence.schemas import DataClass
@@ -1090,6 +1091,7 @@ class EditorialSourceService:
     ) -> EditorialRunResult:
         self._session.rollback()
         with self._session.begin():
+            lock_owner_history_in_transaction(self._session, owner_id=owner_id)
             run, p, v = self._current_run(owner_id, run_id, guard)
             if run.status in {"succeeded", "partial"}:
                 return self._result(run)
@@ -1232,6 +1234,7 @@ class EditorialSourceService:
     ) -> EditorialBodyTarget:
         self._session.rollback()
         with self._session.begin():
+            lock_owner_history_in_transaction(self._session, owner_id=owner_id)
             run, p, v, phase = self._current_body(owner_id, run_id, guard)
             if phase.request_pending or phase.next_index >= len(phase.targets):
                 raise ApplicationError("editorial_version_conflict")
@@ -1248,6 +1251,7 @@ class EditorialSourceService:
     ) -> None:
         self._session.rollback()
         with self._session.begin():
+            lock_owner_history_in_transaction(self._session, owner_id=owner_id)
             run, p, v, phase = self._current_body(owner_id, run_id, guard)
             if not phase.request_pending or phase.next_index >= len(phase.targets):
                 raise ApplicationError("editorial_version_conflict")

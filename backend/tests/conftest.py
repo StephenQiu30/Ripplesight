@@ -14,6 +14,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
+from content.identity_history import register_new_owner_history_in_transaction
 from core.config import Settings
 from db.metadata import Base
 from identity.models import IdentityUser
@@ -48,6 +49,8 @@ def create_test_account(session: Session, *, owner_id: UUID | None = None) -> Id
         )
         session.add(user)
         session.flush()
+        # This fixture just created an account in an isolated fresh test history.
+        register_new_owner_history_in_transaction(session, owner_id=identifier, now=now)
     return user
 
 

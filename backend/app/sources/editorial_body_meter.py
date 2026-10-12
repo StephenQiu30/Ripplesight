@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from connections.editorial_body_admission import require_editorial_body_execution_in_transaction
 from content.editorial_body import require_editorial_body_input_in_transaction
+from content.identity_history import lock_owner_history_in_transaction
 from core.errors import ApplicationError
 from evidence.services import RetentionPolicyUnavailableError, SourceAccessUnavailableError
 from jobs.execution import ExecutionLease, JobExecutionService
@@ -50,6 +51,7 @@ class EditorialBodyRequestMeter:
             raise ValueError("body target request bound must be reviewed and bounded")
 
     def _proof(self, session: Session, target: EditorialBodyTarget) -> EditorialBodyAdmission:
+        lock_owner_history_in_transaction(session, owner_id=target.owner_id)
         if not self._guard(session, target.owner_id, target.job_id):
             raise ApplicationError("editorial_version_conflict")
         require_editorial_body_input_in_transaction(session, target=target, now=self._clock())

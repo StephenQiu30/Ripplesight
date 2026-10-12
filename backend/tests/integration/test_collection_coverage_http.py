@@ -570,9 +570,8 @@ def test_coverage_http_deduplicates_content_and_keeps_source_budget_separate(
     assert view["request_count"] == view["request_attempt_count"] == 2
     assert view["content_ids"] == [str(content_id)]
     assert view["inserted_count"] == 0
-    assert view["deduplicated_count"] == 1
     assert view["stored_observation_count"] == view["unique_content_count"] == 1
-    assert view["identity_count_basis"] == "retained_receipt_identity_v1"
+    assert view["identity_count_basis"] == "frozen_receipt_identity_v2"
     assert view["updated_count"] == 0
     assert view["unchanged_count"] == 0
     assert view["unclassified_count"] == 1
@@ -584,7 +583,8 @@ def test_coverage_http_deduplicates_content_and_keeps_source_budget_separate(
     }
     first = client.get(f"/api/collection-coverage/{first_window}")
     assert first.status_code == 200
-    assert first.json()["inserted_count"] == 1
+    assert first.json()["inserted_count"] == 0
+    assert first.json()["unclassified_count"] == 1
 
 
 def test_coverage_http_requires_full_confirmed_range_and_reconciled_request(

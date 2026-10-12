@@ -3265,12 +3265,11 @@ class JobService:
                     observed_count=item.collection_observed_count,
                     stored_observation_count=fact.observation_count,
                     unique_content_count=fact.ingested_count,
-                    identity_count_basis="retained_receipt_identity_v1",
+                    identity_count_basis="frozen_receipt_identity_v2",
                     inserted_count=fact.first_ingested_count,
                     updated_count=fact.updated_count,
                     unchanged_count=fact.unchanged_count,
                     unclassified_count=fact.unclassified_count,
-                    deduplicated_count=fact.deduplicated_count,
                 )
                 if fact is not None
                 else None
@@ -3301,12 +3300,11 @@ class JobService:
             observed_count=observed if type(observed) is int and observed >= 0 else None,
             stored_observation_count=counts.observation_count,
             unique_content_count=counts.ingested_count,
-            identity_count_basis="retained_receipt_identity_v1",
+            identity_count_basis="frozen_receipt_identity_v2",
             inserted_count=counts.first_ingested_count,
             updated_count=counts.updated_count,
             unchanged_count=counts.unchanged_count,
             unclassified_count=counts.unclassified_count,
-            deduplicated_count=counts.deduplicated_count,
         )
 
     @staticmethod
