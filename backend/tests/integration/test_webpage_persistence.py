@@ -1380,6 +1380,22 @@ def test_document_page_is_persisted_with_checkpoint_in_one_transaction(
     assert first.latest_observation.content_version is not None
     assert first.latest_observation.content_version.text_origin == "machine_extracted"
     assert first.latest_observation.content_version.text_origin_ref == "firecrawl/2.11.162"
+    from content.models import ContentObservation
+    from content.observation_reading import readable_observation_groups_in_transaction
+
+    with webpage_context.sessions.begin() as session:
+        observation = session.get(ContentObservation, first.latest_observation.id)
+        assert observation.input_basis == "source_v1"
+        assert observation.source_key == "web"
+        assert observation.source_native_scope == "example.com"
+        assert observation.source_external_id == first.external_id
+        assert observation.source_identity_basis is None
+        assert readable_observation_groups_in_transaction(
+            session,
+            owner_id=webpage_context.owner_id,
+            observation_groups={"document": (observation.id,)},
+            now=clock,
+        ) == {"document": (observation.id,)}
     assert _content_side_effect_counts(webpage_context) == (1, 1, 1, 1, 1, 1, 1)
     assert replayed_lease.checkpoint_sequence == 1
     assert replayed_lease.checkpoint == {

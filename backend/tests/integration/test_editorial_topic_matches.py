@@ -206,15 +206,17 @@ def test_actual_input_all_blocks_content_analysis_and_report_when_one_policy_rev
             )
             assert first_match is not None and second_observation is not None
             session.execute(
-                text(
-                    "UPDATE content_observations SET input_basis=NULL, source_key=NULL, "
-                    "source_native_scope=NULL, source_external_id=NULL, "
-                    "source_identity_basis=NULL, "
-                    "editorial_profile_id=NULL, native_identity_proof=NULL WHERE id=:id"
-                ),
+                text("UPDATE content_observations SET input_basis='observations_v1' WHERE id=:id"),
                 {"id": first_match.observation_id},
             )
-            session.expire_all()
+            from content.observation_inputs import save_observation_inputs_in_transaction
+
+            save_observation_inputs_in_transaction(
+                session,
+                owner_id=owner,
+                output_observation_id=first_match.observation_id,
+                input_observation_ids=(second_observation.id,),
+            )
             dependencies = (first_match.observation_id, second_observation.id)
             save_version_inputs_in_transaction(
                 session,
@@ -373,15 +375,17 @@ def test_original_cleanup_deletes_derived_chain_reports_and_matches_atomically(e
             )
             assert body_observation is not None and body_observation.content_version_id is not None
             session.execute(
-                text(
-                    "UPDATE content_observations SET input_basis=NULL, source_key=NULL, "
-                    "source_native_scope=NULL, source_external_id=NULL, "
-                    "source_identity_basis=NULL, editorial_profile_id=NULL, "
-                    "native_identity_proof=NULL WHERE id=:id"
-                ),
+                text("UPDATE content_observations SET input_basis='observations_v1' WHERE id=:id"),
                 {"id": body_observation.id},
             )
-            session.expire_all()
+            from content.observation_inputs import save_observation_inputs_in_transaction
+
+            save_observation_inputs_in_transaction(
+                session,
+                owner_id=owner,
+                output_observation_id=body_observation.id,
+                input_observation_ids=(feed_observation.id,),
+            )
             save_version_inputs_in_transaction(
                 session,
                 owner_id=owner,

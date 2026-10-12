@@ -26,12 +26,14 @@ from analysis.schemas import (
     AnnotationWrite,
 )
 from analysis.services import AnalysisService, analysis_operation_id
+from content.analysis_inputs import freeze_analysis_observation_inputs_in_transaction
+from content.analysis_schemas import AnalysisObservationManifest
 from content.schemas import AnalysisPostContentView
 from jobs.schemas import JobAcceptanceInput, JobObservationContext
 from jobs.services import JobService, load_job_execution_configuration
 
 
-def _seed_legacy_analysis_job(
+def _seed_analysis_job(
     session: Session,
     *,
     owner_id: UUID,
@@ -41,8 +43,9 @@ def _seed_legacy_analysis_job(
     rule_version: int = 1,
     prompt_version: str = "v1",
     failed: bool = False,
+    input_manifest: AnalysisObservationManifest | None = None,
 ) -> UUID:
-    """Persist an original complete historical Job, without invoking a provider."""
+    """Persist a controlled original Job; missing manifests explicitly model old Jobs."""
     scope = AnalysisJobScope(
         topic_id=topic_id,
         topic_rule_version=rule_version,
@@ -60,6 +63,7 @@ def _seed_legacy_analysis_job(
             for post in posts
         ),
         retry_index=int(failed),
+        input_manifest=input_manifest,
     )
     accepted = JobService(session, clock=lambda: now).accept_in_transaction(
         owner_id=owner_id,
@@ -70,6 +74,7 @@ def _seed_legacy_analysis_job(
                 content_version_ids=scope.content_version_ids,
                 prompt_version=prompt_version,
                 retry_index=scope.retry_index,
+                input_signature=input_manifest.signature if input_manifest else None,
             ),
             kind="analysis.annotate",
             observation=JobObservationContext(
@@ -101,6 +106,7 @@ def _bind_original_call(
     result: AnnotationWrite,
     rule_version: int,
     now: datetime,
+    input_manifest: AnalysisObservationManifest | None,
 ) -> AnnotationWrite:
     call = session.execute(
         text("SELECT job_id, status FROM ai_calls WHERE owner_id=:owner AND id=:id"),
@@ -129,7 +135,7 @@ def _bind_original_call(
             {"replacement": replacement, "now": now, "owner": owner_id, "id": result.ai_call_id},
         )
         result = result.model_copy(update={"ai_call_id": replacement})
-    job_id = _seed_legacy_analysis_job(
+    job_id = _seed_analysis_job(
         session,
         owner_id=owner_id,
         topic_id=topic_id,
@@ -137,6 +143,7 @@ def _bind_original_call(
         rule_version=rule_version,
         now=now,
         failed=call.status == "failed",
+        input_manifest=input_manifest,
     )
     session.execute(
         text("UPDATE ai_calls SET job_id=:job WHERE owner_id=:owner AND id=:id"),
@@ -232,8 +239,9 @@ def annotation_context() -> Iterator[
         connection.execute(
             text(
                 "INSERT INTO content_observations (id,owner_id,content_id,content_version_id,"
-                "job_id,source_operation_id,observed_at,received_at) "
-                "VALUES (:id,:owner,:content,:version,:job,:operation,:now,:now)"
+                "job_id,source_operation_id,observed_at,received_at,input_basis,source_key,"
+                "source_external_id) VALUES (:id,:owner,:content,:version,:job,:operation,"
+                ":now,:now,'source_v1','hackernews',:external)"
             ),
             {
                 "id": observation_id,
@@ -242,6 +250,7 @@ def annotation_context() -> Iterator[
                 "version": version_id,
                 "job": source_job_id,
                 "operation": uuid4(),
+                "external": str(content_id),
                 "now": now,
             },
         )
@@ -279,9 +288,21 @@ def _persist(
     *,
     rule_version: int = 1,
     at: datetime | None = None,
+    legacy: bool = False,
 ) -> None:
     sessions, owner_id, topic_id, post, _, _, now = context
     with sessions() as session, session.begin():
+        manifest = (
+            None
+            if legacy
+            else freeze_analysis_observation_inputs_in_transaction(
+                session,
+                owner_id=owner_id,
+                post_observations={post.content_version_id: post.observation_id},
+                comment_observations={},
+                now=at or now,
+            )
+        )
         result = _bind_original_call(
             session,
             owner_id=owner_id,
@@ -290,6 +311,7 @@ def _persist(
             result=result,
             rule_version=rule_version,
             now=at or now,
+            input_manifest=manifest,
         )
         AnalysisService(session).persist_results_in_transaction(
             owner_id=owner_id,
@@ -298,6 +320,7 @@ def _persist(
             prompt_version="v1",
             posts={post.content_version_id: post},
             results=(result,),
+            input_manifest=manifest,
             created_at=at or now,
         )
 
@@ -773,6 +796,7 @@ def test_unproven_legacy_result_stays_pending_and_unreadable(
             relevance_reason="受控无关结果",
             summary="存在存储行不能证明结果仍可读",
         ),
+        legacy=True,
     )
     with sessions() as session, session.begin():
         if missing_proof == "original_job":

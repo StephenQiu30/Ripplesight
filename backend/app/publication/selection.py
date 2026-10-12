@@ -8,7 +8,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from analysis.editorial_reading import (
-    load_editorial_publication_inputs_in_transaction,
     load_frozen_editorial_publication_input_in_transaction,
 )
 from analysis.editorial_schemas import EditorialPublicationInputView
@@ -124,26 +123,18 @@ def load_publication_selection_in_transaction(
     remaining = [key for key in records if key not in items]
     for offset in range(0, len(remaining), 500):
         batch = remaining[offset : offset + 500]
-        legacy = load_editorial_publication_inputs_in_transaction(
-            session,
-            owner_id=owner_id,
-            content_ids=tuple(key for key in batch if not records[key].data.get("observation_id")),
-            now=now,
-        )
         for identity in batch:
             row = records[identity]
             observation = row.data.get("observation_id")
-            item = (
-                load_frozen_editorial_publication_input_in_transaction(
-                    session,
-                    owner_id=owner_id,
-                    content_id=identity,
-                    content_version_id=row.content_version_id,
-                    observation_id=UUID(observation),
-                    now=now,
-                )
-                if observation
-                else legacy.get(identity)
+            if not observation:
+                continue
+            item = load_frozen_editorial_publication_input_in_transaction(
+                session,
+                owner_id=owner_id,
+                content_id=identity,
+                content_version_id=row.content_version_id,
+                observation_id=UUID(observation),
+                now=now,
             )
             if item is None or item.material.content_version_id != row.content_version_id:
                 continue
@@ -153,7 +144,7 @@ def load_publication_selection_in_transaction(
                 continue
             if row.data.get("manual_version") != (item.run.manual_version if item.run else 0):
                 continue
-            if observation and tuple(str(i) for i in item.input_observation_ids) != tuple(
+            if tuple(str(i) for i in item.input_observation_ids) != tuple(
                 row.data.get("input_observation_ids", [])
             ):
                 continue

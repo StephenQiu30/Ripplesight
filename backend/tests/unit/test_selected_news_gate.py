@@ -313,13 +313,32 @@ def test_gate_recalls_a_preferred_peer_outside_the_requested_page_and_rechecks_p
     import publication.selection as module
 
     requested, official = candidate(), candidate(2, first_party=True)
+    requested, official = (
+        replace(
+            item,
+            snapshot=item.snapshot.model_copy(
+                update={
+                    "observation_id": UUID(int=number + 2000),
+                    "input_observation_ids": (UUID(int=number + 2000),),
+                }
+            ),
+        )
+        for number, item in enumerate((requested, official), start=1)
+    )
     rows = [
         SimpleNamespace(
             content_id=item.snapshot.material.content_id,
             content_version_id=item.snapshot.material.content_version_id,
             source_key=item.snapshot.material.source_key,
             override={"visibility": visibility} if item is official else {},
-            data={"editorial_run_id": str(item.snapshot.run.id), "manual_version": 0},
+            data={
+                "editorial_run_id": str(item.snapshot.run.id),
+                "manual_version": 0,
+                "observation_id": str(item.snapshot.observation_id),
+                "input_observation_ids": [
+                    str(value) for value in item.snapshot.input_observation_ids
+                ],
+            },
         )
         for item in (requested, official)
     ]
@@ -360,8 +379,8 @@ def test_gate_recalls_a_preferred_peer_outside_the_requested_page_and_rechecks_p
     )
     monkeypatch.setattr(
         module,
-        "load_editorial_publication_inputs_in_transaction",
-        lambda *a, **k: {UUID(int=2): official.snapshot} if readable else {},
+        "load_frozen_editorial_publication_input_in_transaction",
+        lambda *a, **k: official.snapshot if readable else None,
     )
     context = module.load_publication_selection_in_transaction(
         session, owner_id=uuid4(), snapshots={UUID(int=1): requested.snapshot}, now=NOW

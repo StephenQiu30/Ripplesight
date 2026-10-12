@@ -7,13 +7,14 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from content.models import ContentObservation, ContentObservationInput, ContentVersionInput
+from content.models import ContentObservation, ContentObservationInput
 from core.errors import ApplicationError
 
 
 def observation_input_closure_in_transaction(
     session: Session, *, owner_id: UUID, observation_ids: tuple[UUID, ...]
 ) -> tuple[UUID, ...]:
+    """Require a complete, explicitly proven graph for the exact original roots."""
     if not session.in_transaction() or not 1 <= len(observation_ids) <= 2000:
         raise ApplicationError("editorial_material_unavailable")
     result = observation_input_closures_in_transaction(
@@ -26,11 +27,10 @@ def observation_input_closure_in_transaction(
 
 def _load_observation_graph(
     session: Session, *, owner_id: UUID, roots: set[UUID]
-) -> tuple[dict[UUID, set[UUID]], dict[UUID, set[UUID]], set[UUID]]:
+) -> tuple[dict[UUID, set[UUID]], set[UUID]]:
     if len(roots) > 20000:
         raise ApplicationError("editorial_material_unavailable")
     graph: dict[UUID, set[UUID]] = {}
-    witnesses: dict[UUID, set[UUID]] = {}
     invalid: set[UUID] = set()
     pending = set(roots)
     while pending:
@@ -55,68 +55,27 @@ def _load_observation_graph(
             )
         ):
             edges.setdefault(output, set()).add(original)
-        legacy_versions = {
-            row.content_version_id
-            for row in rows
-            if row.input_basis is None and row.content_version_id is not None
-        }
-        originals: dict[UUID, list[tuple[UUID, UUID | None]]] = {}
-        if legacy_versions:
-            for version, identifier, input_version in session.execute(
-                select(
-                    ContentVersionInput.content_version_id,
-                    ContentObservation.id,
-                    ContentObservation.content_version_id,
-                )
-                .join(
-                    ContentObservation,
-                    (ContentObservation.owner_id == ContentVersionInput.owner_id)
-                    & (ContentObservation.id == ContentVersionInput.observation_id),
-                )
-                .where(
-                    ContentVersionInput.owner_id == owner_id,
-                    ContentVersionInput.content_version_id.in_(legacy_versions),
-                )
-            ):
-                originals.setdefault(version, []).append((identifier, input_version))
         for r in rows:
             deps = edges.get(r.id, set())
-            if r.input_basis is None and r.content_version_id is not None:
-                # Legacy version dependencies include output observations of the same
-                # version as evidence witnesses, not reciprocal derivation edges.
-                witnesses[r.id] = {
-                    identifier
-                    for identifier, version in originals.get(r.content_version_id, ())
-                    if version == r.content_version_id
-                }
-                deps.update(
-                    identifier
-                    for identifier, version in originals.get(r.content_version_id, ())
-                    if version != r.content_version_id
-                )
-            if (r.input_basis == "source_v1" and deps) or (
-                r.input_basis == "observations_v1" and not deps
+            # A version's equal text cannot prove this observation's actual inputs.
+            if (
+                r.input_basis not in {"source_v1", "observations_v1"}
+                or (r.input_basis == "source_v1" and deps)
+                or (r.input_basis == "observations_v1" and not deps)
             ):
                 invalid.add(r.id)
             graph[r.id] = deps
-        pending = {
-            item
-            for row in rows
-            for item in graph[row.id] | witnesses.get(row.id, set())
-            if item not in graph
-        }
+        pending = {item for row in rows for item in graph[row.id] if item not in graph}
         if len(set(graph) | pending) > 20000:
             raise ApplicationError("editorial_material_unavailable")
-    return graph, witnesses, invalid
+    return graph, invalid
 
 
 def _closure_for_roots(
     roots: tuple[UUID, ...],
     graph: dict[UUID, set[UUID]],
-    witnesses: dict[UUID, set[UUID]],
     invalid: set[UUID],
 ) -> tuple[UUID, ...] | None:
-    # Witness peers must be readable but are not reciprocal derivation edges.
     reached: set[UUID] = set()
     pending = set(roots)
     while pending:
@@ -128,7 +87,7 @@ def _closure_for_roots(
         reached.add(identifier)
         if len(reached) > 2000:
             return None
-        pending.update((graph[identifier] | witnesses.get(identifier, set())) - reached)
+        pending.update(graph[identifier] - reached)
     visiting: set[UUID] = set()
     done: set[UUID] = set()
     for identifier in reached:
@@ -168,7 +127,7 @@ def observation_input_closures_in_transaction(
     for start in range(0, len(valid), 100):
         batch = dict(valid[start : start + 100])
         try:
-            graph, witnesses, invalid = _load_observation_graph(
+            graph, invalid = _load_observation_graph(
                 session, owner_id=owner_id, roots={i for roots in batch.values() for i in roots}
             )
         except ApplicationError:
@@ -184,8 +143,7 @@ def observation_input_closures_in_transaction(
                     )
             continue
         result.update(
-            (key, _closure_for_roots(roots, graph, witnesses, invalid))
-            for key, roots in batch.items()
+            (key, _closure_for_roots(roots, graph, invalid)) for key, roots in batch.items()
         )
     return result
 
@@ -193,6 +151,8 @@ def observation_input_closures_in_transaction(
 def freeze_observation_inputs_in_transaction(
     session: Session, *, owner_id: UUID, observation_ids: tuple[UUID, ...], now: datetime
 ) -> tuple[UUID, ...]:
+    """Freeze only a complete graph whose exact inputs remain currently readable."""
+    # Local import breaks the graph reader / permission reader dependency cycle.
     from content.observation_reading import readable_observation_groups_in_transaction
 
     closure = readable_observation_groups_in_transaction(
@@ -210,6 +170,7 @@ def save_observation_inputs_in_transaction(
     output_observation_id: UUID,
     input_observation_ids: tuple[UUID, ...],
 ) -> None:
+    """Persist immutable actual inputs; never supply proof to an unknown old output."""
     if (
         not session.in_transaction()
         or not 1 <= len(input_observation_ids) <= 2000
@@ -223,6 +184,7 @@ def save_observation_inputs_in_transaction(
             ContentObservation.owner_id == owner_id, ContentObservation.id == output_observation_id
         )
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if output is None or output.input_basis != "observations_v1":
         raise ApplicationError("editorial_material_unavailable")

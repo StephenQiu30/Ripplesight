@@ -1,6 +1,7 @@
 from datetime import timedelta
 from uuid import uuid4
 
+import pytest
 from sqlalchemy import select, text
 from tests.integration.test_editorial_execution import ControlledClient, _budget, _execute, _run
 from tests.integration.test_publication import NOW
@@ -8,9 +9,13 @@ from tests.integration.test_publication import editorial_client as editorial_cli
 
 from analysis.editorial_models import EditorialOverride
 from content.models import ContentObservation
+from content.observation_inputs import freeze_observation_inputs_in_transaction
 from content.services import ContentObservationCleanup
+from core.errors import ApplicationError
 from evidence.schemas import CleanupTargetKind, DeletionReason
 from evidence.services import CleanupProcessor, LifecycleService
+from publication.publication_models import PublicationRecord
+from publication.reading import PublicationReadingService, full_text_grant_in_transaction
 from publication.schemas import SourcePolicyInput
 from publication.services import PublicationService
 
@@ -114,8 +119,20 @@ def test_quote_deletion_purges_derived_story_and_preserves_independent_main_raw_
     sessions = editorial_client.app.state.session_factory
     with sessions.begin() as session:
         original = session.get(EditorialRun, run.id)
+        quote_inputs = freeze_observation_inputs_in_transaction(
+            session,
+            owner_id=owner,
+            observation_ids=(quoted.latest_observation.id,),
+            now=NOW,
+        )
         original.input_manifest = {
-            "quote": {"content_id": str(quoted.id), "content_version_id": str(quoted_version.id)}
+            **original.input_manifest,
+            "quote": {
+                "content_id": str(quoted.id),
+                "content_version_id": str(quoted_version.id),
+                "observation_id": str(quoted.latest_observation.id),
+                "input_observation_ids": [str(i) for i in quote_inputs],
+            },
         }
         original.input_fingerprint = _fingerprint(
             EditorialService(session, clock=lambda: NOW)
@@ -169,7 +186,6 @@ def test_quote_deletion_purges_derived_story_and_preserves_independent_main_raw_
             "editorial_runs",
             "editorial_stages",
             "editorial_content_states",
-            "publication_records",
             "publication_revisions",
         ):
             assert (
@@ -177,6 +193,50 @@ def test_quote_deletion_purges_derived_story_and_preserves_independent_main_raw_
                     text(f"SELECT count(*) FROM {table} WHERE owner_id=:owner"), {"owner": owner}
                 )
                 == 0
+            )
+        records = tuple(
+            session.scalars(select(PublicationRecord).where(PublicationRecord.owner_id == owner))
+        )
+        assert len(records) == 1
+        record = records[0]
+        assert record.data["visibility"] == "withdrawn"
+        assert record.data["title"] == "材料已撤回"
+        assert record.data["summary"] is None and record.data["original_title"] is None
+        assert not record.data["eligible"] and not record.data["selected"]
+        assert not record.data["indexable"] and not record.data["syndicate"]
+        assert record.data["body_mode"] == "summary" and record.data["reason"] is None
+        assert record.data["tags"] == [] and record.data["score"] is None
+        assert record.data["media_candidate_count"] == 0
+        reader = PublicationReadingService(session)
+        assert (
+            reader.projection_in_transaction(owner_id=owner, content_id=run.content_id, now=NOW)
+            is None
+        )
+        assert (
+            reader.detail_in_transaction(owner_id=owner, content_id=run.content_id, now=NOW) is None
+        )
+        assert reader.selected_snapshot_in_transaction(owner_id=owner, now=NOW).items == []
+        grant = full_text_grant_in_transaction(
+            session,
+            owner_id=owner,
+            content_id=run.content_id,
+            content_version_id=run.content_version_id,
+            policy_revision=record.data["policy_revision"],
+            now=NOW,
+        )
+        assert not grant.granted and grant.body is None
+        main_id = session.scalar(
+            select(ContentObservation.id).where(
+                ContentObservation.owner_id == owner,
+                ContentObservation.content_version_id == run.content_version_id,
+            )
+        )
+        assert freeze_observation_inputs_in_transaction(
+            session, owner_id=owner, observation_ids=(main_id,), now=NOW
+        ) == (main_id,)
+        with pytest.raises(ApplicationError, match="editorial_material_unavailable"):
+            freeze_observation_inputs_in_transaction(
+                session, owner_id=owner, observation_ids=(quoted.latest_observation.id,), now=NOW
             )
         assert (
             session.scalar(

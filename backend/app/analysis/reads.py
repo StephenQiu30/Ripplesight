@@ -7,7 +7,6 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ai.analysis_reading import load_legacy_analysis_call_job_in_transaction
 from analysis.models import ContentAnnotation
 from analysis.prompts import (
     ANALYSIS_PROMPT_VERSION,
@@ -20,28 +19,15 @@ from content.analysis_inputs import (
     require_analysis_observation_inputs_in_transaction,
 )
 from content.analysis_schemas import AnalysisObservationManifest
-from content.version_inputs import legacy_content_versions_readable_in_transaction
 from core.errors import ApplicationError
-from jobs.services import load_job_execution_configuration
 
 
 def analysis_scope_inputs_readable_in_transaction(
     session: Session, *, owner_id: UUID, scope: AnalysisJobScope, now: datetime
 ) -> bool:
+    """Require an exact frozen observation manifest, including every comment input."""
     if scope.input_manifest is None:
-        if scope.prompt_items is None or any(
-            item.comments and item.comment_version_ids is None for item in scope.prompt_items
-        ):
-            return False
-        versions = set(scope.content_version_ids)
-        versions.update(
-            version_id
-            for item in scope.prompt_items or ()
-            for version_id in item.comment_version_ids or ()
-        )
-        return legacy_content_versions_readable_in_transaction(
-            session, owner_id=owner_id, content_version_ids=tuple(versions), now=now
-        )
+        return False
     try:
         require_analysis_observation_inputs_in_transaction(
             session, owner_id=owner_id, manifest=scope.input_manifest, now=now
@@ -54,46 +40,9 @@ def analysis_scope_inputs_readable_in_transaction(
 def annotation_inputs_readable_in_transaction(
     session: Session, *, annotation: ContentAnnotation, now: datetime
 ) -> bool:
+    """A successful model call cannot replace an annotation's missing input proof."""
     if annotation.input_manifest is None:
-        if annotation.input_signature != "legacy" or annotation.ai_call_id is None:
-            return False
-        job_id = load_legacy_analysis_call_job_in_transaction(
-            session,
-            owner_id=annotation.owner_id,
-            ai_call_id=annotation.ai_call_id,
-            prompt_version=annotation.prompt_version,
-        )
-        if job_id is None:
-            return False
-        configuration = load_job_execution_configuration(session, job_id=job_id)
-        if (
-            configuration is None
-            or configuration.owner_id != annotation.owner_id
-            or configuration.kind != "analysis.annotate"
-        ):
-            return False
-        try:
-            scope = AnalysisJobScope.from_job_scope(configuration.scope)
-            if (
-                scope.input_manifest is not None
-                or scope.topic_id != annotation.topic_id
-                or scope.topic_rule_version != annotation.topic_rule_version
-                or scope.prompt_version != annotation.prompt_version
-                or annotation.content_version_id not in scope.content_version_ids
-                or scope.prompt_items is None
-                or any(
-                    item.comments and item.comment_version_ids is None
-                    for item in scope.prompt_items
-                )
-                or configuration.observation.configuration_ref != f"topic:{scope.topic_id}"
-                or configuration.observation.configuration_version != scope.topic_rule_version
-            ):
-                return False
-            return analysis_scope_inputs_readable_in_transaction(
-                session, owner_id=annotation.owner_id, scope=scope, now=now
-            )
-        except (ValueError, ValidationError):
-            return False
+        return False
     try:
         manifest = AnalysisObservationManifest.model_validate(annotation.input_manifest)
         if (
@@ -127,8 +76,6 @@ def readable_annotation_ids_in_transaction(
         identities: dict[UUID, tuple[UUID, str]] = {}
         for row in batch:
             if row.input_manifest is None:
-                if annotation_inputs_readable_in_transaction(session, annotation=row, now=now):
-                    readable.add(row.id)
                 continue
             try:
                 manifest = AnalysisObservationManifest.model_validate(row.input_manifest)

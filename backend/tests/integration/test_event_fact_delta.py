@@ -571,6 +571,24 @@ def test_manual_detach_has_no_automatic_receipt_and_historical_conclusion_is_gat
     assert removed.kind == "unknown" and removed.unavailable and removed.reason is None
 
 
+@pytest.mark.parametrize("revision", [None, 1])
+def test_old_members_without_observation_proof_cannot_borrow_current_sources(
+    event_context, revision
+):
+    event_id, _ = _initial(event_context)
+    sessions, owner, *_ = event_context
+    with sessions.begin() as session:
+        session.execute(
+            text(
+                "UPDATE event_members SET observation_id=NULL,observation_source_key=NULL,"
+                "input_manifest=NULL WHERE owner_id=:owner AND event_id=:event"
+            ),
+            {"owner": owner, "event": event_id},
+        )
+    with pytest.raises(ApplicationError, match="resource_not_found"):
+        _read(event_context, event_id, revision)
+
+
 @pytest.mark.parametrize("relation", ["root", "background"])
 @pytest.mark.parametrize("revision", [None, 1])
 def test_mixed_permission_facts_hide_withdrawn_identity_and_complete_delta(
@@ -584,16 +602,28 @@ def test_mixed_permission_facts_hide_withdrawn_identity_and_complete_delta(
 
     event_id, _ = _initial(event_context, relation=relation)
     sessions, owner, _, versions, *_ = event_context
-    # Older fixed members have independent per-version reading gates. Modern
-    # automatically grouped members intentionally share their full input closure.
+    from content.observation_inputs import freeze_observation_inputs_in_transaction
+    from events.models import EventMember
+
+    # Independently frozen members can retain their own content permission. The
+    # event narrative and delta still depend on all original model inputs.
     with sessions.begin() as session:
-        session.execute(
-            text(
-                "UPDATE event_members SET observation_id=NULL,observation_source_key=NULL,"
-                "input_manifest=NULL WHERE owner_id=:owner AND event_id=:event"
-            ),
-            {"owner": owner, "event": event_id},
-        )
+        for member in session.scalars(
+            select(EventMember).where(
+                EventMember.owner_id == owner, EventMember.event_id == event_id
+            )
+        ):
+            closure = freeze_observation_inputs_in_transaction(
+                session,
+                owner_id=owner,
+                observation_ids=(member.observation_id,),
+                now=event_context[-1],
+            )
+            member.input_manifest = {
+                "basis": "observations_v1",
+                "observation_source_key": member.observation_source_key,
+                "input_observation_ids": [str(value) for value in closure],
+            }
     before = _read(event_context, event_id, revision)
     hidden = next(
         member

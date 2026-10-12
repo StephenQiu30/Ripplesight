@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session
 from content.event_reading import load_event_member_content_in_transaction
 from content.observation_context import load_observation_context_in_transaction
 from content.schemas import EventContentReadReference
-from content.version_inputs import legacy_content_versions_readable_in_transaction
 from core.errors import ApplicationError
 from evidence.schemas import AdmittedSourcePayload, DataClass
 from evidence.services import (
@@ -83,7 +82,7 @@ def source_material_in_transaction(
 def require_media_run_source_in_transaction(
     session: Session, run: PublicationMediaRun, *, now: datetime
 ) -> None:
-    """A nullable legacy source marker must never bypass a modern observation's source FK."""
+    """Require exact frozen source provenance; reject runs without an observation proof."""
     fixed = FrozenPublicationReference.model_validate(run.fixed_reference)
     if (
         fixed.observation_id != run.observation_id
@@ -92,22 +91,7 @@ def require_media_run_source_in_transaction(
     ):
         raise ApplicationError("publication_revision_conflict")
     if run.observation_id is None:
-        if (
-            run.observation_source_key is not None
-            or not legacy_content_versions_readable_in_transaction(
-                session,
-                owner_id=run.owner_id,
-                content_version_ids=(run.content_version_id,),
-                now=now,
-            )
-        ):
-            raise ApplicationError("publication_revision_conflict")
-        source, _ = source_material_in_transaction(
-            session, owner_id=run.owner_id, reference=fixed, now=now
-        )
-        if source != run.source_key:
-            raise ApplicationError("publication_revision_conflict")
-        return
+        raise ApplicationError("publication_revision_conflict")
     actual = load_observation_context_in_transaction(
         session, owner_id=run.owner_id, observation_id=run.observation_id
     )

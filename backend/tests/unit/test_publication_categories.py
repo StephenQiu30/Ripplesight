@@ -40,7 +40,10 @@ def test_live_gate_uses_current_category_without_merging_or_bypassing_permission
     monkeypatch, category, configured
 ):
     # The stored category intentionally differs: the current derived projection is authoritative.
-    stored = member(at=NOW).projection
+    observation_id = uuid4()
+    stored = member(at=NOW).projection.model_copy(
+        update={"observation_id": observation_id, "input_observation_ids": (observation_id,)}
+    )
     current = stored.model_copy(update={"category": category})
     row = SimpleNamespace(
         content_id=stored.content_id,
@@ -51,7 +54,8 @@ def test_live_gate_uses_current_category_without_merging_or_bypassing_permission
         override={},
     )
     snapshot = SimpleNamespace(
-        observation_id=None,
+        observation_id=observation_id,
+        input_observation_ids=(observation_id,),
         run=SimpleNamespace(id=stored.editorial_run_id, manual_version=stored.manual_version),
         material=SimpleNamespace(
             content_version_id=stored.content_version_id, source_key=stored.source_key
@@ -67,9 +71,10 @@ def test_live_gate_uses_current_category_without_merging_or_bypassing_permission
     )
     monkeypatch.setattr(
         reading,
-        "load_editorial_publication_inputs_in_transaction",
-        lambda *a, **k: {stored.content_id: snapshot},
+        "load_frozen_editorial_publication_input_in_transaction",
+        lambda *a, **k: snapshot,
     )
+    monkeypatch.setattr(reading, "observations_readable_in_transaction", lambda *a, **k: True)
     monkeypatch.setattr(
         reading,
         "load_publication_selection_in_transaction",
@@ -81,6 +86,9 @@ def test_live_gate_uses_current_category_without_merging_or_bypassing_permission
     result = reader._live(owner_id=uuid4(), rows=[row], now=NOW)
     assert bool(result) == (not configured or category in configured)
     policy.configuration["participation_mode"] = "isolated"
+    assert reader._live(owner_id=uuid4(), rows=[row], now=NOW) == {}
+    policy.configuration["participation_mode"] = "editorial"
+    monkeypatch.setattr(reading, "observations_readable_in_transaction", lambda *a, **k: False)
     assert reader._live(owner_id=uuid4(), rows=[row], now=NOW) == {}
 
 

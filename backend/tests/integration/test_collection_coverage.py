@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -10,11 +11,12 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from tests.conftest import create_test_account
-from tests.integration.test_analysis_annotations import _seed_legacy_analysis_job
+from tests.integration.test_analysis_annotations import _seed_analysis_job
 from tests.integration.test_analysis_pipeline import _track_analysis_observations
 
 from analysis.services import AnalysisService
 from connections.schemas import SourceExecutionPolicy, SourceQuietWindow
+from content.analysis_inputs import freeze_analysis_observation_inputs_in_transaction
 from content.schemas import AnalysisPostContentView
 from content.services import ContentService
 from jobs.coverage import CollectionDueWindowService
@@ -554,6 +556,7 @@ def test_annotation_projection_separates_pending_failed_and_abnormal(
     topic_id = uuid4()
     versions = tuple(uuid4() for _ in range(4))
     contents = tuple(uuid4() for _ in range(4))
+    observations = tuple(uuid4() for _ in range(4))
     with sessions() as session, session.begin():
         create_test_account(session, owner_id=owner_id)
         source_job_id = uuid4()
@@ -619,16 +622,18 @@ def test_annotation_projection_separates_pending_failed_and_abnormal(
             session.execute(
                 text(
                     "INSERT INTO content_observations (id,owner_id,content_id,content_version_id,"
-                    "job_id,source_operation_id,observed_at,received_at) "
-                    "VALUES (:id,:owner,:content,:version,:job,:operation,:now,:now)"
+                    "job_id,source_operation_id,observed_at,received_at,input_basis,source_key,"
+                    "source_external_id) VALUES (:id,:owner,:content,:version,:job,:operation,"
+                    ":now,:now,'source_v1','hackernews',:external)"
                 ),
                 {
-                    "id": uuid4(),
+                    "id": observations[index],
                     "owner": owner_id,
                     "content": content_id,
                     "version": version_id,
                     "job": source_job_id,
                     "operation": uuid4(),
+                    "external": str(index),
                     "now": now,
                 },
             )
@@ -637,17 +642,28 @@ def test_annotation_projection_separates_pending_failed_and_abnormal(
             AnalysisPostContentView(
                 content_id=content_id,
                 content_version_id=version_id,
+                observation_id=observation_id,
                 title="coverage title",
                 body=None,
             )
-            for content_id, version_id in zip(contents, versions, strict=True)
+            for content_id, version_id, observation_id in zip(
+                contents, versions, observations, strict=True
+            )
         )
-        original_job_id = _seed_legacy_analysis_job(
+        manifest = freeze_analysis_observation_inputs_in_transaction(
+            session,
+            owner_id=owner_id,
+            post_observations=dict(zip(versions[:2], observations[:2], strict=True)),
+            comment_observations={},
+            now=now,
+        )
+        original_job_id = _seed_analysis_job(
             session,
             owner_id=owner_id,
             topic_id=topic_id,
             posts=posts[:2],
             now=now,
+            input_manifest=manifest,
         )
         call_id = uuid4()
         session.execute(
@@ -674,10 +690,12 @@ def test_annotation_projection_separates_pending_failed_and_abnormal(
                     "(id, owner_id, content_id, content_version_id, topic_id, "
                     "topic_rule_version, prompt_version, relevant, relevance_reason, "
                     "summary, viewpoints, ai_call_id, status, result_state, error_code, "
-                    "first_valid_at, created_at, updated_at) VALUES "
+                    "first_valid_at, input_signature, input_manifest, created_at, updated_at) "
+                    "VALUES "
                     "(:id, :owner_id, :content_id, :version_id, :topic_id, 1, 'v1', "
                     ":relevant, :reason, :summary, '[]'::jsonb, :call_id, :status, "
-                    ":result_state, :error_code, :first_valid_at, :now, :now)"
+                    ":result_state, :error_code, :first_valid_at, :signature, "
+                    "CAST(:manifest AS jsonb), :now, :now)"
                 ),
                 {
                     "id": uuid4(),
@@ -693,16 +711,25 @@ def test_annotation_projection_separates_pending_failed_and_abnormal(
                     "result_state": "valid" if status == "annotated" else "invalid",
                     "error_code": None if status == "annotated" else "analysis_output_missing",
                     "first_valid_at": now if status == "annotated" else None,
+                    "signature": manifest.signature,
+                    "manifest": json.dumps(manifest.model_dump(mode="json")),
                     "now": now,
                 },
             )
-        _seed_legacy_analysis_job(
+        _seed_analysis_job(
             session,
             owner_id=owner_id,
             topic_id=topic_id,
             posts=(posts[2],),
             now=now,
             failed=True,
+            input_manifest=freeze_analysis_observation_inputs_in_transaction(
+                session,
+                owner_id=owner_id,
+                post_observations={versions[2]: observations[2]},
+                comment_observations={},
+                now=now,
+            ),
         )
     with sessions() as session, session.begin():
         counts = AnalysisService(session).window_annotation_counts_in_transaction(

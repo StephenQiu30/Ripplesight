@@ -54,10 +54,10 @@ def load_event_member_content_in_transaction(
         return {}
     if len(references) > 2000:
         raise ValueError("event reading allows at most 2000 fixed references")
-    if len(references) > 1 and (
-        len({(ref.content_id, ref.content_version_id) for ref in references}) != len(references)
-        or any(ref.legacy_strict for ref in references)
-    ):
+    references = tuple(ref for ref in references if not ref.legacy_strict)
+    if not references:
+        return {}
+    if len({(ref.content_id, ref.content_version_id) for ref in references}) != len(references):
         combined: dict[EventContentReadReference, EventContentReadView] = {}
         for reference in references:
             combined.update(
@@ -66,17 +66,6 @@ def load_event_member_content_in_transaction(
                 )
             )
         return combined
-    requested_reference = references[0]
-    if requested_reference.legacy_strict:
-        from content.version_inputs import legacy_content_versions_readable_in_transaction
-
-        if not legacy_content_versions_readable_in_transaction(
-            session,
-            owner_id=owner_id,
-            content_version_ids=(requested_reference.content_version_id,),
-            now=now,
-        ):
-            return {}
     reference_keys = {ref: str(index) for index, ref in enumerate(references)}
     supplied_groups = {
         reference_keys[ref]: ref.input_observation_ids

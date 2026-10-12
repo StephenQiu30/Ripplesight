@@ -12,7 +12,6 @@ from sqlalchemy import DateTime, and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from analysis.editorial_reading import (
-    load_editorial_publication_inputs_in_transaction,
     load_frozen_editorial_publication_input_in_transaction,
 )
 from analysis.editorial_schemas import EditorialPublicationInputView
@@ -209,36 +208,29 @@ class PublicationReadingService:
                     self.session, owner_id=owner_id, source_keys=batch, now=now
                 )
             )
-        inputs = load_editorial_publication_inputs_in_transaction(
-            self.session,
-            owner_id=owner_id,
-            content_ids=tuple(row.content_id for row in rows if not row.data.get("observation_id")),
-            now=now,
-        )
         accepted = {}
         for row in rows:
             stored = ProjectionView.model_validate(row.data)
-            if stored.observation_id is not None:
-                if not observations_readable_in_transaction(
-                    self.session,
-                    owner_id=owner_id,
-                    observation_ids=stored.input_observation_ids,
-                    now=now,
-                ):
-                    continue
-                item = load_frozen_editorial_publication_input_in_transaction(
-                    self.session,
-                    owner_id=owner_id,
-                    content_id=row.content_id,
-                    content_version_id=row.content_version_id,
-                    observation_id=stored.observation_id,
-                    now=now,
-                )
-                if item is None or item.input_observation_ids != stored.input_observation_ids:
-                    continue
-            else:
-                item = inputs.get(row.content_id)
-            if item is None or row.content_version_id != item.material.content_version_id:
+            if stored.observation_id is None:
+                continue
+            if not observations_readable_in_transaction(
+                self.session,
+                owner_id=owner_id,
+                observation_ids=stored.input_observation_ids,
+                now=now,
+            ):
+                continue
+            item = load_frozen_editorial_publication_input_in_transaction(
+                self.session,
+                owner_id=owner_id,
+                content_id=row.content_id,
+                content_version_id=row.content_version_id,
+                observation_id=stored.observation_id,
+                now=now,
+            )
+            if item is None or item.input_observation_ids != stored.input_observation_ids:
+                continue
+            if row.content_version_id != item.material.content_version_id:
                 continue
             if row.source_key != item.material.source_key:
                 continue

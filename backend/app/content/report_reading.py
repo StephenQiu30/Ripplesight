@@ -7,7 +7,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from content.models import ContentObservation
-from content.version_inputs import legacy_content_versions_readable_in_transaction
 
 
 def report_inputs_readable_in_transaction(
@@ -29,17 +28,18 @@ def report_inputs_readable_in_transaction(
     originals = set(observation_ids)
     if not versions:
         return not originals
-    if originals:
-        try:
-            closure = observation_input_closure_in_transaction(
-                session, owner_id=owner_id, observation_ids=tuple(originals)
-            )
-        except ApplicationError:
-            return False
-        if not observations_readable_in_transaction(
-            session, owner_id=owner_id, observation_ids=closure, now=now
-        ):
-            return False
+    if not originals:
+        return False
+    try:
+        closure = observation_input_closure_in_transaction(
+            session, owner_id=owner_id, observation_ids=tuple(originals)
+        )
+    except ApplicationError:
+        return False
+    if not observations_readable_in_transaction(
+        session, owner_id=owner_id, observation_ids=closure, now=now
+    ):
+        return False
     rows = tuple(
         session.scalars(
             select(ContentObservation).where(
@@ -49,19 +49,4 @@ def report_inputs_readable_in_transaction(
             )
         )
     )
-    if originals and {r.content_version_id for r in rows} != versions:
-        return False
-    if not originals:
-        # Legacy manifests without observations must remain on the strict legacy graph.
-        return legacy_content_versions_readable_in_transaction(
-            session, owner_id=owner_id, content_version_ids=tuple(versions), now=now
-        ) and not session.scalar(
-            select(ContentObservation.id)
-            .where(
-                ContentObservation.owner_id == owner_id,
-                ContentObservation.content_version_id.in_(versions),
-                ContentObservation.input_basis.is_not(None),
-            )
-            .limit(1)
-        )
-    return True
+    return {r.content_version_id for r in rows} == versions

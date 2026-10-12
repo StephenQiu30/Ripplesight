@@ -840,8 +840,9 @@ def test_coverage_http_keeps_analysis_anomaly_separate_from_unknown(
                 text(
                     "INSERT INTO content_observations "
                     "(id, owner_id, content_id, job_id, source_operation_id, "
-                    "content_version_id, observed_at, received_at) VALUES "
-                    "(:id, :owner, :content, :job, :operation, :version, :at, :at)"
+                    "content_version_id, observed_at, received_at, input_basis, source_key, "
+                    "source_external_id) VALUES (:id, :owner, :content, :job, :operation, "
+                    ":version, :at, :at, 'source_v1', 'rss_36kr', :external)"
                 ),
                 {
                     "id": observation_id,
@@ -850,6 +851,7 @@ def test_coverage_http_keeps_analysis_anomaly_separate_from_unknown(
                     "job": collection_job_id,
                     "operation": uuid4(),
                     "version": version_id,
+                    "external": content_id.hex,
                     "at": _BASE + timedelta(minutes=1),
                 },
             )

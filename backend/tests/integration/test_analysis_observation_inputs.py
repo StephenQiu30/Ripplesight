@@ -822,7 +822,7 @@ def legacy_result(case):
             ),
             {"id": job_id, "scope": json.dumps(legacy_raw), "operation": operation},
         )
-        assert analysis_scope_inputs_readable_in_transaction(
+        assert not analysis_scope_inputs_readable_in_transaction(
             session, owner_id=case.owner_id, scope=scope, now=case.now
         )
     call_id = uuid4()
@@ -867,7 +867,7 @@ def test_legacy_annotation_does_not_outlive_its_original_comment_permission(anal
     _, scope, _, row_id = legacy_result(case)
     with case.sessions() as session, session.begin():
         row = session.get(ContentAnnotation, row_id)
-        assert annotation_inputs_readable_in_transaction(session, annotation=row, now=case.now)
+        assert not annotation_inputs_readable_in_transaction(session, annotation=row, now=case.now)
     _make_unreadable(case, case.comment_id, "expired")
     with case.sessions() as session, session.begin():
         assert not analysis_scope_inputs_readable_in_transaction(

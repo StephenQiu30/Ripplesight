@@ -3,7 +3,11 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy import insert, select, text
-from tests.integration.test_event_reading import _seed_reading, event_read_client  # noqa: F401
+from tests.integration.test_event_reading import (
+    _fixed_member_fields,
+    _seed_reading,
+    event_read_client,  # noqa: F401
+)
 from tests.integration.test_event_reading_boundaries import _attach_member, _other_content
 
 from events.heat import EventHeatService, record_source_fetch_success_in_transaction
@@ -60,6 +64,7 @@ def _seed_heat_beyond_candidate_page(client, *, count=1000):
     topics = [uuid4() for _ in range(count)]
     newer = [uuid4() for _ in topics]
     with factory() as session, session.begin():
+        fixed_fields = _fixed_member_fields(session, owner, fixed)
         session.execute(
             insert(MonitorTopic),
             [
@@ -121,6 +126,7 @@ def _seed_heat_beyond_candidate_page(client, *, count=1000):
                     event_id=identity,
                     content_id=fixed.id,
                     content_version_id=fixed.latest_observation.content_version.id,
+                    **fixed_fields,
                     source_key="x",
                     representative_comment_id=None,
                     added_revision=1,
@@ -169,6 +175,7 @@ def test_hot_read_retains_exact_top_ten_and_canonical_tie_order(event_read_clien
         event_read_client, count=14
     )
     with factory() as session, session.begin():
+        second_fields = _fixed_member_fields(session, owner, second)
         session.execute(
             insert(EventMember),
             [
@@ -179,6 +186,7 @@ def test_hot_read_retains_exact_top_ten_and_canonical_tie_order(event_read_clien
                     event_id=identity,
                     content_id=second.id,
                     content_version_id=second.latest_observation.content_version.id,
+                    **second_fields,
                     source_key="x",
                     representative_comment_id=None,
                     added_revision=1,

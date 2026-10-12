@@ -275,7 +275,6 @@ def test_two_alias_body_outputs_share_representation_but_keep_separate_actual_fe
 
 def test_legacy_leaf_without_original_evidence_is_unreadable_even_with_text_version(engine):
     from content.report_reading import report_inputs_readable_in_transaction
-    from content.version_inputs import legacy_content_versions_readable_in_transaction
 
     with Session(engine, expire_on_commit=False) as session:
         service, owner, profile = configured(session)
@@ -290,9 +289,6 @@ def test_legacy_leaf_without_original_evidence_is_unreadable_even_with_text_vers
             values.update(id=identifier, fingerprint=identifier.bytes * 2)
             session.add(ContentVersion(**values))
             session.flush()
-            assert not legacy_content_versions_readable_in_transaction(
-                session, owner_id=owner, content_version_ids=(identifier,), now=NOW
-            )
             assert not report_inputs_readable_in_transaction(
                 session,
                 owner_id=owner,

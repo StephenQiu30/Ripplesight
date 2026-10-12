@@ -148,8 +148,10 @@ def analysis_case() -> Iterator[AnalysisCase]:
             text(
                 "INSERT INTO content_observations "
                 "(id, owner_id, content_id, job_id, source_operation_id, "
-                "content_version_id, observed_at, received_at) VALUES "
-                "(:id, :owner, :content, :job, :operation, :version, :now, :now)"
+                "content_version_id, observed_at, received_at, input_basis, "
+                "source_key, source_external_id) VALUES "
+                "(:id, :owner, :content, :job, :operation, :version, :now, :now, "
+                "'source_v1', 'hackernews', :external)"
             ),
             {
                 "id": uuid4(),
@@ -158,6 +160,7 @@ def analysis_case() -> Iterator[AnalysisCase]:
                 "job": source_job_id,
                 "operation": uuid4(),
                 "version": version_id,
+                "external": content_id.hex,
                 "now": old,
             },
         )
@@ -193,8 +196,10 @@ def _seed_comment_version(
         text(
             "INSERT INTO content_observations "
             "(id, owner_id, content_id, job_id, source_operation_id, "
-            "content_version_id, observed_at, received_at) "
-            "SELECT :id, :owner, :content, id, :operation, :version, :at, :at FROM jobs "
+            "content_version_id, observed_at, received_at, input_basis, "
+            "source_key, source_external_id) "
+            "SELECT :id, :owner, :content, id, :operation, :version, :at, :at, "
+            "'source_v1', 'hackernews', :external FROM jobs "
             "WHERE owner_id=:owner AND source_key='hackernews' AND kind='keyword.search' LIMIT 1"
         ),
         {
@@ -203,6 +208,7 @@ def _seed_comment_version(
             "content": comment_id,
             "operation": uuid4(),
             "version": version_id,
+            "external": comment_id.hex,
             "at": at,
         },
     )
@@ -429,8 +435,10 @@ def test_analysis_scan_uses_selected_source_or_exact_hotlist_topic_version(
                 text(
                     "INSERT INTO content_observations "
                     "(id, owner_id, content_id, job_id, source_operation_id, "
-                    "content_version_id, observed_at, received_at) VALUES "
-                    "(:id, :owner, :content, :job, :operation, :version, :at, :at)"
+                    "content_version_id, observed_at, received_at, input_basis, "
+                    "source_key, source_external_id) VALUES "
+                    "(:id, :owner, :content, :job, :operation, :version, :at, :at, "
+                    "'source_v1', :source, :external)"
                 ),
                 {
                     "id": uuid4(),
@@ -439,6 +447,8 @@ def test_analysis_scan_uses_selected_source_or_exact_hotlist_topic_version(
                     "job": job_id,
                     "operation": uuid4(),
                     "version": version_id,
+                    "external": content_id.hex,
+                    "source": source_key,
                     "at": at,
                 },
             )

@@ -409,9 +409,12 @@ class ContentObservation(Base):
             "AND source_external_id IS NULL AND source_identity_basis IS NULL "
             "AND editorial_profile_id IS NULL AND native_identity_proof IS NULL) OR "
             "(input_basis IS NOT NULL AND source_key IS NOT NULL "
-            "AND source_external_id IS NOT NULL AND source_identity_basis IS NOT NULL "
+            "AND source_external_id IS NOT NULL "
             "AND source_key ~ '^[a-z][a-z0-9_-]{0,63}$' "
-            "AND source_external_id <> '' AND source_identity_basis IN ('guid', 'url_fallback'))",
+            "AND source_external_id <> '' "
+            "AND (source_identity_basis IS NULL "
+            "OR source_identity_basis IN ('guid', 'url_fallback')) "
+            "AND (editorial_profile_id IS NULL OR source_identity_basis IS NOT NULL))",
             name="content_observations_provenance_check",
         ),
         CheckConstraint(

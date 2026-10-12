@@ -1342,18 +1342,17 @@ class ContentService:
                 proof=identity_proof,
                 now=now,
             )
-        if editorial_profile_id is not None:
-            observation_values.update(
-                source_key=command.admission.source_key,
-                source_native_scope=native_scope,
-                source_external_id=external_id,
-                source_identity_basis=identity_basis,
-                editorial_profile_id=editorial_profile_id,
-                native_identity_proof=identity_proof.model_dump(mode="json")
-                if identity_proof
-                else None,
-                input_basis="observations_v1" if input_observation_ids else "source_v1",
-            )
+        observation_values.update(
+            source_key=command.admission.source_key,
+            source_native_scope=native_scope,
+            source_external_id=external_id,
+            source_identity_basis=identity_basis,
+            editorial_profile_id=editorial_profile_id,
+            native_identity_proof=identity_proof.model_dump(mode="json")
+            if identity_proof
+            else None,
+            input_basis="observations_v1" if input_observation_ids else "source_v1",
+        )
         content_version = self._find_or_create_content_version(
             owner_id=owner_id,
             content_id=content.id,
@@ -2243,11 +2242,13 @@ class ContentService:
     ) -> ContentObservation:
         # Replay freezes the original predecessor and execution epoch.
         existing_receipt = self._session.scalar(
-            select(ContentObservation).where(
+            select(ContentObservation)
+            .where(
                 ContentObservation.owner_id == owner_id,
                 ContentObservation.content_id == content_id,
                 ContentObservation.source_operation_id == source_operation_id,
             )
+            .execution_options(populate_existing=True)
         )
         if existing_receipt is not None:
             if not self._observation_matches(
@@ -2325,6 +2326,7 @@ class ContentService:
                 ContentObservation.source_operation_id == source_operation_id,
             )
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
         if existing is None:
             raise RuntimeError("conflicting content observation is not visible")

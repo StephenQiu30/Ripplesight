@@ -320,6 +320,45 @@ def _manual_posts(client: TestClient, count: int):
     return owner, posts
 
 
+def test_old_projection_cannot_borrow_current_input_for_reading_or_selection(
+    editorial_client: TestClient,
+) -> None:
+    from analysis.editorial_reading import load_frozen_editorial_publication_input_in_transaction
+    from core.config import Settings
+    from publication.publication_models import PublicationRecord
+    from publication.selection import load_publication_selection_in_transaction
+
+    owner, posts = _manual_posts(editorial_client, 2)
+    sessions = editorial_client.app.state.session_factory
+    with sessions.begin() as session:
+        publisher = PublicationService(session)
+        for post in posts:
+            assert publisher.publish_in_transaction(owner_id=owner, content_id=post.id, now=NOW)
+        old = session.get(PublicationRecord, (owner, posts[0].id))
+        data = dict(old.data)
+        data.pop("observation_id")
+        data.pop("input_observation_ids")
+        old.data = data
+    with sessions.begin() as session:
+        session.info["settings"] = Settings(_env_file=None, events_cluster_enabled=False)
+        reader = PublicationReadingService(session)
+        assert reader.detail_in_transaction(owner_id=owner, content_id=posts[0].id, now=NOW) is None
+        assert reader.detail_in_transaction(owner_id=owner, content_id=posts[1].id, now=NOW)
+        current = load_frozen_editorial_publication_input_in_transaction(
+            session,
+            owner_id=owner,
+            content_id=posts[1].id,
+            content_version_id=posts[1].latest_observation.content_version.id,
+            observation_id=posts[1].latest_observation.id,
+            now=NOW,
+        )
+        assert current is not None
+        selection = load_publication_selection_in_transaction(
+            session, owner_id=owner, snapshots={posts[1].id: current}, now=NOW
+        )
+        assert set(selection.snapshots) == {posts[1].id}
+
+
 def test_selected_watermark_never_leaps_pending_and_old_upsert_becomes_remove(
     editorial_client: TestClient,
 ) -> None:

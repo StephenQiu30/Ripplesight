@@ -159,9 +159,12 @@ def _seed_reading_evidence(session, owner, topic, version_ids, now):
     by_source = {}
     for version, content in rows:
         record = session.execute(
-            text("SELECT source_key,created_at FROM content_records WHERE id=:id"), {"id": content}
+            text("SELECT source_key,created_at,external_id FROM content_records WHERE id=:id"),
+            {"id": content},
         ).one()
-        by_source.setdefault(record.source_key, []).append((version, content, record.created_at))
+        by_source.setdefault(record.source_key, []).append(
+            (version, content, record.created_at, record.external_id)
+        )
     for source, versions in by_source.items():
         policy = session.execute(
             text(
@@ -233,15 +236,18 @@ def _seed_reading_evidence(session, owner, topic, version_ids, now):
                 "policy": policy,
                 "retention": retention,
                 "expires": now + timedelta(days=30),
+                "source": source,
+                "external": external,
             }
-            for version, content, seen in versions
+            for version, content, seen, external in versions
         ]
         session.execute(
             text(
                 "INSERT INTO content_observations "
                 "(id,owner_id,content_id,content_version_id,job_id,source_operatio"
-                "n_id,observed_at,received_at)"
-                " VALUES (:id,:owner,:content,:version,:job,:operation,:seen,:seen)"
+                "n_id,observed_at,received_at,input_basis,source_key,source_external_id)"
+                " VALUES (:id,:owner,:content,:version,:job,:operation,:seen,:seen,"
+                "'source_v1',:source,:external)"
             ),
             values,
         )
@@ -1007,6 +1013,13 @@ def test_review_append_to_existing_event(event_context, monkeypatch, outcome):
         )
         session.execute(
             text(
+                "UPDATE content_observations SET source_key='google_news' "
+                "WHERE owner_id=:owner AND source_key='reddit'"
+            ),
+            {"owner": owner},
+        )
+        session.execute(
+            text(
                 "UPDATE source_access_policies SET source_key='google_news' "
                 "WHERE owner_id=:owner AND source_key='reddit'"
             ),
@@ -1344,7 +1357,7 @@ def test_rework_old_event_requires_recent_current_member(event_context, monkeypa
             assert target.revision == (2 if recent_member == "removed" else 1)
 
 
-def test_queued_legacy_annotation_candidate_rechecks_source_permission_before_pay(
+def test_queued_frozen_annotation_candidate_rechecks_source_permission_before_pay(
     event_context, monkeypatch
 ):
     sessions, owner, _, versions, _, now = event_context
@@ -1554,7 +1567,7 @@ def test_event_prompt_preference_stays_within_legacy_body_version(event_context,
             )
         )
         session.flush()
-        # Isolate ranking from the separately tested legacy job/permission proof.
+        # Isolate prompt ranking from the independently tested exact-input permission guard.
         monkeypatch.setattr(
             "analysis.services.readable_annotation_ids_in_transaction",
             lambda session, *, annotations, now: {row.id for row in annotations},
