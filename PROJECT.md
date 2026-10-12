@@ -225,6 +225,10 @@ CI 验证当前锁定运行栈。frontend执行完整静态检查、交互回归
 采集持久化、正文请求计量和精确观察清理均先取owner历史事务锁，再锁Job/run、来源准入及原生身份；owner锁不跨网络请求持有。采集计量合同为`frozen_receipt_identity_v2`，仅输出原始观察、唯一身份及四类互斥计数，删除旧“观察数减新增”兼容字段。
 
 
+### CORE-01 在线依赖证明
+
+PLAN-10 R2-B先修实际observation来源/ALL依赖，再接每次新读的独立权威，全部消费者就绪后才接管删除。B1a由content持有source_v1/observations_v1证明，未知旧basis拒读不回填，不从同版本推测依赖。所有新post/comment/document固定来源shadow；编辑来源才要求guid/url_fallback，普通原生ID/网页沿既有身份，source_identity_basis为空在明确basis下表示该判定不适用。唯一schema/ORM同步约束，规范SQL仅用于全新隔离库，不自动迁移业务库。ContentVersionInput真实依赖和清理消费者保留，不作为未知观察的授权替代。
+
 ### CORE-01 邮件验证事务方案
 
 邮件挑战真源迁至PostgreSQL的`identity_email_challenges`，与账户、绑定、凭据变更及新会话同事务消费。Redis邮件数据仅为发送/验证限流；OAuth状态/PKCE仍沿用独立存储，不能据此声称OAuth事务完成。领域实现位于identity/email_challenges.py，Router仅传入浏览器绑定，ORM及唯一DDL同步维护。匿名绑定HttpOnly nonce，认证操作绑定owner/session/credential_version；统一锁序挑战→账户→会话，SMTP不跨事务持锁。重发UPSERT、错误计数提交及业务失败回滚合同见[切片SPEC](docs/plan/29-登录与验证注册.md#spec-开发合同)。过期行操作时有界清理，定期清理与保留期运行验收仍待完成。旧Redis邮件挑战切换后失效，不双写真源；业务库部署与升级仍遵守§6，当前仅改唯一schema和独立测试库。
