@@ -44,6 +44,25 @@
 
 依赖主线：CORE-00/01 → CORE-02/03/04 → CORE-05/06 → CORE-07/08/09 → CORE-10 → CORE-11正式观察。调度/目标验证和评测工具可提前并行准备；不得以单一来源、测试通过或手动发送替代完整闭环。
 
+## 国内首条闭环就绪核对
+
+已完成基于已提交`d8925d7a`的源码核对和[PLAN-08候选交接合同](docs/plan/08-平台接入.md#国内首条闭环就绪交接范围待确认)准备，仅本片两份文档的隔离候选通过242份Markdown结构/链接检查及19项文档工具回归，差异空白检查通过；未启动新代码切片，未选定首发平台，未取得正式代码SPEC评审。原始需求、FR/AC范围与优先级保持现行四目录定义；现有P0代码暂停边界继续按本文件和本人后续指示执行。本次自行核对，不派发审查任务，也不把自审称为独立评审。
+
+**B站只作为待选候选。** 当前[适配器](backend/app/sources/adapters/bilibili_chrome.py)搜索取一页、上游候选最多5条、本地最多保存2条原帖；文本为标题/简介且`text_scope=truncated`，不是视频完整内容。评论仅每帖首页最多20条根评论，不遍历回复，拒绝非空page_token，没有完整尾页证明；缺少结果或截断不能推断完整覆盖。[目录](backend/app/connections/catalog.py)的candidate/required与auth_kind不是准入证据，NONE也不表示B站无需本机Chrome登录；HN的required标签不改变国内POC优先级。费用、账号许可与真实能力本轮均未核实，不启用或探测来源；首个平台即便完成受限验证也不能关闭国内完整POC。
+
+| 闭环环节与要求 | 已有可复用路径（源码存在） | 补齐或开工前必须证明的结果 |
+|---|---|---|
+| 来源能力/准入：FR-08-01～03 | [类型合同](backend/app/sources/contracts.py)、[B站适配器](backend/app/sources/adapters/bilibili_chrome.py)有搜索/评论及停止结果；已有[Chrome管线样本](backend/tests/integration/test_chrome_monitor.py) | 把关键词/详情/全文/根评论/回复/分页/回补/删除证据分别投影支持、受限、不支持或未知并附依据日期；冻结国内平台范围与准入，不用目录标签或样本代替真实证明 |
+| 冻结查询及增量：FR-01、02-01/03、03、46 | [主题规则与受理](backend/app/monitors/services.py)、[发现与请求预算](backend/app/content/discovery.py)、[冻结回执分类](backend/app/content/collection_counts.py)及任务/列表单轮摘要 | 继续复用规则/窗口/上限/连接版本和实际执行轮；未知语言、匹配语义及完整窗口分母须按对应SPEC证明，不能凭累计或首屏结果补造完整性 |
+| 原帖/旧帖讨论：FR-02-02/04 | [评论请求执行](backend/app/content/comments_execution.py)、[自动候选扫描](backend/app/content/services.py)和原生父链/版本可复用 | 自动扫描按建档年龄/近期观察选候选，不是用户显式持久跟踪；补纳入/退出/到期/频率上限及版本，窗口外旧帖新评论可发现，退出后逐请求停止；回复和缺父不能标成已完整采集 |
+| 独立相关性与排序：FR-04-01、09、36 | [评论原帖/父链冻结与复核](backend/app/content/comment_analysis.py)、[分析输入/提交](backend/app/analysis/services.py)、[本机调用门禁](backend/app/ai/services.py)可复用 | 原帖输出仍整项校验[AnnotationOutputItem](backend/app/analysis/schemas.py)：非法情感/观点会使有效相关性一并无效；先拆独立维度状态，保留不足/未知/延后，再验证相关性与新鲜度排序、稳定cursor和解释；不以互动或任意相似度代替 |
+| 事件与新事实：FR-04-02/03、05-01/02 | [归并与事实写入](backend/app/events/fact_writer.py)、[纠错输入](backend/app/events/fact_schemas.py)已有事件/事实修订、预期版本和来源引用 | [事实模型](backend/app/events/fact_models.py)的confirmed/unreviewed/merged不能证明说法、支持/确认/反证/撤回和规范事件谱系继承已完整；按真实输入与当前许可逐项验收，重复报道不加新事实、线索不冒充证实 |
+| 自然监测/停止/预算：FR-06、46/47/50 | [请求前围栏](backend/app/jobs/execution.py)、[逐请求准入/预算](backend/app/content/discovery.py)及现有调度/回执可复用；停止检查调用主题生命周期围栏 | 完整调度生效区间和启停历史、跨改频/删来源的应执行分母、独立采集/分析/发送授权、预算停用/改版额度、模型停用与未知用量仍须具体SPEC及反例；已存在围栏不重建或撤销 |
+| 热点/关注/提醒：FR-05-03、07、35 | [目标版本/资格门禁](backend/app/notifications/alert_services.py)、[外发准备及unknown保护](backend/app/notifications/executor.py)可复用 | `_target_reason`仍以同目标修订provider accepted历史作为就绪依据；补具体地址版本显式验证、静默、规范事件/事实进展去重与取消继承；冻结可比窗口/热点规则和提醒批次，三类核心提醒均保留，不用提供方接受代替本人收到 |
+| 本人隔离/附件/提交/外发：FR-10、NFR-06/07/15 | [会话/写入门禁](backend/app/api/dependencies.py)、[完整资料依赖候选](backend/app/content/authority_reading.py)、[当前资源许可](backend/app/evidence/services.py)及上述冻结输入门禁可复用 | 逐一列实际开放入口的owner、当前许可、ALL依赖、ID/cursor及间接引用反例；完整详情已接入独立权威须保持强制拒绝与锁外复核，不能推广为所有列表/分析/附件/外发均已接齐。附件/导出/派生及写方本轮未做全路径验证；恢复目标未证明前保持隔离，不把完整账本迁移强加为全部核心前置 |
+
+源码与测试文件存在只证明可定位实现，本轮没有重跑后端业务测试、模型或平台，因此不新增上述能力通过项。读入口、模型输入及结果提交、附件、任务控制和发送分别核查；费用/账号不明只阻塞对应真实验收，当前BACKLOG记录的代码暂停与待评审SPEC是另一层门槛。后续先确认一个国内来源及受限范围、代表主题/关键词，再按PLAN-08为确定查询/未知语言、显式旧帖跟踪、独立相关性和事实状态分别冻结最小SPEC；不自动接续B1b-2，不扩大到辅助页面或完整灾备。本准备不改变全部核心未关闭状态。
+
 ## 源码依据与差距
 
 ### CORE-01：访问、身份和恢复
