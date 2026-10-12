@@ -133,9 +133,10 @@ def _post(row: dict[str, object]) -> SourcePost:
 def _comment(row: dict[str, object], video_id: str) -> SourceComment:
     if str(row.get("video_id")) != video_id:
         raise ValueError("comment belongs to a different video")
-    parent = str(row.get("parent_comment_id") or "0")
+    raw_parent = row.get("parent_comment_id")
+    parent = str(raw_parent) if raw_parent is not None and raw_parent != "" else None
     if _VIDEO_ID.fullmatch(str(row["comment_id"])) is None or (
-        parent != "0" and _VIDEO_ID.fullmatch(parent) is None
+        parent is not None and parent != "0" and _VIDEO_ID.fullmatch(parent) is None
     ):
         raise ValueError("invalid Bilibili comment ID")
     return SourceComment(
@@ -143,6 +144,8 @@ def _comment(row: dict[str, object], video_id: str) -> SourceComment:
         external_id=str(row["comment_id"]),
         post_external_id=video_id,
         parent_comment_external_id=None if parent == "0" else parent,
+        root_comment_external_id=str(row["comment_id"]) if parent == "0" else None,
+        parent_relation_status="root" if parent == "0" else "unresolved",
         author_external_id=str(row["creator_hash"]) if row.get("creator_hash") else None,
         author_name=str(row["nickname"]) if row.get("nickname") else None,
         published_at=_timestamp(row.get("create_time")),

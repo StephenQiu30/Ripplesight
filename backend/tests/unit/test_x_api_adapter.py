@@ -88,10 +88,14 @@ def test_direct_reply_search_maps_root_and_nested_parent() -> None:
     assert root.items[0].external_id == "101"
     assert root.items[0].post_external_id == "100"
     assert root.items[0].parent_comment_external_id is None
+    assert root.items[0].root_comment_external_id == "101"
+    assert root.items[0].parent_relation_status == "root"
     assert nested.capability is SourceCapability.REPLIES
     assert nested.items[0].external_id == "102"
     assert nested.items[0].post_external_id == "100"
     assert nested.items[0].parent_comment_external_id == "101"
+    assert nested.items[0].root_comment_external_id is None
+    assert nested.items[0].parent_relation_status == "unresolved"
     assert [call.url.params["query"] for call in calls] == [
         "in_reply_to_tweet_id:100",
         "in_reply_to_tweet_id:101",
@@ -126,6 +130,9 @@ def test_direct_replies_paginate_and_settle_valid_empty_page() -> None:
 
     assert first.state is SourcePageState.MORE
     assert first.next_page_token == "ABCD"
+    assert first.items[0].parent_comment_external_id is None
+    assert first.items[0].root_comment_external_id is None
+    assert first.items[0].parent_relation_status == "unresolved"
     assert second.state is SourcePageState.EMPTY
     assert second.stop_reason is SourceStopReason.SOURCE_EMPTY
     assert calls[1].url.params["next_token"] == "ABCD"
@@ -145,7 +152,9 @@ def test_nested_reply_can_use_verified_response_root_when_request_omits_it() -> 
 
     assert page.state is SourcePageState.COMPLETE
     assert page.items[0].post_external_id == "100"
-    assert page.items[0].parent_comment_external_id == "101"
+    assert page.items[0].parent_comment_external_id is None
+    assert page.items[0].root_comment_external_id is None
+    assert page.items[0].parent_relation_status == "unresolved"
 
 
 @pytest.mark.parametrize(

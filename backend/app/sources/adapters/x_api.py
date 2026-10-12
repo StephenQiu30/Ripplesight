@@ -338,11 +338,14 @@ class XApiAdapter:
         ):
             raise _SourceFailureError(SourceStopReason.PROTOCOL_ERROR)
         assert isinstance(root_id, str)
+        is_root_comment = post.parent_external_id == root_id
         return SourceComment(
             source_key="x",
             external_id=post.external_id,
             post_external_id=root_id,
-            parent_comment_external_id=None if parent_id == root_id else parent_id,
+            parent_comment_external_id=None if is_root_comment else post.parent_external_id,
+            root_comment_external_id=post.external_id if is_root_comment else None,
+            parent_relation_status="root" if is_root_comment else "unresolved",
             author_external_id=post.author_external_id,
             published_at=post.published_at,
             text=post.text,

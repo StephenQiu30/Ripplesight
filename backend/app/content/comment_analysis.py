@@ -140,6 +140,8 @@ def load_comment_analysis_page_in_transaction(
             parents.append(parent)
             seen.add(parent_id)
             current = parent_thread
+        if current.parent_content_id is None and current.parent_relation_status != "root":
+            state = "unresolved"
         result.append(
             CommentAnalysisContext.model_validate(
                 {

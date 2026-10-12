@@ -1444,6 +1444,9 @@ def _comment_command(
         fields["reply_target_comment_external_id"] = reply_target_comment_external_id
     if parent_relation_status is not None:
         fields["parent_relation_status"] = parent_relation_status
+    elif parent_comment_external_id is None:
+        # Existing fixture scenarios explicitly describe confirmed roots.
+        fields["parent_relation_status"] = "root"
     return PersistContentPostInput(
         job_id=job_id,
         source_operation_id=uuid4(),
@@ -1978,3 +1981,265 @@ def test_media_only_requires_current_permission_for_stored_semantics(content_cli
             {"id": policy},
         )
     assert content_client.get(f"/api/contents/{post.id}").status_code == 404
+
+
+@pytest.mark.parametrize("resolved_status", ["root", "observed"])
+def test_unknown_comment_relation_can_be_filled_without_new_identity(
+    content_client, resolved_status
+):
+    owner = _user_scope(content_client)
+    connection_id, *_ = _seed_context(content_client, owner)
+    policy_id, retention_id, job_id = _seed_comment_context(content_client, owner, connection_id)
+    factory = content_client.app.state.session_factory
+
+    def save(**changes):
+        with factory() as session:
+            return ContentService(session).persist_comment(
+                owner_id=owner,
+                command=_comment_command(
+                    owner_id=owner,
+                    connection_id=connection_id,
+                    policy_id=policy_id,
+                    retention_id=retention_id,
+                    job_id=job_id,
+                    external_id="late-child",
+                    post_external_id="post-late",
+                    **changes,
+                ),
+            )
+
+    unknown = save(parent_relation_status="unresolved")
+    with factory() as session:
+        assert session.execute(
+            text(
+                "SELECT root_content_id,parent_content_id,parent_relation_status "
+                "FROM content_threads "
+                "WHERE owner_id=:owner AND content_id=:id"
+            ),
+            {"owner": owner, "id": unknown.id},
+        ).one() == (None, None, "unresolved")
+    changes = {"parent_relation_status": resolved_status}
+    if resolved_status == "observed":
+        changes.update(
+            parent_comment_external_id="late-parent", root_comment_external_id="late-root"
+        )
+    resolved = save(**changes)
+    assert resolved.id == unknown.id
+    assert (
+        resolved.latest_observation.content_version.id
+        == unknown.latest_observation.content_version.id
+    )
+    save(parent_relation_status="unresolved")
+    with factory() as session:
+        state = session.scalar(
+            text(
+                "SELECT parent_relation_status FROM content_threads "
+                "WHERE owner_id=:owner AND content_id=:id"
+            ),
+            {"owner": owner, "id": unknown.id},
+        )
+        assert state == resolved_status
+    with pytest.raises(ValueError, match="thread"):
+        save(parent_relation_status="observed", parent_comment_external_id="different-parent")
+
+
+def test_late_placeholder_cannot_move_to_another_post(content_client):
+    owner = _user_scope(content_client)
+    connection_id, *_ = _seed_context(content_client, owner)
+    policy_id, retention_id, job_id = _seed_comment_context(content_client, owner, connection_id)
+    factory = content_client.app.state.session_factory
+
+    def save(**changes):
+        with factory() as session:
+            return ContentService(session).persist_comment(
+                owner_id=owner,
+                command=_comment_command(
+                    owner_id=owner,
+                    connection_id=connection_id,
+                    policy_id=policy_id,
+                    retention_id=retention_id,
+                    job_id=job_id,
+                    **changes,
+                ),
+            )
+
+    save(external_id="child", post_external_id="post-A", parent_comment_external_id="parent")
+    with pytest.raises(ValueError, match="different post"):
+        save(external_id="parent", post_external_id="post-B", parent_relation_status="root")
+    save(external_id="parent", post_external_id="post-A", parent_relation_status="root")
+    with pytest.raises(ValueError, match="cycle"):
+        save(
+            external_id="parent",
+            post_external_id="post-A",
+            parent_comment_external_id="child",
+            parent_relation_status="observed",
+        )
+
+
+@pytest.mark.parametrize("late_parent", [False, True])
+def test_declared_root_must_agree_with_known_ancestor(content_client, late_parent):
+    owner = _user_scope(content_client)
+    connection_id, *_ = _seed_context(content_client, owner)
+    policy_id, retention_id, job_id = _seed_comment_context(content_client, owner, connection_id)
+    factory = content_client.app.state.session_factory
+
+    def save(external_id, **changes):
+        with factory() as session:
+            return ContentService(session).persist_comment(
+                owner_id=owner,
+                command=_comment_command(
+                    owner_id=owner,
+                    connection_id=connection_id,
+                    policy_id=policy_id,
+                    retention_id=retention_id,
+                    job_id=job_id,
+                    external_id=external_id,
+                    post_external_id="post-root-check",
+                    **changes,
+                ),
+            )
+
+    if late_parent:
+        save(
+            "child", parent_comment_external_id="parent", root_comment_external_id="different-root"
+        )
+        with pytest.raises(ValueError, match="known root"):
+            save("parent", parent_relation_status="root")
+    else:
+        save("parent", parent_relation_status="root")
+        with pytest.raises(ValueError, match="known root"):
+            save(
+                "child",
+                parent_comment_external_id="parent",
+                root_comment_external_id="different-root",
+            )
+
+
+def test_unknown_ancestor_remains_unknown_in_root_and_reply_pages(content_client):
+    owner = _user_scope(content_client)
+    connection_id, policy_id, retention_id, post_job, _ = _seed_context(content_client, owner)
+    comment_policy, comment_retention, comment_job = _seed_comment_context(
+        content_client, owner, connection_id
+    )
+    factory = content_client.app.state.session_factory
+    with factory() as session:
+        post = ContentService(session).persist_post(
+            owner_id=owner,
+            command=_command(
+                owner_id=owner,
+                connection_id=connection_id,
+                policy_id=policy_id,
+                retention_id=retention_id,
+                job_id=post_job,
+                operation_id=uuid4(),
+                observed_at=datetime.now(UTC) - timedelta(minutes=2),
+                external_id="unknown-post",
+                extra_fields={"text_scope": "full", "text_origin": "source", "title": "post"},
+            ),
+        )
+    for external, parent in (("unknown", None), ("child", "unknown")):
+        with factory() as session:
+            ContentService(session).persist_comment(
+                owner_id=owner,
+                command=_comment_command(
+                    owner_id=owner,
+                    connection_id=connection_id,
+                    policy_id=comment_policy,
+                    retention_id=comment_retention,
+                    job_id=comment_job,
+                    external_id=external,
+                    post_external_id="unknown-post",
+                    parent_comment_external_id=parent,
+                    parent_relation_status="unresolved",
+                ),
+            )
+    roots = content_client.get(f"/api/contents/{post.id}/comments").json()["items"]
+    assert len(roots) == 1 and roots[0]["root_content_id"] is None
+    assert roots[0]["parent_relation_status"] == "unresolved"
+    replies = content_client.get(
+        f"/api/contents/{post.id}/comments", params={"root_id": roots[0]["content_id"]}
+    ).json()["items"]
+    assert len(replies) == 1 and replies[0]["external_id"] == "child"
+    assert replies[0]["root_content_id"] is None
+
+
+@pytest.mark.parametrize(
+    "reference",
+    ["parent_comment_external_id", "root_comment_external_id", "reply_target_comment_external_id"],
+)
+def test_unknown_placeholder_cannot_be_shared_by_different_posts(content_client, reference):
+    owner = _user_scope(content_client)
+    connection_id, *_ = _seed_context(content_client, owner)
+    policy_id, retention_id, job_id = _seed_comment_context(content_client, owner, connection_id)
+    factory = content_client.app.state.session_factory
+
+    def save(child, post):
+        changes = {"parent_comment_external_id": "parent-" + post, reference: "shared-unknown"}
+        with factory() as session:
+            return ContentService(session).persist_comment(
+                owner_id=owner,
+                command=_comment_command(
+                    owner_id=owner,
+                    connection_id=connection_id,
+                    policy_id=policy_id,
+                    retention_id=retention_id,
+                    job_id=job_id,
+                    external_id=child,
+                    post_external_id=post,
+                    **changes,
+                ),
+            )
+
+    save("child-A", "post-A")
+    with pytest.raises(ValueError, match="different post"):
+        save("child-B", "post-B")
+
+
+def test_concurrent_unknown_relation_repairs_commit_only_one_parent(content_client):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    owner = _user_scope(content_client)
+    connection_id, *_ = _seed_context(content_client, owner)
+    policy_id, retention_id, job_id = _seed_comment_context(content_client, owner, connection_id)
+    factory = content_client.app.state.session_factory
+
+    def save(parent):
+        with factory() as session:
+            return ContentService(session).persist_comment(
+                owner_id=owner,
+                command=_comment_command(
+                    owner_id=owner,
+                    connection_id=connection_id,
+                    policy_id=policy_id,
+                    retention_id=retention_id,
+                    job_id=job_id,
+                    external_id="concurrent-child",
+                    post_external_id="concurrent-post",
+                    parent_comment_external_id=parent,
+                    parent_relation_status="unresolved",
+                ),
+            )
+
+    initial = save(None)
+    barrier = Barrier(2)
+
+    def repair(parent):
+        barrier.wait(timeout=5)
+        try:
+            return save(parent).id
+        except ValueError:
+            return None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(repair, parent) for parent in ("parent-A", "parent-B")]
+        results = [future.result(timeout=15) for future in futures]
+    assert results.count(initial.id) == results.count(None) == 1
+    with factory() as session:
+        assert (
+            session.scalar(
+                text("SELECT count(*) FROM content_observations WHERE content_id=:id"),
+                {"id": initial.id},
+            )
+            == 2
+        )

@@ -567,6 +567,7 @@ class CommentTreeLimiter:
         self._root_by_comment: dict[str, str] = {}
         self._reply_counts: dict[str, int] = {}
         self._truncated = False
+        self._unknown_count = 0
 
     @property
     def truncated(self) -> bool:
@@ -581,6 +582,14 @@ class CommentTreeLimiter:
                 continue
             self._seen.add(item.external_id)
             parent_id = item.parent_comment_external_id
+            if parent_id is None and item.parent_relation_status != "root":
+                if self._unknown_count >= self._first_level_limit:
+                    self._truncated = True
+                    filtered += 1
+                else:
+                    self._unknown_count += 1
+                    admitted.append(item)
+                continue
             if parent_id is None:
                 root_id = item.external_id
                 self._root_by_comment[item.external_id] = root_id
@@ -844,8 +853,7 @@ class CommentPageCommitService:
             fields["root_comment_external_id"] = comment.root_comment_external_id
         if comment.reply_target_comment_external_id is not None:
             fields["reply_target_comment_external_id"] = comment.reply_target_comment_external_id
-        if comment.parent_relation_status != "unresolved":
-            fields["parent_relation_status"] = comment.parent_relation_status
+        fields["parent_relation_status"] = comment.parent_relation_status
         if comment.author_external_id is not None:
             fields["author_external_id"] = comment.author_external_id
         if comment.author_name is not None:

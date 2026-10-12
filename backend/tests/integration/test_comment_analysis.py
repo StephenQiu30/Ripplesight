@@ -647,3 +647,14 @@ def test_comment_results_do_not_create_post_alert_facts_or_post_prompt_denominat
             runtime_windows=(),
         )
         assert COMMENT_ANALYSIS_PROMPT_VERSION not in versions
+
+
+def test_unknown_target_and_unknown_ancestor_stay_unresolved(analysis_case):
+    case = analysis_case
+    unknown = _reply(case, None, status="unresolved")
+    child = _reply(case, unknown)
+    contexts = _scopes(case)
+    assert contexts[unknown][1].prompt_items[0].comment_context.parent_state == "unresolved"
+    context = contexts[child][1].prompt_items[0].comment_context
+    assert context.parent_state == "unresolved"
+    assert [item.content_id for item in context.parents] == [unknown]

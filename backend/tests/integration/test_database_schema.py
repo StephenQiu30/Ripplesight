@@ -255,3 +255,12 @@ def test_collection_execution_attribution_constraints(schema_engine: Engine) -> 
         item["name"] for item in inspector.get_check_constraints("content_observations")
     }
     assert "content_observations_execution_epoch_check" in observation_checks
+
+
+def test_comment_relation_constraint_preserves_unknown_parent(schema_engine: Engine) -> None:
+    checks = inspect(schema_engine).get_check_constraints("content_threads")
+    constraint = next(
+        item["sqltext"] for item in checks if item["name"] == "content_threads_distinct_check"
+    )
+    assert "unresolved" in constraint
+    assert "parent_content_id IS NULL" in constraint and "root_content_id IS NULL" in constraint

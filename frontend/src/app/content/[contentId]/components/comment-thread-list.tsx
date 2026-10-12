@@ -151,7 +151,12 @@ export function replyContext(
   visible: ReadonlyMap<string, HotKeyAPI.ContentCommentView>,
 ): string | null {
   if (comment.parent_content_id === root.content_id) {
-    return root.external_id ? `回复线程根 ${root.external_id}` : "回复线程根";
+    if (root.parent_relation_status === "root") {
+      return root.external_id ? `回复线程根 ${root.external_id}` : "回复线程根";
+    }
+    return root.external_id
+      ? `回复 ${root.external_id}（父链尚未确认）`
+      : "回复父评论（父链尚未确认）";
   }
   const parent = comment.parent_content_id
     ? visible.get(comment.parent_content_id)

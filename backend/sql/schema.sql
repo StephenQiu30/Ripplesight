@@ -1896,6 +1896,8 @@ CREATE TABLE content_threads (
             (parent_content_id IS NULL AND root_content_id IS NOT NULL
                 AND root_content_id = content_id
                 AND reply_target_content_id IS NULL AND parent_relation_status = 'root')
+            OR (parent_content_id IS NULL AND root_content_id IS NULL
+                AND reply_target_content_id IS NULL AND parent_relation_status = 'unresolved')
             OR (parent_content_id IS NOT NULL
                 AND (root_content_id IS NULL OR root_content_id <> content_id)
                 AND parent_relation_status IN ('observed', 'unavailable', 'unresolved'))

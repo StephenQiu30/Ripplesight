@@ -162,3 +162,25 @@ describe("comment thread reading", () => {
     expect(replyContext(reply, root, new Map())).toBeNull();
   });
 });
+
+it("does not present an unknown ancestor as a confirmed thread root", () => {
+  const unknown = {
+    ...reply,
+    content_id: "unknown-parent",
+    external_id: "U",
+    parent_content_id: null,
+    root_content_id: null,
+    parent_relation_status: "unresolved" as const,
+  };
+  expect(
+    replyContext(
+      {
+        ...reply,
+        parent_content_id: unknown.content_id,
+        root_content_id: null,
+      },
+      unknown,
+      new Map(),
+    ),
+  ).toBe("回复 U（父链尚未确认）");
+});

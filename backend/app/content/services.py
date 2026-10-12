@@ -923,12 +923,20 @@ class ContentService:
         reply_target_external_id = _optional_identifier(fields, "reply_target_comment_external_id")
         relation_status = fields.get("parent_relation_status")
         if parent_external_id is None:
-            if root_external_id not in {None, external_id} or reply_target_external_id is not None:
-                raise ValueError("root comment has conflicting thread references")
-            if relation_status not in {None, "root"}:
-                raise ValueError("root comment has an invalid parent relation status")
-            root_external_id = external_id
-            relation_status = "root"
+            relation_status = relation_status or "unresolved"
+            if relation_status == "root":
+                if (
+                    root_external_id not in {None, external_id}
+                    or reply_target_external_id is not None
+                ):
+                    raise ValueError("root comment has conflicting thread references")
+                root_external_id = external_id
+            elif (
+                relation_status != "unresolved"
+                or root_external_id is not None
+                or reply_target_external_id is not None
+            ):
+                raise ValueError("unknown comment has conflicting thread references")
         elif (
             root_external_id == external_id
             or reply_target_external_id == external_id
@@ -937,6 +945,15 @@ class ContentService:
             raise ValueError("reply has conflicting thread references")
         else:
             relation_status = relation_status or "unresolved"
+        # Lock the shared post before any comment identity to serialize chain repairs.
+        post = self._find_or_create_content(
+            owner_id=owner_id,
+            source_key=command.admission.source_key,
+            object_type="post",
+            native_scope=command.native_scope,
+            external_id=post_external_id,
+            created_at=now,
+        )
         observation_fields = {
             name: value
             for name, value in fields.items()
@@ -960,14 +977,6 @@ class ContentService:
             now=now,
         )
         source_key = command.admission.source_key
-        post = self._find_or_create_content(
-            owner_id=owner_id,
-            source_key=source_key,
-            object_type="post",
-            native_scope=command.native_scope,
-            external_id=post_external_id,
-            created_at=now,
-        )
         parent = (
             None
             if parent_external_id is None
@@ -1007,6 +1016,42 @@ class ContentService:
             if reply_target_external_id is not None
             else None
         )
+        referenced_ids = {saved.id} | {
+            item.id for item in (parent, root, reply_target) if item is not None
+        }
+        conflicting_reference = self._session.scalar(
+            select(ContentThread.content_id)
+            .where(
+                ContentThread.owner_id == owner_id,
+                ContentThread.post_content_id != post.id,
+                or_(
+                    ContentThread.parent_content_id.in_(referenced_ids),
+                    ContentThread.root_content_id.in_(referenced_ids),
+                    ContentThread.reply_target_content_id.in_(referenced_ids),
+                ),
+            )
+            .limit(1)
+        )
+        if conflicting_reference is not None:
+            raise ValueError("comment thread references a different post")
+        for reference in (parent, root if root is not saved else None, reply_target):
+            if reference is None:
+                continue
+            related = self._session.get(ContentThread, (owner_id, reference.id))
+            if related is not None and related.post_content_id != post.id:
+                raise ValueError("comment thread references a different post")
+        ancestor_id = parent_id
+        seen = {saved.id}
+        while ancestor_id is not None:
+            if ancestor_id in seen:
+                raise ValueError("comment thread would contain a cycle")
+            seen.add(ancestor_id)
+            ancestor = self._session.get(ContentThread, (owner_id, ancestor_id))
+            if ancestor is None:
+                break
+            if ancestor.post_content_id != post.id:
+                raise ValueError("comment thread references a different post")
+            ancestor_id = ancestor.parent_content_id
         inserted = self._session.scalar(
             insert(ContentThread)
             .values(
@@ -1023,26 +1068,75 @@ class ContentService:
             .returning(ContentThread.content_id)
         )
         if inserted is None:
-            existing = self._session.get(ContentThread, (owner_id, saved.id))
-            if (
-                existing is None
-                or existing.post_content_id != post.id
-                or existing.parent_content_id != parent_id
-                or (root is not None and existing.root_content_id not in {None, root.id})
-                or (
-                    reply_target is not None
-                    and existing.reply_target_content_id not in {None, reply_target.id}
+            existing = self._session.scalar(
+                select(ContentThread)
+                .where(
+                    ContentThread.owner_id == owner_id,
+                    ContentThread.content_id == saved.id,
                 )
-            ):
+                .with_for_update()
+            )
+            if existing is None or existing.post_content_id != post.id:
                 raise ValueError("comment thread conflicts with the stored thread")
-            if root is not None and existing.root_content_id is None:
-                existing.root_content_id = root.id
-            if reply_target is not None and existing.reply_target_content_id is None:
-                existing.reply_target_content_id = reply_target.id
-            if relation_status == "observed" or (
-                relation_status == "unavailable" and existing.parent_relation_status == "unresolved"
+            incoming_unknown = parent_id is None and relation_status == "unresolved"
+            stored_unknown = (
+                existing.parent_content_id is None
+                and existing.parent_relation_status == "unresolved"
+            )
+            if not incoming_unknown:
+                if (
+                    (not stored_unknown and existing.parent_content_id != parent_id)
+                    or (root is not None and existing.root_content_id not in {None, root.id})
+                    or (
+                        reply_target is not None
+                        and existing.reply_target_content_id not in {None, reply_target.id}
+                    )
+                ):
+                    raise ValueError("comment thread conflicts with the stored thread")
+                if stored_unknown:
+                    existing.parent_content_id = parent_id
+                    existing.parent_relation_status = relation_status
+                if root is not None and existing.root_content_id is None:
+                    existing.root_content_id = root.id
+                if reply_target is not None and existing.reply_target_content_id is None:
+                    existing.reply_target_content_id = reply_target.id
+                if relation_status == "observed" or (
+                    relation_status == "unavailable"
+                    and existing.parent_relation_status == "unresolved"
+                ):
+                    existing.parent_relation_status = relation_status
+        self._session.flush()
+        # A late placeholder repair must also respect roots declared by descendants.
+        stored_threads = {
+            item.content_id: item
+            for item in self._session.scalars(
+                select(ContentThread).where(
+                    ContentThread.owner_id == owner_id,
+                    ContentThread.post_content_id == post.id,
+                )
+            )
+        }
+        for child in stored_threads.values():
+            if child.root_content_id is None:
+                continue
+            current = child
+            visited: set[UUID] = set()
+            while current.content_id not in visited:
+                visited.add(current.content_id)
+                if current.root_content_id not in {None, child.root_content_id}:
+                    raise ValueError("comment thread conflicts with the known root")
+                if current.parent_content_id is None:
+                    break
+                ancestor = stored_threads.get(current.parent_content_id)
+                if ancestor is None:
+                    break
+                current = ancestor
+            declared_root = stored_threads.get(child.root_content_id)
+            if declared_root is not None and (
+                declared_root.parent_content_id is not None
+                or declared_root.root_content_id not in {None, child.root_content_id}
             ):
-                existing.parent_relation_status = relation_status
+                raise ValueError("comment thread conflicts with the known root")
         if fields.get("body") is not None:
             self._session.execute(
                 update(ContentThread)
@@ -1807,6 +1901,21 @@ class ContentService:
                     current = ancestor
                 return current.content_id
 
+            def confirmed_root(thread: ContentThread) -> UUID | None:
+                current = thread
+                visited: set[UUID] = set()
+                while current.content_id not in visited:
+                    visited.add(current.content_id)
+                    if current.root_content_id is not None:
+                        return current.root_content_id
+                    if current.parent_content_id is None:
+                        return None
+                    ancestor = thread_by_id.get(current.parent_content_id)
+                    if ancestor is None:
+                        return None
+                    current = ancestor
+                return None
+
             groups: dict[UUID, list[ContentThread]] = {}
             for thread in threads:
                 groups.setdefault(resolve_root(thread), []).append(thread)
@@ -1886,17 +1995,23 @@ class ContentService:
                 if root_id is None and parent_id is None:
                     root_thread = (
                         page_thread
-                        if page_thread is not None and page_thread.parent_content_id is None
+                        if page_thread is not None and page_thread.parent_relation_status == "root"
                         else None
                     )
-                    item_root_id = item
+                    item_root_id = (
+                        confirmed_root(page_thread)
+                        if page_thread is not None
+                        else item
+                        if any(member.root_content_id == item for member in groups[item])
+                        else None
+                    )
                     relation_status = "root" if root_thread is not None else "unresolved"
                     parent_content_id = None
                     reply_target_content_id = None
                     has_replies = any(member.content_id != item for member in groups[item])
                 else:
                     assert page_thread is not None
-                    item_root_id = resolve_root(page_thread)
+                    item_root_id = confirmed_root(page_thread)
                     relation_status = page_thread.parent_relation_status
                     parent_content_id = page_thread.parent_content_id
                     reply_target_content_id = page_thread.reply_target_content_id

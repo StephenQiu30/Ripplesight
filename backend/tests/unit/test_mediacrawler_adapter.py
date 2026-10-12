@@ -197,7 +197,37 @@ def test_search_maps_real_shape_and_comments_read_only_cached_output(
     assert len(comments.items) == 1
     assert isinstance(comments.items[0], SourceComment)
     assert comments.items[0].parent_comment_external_id is None
+    assert comments.items[0].root_comment_external_id == comment["comment_id"]
+    assert comments.items[0].parent_relation_status == "root"
     assert attempts == list(range(1, 15))
+
+
+@pytest.mark.parametrize("parent", ["missing", None, "", "0", 0, "303"])
+def test_cached_comments_distinguish_explicit_root_from_missing_parent(
+    tmp_path: Path, parent: str | int | None
+) -> None:
+    row = _video_comment("101")
+    if parent == "missing":
+        row.pop("parent_comment_id")
+    else:
+        row["parent_comment_id"] = parent
+    crawler = _crawler_with_results(tmp_path, [_video("101", None)], [row])
+    adapter = _adapter(tmp_path, crawler)
+    adapter.fetch_page(SearchRequest(source_key="bilibili", query="DeepSeek", page_size=1))
+    page = adapter.fetch_page(
+        CommentsRequest(source_key="bilibili", post_external_id="101", page_size=20)
+    )
+    assert len(page.items) == 1
+    comment = page.items[0]
+    assert isinstance(comment, SourceComment)
+    if parent in {"0", 0}:
+        assert comment.parent_relation_status == "root"
+        assert comment.parent_comment_external_id is None
+        assert comment.root_comment_external_id == "101"
+    else:
+        assert comment.parent_relation_status == "unresolved"
+        assert comment.parent_comment_external_id == ("303" if parent == "303" else None)
+        assert comment.root_comment_external_id is None
 
 
 def test_search_filters_outside_window_and_its_comments(

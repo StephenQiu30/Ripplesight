@@ -367,12 +367,19 @@ class SourceComment(_ContractModel):
     @model_validator(mode="after")
     def validate_comment_relation(self) -> SourceComment:
         if self.parent_comment_external_id is None:
-            if (
-                self.root_comment_external_id not in {None, self.external_id}
-                or self.reply_target_comment_external_id is not None
-                or self.parent_relation_status not in {"root", "unresolved"}
-            ):
-                raise ValueError("root comment has an invalid relation")
+            if self.parent_relation_status == "root":
+                valid = (
+                    self.root_comment_external_id in {None, self.external_id}
+                    and self.reply_target_comment_external_id is None
+                )
+            else:
+                valid = (
+                    self.parent_relation_status == "unresolved"
+                    and self.root_comment_external_id is None
+                    and self.reply_target_comment_external_id is None
+                )
+            if not valid:
+                raise ValueError("comment without a parent must be explicit root or unknown")
         elif (
             self.root_comment_external_id == self.external_id
             or self.reply_target_comment_external_id == self.external_id

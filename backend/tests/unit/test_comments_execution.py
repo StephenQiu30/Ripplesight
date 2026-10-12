@@ -40,6 +40,7 @@ def _comment(
         external_id=identifier,
         post_external_id=post_external_id,
         parent_comment_external_id=parent,
+        parent_relation_status="root" if parent is None else "unresolved",
         author_external_id="alice",
         author_name="Alice",
         published_at=datetime(2026, 9, 25, tzinfo=UTC),
@@ -221,6 +222,7 @@ def test_comment_payload_maps_thread_author_metric_and_text_fields() -> None:
         "external_id": "child",
         "post_external_id": "42",
         "parent_comment_external_id": "root",
+        "parent_relation_status": "unresolved",
         "published_at": "2026-09-25T00:00:00+00:00",
         "like_count": 1,
         "author_external_id": "alice",
@@ -317,3 +319,13 @@ def test_manual_comment_job_scope_reaches_adapter_setup(monkeypatch: pytest.Monk
     configuration.scope["manual_content_id"] = "not-a-uuid"
     with pytest.raises(JobExecutionFailure, match="comments_scope_invalid"):
         executor.execute(message, lease)
+
+
+def test_unknown_parent_does_not_consume_confirmed_root_quota():
+    limiter = CommentTreeLimiter(first_level_limit=1, replies_per_thread_limit=1)
+    unknown = _comment("unknown").model_copy(update={"parent_relation_status": "unresolved"})
+    extra = _comment("extra").model_copy(update={"parent_relation_status": "unresolved"})
+    root = _comment("root")
+    admitted, filtered = limiter.admit((unknown, root, extra))
+    assert admitted == (unknown, root)
+    assert filtered == 1 and limiter.truncated
