@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { PlayIcon } from "lucide-react";
 
 import { runMonitorTopic } from "@/api/jiankongzhuti";
+import { JobCollectionCounts } from "@/components/collection/job-collection-counts";
 import { QueryPlan } from "@/components/monitors/query-plan";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -120,16 +121,18 @@ export function TopicRunResult({
                 </UI.Text>
               )}
               {source.job_ids.map((jobId) => (
-                <Button
-                  asChild
-                  variant="link"
-                  className="self-start px-0"
+                <UI.Content
                   key={jobId}
+                  className="flex min-w-0 flex-col items-start gap-2"
                 >
-                  <Link href={`/jobs/${jobId}`}>
-                    查看任务 <UI.InlineCode>{jobId.slice(0, 8)}</UI.InlineCode>
-                  </Link>
-                </Button>
+                  <Button asChild variant="link" className="self-start px-0">
+                    <Link href={`/jobs/${jobId}`}>
+                      查看任务{" "}
+                      <UI.InlineCode>{jobId.slice(0, 8)}</UI.InlineCode>
+                    </Link>
+                  </Button>
+                  <JobCollectionCounts jobId={jobId} scope="execution" />
+                </UI.Content>
               ))}
               <QueryPlan plan={source.query_plan} />
             </ItemContent>

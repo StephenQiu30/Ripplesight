@@ -23,7 +23,7 @@ import { ApiRequestError } from "@/request";
 import { STATUS_LABELS, capabilityLabel, formatTime } from "./job-presenters";
 
 import { JobHealthSummary } from "./job-health-summary";
-import { JobCollectionCounts } from "./job-collection-counts";
+import { JobCollectionCounts } from "@/components/collection/job-collection-counts";
 
 type HistoryState =
   | { status: "loading" }

@@ -8,7 +8,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import * as UI from "@/components/ui/content";
-import { formatTime } from "../../components/job-presenters";
 
 const outcomes = {
   expired: "租约过期",
@@ -18,14 +17,26 @@ const outcomes = {
   failed: "失败",
 };
 
+function formatTime(value: string): string {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return "未知";
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    dateStyle: "medium",
+    timeStyle: "medium",
+  }).format(timestamp);
+}
+
 /** Show explicit execution receipts without treating a budget cycle as a material delta. */
 export function JobExecutionCounts({
   job,
+  headingLevel = 2,
 }: {
   job: Pick<
     HotKeyAPI.JobStatusView,
     "collection_executions" | "collection_executions_has_more"
   >;
+  headingLevel?: 2 | 4;
 }) {
   const executions = job.collection_executions;
   return (
@@ -34,9 +45,9 @@ export function JobExecutionCounts({
       aria-label="单轮执行差分"
       className="mt-10 flex min-w-0 flex-col gap-4"
     >
-      <UI.Heading level={2}>单轮执行差分</UI.Heading>
+      <UI.Heading level={headingLevel}>单轮执行差分</UI.Heading>
       <UI.Text size="sm" tone="muted">
-        每次实际领取为一执行轮；自动重试或租约恢复也开启新轮，同一预算周期可有多轮执行。仅统计明确归属本轮的保留观察，与此前观察比较，不由累计量相减。累计量与单轮分别读取，不相减或加总。
+        每次实际领取为一执行轮；自动重试或租约恢复也开启新轮，同一预算周期可有多轮执行。仅统计明确归属本轮的回执，按冻结首次身份与精确前驱比较，不由累计量相减。累计量与单轮分别读取，不相减或加总。
       </UI.Text>
       {executions == null ? (
         <UI.Text tone="muted">执行轮次记录未知，旧响应不推断为零轮。</UI.Text>
@@ -62,7 +73,7 @@ export function JobExecutionCounts({
             </CollapsibleTrigger>
             <CollapsibleContent>
               <UI.Content className="mt-4 min-w-0">
-                <UI.Heading level={3}>
+                <UI.Heading level={headingLevel === 2 ? 3 : 5}>
                   第 {execution.execution_epoch} 执行轮计量
                 </UI.Heading>
                 <UI.Text size="sm" tone="muted" className="mt-2">
@@ -82,6 +93,7 @@ export function JobExecutionCounts({
                   <CollectionIdentityCounts
                     row={execution.counts}
                     scope="execution"
+                    headingLevel={headingLevel === 2 ? 4 : 6}
                   />
                 )}
               </UI.Content>

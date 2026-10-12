@@ -53,7 +53,7 @@ export function CollectionIdentityCounts({
       | "unclassified_count"
     >
   >;
-  headingLevel?: 2 | 4;
+  headingLevel?: 2 | 4 | 6;
   scope?: "job" | "execution";
 }) {
   const scopeLabel = scope === "execution" ? "本执行轮" : "本任务";

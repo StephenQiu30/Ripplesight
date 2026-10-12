@@ -54,7 +54,7 @@ describe("job history card", () => {
       const html = renderToStaticMarkup(
         createElement(JobHistoryCard, { job: { ...job, kind } }),
       );
-      expect(html).toContain("查看累计计量");
+      expect(html).toContain("查看累计与逐轮计量");
       expect(html).toContain('aria-expanded="false"');
       expect(html).toContain('href="/jobs/job-1"');
       expect(api.get).not.toHaveBeenCalled();

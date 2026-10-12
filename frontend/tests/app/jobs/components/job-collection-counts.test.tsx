@@ -12,7 +12,7 @@ import { afterEach, expect, it, vi } from "vitest";
 const api = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock("@/api/caijirenwu", () => ({ getCollectionJob: api.get }));
 
-import { JobCollectionCounts } from "@/app/jobs/components/job-collection-counts";
+import { JobCollectionCounts } from "@/components/collection/job-collection-counts";
 import { ApiRequestError } from "@/request";
 
 const counts = {
@@ -34,7 +34,7 @@ function show() {
   return render(<JobCollectionCounts jobId="job-a" kind="keyword.search" />);
 }
 function expand() {
-  fireEvent.click(screen.getByRole("button", { name: "查看累计计量" }));
+  fireEvent.click(screen.getByRole("button", { name: "查看累计与逐轮计量" }));
 }
 function error(status: number) {
   return new ApiRequestError({
@@ -62,7 +62,7 @@ it.each(["keyword.search", "source.comments"] as const)(
     api.get.mockResolvedValue({ ...receipt, kind });
     render(<JobCollectionCounts jobId="job-a" kind={kind} />);
     expect(api.get).not.toHaveBeenCalled();
-    expect(screen.queryByRole("region", { name: "任务累计计量" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "任务计量" })).toBeNull();
     expand();
     const panel = await screen.findByRole("region", { name: "采集计量" });
     expect(api.get).toHaveBeenCalledOnce();
@@ -135,7 +135,7 @@ it("shows loading without fabricated counts", async () => {
   api.get.mockReturnValue(pending.promise);
   show();
   expand();
-  await screen.findByText("正在读取累计计量。");
+  await screen.findByText("正在读取任务计量。");
   expect(screen.queryByRole("region", { name: "采集计量" })).toBeNull();
   pending.resolve(receipt);
   await screen.findByRole("region", { name: "采集计量" });
@@ -147,7 +147,7 @@ it("retries an initial failure without writing or inventing zero", async () => {
     .mockResolvedValueOnce(receipt);
   show();
   expand();
-  await screen.findByText("无法读取累计计量");
+  await screen.findByText("无法读取任务计量");
   expect(screen.queryByRole("region", { name: "采集计量" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "重试计量" }));
   await screen.findByRole("region", { name: "采集计量" });
@@ -210,9 +210,9 @@ it("aborts on close and ignores the old late result when reopened", async () => 
   });
   show();
   expand();
-  await screen.findByText("正在读取累计计量。");
+  await screen.findByText("正在读取任务计量。");
   const signal = api.get.mock.calls[0][1].signal as AbortSignal;
-  fireEvent.click(screen.getByRole("button", { name: "收起累计计量" }));
+  fireEvent.click(screen.getByRole("button", { name: "收起累计与逐轮计量" }));
   expect(signal.aborted).toBe(true);
   expand();
   await screen.findByText("27 条");
@@ -226,7 +226,7 @@ it("aborts on unmount", async () => {
   api.get.mockReturnValue(new Promise(() => {}));
   const view = show();
   expand();
-  await screen.findByText("正在读取累计计量。");
+  await screen.findByText("正在读取任务计量。");
   const signal = api.get.mock.calls[0][1].signal as AbortSignal;
   view.unmount();
   expect(signal.aborted).toBe(true);
@@ -241,7 +241,7 @@ it("isolates a changed task from the old late response", async () => {
   });
   const view = show();
   expand();
-  await screen.findByText("正在读取累计计量。");
+  await screen.findByText("正在读取任务计量。");
   const signal = api.get.mock.calls[0][1].signal as AbortSignal;
   view.rerender(<JobCollectionCounts jobId="job-b" kind="keyword.search" />);
   await screen.findByText("27 条");
@@ -272,11 +272,11 @@ it("keeps multiple cards independent and reads only the explicitly opened card",
       <JobCollectionCounts jobId="job-b" kind="keyword.search" />
     </>,
   );
-  fireEvent.click(screen.getAllByRole("button", { name: "查看累计计量" })[1]);
+  fireEvent.click(
+    screen.getAllByRole("button", { name: "查看累计与逐轮计量" })[1],
+  );
   await screen.findByRole("region", { name: "采集计量" });
   expect(api.get).toHaveBeenCalledOnce();
   expect(api.get.mock.calls[0][0]).toEqual({ job_id: "job-b" });
-  expect(screen.getAllByRole("region", { name: "任务累计计量" })).toHaveLength(
-    1,
-  );
+  expect(screen.getAllByRole("region", { name: "任务计量" })).toHaveLength(1);
 });

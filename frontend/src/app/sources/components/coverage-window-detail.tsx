@@ -3,6 +3,7 @@ import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
 import Link from "next/link";
 
+import { JobCollectionCounts } from "@/components/collection/job-collection-counts";
 import { QueryPlan } from "@/components/monitors/query-plan";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -164,6 +165,15 @@ export function CoverageWindowDetail({
           <Link href={`/jobs/${row.job_id}`}>打开关联任务</Link>
         </Button>
       )}
+      {row.job_id ? (
+        <UI.Content className="mt-4 min-w-0">
+          <JobCollectionCounts
+            key={`${row.window_id}:${row.job_id}`}
+            jobId={row.job_id}
+            scope="execution"
+          />
+        </UI.Content>
+      ) : null}
       <UI.Content as="dl" className="mt-8 grid gap-x-6 gap-y-5 sm:grid-cols-2">
         <Fact label="窗口起点" value={coverageTime(row.window_start)} />
         <Fact label="窗口终点" value={coverageTime(row.window_end)} />

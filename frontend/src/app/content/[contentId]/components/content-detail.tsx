@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { getContentRecord } from "@/api/zuopinziliao";
+import { JobCollectionCounts } from "@/components/collection/job-collection-counts";
 import { AnnotationPanel } from "@/app/content/[contentId]/components/annotation-panel";
 import { CommentThreadList } from "@/app/content/[contentId]/components/comment-thread-list";
 import { ContentSources } from "@/app/content/[contentId]/components/content-sources";
@@ -366,6 +367,43 @@ function VisibilityHistory({
   );
 }
 
+export function ContentDiscoveryList({
+  discoveries,
+}: {
+  discoveries: HotKeyAPI.ContentRecordDetailView["discoveries"];
+}) {
+  return (
+    <UI.Content className="mt-6 flex flex-col gap-6">
+      {discoveries.map((discovery) => (
+        <UI.Content as="article" key={discovery.job_id} className="py-4">
+          <UI.Content className="flex flex-wrap items-start justify-between gap-3">
+            <UI.Content className="min-w-0">
+              <UI.Heading level={3} className="font-medium break-words">
+                {discovery.configuration_ref}
+              </UI.Heading>
+              <UI.Text className="text-muted-foreground mt-1 text-xs">
+                配置版本 v{discovery.configuration_version}
+              </UI.Text>
+              <UI.Text className="text-muted-foreground mt-1 text-xs">
+                {scanKindLabel(discovery.scan_kind)}
+              </UI.Text>
+            </UI.Content>
+            <Badge variant="outline">
+              {formatTime(discovery.first_observed_at)}
+            </Badge>
+          </UI.Content>
+          <Button asChild variant="ghost" size="sm" className="mt-3">
+            <Link href={`/jobs/${discovery.job_id}`}>查看采集任务</Link>
+          </Button>
+          <UI.Content className="mt-3 min-w-0">
+            <JobCollectionCounts jobId={discovery.job_id} scope="execution" />
+          </UI.Content>
+        </UI.Content>
+      ))}
+    </UI.Content>
+  );
+}
+
 export function ContentDetail({ contentId }: ContentDetailProps) {
   const [state, setState] = useState<DetailState>({ status: "loading" });
   const [retryToken, setRetryToken] = useState(0);
@@ -653,35 +691,7 @@ export function ContentDetail({ contentId }: ContentDetailProps) {
             <UI.Text className="text-muted-foreground mt-2 text-sm">
               同一作品可由多个任务发现；以下仅显示仍有可读观察的任务关系。
             </UI.Text>
-            <UI.Content className="mt-6 flex flex-col gap-6">
-              {content.discoveries.map((discovery) => (
-                <UI.Content
-                  as="article"
-                  key={discovery.job_id}
-                  className="py-4"
-                >
-                  <UI.Content className="flex flex-wrap items-start justify-between gap-3">
-                    <UI.Content className="min-w-0">
-                      <UI.Heading level={3} className="font-medium break-words">
-                        {discovery.configuration_ref}
-                      </UI.Heading>
-                      <UI.Text className="text-muted-foreground mt-1 text-xs">
-                        配置版本 v{discovery.configuration_version}
-                      </UI.Text>
-                      <UI.Text className="text-muted-foreground mt-1 text-xs">
-                        {scanKindLabel(discovery.scan_kind)}
-                      </UI.Text>
-                    </UI.Content>
-                    <Badge variant="outline">
-                      {formatTime(discovery.first_observed_at)}
-                    </Badge>
-                  </UI.Content>
-                  <Button asChild variant="ghost" size="sm" className="mt-3">
-                    <Link href={`/jobs/${discovery.job_id}`}>查看采集任务</Link>
-                  </Button>
-                </UI.Content>
-              ))}
-            </UI.Content>
+            <ContentDiscoveryList discoveries={content.discoveries} />
           </UI.Content>
         </TabsContent>
       </Tabs>

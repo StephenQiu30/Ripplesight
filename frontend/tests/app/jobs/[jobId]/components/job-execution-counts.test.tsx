@@ -7,7 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
-import { JobExecutionCounts } from "@/app/jobs/[jobId]/components/job-execution-counts";
+import { JobExecutionCounts } from "@/components/collection/execution-counts";
 
 const counts: HotKeyAPI.JobCollectionCountsView = {
   identity_count_basis: "frozen_receipt_identity_v2",

@@ -79,6 +79,8 @@ Web 外壳使用 `BasicLayout → PageContainer`：前者管理侧栏、移动�
 
 单轮执行差分复用job_attempts的job+lease_epoch边界，新领取标记collection_counts_tracked，并以可空collection_observed_count保存已原子提交页面的上游增量。content_observations.execution_epoch可空外键绑定实际执行；重放不改原归属，旧记录不回填。content一次历史查询按明确归属投影最近20轮身份计量，jobs只读输出，Web与整个任务累计分别展示。规范SQL仅用于全新独立测试库，业务库升级遵守§6。
 
+列表逐轮摘要复用`components/collection/job-collection-counts.tsx`的显式GET与取消/失权边界，单轮展示统一在`components/collection/execution-counts.tsx`，任务详情消费同一组件。任务记录、覆盖窗口、受理任务及发现关系只用明确任务引用；不新增采集、计量查询或账本。
+
 报告列表与详情共用全部冻结输入许可检查，导出状态与下载同样复核当前许可；事件成员列表与计数只包含当前可读集合，partial不携带受限成员引用或数量。
 
 事件修订差分由events领域在既有分组评估记录的可空JSONB结果中原子冻结，关联实际事件修订、此前修订及新成员/事实身份；不建立第二份材料或事实账本。事实读取在当前许可下投影差分，统计由程序从冻结分类计算。旧记录无结果不倒填；模型补证/重复判断及实际可读证据分别核对。

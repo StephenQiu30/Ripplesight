@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/collapsible";
 import { PageState } from "@/components/system/page-state";
 import { QueryPlan } from "@/components/monitors/query-plan";
-import { JobExecutionCounts } from "./job-execution-counts";
+import { JobExecutionCounts } from "@/components/collection/execution-counts";
 import { CollectionIdentityCounts } from "@/components/collection/identity-counts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
