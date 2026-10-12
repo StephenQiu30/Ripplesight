@@ -220,3 +220,10 @@ CI 验证当前锁定运行栈。frontend执行完整静态检查、交互回归
 可靠首次计量使用content领域的`content_identity_history`：仅真实新建账户同事务登记完整起点，FK账户并随账户删除；缺登记/旧账户一律未知。该表仅保留owner、complete/unknown与登记/失效时间，不含对象ID、原生键、URL或哈希。任一完整对象清理使owner级历史标记永久变unknown，覆盖跨profile强原生别名，配置/连接变化不得复位。写观察与清理先取相同owner事务锁，再取原生身份锁；`content_records.last_collection_observation_id`记录精确前序，即使前序删除也不回退到更早观察。观察冻结计量依据版本、首次身份状态和前序ID，重放保持原始回执。结构升级遵守§6，不能把缺历史默认为首次。
 
 采集持久化、正文请求计量和精确观察清理均先取owner历史事务锁，再锁Job/run、来源准入及原生身份；owner锁不跨网络请求持有。采集计量合同为`frozen_receipt_identity_v2`，仅输出原始观察、唯一身份及四类互斥计数，删除旧“观察数减新增”兼容字段。
+
+
+### CORE-01 邮件验证事务方案
+
+邮件挑战真源迁至PostgreSQL的`identity_email_challenges`，与账户、绑定、凭据变更及新会话同事务消费。Redis邮件数据仅为发送/验证限流；OAuth状态/PKCE仍沿用独立存储，不能据此声称OAuth事务完成。领域实现位于identity/email_challenges.py，Router仅传入浏览器绑定，ORM及唯一DDL同步维护。匿名绑定HttpOnly nonce，认证操作绑定owner/session/credential_version；统一锁序挑战→账户→会话，SMTP不跨事务持锁。重发UPSERT、错误计数提交及业务失败回滚合同见[切片SPEC](docs/spec/CORE-01-邮件挑战与身份事务.md)。过期行操作时有界清理，定期清理与保留期运行验收仍待完成。旧Redis邮件挑战切换后失效，不双写真源；业务库部署与升级仍遵守§6，当前仅改唯一schema和独立测试库。
+
+开发追踪增加按切片建立的docs/spec：先评审并固定SPEC Git版本，再按PLAN实施。职责与模板以[文档入口](docs/index.md#切片开发规格sdd)为唯一规范。
