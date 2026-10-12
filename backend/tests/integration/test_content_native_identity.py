@@ -151,10 +151,10 @@ def test_two_approved_routes_share_identity_version_but_not_observation_or_permi
                 s, owner_id=owner, references=(ra, rb), now=NOW
             )
             assert ra not in readings and readings[rb].source_key == pb.source_key
-        detail = ContentService(s, clock=lambda: NOW).get_content(owner_id=owner, content_id=fb[0])
-        assert detail.source_key == pb.source_key
-        assert detail.native_scope == f"editorial-profile:{pb.id}"
-        assert [x.observation_id for x in detail.readable_sources] == [fb[2]]
+        # The complete detail still carries A's visibility history. B's readable
+        # alias cannot authorize that withdrawn original history.
+        with pytest.raises(ApplicationError, match="resource_not_found"):
+            ContentService(s, clock=lambda: NOW).get_content(owner_id=owner, content_id=fb[0])
         with s.begin():
             purge_observation_dependants_in_transaction(
                 s, owner_id=owner, observation_id=fa[2], now=NOW
@@ -169,12 +169,14 @@ def test_two_approved_routes_share_identity_version_but_not_observation_or_permi
                 )
                 is not None
             )
-        assert (
-            ContentService(s, clock=lambda: NOW)
-            .get_content(owner_id=owner, content_id=fb[0])
-            .latest_observation.id
-            == fb[2]
-        )
+        # Cleanup deliberately preserves visibility history. Its missing A
+        # witness keeps the complete detail unknown, while B itself survives.
+        with pytest.raises(ApplicationError, match="resource_not_found"):
+            ContentService(s, clock=lambda: NOW).get_content(owner_id=owner, content_id=fb[0])
+        with s.begin():
+            assert rb in load_event_member_content_in_transaction(
+                s, owner_id=owner, references=(rb,), now=NOW
+            )
 
 
 @pytest.mark.parametrize("grant,weak", [(False, False), (True, True)])

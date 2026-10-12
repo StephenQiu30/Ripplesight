@@ -20,6 +20,8 @@ from xml.etree.ElementTree import ParseError
 import httpx
 from pydantic import ValidationError
 
+from core.errors import AuthorityUnavailableError
+
 
 class JobProcessOutcome(StrEnum):
     COMPLETED = "completed"
@@ -176,6 +178,8 @@ class JobProcessSupervisor:
                                 "parse_error",
                                 "network_error",
                                 "job_unhandled_exception",
+                                "authority_unavailable_transient",
+                                "authority_unavailable_configuration",
                             }
                             or message.safe_summary is None
                             or (
@@ -282,6 +286,8 @@ def _run_child(
 
 
 def _classify_child_exception(error: Exception) -> tuple[str, str]:
+    if isinstance(error, AuthorityUnavailableError):
+        return f"authority_unavailable_{error.kind}", "独立访问权威不可用"
     if isinstance(error, (JSONDecodeError, UnicodeError, ParseError, SyntaxError)):
         return "parse_error", "子进程解析数据失败"
     if isinstance(error, (ValidationError, ValueError)):

@@ -6,13 +6,14 @@ import re
 from base64 import b64decode, urlsafe_b64encode
 from binascii import Error as Base64Error
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4, uuid5
 
 import structlog
+from pydantic import ValidationError
 from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
@@ -20,6 +21,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from analysis.prompts import ANALYSIS_PROMPT_VERSION
 from analysis.reads import (
+    load_annotation_manifests_in_transaction,
     load_content_annotations_in_transaction,
     load_current_annotation_states_in_transaction,
 )
@@ -33,6 +35,12 @@ from connections.services import (
     AppliedSourcePreset,
     SourceCapabilityEvidenceService,
     load_applied_source_presets_in_transaction,
+)
+from content.authority_reading import (
+    ContentAuthorityProof,
+    content_read_snapshot,
+    freeze_content_authority_in_transaction,
+    require_unowned_transaction,
 )
 from content.collection_counts import (
     classify_collection_execution_identities,
@@ -103,7 +111,9 @@ from content.topic_matches import readable_editorial_topic_matches_in_transactio
 from content.version_inputs import (
     observations_readable_in_transaction,
 )
-from core.errors import ApplicationError
+from core.config import Settings
+from core.errors import ApplicationError, AuthorityUnavailableError
+from evidence.journal import create_journal_reader
 from evidence.schemas import CleanupTargetKind, CleanupTargetSpec
 from evidence.services import (
     LifecycleService,
@@ -1493,98 +1503,252 @@ class ContentService:
             return self._visibility_view(visibility)
 
     def get_content(self, *, owner_id: UUID, content_id: UUID) -> ContentRecordDetailView:
+        """Read the complete detail only after lock-free authority and fresh ALL recheck."""
+        engine = require_unowned_transaction(self._session)
+        settings = self._session.info.get("settings")
+        if not isinstance(settings, Settings):
+            try:
+                settings = Settings()
+            except ValidationError as error:
+                raise AuthorityUnavailableError() from error
+        journal = create_journal_reader(settings, source_database_url=engine.url)
+        try:
+            for _attempt in range(3):
+                with content_read_snapshot(self._session):
+                    detail, proof = self._content_detail_candidate_in_transaction(
+                        owner_id=owner_id, content_id=content_id
+                    )
+                if journal.denied_resources(owner_id=owner_id, resources=proof.resources):
+                    raise ApplicationError("resource_not_found")
+                with content_read_snapshot(self._session):
+                    current, current_proof = self._content_detail_candidate_in_transaction(
+                        owner_id=owner_id, content_id=content_id
+                    )
+                    if current_proof == proof and current == detail:
+                        return current
+            raise AuthorityUnavailableError()
+        finally:
+            journal.close()
+
+    def _content_detail_candidate_in_transaction(
+        self, *, owner_id: UUID, content_id: UUID
+    ) -> tuple[ContentRecordDetailView, ContentAuthorityProof]:
         now = self._clock()
-        self._session.rollback()
-        with self._session.begin():
-            content = self._session.scalar(
-                select(ContentRecord).where(
-                    ContentRecord.owner_id == owner_id,
-                    ContentRecord.id == content_id,
-                )
+        content = self._session.scalar(
+            select(ContentRecord).where(
+                ContentRecord.owner_id == owner_id,
+                ContentRecord.id == content_id,
             )
-            if content is None:
+        )
+        if content is None:
+            raise ApplicationError("resource_not_found")
+        projected = self._readable_observations(
+            owner_id=owner_id,
+            content_ids={content.id},
+            now=now,
+        ).get(content.id)
+        if projected is None:
+            raise ApplicationError("resource_not_found")
+        observation, readable_job_ids = projected
+        discoveries = self._discoveries(owner_id, content.id, readable_job_ids)
+        readable_observations = self._readable_observation_history(
+            owner_id=owner_id,
+            content_id=content.id,
+            now=now,
+        )
+        observation_contexts = load_observation_contexts_in_transaction(
+            self._session,
+            owner_id=owner_id,
+            observation_ids={item.id for item in readable_observations},
+        )
+        contexts: dict[UUID, ContentJobContext] = {}
+        for item in readable_observations:
+            exact = observation_contexts.get(item.id)
+            if exact is None or (item.job_id in contexts and contexts[item.job_id] != exact.job):
                 raise ApplicationError("resource_not_found")
-            projected = self._readable_observations(
+            contexts[item.job_id] = exact.job
+        version_views = self._content_version_views(
+            owner_id=owner_id,
+            content_observations=[(content, item) for item in readable_observations],
+            now=now,
+        )
+        visibility_history = self._visibility_history(
+            owner_id=owner_id,
+            content_id=content.id,
+        )
+        version_history = self._version_history(readable_observations, version_views)
+        annotations = load_content_annotations_in_transaction(
+            self._session,
+            owner_id=owner_id,
+            content_id=content.id,
+            readable_version_ids={item.content_version.id for item in version_history},
+            now=now,
+        )
+        topic_ids = {item.topic_id for item in annotations}
+        topic_ids.update(
+            self._hotlist_topic_ids(
                 owner_id=owner_id,
-                content_ids={content.id},
-                now=now,
-            ).get(content.id)
-            if projected is None:
+                readable_jobs={content.id: readable_job_ids},
+            ).get(content.id, set())
+        )
+        for discovery in discoveries:
+            context = contexts.get(discovery.job_id)
+            if context is not None and context.configuration_ref.startswith("topic:"):
+                try:
+                    topic_ids.add(UUID(context.configuration_ref.removeprefix("topic:")))
+                except ValueError:
+                    continue
+        topic_ids.update(
+            item.topic_id
+            for item in readable_editorial_topic_matches_in_transaction(
+                self._session, owner_id=owner_id, content_ids={content.id}, now=now
+            )
+        )
+        topic_contexts = load_content_topic_contexts_in_transaction(
+            self._session, owner_id=owner_id, topic_ids=topic_ids
+        )
+        analysis_topics = [
+            ContentAnalysisTopicView(
+                topic_id=topic.topic_id,
+                topic_name=topic.name,
+                current_rule_version=topic.current_version,
+            )
+            for topic in sorted(
+                topic_contexts.values(), key=lambda item: (item.name, item.topic_id)
+            )
+        ]
+        detail = self._detail_view(
+            content=content,
+            observation=observation,
+            content_version=self._selected_version_view(observation, version_views),
+            current_visibility=(visibility_history[0] if visibility_history else None),
+            discoveries=discoveries,
+            job_contexts=contexts,
+            version_history=version_history,
+            visibility_history=visibility_history,
+            analysis_topics=analysis_topics,
+            annotations=annotations,
+        )
+        proof = self._freeze_detail_authority_in_transaction(
+            owner_id=owner_id, detail=detail, observations=readable_observations, now=self._clock()
+        )
+        return detail, proof
+
+    def _freeze_detail_authority_in_transaction(
+        self,
+        *,
+        owner_id: UUID,
+        detail: ContentRecordDetailView,
+        observations: list[ContentObservation],
+        now: datetime,
+    ) -> ContentAuthorityProof:
+        roots = {item.id for item in observations} | {detail.latest_observation.id}
+        contexts = load_observation_contexts_in_transaction(
+            self._session, owner_id=owner_id, observation_ids=roots
+        )
+        if set(contexts) != roots or any(
+            context.input_basis is None for context in contexts.values()
+        ):
+            raise ApplicationError("resource_not_found")
+        # A discovery is evidence of this Job's actual observation, not another source alias.
+        for discovery in detail.discoveries:
+            matching = [item for item in observations if item.job_id == discovery.job_id]
+            if (
+                not matching
+                or discovery.first_observed_at != min(item.observed_at for item in matching)
+                or any(
+                    (
+                        discovery.configuration_ref,
+                        discovery.configuration_version,
+                        discovery.scan_kind,
+                    )
+                    != (
+                        contexts[item.id].job.configuration_ref,
+                        contexts[item.id].job.configuration_version,
+                        contexts[item.id].job.scan_kind,
+                    )
+                    for item in matching
+                )
+            ):
                 raise ApplicationError("resource_not_found")
-            observation, readable_job_ids = projected
-            discoveries = self._discoveries(owner_id, content.id, readable_job_ids)
-            contexts = load_content_job_contexts(
-                self._session,
-                owner_id=owner_id,
-                job_ids={item.job_id for item in discoveries},
-            )
-            readable_observations = self._readable_observation_history(
-                owner_id=owner_id,
-                content_id=content.id,
-                now=now,
-            )
-            version_views = self._content_version_views(
-                owner_id=owner_id,
-                content_observations=[(content, item) for item in readable_observations],
-                now=now,
-            )
-            visibility_history = self._visibility_history(
-                owner_id=owner_id,
-                content_id=content.id,
-            )
-            version_history = self._version_history(readable_observations, version_views)
-            annotations = load_content_annotations_in_transaction(
-                self._session,
-                owner_id=owner_id,
-                content_id=content.id,
-                readable_version_ids={item.content_version.id for item in version_history},
-                now=now,
-            )
-            topic_ids = {item.topic_id for item in annotations}
-            topic_ids.update(
-                self._hotlist_topic_ids(
-                    owner_id=owner_id,
-                    readable_jobs={content.id: readable_job_ids},
-                ).get(content.id, set())
-            )
-            for discovery in discoveries:
-                context = contexts.get(discovery.job_id)
-                if context is not None and context.configuration_ref.startswith("topic:"):
-                    try:
-                        topic_ids.add(UUID(context.configuration_ref.removeprefix("topic:")))
-                    except ValueError:
-                        continue
-            topic_ids.update(
-                item.topic_id
-                for item in readable_editorial_topic_matches_in_transaction(
-                    self._session, owner_id=owner_id, content_ids={content.id}, now=now
+        visibility = tuple(
+            self._session.scalars(
+                select(ContentVisibilityObservation)
+                .where(
+                    ContentVisibilityObservation.owner_id == owner_id,
+                    ContentVisibilityObservation.content_id == detail.id,
                 )
+                .order_by(ContentVisibilityObservation.id)
             )
-            topic_contexts = load_content_topic_contexts_in_transaction(
-                self._session, owner_id=owner_id, topic_ids=topic_ids
-            )
-            analysis_topics = [
-                ContentAnalysisTopicView(
-                    topic_id=topic.topic_id,
-                    topic_name=topic.name,
-                    current_rule_version=topic.current_version,
+        )
+        for item in visibility:
+            if (
+                item.status != "visible"
+                or item.basis != "content_returned"
+                or not any(
+                    observed.content_id == item.content_id
+                    and observed.job_id == item.job_id
+                    and observed.source_operation_id == item.source_operation_id
+                    and observed.observed_at == item.observed_at
+                    and observed.received_at == item.received_at
+                    for observed in observations
                 )
-                for topic in sorted(
-                    topic_contexts.values(), key=lambda item: (item.name, item.topic_id)
-                )
-            ]
-            return self._detail_view(
-                content=content,
-                observation=observation,
-                content_version=self._selected_version_view(observation, version_views),
-                current_visibility=(visibility_history[0] if visibility_history else None),
-                discoveries=discoveries,
-                job_contexts=contexts,
-                version_history=version_history,
-                visibility_history=visibility_history,
-                analysis_topics=analysis_topics,
-                annotations=annotations,
-            )
+            ):
+                raise ApplicationError("resource_not_found")
+        if self._hotlist_topic_ids(
+            owner_id=owner_id, readable_jobs={detail.id: {item.job_id for item in observations}}
+        ).get(detail.id):
+            raise ApplicationError("resource_not_found")
+        matches = readable_editorial_topic_matches_in_transaction(
+            self._session, owner_id=owner_id, content_ids={detail.id}, now=now
+        )
+        for match in matches:
+            if match.observation_id not in match.input_observation_ids:
+                raise ApplicationError("resource_not_found")
+            roots.update(match.input_observation_ids)
+        manifests = load_annotation_manifests_in_transaction(
+            self._session,
+            owner_id=owner_id,
+            annotation_ids={item.id for item in detail.annotations},
+            now=now,
+        )
+        for manifest in manifests.values():
+            roots.update(manifest.input_observation_ids)
+        for version in detail.version_history:
+            for relation in version.content_version.relations:
+                if relation.target_content_id is not None:
+                    target = self._readable_observations(
+                        owner_id=owner_id, content_ids={relation.target_content_id}, now=now
+                    ).get(relation.target_content_id)
+                    if target is None:
+                        raise ApplicationError("resource_not_found")
+                    roots.update(
+                        item.id
+                        for item in self._readable_observation_history(
+                            owner_id=owner_id, content_id=relation.target_content_id, now=now
+                        )
+                    )
+        return freeze_content_authority_in_transaction(
+            self._session,
+            owner_id=owner_id,
+            roots=roots,
+            additional_resources={("content_annotation", identifier) for identifier in manifests},
+            output={
+                "detail": detail.model_dump(mode="json"),
+                "annotation_inputs": {
+                    str(key): value.model_dump(mode="json") for key, value in manifests.items()
+                },
+                "matches": [asdict(match) for match in matches],
+                "visibility": [
+                    {
+                        column.name: getattr(item, column.name)
+                        for column in ContentVisibilityObservation.__table__.columns
+                    }
+                    for item in visibility
+                ],
+            },
+            now=now,
+        )
 
     def list_contents(
         self,
@@ -2688,23 +2852,37 @@ class ContentService:
                 )
             ).all()
         )
-        content_by_id = {content.id: content for content, _ in content_observations}
+        contexts = load_observation_contexts_in_transaction(
+            self._session,
+            owner_id=owner_id,
+            observation_ids={item.id for _, item in content_observations},
+        )
+        version_sources: dict[UUID, set[str]] = {}
+        for _, observed in content_observations:
+            context = contexts.get(observed.id)
+            if context is not None and observed.content_version_id is not None:
+                version_sources.setdefault(observed.content_version_id, set()).add(
+                    context.source_key
+                )
         relation_version = {version.id: version for version in versions}
         target_external_ids = {relation.target_external_id for relation in relations}
-        target_source_keys = {
-            content_by_id[version.content_id].source_key
-            for version in versions
-            if version.content_id in content_by_id
-        }
+        target_source_keys = set().union(*version_sources.values()) if version_sources else set()
         target_candidates = (
             list(
                 self._session.scalars(
-                    select(ContentRecord).where(
+                    select(ContentRecord)
+                    .join(
+                        ContentObservation,
+                        (ContentObservation.owner_id == ContentRecord.owner_id)
+                        & (ContentObservation.content_id == ContentRecord.id),
+                    )
+                    .where(
                         ContentRecord.owner_id == owner_id,
                         ContentRecord.object_type == "post",
-                        ContentRecord.source_key.in_(target_source_keys),
-                        ContentRecord.external_id.in_(target_external_ids),
+                        ContentObservation.source_key.in_(target_source_keys),
+                        ContentObservation.source_external_id.in_(target_external_ids),
                     )
+                    .distinct()
                 ).all()
             )
             if target_external_ids and target_source_keys
@@ -2717,15 +2895,24 @@ class ContentService:
                 now=now,
             )
         )
-        readable_targets = {
-            (
-                candidate.source_key,
-                candidate.native_scope,
-                candidate.external_id,
-            ): candidate.id
-            for candidate in target_candidates
-            if candidate.id in readable_target_ids
-        }
+        readable_targets: dict[tuple[str, str | None, str], UUID] = {}
+        ambiguous_targets: set[tuple[str, str | None, str]] = set()
+        for candidate in target_candidates:
+            if candidate.id not in readable_target_ids:
+                continue
+            history = self._readable_observation_history(
+                owner_id=owner_id, content_id=candidate.id, now=now
+            )
+            target_contexts = load_observation_contexts_in_transaction(
+                self._session, owner_id=owner_id, observation_ids={item.id for item in history}
+            )
+            for context in target_contexts.values():
+                key = (context.source_key, context.native_scope, context.external_id)
+                if key in readable_targets and readable_targets[key] != candidate.id:
+                    ambiguous_targets.add(key)
+                readable_targets[key] = candidate.id
+        for key in ambiguous_targets:
+            readable_targets.pop(key, None)
         grouped_relations: dict[UUID, list[ContentVersionRelationView]] = {}
         relation_order = {
             ContentRelationType.QUOTE.value: 0,
@@ -2736,7 +2923,10 @@ class ContentService:
             key=lambda item: (relation_order[item.relation_type], item.id),
         ):
             version = relation_version[relation.content_version_id]
-            source_key = content_by_id[version.content_id].source_key
+            sources = version_sources.get(version.id, set())
+            if len(sources) != 1:
+                raise ApplicationError("resource_not_found")
+            source_key = next(iter(sources))
             grouped_relations.setdefault(relation.content_version_id, []).append(
                 ContentVersionRelationView(
                     relation_type=ContentRelationType(relation.relation_type),

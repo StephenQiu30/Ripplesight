@@ -262,6 +262,26 @@ def load_content_annotations_in_transaction(
     return [ContentAnnotationReadView.model_validate(row) for row in rows if row.id in readable]
 
 
+def load_annotation_manifests_in_transaction(
+    session: Session, *, owner_id: UUID, annotation_ids: set[UUID], now: datetime
+) -> dict[UUID, AnalysisObservationManifest]:
+    """Expose exact valid inputs for a domain's complete authority candidate."""
+    if not session.in_transaction() or len(annotation_ids) > 2000:
+        raise ApplicationError("editorial_material_unavailable")
+    rows = tuple(
+        session.scalars(
+            select(ContentAnnotation)
+            .where(ContentAnnotation.owner_id == owner_id, ContentAnnotation.id.in_(annotation_ids))
+            .execution_options(populate_existing=True)
+        )
+    )
+    if {row.id for row in rows} != annotation_ids or readable_annotation_ids_in_transaction(
+        session, annotations=rows, now=now
+    ) != annotation_ids:
+        raise ApplicationError("editorial_material_unavailable")
+    return {row.id: AnalysisObservationManifest.model_validate(row.input_manifest) for row in rows}
+
+
 def load_report_annotation_observation_ids_in_transaction(
     session: Session,
     *,

@@ -18,6 +18,7 @@ from jobs.schemas import JobFailureCategory
 from tests.process_targets import (
     _exit_without_result,
     _ignore_terminate_and_wait,
+    _raise_authority_error,
     _raise_network_error,
     _raise_owned_value_error,
     _raise_parse_error,
@@ -38,6 +39,24 @@ from worker.execution import (
     JobProcessSupervisor,
 )
 from worker.messaging import MessageDeferredError
+
+
+@pytest.mark.parametrize("kind", ["transient", "configuration"])
+def test_spawned_authority_failure_keeps_safe_category_and_bounded_retry(kind):
+    from core.errors import AuthorityUnavailableError
+
+    now = datetime.now(UTC)
+    with pytest.raises(JobProcessChildError) as captured:
+        _supervisor().run(
+            _raise_authority_error, (kind,), cancellation_requested=lambda: False, stopping=Event()
+        )
+    failure = worker_app._child_exception_failure(captured.value, occurred_at=now)
+    direct = worker_app._authority_failure(AuthorityUnavailableError(kind), occurred_at=now)
+    assert failure == direct
+    assert failure.error_code == "authority_unavailable"
+    assert failure.retry_at == (now + timedelta(seconds=30) if kind == "transient" else None)
+    assert failure.max_attempts == (3 if kind == "transient" else None)
+    assert "private" not in str(captured.value) and "private" not in str(failure)
 
 
 def _supervisor(*, execution_timeout_seconds: float = 2.0) -> JobProcessSupervisor:

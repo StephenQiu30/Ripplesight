@@ -14,7 +14,7 @@ from fastapi.exceptions import RequestValidationError, ResponseValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from core.errors import ERROR_CATEGORIES, ApplicationError, ErrorCategory
+from core.errors import ERROR_CATEGORIES, ApplicationError, AuthorityUnavailableError, ErrorCategory
 from core.schemas import ErrorView, ValidationErrorItem
 
 
@@ -427,6 +427,16 @@ def _validate_application_error_map() -> None:
 
 def register_exception_handlers(app: FastAPI) -> None:
     _validate_application_error_map()
+
+    @app.exception_handler(AuthorityUnavailableError)
+    async def authority_error_handler(
+        request: Request, error: AuthorityUnavailableError
+    ) -> JSONResponse:
+        return _error_response(
+            request,
+            PublicError(503, error.code, "独立访问权威不可用; 请核对配置或等待恢复"),
+            headers={"retry-after": "30"} if error.kind == "transient" else None,
+        )
 
     @app.exception_handler(ApplicationError)
     async def application_error_handler(

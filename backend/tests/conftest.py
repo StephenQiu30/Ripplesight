@@ -1,5 +1,4 @@
 import os
-import re
 import sys
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -11,7 +10,6 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pwdlib import PasswordHash
 from sqlalchemy import create_engine, text
-from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from content.identity_history import register_new_owner_history_in_transaction
@@ -20,6 +18,7 @@ from db.metadata import Base
 from identity.models import IdentityUser
 from identity.services import IdentityService
 from main import create_app
+from tests.journal_support import JournalContext, validate_test_database_url
 
 _BACKEND_ROOT = str(Path(__file__).resolve().parent.parent)
 if _BACKEND_ROOT not in sys.path:
@@ -77,17 +76,6 @@ def authenticated_headers(client: TestClient) -> dict[str, str]:
     return {"X-HotKey-CSRF": client.cookies["hotkey_csrf"], "Origin": client.headers["Origin"]}
 
 
-def validate_test_database_url(value: str) -> None:
-    parsed = make_url(value)
-    if (
-        parsed.drivername != "postgresql+psycopg"
-        or parsed.host not in {"127.0.0.1", "localhost", "::1"}
-        or not re.fullmatch(r"hotkey_test_[a-z0-9_]+", parsed.database or "")
-        or parsed.query
-    ):
-        raise ValueError("integration tests require a local isolated hotkey_test_<suffix> database")
-
-
 def pytest_sessionstart(session: pytest.Session) -> None:
     value = os.getenv("HOTKEY_TEST_DATABASE_URL")
     if value is not None:
@@ -100,6 +88,26 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 @pytest.fixture(autouse=True)
 def isolated_test_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(Settings.model_config, "env_file", None)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def runtime_journal() -> Iterator[JournalContext | None]:
+    """Supply a real restricted independent reader to migrated integration consumers."""
+    raw = os.getenv("HOTKEY_TEST_DATABASE_URL")
+    if raw is None:
+        yield None
+        return
+    # Local import avoids loading test support before conftest initialization.
+    from tests.journal_support import isolated_journal
+
+    with isolated_journal(raw) as context, pytest.MonkeyPatch.context() as patch:
+        patch.setenv(
+            "HOTKEY_RESTRICTION_JOURNAL_READ_URL",
+            context.urls["reader"].render_as_string(hide_password=False),
+        )
+        patch.setenv("HOTKEY_RESTRICTION_JOURNAL_LEDGER_ID", str(context.ledger_id))
+        patch.setenv("HOTKEY_RESTRICTION_JOURNAL_EPOCH", "1")
+        yield context
 
 
 @pytest.fixture(autouse=True)

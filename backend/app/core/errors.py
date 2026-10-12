@@ -3,6 +3,22 @@ from __future__ import annotations
 from collections.abc import Mapping
 from enum import StrEnum
 from types import MappingProxyType
+from typing import Literal
+
+
+class AuthorityUnavailableError(RuntimeError):
+    """Independent authority failure; material guards must never swallow it.
+
+    Only the fixed classification may cross process/API boundaries. Exception
+    causes can contain database details and must not be exposed to callers.
+    """
+
+    code = "authority_unavailable"
+
+    def __init__(self, kind: Literal["transient", "configuration"] = "configuration") -> None:
+        self.kind = kind
+        super().__init__(self.code)
+
 
 type ErrorContextValue = str | int | float | bool | None
 

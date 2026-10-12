@@ -129,6 +129,7 @@ CORE-01恢复目标按设计10分为独立账本、隔离重放、身份/对象�
 
 - `backend/sql/schema.sql` 是唯一的建表来源，自带 `BEGIN/COMMIT`，只用于全新的空库。不用 Alembic，不用 ORM 建表，也不用 SQLite 存业务数据。所有时间字段使用 `TIMESTAMPTZ`。
 - 独立拒绝账本由evidence持有，唯一DDL为`backend/sql/journal.sql`，只用于另一个全新空账本库；不导入业务schema、不进入业务metadata/dump、没有业务FK。R2-A交付最小head/events、受限原子追加函数及R1只读消费者；共用交换合同归evidence，删除backups的重复归属文件。业务库唯一schema规则保持不变。运行角色不能改历史/重建epoch，缺独立pin/head必须拒绝；R2-B全部在线消费者未就绪前不接管业务删除，不提供双写/失败回退。具体合同见PLAN-10内嵌SPEC；同机独立测试库不证明生产故障域或历史覆盖。
+- 独立账本唯一性损坏反例需要在已验证的自有测试库临时移除唯一约束；架构门禁仅允许`tests/integration/test_independent_journal.py`的`test_online_rejects_duplicate_owner_operation_even_with_valid_chain`中一次确切的`ALTER TABLE restriction_journal.events DROP CONSTRAINT events_owner_id_operation_id_key`。其他文件、函数或DDL仍拒绝，并以反例验证边界。这是受控故障注入，不是建表来源或业务迁移；测试库结束后删除。
 - 改表结构时，SQL、ORM 模型和结构断言要在同一次提交里更新，并在一个全新的 PostgreSQL 上核对所有表的列、类型、可空性和主键。
 - 业务库名固定为 `hotkey`。测试只用独立的 `hotkey_test_<后缀>` 库，用完删除；绝不能在业务库上跑测试。
 - 备份恢复验证从`hotkey_test_`源库恢复时，自动创建`hotkey_test_restore_<随机编号>`目标，用后删除；其他源库保留`hotkey_restore_`命名。测试环境的维护恢复配置仅接受本机独立测试源和独立`hotkey_test_restore_`入口，正常环境保留既有恢复入口限制。入口与真正恢复目标分别核对，不能只检查主测试库；既存恢复库不得作为测试清理对象。

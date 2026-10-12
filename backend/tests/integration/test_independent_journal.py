@@ -1,23 +1,19 @@
 """Verify independent PG authority and restricted roles, never business databases."""
 
 import os
-import secrets
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
 from pathlib import Path
 from threading import Event
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import psycopg
 import pytest
-from psycopg import sql
-from sqlalchemy import Engine, create_engine, text
-from sqlalchemy.engine import URL, make_url
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
-from tests.conftest import validate_test_database_url
 from tests.integration.test_data_lifecycle import lifecycle_context as lifecycle_context
 from tests.integration.test_recovery_replay import SCHEMA, _track
 from tests.integration.test_restore_isolation import EmptyEvidenceInspector
+from tests.journal_support import isolated_journal
 from tests.unit.test_backup_restore import _manifest
 from typer.testing import CliRunner
 
@@ -26,6 +22,7 @@ from backups.restore import BackupRestoreService
 from backups.services import BackupService
 from cli import commands as cli_commands
 from core.config import Settings
+from core.errors import AuthorityUnavailableError
 from evidence.journal import (
     DenialCommand,
     JournalConflictError,
@@ -39,88 +36,13 @@ from evidence.schemas import DeletionReason
 DDL = Path(__file__).resolve().parents[2] / "sql" / "journal.sql"
 
 
-@dataclass
-class JournalContext:
-    source: URL
-    owner: Engine
-    ledger_id: UUID
-    urls: dict[str, URL]
-    writer: RestrictionJournal
-    reader: RestrictionJournal
-
-
 @pytest.fixture
 def journal_context():
     raw = os.getenv("HOTKEY_TEST_DATABASE_URL")
     if raw is None:
         pytest.skip("isolated PostgreSQL test database is required")
-    validate_test_database_url(raw)
-    source = make_url(raw)
-    database = "hotkey_test_journal_" + uuid4().hex[:20]
-    admin = create_engine(source.set(database="postgres"), isolation_level="AUTOCOMMIT")
-    owner = create_engine(source.set(database=database))
-    roles, created_roles, clients = {}, [], []
-    created = False
-    ledger_id = uuid4()
-    try:
-        with admin.connect() as connection:
-            connection.exec_driver_sql(f'CREATE DATABASE "{database}" WITH ALLOW_CONNECTIONS false')
-            created = True
-            connection.exec_driver_sql(f'REVOKE ALL ON DATABASE "{database}" FROM PUBLIC')
-            for kind in ("reader", "writer", "excess"):
-                name = "hotkey_test_jr_" + kind + "_" + uuid4().hex[:16]
-                password = secrets.token_hex(24)
-                connection.connection.driver_connection.execute(
-                    sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(
-                        sql.Identifier(name), sql.Literal(password)
-                    )
-                )
-                created_roles.append(name)
-                roles[kind] = source.set(database=database, username=name, password=password)
-                connection.exec_driver_sql(f'GRANT CONNECT ON DATABASE "{database}" TO "{name}"')
-            connection.exec_driver_sql(f'ALTER DATABASE "{database}" ALLOW_CONNECTIONS true')
-        with owner.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
-            connection.connection.driver_connection.execute(DDL.read_text())
-            connection.execute(
-                text("SELECT restriction_journal.initialize(:id, 1)"), {"id": ledger_id}
-            )
-            for kind, url in roles.items():
-                name = url.username
-                connection.exec_driver_sql(f'GRANT USAGE ON SCHEMA restriction_journal TO "{name}"')
-                connection.exec_driver_sql(
-                    f'GRANT SELECT ON ALL TABLES IN SCHEMA restriction_journal TO "{name}"'
-                )
-                if kind != "reader":
-                    connection.exec_driver_sql(
-                        "GRANT EXECUTE ON FUNCTION restriction_journal.append("
-                        f'uuid,bigint,uuid,uuid,text,uuid,text) TO "{name}"'
-                    )
-                if kind == "excess":
-                    connection.exec_driver_sql(
-                        f'GRANT UPDATE ON restriction_journal.events TO "{name}"'
-                    )
-        for kind in ("writer", "reader"):
-            clients.append(
-                RestrictionJournal(
-                    database_url=roles[kind],
-                    source_database_url=source,
-                    ledger_id=ledger_id,
-                    epoch=1,
-                )
-            )
-        yield JournalContext(source, owner, ledger_id, roles, *clients)
-    finally:
-        for client in clients:
-            client.close()
-        owner.dispose()
-        try:
-            with admin.connect() as connection:
-                if created:
-                    connection.exec_driver_sql(f'DROP DATABASE "{database}" WITH (FORCE)')
-                for name in reversed(created_roles):
-                    connection.exec_driver_sql(f'DROP ROLE "{name}"')
-        finally:
-            admin.dispose()
+    with isolated_journal(raw) as context:
+        yield context
 
 
 def command(**changes) -> DenialCommand:
@@ -371,8 +293,14 @@ def test_online_sequence_exceeds_r1_bound_without_truncating_export(journal_cont
         """),
             {"ledger": context.ledger_id, "owner": uuid4(), "resource": uuid4()},
         ).all()
-    receipt = context.writer.append(command())
+    final = command()
+    receipt = context.writer.append(final)
     assert receipt.sequence == 10002 and receipt.digest == entry_digest(receipt)
+    resources = frozenset({(final.resource_type, final.resource_id)})
+    assert (
+        context.reader.denied_resources(owner_id=final.owner_id, resources=resources) == resources
+    )
+    assert not context.reader.denied_resources(owner_id=uuid4(), resources=resources)
     with pytest.raises(JournalExportLimitError):
         context.reader.export(_manifest())
     with context.owner.connect() as connection:
@@ -409,6 +337,210 @@ def test_corrupted_history_rejected_and_schema_has_no_business_foreign_keys(jour
         )
     with pytest.raises(JournalUnavailableError):
         context.reader.export(_manifest())
+    with pytest.raises(AuthorityUnavailableError):
+        context.reader.denied_resources(owner_id=uuid4(), resources=frozenset())
+
+
+def test_online_empty_and_deny_committed_between_reads(journal_context):
+    context = journal_context
+    denied = command(resource_type="content_observation")
+    resources = frozenset({(denied.resource_type, denied.resource_id)})
+    assert not context.reader.denied_resources(owner_id=denied.owner_id, resources=resources)
+    context.writer.append(denied)
+    assert (
+        context.reader.denied_resources(owner_id=denied.owner_id, resources=resources) == resources
+    )
+
+
+@pytest.mark.parametrize("defect", ["head", "gap", "irrelevant_digest"])
+def test_online_rejects_incomplete_or_irrelevant_corrupt_chain(journal_context, defect):
+    context = journal_context
+    first, second = command(), command()
+    context.writer.append(first)
+    context.writer.append(second)
+    with context.owner.begin() as connection:
+        if defect == "head":
+            connection.execute(text("UPDATE restriction_journal.head SET sequence=1"))
+        elif defect == "gap":
+            connection.execute(text("DELETE FROM restriction_journal.events WHERE sequence=1"))
+        else:
+            connection.execute(
+                text("UPDATE restriction_journal.events SET digest=:bad WHERE sequence=2"),
+                {"bad": "0" * 64},
+            )
+    with pytest.raises(AuthorityUnavailableError) as captured:
+        context.reader.denied_resources(
+            owner_id=first.owner_id, resources=frozenset({(first.resource_type, first.resource_id)})
+        )
+    assert captured.value.kind == "configuration"
+
+
+def test_online_budget_exhaustion_issues_no_later_sql(journal_context, monkeypatch):
+    from sqlalchemy import event
+
+    from evidence import journal
+
+    context = journal_context
+    statements = []
+    event.listen(
+        context.reader._engine, "before_cursor_execute", lambda *_args: statements.append(_args[2])
+    )
+    times = iter([10.0, 41.0])
+    monkeypatch.setattr(journal, "monotonic", lambda: next(times))
+    with pytest.raises(AuthorityUnavailableError) as captured:
+        context.reader.denied_resources(owner_id=uuid4(), resources=frozenset())
+    assert captured.value.kind == "configuration" and statements == []
+
+
+def test_actual_statement_timeout_is_configuration_failure(journal_context, monkeypatch):
+    context = journal_context
+
+    def slow_authority(connection, mode, **_kwargs):
+        connection.exec_driver_sql("SET LOCAL statement_timeout=10")
+        connection.execute(text("SELECT pg_sleep(0.1)"))
+
+    monkeypatch.setattr(context.reader, "_authority", slow_authority)
+    with pytest.raises(AuthorityUnavailableError) as captured:
+        context.reader.denied_resources(owner_id=uuid4(), resources=frozenset())
+    assert captured.value.kind == "configuration"
+
+
+def test_online_refuses_standby_even_with_valid_pin_and_role(journal_context, monkeypatch):
+    from sqlalchemy.engine import Connection
+
+    context = journal_context
+    actual = Connection.scalar
+
+    def scalar(connection, statement, *args, **kwargs):
+        if str(statement) == "SELECT pg_is_in_recovery()":
+            return True
+        return actual(connection, statement, *args, **kwargs)
+
+    monkeypatch.setattr(Connection, "scalar", scalar)
+    with pytest.raises(AuthorityUnavailableError) as captured:
+        context.reader.denied_resources(owner_id=uuid4(), resources=frozenset())
+    assert captured.value.kind == "configuration"
+
+
+def test_online_rejects_duplicate_owner_operation_even_with_valid_chain(journal_context):
+    context = journal_context
+    original = command()
+    first = context.writer.append(original)
+    second = context.writer.append(command(owner_id=original.owner_id))
+    changed = second.model_copy(update={"operation_id": first.operation_id})
+    digest = entry_digest(changed)
+    with context.owner.begin() as connection:
+        connection.exec_driver_sql(
+            "ALTER TABLE restriction_journal.events DROP CONSTRAINT "
+            "events_owner_id_operation_id_key"
+        )
+        connection.execute(
+            text(
+                "UPDATE restriction_journal.events SET operation_id=:op, "
+                "digest=:digest WHERE sequence=2"
+            ),
+            {"op": first.operation_id, "digest": digest},
+        )
+        connection.execute(
+            text("UPDATE restriction_journal.head SET digest=:digest"), {"digest": digest}
+        )
+    with pytest.raises(AuthorityUnavailableError):
+        context.reader.denied_resources(owner_id=uuid4(), resources=frozenset())
+
+
+def test_budget_exhausted_during_validation_does_not_fetch_or_issue_sql(
+    journal_context, monkeypatch
+):
+    from sqlalchemy import event
+
+    from evidence import journal
+
+    context = journal_context
+    context.writer.append(command())
+    expired = [False]
+    statements_after_expiration = []
+    actual = context.reader._entry
+
+    def entry(row):
+        result = actual(row)
+        expired[0] = True
+        return result
+
+    monkeypatch.setattr(context.reader, "_entry", entry)
+    monkeypatch.setattr(journal, "monotonic", lambda: 40.0 if expired[0] else 1.0)
+
+    def observe(_connection, _cursor, statement, *_args):
+        if expired[0]:
+            statements_after_expiration.append(statement)
+
+    event.listen(context.reader._engine, "before_cursor_execute", observe)
+    with pytest.raises(AuthorityUnavailableError) as captured:
+        context.reader.denied_resources(owner_id=uuid4(), resources=frozenset())
+    assert captured.value.kind == "configuration" and not statements_after_expiration
+
+
+@pytest.mark.parametrize("role", ["writer", "excess"])
+def test_online_rejects_mutating_reader_roles(journal_context, role):
+    context = journal_context
+    reader = RestrictionJournal(
+        database_url=context.urls[role],
+        source_database_url=context.source,
+        ledger_id=context.ledger_id,
+        epoch=1,
+    )
+    try:
+        with pytest.raises(AuthorityUnavailableError) as captured:
+            reader.denied_resources(owner_id=uuid4(), resources=frozenset())
+        assert captured.value.kind == "configuration"
+    finally:
+        reader.close()
+
+
+def test_actual_connection_refusal_is_transient(journal_context):
+    import socket
+
+    context = journal_context
+    with socket.socket() as reserved:
+        reserved.bind(("127.0.0.1", 0))
+        reader = RestrictionJournal(
+            database_url=context.urls["reader"].set(port=reserved.getsockname()[1]),
+            source_database_url=context.source,
+            ledger_id=context.ledger_id,
+            epoch=1,
+        )
+        try:
+            with pytest.raises(AuthorityUnavailableError) as captured:
+                reader.denied_resources(owner_id=uuid4(), resources=frozenset())
+            assert captured.value.kind == "transient"
+        finally:
+            reader.close()
+
+
+def test_online_budget_expiring_after_primary_check_never_queries_head(
+    journal_context, monkeypatch
+):
+    from sqlalchemy import event
+
+    from evidence import journal
+
+    context = journal_context
+    expired = [False]
+    issued_after_deadline = []
+    monkeypatch.setattr(journal, "monotonic", lambda: 40.0 if expired[0] else 1.0)
+
+    def after(_connection, _cursor, statement, *_args):
+        if statement == "SELECT pg_is_in_recovery()":
+            expired[0] = True
+
+    def before(_connection, _cursor, statement, *_args):
+        if expired[0]:
+            issued_after_deadline.append(statement)
+
+    event.listen(context.reader._engine, "after_cursor_execute", after)
+    event.listen(context.reader._engine, "before_cursor_execute", before)
+    with pytest.raises(AuthorityUnavailableError) as captured:
+        context.reader.denied_resources(owner_id=uuid4(), resources=frozenset())
+    assert captured.value.kind == "configuration" and not issued_after_deadline
 
 
 @pytest.mark.parametrize("defect", ["type", "reason", "owner", "pin"])

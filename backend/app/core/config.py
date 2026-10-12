@@ -118,6 +118,9 @@ class Settings(BaseSettings):
         return self
 
     database_url: SecretStr
+    restriction_journal_read_url: SecretStr | None = None
+    restriction_journal_ledger_id: UUID | None = None
+    restriction_journal_epoch: int | None = Field(default=None, ge=1, le=9223372036854775807)
     database_pool_size: int = Field(default=10, ge=1, le=100)
     database_max_overflow: int = Field(default=10, ge=0, le=100)
     database_pool_timeout_seconds: float = Field(default=10, gt=0, le=60)

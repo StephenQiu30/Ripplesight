@@ -90,6 +90,30 @@ def _raise_network_error() -> None:
     raise ConnectionError("https://example.invalid/?token=private")
 
 
+def _raise_authority_error(kind: str) -> None:
+    from core.errors import AuthorityUnavailableError
+
+    raise AuthorityUnavailableError(kind) from ConnectionError("private authority credentials")
+
+
+def _authority_job_child(message, lease, lease_seconds):
+    """Use the actual child handler boundary with fixed isolated authority failure."""
+    from datetime import timedelta
+
+    from core.errors import AuthorityUnavailableError
+    from worker import app
+
+    def handler(_context):
+        raise AuthorityUnavailableError(message.configuration_ref.split(":")[1])
+
+    app._registered_job_handlers = lambda *_args, **_kwargs: {message.kind: handler}
+    mapper = app._authority_failure
+    app._authority_failure = lambda error, **_kwargs: mapper(
+        error, occurred_at=lease.expires_at - timedelta(seconds=lease_seconds)
+    )
+    return app._run_job_in_child(message, lease, lease_seconds)
+
+
 def _exit_without_result() -> None:
     os._exit(19)
 

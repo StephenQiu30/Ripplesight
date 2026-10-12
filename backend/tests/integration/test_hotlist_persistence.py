@@ -762,8 +762,12 @@ def test_hotlist_match_persists_one_content_for_two_topics_and_skips_unmatched(
             )
             assert [item.id for item in visible] == [records[0].id]
             assert cursor is None
-        detail = service.get_content(owner_id=runtime.owner_id, content_id=records[0].id)
-        assert {item.topic_id for item in detail.analysis_topics} == {ai_topic, chip_topic}
+        # Adopted hotlist mappings lack a complete material manifest. Keep their
+        # stored history, but refuse the whole protected detail until proven.
+        with pytest.raises(ApplicationError, match="resource_not_found"):
+            service.get_content(owner_id=runtime.owner_id, content_id=records[0].id)
+        with session.begin():
+            assert session.scalar(text("SELECT count(*) FROM hotlist_entries")) == 2
 
 
 def test_analysis_scan_excludes_expired_hotlist_evidence(runtime: HotlistRuntime) -> None:
@@ -859,8 +863,10 @@ def test_old_hotlist_match_cannot_borrow_new_readable_observation(
             assert len(page) == 1
             seen.append(page[0].id)
         assert len(set(seen)) == 2 and content_id in seen and cursor is None
-        detail = service.get_content(owner_id=runtime.owner_id, content_id=content_id)
-        assert {topic.topic_id for topic in detail.analysis_topics} == {chip_topic}
+        # A new readable observation cannot authorize orphaned visibility or
+        # the unproven hotlist mapping in the complete detail DTO.
+        with pytest.raises(ApplicationError, match="resource_not_found"):
+            service.get_content(owner_id=runtime.owner_id, content_id=content_id)
         with session.begin():
             assert (
                 load_post_versions_for_analysis_scan(

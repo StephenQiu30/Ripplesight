@@ -269,9 +269,61 @@ def test_every_persistent_domain_registers_its_models() -> None:
 
 
 def test_application_and_tests_do_not_create_or_drop_schema() -> None:
+    approved = 0
     for directory in (APP, BACKEND / "tests"):
         for path in directory.rglob("*.py"):
-            assert not _orm_ddl_calls(path.read_text()), path
+            calls, injected = _unapproved_ddl_calls(path.read_text(), path.relative_to(BACKEND))
+            assert not calls, path
+            approved += injected
+    assert approved == 1
+
+
+def _unapproved_ddl_calls(source: str, path: Path) -> tuple[set[str], int]:
+    """Allow exactly one reviewed corruption injection, never a file-wide DDL bypass."""
+    approved_sql = (
+        "ALTER TABLE restriction_journal.events DROP CONSTRAINT events_owner_id_operation_id_key"
+    )
+    tree = ast.parse(source)
+    approved = 0
+    if path == Path("tests/integration/test_independent_journal.py"):
+        for function in tree.body:
+            if not isinstance(function, ast.FunctionDef) or function.name != (
+                "test_online_rejects_duplicate_owner_operation_even_with_valid_chain"
+            ):
+                continue
+            for node in ast.walk(function):
+                if (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "exec_driver_sql"
+                    and len(node.args) == 1
+                    and isinstance(node.args[0], ast.Constant)
+                    and node.args[0].value == approved_sql
+                ):
+                    node.args[0] = ast.Constant(value="")
+                    approved += 1
+    return _orm_ddl_calls(ast.unparse(tree)), approved
+
+
+@pytest.mark.parametrize("defect", ["none", "path", "function", "sql", "extra"])
+def test_journal_corruption_exception_cannot_hide_other_ddl(defect):
+    path = Path("tests/integration/test_independent_journal.py")
+    function = "test_online_rejects_duplicate_owner_operation_even_with_valid_chain"
+    query = (
+        "ALTER TABLE restriction_journal.events DROP CONSTRAINT events_owner_id_operation_id_key"
+    )
+    if defect == "path":
+        path = Path("app/evidence/journal.py")
+    elif defect == "function":
+        function = "other_test"
+    elif defect == "sql":
+        query = "ALTER TABLE restriction_journal.head ADD COLUMN wrong integer"
+    source = f"def {function}():\n    connection.exec_driver_sql({query!r})\n"
+    if defect == "extra":
+        source += "    connection.exec_driver_sql('CREATE TABLE wrong (id integer)')\n"
+    calls, approved = _unapproved_ddl_calls(source, path)
+    assert bool(calls) is (defect != "none")
+    assert approved == (1 if defect in {"none", "extra"} else 0)
 
 
 def test_routers_do_not_import_persistence_or_service_implementations() -> None:

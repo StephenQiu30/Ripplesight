@@ -36,6 +36,7 @@ from core.config import (
     Settings,
     get_settings,
 )
+from core.errors import AuthorityUnavailableError
 from core.logging import configure_logging
 
 # Spawn starts a fresh interpreter; import the canonical registry to resolve ORM foreign keys.
@@ -253,10 +254,14 @@ def _run_job_in_child(
         )
         try:
             completion = handler(context)
-        except JobExecutionFailure as failure:
+        except (AuthorityUnavailableError, JobExecutionFailure) as error:
             return ChildJobResult(
                 lease=context.lease,
-                failure=ChildJobFailure.from_failure(failure),
+                failure=ChildJobFailure.from_failure(
+                    _authority_failure(error, occurred_at=datetime.now(UTC))
+                    if isinstance(error, AuthorityUnavailableError)
+                    else error
+                ),
             )
         return ChildJobResult(
             lease=context.lease,
@@ -504,7 +509,7 @@ def create_job_dispatcher(
             )
             try:
                 completion = handler(context)
-            except JobExecutionFailure as failure:
+            except (AuthorityUnavailableError, JobExecutionFailure) as error:
                 with sessions() as session:
                     JobExecutionService(
                         session,
@@ -513,7 +518,9 @@ def create_job_dispatcher(
                     ).record_failure(
                         context.lease,
                         message=reference,
-                        failure=failure,
+                        failure=_authority_failure(error, occurred_at=_now(clock))
+                        if isinstance(error, AuthorityUnavailableError)
+                        else error,
                     )
                 return
             with sessions() as session:
@@ -537,6 +544,16 @@ def _now(clock: Clock | None) -> datetime:
 def _child_exception_failure(
     error: JobProcessChildError, *, occurred_at: datetime
 ) -> JobExecutionFailure:
+    if error.error_code in {
+        "authority_unavailable_transient",
+        "authority_unavailable_configuration",
+    }:
+        return _authority_failure(
+            AuthorityUnavailableError(
+                "transient" if error.error_code.endswith("transient") else "configuration"
+            ),
+            occurred_at=occurred_at,
+        )
     if error.error_code == "parse_error":
         category = JobFailureCategory.PARSE_ERROR
         next_action = "检查数据格式后手动重试"
@@ -562,6 +579,26 @@ def _child_exception_failure(
         occurred_at=occurred_at,
         next_action=next_action,
         manual_retry_allowed=True,
+    )
+
+
+def _authority_failure(
+    error: AuthorityUnavailableError, *, occurred_at: datetime
+) -> JobExecutionFailure:
+    """Map both Worker paths without exposing authority causes or material identities."""
+    transient = error.kind == "transient"
+    return JobExecutionFailure(
+        error_code=error.code,
+        category=JobFailureCategory.TRANSIENT
+        if transient
+        else JobFailureCategory.CONFIGURATION_UNAVAILABLE,
+        occurred_at=occurred_at,
+        next_action="等待独立权威恢复后重新准入"
+        if transient
+        else "修复独立权威配置或准入边界后重试",
+        manual_retry_allowed=True,
+        retry_at=occurred_at + timedelta(seconds=30) if transient else None,
+        max_attempts=3 if transient else None,
     )
 
 

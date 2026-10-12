@@ -1,19 +1,19 @@
-"""Independent restrictive authority, not an online business authorization gate.
+"""Pinned independent denials for maintenance and explicitly migrated online reads."""
 
-R2-A consumers are explicit maintenance rehearsals. Business writers and reads
-must not partially opt in before the full R2-B protection contract is ready.
-"""
+from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Literal
+from time import monotonic
+from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Connection, create_engine, text
 from sqlalchemy.engine import URL, RowMapping, make_url
-from sqlalchemy.exc import ArgumentError, DBAPIError, SQLAlchemyError
+from sqlalchemy.exc import ArgumentError, DBAPIError, SQLAlchemyError, TimeoutError
 
+from core.errors import AuthorityUnavailableError
 from evidence.journal_contract import (
     RecoveryCandidateBinding,
     RecoveryCheckpoint,
@@ -22,9 +22,13 @@ from evidence.journal_contract import (
     RecoverySnapshot,
     VerifiedRecovery,
     entry_digest,
+    genesis_digest,
     verify_recovery_snapshot,
 )
 from evidence.schemas import DeletionReason
+
+if TYPE_CHECKING:
+    from core.config import Settings
 
 
 class JournalError(RuntimeError):
@@ -67,6 +71,25 @@ class JournalHead(BaseModel):
     digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
+def create_journal_reader(settings: Settings, *, source_database_url: URL) -> RestrictionJournal:
+    """Require the independent reader configuration; never infer a business fallback."""
+    if (
+        settings.restriction_journal_read_url is None
+        or settings.restriction_journal_ledger_id is None
+        or settings.restriction_journal_epoch is None
+    ):
+        raise AuthorityUnavailableError()
+    try:
+        return RestrictionJournal(
+            database_url=settings.restriction_journal_read_url.get_secret_value(),
+            source_database_url=source_database_url,
+            ledger_id=settings.restriction_journal_ledger_id,
+            epoch=settings.restriction_journal_epoch,
+        )
+    except JournalUnavailableError as error:
+        raise AuthorityUnavailableError() from error
+
+
 class RestrictionJournal:
     """Own a connection pool for one explicitly pinned independent database.
 
@@ -85,7 +108,7 @@ class RestrictionJournal:
     ) -> None:
         try:
             target, source = make_url(database_url), make_url(source_database_url)
-        except ArgumentError as error:
+        except (ArgumentError, ValueError) as error:
             raise JournalUnavailableError("journal database settings are invalid") from error
         if (
             target.drivername != "postgresql+psycopg"
@@ -107,17 +130,32 @@ class RestrictionJournal:
         ):
             raise JournalUnavailableError("test journals require local isolated databases")
         self._ledger_id, self._epoch = ledger_id, epoch
-        self._engine = create_engine(target, connect_args={"connect_timeout": 5})
+        self._engine = create_engine(target, connect_args={"connect_timeout": 5}, pool_timeout=5)
 
     def close(self) -> None:
         """Release only this client's connections; never drop a database."""
         self._engine.dispose()
 
     def _authority(
-        self, connection: Connection, mode: Literal["append", "export", "receipt"]
+        self,
+        connection: Connection,
+        mode: Literal["append", "export", "receipt", "online"],
+        *,
+        deadline: float | None = None,
     ) -> JournalHead:
         # Catalog checks must not resolve caller-created temporary types/relations.
+        if mode == "online":
+            if deadline is None:
+                raise AuthorityUnavailableError()
+            self._online_budget(connection, deadline)
         connection.exec_driver_sql("SET LOCAL search_path = pg_catalog, pg_temp")
+        if mode == "online":
+            if deadline is None:
+                raise AuthorityUnavailableError()
+            self._online_budget(connection, deadline)
+            if connection.scalar(text("SELECT pg_is_in_recovery()")) is not False:
+                raise JournalUnavailableError("online journal requires the primary database")
+            self._online_budget(connection, deadline)
         row = (
             connection.execute(
                 text("""
@@ -172,13 +210,117 @@ class RestrictionJournal:
         ):
             raise JournalUnavailableError("journal authority or runtime permissions are unsafe")
         if (mode == "append" and row["can_append"] is not True) or (
-            mode == "export" and row["can_append"] is not False
+            mode in {"export", "online"} and row["can_append"] is not False
         ):
             raise JournalUnavailableError("journal reader and writer permissions must be separate")
         head = JournalHead.model_validate({key: row[key] for key in JournalHead.model_fields})
         if head.ledger_id != self._ledger_id or head.epoch != self._epoch:
             raise JournalUnavailableError("journal identity does not match its independent pin")
         return head
+
+    @staticmethod
+    def _online_budget(connection: Connection, deadline: float) -> None:
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            raise AuthorityUnavailableError()
+        # SET is deliberately not streamed; the event SELECT alone owns its cursor.
+        connection.exec_driver_sql(f"SET LOCAL statement_timeout = {max(1, int(remaining * 1000))}")
+
+    def denied_resources(
+        self, *, owner_id: UUID, resources: frozenset[tuple[str, UUID]]
+    ) -> frozenset[tuple[str, UUID]]:
+        """Verify the complete online chain before returning exact candidate denials.
+
+        Uses a fresh restricted read snapshot on every call. The total ledger
+        has no R1 export bound; only a batch and candidate matches stay in memory.
+        No result authorizes another action or a later network boundary.
+
+        Raises:
+            AuthorityUnavailableError: No complete trusted answer was obtained.
+        """
+        deadline = monotonic() + 30
+        if (
+            not isinstance(owner_id, UUID)
+            or len(resources) > 20000
+            or any(
+                not isinstance(key, str)
+                or not key.isascii()
+                or not 1 <= len(key) <= 64
+                or not key[0].islower()
+                or any(not (c.islower() or c.isdigit() or c == "_") for c in key)
+                or not isinstance(identifier, UUID)
+                for key, identifier in resources
+            )
+        ):
+            raise AuthorityUnavailableError()
+        try:
+            with (
+                self._engine.connect().execution_options(
+                    isolation_level="REPEATABLE READ"
+                ) as connection,
+                connection.begin(),
+            ):
+                self._online_budget(connection, deadline)
+                connection.exec_driver_sql("SET TRANSACTION READ ONLY")
+                head = self._authority(connection, "online", deadline=deadline)
+                self._online_budget(connection, deadline)
+                if (
+                    connection.execute(
+                        text("""
+                    SELECT 1 FROM restriction_journal.events
+                    GROUP BY owner_id, operation_id HAVING count(*) > 1 LIMIT 1
+                """)
+                    ).first()
+                    is not None
+                ):
+                    raise AuthorityUnavailableError()
+                previous = genesis_digest(
+                    RecoverySnapshot(
+                        format_version="ripplesight.recovery-ledger.v1",
+                        ledger_id=head.ledger_id,
+                        epoch=head.epoch,
+                        normalization_version=head.normalization_version,
+                        entries=(),
+                    )
+                )
+                sequence = 0
+                denied: set[tuple[str, UUID]] = set()
+                self._online_budget(connection, deadline)
+                with connection.execute(
+                    text(
+                        "SELECT * FROM restriction_journal.events ORDER BY sequence"
+                    ).execution_options(stream_results=True, yield_per=256)
+                ) as rows:
+                    batches = rows.mappings().partitions(256)
+                    while True:
+                        self._online_budget(connection, deadline)
+                        batch = next(batches, ())
+                        if not batch:
+                            break
+                        for row in batch:
+                            if monotonic() >= deadline:
+                                raise AuthorityUnavailableError()
+                            entry = self._entry(row)
+                            if entry.sequence != sequence + 1 or entry.previous_digest != previous:
+                                raise AuthorityUnavailableError()
+                            sequence, previous = entry.sequence, entry.digest
+                            key = (entry.resource_type, entry.resource_id)
+                            if entry.owner_id == owner_id and key in resources:
+                                denied.add(key)
+                if sequence != head.sequence or previous != head.digest:
+                    raise AuthorityUnavailableError()
+                self._online_budget(connection, deadline)
+                return frozenset(denied)
+        except (JournalUnavailableError, ValueError) as error:
+            raise AuthorityUnavailableError() from error
+        except SQLAlchemyError as error:
+            state = getattr(error.orig, "sqlstate", None) if isinstance(error, DBAPIError) else None
+            transient = isinstance(error, TimeoutError) or (
+                isinstance(error, DBAPIError) and (state is None or state.startswith("08"))
+            )
+            raise AuthorityUnavailableError(
+                "transient" if transient else "configuration"
+            ) from error
 
     @staticmethod
     def _entry(row: RowMapping) -> RecoveryEntry:

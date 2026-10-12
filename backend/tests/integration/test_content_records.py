@@ -402,7 +402,10 @@ def test_edit_and_visibility_history_keep_last_success_across_failures_and_late_
                 basis=ContentVisibilityBasis.HTTP_GONE,
             ),
         )
-        after_late_delete = service.get_content(owner_id=owner_id, content_id=created.id)
+        # Until visibility has its own original proof, non-returned history makes
+        # the whole protected detail unknown, even when newer text is retained.
+        with pytest.raises(ApplicationError, match="resource_not_found"):
+            service.get_content(owner_id=owner_id, content_id=created.id)
         service.record_visibility(
             owner_id=owner_id,
             command=RecordContentVisibilityInput(
@@ -414,17 +417,8 @@ def test_edit_and_visibility_history_keep_last_success_across_failures_and_late_
                 basis=ContentVisibilityBasis.TIMEOUT,
             ),
         )
-        after_timeout = service.get_content(owner_id=owner_id, content_id=created.id)
-        assert [item.content_version.body for item in after_timeout.version_history] == [
-            "第二版正文",
-            "第一版正文",
-        ]
-        assert [item.status.value for item in after_timeout.visibility_history] == [
-            "transient_failure",
-            "visible",
-            "deleted",
-            "visible",
-        ]
+        with pytest.raises(ApplicationError, match="resource_not_found"):
+            service.get_content(owner_id=owner_id, content_id=created.id)
         service.record_visibility(
             owner_id=owner_id,
             command=RecordContentVisibilityInput(
@@ -449,12 +443,6 @@ def test_edit_and_visibility_history_keep_last_success_across_failures_and_late_
         )
 
     assert created.id == updated.id
-    assert after_late_delete.current_visibility is not None
-    assert after_late_delete.current_visibility.status is ContentVisibilityStatus.VISIBLE
-    assert after_timeout.current_visibility is not None
-    assert after_timeout.current_visibility.status is ContentVisibilityStatus.TRANSIENT_FAILURE
-    assert after_timeout.latest_observation.content_version is not None
-    assert after_timeout.latest_observation.content_version.body == "第二版正文"
 
     # Decision 06 forbids resurfacing X source-deleted text, even to its owner.
     response = content_client.get(f"/api/contents/{created.id}")
@@ -1011,10 +999,9 @@ def test_detail_reads_annotation_status_by_readable_version_and_current_topic_ru
             reason=DeletionReason.USER_REQUEST,
         )
     refreshed = content_client.get(f"/api/contents/{second.id}")
-    assert refreshed.status_code == 200
-    assert {item["content_version_id"] for item in refreshed.json()["annotations"]} == {
-        str(current_version.id)
-    }
+    # The original discovery still points at the withdrawn first observation;
+    # surviving versions cannot retroactively replace that original evidence.
+    assert refreshed.status_code == 404
 
 
 def test_content_list_filters_bind_cursor_and_label_discovery_time(
