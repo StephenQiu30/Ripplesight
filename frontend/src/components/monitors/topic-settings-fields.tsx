@@ -59,7 +59,7 @@ export function selectableTopicSources(
     );
     if (!search) return [];
     const status = search.scheduled.status;
-    const selectable =
+    const ready =
       platform.connection_status === "active" &&
       !platform.has_credentials &&
       (status === "available" || status === "pending_verification");
@@ -67,17 +67,17 @@ export function selectableTopicSources(
       {
         sourceKey: platform.source_key,
         displayName: platform.display_name,
-        selectable,
+        selectable: true,
         searchContract: platform.search_contract,
         connectionVersion: platform.connection_version,
         capabilities: platform.capabilities
           .map((capability) => capability.display_name)
           .join(" · "),
-        reason: selectable
+        reason: ready
           ? status === "available"
             ? "已验证；恢复时还会检查预算。"
             : "预设已应用，待真实采集验证。"
-          : search.scheduled.next_action,
+          : `可保存草稿；启用前需完成接入检查。${search.scheduled.next_action}`,
       },
     ];
   });
@@ -121,7 +121,7 @@ export function TopicSettingsFields({
     <FieldSet disabled={disabled}>
       <FieldLegend variant="label">信息来源</FieldLegend>
       <FieldDescription>
-        从系统内置平台中选择关键词搜索来源。未接入的平台先完成连接配置；新主题保存后暂停，由你开始运行。
+        从系统内置平台中选择关键词搜索来源。未就绪的平台也可保存到草稿；保存不执行采集，启用时再检查连接、准入与预算。
       </FieldDescription>
       {sourceOptions.length > 0 ? (
         <FieldGroup className="gap-5">

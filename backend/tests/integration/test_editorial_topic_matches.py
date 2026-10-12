@@ -60,7 +60,9 @@ def _topic(session: Session, owner: UUID, profile_id: UUID, keyword: str = "mode
         ),
     )
     assert topic.readiness_status == "ready"
-    return service.resume_topic(owner_id=owner, topic_id=topic.id)
+    return service.resume_topic(
+        owner_id=owner, topic_id=topic.id, expected_version=topic.current_version
+    )
 
 
 def _ingest(session: Session, service, owner: UUID, profile, *, title: str = "New model"):

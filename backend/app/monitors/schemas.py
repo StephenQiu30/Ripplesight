@@ -66,6 +66,12 @@ class MonitorTopicUpdateInput(MonitorTopicCreateInput):
     expected_version: int = Field(ge=1)
 
 
+class MonitorTopicResumeInput(InputModel):
+    """Enable only the immutable topic version the user has reviewed."""
+
+    expected_version: int = Field(ge=1)
+
+
 class MonitorTopicPreviewInput(MonitorRuleSetInput):
     sample_titles: list[PreviewSampleInput] = Field(min_length=1, max_length=20)
 

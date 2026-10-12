@@ -19,6 +19,7 @@ from monitors.schemas import (
     MonitorTopicCreateInput,
     MonitorTopicPreviewInput,
     MonitorTopicPreviewView,
+    MonitorTopicResumeInput,
     MonitorTopicRunInput,
     MonitorTopicRunView,
     MonitorTopicUpdateInput,
@@ -103,8 +104,8 @@ def list_monitor_topics(
     status_code=status.HTTP_201_CREATED,
     summary="创建监控主题",
     description=(
-        "保存本地匹配规则和采集版本; 所选来源须有已应用搜索预设及当前准入策略。"
-        "新主题保持暂停, 来源选择会生成停用的搜索调度行。"
+        "保存有效的本地匹配规则与来源选择为暂停草稿, 无需来源当前就绪。"
+        "保存不创建调度或任务; 显式启用时校验冻结版本、来源和预算。"
     ),
     responses=_WRITE_RESPONSES,
 )
@@ -258,16 +259,19 @@ def pause_monitor_topic(
     response_model=MonitorTopicView,
     status_code=status.HTTP_200_OK,
     summary="恢复监控主题",
-    description="仅已准入、启用且预算可用的搜索来源可恢复; 恢复会启用其调度行。",
+    description="校验用户已审阅的冻结版本, 再复核当前来源与预算; 成功后启用调度。",
     responses=_WRITE_RESPONSES,
 )
 def resume_monitor_topic(
     topic_id: UUID,
+    command: MonitorTopicResumeInput,
     response: Response,
     service: MonitorTopicServiceDependency,
     scope_id: UserWriteScopeDependency,
 ) -> MonitorTopicView:
-    topic = service.resume_topic(owner_id=scope_id, topic_id=topic_id)
+    topic = service.resume_topic(
+        owner_id=scope_id, topic_id=topic_id, expected_version=command.expected_version
+    )
     response.headers["cache-control"] = "no-store"
     return topic
 

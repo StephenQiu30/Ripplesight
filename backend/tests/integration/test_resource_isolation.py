@@ -31,7 +31,7 @@ from jobs.services import JobService
         ),
         ("POST", "/api/topics/{topic_id}/clone", None),
         ("POST", "/api/topics/{topic_id}/pause", None),
-        ("POST", "/api/topics/{topic_id}/resume", None),
+        ("POST", "/api/topics/{topic_id}/resume", {"expected_version": 1}),
         ("POST", "/api/topics/{topic_id}/archive", None),
         ("GET", "/api/jobs/{job_id}", None),
         ("POST", "/api/jobs/{job_id}/cancel", None),

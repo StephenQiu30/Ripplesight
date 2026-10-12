@@ -4,9 +4,9 @@
 
 ## 核对基线与结论
 
-2026-10-12以已推送main的`569ea67c`静态核对核心实现；该提交包含本轮规格重建，之前的任务累计/执行轮计量提交也已随main推送。本次后续修改仅重排BACKLOG，没有改业务代码、schema或迁移，没有连接业务库、启动服务或调用真实平台/模型/通知。
+2026-10-12以已推送main的`569ea67c`完成规格重建，`1e053d83`据此重排核心缺口。随后按CORE-01/02/03实施隔离保护、草稿与启用分离、评论关系和身份计量切片；下面分别记录代码完成证据与剩余验收，未关闭整个核心任务。验证只连接独立测试库和本机受控服务，未升级业务库或调用真实平台、模型、通知。
 
-**核心闭环尚未完成。** 已有准入、原生身份/版本、查询回执、部分增量计量、逐评论分析、事件修订、采集暂停围栏、预算连续扣账和unknown发送保护；仍有确定行为冲突及未实现的业务合同。下文“已有”只表示代码路径存在，“差距”有源码依据，“待核对”尚不能证明全路径，“待验收”需要独立环境/真实来源/自然时间/本人接收。既有测试入口未在本轮重跑，不能据此更新通过状态。
+**核心闭环尚未完成。** 已有准入、原生身份/版本、查询回执、部分增量计量、逐评论分析、事件修订、采集暂停围栏、预算连续扣账和unknown发送保护；仍有确定行为冲突及未实现的业务合同。下文“已有”只表示代码路径存在，“差距”有源码依据，“待核对”尚不能证明全路径，“待验收”需要独立环境/真实来源/自然时间/本人接收。仅对明确记录了本轮验证证据的切片更新代码完成状态。
 
 规格重建已补原始意图、功能/非功能需求、AC、用户故事及数据库字段/关系/事务；59组文件名/H1、185份Markdown链接/锚点和10项文档工具回归通过，原始需求、数据库及文档三路只读审查无剩余文档阻断。这仅证明文档一致性，目标设计仍须评审，不能视作DDL已实施或产品能力通过。
 
@@ -55,7 +55,8 @@
 ### CORE-02～04：配置、采集和计量
 
 - **已有**：关键词规范化、三组词、规则版本、手动/定时查询受理/跳过和冻结配置，[query_plans.py](backend/app/jobs/query_plans.py)、[runs.py](backend/app/monitors/runs.py)。来源目录及受控样本不是免费准入或真实覆盖证明。
-- **确定差距**：创建/更新主题先要求来源已应用且就绪，[services.py](backend/app/monitors/services.py#L868)、[来源检查](backend/app/monitors/services.py#L1398)，与FR-01-01有效草稿可保存冲突。当前[跨组校验](backend/app/monitors/services.py#L405)还拒绝any/all同词及任意正向词与exclude重合，超过目标中all/exclude直接矛盾的范围，例如any=[Alpha,Beta]、exclude=[Alpha]仍可匹配Beta。未知语言在[discovery.py](backend/app/content/discovery.py#L499)按filtered丢弃，不能表达待判断，[来源说明](backend/app/connections/search_contracts.py#L49)也须同步修正。
+- **CORE-02草稿切片代码完成，能力待验收**：已声明且支持搜索的来源未就绪时允许保存有效草稿；新建/克隆默认暂停，不创建调度、任务、连接或预算。生效规则或采集配置变更递增不可变版本，并在同事务暂停主题、递增围栏和禁用旧调度；名称、报告设置及无变化保存不制造规则版本。显式启用必须提交`expected_version`，先核对当前版本，再检查来源及预算；缺版本422、旧版本409，幂等重放也不能绕过版本检查。any/all同词及部分any/exclude重合允许，all/exclude直接矛盾仍拒绝；页面允许保存未就绪草稿并解释保存后暂停。见[主题服务](backend/app/monitors/services.py)、[设计01](docs/design/01-关键词配置.md)和[计划01](docs/plan/01-关键词配置.md)。独立导出的草稿暂存快照170项通过，相关消费者另25项通过；快照Ruff/格式/mypy和Web全量1198项、lint/types/format/build通过，独立只读审查无阻断；联合全量检查及1440px/390px受控五态、键盘证据见文末。CORE-02继续开放，不以模拟就绪状态代替真实启用验收。
+- **确定差距**：未知语言在[discovery.py](backend/app/content/discovery.py#L499)按filtered丢弃，不能表达待判断，[来源说明](backend/app/connections/search_contracts.py#L49)也须同步修正。
 - **提案分歧待样本冻结**：当前[匹配函数](backend/app/monitors/services.py#L418)对CJK包含、Latin词边界，预览与执行共用，不能说二者已不一致。01中的规范化字串包含是待样本评审提案；用真实词组样本冻结匹配版本后同步预览、执行和说明，不为兼容旧代码保留错误方案，也不冒充用户已批准新算法。
 - **已有及确定差距**：当前原生身份键为owner/source_key/object_type/native_scope/external_id，[models.py](backend/app/content/models.py#L31)，内容版本、观察和发现已分开。[Threads强原生映射](backend/app/sources/editorial_identity.py#L25)另有证据合同，不能泛化为所有平台跨连接映射已完成。已知父ID但正文缺失的placeholder能补齐；父ID从None迟到则在[services.py](backend/app/content/services.py#L925)先认作root、[后续关系检查](backend/app/content/services.py#L1030)报冲突，未满足AC-03-01身份不变而补关系。
 - **已有及确定差距**：任务累计、互斥四类和lease_epoch执行轮差分已实现，[任务执行读取](backend/app/jobs/services.py#L3235)；但[分类](backend/app/content/collection_counts.py#L65)把“无保留前观察”直接计new，[历史查询](backend/app/content/services.py#L723)仅基于当前保留观察，历史清理会让旧对象误报新增。补可靠首次身份及比较证据；证据过期应unknown，旧dedup字段或旧口径不得作为兼容理由保留错误分类。
@@ -132,7 +133,7 @@
 | [30 账户与订阅设置](docs/requirement/30-账户与订阅设置.md) · [设计](docs/design/30-账户与订阅设置.md) · [计划](docs/plan/30-账户与订阅设置.md) | 个人资料/头像读写、凭据、身份连接和报告邮件订阅入口。 [account-settings.tsx](frontend/src/app/account/components/account-settings.tsx#L55) | 新FR/AC全项复核待办；真实账号挑战与送达未验收。 | 冲突/失败保留输入、凭据变更撤会话、真实邮箱/SMTP。 |
 | [31 个人工作台入口](docs/requirement/31-个人工作台入口.md) · [设计](docs/design/31-个人工作台入口.md) · [计划](docs/plan/31-个人工作台入口.md) | 登录工作台复用TopicsWorkspace并保留其他业务入口。 [page.tsx](frontend/src/app/workspace/page.tsx#L23) | 仍有/feeds、/agent等冻结功能入口，按00核对后清理。 | 个人会话隔离、入口可达及窄屏导航。 |
 | [32 监控主题工作区](docs/requirement/32-监控主题工作区.md) · [设计](docs/design/32-监控主题工作区.md) · [计划](docs/plan/32-监控主题工作区.md) | 全宽主题列表位于详情上方、默认展开可收起；连续主区与次级结果/运行/设置复用。 [topics-workspace.tsx](frontend/src/app/topics/components/topics-workspace.tsx#L19) | 草稿准入、资料排序、事件状态、24小时趋势和提醒原因分别见CORE-02/05/06/08/10。 | 仅主题区布局、旧tab深链接、草稿/版本冲突与1440px/390px五状态。 |
-| [33 新建监控主题](docs/requirement/33-新建监控主题.md) · [设计](docs/design/33-新建监控主题.md) · [计划](docs/plan/33-新建监控主题.md) | 三组词、来源能力、频率/报告配置、语言/窗口/采集上限、q预填和本地预览；新建默认暂停。 [topic-form.tsx](frontend/src/app/monitors/new/components/topic-form.tsx#L84) | 默认暂停已有；来源未就绪保存草稿被服务端拒绝，与新规范不符，见CORE-02。 | q长度、默认状态、草稿保留、重复提交与来源不可用。 |
+| [33 新建监控主题](docs/requirement/33-新建监控主题.md) · [设计](docs/design/33-新建监控主题.md) · [计划](docs/plan/33-新建监控主题.md) | 三组词、来源能力、频率/报告配置、语言/窗口/采集上限、q预填和本地预览；未就绪来源可存草稿，新建默认暂停。 [topic-form.tsx](frontend/src/app/monitors/new/components/topic-form.tsx#L84) | 草稿/启用分离与版本保护的代码切片完成，见CORE-02；匹配版本冻结和未知语言仍开放。 | q长度、草稿保留、重复提交、真实来源不可用时启用阻断。 |
 | [34 监控主题详情](docs/requirement/34-监控主题详情.md) · [设计](docs/design/34-监控主题详情.md) · [计划](docs/plan/34-监控主题详情.md) | 指定主题复用同一TopicsWorkspace与编辑/读取链。 [page.tsx](frontend/src/app/monitors/[topicId]/page.tsx#L5) | 按CORE-02/05/07核对配置、读取和恢复，不能因共用组件认定合同已满足。 | 动态topicId、跨owner、不存在、冲突与恢复。 |
 | [35 个人告警](docs/requirement/35-个人告警.md) · [设计](docs/design/35-个人告警.md) · [计划](docs/plan/35-个人告警.md) | 主题/事件选项翻页、规则/版本/目标编辑与最多50条历史。 [alerts-workspace.tsx](frontend/src/app/alerts/components/alerts-workspace.tsx#L429) | 通用负面/热度告警不能替代三类核心提醒；目标验证、静默、关注、语义去重和已读见CORE-09/10。 | 冷却、重复评估、目标修订、未知发送与本人实际收到。 |
 | [36 私有资料列表](docs/requirement/36-私有资料列表.md) · [设计](docs/design/36-私有资料列表.md) · [计划](docs/plan/36-私有资料列表.md) | q/来源/主题/日期/分析状态筛选、20条游标，网页采集为显式任务。 [content-list.tsx](frontend/src/app/content/components/content-list.tsx#L140) | 资料目前按UUID翻页；相关性/时效排序见CORE-05，保留观察与真实增量差距见CORE-03。 | 字面搜索、UTC边界、cursor上下文、owner与只读不采集。 |
@@ -167,13 +168,13 @@
 
 ## 验证证据与未通过范围
 
-本轮实现核对是源码审查，未重跑业务测试或现场检查部署。此前BACKLOG记录过暂停、查询快照、评论分析、恢复隔离、任务计量、Python质量及登录键盘的受控工程验证；这些结果只覆盖各自切片和当时树，不证明`569ea67c`全量业务回归、当前部署版本或新FR/AC通过。现有测试作为复用入口，不把旧数量汇总成当前通过数。
+规格重建阶段只做源码核对，随后实施切片才重跑工程检查。隔离切片的独立暂存快照全量2895项通过；后续切片联合工作树全量2932项通过（1079/841/1012，无跳过）；父链适配器后补反例另随该切片回填。后端全量Ruff、格式及mypy通过。草稿暂存快照Web全量1198项、lint/types/format/build及文档链接检查通过；主题、资料/评论、任务三组页面在1440px/390px受控HTTP样本覆盖正常、空、加载、错误、403及键盘操作。独立只读审查覆盖各切片的实际代码和合同。以上只证明代码与模拟场景，不证明当前部署、真实来源或新FR/AC全部通过；不把此前旧测试数量累计为本轮通过数。
 
 **部署结构待核对**：此前执行轮切片明确记录，新增执行跟踪、可空上游计数、观察执行归属及FK只在全新独立测试库执行，尚未升级业务库；本轮未检查或改变该状态。推送main不等于服务部署/业务结构已同步。上线前按[PROJECT数据库规则](PROJECT.md#6-数据库)确认现有结构、备份、升级与回滚，不在缺少相应结构的旧库直接运行新代码，也不补造历史轮次归属。此前未配置的Redis/MinIO测试依赖、真实MinIO证据恢复及业务恢复不计通过。
 
 | 范围 | 复用入口 | 本次后续必须补证 |
 |---|---|---|
-| 草稿/查询/采集 | [test_monitor_topics.py](backend/tests/integration/test_monitor_topics.py)、[test_keyword_discovery.py](backend/tests/integration/test_keyword_discovery.py)、[test_topic_collection_config.py](backend/tests/integration/test_topic_collection_config.py) | 未就绪草稿、确定匹配、未知语言、旧帖跟踪、逐平台真实限制 |
+| 草稿/查询/采集 | [test_monitor_topics.py](backend/tests/integration/test_monitor_topics.py)、[test_keyword_discovery.py](backend/tests/integration/test_keyword_discovery.py)、[test_topic_collection_config.py](backend/tests/integration/test_topic_collection_config.py) | 草稿/显式启用受控反例已通过；仍补匹配版本、未知语言、旧帖跟踪、逐平台真实限制 |
 | 身份/增量/执行轮 | [test_content_native_identity.py](backend/tests/integration/test_content_native_identity.py)、[test_content_collection_facts.py](backend/tests/integration/test_content_collection_facts.py)、[test_content_collection_counts.py](backend/tests/unit/test_content_collection_counts.py) | 父ID迟到、删除前观察不误报新增、同轮重复与跨轮、未知归属 |
 | 相关性/事件/事实 | [test_analysis_annotations.py](backend/tests/integration/test_analysis_annotations.py)、[test_event_clustering.py](backend/tests/integration/test_event_clustering.py)、[test_event_fact_delta.py](backend/tests/integration/test_event_fact_delta.py)、[test_event_corrections.py](backend/tests/integration/test_event_corrections.py) | 独立维度、排序、候选、确认/反证/纠错、继承；独立保留集质量 |
 | 调度/停止/预算 | [test_collection_coverage.py](backend/tests/integration/test_collection_coverage.py)、[test_topic_collection_pause.py](backend/tests/integration/test_topic_collection_pause.py)、[test_resource_budgets.py](backend/tests/integration/test_resource_budgets.py) | 离线跨政策完整分母、独立停止作用域、预算停用及不清额度 |

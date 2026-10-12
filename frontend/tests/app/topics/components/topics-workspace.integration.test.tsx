@@ -99,7 +99,10 @@ it("selects the first real topic, keeps old detail links, and reflects pause and
   );
   fireEvent.click(screen.getByRole("button", { name: "恢复关注" }));
   await screen.findByRole("button", { name: "暂停关注" });
-  expect(api.resume).toHaveBeenCalledWith({ topic_id: "topic-a" });
+  expect(api.resume).toHaveBeenCalledWith(
+    { topic_id: "topic-a" },
+    { expected_version: 2 },
+  );
   expect(screen.getByRole("link", { name: /主题一/ }).textContent).toContain(
     "定时已启用",
   );

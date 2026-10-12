@@ -151,19 +151,18 @@ def test_keywords_are_stably_deduplicated_and_cross_group_conflicts_are_rejected
 
     with pytest.raises(ApplicationError, match="keyword_group_conflict"):
         normalize_monitor_rules(
-            match_any=["品牌"],
-            match_all=[],
+            match_any=["另一个词"],
+            match_all=["品牌"],
             exclude=[" 品牌 "],
         )
 
 
-def test_same_keyword_cannot_appear_in_any_and_all_groups() -> None:
-    with pytest.raises(ApplicationError, match="keyword_group_conflict"):
-        normalize_monitor_rules(
-            match_any=["Brand"],
-            match_all=["\uff22\uff32\uff21\uff2e\uff24"],
-            exclude=[],
-        )
+def test_positive_overlap_and_partial_any_exclusion_remain_valid() -> None:
+    rules = normalize_monitor_rules(
+        match_any=["Alpha", "Beta"], match_all=["Beta"], exclude=["Alpha"]
+    )
+    assert evaluate_monitor_rules(rules, "Beta").matched
+    assert not evaluate_monitor_rules(rules, "Alpha Beta").matched
 
 
 def test_rule_match_reports_actual_positive_and_excluded_terms_in_rule_order() -> None:

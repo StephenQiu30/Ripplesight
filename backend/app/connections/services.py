@@ -1553,3 +1553,14 @@ def _authentication_failed(session: Session, connection: SourceConnection) -> bo
         )
         is not None
     )
+
+
+def validate_topic_search_source_keys(source_keys: tuple[str, ...]) -> None:
+    """Allow declared search sources in drafts, independently of connection readiness."""
+    declared = {
+        entry.source_key
+        for entry in SOURCE_CATALOG
+        if SourceCapability.SEARCH in entry.capabilities
+    }
+    if not set(source_keys).issubset(declared):
+        raise ApplicationError("invalid_monitor_rules")

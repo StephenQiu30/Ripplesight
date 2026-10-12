@@ -81,7 +81,7 @@ export function EditorialTopicSources({
     <FieldSet disabled={disabled}>
       <FieldLegend variant="label">订阅流</FieldLegend>
       <FieldDescription>
-        从已获准的订阅流中匹配关键词。一次更新可用于多个关注；筛选已有订阅内容的范围以来源说明为准。
+        订阅流可先保存到草稿；未就绪来源需在启用前完成检查。一次更新可用于多个关注，匹配范围以来源说明为准。
       </FieldDescription>
       {state.status === "loading" ? (
         <Spinner aria-label="正在读取订阅流" />
@@ -119,7 +119,7 @@ export function EditorialTopicSources({
                 <Switch
                   id={`editorial-profile-${item.profile_id}`}
                   checked={selected}
-                  disabled={disabled || (!item.selectable && !selected)}
+                  disabled={disabled}
                   onCheckedChange={(checked) =>
                     toggle(item.profile_id, checked)
                   }

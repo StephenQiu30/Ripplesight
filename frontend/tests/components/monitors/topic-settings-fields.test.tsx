@@ -59,7 +59,7 @@ describe("topic source settings", () => {
         .searchContract,
     ).toBeUndefined();
   });
-  it("distinguishes a selectable pending source from restricted and missing sources", () => {
+  it("allows declared unready sources in drafts while preserving readiness warnings", () => {
     const pending = selectableTopicSources([source("pending_verification")]);
     expect(pending[0].selectable).toBe(true);
     expect(pending[0].reason).toContain("待真实采集验证");
@@ -67,8 +67,8 @@ describe("topic source settings", () => {
       [source("restricted")],
       ["missing"],
     );
-    expect(restricted[0].selectable).toBe(false);
-    expect(restricted[0].reason).toContain("持久读取验证");
+    expect(restricted[0].selectable).toBe(true);
+    expect(restricted[0].reason).toContain("可保存草稿");
     expect(restricted[1].selectable).toBe(false);
     const html = renderToStaticMarkup(
       createElement(TopicSettingsFields, {

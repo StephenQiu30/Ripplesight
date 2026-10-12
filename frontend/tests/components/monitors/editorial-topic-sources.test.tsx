@@ -34,7 +34,7 @@ beforeEach(() => vi.resetAllMocks());
 afterEach(cleanup);
 
 describe("personal topic subscription sources", () => {
-  it("rejects a candidate selection while allowing removal of an unavailable selected source", async () => {
+  it("allows unready draft sources and removal of unavailable selections", async () => {
     api.list.mockResolvedValue([
       source,
       {
@@ -57,7 +57,9 @@ describe("personal topic subscription sources", () => {
     expect(screen.getByRole("switch", { name: "公开产品动态" })).toBeTruthy();
     expect(
       (screen.getByLabelText("待验证来源") as HTMLInputElement).disabled,
-    ).toBe(true);
+    ).toBe(false);
+    fireEvent.click(screen.getByLabelText("待验证来源"));
+    expect(changed).toHaveBeenLastCalledWith(["candidate", "unavailable"]);
     fireEvent.click(screen.getByLabelText("公开产品动态"));
     expect(changed).toHaveBeenLastCalledWith([
       "approved-profile",

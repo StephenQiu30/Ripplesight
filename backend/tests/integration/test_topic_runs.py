@@ -95,7 +95,11 @@ def _ready_topic(
         },
     )
     assert created.status_code == 201, created.json()
-    resumed = client.post(f"{created.headers['location']}/resume", headers=_csrf_headers(client))
+    resumed = client.post(
+        f"{created.headers['location']}/resume",
+        json={"expected_version": 1},
+        headers=_csrf_headers(client),
+    )
     assert resumed.status_code == 200, resumed.json()
     return created.headers["location"]
 
@@ -249,6 +253,10 @@ def test_manual_all_skipped_freezes_full_queries_and_replays_after_changes(
         },
     )
     assert edited.status_code == 200, edited.json()
+    enabled = client.post(
+        location + "/resume", headers=_csrf_headers(client), json={"expected_version": 2}
+    )
+    assert enabled.status_code == 200, enabled.json()
     if reason == "rate_limited":
         assert (
             client.post(
@@ -342,7 +350,12 @@ def test_manual_all_skipped_freezes_full_queries_and_replays_after_changes(
     fresh = {**payload, "operation_id": str(uuid4())}
     rejected = client.post(location + "/runs", headers=_csrf_headers(client), json=fresh)
     assert rejected.status_code == 409 and rejected.json()["code"] == "topic_not_ready"
-    assert client.post(location + "/resume", headers=_csrf_headers(client)).status_code == 200
+    assert (
+        client.post(
+            location + "/resume", json={"expected_version": 3}, headers=_csrf_headers(client)
+        ).status_code
+        == 200
+    )
     with factory() as session:
         fresh_result = MonitorTopicRunService(
             session, client.app.state.settings, clock=lambda: now + timedelta(hours=1)
@@ -394,7 +407,11 @@ def test_all_skipped_operation_conflicts_owner_isolation_constraints_and_cleanup
         assert created.status_code == 201, created.json()
         other_location = created.headers["location"]
         assert (
-            outsider.post(other_location + "/resume", headers=_csrf_headers(outsider)).status_code
+            outsider.post(
+                other_location + "/resume",
+                json={"expected_version": 1},
+                headers=_csrf_headers(outsider),
+            ).status_code
             == 200
         )
         with factory.begin() as session:
@@ -545,7 +562,9 @@ def test_shared_source_rotates_topics_across_due_windows(
     second = created.headers["location"]
     assert (
         monitor_topic_client.post(
-            second + "/resume", headers=_csrf_headers(monitor_topic_client)
+            second + "/resume",
+            json={"expected_version": 1},
+            headers=_csrf_headers(monitor_topic_client),
         ).status_code
         == 200
     )
@@ -588,6 +607,12 @@ def test_schedule_continues_after_topic_interval_changes(monitor_topic_client: T
         },
     )
     assert updated.status_code == 200, updated.json()
+    enabled = monitor_topic_client.post(
+        location + "/resume",
+        headers=_csrf_headers(monitor_topic_client),
+        json={"expected_version": 2},
+    )
+    assert enabled.status_code == 200, enabled.json()
     for seconds in (600, 2400):
         with factory.begin() as session:
             assert (
@@ -780,6 +805,10 @@ def test_query_limit_receipt_is_frozen_and_readable_without_extra_jobs(
         },
     )
     assert edited.status_code == 200, edited.json()
+    enabled = client.post(
+        location + "/resume", headers=_csrf_headers(client), json={"expected_version": 2}
+    )
+    assert enabled.status_code == 200, enabled.json()
     payload = {"operation_id": str(uuid4()), "source_keys": ["hackernews"]}
     sessions = client.app.state.session_factory
     if scheduled:
@@ -848,6 +877,10 @@ def test_manual_run_replay_preserves_numeric_query_order(monitor_topic_client: T
         },
     )
     assert edited.status_code == 200, edited.json()
+    enabled = client.post(
+        location + "/resume", headers=_csrf_headers(client), json={"expected_version": 2}
+    )
+    assert enabled.status_code == 200, enabled.json()
     payload = {"operation_id": str(uuid4()), "source_keys": ["hackernews"]}
     first = client.post(location + "/runs", headers=_csrf_headers(client), json=payload)
     replay = client.post(location + "/runs", headers=_csrf_headers(client), json=payload)
@@ -1113,6 +1146,10 @@ def test_scheduled_source_skip_freezes_queries_without_additional_work(
         },
     )
     assert edited.status_code == 200, edited.json()
+    enabled = client.post(
+        location + "/resume", headers=_csrf_headers(client), json={"expected_version": 2}
+    )
+    assert enabled.status_code == 200, enabled.json()
     if reason == "rate_limited":
         accepted = client.post(
             location + "/runs",

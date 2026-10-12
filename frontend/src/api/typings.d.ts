@@ -4438,6 +4438,11 @@ declare namespace HotKeyAPI {
   type MonitorTopicReadinessStatus =
     "pending_source_selection" | "pending_source_readiness" | "ready";
 
+  type MonitorTopicResumeInput = {
+    /** Expected Version */
+    expected_version: number;
+  };
+
   type MonitorTopicRunInput = {
     /** Operation Id */
     operation_id: string;

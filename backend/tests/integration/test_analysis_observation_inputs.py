@@ -682,7 +682,9 @@ def test_report_uses_readable_independent_alias_when_newer_same_version_alias_is
                 editorial_profile_ids=[profile_a.id, profile_b.id],
             ),
         )
-        selected = topics.resume_topic(owner_id=owner, topic_id=selected.id)
+        selected = topics.resume_topic(
+            owner_id=owner, topic_id=selected.id, expected_version=selected.current_version
+        )
         _, b = collect(session, service_b, owner, profile_b)
         _, a = collect(
             session,

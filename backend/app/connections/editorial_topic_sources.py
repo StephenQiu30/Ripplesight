@@ -160,3 +160,19 @@ def require_editorial_topic_profiles_in_transaction(
         view = _availability(session, profile, version, now)
         if not view.selectable:
             raise ApplicationError("editorial_source_unavailable", context={"reason": view.reason})
+
+
+def validate_editorial_topic_profiles_in_transaction(
+    session: Session, *, owner_id: UUID, profile_ids: tuple[UUID, ...]
+) -> None:
+    """Validate draft references without requiring execution readiness or doing I/O."""
+    from connections.editorial_rsshub import load_current_editorial_profile_in_transaction
+
+    if not session.in_transaction() or len(profile_ids) > 200:
+        raise ValueError("draft source validation requires a bounded caller transaction")
+    if len(set(profile_ids)) != len(profile_ids):
+        raise ApplicationError("invalid_editorial_input")
+    for profile_id in profile_ids:
+        load_current_editorial_profile_in_transaction(
+            session, owner_id=owner_id, profile_id=profile_id
+        )

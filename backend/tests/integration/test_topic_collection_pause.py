@@ -120,7 +120,7 @@ def _transition(client: TestClient, location: str, *, resume: bool = False) -> N
         topic_id = UUID(location.rsplit("/", 1)[1])
         service.pause_topic(owner_id=owner, topic_id=topic_id)
         if resume:
-            service.resume_topic(owner_id=owner, topic_id=topic_id)
+            service.resume_topic(owner_id=owner, topic_id=topic_id, expected_version=1)
 
 
 @pytest.mark.parametrize("kind", ["keyword.search", "source.comments"])
@@ -455,7 +455,12 @@ def test_other_topics_owners_and_source_hotlists_keep_request_permission(
     assert created.status_code == 201, created.json()
     foreign_location = created.headers["location"]
     assert (
-        client.post(foreign_location + "/resume", headers=_csrf_headers(client)).status_code == 200
+        client.post(
+            foreign_location + "/resume",
+            json={"expected_version": 1},
+            headers=_csrf_headers(client),
+        ).status_code
+        == 200
     )
     response = client.post(
         foreign_location + "/runs",

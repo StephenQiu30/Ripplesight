@@ -30,7 +30,9 @@ CONFIG = {
 }
 
 
-def configure(client: TestClient, location: str, *, version: int = 1, **config: object) -> dict:
+def configure(
+    client: TestClient, location: str, *, version: int = 1, enable: bool = False, **config: object
+) -> dict:
     response = client.patch(
         location,
         headers=_csrf_headers(client),
@@ -48,6 +50,13 @@ def configure(client: TestClient, location: str, *, version: int = 1, **config: 
         },
     )
     assert response.status_code == 200, response.json()
+    if enable:
+        response = client.post(
+            location + "/resume",
+            headers=_csrf_headers(client),
+            json={"expected_version": response.json()["current_version"]},
+        )
+        assert response.status_code == 200, response.json()
     return response.json()
 
 
@@ -57,7 +66,7 @@ def test_settings_version_clone_and_frozen_entry_points(
 ) -> None:
     client = monitor_topic_client
     location = _ready_topic(client, source_keys=("hackernews",), source_min_interval=0)
-    topic = configure(client, location)
+    topic = configure(client, location, enable=True)
     assert topic["current_version"] == 2
     assert {key: topic[key] for key in CONFIG} == CONFIG
     assert client.get(location).json() == topic
@@ -126,7 +135,7 @@ def test_cross_page_cap_and_language_use_frozen_settings(
 ) -> None:
     client = monitor_topic_client
     location = _ready_topic(client, source_keys=("hackernews",), source_min_interval=0)
-    configure(client, location)
+    configure(client, location, enable=True)
     accepted = client.post(
         location + "/runs",
         headers=_csrf_headers(client),
@@ -134,7 +143,6 @@ def test_cross_page_cap_and_language_use_frozen_settings(
     )
     assert accepted.status_code == 202
     job_id = UUID(accepted.json()["sources"][0]["job_ids"][0])
-    configure(client, location, version=2, search_language="zh", max_items_per_query=10)
     sessions = client.app.state.session_factory
     engine = sessions.kw["bind"]
     with sessions() as session:
@@ -186,6 +194,7 @@ def test_cross_page_cap_and_language_use_frozen_settings(
         lease_seconds=60,
         adapter_factory=lambda before, _cancelled, _limit, _seconds: Adapter(before),
     ).execute(_accepted_message(engine, job_id), lease)
+    configure(client, location, version=2, search_language="zh", max_items_per_query=10)
     assert [request.page_size for request in submitted] == [3, 3]
     assert completion.status.value == "partially_succeeded"
     assert renewed.checkpoint["collection.observed_count"] == 4
@@ -263,6 +272,7 @@ def test_native_hn_keeps_page_size_and_obeys_frozen_limits(
     configure(
         client,
         location,
+        enable=True,
         search_language="any",
         max_items_per_query=150,
         max_requests_per_query=request_limit,
@@ -336,7 +346,7 @@ def test_update_omitting_new_fields_preserves_collection_settings(
 ) -> None:
     client = monitor_topic_client
     location = _ready_topic(client, source_keys=("hackernews",), source_min_interval=0)
-    configure(client, location)
+    configure(client, location, enable=True)
     response = client.patch(
         location,
         headers=_csrf_headers(client),

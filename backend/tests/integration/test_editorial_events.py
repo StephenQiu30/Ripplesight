@@ -296,12 +296,13 @@ def test_selected_editorial_material_creates_story_without_a_user_monitor(
         for method in (
             topic_service.get_topic,
             topic_service.clone_topic,
-            topic_service.resume_topic,
             topic_service.pause_topic,
             topic_service.archive_topic,
         ):
             with pytest.raises(ApplicationError, match="resource_not_found"):
                 method(owner_id=owner, topic_id=event.topic_id)
+        with pytest.raises(ApplicationError, match="resource_not_found"):
+            topic_service.resume_topic(owner_id=owner, topic_id=event.topic_id, expected_version=1)
         with pytest.raises(ApplicationError, match="resource_not_found"):
             topic_service.update_topic(
                 owner_id=owner,

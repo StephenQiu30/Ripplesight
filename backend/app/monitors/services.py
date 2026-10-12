@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from connections.services import (
     load_applied_source_presets_in_transaction,
     load_execution_policy_in_transaction,
+    validate_topic_search_source_keys,
 )
 from core.errors import ApplicationError
 from evidence.services import load_source_access_readiness
@@ -396,13 +397,12 @@ def normalize_monitor_rules(
     match_all: Iterable[str],
     exclude: Iterable[str],
 ) -> NormalizedMonitorRules:
-    normalized_any, any_keys = _normalize_group(match_any)
+    normalized_any, _ = _normalize_group(match_any)
     normalized_all, all_keys = _normalize_group(match_all)
     normalized_exclude, exclude_keys = _normalize_group(exclude)
     if not normalized_any and not normalized_all:
         raise ApplicationError("invalid_monitor_rules")
-    include_keys = any_keys | all_keys
-    if any_keys & all_keys or include_keys & exclude_keys:
+    if all_keys & exclude_keys:
         raise ApplicationError("keyword_group_conflict")
     return NormalizedMonitorRules(
         match_any=normalized_any,
@@ -849,7 +849,7 @@ class MonitorTopicService:
         command: MonitorTopicCreateInput,
     ) -> MonitorTopicView:
         from connections.editorial_topic_sources import (
-            require_editorial_topic_profiles_in_transaction,
+            validate_editorial_topic_profiles_in_transaction,
         )
 
         name = self._normalize_name(command.name)
@@ -862,22 +862,17 @@ class MonitorTopicService:
         now = self._clock()
         self._session.rollback()
         with self._session.begin():
-            require_editorial_topic_profiles_in_transaction(
-                self._session, owner_id=owner_id, profile_ids=profile_ids, now=now
+            validate_topic_search_source_keys(source_keys)
+            validate_editorial_topic_profiles_in_transaction(
+                self._session, owner_id=owner_id, profile_ids=profile_ids
             )
-            source_intervals = self._require_applied_search_sources(
-                owner_id=owner_id, source_keys=source_keys
-            )
+            readiness = self._draft_readiness(owner_id, source_keys, profile_ids, now)
             topic = MonitorTopic(
                 id=uuid4(),
                 owner_id=owner_id,
                 name=name,
                 status=MonitorTopicStatus.PAUSED.value,
-                readiness_status=(
-                    MonitorTopicReadinessStatus.READY.value
-                    if source_keys or profile_ids
-                    else MonitorTopicReadinessStatus.PENDING_SOURCE_SELECTION.value
-                ),
+                readiness_status=readiness.value,
                 current_version=1,
                 collection_interval_seconds=command.collection_interval_seconds,
                 report_time=command.report_time,
@@ -908,9 +903,6 @@ class MonitorTopicService:
             self._session.flush()
             self._session.add(version)
             self._record_status_event(topic=topic, reason="created", occurred_at=now)
-            self._sync_search_schedules(
-                topic=topic, source_keys=source_keys, source_intervals=source_intervals, now=now
-            )
             view = self._view(topic, version, source_keys=source_keys)
         return view
 
@@ -1073,7 +1065,7 @@ class MonitorTopicService:
 
     def clone_topic(self, *, owner_id: UUID, topic_id: UUID) -> MonitorTopicView:
         from connections.editorial_topic_sources import (
-            require_editorial_topic_profiles_in_transaction,
+            validate_editorial_topic_profiles_in_transaction,
         )
 
         reject_internal_editorial_topic(owner_id=owner_id, topic_id=topic_id)
@@ -1084,22 +1076,17 @@ class MonitorTopicService:
             source_version = self._find_version(source)
             source_keys = self._source_keys(source)
             profile_ids = tuple(UUID(value) for value in source_version.editorial_profile_ids)
-            require_editorial_topic_profiles_in_transaction(
-                self._session, owner_id=owner_id, profile_ids=profile_ids, now=now
+            validate_editorial_topic_profiles_in_transaction(
+                self._session, owner_id=owner_id, profile_ids=profile_ids
             )
-            source_intervals = self._require_applied_search_sources(
-                owner_id=owner_id, source_keys=source_keys
-            )
+            validate_topic_search_source_keys(source_keys)
+            readiness = self._draft_readiness(owner_id, source_keys, profile_ids, now)
             clone = MonitorTopic(
                 id=uuid4(),
                 owner_id=owner_id,
                 name=source.name,
                 status=MonitorTopicStatus.PAUSED.value,
-                readiness_status=(
-                    MonitorTopicReadinessStatus.READY.value
-                    if source_keys or profile_ids
-                    else MonitorTopicReadinessStatus.PENDING_SOURCE_SELECTION.value
-                ),
+                readiness_status=readiness.value,
                 current_version=1,
                 collection_interval_seconds=source.collection_interval_seconds,
                 report_time=source.report_time,
@@ -1130,9 +1117,6 @@ class MonitorTopicService:
             self._session.flush()
             self._session.add(clone_version)
             self._record_status_event(topic=clone, reason="cloned", occurred_at=now)
-            self._sync_search_schedules(
-                topic=clone, source_keys=source_keys, source_intervals=source_intervals, now=now
-            )
             view = self._view(clone, clone_version, source_keys=source_keys)
         return view
 
@@ -1143,11 +1127,15 @@ class MonitorTopicService:
             target=MonitorTopicStatus.PAUSED,
         )
 
-    def resume_topic(self, *, owner_id: UUID, topic_id: UUID) -> MonitorTopicView:
+    def resume_topic(
+        self, *, owner_id: UUID, topic_id: UUID, expected_version: int
+    ) -> MonitorTopicView:
+        """Enable the reviewed version after current source and budget admission."""
         return self._transition_topic(
             owner_id=owner_id,
             topic_id=topic_id,
             target=MonitorTopicStatus.ACTIVE,
+            expected_version=expected_version,
         )
 
     def archive_topic(self, *, owner_id: UUID, topic_id: UUID) -> MonitorTopicView:
@@ -1165,7 +1153,7 @@ class MonitorTopicService:
         command: MonitorTopicUpdateInput,
     ) -> MonitorTopicView:
         from connections.editorial_topic_sources import (
-            require_editorial_topic_profiles_in_transaction,
+            validate_editorial_topic_profiles_in_transaction,
         )
 
         reject_internal_editorial_topic(owner_id=owner_id, topic_id=topic_id)
@@ -1188,12 +1176,11 @@ class MonitorTopicService:
                 raise ApplicationError("topic_archived")
             if topic.current_version != command.expected_version:
                 raise ApplicationError("topic_version_conflict")
-            source_intervals = self._require_applied_search_sources(
-                owner_id=owner_id, source_keys=source_keys
+            validate_topic_search_source_keys(source_keys)
+            validate_editorial_topic_profiles_in_transaction(
+                self._session, owner_id=owner_id, profile_ids=profile_ids
             )
-            require_editorial_topic_profiles_in_transaction(
-                self._session, owner_id=owner_id, profile_ids=profile_ids, now=now
-            )
+            readiness = self._draft_readiness(owner_id, source_keys, profile_ids, now)
             current = self._find_version(topic)
             command = command.model_copy(
                 update={
@@ -1219,12 +1206,6 @@ class MonitorTopicService:
                 or current.max_items_per_query != command.max_items_per_query
                 or current.max_requests_per_query != command.max_requests_per_query
             )
-            if (
-                topic.status == MonitorTopicStatus.ACTIVE.value
-                and collection_changed
-                and source_keys
-            ):
-                self._require_available_source_budget(owner_id=owner_id, source_keys=source_keys)
             settings_changed = (
                 collection_changed
                 or topic.report_time != command.report_time
@@ -1252,32 +1233,26 @@ class MonitorTopicService:
                 )
                 self._session.add(current)
                 topic.current_version = next_version
-            if name_changed or rules_changed or settings_changed:
+            if (
+                name_changed
+                or rules_changed
+                or settings_changed
+                or topic.readiness_status != readiness.value
+            ):
                 topic.name = name
                 if (
-                    not (source_keys or profile_ids)
-                    and topic.status == MonitorTopicStatus.ACTIVE.value
-                ):
+                    rules_changed or collection_changed
+                ) and topic.status == MonitorTopicStatus.ACTIVE.value:
                     topic.status = MonitorTopicStatus.PAUSED.value
-                    self._record_status_event(
-                        topic=topic, reason="source_selection", occurred_at=now
-                    )
-                topic.readiness_status = (
-                    MonitorTopicReadinessStatus.READY.value
-                    if source_keys or profile_ids
-                    else MonitorTopicReadinessStatus.PENDING_SOURCE_SELECTION.value
-                )
+                    self._record_status_event(topic=topic, reason="paused", occurred_at=now)
+                topic.readiness_status = readiness.value
                 topic.collection_interval_seconds = command.collection_interval_seconds
                 topic.report_time = command.report_time
                 topic.weekly_report_enabled = command.weekly_report_enabled
                 topic.notification_target_names = list(notification_target_names)
                 topic.updated_at = now
-            self._sync_search_schedules(
-                topic=topic,
-                source_keys=source_keys,
-                source_intervals=source_intervals,
-                now=now,
-            )
+            if topic.status != MonitorTopicStatus.ACTIVE.value:
+                self._set_schedules_enabled(topic=topic, enabled=False, now=now)
             view = self._view(topic, current, source_keys=source_keys)
         return view
 
@@ -1287,6 +1262,7 @@ class MonitorTopicService:
         owner_id: UUID,
         topic_id: UUID,
         target: MonitorTopicStatus,
+        expected_version: int | None = None,
     ) -> MonitorTopicView:
         from connections.editorial_topic_sources import (
             require_editorial_topic_profiles_in_transaction,
@@ -1301,6 +1277,8 @@ class MonitorTopicService:
                 topic_id=topic_id,
                 for_update=True,
             )
+            if target == MonitorTopicStatus.ACTIVE and topic.current_version != expected_version:
+                raise ApplicationError("topic_version_conflict")
             previous_status = topic.status
             if topic.status == MonitorTopicStatus.ARCHIVED.value:
                 if target != MonitorTopicStatus.ARCHIVED:
@@ -1374,17 +1352,33 @@ class MonitorTopicService:
         return version
 
     def _source_keys(self, topic: MonitorTopic) -> tuple[str, ...]:
-        return tuple(
-            self._session.scalars(
-                select(MonitorSchedule.source_key)
-                .where(
-                    MonitorSchedule.owner_id == topic.owner_id,
-                    MonitorSchedule.topic_id == topic.id,
-                    MonitorSchedule.capability == SourceCapability.SEARCH.value,
-                )
-                .order_by(MonitorSchedule.source_key)
-            )
+        """Read configured selections from the immutable rule, not execution schedules."""
+        return tuple(self._find_version(topic).source_keys)
+
+    def _draft_readiness(
+        self,
+        owner_id: UUID,
+        source_keys: tuple[str, ...],
+        profile_ids: tuple[UUID, ...],
+        now: datetime,
+    ) -> MonitorTopicReadinessStatus:
+        """Describe readiness without admitting work, reserving budget, or losing drafts."""
+        from connections.editorial_topic_sources import (
+            require_editorial_topic_profiles_in_transaction,
         )
+
+        if not (source_keys or profile_ids):
+            return MonitorTopicReadinessStatus.PENDING_SOURCE_SELECTION
+        try:
+            self._require_applied_search_sources(owner_id=owner_id, source_keys=source_keys)
+            require_editorial_topic_profiles_in_transaction(
+                self._session, owner_id=owner_id, profile_ids=profile_ids, now=now
+            )
+        except ApplicationError as error:
+            if error.code not in {"source_preset_not_applied", "editorial_source_unavailable"}:
+                raise
+            return MonitorTopicReadinessStatus.PENDING_SOURCE_READINESS
+        return MonitorTopicReadinessStatus.READY
 
     def _require_applied_search_sources(
         self,

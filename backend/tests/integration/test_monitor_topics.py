@@ -222,22 +222,74 @@ def test_source_and_interval_changes_create_immutable_topic_snapshots(
     assert monitor_topic_client.get(location).json() == updated.json()
 
 
-def test_unapplied_search_source_cannot_be_selected_or_resumed(
+def test_unready_search_source_saves_draft_without_execution_side_effects(
     monitor_topic_client: TestClient,
 ) -> None:
     _user_scope(monitor_topic_client)
-    rejected = monitor_topic_client.post(
+    created = monitor_topic_client.post(
         "/api/topics",
         headers=_csrf_headers(monitor_topic_client),
         json={**_topic_payload(), "source_keys": ["hackernews"]},
     )
+    assert created.status_code == 201, created.text
+    assert created.json()["status"] == "paused"
+    assert created.json()["readiness_status"] == "pending_source_readiness"
+    location = created.headers["location"]
+    rejected = monitor_topic_client.post(
+        location + "/resume",
+        json={"expected_version": 1},
+        headers=_csrf_headers(monitor_topic_client),
+    )
     assert rejected.status_code == 409
     assert rejected.json()["code"] == "source_preset_not_applied"
+    assert monitor_topic_client.get(location).json() == created.json()
     with monitor_topic_client.app.state.session_factory() as session:
-        assert session.execute(text("SELECT count(*) FROM monitor_topics")).scalar_one() == 0
+        for table in (
+            "jobs",
+            "monitor_schedules",
+            "resource_budget_reservations",
+            "source_connections",
+        ):
+            assert session.scalar(text(f"SELECT count(*) FROM {table}")) == 0
 
 
-def test_source_selection_rejects_revoked_access_policy(
+def test_clone_keeps_unready_configuration_as_draft_without_work(
+    monitor_topic_client: TestClient,
+) -> None:
+    created = monitor_topic_client.post(
+        "/api/topics",
+        headers=_csrf_headers(monitor_topic_client),
+        json={**_topic_payload(), "source_keys": ["hackernews"]},
+    )
+    assert created.status_code == 201
+    cloned = monitor_topic_client.post(
+        created.headers["location"] + "/clone", headers=_csrf_headers(monitor_topic_client)
+    )
+    assert cloned.status_code == 201, cloned.text
+    assert cloned.json()["status"] == "paused"
+    assert cloned.json()["source_keys"] == ["hackernews"]
+    assert cloned.json()["readiness_status"] == "pending_source_readiness"
+    with monitor_topic_client.app.state.session_factory() as session:
+        for table in (
+            "jobs",
+            "monitor_schedules",
+            "resource_budget_reservations",
+            "source_connections",
+        ):
+            assert session.scalar(text(f"SELECT count(*) FROM {table}")) == 0
+
+
+@pytest.mark.parametrize("source", ["unknown_source", "hotlist_weibo"])
+def test_draft_rejects_unknown_or_non_search_source(monitor_topic_client, source):
+    response = monitor_topic_client.post(
+        "/api/topics",
+        headers=_csrf_headers(monitor_topic_client),
+        json={**_topic_payload(), "source_keys": [source]},
+    )
+    assert response.status_code == 422
+
+
+def test_revoked_source_can_be_saved_but_cannot_be_enabled(
     monitor_topic_client: TestClient,
 ) -> None:
     _user_scope(monitor_topic_client)
@@ -260,8 +312,15 @@ def test_source_selection_rejects_revoked_access_policy(
         headers=_csrf_headers(monitor_topic_client),
         json={**_topic_payload(), "source_keys": ["hackernews"]},
     )
-    assert rejected.status_code == 409
-    assert rejected.json()["code"] == "source_preset_not_applied"
+    assert rejected.status_code == 201, rejected.text
+    assert rejected.json()["status"] == "paused"
+    assert rejected.json()["readiness_status"] == "pending_source_readiness"
+    enabled = monitor_topic_client.post(
+        rejected.headers["location"] + "/resume",
+        json={"expected_version": 1},
+        headers=_csrf_headers(monitor_topic_client),
+    )
+    assert enabled.status_code == 409 and enabled.json()["code"] == "source_preset_not_applied"
 
 
 @pytest.mark.parametrize("budget_key", ["source.hackernews.network.daily", "missing_global"])
@@ -295,6 +354,7 @@ def test_resume_rejects_unavailable_source_budget(
         )
     rejected = monitor_topic_client.post(
         f"{created.headers['location']}/resume",
+        json={"expected_version": 1},
         headers=_csrf_headers(monitor_topic_client),
     )
     assert rejected.status_code == 409
@@ -302,7 +362,7 @@ def test_resume_rejects_unavailable_source_budget(
     assert monitor_topic_client.get(created.headers["location"]).json()["status"] == "paused"
 
 
-def test_active_topic_cannot_enable_a_new_source_without_budget(
+def test_active_topic_edit_saves_paused_draft_and_enable_rechecks_budget(
     monitor_topic_client: TestClient,
 ) -> None:
     _user_scope(monitor_topic_client)
@@ -321,7 +381,9 @@ def test_active_topic_cannot_enable_a_new_source_without_budget(
     assert created.status_code == 201, created.json()
     location = created.headers["location"]
     resumed = monitor_topic_client.post(
-        f"{location}/resume", headers=_csrf_headers(monitor_topic_client)
+        f"{location}/resume",
+        json={"expected_version": 1},
+        headers=_csrf_headers(monitor_topic_client),
     )
     assert resumed.status_code == 200, resumed.json()
     with factory.begin() as session:
@@ -341,11 +403,17 @@ def test_active_topic_cannot_enable_a_new_source_without_budget(
             "source_keys": ["google_news", "hackernews"],
         },
     )
-    assert rejected.status_code == 409
-    assert rejected.json()["code"] == "topic_not_ready"
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["status"] == "paused"
+    enabled = monitor_topic_client.post(
+        location + "/resume",
+        json={"expected_version": 2},
+        headers=_csrf_headers(monitor_topic_client),
+    )
+    assert enabled.status_code == 409 and enabled.json()["code"] == "topic_not_ready"
     current = monitor_topic_client.get(location)
-    assert current.json()["current_version"] == 1
-    assert current.json()["source_keys"] == ["hackernews"]
+    assert current.json()["current_version"] == 2
+    assert current.json()["source_keys"] == ["google_news", "hackernews"]
     with factory() as session:
         events = session.execute(
             text(
@@ -354,7 +422,7 @@ def test_active_topic_cannot_enable_a_new_source_without_budget(
             ),
             {"topic_id": created.json()["id"]},
         ).all()
-    assert events == [("paused", "created"), ("active", "resumed")]
+    assert events == [("paused", "created"), ("active", "resumed"), ("paused", "paused")]
 
 
 def test_name_only_edit_keeps_rule_version_and_owner_filter_hides_topic(
@@ -407,7 +475,7 @@ def test_conflicting_keyword_groups_are_rejected_without_persistence(
     rejected = monitor_topic_client.post(
         "/api/topics",
         headers=_csrf_headers(monitor_topic_client),
-        json={**_topic_payload(), "exclude": [" brand "]},
+        json={**_topic_payload(), "match_all": ["Brand"], "exclude": [" brand "]},
     )
 
     assert rejected.status_code == 422
@@ -536,6 +604,7 @@ def test_topic_lifecycle_is_idempotent_and_resume_requires_ready_source(
     )
     resumed = monitor_topic_client.post(
         f"{location}/resume",
+        json={"expected_version": 1},
         headers=_csrf_headers(monitor_topic_client),
     )
     assert paused.status_code == 200
@@ -556,6 +625,7 @@ def test_topic_lifecycle_is_idempotent_and_resume_requires_ready_source(
     assert selected.status_code == 200
     resumed_ready = monitor_topic_client.post(
         f"{location}/resume",
+        json={"expected_version": 2},
         headers=_csrf_headers(monitor_topic_client),
     )
     with factory() as session:
@@ -565,6 +635,7 @@ def test_topic_lifecycle_is_idempotent_and_resume_requires_ready_source(
         ).scalar_one()
     resumed_again = monitor_topic_client.post(
         f"{location}/resume",
+        json={"expected_version": 2},
         headers=_csrf_headers(monitor_topic_client),
     )
     with factory() as session:
@@ -602,7 +673,9 @@ def test_topic_lifecycle_is_idempotent_and_resume_requires_ready_source(
     assert edit_archived.status_code == 409
     assert edit_archived.json()["code"] == "topic_archived"
     resume_archived = monitor_topic_client.post(
-        f"{location}/resume", headers=_csrf_headers(monitor_topic_client)
+        f"{location}/resume",
+        json={"expected_version": 2},
+        headers=_csrf_headers(monitor_topic_client),
     )
     assert resume_archived.status_code == 409
     assert resume_archived.json()["code"] == "topic_archived"
@@ -668,7 +741,9 @@ def test_removing_all_sources_records_automatic_topic_pause(
     assert created.status_code == 201, created.json()
     location = created.headers["location"]
     resumed = monitor_topic_client.post(
-        location + "/resume", headers=_csrf_headers(monitor_topic_client)
+        location + "/resume",
+        json={"expected_version": 1},
+        headers=_csrf_headers(monitor_topic_client),
     )
     assert resumed.status_code == 200, resumed.json()
     selected_none = monitor_topic_client.patch(
@@ -691,7 +766,7 @@ def test_removing_all_sources_records_automatic_topic_pause(
     assert events == [
         (1, "paused", "created", 1),
         (2, "active", "resumed", 1),
-        (3, "paused", "source_selection", 2),
+        (3, "paused", "paused", 2),
     ]
 
 
@@ -847,6 +922,15 @@ def test_shorter_cadence_bounds_existing_future_deadline_without_delaying_due_wo
     )
     assert created.status_code == 201, created.text
     topic = created.json()["id"]
+    location = created.headers["location"]
+    assert (
+        monitor_topic_client.post(
+            location + "/resume",
+            json={"expected_version": 1},
+            headers=_csrf_headers(monitor_topic_client),
+        ).status_code
+        == 200
+    )
     old_deadline = datetime.now(UTC) + timedelta(days=1)
     with factory.begin() as session:
         session.execute(
@@ -859,6 +943,21 @@ def test_shorter_cadence_bounds_existing_future_deadline_without_delaying_due_wo
         json={**payload, "expected_version": 1, "collection_interval_seconds": 3600},
     )
     assert updated.status_code == 200, updated.text
+    assert updated.json()["status"] == "paused"
+    with factory() as session:
+        scheduled = session.execute(
+            text("SELECT next_run_at,enabled FROM monitor_schedules WHERE topic_id=:topic"),
+            {"topic": topic},
+        ).one()
+        assert scheduled.next_run_at == old_deadline and not scheduled.enabled
+    assert (
+        monitor_topic_client.post(
+            location + "/resume",
+            json={"expected_version": 2},
+            headers=_csrf_headers(monitor_topic_client),
+        ).status_code
+        == 200
+    )
     with factory() as session:
         row = session.execute(
             text("SELECT next_run_at,updated_at FROM monitor_schedules WHERE topic_id=:topic"),
@@ -878,6 +977,14 @@ def test_shorter_cadence_bounds_existing_future_deadline_without_delaying_due_wo
         json={**payload, "expected_version": 2, "collection_interval_seconds": 3600},
     )
     assert repaired.status_code == 200 and repaired.json()["current_version"] == 2
+    assert (
+        monitor_topic_client.post(
+            location + "/resume",
+            json={"expected_version": 2},
+            headers=_csrf_headers(monitor_topic_client),
+        ).status_code
+        == 200
+    )
     with factory() as session:
         next_due = session.execute(
             text("SELECT next_run_at FROM monitor_schedules WHERE topic_id=:topic"),
@@ -904,3 +1011,37 @@ def test_shorter_cadence_bounds_existing_future_deadline_without_delaying_due_wo
             ).scalar_one()
             == overdue
         )
+
+
+def test_enable_requires_reviewed_version_and_keeps_stale_draft_paused(monitor_topic_client):
+    created = monitor_topic_client.post(
+        "/api/topics",
+        headers=_csrf_headers(monitor_topic_client),
+        json={**_topic_payload(), "source_keys": ["hackernews"]},
+    )
+    location = created.headers["location"]
+    changed = monitor_topic_client.patch(
+        location,
+        headers=_csrf_headers(monitor_topic_client),
+        json={
+            **_topic_payload(),
+            "source_keys": ["hackernews"],
+            "match_any": ["new"],
+            "expected_version": 1,
+        },
+    )
+    assert changed.status_code == 200 and changed.json()["current_version"] == 2
+    missing = monitor_topic_client.post(
+        location + "/resume", headers=_csrf_headers(monitor_topic_client)
+    )
+    assert missing.status_code == 422
+    stale = monitor_topic_client.post(
+        location + "/resume",
+        headers=_csrf_headers(monitor_topic_client),
+        json={"expected_version": 1},
+    )
+    assert stale.status_code == 409 and stale.json()["code"] == "topic_version_conflict"
+    assert monitor_topic_client.get(location).json()["status"] == "paused"
+    with monitor_topic_client.app.state.session_factory() as session:
+        assert session.scalar(text("SELECT count(*) FROM monitor_schedules")) == 0
+        assert session.scalar(text("SELECT count(*) FROM jobs")) == 0

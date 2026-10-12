@@ -438,13 +438,17 @@ export function TopicEditor({
         router.push(`/monitors/${clone.id}`);
         return;
       }
-      const operation =
-        action === "archive"
-          ? archiveMonitorTopic
-          : action === "pause"
-            ? pauseMonitorTopic
-            : resumeMonitorTopic;
-      const topic = await operation({ topic_id: topicId });
+      const topic =
+        action === "resume"
+          ? await resumeMonitorTopic(
+              { topic_id: topicId },
+              { expected_version: state.topic.current_version },
+            )
+          : await (
+              action === "archive" ? archiveMonitorTopic : pauseMonitorTopic
+            )({
+              topic_id: topicId,
+            });
       if (!mounted.current) return;
       applyTopic(topic);
       toast.success(
@@ -694,7 +698,7 @@ export function TopicEditor({
                 ))}
               </UI.Content>
               <UI.Text tone="muted" size="sm">
-                调整后保存才会生效，保存不会立即开始采集。
+                关键词或采集配置改动保存后将暂停关注，需明确开始运行；保存本身不采集。
               </UI.Text>
               <UI.Content className="flex flex-wrap gap-2">
                 {topic.status === "active" ? (

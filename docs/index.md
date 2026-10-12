@@ -10,7 +10,7 @@
 - [接口与异步合同](design/00-产品目标与边界.md#接口与异步合同设计)：输入输出、版本、幂等和未知恢复，不绑定旧路由。
 - [依赖与发布门槛](plan/00-产品目标与边界.md#总体执行顺序)：Card/Conversation/Confirmation故事及有具体产物、依赖、完成判据的任务。
 
-追踪为`OR → REQ/FR → BR/NFR → design → US/T → AC → BACKLOG证据`。方案与指标未获正式评审的部分明确待定，不能把文档完成当成能力可用。进度、阈值确认及运行证据只在根目录BACKLOG；运行架构在PROJECT，本轮未改业务代码或数据库。
+追踪为`OR → REQ/FR → BR/NFR → design → US/T → AC → BACKLOG证据`。方案与指标未获正式评审的部分明确待定，不能把文档完成当成能力可用。进度、阈值确认及运行证据只在根目录BACKLOG；运行架构在PROJECT，实施状态以BACKLOG为准。
 
 ## 需求目录
 

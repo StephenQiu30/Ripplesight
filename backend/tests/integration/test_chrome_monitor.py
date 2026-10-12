@@ -103,7 +103,9 @@ def test_chrome_owner_preset_real_pipeline_and_idempotent_dispatch(
         assert response.status_code == 201, response.json()
         topic_id = response.json()["id"]
         response = client.post(
-            f"/api/topics/{topic_id}/resume", headers=authenticated_headers(client)
+            f"/api/topics/{topic_id}/resume",
+            json={"expected_version": 1},
+            headers=authenticated_headers(client),
         )
         assert response.status_code == 200, response.json()
         operation = {"operation_id": str(uuid4()), "source_keys": ["bilibili"]}
