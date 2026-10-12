@@ -1,6 +1,7 @@
 "use client";
 
 import { PageHeader } from "@/components/system/page-header";
+import { cn } from "@/lib/utils";
 
 import { SavedNote, readSavedNotes } from "./saved-note";
 import { Fragment, useEffect, useRef, useState } from "react";
@@ -362,6 +363,25 @@ export function SavedItems({
       .catch(() => toast.error("存储不可用，未删除。"))
       .finally(() => setRemoving((old) => old.filter((entry) => entry !== id)));
   };
+  const searchField = full ? (
+    <Field className="w-full md:w-65">
+      <FieldLabel htmlFor="saved-search" className="sr-only">
+        搜索本页收藏
+      </FieldLabel>
+      <InputGroup>
+        <InputGroupAddon>
+          <SearchIcon />
+        </InputGroupAddon>
+        <InputGroupInput
+          id="saved-search"
+          type="search"
+          placeholder="在本页收藏中搜索"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </InputGroup>
+    </Field>
+  ) : null;
   return (
     <UI.Content
       as="section"
@@ -378,10 +398,15 @@ export function SavedItems({
       >
         下载收藏
       </UI.TextLink>
-      <UI.Content className="flex flex-wrap items-center justify-between gap-4">
+      <UI.Content
+        className={cn(
+          !pageTitle && "flex flex-wrap items-center justify-between gap-4",
+        )}
+      >
         {pageTitle ? (
           <PageHeader
             title={full ? "收藏" : label}
+            actions={searchField}
             description={
               <>
                 {!busy && !storageUnavailable
@@ -407,25 +432,7 @@ export function SavedItems({
             </UI.Text>
           </UI.Content>
         )}
-        {full ? (
-          <Field className="w-full md:w-65">
-            <FieldLabel htmlFor="saved-search" className="sr-only">
-              搜索本页收藏
-            </FieldLabel>
-            <InputGroup>
-              <InputGroupAddon>
-                <SearchIcon />
-              </InputGroupAddon>
-              <InputGroupInput
-                id="saved-search"
-                type="search"
-                placeholder="在本页收藏中搜索"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </InputGroup>
-          </Field>
-        ) : null}
+        {!pageTitle && searchField}
       </UI.Content>
       <UI.Content className={full ? "reading-columns items-start" : undefined}>
         <UI.Content className="flex min-w-0 flex-col gap-4">

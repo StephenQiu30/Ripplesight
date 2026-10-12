@@ -13,11 +13,14 @@ const toggleVariants = cva(
         default: "bg-transparent",
         segmented:
           "text-muted-foreground bg-transparent data-[state=on]:bg-background data-[state=on]:text-foreground",
+        auth: "text-muted-foreground bg-transparent text-[13px] data-[state=on]:bg-background data-[state=on]:text-foreground",
         reading:
           "text-muted-foreground bg-secondary rounded-full data-[state=on]:bg-primary data-[state=on]:text-primary-foreground md:rounded-md md:bg-transparent md:data-[state=on]:bg-background md:data-[state=on]:text-foreground",
         outline: "border border-input bg-transparent hover:bg-muted",
       },
       size: {
+        reading:
+          "h-9 min-w-9 px-3.5 text-[13px] md:h-8 md:min-w-8 md:px-2.5 md:text-sm",
         default:
           "h-8 min-w-8 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         sm: "h-7 min-w-7 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",

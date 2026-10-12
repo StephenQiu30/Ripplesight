@@ -43,7 +43,7 @@ export function TopicAlerts({ topicId }: { topicId: string }) {
       className="flex min-w-0 flex-col gap-4"
     >
       <UI.Content className="flex flex-wrap items-center justify-between gap-3">
-        <UI.Heading level={3} appearance="sidebar">
+        <UI.Heading level={3} appearance="subsection">
           告警规则
         </UI.Heading>
         <Button asChild variant="link">
@@ -132,7 +132,7 @@ export function TopicAlerts({ topicId }: { topicId: string }) {
       {!error?.forbidden && rules ? (
         <UI.Content as="section" layout="stack" className="mt-5">
           <UI.Content className="flex items-center justify-between gap-3">
-            <UI.Heading level={3} appearance="sidebar">
+            <UI.Heading level={3} appearance="subsection">
               最近告警
             </UI.Heading>
             <Button

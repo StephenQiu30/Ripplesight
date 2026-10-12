@@ -1,4 +1,5 @@
 "use client";
+import { Badge } from "@/components/ui/badge";
 import * as UI from "@/components/ui/content";
 
 import { toast } from "sonner";
@@ -585,19 +586,20 @@ export function TopicEditor({
           <Link href="/topics">返回我的关注</Link>
         </Button>
       )}
-      <UI.Content className="flex min-w-0 flex-col gap-8">
+      <UI.Content className="flex min-w-0 flex-col gap-5">
         <UI.Content
           as="section"
           aria-label="主题详情"
-          className="flex flex-col gap-5"
+          className="flex flex-wrap items-center justify-between gap-3"
         >
           <UI.Heading
             level={embedded ? 2 : 1}
-            appearance={embedded ? "form" : undefined}
+            appearance={embedded ? "workspace" : undefined}
           >
             {topic.name}
           </UI.Heading>
-          <UI.Text tone="muted" size="xs">
+          <Badge variant="secondary">{topicStatusLabel(topic.status)}</Badge>
+          <UI.Text tone="muted" size="xs" className="sr-only">
             {topicStatusLabel(topic.status)} · 每{" "}
             {topic.collection_interval_seconds / 60} 分钟检索 ·{" "}
             {topic.source_keys.length} 个来源

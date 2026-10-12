@@ -1,5 +1,6 @@
 "use client";
 import * as UI from "@/components/ui/content";
+import { cn } from "@/lib/utils";
 
 import { toast } from "sonner";
 
@@ -47,7 +48,9 @@ export function TopicList({
   onFirstTopic,
   updatedTopics,
   onForbidden,
+  compact = false,
 }: {
+  compact?: boolean;
   selectedTopicId?: string;
   onFirstTopic?: (id: string | undefined) => void;
   updatedTopics?: Record<string, HotKeyAPI.MonitorTopicView>;
@@ -168,25 +171,38 @@ export function TopicList({
           .map((topic) => presentUpdatedTopic(topic, updatedTopics?.[topic.id]))
           .filter((topic) => includeArchived || topic.status !== "archived")
       : [];
+  const controls = (
+    <UI.Content
+      className={cn(
+        "flex flex-wrap items-center justify-between gap-4",
+        compact && "mt-3",
+      )}
+    >
+      <UI.Heading
+        level={2}
+        appearance="sidebar"
+        id="monitor-topics-heading"
+        className={cn(compact && "sr-only")}
+      >
+        主题列表
+      </UI.Heading>
+      <Field orientation="horizontal" className="w-fit">
+        <Switch
+          id="include-archived"
+          checked={includeArchived}
+          onCheckedChange={(checked) => resetList(checked)}
+        />
+        <FieldLabel htmlFor="include-archived">显示已归档</FieldLabel>
+      </Field>
+    </UI.Content>
+  );
   return (
     <UI.Content
       as="section"
       className="flex min-w-0 flex-col gap-5"
       aria-labelledby="monitor-topics-heading"
     >
-      <UI.Content className="flex flex-wrap items-center justify-between gap-4">
-        <UI.Heading level={2} appearance="sidebar" id="monitor-topics-heading">
-          主题列表
-        </UI.Heading>
-        <Field orientation="horizontal" className="w-fit">
-          <Switch
-            id="include-archived"
-            checked={includeArchived}
-            onCheckedChange={(checked) => resetList(checked)}
-          />
-          <FieldLabel htmlFor="include-archived">显示已归档</FieldLabel>
-        </Field>
-      </UI.Content>
+      {!compact && controls}
       {state.status === "loading" && (
         <PageState
           headingLevel={2}
@@ -284,6 +300,7 @@ export function TopicList({
           {loadingMore ? "正在读取" : "加载更多"}
         </Button>
       ) : null}
+      {compact && controls}
     </UI.Content>
   );
 }

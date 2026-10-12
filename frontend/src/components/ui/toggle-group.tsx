@@ -42,6 +42,7 @@ function ToggleGroup({
       className={cn(
         "group/toggle-group flex w-fit flex-row items-center rounded-lg data-vertical:flex-col data-vertical:items-stretch data-[size=sm]:rounded-[min(var(--radius-md),10px)] data-[spacing=0]:gap-0 data-[spacing=1]:gap-1 data-[spacing=2]:gap-2 data-[spacing=3]:gap-3 data-[spacing=4]:gap-4",
         variant === "segmented" && "bg-secondary p-0.5",
+        variant === "auth" && "bg-secondary p-0.75",
         variant === "reading" && "md:bg-secondary md:p-0.5",
         className,
       )}

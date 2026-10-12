@@ -321,10 +321,10 @@ export function LoginForm({
           <ToggleGroup
             // Keep pressed-button semantics; the controlled value allows one method.
             type="multiple"
-            variant="segmented"
-            size="lg"
+            variant="auth"
+            size="default"
             aria-label="登录方式"
-            className="mb-5 w-full"
+            className="mb-6 w-full"
             value={method === "github" ? [] : [method]}
             disabled={!ready}
             onValueChange={(values) => {
@@ -375,12 +375,15 @@ export function LoginForm({
               onInvalidCapture={markInvalidFields}
               aria-label="账号密码登录"
             >
-              <FieldGroup>
+              <FieldGroup className="gap-4">
                 <Field
+                  className="gap-1.5"
                   data-disabled={!ready}
                   data-invalid={invalidFields.username}
                 >
-                  <FieldLabel htmlFor="login-username">邮箱或用户名</FieldLabel>
+                  <FieldLabel size="caption" htmlFor="login-username">
+                    邮箱或用户名
+                  </FieldLabel>
                   <Input
                     appearance="form"
                     ref={credentialInput}
@@ -402,9 +405,14 @@ export function LoginForm({
                     disabled={!ready}
                   />
                 </Field>
-                <Field data-invalid={invalidFields.password}>
+                <Field
+                  className="gap-1.5"
+                  data-invalid={invalidFields.password}
+                >
                   <UI.Content className="flex items-center justify-between gap-2">
-                    <FieldLabel htmlFor="login-password">密码</FieldLabel>
+                    <FieldLabel size="caption" htmlFor="login-password">
+                      密码
+                    </FieldLabel>
                     {options.email ? (
                       <Button
                         type="button"
@@ -472,12 +480,15 @@ export function LoginForm({
               onInvalidCapture={markInvalidFields}
               aria-label="邮箱验证码登录"
             >
-              <FieldGroup>
+              <FieldGroup className="gap-4">
                 <Field
+                  className="gap-1.5"
                   data-disabled={!ready}
                   data-invalid={invalidFields.email}
                 >
-                  <FieldLabel htmlFor="login-email">邮箱</FieldLabel>
+                  <FieldLabel size="caption" htmlFor="login-email">
+                    邮箱
+                  </FieldLabel>
                   <Input
                     appearance="form"
                     ref={credentialInput}
@@ -510,7 +521,9 @@ export function LoginForm({
                     data-disabled={!ready || expired}
                     data-invalid={invalidFields.code}
                   >
-                    <FieldLabel htmlFor="login-code">验证码</FieldLabel>
+                    <FieldLabel size="caption" htmlFor="login-code">
+                      验证码
+                    </FieldLabel>
                     <Input
                       appearance="form"
                       ref={codeInput}
@@ -573,13 +586,13 @@ export function LoginForm({
             </Alert>
           )}
           <UI.Content
-            className="mt-5 flex flex-col gap-4"
+            className="mt-6 flex flex-col gap-6"
             role="group"
             aria-label="其他登录方式"
           >
             <UI.Content className="flex items-center gap-3">
               <Separator className="flex-1" />
-              <UI.Text as="span" tone="muted" size="xs">
+              <UI.Text as="span" tone="muted" size="label">
                 或
               </UI.Text>
               <Separator className="flex-1" />

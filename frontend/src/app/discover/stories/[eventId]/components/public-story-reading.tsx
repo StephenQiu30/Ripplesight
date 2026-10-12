@@ -143,7 +143,7 @@ export function PublicStoryReading({
         aside={
           <>
             <UI.Content as="section" layout="stack">
-              <UI.Heading>大家怎么看</UI.Heading>
+              <UI.Heading appearance="reading">大家怎么看</UI.Heading>
               <UI.Text size="xs" tone="muted">
                 暂无公开评论样本
               </UI.Text>
@@ -156,7 +156,7 @@ export function PublicStoryReading({
               </UI.Text>
             </SignalNotice>
             <UI.Content layout="stack">
-              <UI.Heading>代表观点</UI.Heading>
+              <UI.Heading appearance="reading">代表观点</UI.Heading>
               <ToggleGroup
                 type="single"
                 size="default"
@@ -177,7 +177,7 @@ export function PublicStoryReading({
               <EventEmpty>公开资料暂未提供代表评论。</EventEmpty>
             </UI.Content>
             <UI.Content as="section" layout="stack">
-              <UI.Heading>平台分布</UI.Heading>
+              <UI.Heading appearance="reading">平台分布</UI.Heading>
               <UI.Text size="xs" tone="muted">
                 按当前已加载的公开报道统计
               </UI.Text>
@@ -205,7 +205,7 @@ export function PublicStoryReading({
         }
       >
         <UI.Content as="section" className="flex flex-col gap-4">
-          <UI.Heading>发生了什么</UI.Heading>
+          <UI.Heading appearance="reading">发生了什么</UI.Heading>
           <UI.Text className="whitespace-pre-wrap">{story.summary}</UI.Text>
           {story.latest_progress ? (
             <>
@@ -217,7 +217,7 @@ export function PublicStoryReading({
           ) : null}
         </UI.Content>
         <UI.Content as="section" className="flex flex-col gap-4">
-          <UI.Heading>热度与负面占比</UI.Heading>
+          <UI.Heading appearance="reading">热度与负面占比</UI.Heading>
           <ObservationGap>
             暂无公开历史曲线与负面占比，不能由单次热度推算趋势。
           </ObservationGap>
@@ -235,6 +235,7 @@ export function PublicStoryReading({
           ) : null}
         </UI.Content>
         <EventTimeline
+          headingAppearance="reading"
           entries={
             developments.length
               ? developments.map((entry) => ({
@@ -288,7 +289,7 @@ export function PublicStoryReading({
             ) : undefined
           }
         />
-        <EventSources sources={sources} />
+        <EventSources sources={sources} headingAppearance="reading" />
       </EventColumns>
     </UI.Content>
   );

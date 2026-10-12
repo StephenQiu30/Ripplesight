@@ -15,7 +15,7 @@ export function BoardFilters({
 }) {
   const router = useRouter();
   return (
-    <Content className="hide-scrollbar min-w-0 overflow-x-auto py-1">
+    <Content className="hide-scrollbar min-w-0 overflow-x-auto py-1 md:overflow-visible md:py-0">
       <ToggleGroup
         type="single"
         size="default"

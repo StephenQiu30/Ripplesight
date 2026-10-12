@@ -8,7 +8,7 @@ export function LoginBrandStory({ children }: { children?: ReactNode }) {
     <UI.Content
       as="aside"
       aria-label="Ripplesight"
-      className="hidden min-w-0 flex-col gap-8 lg:flex"
+      className="hidden min-w-0 flex-col gap-8 lg:flex lg:-translate-y-3"
     >
       <Image
         src="/brand/login-ripple.png"

@@ -4,9 +4,11 @@ import { cn } from "@/lib/utils";
 export function ObservationGap({
   children,
   compact = false,
+  size = "default",
 }: {
   children: React.ReactNode;
   compact?: boolean;
+  size?: "default" | "hourly";
 }) {
   return (
     <div
@@ -16,6 +18,7 @@ export function ObservationGap({
         compact
           ? "h-8"
           : "bg-muted/50 h-48 rounded-lg border-b px-6 text-center",
+        !compact && size === "hourly" && "h-35",
       )}
     >
       {children}

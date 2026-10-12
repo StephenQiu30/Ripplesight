@@ -18,9 +18,13 @@ const headingVariants = cva("tracking-tight", {
       section: "text-xl font-semibold",
       sidebar: "text-sm leading-6 font-semibold",
       display: "text-4xl leading-tight font-semibold lg:text-5xl",
-      form: "text-2xl leading-8 font-semibold",
+      form: "text-[22px] leading-7 font-semibold",
       result: "text-base leading-6 font-semibold",
       feed: "text-base leading-6 font-semibold md:text-lg md:leading-6",
+      reading: "text-lg leading-6 font-semibold",
+      workspace: "text-2xl leading-8 font-semibold",
+      subsection: "text-base leading-6 font-semibold",
+      home: "text-[26px] leading-[34px] font-semibold md:text-page md:leading-10",
     },
   },
 });
@@ -31,7 +35,17 @@ export function Heading({
   ...props
 }: React.ComponentProps<"h1"> & {
   level?: 1 | 2 | 3 | 4 | 5 | 6;
-  appearance?: "section" | "sidebar" | "display" | "form" | "result" | "feed";
+  appearance?:
+    | "section"
+    | "sidebar"
+    | "display"
+    | "form"
+    | "result"
+    | "feed"
+    | "reading"
+    | "workspace"
+    | "subsection"
+    | "home";
 }) {
   return React.createElement(`h${level}`, {
     "data-slot": "heading",
@@ -53,8 +67,10 @@ const textVariants = cva("", {
       inherit: "",
       sm: "text-sm leading-6",
       xs: "text-xs leading-5",
-      metric: "text-2xl leading-8 font-medium md:text-metric",
+      metric: "text-[22px] leading-[29px] font-medium md:text-metric",
       lead: "text-lg leading-8",
+      label: "text-xs leading-4",
+      description: "text-[13px] leading-[18px]",
     },
   },
   defaultVariants: { tone: "default", size: "inherit" },

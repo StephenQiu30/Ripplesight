@@ -233,6 +233,19 @@
 }
 
 /* Geometry measured from the desktop-exported Figma frames (1440 / 390). */
+@utility workspace-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2rem;
+  @media (min-width: 80rem) {
+    grid-template-columns: minmax(0, 20.625rem) minmax(0, 1fr);
+    gap: 2.5rem;
+    &[data-list-collapsed="true"] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}
+
 @utility reading-columns {
   display: grid;
   align-items: start;

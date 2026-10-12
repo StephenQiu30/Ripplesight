@@ -82,6 +82,7 @@ export function HomeContent({
     <Content layout="stack" className="gap-8" aria-busy={isPending}>
       <LoadingSignal active={isPending} />
       <PageHeader
+        titleAppearance="home"
         title="今日 AI 热点"
         description={
           updatedAt ? `更新于 ${publicationTime(updatedAt)}` : undefined
@@ -170,7 +171,7 @@ export function HomeContent({
               <ToggleGroup
                 type="single"
                 variant="reading"
-                size="default"
+                size="reading"
                 value={category}
                 aria-label="事件分类"
                 onValueChange={(value) => {

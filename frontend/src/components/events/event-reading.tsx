@@ -213,12 +213,14 @@ export function EventTimeline({
   entries,
   feedback,
   footer,
+  headingAppearance,
   description = "按当前已加载成员的发布时间排列；未提供发布时间时使用观察时间。",
 }: {
   entries: TimelineEntry[];
   feedback?: ReactNode;
   footer?: ReactNode;
   description?: string;
+  headingAppearance?: React.ComponentProps<typeof UI.Heading>["appearance"];
 }) {
   return (
     <UI.Content
@@ -226,7 +228,9 @@ export function EventTimeline({
       aria-labelledby="event-timeline-heading"
       className="flex flex-col gap-4"
     >
-      <UI.Heading id="event-timeline-heading">时间线</UI.Heading>
+      <UI.Heading appearance={headingAppearance} id="event-timeline-heading">
+        时间线
+      </UI.Heading>
       <UI.Text size="xs" tone="muted">
         {description}
       </UI.Text>
@@ -294,14 +298,22 @@ export function EventTimeline({
   );
 }
 
-export function EventSources({ sources }: { sources: EventSource[] }) {
+export function EventSources({
+  sources,
+  headingAppearance,
+}: {
+  sources: EventSource[];
+  headingAppearance?: React.ComponentProps<typeof UI.Heading>["appearance"];
+}) {
   return (
     <UI.Content
       as="section"
       aria-labelledby="event-sources-heading"
       className="flex min-w-0 flex-col gap-4"
     >
-      <UI.Heading id="event-sources-heading">来源</UI.Heading>
+      <UI.Heading appearance={headingAppearance} id="event-sources-heading">
+        来源
+      </UI.Heading>
       {!sources.length ? (
         <EventEmpty>当前事件尚无可读来源。</EventEmpty>
       ) : (

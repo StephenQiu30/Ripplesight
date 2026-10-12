@@ -15,6 +15,7 @@ export function HomeLoading() {
       <LoadingSignal />
       <Content layout="stack" className="gap-1">
         <PageHeader
+          titleAppearance="home"
           title={<>今日 AI 热点</>}
           description={<>正在加载公开事件与日报…</>}
         />
