@@ -66,3 +66,36 @@ class IdentitySession(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_reason: Mapped[str | None] = mapped_column(String(32))
     user: Mapped[IdentityUser] = relationship(back_populates="sessions")
+
+
+class IdentityEmailChallenge(Base):
+    """Latest email proof per bound flow; consumed with the identity transaction."""
+
+    __tablename__ = "identity_email_challenges"
+    __table_args__ = (
+        CheckConstraint("octet_length(scope_digest) = 32", name="identity_email_scope_length"),
+        CheckConstraint("octet_length(binding_digest) = 32", name="identity_email_binding_length"),
+        CheckConstraint("octet_length(code_digest) = 32", name="identity_email_code_length"),
+        CheckConstraint(
+            "purpose IN ('login', 'email_link', 'credentials_update')",
+            name="identity_email_purpose",
+        ),
+        CheckConstraint("attempt_count BETWEEN 0 AND 5", name="identity_email_attempts"),
+        CheckConstraint("expires_at > created_at", name="identity_email_expiry"),
+        CheckConstraint(
+            "consumed_at IS NULL OR invalidated_at IS NULL", name="identity_email_terminal"
+        ),
+        Index("identity_email_expiry_idx", "expires_at"),
+    )
+
+    scope_digest: Mapped[bytes] = mapped_column(LargeBinary(32), primary_key=True)
+    challenge_id: Mapped[UUID] = mapped_column(unique=True)
+    email: Mapped[str] = mapped_column(String(254))
+    purpose: Mapped[str] = mapped_column(String(24))
+    binding_digest: Mapped[bytes] = mapped_column(LargeBinary(32))
+    code_digest: Mapped[bytes] = mapped_column(LargeBinary(32))
+    attempt_count: Mapped[int]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    invalidated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

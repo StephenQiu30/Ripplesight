@@ -178,14 +178,14 @@ describe("request transport", () => {
     requestHeaders.mockResolvedValue(
       new Headers({
         cookie:
-          "unrelated=secret; hotkey_session=one; hotkey_csrf=csrf-one; hotkey_oauth=binding",
+          "unrelated=secret; hotkey_session=one; hotkey_csrf=csrf-one; hotkey_oauth=binding; hotkey_email_browser=browser-binding",
       }),
     );
     await request("/api/topics", {
       method: "POST",
       adapter: async (config) => {
         expect(config.headers.get("Cookie")).toBe(
-          "hotkey_session=one; hotkey_csrf=csrf-one; hotkey_oauth=binding",
+          "hotkey_session=one; hotkey_csrf=csrf-one; hotkey_oauth=binding; hotkey_email_browser=browser-binding",
         );
         expect(config.headers.get("X-HotKey-CSRF")).toBe("csrf-one");
         return {

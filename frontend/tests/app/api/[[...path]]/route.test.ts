@@ -34,6 +34,40 @@ async function close(server: Server): Promise<void> {
 }
 
 describe("API route proxy", () => {
+  it("forwards the bound email browser cookie in both directions", async () => {
+    process.env.HOTKEY_API_ORIGIN = "http://127.0.0.1:8000";
+    const upstream = vi.fn().mockResolvedValue(
+      new Response("{}", {
+        headers: {
+          "Content-Type": "application/json",
+          "Set-Cookie":
+            "hotkey_email_browser=bound_nonce; HttpOnly; Path=/api/identity; Max-Age=300; SameSite=Lax",
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", upstream);
+    const response = await route.POST(
+      new Request("http://web.test/api/identity/email/challenges", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: "unrelated=secret; hotkey_email_browser=bound_nonce",
+        },
+        body: JSON.stringify({ email: "reader@example.com" }),
+      }),
+      {
+        params: Promise.resolve({ path: ["identity", "email", "challenges"] }),
+      },
+    );
+    expect(upstream.mock.calls[0][1].headers.get("cookie")).toBe(
+      "hotkey_email_browser=bound_nonce",
+    );
+    expect(response.headers.get("set-cookie")).toContain(
+      "hotkey_email_browser=bound_nonce",
+    );
+    expect(response.headers.get("set-cookie")).toContain("HttpOnly");
+  });
+
   it.each([
     ["public", "feed.xml"],
     ["public", "feed", "full", "category", "ai-models.xml"],

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from urllib.parse import unquote, urlencode, urlsplit
@@ -18,6 +20,7 @@ from core.errors import ApplicationError
 from identity.adapters.email import SmtpEmailAdapter
 from identity.adapters.github import GitHubAdapter
 from identity.adapters.verification_store import VerificationStore
+from identity.email_challenges import EmailChallenges, EmailProof
 from identity.models import IdentitySession, IdentityUser
 from identity.schemas import (
     EmailChallengeView,
@@ -68,6 +71,7 @@ class AuthenticatedIdentity:
     view: IdentitySessionView
     csrf_digest: bytes
     created_at: datetime
+    credential_version: int
 
 
 class IdentityService:
@@ -176,6 +180,7 @@ class IdentityService:
                 self._view(model.user, model.expires_at),
                 bytes(model.csrf_digest),
                 model.created_at,
+                model.credential_version,
             )
 
     @staticmethod
@@ -200,6 +205,33 @@ class IdentityService:
                 raise ApplicationError("invalid_session")
             model.revoked_at, model.revoked_reason = datetime.now(UTC), "logout"
 
+    def _challenges(self) -> EmailChallenges:
+        return EmailChallenges(self.session, self._store())
+
+    def _email_binding(self, identity: AuthenticatedIdentity) -> bytes:
+        return self._challenges().session_binding(
+            identity.view.user.id, identity.session_id, identity.credential_version
+        )
+
+    @contextmanager
+    def _write_transaction(self, proof: EmailProof | None = None) -> Iterator[str | None]:
+        """Commit wrong attempts before rejection; roll correct consumption back on failure."""
+        rejected = False
+        if proof is not None:
+            self._challenges().prune()
+        with self.session.begin():
+            row = None
+            if proof is not None:
+                row = self._challenges().consume_in_transaction(proof)
+                rejected = row is None
+            if not rejected:
+                yield row.email if row is not None else None
+                # Account/session locks or password work may outlive the proof window.
+                if row is not None and row.expires_at <= datetime.now(UTC):
+                    raise ApplicationError("invalid_email_code")
+        if rejected:
+            raise ApplicationError("invalid_email_code")
+
     def send_email_code(
         self,
         *,
@@ -207,23 +239,25 @@ class IdentityService:
         client_ip: str,
         identity: AuthenticatedIdentity | None = None,
         linking: bool = False,
+        browser_binding: str | None = None,
     ) -> EmailChallengeView:
+        """Persist a bound proof before SMTP, invalidating only this ID on delivery failure."""
         if not self.options().email or self.email is None:
             raise ApplicationError("email_login_unavailable")
         if identity is not None and not linking and identity.view.user.email != email:
             raise ApplicationError("invalid_email_code")
-        challenge = self._store().send_email_challenge(
+        challenge = self._challenges().issue(
             email,
             client_ip,
-            purpose="email_link" if linking else "credentials_update" if identity else "login",
-            user_id=(str(identity.session_id) if linking else str(identity.view.user.id))
+            "email_link" if linking else "credentials_update" if identity else "login",
+            self._email_binding(identity)
             if identity
-            else None,
+            else self._challenges().browser_binding(browser_binding),
         )
         try:
             self.email.send_code(email, challenge.code)
         except Exception:
-            self._store().invalidate_email_challenge(challenge.challenge_id)
+            self._challenges().invalidate(UUID(challenge.challenge_id))
             raise ApplicationError("email_delivery_unavailable") from None
         return EmailChallengeView(
             challenge_id=UUID(challenge.challenge_id),
@@ -232,12 +266,18 @@ class IdentityService:
         )
 
     def verify_email(
-        self, *, challenge_id: UUID, code: str, client_ip: str
+        self, *, challenge_id: UUID, code: str, client_ip: str, browser_binding: str | None
     ) -> CreatedIdentitySession:
+        """Consume a browser-bound code in the same transaction as account and session."""
         if not self.options().email:
             raise ApplicationError("email_login_unavailable")
-        email = self._store().consume_email_challenge(str(challenge_id), code, client_ip)
-        return self._verified_login(email=email, github_user_id=None)
+        self._store().limit_email_verify(client_ip)
+        binding = self._challenges().browser_binding(browser_binding)
+        return self._verified_login(
+            email="",
+            github_user_id=None,
+            proof=EmailProof(challenge_id, code, "login", binding),
+        )
 
     def start_github(
         self, *, return_to: str, client_ip: str, identity: AuthenticatedIdentity | None = None
@@ -285,14 +325,11 @@ class IdentityService:
     ) -> CreatedIdentitySession:
         if not self.options().email:
             raise ApplicationError("email_login_unavailable")
-        email = self._store().consume_email_challenge(
-            str(challenge_id),
-            code,
-            client_ip,
-            purpose="email_link",
-            user_id=str(identity.session_id),
+        self._store().limit_email_verify(client_ip)
+        return self._link_identity(
+            identity,
+            proof=EmailProof(challenge_id, code, "email_link", self._email_binding(identity)),
         )
-        return self._link_identity(identity, email=email)
 
     def _link_identity(
         self,
@@ -300,10 +337,10 @@ class IdentityService:
         *,
         email: str | None = None,
         github_user_id: str | None = None,
+        proof: EmailProof | None = None,
     ) -> CreatedIdentitySession:
-        now = datetime.now(UTC)
         try:
-            with self.session.begin():
+            with self._write_transaction(proof) as verified_email:
                 user = self.session.get(
                     IdentityUser,
                     identity.view.user.id,
@@ -316,6 +353,7 @@ class IdentityService:
                     with_for_update=True,
                     populate_existing=True,
                 )
+                now = datetime.now(UTC)
                 if (
                     user is None
                     or active is None
@@ -323,12 +361,15 @@ class IdentityService:
                     or active.revoked_at is not None
                     or active.expires_at <= now
                     or active.credential_version != user.credential_version
+                    or identity.credential_version != user.credential_version
                 ):
                     raise ApplicationError("invalid_session")
                 if github_user_id is not None:
                     if user.github_user_id not in {None, github_user_id}:
                         raise ApplicationError("identity_link_conflict")
                     user.github_user_id = github_user_id
+                if verified_email is not None:
+                    email = verified_email
                 if email is not None:
                     user.email = email
                 user.credential_version += 1
@@ -338,13 +379,17 @@ class IdentityService:
         except IntegrityError:
             raise ApplicationError("identity_link_conflict") from None
 
-    def _verified_login(self, *, email: str, github_user_id: str | None) -> CreatedIdentitySession:
-        now = datetime.now(UTC)
+    def _verified_login(
+        self, *, email: str, github_user_id: str | None, proof: EmailProof | None = None
+    ) -> CreatedIdentitySession:
         # Identity creation and its first session commit together. A conflicting verified
         # email/GitHub insert is reread once after PostgreSQL resolves the unique constraint.
         for attempt in range(2):
             try:
-                with self.session.begin():
+                with self._write_transaction(proof) as verified_email:
+                    if verified_email is not None:
+                        email = verified_email
+                    now = datetime.now(UTC)
                     user = (
                         self.session.scalar(
                             select(IdentityUser)
@@ -399,19 +444,18 @@ class IdentityService:
         command: IdentityCredentialsUpdateInput,
         client_ip: str,
     ) -> CreatedIdentitySession:
-        verified_email = None
+        proof = None
         self._store().limit_password(f"credentials:{identity.view.user.id}", client_ip)
         if command.challenge_id is not None and command.code is not None:
-            verified_email = self._store().consume_email_challenge(
-                str(command.challenge_id),
+            self._store().limit_email_verify(client_ip)
+            proof = EmailProof(
+                command.challenge_id,
                 command.code,
-                client_ip,
-                purpose="credentials_update",
-                user_id=str(identity.view.user.id),
+                "credentials_update",
+                self._email_binding(identity),
             )
-        now = datetime.now(UTC)
         try:
-            with self.session.begin():
+            with self._write_transaction(proof) as verified_email:
                 user = self.session.get(
                     IdentityUser,
                     identity.view.user.id,
@@ -424,6 +468,7 @@ class IdentityService:
                     with_for_update=True,
                     populate_existing=True,
                 )
+                now = datetime.now(UTC)
                 if (
                     user is None
                     or active is None
@@ -431,6 +476,7 @@ class IdentityService:
                     or active.revoked_at is not None
                     or active.expires_at <= now
                     or active.credential_version != user.credential_version
+                    or identity.credential_version != user.credential_version
                 ):
                     raise ApplicationError("invalid_session")
                 if user.password_hash:

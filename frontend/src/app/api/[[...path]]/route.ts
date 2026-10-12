@@ -74,7 +74,7 @@ function createUpstreamHeaders(request: Request): Headers {
     .split(";")
     .map((cookie) => cookie.trim())
     .filter((cookie) =>
-      /^(?:hotkey_session|hotkey_csrf|hotkey_oauth)=[A-Za-z0-9._~-]*$/.test(
+      /^(?:hotkey_session|hotkey_csrf|hotkey_oauth|hotkey_email_browser)=[A-Za-z0-9._~-]*$/.test(
         cookie,
       ),
     )
@@ -92,7 +92,11 @@ function createClientHeaders(upstream: Response): Headers {
     }
   });
   for (const cookie of upstream.headers.getSetCookie()) {
-    if (/^(?:hotkey_session|hotkey_csrf|hotkey_oauth)=/.test(cookie)) {
+    if (
+      /^(?:hotkey_session|hotkey_csrf|hotkey_oauth|hotkey_email_browser)=/.test(
+        cookie,
+      )
+    ) {
       headers.append("set-cookie", cookie);
     }
   }

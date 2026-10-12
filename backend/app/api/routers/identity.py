@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import secrets
 from ipaddress import ip_address
 from typing import Annotated, Any
 
@@ -180,9 +182,26 @@ def email_challenge(
     else:
         _public_write(request, csrf)
     response.headers["cache-control"] = "no-store"
-    return service.send_email_code(
-        email=payload.email, client_ip=_client_ip(request), identity=identity
+    nonce = request.cookies.get("hotkey_email_browser")
+    if nonce is None or re.fullmatch(r"[A-Za-z0-9_-]{43}", nonce) is None:
+        nonce = secrets.token_urlsafe(32)
+    challenge = service.send_email_code(
+        email=payload.email,
+        client_ip=_client_ip(request),
+        identity=identity,
+        browser_binding=nonce,
     )
+    if identity is None:
+        response.set_cookie(
+            "hotkey_email_browser",
+            nonce,
+            httponly=True,
+            secure=service.cookie_secure,
+            samesite="lax",
+            path="/api/identity",
+            max_age=300,
+        )
+    return challenge
 
 
 @router.post(
@@ -201,7 +220,10 @@ def email_login(
 ) -> IdentitySessionView:
     _public_write(request, csrf)
     created = service.verify_email(
-        challenge_id=payload.challenge_id, code=payload.code, client_ip=_client_ip(request)
+        challenge_id=payload.challenge_id,
+        code=payload.code,
+        client_ip=_client_ip(request),
+        browser_binding=request.cookies.get("hotkey_email_browser"),
     )
     _set_cookies(response, service, created)
     return created.view

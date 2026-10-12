@@ -8,7 +8,7 @@
 
 **核心闭环尚未完成。** 已有准入、原生身份/版本、查询回执、部分增量计量、逐评论分析、事件修订、采集暂停围栏、预算连续扣账和unknown发送保护；仍有确定行为冲突及未实现的业务合同。下文“已有”只表示代码路径存在，“差距”有源码依据，“待核对”尚不能证明全路径，“待验收”需要独立环境/真实来源/自然时间/本人接收。仅对明确记录了本轮验证证据的切片更新代码完成状态。
 
-当前规格按pm-execution统一为“原始OR → 详细FR/BR/NFR/AC → 开发PRD/US ↔ 目标设计 → agent PLAN/T → 验证证据”。59组四目录同编号同名；108个用户故事归PRD，237项工程任务归PLAN，原有12个OR、102个FR及108个AC的追踪编号保留。定位/范围集中在总体PRD，调研作为有日期和限制的依据，不能反推目标方案。PLAN已补启动输入、具体产物/依赖、场景验证、停止条件和交付输出，并拆开趋势/目标、订阅/报告、刊期/修订/许可、模型配置/分析的互相等待。
+当前规格按pm-execution统一为“原始OR → 详细FR/BR/NFR/AC → 开发PRD/US ↔ 目标设计 → agent PLAN（内嵌SPEC → T） → 验证证据”。59组四目录同编号同名；108个用户故事归PRD，237项工程任务归PLAN，原有12个OR、102个FR及108个AC的追踪编号保留。定位/范围集中在总体PRD，调研作为有日期和限制的依据，不能反推目标方案。PLAN已补启动输入、具体产物/依赖、场景验证、停止条件和交付输出，并拆开趋势/目标、订阅/报告、刊期/修订/许可、模型配置/分析的互相等待。
 
 本轮规范与工具检查：242份Markdown的四目录结构、链接/锚点和19项文档工具回归通过；Web lint、typecheck、format:check、1208项测试及生产构建通过；文档质量与追踪/检查工具两路独立只读审查无剩余阻断。这仅证明当前文档与工具符合交接规范，不表示59个编号均已开发就绪、数据库方案已批准或核心能力已验收；每个切片仍需按[就绪门槛](docs/index.md#需求驱动的交付规范)核对决定性输入和设计。来源准入、质量基线、提醒批次及真实验收缺口仍见下文，未因文档整理关闭。
 
@@ -48,13 +48,13 @@
 
 ### CORE-01：访问、身份和恢复
 
-- **SDD就绪准备**：PLAN-29内嵌[邮件挑战与身份事务SPEC](docs/plan/29-登录与验证注册.md#spec-开发合同)，绑定FR/AC/US-29-01及T-29-01/02/04；按切片评审SPEC再实施的门槛已同步59项PLAN与工程规范。方案为PG邮件挑战与身份/会话同事务，含浏览器及会话/凭据版本绑定、重发、错码计数、失败恢复和Web代理消费者。59份PLAN均内嵌SPEC门槛，邮件合同归入PLAN-29，30引用共享合同；242份文档结构与19项工具回归通过，独立迁移审查无信息丢失；仅规格准备，不关闭身份或恢复缺口。
+- **SDD就绪准备**：PLAN-29内嵌[邮件挑战与身份事务SPEC](docs/plan/29-登录与验证注册.md#spec-开发合同)，绑定FR/AC/US-29-01及T-29-01/02/04，并由PLAN-30引用以支持FR/AC/US-30-01与T-30-02；按切片评审SPEC再实施的门槛已同步59项PLAN与工程规范。方案为PG邮件挑战与身份/会话同事务，含浏览器及会话/凭据版本绑定、重发、错码计数、失败恢复和Web代理消费者。59份PLAN均内嵌SPEC门槛，邮件合同归入PLAN-29，30引用共享合同；242份文档结构与19项工具回归通过，独立迁移审查无信息丢失。规范迁移与规格准备已完成；邮件实现证据另列下文，不关闭整个身份或恢复任务。
 
 - **代码切片已完成，能力待验收**：报告列表先选最新定稿修订再执行全部冻结输入许可检查，过滤后分页且不回退旧版；导出状态与下载共用完整许可门禁；事件当前/固定修订成员、事实引用及游标先过滤不可读输入，标题/摘要/框架和差分按全部输入检查。撤权差分返回`unavailable`，不泄露受限UUID或计数；页面只展示当前可读成员数。独立只读审查无阻断；该切片暂存快照在独立新库全量2895项通过（926/948/1021，无跳过），Web全量1198项及lint/types/format/build、文档链接检查通过；实际同版本API生成及契约检查无差异。1440px/390px受控HTTP浏览器样本覆盖正常、部分可读、未知、空、加载、错误、403及键盘重试/修订读取。上述为代码及模拟验证，不代表真实撤权、媒体全路径或恢复验收通过；CORE-01继续开放。
 
 - **已有**：服务端会话owner与CSRF/运营边界在[dependencies.py](backend/app/api/dependencies.py#L527)；当前资源删除屏障在[evidence/services.py](backend/app/evidence/services.py#L161)，精确观察依赖清理覆盖报告/告警/公开/事件/分析在[lifecycle.py](backend/app/content/lifecycle.py#L114)。不能重列为完全缺失；仍须逐读路径核对标题、计数、媒体、固定修订及导出是否执行当前许可。
 - **确定差距**：恢复验证只执行隔离dump/restore、表数量与读写核对及对象校验，[restore.py](backend/app/backups/restore.py#L132)未接入备份后删除/撤权重放。当前删除指令与资源同库且FK级联，[models.py](backend/app/evidence/models.py#L236)不能独自提供跨旧备份的独立屏障。补独立最小账本、恢复隔离及重放完成判据；不把现有恢复工具当作安全上线恢复已完成，也不声称当前临时恢复库已对外暴露。 下一切片就绪合同已细化于[PLAN-10内嵌SPEC](docs/plan/10-权限与数据生命周期.md#core-01-独立账本与恢复屏障切片)，覆盖全入口/外发围栏、账本范围与备份年龄、恢复身份授权及中断重放反例。账本介质/故障域、双存储提交协调、权威身份状态、连续水位与保留/自身恢复策略仍须冻结；仅规划评审通过，未实施恢复屏障。
-- **已有及目标差距**：Redis脚本原子一次消费、尝试限制/重发失效已有，[verification_store.py](backend/app/identity/adapters/verification_store.py#L56)；账户与首会话在同一PG事务且邮箱/GitHub有唯一约束，[services.py](backend/app/identity/services.py#L340)。但[邮件消费](backend/app/identity/services.py#L238)先于PG事务，消费后建号/会话提交失败没有跨存储恢复收据，未满足29目标事务合同。应评审同事务或等价可恢复方案，不误报验证码可重放；不因身份存储内嵌而机械新建表。
+- **邮件身份事务切片代码完成，能力待验收**：以`eb1fe467`的[PLAN-29内嵌SPEC](docs/plan/29-登录与验证注册.md#spec-开发合同)为基线，并纳入本轮已评审的nonce计数澄清，实施FR/AC/US-29-01、30-01及T-29-01/02/04、T-30-02。邮件挑战替换为PG真源，[挑战领域](backend/app/identity/email_challenges.py)将正确消费与账户/绑定、owner历史、凭据及会话写入同一事务；写入或提交失败全部回滚，唯一冲突重试重新锁定并验证。匿名绑定浏览器nonce，敏感变更绑定当前owner/session/credential_version；Web代理及SSR同步转发Cookie。错码次数提交后拒绝；重发替换同流旧ID，SMTP失败只失效本次ID；过期清理独立短事务后才锁挑战，等锁后复查真实期限。旧Redis邮件脚本删除，无双写或弱绑定回退；Redis仍承担限流和现有OAuth短期状态，后者需另行核对。全新隔离库执行DDL并验证非法状态约束；63项身份受控回归随全量后端2959项全部通过，无跳过，覆盖提交失败/唯一冲突重试、并发兑换、重发/SMTP竞态、等锁过期、绑定及篡改；全量Ruff、格式和mypy通过。Web全量1209项及静态/构建检查通过，同版本运行API生成30份客户端文件无差异；实际Web代理处理器→隔离HTTP API→PG/Redis的受控链路通过，未做真实浏览器登录或SMTP/OAuth验收。业务与数据库两路独立只读审查无阻断。真实SMTP/OAuth、业务库切换、空闲物理保留时限及定期清理、恢复屏障仍待验收；CORE-01继续开放。
 
 ### CORE-02～04：配置、采集和计量
 
@@ -133,7 +133,7 @@
 
 | 编号及文档 | 已有入口（此前源码扫描） | 待补齐 / 待核对 | 待验收 |
 |---|---|---|---|
-| [29 登录与验证注册](docs/requirement/29-登录与验证注册.md) · [设计](docs/design/29-登录与验证注册.md) · [计划](docs/plan/29-登录与验证注册.md) | 首页背景登录弹窗、密码/邮件/GitHub路径、安全returnTo和会话错误状态。 [page.tsx](frontend/src/app/login/page.tsx#L14) | 身份一次消费与建号/会话跨存储失败恢复见CORE-01；既有键盘修复保留，真实邮件/OAuth与动态重排仍待验收。 | 真实身份流程、过期验证码与会话撤销；受控键盘不代替真实登录验收。 |
+| [29 登录与验证注册](docs/requirement/29-登录与验证注册.md) · [设计](docs/design/29-登录与验证注册.md) · [计划](docs/plan/29-登录与验证注册.md) | 首页背景登录弹窗、密码/邮件/GitHub路径、安全returnTo和会话错误状态。 [page.tsx](frontend/src/app/login/page.tsx#L14) | 邮件挑战与身份/会话同事务代码切片完成，见CORE-01；既有键盘修复保留，真实邮件/OAuth、恢复及动态重排仍待验收。 | 真实身份流程、过期验证码与会话撤销；受控键盘不代替真实登录验收。 |
 | [30 账户与订阅设置](docs/requirement/30-账户与订阅设置.md) · [设计](docs/design/30-账户与订阅设置.md) · [计划](docs/plan/30-账户与订阅设置.md) | 个人资料/头像读写、凭据、身份连接和报告邮件订阅入口。 [account-settings.tsx](frontend/src/app/account/components/account-settings.tsx#L55) | 新FR/AC全项复核待办；真实账号挑战与送达未验收。 | 冲突/失败保留输入、凭据变更撤会话、真实邮箱/SMTP。 |
 | [31 个人工作台入口](docs/requirement/31-个人工作台入口.md) · [设计](docs/design/31-个人工作台入口.md) · [计划](docs/plan/31-个人工作台入口.md) | 登录工作台复用TopicsWorkspace并保留其他业务入口。 [page.tsx](frontend/src/app/workspace/page.tsx#L23) | 仍有/feeds、/agent等冻结功能入口，按00核对后清理。 | 个人会话隔离、入口可达及窄屏导航。 |
 | [32 监控主题工作区](docs/requirement/32-监控主题工作区.md) · [设计](docs/design/32-监控主题工作区.md) · [计划](docs/plan/32-监控主题工作区.md) | 全宽主题列表位于详情上方、默认展开可收起；连续主区与次级结果/运行/设置复用。 [topics-workspace.tsx](frontend/src/app/topics/components/topics-workspace.tsx#L19) | 草稿准入、资料排序、事件状态、24小时趋势和提醒原因分别见CORE-02/05/06/08/10。 | 仅主题区布局、旧tab深链接、草稿/版本冲突与1440px/390px五状态。 |
@@ -174,7 +174,9 @@
 
 规格重建阶段只做源码核对，随后实施切片才重跑工程检查。隔离切片的独立暂存快照全量2895项通过；后续切片联合工作树全量2932项通过（1079/841/1012，无跳过）；父链适配器补查后的来源/关键词/评论消费者112项复跑通过，包含新增6项输入反例。后端全量Ruff、格式及mypy通过。草稿/父链暂存快照Web全量分别1198/1199项，最终计量工作树Web1199项及lint/types/format/build、文档链接检查通过；主题、资料/评论、任务三组页面在1440px/390px受控HTTP样本覆盖正常、空、加载、错误、403及键盘操作。独立只读审查覆盖各切片的实际代码和合同。以上只证明代码与模拟场景，不证明当前部署、真实来源或新FR/AC全部通过；不把此前旧测试数量累计为本轮通过数。
 
-**部署结构待核对**：此前执行轮切片明确记录，新增执行跟踪、可空上游计数、观察执行归属及FK只在全新独立测试库执行，尚未升级业务库；本轮也只在新测试库核对评论关系约束、账户历史登记与观察依据字段，未升级业务库。推送main不等于服务部署/业务结构已同步。上线前按[PROJECT数据库规则](PROJECT.md#6-数据库)确认现有结构、备份、升级与回滚，不在缺少相应结构的旧库直接运行新代码，也不补造历史轮次归属。本轮Redis专属进程、MinIO专属桶及清理路径已用于工程回归；真实业务证据对象恢复和业务恢复仍不计通过。
+本次邮件身份事务切片全量后端2959项通过（含63项身份回归，无跳过），使用全新PG测试库与专属Redis/Kafka/MinIO；2条警告来自测试客户端依赖的弃用提示。全量Ruff、格式、mypy及Web1209项、lint/typecheck/format/build通过；运行候选API的客户端生成/契约检查无差异，实际Web代理处理器与隔离HTTP API的受控绑定链路通过。文档结构/链接检查和19项工具回归通过，独立业务/数据库及记录边界复核无剩余阻断。这些证据独立于此前计数，不代表真实SMTP/OAuth、浏览器登录、业务数据库或部署验收。
+
+**部署结构待核对**：此前执行轮切片明确记录，新增执行跟踪、可空上游计数、观察执行归属及FK只在全新独立测试库执行，尚未升级业务库；本轮也只在新测试库核对评论关系约束、账户历史登记、观察依据字段及邮件挑战表，未升级业务库。邮件切换须先审查结构升级和会话/挑战失效，旧Redis验证码不迁移。推送main不等于服务部署/业务结构已同步。上线前按[PROJECT数据库规则](PROJECT.md#6-数据库)确认现有结构、备份、升级与回滚，不在缺少相应结构的旧库直接运行新代码，也不补造历史轮次归属。本轮Redis专属进程、MinIO专属桶及清理路径已用于工程回归；真实业务证据对象恢复和业务恢复仍不计通过。
 
 | 范围 | 复用入口 | 本次后续必须补证 |
 |---|---|---|
@@ -183,7 +185,7 @@
 | 相关性/事件/事实 | [test_analysis_annotations.py](backend/tests/integration/test_analysis_annotations.py)、[test_event_clustering.py](backend/tests/integration/test_event_clustering.py)、[test_event_fact_delta.py](backend/tests/integration/test_event_fact_delta.py)、[test_event_corrections.py](backend/tests/integration/test_event_corrections.py) | 独立维度、排序、候选、确认/反证/纠错、继承；独立保留集质量 |
 | 调度/停止/预算 | [test_collection_coverage.py](backend/tests/integration/test_collection_coverage.py)、[test_topic_collection_pause.py](backend/tests/integration/test_topic_collection_pause.py)、[test_resource_budgets.py](backend/tests/integration/test_resource_budgets.py) | 离线跨政策完整分母、独立停止作用域、预算停用及不清额度 |
 | 目标/告警/外部unknown | [test_alerts.py](backend/tests/integration/test_alerts.py)、[test_notifications_pipeline.py](backend/tests/integration/test_notifications_pipeline.py) | 地址挑战、静默、三类触发、关注取消/继承、跨版本语义去重与本人接收 |
-| 权限/身份/恢复 | [test_resource_isolation.py](backend/tests/integration/test_resource_isolation.py)、[test_content_dependency_cleanup.py](backend/tests/integration/test_content_dependency_cleanup.py)、[test_identity_login.py](backend/tests/integration/test_identity_login.py)、[test_restore_isolation.py](backend/tests/integration/test_restore_isolation.py) | 全投影当前许可、跨存储失败恢复、独立删除账本重放及上线隔离；MinIO/真实业务恢复另验 |
+| 权限/身份/恢复 | [test_resource_isolation.py](backend/tests/integration/test_resource_isolation.py)、[test_content_dependency_cleanup.py](backend/tests/integration/test_content_dependency_cleanup.py)、[test_identity_login.py](backend/tests/integration/test_identity_login.py)、[test_restore_isolation.py](backend/tests/integration/test_restore_isolation.py) | 邮件事务失败/重试与绑定的受控反例和工程门禁已通过；仍补真实身份流程、全投影当前许可、独立删除账本重放及上线隔离；MinIO/真实业务恢复另验 |
 
 **未通过的产品验收**：真实两轮国内来源采集、独立相关性/事件评测、完整消费链就绪后的七个连续自然日、全部应执行窗口及至少一次自然提醒本人接收，均未由本轮证明。当前部署与该提交对应关系未检查；受控页面/固定样本/健康检查不替代登录后核心页面和真实依赖验收。超预算、未准入、越权、误去重、停止作用域新请求等硬门槛任一失败即阻断。
 

@@ -58,6 +58,22 @@ CREATE INDEX identity_sessions_user_id_idx ON identity_sessions(user_id);
 CREATE INDEX identity_sessions_active_expiry_idx ON identity_sessions(expires_at)
     WHERE revoked_at IS NULL;
 
+CREATE TABLE identity_email_challenges (
+    scope_digest BYTEA PRIMARY KEY CONSTRAINT identity_email_scope_length CHECK (octet_length(scope_digest) = 32),
+    challenge_id UUID NOT NULL UNIQUE,
+    email VARCHAR(254) NOT NULL,
+    purpose VARCHAR(24) NOT NULL CONSTRAINT identity_email_purpose CHECK (purpose IN ('login', 'email_link', 'credentials_update')),
+    binding_digest BYTEA NOT NULL CONSTRAINT identity_email_binding_length CHECK (octet_length(binding_digest) = 32),
+    code_digest BYTEA NOT NULL CONSTRAINT identity_email_code_length CHECK (octet_length(code_digest) = 32),
+    attempt_count INTEGER NOT NULL CONSTRAINT identity_email_attempts CHECK (attempt_count BETWEEN 0 AND 5),
+    created_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL CONSTRAINT identity_email_expiry CHECK (expires_at > created_at),
+    consumed_at TIMESTAMPTZ,
+    invalidated_at TIMESTAMPTZ,
+    CONSTRAINT identity_email_terminal CHECK (consumed_at IS NULL OR invalidated_at IS NULL)
+);
+CREATE INDEX identity_email_expiry_idx ON identity_email_challenges(expires_at);
+
 -- Monitors
 
 CREATE TABLE monitor_topics (

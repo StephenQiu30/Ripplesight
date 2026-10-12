@@ -156,6 +156,7 @@ const AUTH_COOKIE_NAMES = new Set([
   "hotkey_session",
   "hotkey_csrf",
   "hotkey_oauth",
+  "hotkey_email_browser",
 ]);
 
 function identityCookies(value: string): string {

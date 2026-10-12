@@ -18,7 +18,8 @@ from core.config import Settings
 from core.errors import ApplicationError
 from identity.adapters.github import GitHubAdapter
 from identity.adapters.verification_store import VerificationStore
-from identity.models import IdentitySession, IdentityUser
+from identity.email_challenges import EmailChallenges
+from identity.models import IdentityEmailChallenge, IdentitySession, IdentityUser
 from identity.schemas import IdentityCredentialsUpdateInput
 from identity.services import IdentityService
 from main import create_app
@@ -417,22 +418,44 @@ def test_password_setup_rechecks_current_session_in_database(identity_app, chang
         assert user.credential_version == (2 if change == "user_version" else 1)
 
 
+NONCE = "b" * 43
+
+
+def issue_email(app, store, email, purpose="login", binding=None):
+    with app.state.session_factory() as session:
+        domain = EmailChallenges(session, store)
+        return domain.issue(email, "10.0.0.1", purpose, binding or domain.browser_binding(NONCE))
+
+
+def redeem_email(app, store, challenge, code=None, nonce=NONCE):
+    with app.state.session_factory() as session:
+        return IdentityService(session, app.state.settings, verification=store).verify_email(
+            challenge_id=UUID(challenge.challenge_id),
+            code=code or challenge.code,
+            client_ip="10.0.0.2",
+            browser_binding=nonce,
+        )
+
+
 def test_email_wrong_attempts_binding_cooldown_and_parallel_replay(identity_app) -> None:
-    _app, _client, _mail, store = identity_app
-    challenge = store.send_email_challenge("atomic@example.com", "10.0.0.1")
+    app, _client, _mail, store = identity_app
+    challenge = issue_email(app, store, "atomic@example.com")
     with pytest.raises(ApplicationError, match="auth_rate_limited"):
-        store.send_email_challenge("atomic@example.com", "10.0.0.1")
+        issue_email(app, store, "atomic@example.com")
     wrong = "000000" if challenge.code != "000000" else "111111"
     for _ in range(5):
         with pytest.raises(ApplicationError, match="invalid_email_code"):
-            store.consume_email_challenge(challenge.challenge_id, wrong, "10.0.0.2")
+            redeem_email(app, store, challenge, wrong)
     with pytest.raises(ApplicationError, match="invalid_email_code"):
-        store.consume_email_challenge(challenge.challenge_id, challenge.code, "10.0.0.2")
-    parallel = store.send_email_challenge("parallel@example.com", "10.0.0.1")
+        redeem_email(app, store, challenge)
+    with app.state.session_factory() as session:
+        assert session.scalar(select(IdentityEmailChallenge)).attempt_count == 5
+        assert session.scalars(select(IdentityUser)).all() == []
+    parallel = issue_email(app, store, "parallel@example.com")
 
     def consume(_: int) -> str:
         try:
-            return store.consume_email_challenge(parallel.challenge_id, parallel.code, "10.0.0.3")
+            return redeem_email(app, store, parallel).view.user.email
         except ApplicationError as error:
             return error.code
 
@@ -440,19 +463,9 @@ def test_email_wrong_attempts_binding_cooldown_and_parallel_replay(identity_app)
         results = list(executor.map(consume, range(8)))
     assert results.count("parallel@example.com") == 1
     assert results.count("invalid_email_code") == 7
-    bound = store.send_email_challenge(
-        "bound@example.com", "10.0.0.1", purpose="credentials_update", user_id="first"
-    )
+    bound = issue_email(app, store, "bound@example.com", "credentials_update")
     with pytest.raises(ApplicationError, match="invalid_email_code"):
-        store.consume_email_challenge(
-            bound.challenge_id,
-            bound.code,
-            "10.0.0.2",
-            purpose="credentials_update",
-            user_id="second",
-        )
-    with pytest.raises(ApplicationError, match="invalid_email_code"):
-        store.consume_email_challenge(bound.challenge_id, bound.code, "10.0.0.2")
+        redeem_email(app, store, bound)
 
 
 def test_github_http_adapter_state_binding_and_email_links_same_user(identity_app) -> None:
@@ -571,6 +584,8 @@ def test_smtp_failure_invalidates_challenge_and_does_not_create_account(identity
     assert list(store._redis.scan_iter(match=f"{store._prefix}email-challenge:*")) == []
     with app.state.session_factory() as session:
         assert session.scalars(select(IdentityUser)).all() == []
+        row = session.scalar(select(IdentityEmailChallenge))
+        assert row.invalidated_at is not None and row.consumed_at is None
 
 
 def test_credential_email_verification_is_bound_to_the_authenticated_account(identity_app) -> None:
@@ -609,16 +624,19 @@ def test_credential_email_verification_is_bound_to_the_authenticated_account(ide
     assert client.get("/api/identity/session").json() == updated.json()
 
 
-def test_email_hmac_prevents_a_redis_address_change_from_logging_in_someone_else(
+def test_email_hmac_prevents_a_database_address_change_from_logging_in_someone_else(
     identity_app,
 ) -> None:
-    _app, _client, _mail, store = identity_app
-    challenge = store.send_email_challenge("straße@example.com", "10.0.0.1")
-    key = store._key("email-challenge", challenge.challenge_id)
-    assert store._redis.hget(key, "email") == "straße@example.com".encode()
-    store._redis.hset(key, "email", "strasse@example.com")
+    app, _client, _mail, store = identity_app
+    challenge = issue_email(app, store, "straße@example.com")
+    with app.state.session_factory() as session, session.begin():
+        row = session.scalar(select(IdentityEmailChallenge))
+        assert row.email == "straße@example.com"
+        row.email = "strasse@example.com"
     with pytest.raises(ApplicationError, match="invalid_email_code"):
-        store.consume_email_challenge(challenge.challenge_id, challenge.code, "10.0.0.1")
+        redeem_email(app, store, challenge)
+    with app.state.session_factory() as session:
+        assert session.scalars(select(IdentityUser)).all() == []
 
 
 def test_redis_unavailable_rejects_password_login(identity_app) -> None:
@@ -746,12 +764,11 @@ def test_email_binding_proof_cannot_be_reused_for_another_purpose_or_session(
     login(client, "link.first")
     if proof in {"login", "credentials"}:
         purpose = "login" if proof == "login" else "credentials_update"
-        challenge = store.send_email_challenge(
-            "proof@example.com",
-            "10.0.0.1",
-            purpose=purpose,
-            user_id=str(owner) if proof == "credentials" else None,
-        )
+        with app.state.session_factory() as session:
+            service = IdentityService(session, app.state.settings, verification=store)
+            identity = service.authenticate(client.cookies.get("hotkey_session"))
+            binding = service._email_binding(identity) if proof == "credentials" else None
+        challenge = issue_email(app, store, "proof@example.com", purpose, binding)
         payload = {"challenge_id": challenge.challenge_id, "code": challenge.code}
     else:
         payload = link_code(client, mail, "proof@example.com")
@@ -1020,3 +1037,381 @@ def test_new_github_registration_requires_username_password_setup(identity_app, 
         for identifier in ("chosen.github", "new.github@example.com"):
             client.cookies.clear()
             assert login(client, identifier).json()["user"]["id"] == initial["user"]["id"]
+
+
+@pytest.mark.parametrize("failure_point", ["session_write", "commit"])
+def test_email_identity_failure_rolls_back_proof_and_account(
+    identity_app, monkeypatch, failure_point
+) -> None:
+    from sqlalchemy import event
+
+    app, _client, _mail, store = identity_app
+    challenge = issue_email(app, store, "rollback@example.com")
+    with app.state.session_factory() as session:
+        service = IdentityService(session, app.state.settings, verification=store)
+
+        def fail(*args, **kwargs):
+            raise RuntimeError("injected transaction failure")
+
+        if failure_point == "session_write":
+            with monkeypatch.context() as patch:
+                patch.setattr(service, "_new_session", fail)
+                with pytest.raises(RuntimeError, match="injected"):
+                    service.verify_email(
+                        challenge_id=UUID(challenge.challenge_id),
+                        code=challenge.code,
+                        client_ip="10.0.0.2",
+                        browser_binding=NONCE,
+                    )
+        else:
+            injected = []
+
+            def fail_identity_commit(current):
+                row = current.scalar(select(IdentityEmailChallenge))
+                if row is not None and row.consumed_at is not None:
+                    assert current.scalars(select(IdentityUser)).all()
+                    assert current.scalars(select(IdentitySession)).all()
+                    injected.append(True)
+                    fail()
+
+            event.listen(session, "before_commit", fail_identity_commit)
+            try:
+                with pytest.raises(RuntimeError, match="injected"):
+                    service.verify_email(
+                        challenge_id=UUID(challenge.challenge_id),
+                        code=challenge.code,
+                        client_ip="10.0.0.2",
+                        browser_binding=NONCE,
+                    )
+            finally:
+                event.remove(session, "before_commit", fail_identity_commit)
+            assert injected == [True]
+    with app.state.session_factory() as session:
+        assert session.scalar(select(IdentityEmailChallenge)).consumed_at is None
+        assert session.scalars(select(IdentityUser)).all() == []
+        assert session.scalars(select(IdentitySession)).all() == []
+    created = redeem_email(app, store, challenge)
+    assert created.view.user.email == "rollback@example.com"
+    # Dropping the successful response does not make the committed code reusable.
+    with pytest.raises(ApplicationError, match="invalid_email_code"):
+        redeem_email(app, store, challenge)
+    with app.state.session_factory() as session:
+        assert len(session.scalars(select(IdentitySession)).all()) == 1
+
+
+def test_email_browser_binding_and_resend_keep_only_latest_proof(identity_app) -> None:
+    app, client, mail, store = identity_app
+    email = "browser@example.com"
+    first = client.post(
+        "/api/identity/email/challenges", headers={"X-HotKey-CSRF": "1"}, json={"email": email}
+    )
+    assert first.status_code == 200, first.text
+    nonce = client.cookies.get("hotkey_email_browser")
+    assert len(nonce) == 43
+    cookie = first.headers["set-cookie"]
+    assert "HttpOnly" in cookie and "Path=/api/identity" in cookie and "Max-Age=300" in cookie
+    old = {"challenge_id": first.json()["challenge_id"], "code": mail.codes[email]}
+    with TestClient(app, base_url=app.state.settings.web_origin) as other:
+        other.headers["Origin"] = app.state.settings.web_origin
+        rejected = other.post(
+            "/api/identity/email/sessions", headers={"X-HotKey-CSRF": "1"}, json=old
+        )
+        assert rejected.status_code == 401 and rejected.json()["code"] == "invalid_email_code"
+    store._redis.delete(store._key("email-cooldown", email))
+    second = client.post(
+        "/api/identity/email/challenges", headers={"X-HotKey-CSRF": "1"}, json={"email": email}
+    )
+    assert second.status_code == 200 and client.cookies.get("hotkey_email_browser") == nonce
+    assert second.json()["challenge_id"] != old["challenge_id"]
+    rejected = client.post("/api/identity/email/sessions", headers={"X-HotKey-CSRF": "1"}, json=old)
+    assert rejected.status_code == 401
+    accepted = client.post(
+        "/api/identity/email/sessions",
+        headers={"X-HotKey-CSRF": "1"},
+        json={"challenge_id": second.json()["challenge_id"], "code": mail.codes[email]},
+    )
+    assert accepted.status_code == 200, accepted.text
+
+
+@pytest.mark.parametrize("lock_target", ["challenge", "user"])
+def test_email_proof_expiry_is_rechecked_after_waiting_for_lock(identity_app, lock_target) -> None:
+    import time
+
+    from sqlalchemy import text
+
+    app, _client, _mail, store = identity_app
+    email = "lock.expiry@example.com"
+    owner = create_account(app, "lock.expiry", email)
+    challenge = issue_email(app, store, email)
+    with app.state.session_factory() as session, session.begin():
+        row = session.scalar(select(IdentityEmailChallenge))
+        row.expires_at = datetime.now(UTC) + timedelta(seconds=1)
+    with app.state.session_factory() as blocker, blocker.begin():
+        if lock_target == "challenge":
+            blocker.scalar(select(IdentityEmailChallenge).with_for_update())
+        else:
+            blocker.get(IdentityUser, owner, with_for_update=True)
+
+        def attempt():
+            try:
+                redeem_email(app, store, challenge)
+                return "unexpected success"
+            except ApplicationError as error:
+                return error.code
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(attempt)
+            # Verify the request has reached a real PG lock, then let expiry pass.
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                blocker.execute(text("SELECT pg_stat_clear_snapshot()"))
+                waiting = blocker.scalar(
+                    text(
+                        "SELECT count(*) FROM pg_stat_activity "
+                        "WHERE datname=current_database() AND wait_event_type='Lock'"
+                    )
+                )
+                if waiting:
+                    break
+                time.sleep(0.01)
+            time.sleep(1.1)
+            blocker.commit()
+            result = future.result(timeout=5)
+            assert waiting
+            assert result == "invalid_email_code"
+    with app.state.session_factory() as session:
+        assert session.scalars(select(IdentitySession)).all() == []
+        assert session.scalar(select(IdentityEmailChallenge)).consumed_at is None
+
+
+def test_email_failed_delivery_cannot_invalidate_a_newer_resend(identity_app) -> None:
+    app, _client, _mail, store = identity_app
+    older = issue_email(app, store, "delivery.race@example.com")
+    store._redis.delete(store._key("email-cooldown", "delivery.race@example.com"))
+    newer = issue_email(app, store, "delivery.race@example.com")
+    with app.state.session_factory() as session:
+        EmailChallenges(session, store).invalidate(UUID(older.challenge_id))
+    assert redeem_email(app, store, newer).view.user.email == "delivery.race@example.com"
+
+
+@pytest.mark.parametrize(
+    "column,value",
+    [
+        ("scope_digest", b"short"),
+        ("binding_digest", b"short"),
+        ("code_digest", b"short"),
+        ("purpose", "other"),
+        ("attempt_count", -1),
+        ("attempt_count", 6),
+        ("expires_at", datetime(2000, 1, 1, tzinfo=UTC)),
+        ("invalidated_at", datetime.now(UTC)),
+    ],
+)
+def test_email_challenge_database_rejects_invalid_states(identity_app, column, value) -> None:
+    from sqlalchemy.exc import IntegrityError
+
+    app, _client, _mail, store = identity_app
+    challenge = issue_email(app, store, "constraints@example.com")
+    redeem_email(app, store, challenge)
+    with app.state.session_factory() as session, pytest.raises(IntegrityError), session.begin():
+        session.execute(update(IdentityEmailChallenge).values({column: value}))
+
+
+@pytest.mark.parametrize("expire_retry", [False, True])
+def test_email_unique_account_retry_revalidates_its_own_proof(
+    identity_app, monkeypatch, expire_retry
+) -> None:
+    from threading import Barrier
+
+    app, _client, _mail, store = identity_app
+    first = issue_email(app, store, "unique.race@example.com")
+    store._redis.delete(store._key("email-cooldown", "unique.race@example.com"))
+    with app.state.session_factory() as session:
+        second = EmailChallenges(session, store).issue(
+            "unique.race@example.com",
+            "10.0.0.1",
+            "login",
+            EmailChallenges(session, store).browser_binding("c" * 43),
+        )
+    barrier = Barrier(2)
+    # Synchronize both missing-account reads before either INSERT can succeed.
+
+    from sqlalchemy.orm import Session
+
+    original_flush = Session.flush
+    seen = set()
+
+    def synchronized_flush(session, *args, **kwargs):
+        if any(isinstance(row, IdentityUser) for row in session.new) and id(session) not in seen:
+            seen.add(id(session))
+            barrier.wait(timeout=5)
+        return original_flush(session, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "flush", synchronized_flush)
+    # For the losing insertion, expire its proof after the unique failure rollback.
+    original_transaction = IdentityService._write_transaction
+    from contextlib import contextmanager
+
+    attempts = {}
+
+    @contextmanager
+    def observed_transaction(service, proof=None):
+        key = proof.challenge_id if proof else None
+        attempts[key] = attempts.get(key, 0) + 1
+        if expire_retry and attempts[key] == 2:
+            with app.state.session_factory() as other, other.begin():
+                row = other.scalar(
+                    select(IdentityEmailChallenge).where(IdentityEmailChallenge.challenge_id == key)
+                )
+                row.created_at = datetime.now(UTC) - timedelta(minutes=6)
+                row.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        with original_transaction(service, proof) as email:
+            yield email
+
+    monkeypatch.setattr(IdentityService, "_write_transaction", observed_transaction)
+
+    def redeem(value):
+        challenge, nonce = value
+        try:
+            return redeem_email(app, store, challenge, nonce=nonce).view.user.id
+        except ApplicationError as error:
+            return error.code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(redeem, [(first, NONCE), (second, "c" * 43)]))
+    assert sorted(attempts.values()) == [1, 2]
+    if expire_retry:
+        assert results.count("invalid_email_code") == 1
+    else:
+        assert results[0] == results[1]
+    with app.state.session_factory() as session:
+        assert len(session.scalars(select(IdentityUser)).all()) == 1
+        assert len(session.scalars(select(IdentitySession)).all()) == (1 if expire_retry else 2)
+
+
+def test_email_expiry_cleanup_commits_before_concurrent_resends(identity_app, monkeypatch) -> None:
+    from threading import Barrier
+
+    app, _client, _mail, store = identity_app
+    first = issue_email(app, store, "cleanup.first@example.com")
+    second = issue_email(app, store, "cleanup.second@example.com")
+    with app.state.session_factory() as session, session.begin():
+        session.execute(
+            update(IdentityEmailChallenge).values(
+                created_at=datetime.now(UTC) - timedelta(minutes=6),
+                expires_at=datetime.now(UTC) - timedelta(seconds=1),
+            )
+        )
+    for email in ("cleanup.first@example.com", "cleanup.second@example.com"):
+        store._redis.delete(store._key("email-cooldown", email))
+    barrier = Barrier(2)
+    original = EmailChallenges.prune
+
+    def synchronized_cleanup(domain):
+        original(domain)
+        assert not domain.session.in_transaction()
+        barrier.wait(timeout=5)
+
+    monkeypatch.setattr(EmailChallenges, "prune", synchronized_cleanup)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        renewed = list(
+            executor.map(
+                lambda email: issue_email(app, store, email),
+                ["cleanup.second@example.com", "cleanup.first@example.com"],
+            )
+        )
+    assert {value.challenge_id for value in renewed}.isdisjoint(
+        {first.challenge_id, second.challenge_id}
+    )
+    with app.state.session_factory() as session:
+        assert len(session.scalars(select(IdentityEmailChallenge)).all()) == 2
+
+
+@pytest.mark.parametrize("operation", ["link", "credentials"])
+def test_sensitive_email_transaction_failure_preserves_proof_and_session(
+    identity_app, monkeypatch, operation
+) -> None:
+    app, client, mail, _store = identity_app
+    owner = create_account(app, "sensitive.owner", "sensitive@example.com")
+    login(client, "sensitive.owner")
+    previous = client.cookies.get("hotkey_session")
+    if operation == "link":
+        payload = link_code(client, mail, "new.sensitive@example.com")
+        endpoint = "/api/identity/email/link"
+    else:
+        sent = client.post(
+            "/api/identity/email/challenges",
+            headers=write_headers(client),
+            json={"email": "sensitive@example.com"},
+        )
+        assert sent.status_code == 200
+        payload = {
+            "challenge_id": sent.json()["challenge_id"],
+            "code": mail.codes["sensitive@example.com"],
+            "username": "sensitive.changed",
+            "password": "new-sensitive-password-123",
+        }
+        endpoint = "/api/identity/credentials"
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("injected sensitive failure")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(IdentityService, "_new_session", fail)
+        with pytest.raises(RuntimeError, match="injected sensitive"):
+            client.put(endpoint, headers=write_headers(client), json=payload)
+    with app.state.session_factory() as session:
+        user = session.get(IdentityUser, owner)
+        assert user.email == "sensitive@example.com" and user.credential_version == 1
+        assert session.scalar(select(IdentityEmailChallenge)).consumed_at is None
+        assert len(session.scalars(select(IdentitySession)).all()) == 1
+    assert client.get("/api/identity/session").status_code == 200
+    retried = client.put(endpoint, headers=write_headers(client), json=payload)
+    assert retried.status_code == 200, retried.text
+    assert client.cookies.get("hotkey_session") != previous
+    assert (
+        client.get(
+            "/api/identity/session", headers={"Cookie": f"hotkey_session={previous}"}
+        ).status_code
+        == 401
+    )
+
+
+@pytest.mark.parametrize("binding_change", ["session", "credential_version"])
+def test_credential_email_proof_rejects_new_binding_generation(
+    identity_app, binding_change
+) -> None:
+    app, client, mail, _store = identity_app
+    owner = create_account(app, "generation.owner", "generation@example.com")
+    login(client, "generation.owner")
+    sent = client.post(
+        "/api/identity/email/challenges",
+        headers=write_headers(client),
+        json={"email": "generation@example.com"},
+    )
+    assert sent.status_code == 200
+    if binding_change == "session":
+        client.cookies.clear()
+        login(client, "generation.owner")
+    else:
+        with app.state.session_factory() as session, session.begin():
+            session.get(IdentityUser, owner).credential_version = 2
+            session.execute(
+                update(IdentitySession)
+                .where(IdentitySession.user_id == owner)
+                .values(credential_version=2)
+            )
+    rejected = client.put(
+        "/api/identity/credentials",
+        headers=write_headers(client),
+        json={
+            "challenge_id": sent.json()["challenge_id"],
+            "code": mail.codes["generation@example.com"],
+            "username": "generation.changed",
+            "password": "generation-password-123",
+        },
+    )
+    assert rejected.status_code == 401 and rejected.json()["code"] == "invalid_email_code"
+    with app.state.session_factory() as session:
+        assert session.get(IdentityUser, owner).username == "generation.owner"
+        assert session.scalar(select(IdentityEmailChallenge)).consumed_at is None
