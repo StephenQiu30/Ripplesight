@@ -15,6 +15,7 @@ from confluent_kafka.admin import AdminClient, NewTopic
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 from tests.conftest import create_test_account
+from tests.hotlist_fixtures import ControlledHotlistPresetService
 
 from analysis.prompts import ANALYSIS_PROMPT_VERSION, LEGACY_ANALYSIS_PROMPT_VERSION
 from analysis.schemas import (
@@ -30,14 +31,21 @@ from analysis.services import (
     resolve_annotation_results,
 )
 from connections.presets import SOURCE_PRESETS
-from connections.services import SourcePresetService
+from content.hotlist_material import persist_board_in_transaction
+from content.models import HotlistEntryRecord
 from core.config import Settings
 from evidence.schemas import DataClass, DeletionReason
 from evidence.services import LifecycleService, SourceAccessPolicyService
 from jobs.execution import JobExecutionFailure
 from jobs.schemas import JobAcceptedMessage
 from jobs.services import OutboxEnvelope
-from sources.contracts import SourceCapability
+from sources.contracts import (
+    HotlistEntry,
+    HotlistPage,
+    SourceCapability,
+    SourcePageState,
+    SourceStopReason,
+)
 from worker.app import create_job_message_handler
 from worker.messaging import process_message, publish_outbox
 
@@ -229,7 +237,7 @@ def _track_analysis_observations(session: Session, owner_id: UUID) -> None:
     ).all()
     for row in rows:
         at = max(row.observed_at, SOURCE_PRESETS[row.source_key].reviewed_at)
-        SourcePresetService(session, clock=lambda at=at: at).apply_in_transaction(
+        ControlledHotlistPresetService(session, clock=lambda at=at: at).apply_in_transaction(
             owner_id=owner_id,
             preset=SOURCE_PRESETS[row.source_key],
         )
@@ -460,7 +468,6 @@ def test_analysis_scan_uses_selected_source_or_exact_hotlist_topic_version(
             at: datetime,
             entries: tuple[tuple[UUID, list[str]], ...],
         ) -> None:
-            snapshot_id = uuid4()
             session.execute(
                 text(
                     "INSERT INTO collection_due_windows "
@@ -479,40 +486,56 @@ def test_analysis_scan_uses_selected_source_or_exact_hotlist_topic_version(
                     "job": job_id,
                 },
             )
-            session.execute(
-                text(
-                    "INSERT INTO hotlist_snapshots "
-                    "(id, owner_id, source_key, job_id, operation_id, observed_at, entry_count) "
-                    "VALUES (:id, :owner, 'hotlist_36kr', :job, :operation, :at, :count)"
-                ),
-                {
-                    "id": snapshot_id,
-                    "owner": case.owner_id,
-                    "job": job_id,
-                    "operation": operation_id,
-                    "at": at,
-                    "count": len(entries),
-                },
+            received = max(at, SOURCE_PRESETS["hotlist_36kr"].reviewed_at)
+            ControlledHotlistPresetService(session, clock=lambda: received).apply_in_transaction(
+                owner_id=case.owner_id, preset=SOURCE_PRESETS["hotlist_36kr"]
             )
-            session.execute(
+            connection = session.execute(
                 text(
-                    "INSERT INTO hotlist_entries "
-                    "(snapshot_id, owner_id, rank, title, url, content_id, matched_topic_ids) "
-                    "VALUES (:snapshot, :owner, :rank, 'HotKey 讨论', :url, :content, "
-                    "CAST(:matches AS jsonb))"
+                    "SELECT id,current_version FROM source_connections WHERE owner_id=:owner "
+                    "AND source_key='hotlist_36kr'"
                 ),
-                [
-                    {
-                        "snapshot": snapshot_id,
-                        "owner": case.owner_id,
-                        "rank": rank,
-                        "url": f"https://example.com/{content_id}",
-                        "content": content_id,
-                        "matches": json.dumps(matches),
-                    }
-                    for rank, (content_id, matches) in enumerate(entries, 1)
-                ],
+                {"owner": case.owner_id},
+            ).one()
+            scope = {
+                "connection_id": str(connection.id),
+                "connection_version": connection.current_version,
+                "interval_seconds": 1800,
+            }
+            session.execute(
+                text("UPDATE jobs SET scope=CAST(:scope AS jsonb) WHERE id=:id"),
+                {"scope": json.dumps(scope), "id": job_id},
             )
+            # Valid fixture uses the real admitted raw-board writer, rather than legacy SQL rows.
+            snapshot, _ = persist_board_in_transaction(
+                session,
+                owner_id=case.owner_id,
+                job_id=job_id,
+                operation_id=operation_id,
+                connection_id=connection.id,
+                connection_version=connection.current_version,
+                due_at=at,
+                interval_seconds=1800,
+                page=HotlistPage(
+                    source_key="hotlist_36kr",
+                    state=SourcePageState.COMPLETE,
+                    items=tuple(
+                        HotlistEntry(
+                            rank=rank, title="HotKey 讨论", url=f"https://example.com/{content}"
+                        )
+                        for rank, (content, _) in enumerate(entries, 1)
+                    ),
+                    observed_at=at,
+                    request_count=1,
+                    adapter_version="controlled-analysis-board",
+                    stop_reason=SourceStopReason.END_OF_RESULTS,
+                ),
+                now=received,
+            )
+            for rank, (content, matches) in enumerate(entries, 1):
+                row = session.get(HotlistEntryRecord, (snapshot.id, rank))
+                row.content_id = content
+                row.matched_topic_ids = matches
 
         google_job_id, _ = seed_job("google_news", "keyword.search", "search", old)
         _, google_version_id = seed_post("google_news", google_job_id, old)

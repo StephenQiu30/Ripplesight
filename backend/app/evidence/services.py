@@ -258,6 +258,49 @@ class SourceAccessPolicyService:
         with self._session.begin():
             return self.save_in_transaction(owner_id=owner_id, command=command)
 
+    def initialize_pending_in_transaction(
+        self,
+        *,
+        owner_id: UUID,
+        source_key: str,
+        capability: SourceCapability,
+        processing_purpose: str,
+        field_purposes: dict[str, str],
+    ) -> None:
+        """Create a proposed scope without granting access or replacing concurrent review.
+
+        Conflict-do-nothing is intentional: a setup race must preserve the winner's
+        approval, rejection, expiry and version instead of an UPSERT back to pending.
+        """
+        if not self._session.in_transaction():
+            raise RuntimeError("pending source setup requires caller transaction")
+        command = SourceAccessPolicyInput(
+            source_key=source_key,
+            capability=capability,
+            status=AccessPolicyStatus.PENDING,
+            enabled=False,
+            processing_purpose=processing_purpose,
+            field_purposes=field_purposes,
+        )
+        now = self._clock()
+        self._session.execute(
+            insert(SourceAccessPolicy)
+            .values(
+                id=uuid4(),
+                owner_id=owner_id,
+                source_key=source_key,
+                capability=capability.value,
+                status=command.status.value,
+                enabled=False,
+                processing_purpose=command.processing_purpose,
+                field_purposes=command.field_purposes,
+                policy_version=1,
+                created_at=now,
+                updated_at=now,
+            )
+            .on_conflict_do_nothing(constraint="source_access_policies_owner_source_capability_key")
+        )
+
     def save_in_transaction(
         self,
         *,
@@ -380,6 +423,7 @@ class SourceAccessPolicyService:
         source_key: str,
         capability: SourceCapability,
         data_class: DataClass,
+        required_fields: frozenset[str] = frozenset(),
     ) -> None:
         """Lock and verify current source and retention policies before a source call."""
         now = self._clock()
@@ -399,6 +443,7 @@ class SourceAccessPolicyService:
             or policy.status != AccessPolicyStatus.APPROVED.value
             or not policy.enabled
             or not policy.field_purposes
+            or not required_fields.issubset(policy.field_purposes)
             or (policy.review_expires_at is not None and policy.review_expires_at <= now)
         ):
             raise SourceAccessUnavailableError("source access policy is unavailable")
@@ -1588,3 +1633,40 @@ class CleanupProcessor:
         else:
             deletion.status = DeletionStatus.PENDING.value
             deletion.completed_at = None
+
+
+def registered_cleanup_authorized_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    identities: dict[str, set[UUID]],
+    kind: CleanupTargetKind,
+    reference: str,
+) -> bool:
+    """Prove that a deletion decision and its registered target own this exact resource.
+
+    A handler receives a reference string from the processor, so it must not infer
+    deletion authority merely from a globally unique business ID.
+    """
+    if not session.in_transaction() or sum(map(len, identities.values())) > 1000:
+        raise ValueError("cleanup ownership requires bounded caller transaction")
+    for resource_type, identifiers in identities.items():
+        rows = session.scalars(
+            select(EvidenceResource)
+            .join(
+                DeletionDirective,
+                (DeletionDirective.resource_record_id == EvidenceResource.id)
+                & (DeletionDirective.owner_id == EvidenceResource.owner_id),
+            )
+            .join(CleanupTarget, CleanupTarget.deletion_id == DeletionDirective.id)
+            .where(
+                EvidenceResource.owner_id == owner_id,
+                EvidenceResource.resource_type == resource_type,
+                EvidenceResource.resource_id.in_(identifiers),
+                CleanupTarget.target_kind == kind.value,
+                CleanupTarget.target_reference == reference,
+            )
+        )
+        if any({"kind": kind.value, "reference": reference} in row.cleanup_targets for row in rows):
+            return True
+    return False

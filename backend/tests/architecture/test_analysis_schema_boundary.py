@@ -125,3 +125,8 @@ def test_analysis_schema_import_does_not_load_persistence_or_http() -> None:
         "assert not forbidden, forbidden"
     )
     subprocess.run([sys.executable, "-c", code], check=True, timeout=10, capture_output=True)
+
+
+def test_publication_schema_recursive_dependencies_are_pure() -> None:
+    """Public DTO additions must not indirectly import ORM or service consumers."""
+    assert not _impure_dependency_paths(APP, "publication.schemas")

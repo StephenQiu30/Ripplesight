@@ -131,13 +131,15 @@ Web 外壳使用 `BasicLayout → PageContainer`：前者管理侧栏、移动�
 
 CORE-01恢复目标按设计10分为独立账本、隔离重放、身份/对象及全入口屏障、最终追赶与切换。R1提供版本化完整资源拒读交换合同及随机新临时库复演，evidence提供调用者事务内重放接口，成功仍固定不允许开放服务。R2按PLAN-10内嵌SPEC先落实独立账本事务及只读重放消费者，再接通全部在线写入/读取/副作用；不把交换样本或部分接入当线上权威。账本目标为独立PG实例/专库、凭据和备份生命周期；实际故障域、身份/对象恢复及最终切换仍需验收。
 
+这是完整账本/恢复方案内的依赖，不是核心业务的统一开工顺序；排期见BACKLOG。正常owner/当前许可/完整依赖、删除决定可靠保存与独立最小记录、停止及副作用幂等仍是业务硬门槛。未部署完整恢复能力时，恢复目标不得进入业务身份、API/Worker/Scheduler、队列及对象外发；只有该操作范围的当前限制/身份和副作用复核通过才可评审开放。已接入独立reader的路径强制配置和故障拒绝保持不变，不借排期后置恢复旧allow。
+
 - `backend/sql/schema.sql` 是唯一的建表来源，自带 `BEGIN/COMMIT`，只用于全新的空库。不用 Alembic，不用 ORM 建表，也不用 SQLite 存业务数据。所有时间字段使用 `TIMESTAMPTZ`。
 - 独立拒绝账本由evidence持有，唯一DDL为`backend/sql/journal.sql`，只用于另一个全新空账本库；不导入业务schema、不进入业务metadata/dump、没有业务FK。R2-A交付最小head/events、受限原子追加函数及R1只读消费者；共用交换合同归evidence，删除backups的重复归属文件。业务库唯一schema规则保持不变。运行角色不能改历史/重建epoch，缺独立pin/head必须拒绝；R2-B全部在线消费者未就绪前不接管业务删除，不提供双写/失败回退。具体合同见PLAN-10内嵌SPEC；同机独立测试库不证明生产故障域或历史覆盖。
 - 独立账本唯一性损坏反例需要在已验证的自有测试库临时移除唯一约束；架构门禁仅允许`tests/integration/test_independent_journal.py`的`test_online_rejects_duplicate_owner_operation_even_with_valid_chain`中一次确切的`ALTER TABLE restriction_journal.events DROP CONSTRAINT events_owner_id_operation_id_key`。其他文件、函数或DDL仍拒绝，并以反例验证边界。这是受控故障注入，不是建表来源或业务迁移；测试库结束后删除。
 - 改表结构时，SQL、ORM 模型和结构断言要在同一次提交里更新，并在一个全新的 PostgreSQL 上核对所有表的列、类型、可空性和主键。
 - 业务库名固定为 `hotkey`。测试只用独立的 `hotkey_test_<后缀>` 库，用完删除；绝不能在业务库上跑测试。
 - 备份恢复验证从`hotkey_test_`源库恢复时，自动创建`hotkey_test_restore_<随机编号>`目标，用后删除；其他源库保留`hotkey_restore_`命名。测试环境的维护恢复配置仅接受本机独立测试源和独立`hotkey_test_restore_`入口，正常环境保留既有恢复入口限制。入口与真正恢复目标分别核对，不能只检查主测试库；既存恢复库不得作为测试清理对象。
-- **升级有数据的库**：先停写并备份，在新库上实际恢复一遍，确认能读；再建一个全新空库、执行完整的 `schema.sql`、导入并核对数据（各表行数、外键、任务和预算等）；全部核对无误后才切换，旧库保留作回退。禁止直接在旧库上执行 `schema.sql`。
+- **升级有数据的库**：先停写并备份，在新库上实际隔离恢复一遍，确认结构与数据；再建一个全新空库、执行完整的 `schema.sql`、导入并核对数据（各表行数、外键、任务和预算等）；全部核对无误，且当前删除/撤权、身份和副作用围栏均通过才切换。旧库可保留为隔离回退候选，不可直接恢复旧授权/任务；回退也须复核切换后新增的限制。禁止直接在旧库上执行 `schema.sql`，不能借灾备排期后置跳过该操作范围的恢复验证。
 
 ## 7. 任务与可靠性
 
@@ -240,4 +242,18 @@ B1b按[PLAN-10锁外权威合同](docs/plan/10-权限与数据生命周期.md#b1
 
 邮件挑战真源迁至PostgreSQL的`identity_email_challenges`，与账户、绑定、凭据变更及新会话同事务消费。Redis邮件数据仅为发送/验证限流；OAuth状态/PKCE仍沿用独立存储，不能据此声称OAuth事务完成。领域实现位于identity/email_challenges.py，Router仅传入浏览器绑定，ORM及唯一DDL同步维护。匿名绑定HttpOnly nonce，认证操作绑定owner/session/credential_version；统一锁序挑战→账户→会话，SMTP不跨事务持锁。重发UPSERT、错误计数提交及业务失败回滚合同见[切片SPEC](docs/plan/29-登录与验证注册.md#spec-开发合同)。过期行操作时有界清理，定期清理与保留期运行验收仍待完成。旧Redis邮件挑战切换后失效，不双写真源；业务库部署与升级仍遵守§6，当前仅改唯一schema和独立测试库。
 
-开发追踪由各PLAN内嵌SPEC：先评审并固定PLAN的Git版本，再按同文件工程任务实施。职责与模板以[文档入口](docs/index.md#plan内嵌specsdd)为唯一规范。
+开发追踪由各PLAN内嵌SPEC：先独立评审并按所属PLAN记录可复核规格基线，再按同文件工程任务实施。职责与模板以[文档入口](docs/index.md#plan内嵌specsdd)为唯一规范。
+
+首页公开聚合由publication应用层在同一只读快照内扫描当前许可集合，事件时间依据由events提供；`/api/publication/home`返回全站计数和有界列表，不从Web列表估算，不新增统计表或读取时回填。
+
+公开报道情感由analysis读取独立维度及固定观察证明，monitors提供当前规则版本；publication仅在完整事件公开许可通过后消费DTO并汇总同一快照的全站材料分母。首页/详情共用样本合同，不跨域查询分析ORM，不新增情感表或读取时触发分析，未经校准不生成突增/通知。
+
+首页负面突增只读规则由publication在home同一快照内全站逐事件判定；core/publication_config.py持有严格配置类型，HOTKEY_PUBLIC_NEGATIVE_SURGE_POLICY无业务默认阈值。公开响应不含校准引用，不持久化、不创建个人通知；判定及不足合同见设计12与HOME-SURGE-04。
+
+### 首页事件历史领域读取
+
+events/public_history.py负责固定快照的散列、公开三元组/闭包、来源口径、逐点可用性及6小时趋势；publication在完整公开许可后消费DTO，不访问events ORM。热度writer新增manifest provenance，无DDL。该历史是延迟计算记录，旧依据/补算/采集不完整不连线。首页仅为最终50项读取历史，全站统计保持独立。
+
+平台榜单由content保留固定原始条目及可空provenance，evidence分别登记整榜/条目资源和postgres_hotlist_snapshot清理目标；任一条删除保守清除整榜及派生观察，CLI/维护共用handler。publication复用版本化来源配置中的独立hotlist_publication授权，不继承正文再发布或组件许可；首页只消费纯DTO及当前许可，原生未知与RSSHub源序号分开。升级仅新空库按§6验证，旧无依据数据不回填授权。
+
+热榜技术预设不授平台采集/留存或组件运行权：首次仅pending来源档案与技术连接，重应用不覆盖已有审核/留存/组件预算；显式审核就绪后才运行。真实来源及升级准备合同见PLAN40 HOME-NATIVE-LIVE-07和DESIGN10隔离迁移准备。

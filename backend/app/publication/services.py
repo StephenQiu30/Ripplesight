@@ -78,6 +78,12 @@ class PublicationService:
             r"[a-z0-9][a-z0-9_-]{0,63}", source_key
         ):
             raise ApplicationError("invalid_publication_input")
+        if command.hotlist_publication is not None:
+            # Fixed adapter routes bound the public grant to supported board sources.
+            from sources.adapters.rsshub_hotlist import HOTLIST_ROUTES
+
+            if source_key not in HOTLIST_ROUTES or command.participation_mode != "hot_signal":
+                raise ApplicationError("invalid_publication_input")
         at = now or datetime.now(UTC)
         digest = fingerprint(
             {

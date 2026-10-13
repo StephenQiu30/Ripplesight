@@ -43,6 +43,7 @@ def load_publication_selection_in_transaction(
     snapshots: dict[UUID, EditorialPublicationInputView],
     now: datetime,
     visibility_overrides: dict[UUID, str] | None = None,
+    strict_capacity: bool = False,
 ) -> PublicationSelectionContext:
     """Recall across pagination and sources, then revalidate every fixed peer and policy."""
     if not session.in_transaction():
@@ -102,6 +103,7 @@ def load_publication_selection_in_transaction(
                     content_versions={key: items[key].material.content_version_id for key in batch},
                     selected_observations={key: items[key].observation_id for key in batch},
                     now=now,
+                    strict_capacity=strict_capacity,
                 )
             )
         return result

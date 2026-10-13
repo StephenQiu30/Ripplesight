@@ -763,7 +763,7 @@ CREATE TABLE evidence_cleanup_targets (
         target_kind IN (
             'redis_cache',
             'minio_object',
-            'postgres_content_observation'
+            'postgres_content_observation', 'postgres_hotlist_snapshot'
         )
     ),
     target_reference VARCHAR(1024) NOT NULL,
@@ -781,7 +781,7 @@ CREATE TABLE evidence_cleanup_targets (
     CONSTRAINT evidence_cleanup_targets_deletion_kind_reference_key
         UNIQUE (deletion_id, target_kind, target_reference),
     CHECK (
-        target_kind <> 'postgres_content_observation'
+        target_kind NOT IN ('postgres_content_observation', 'postgres_hotlist_snapshot')
         OR target_reference ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
     ),
     CHECK (
@@ -1613,6 +1613,7 @@ CREATE TABLE hotlist_snapshots (
     operation_id UUID NOT NULL,
     observed_at TIMESTAMPTZ NOT NULL,
     entry_count INTEGER NOT NULL CHECK (entry_count >= 0 AND entry_count <= 100),
+    provenance JSONB CHECK (provenance IS NULL OR jsonb_typeof(provenance) = 'object'),
     CONSTRAINT hotlist_snapshots_owner_id_key UNIQUE (owner_id, id),
     CONSTRAINT hotlist_snapshots_owner_job_key UNIQUE (owner_id, job_id),
     CONSTRAINT hotlist_snapshots_owner_source_operation_key

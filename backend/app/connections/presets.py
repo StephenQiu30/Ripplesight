@@ -158,6 +158,25 @@ _A_TIER_REVIEWED_AT = datetime(2026, 9, 25, tzinfo=UTC)
 _HOTLIST_FIELD_PURPOSES = MappingProxyType(
     {
         **_RSS_POST_FIELD_PURPOSES,
+        **{
+            name: "固定整榜与条目字段的来源依据及生命周期"
+            for name in (
+                "observed_at",
+                "received_at",
+                "board_state",
+                "entry_count",
+                "source_entry_count",
+                "truncated",
+                "adapter_version",
+                "source_updated_at",
+                "rank",
+                "summary",
+                "heat",
+                "native_id",
+                "native_rank",
+                "heat_unit",
+            )
+        },
     }
 )
 
@@ -180,7 +199,7 @@ def _hotlist_preset(source_key: str, route: str) -> SourcePreset:
         ),
         retention_days=90,
         component_name=f"collector.{source_key}",
-        component_version="rsshub-hotlist-v2",
+        component_version="rsshub-hotlist-v3",
         component_license="AGPL-3.0",
         component_cost_class="zero_price",
         component_terms_reference="https://docs.rsshub.app/",

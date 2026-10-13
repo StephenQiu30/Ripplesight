@@ -47,6 +47,35 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
+it("shows public assignment evidence and distinguishes reference time from occurrence", async () => {
+  api.developments.mockResolvedValue({ developments: [], next_cursor: null });
+  render(
+    <PublicStoryReading
+      story={{
+        ...story,
+        timing: {
+          snapshot_at: "2026-10-13T00:00:00Z",
+          reference_at: story.first_seen_at,
+          reference_basis: "published",
+          identified_at: "2026-10-01T00:00:00Z",
+          latest_development_at: "2026-10-12T12:00:00Z",
+          development_fact_ids: ["public-fact-evidence"],
+          activity: "existing_updated",
+          occurred_at: null,
+        },
+      }}
+    />,
+  );
+  await screen.findByText("当前窗口尚无可公开的事实与进展。");
+  expect(screen.getByText(/进展事实依据：/).textContent).toContain(
+    "public-fact-evidence",
+  );
+  expect(screen.getByText(/来源发布时间.*发生时间未记录/)).toBeTruthy();
+  expect(screen.getByText(/事件参考.*2026年10月2日/)).toBeTruthy();
+  expect(screen.queryByText(/首次发现/)).toBeNull();
+  expect(api.privateHeat).not.toHaveBeenCalled();
+});
+
 it("keeps anonymous public reading inside public APIs, counts actual sources, and maps fact citations to report rows", async () => {
   api.developments.mockResolvedValue({
     event_id: "event",
@@ -85,7 +114,7 @@ it("keeps anonymous public reading inside public APIs, counts actual sources, an
   expect(screen.getByText("公开资料暂未提供代表评论。")).toBeTruthy();
   expect(screen.getByRole("heading", { name: "平台分布" })).toBeTruthy();
   expect(
-    screen.getByText("暂无公开历史曲线与负面占比，不能由单次热度推算趋势。"),
+    screen.getByText("暂无公开历史曲线，不能由单次热度推算趋势。"),
   ).toBeTruthy();
   expect(api.developments).toHaveBeenCalledWith(
     { event_id: "event", limit: 20, window: "7d" },

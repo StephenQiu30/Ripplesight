@@ -66,6 +66,7 @@ class CleanupTargetKind(StrEnum):
     REDIS_CACHE = "redis_cache"
     MINIO_OBJECT = "minio_object"
     POSTGRES_CONTENT_OBSERVATION = "postgres_content_observation"
+    POSTGRES_HOTLIST_SNAPSHOT = "postgres_hotlist_snapshot"
 
 
 class DeletionReason(StrEnum):
@@ -228,7 +229,10 @@ class CleanupTargetSpec(BaseModel):
                 raise ValueError("MinIO cleanup target must be a normalized object name")
             if len(reference.encode()) > 1024:
                 raise ValueError("MinIO object name cannot exceed 1024 bytes")
-        if self.kind is CleanupTargetKind.POSTGRES_CONTENT_OBSERVATION:
+        if self.kind in {
+            CleanupTargetKind.POSTGRES_CONTENT_OBSERVATION,
+            CleanupTargetKind.POSTGRES_HOTLIST_SNAPSHOT,
+        }:
             try:
                 UUID(reference)
             except ValueError as error:

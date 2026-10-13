@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import publication.stories as module
+from analysis.public_sentiment import PublicReportSentiment
 from publication.reading import PublicationReadingService
 from tests.unit.test_publication_groups import member
 
@@ -18,6 +19,7 @@ def test_story_index_requires_every_fixed_member_even_outside_report_subset(monk
     )
     story = SimpleNamespace(
         event_id=event_id,
+        topic_id=uuid4(),
         revision=1,
         title="当前固定故事",
         summary="经许可复验的故事",
@@ -26,6 +28,9 @@ def test_story_index_requires_every_fixed_member_even_outside_report_subset(monk
         first_seen_at=now,
         heat=None,
         attention=None,
+        first_seen_basis="published",
+        created_at=now,
+        developments=(),
         narrative_input_observation_ids=(displayed.observation_id, undisplayed.observation_id),
         members=tuple(
             SimpleNamespace(
@@ -41,6 +46,21 @@ def test_story_index_requires_every_fixed_member_even_outside_report_subset(monk
     monkeypatch.setattr(
         module, "load_publication_stories_in_transaction", lambda *a, **k: {event_id: story}
     )
+    monkeypatch.setattr(
+        module,
+        "read_public_report_sentiments_in_transaction",
+        lambda *a, references, **k: {
+            r.content_id: PublicReportSentiment("not_analyzed") for r in references
+        },
+    )
+    history_reads = []
+
+    def history_provider(*args, references, **kwargs):
+        history_reads.append(references)
+        assert {ref.content_id for ref in references} == {displayed.content_id}
+        return None
+
+    monkeypatch.setattr(module, "read_public_history_in_transaction", history_provider)
     source_by_observation = {p.observation_id: p.source_key for p in (displayed, undisplayed)}
     monkeypatch.setattr(
         module,
@@ -89,6 +109,8 @@ def test_story_index_requires_every_fixed_member_even_outside_report_subset(monk
         )
         == []
     )
+
+    assert len(history_reads) == 3
 
 
 def test_hot_ranking_considers_story_after_two_thousand_raw_records(monkeypatch):

@@ -26,6 +26,7 @@ from backups.schemas import BackupManifest
 from backups.services import BackupService
 from connections.editorial_schemas import EditorialSourceOperationalHealth
 from connections.editorial_services import list_editorial_source_health_in_transaction
+from content.hotlist_cleanup import HotlistSnapshotCleanup
 from content.operations_reading import load_ingestion_health_in_transaction
 from content.services import ContentObservationCleanup
 from core.config import Settings
@@ -743,6 +744,9 @@ class OperationsMaintenanceExecutor:
                     CleanupTargetKind.REDIS_CACHE: RedisCacheCleanup(redis),
                     CleanupTargetKind.MINIO_OBJECT: MinioObjectCleanup(
                         self._minio(), self._settings.minio_bucket
+                    ),
+                    CleanupTargetKind.POSTGRES_HOTLIST_SNAPSHOT: HotlistSnapshotCleanup(
+                        self._sessions
                     ),
                     CleanupTargetKind.POSTGRES_CONTENT_OBSERVATION: ContentObservationCleanup(
                         self._sessions

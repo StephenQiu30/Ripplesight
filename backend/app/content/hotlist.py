@@ -4,7 +4,7 @@ import hashlib
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from typing import Literal
-from uuid import UUID, uuid4, uuid5
+from uuid import UUID, uuid5
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
@@ -16,6 +16,13 @@ from connections.services import (
     require_source_connection_version,
 )
 from content.discovery import KeywordDiscoveryPageCommitService, KeywordRequestMeter
+from content.hotlist_material import persist_board_in_transaction
+from content.hotlist_reading import (
+    BoardUnavailableError,
+    compare_boards_in_transaction,
+    read_board_in_transaction,
+)
+from content.hotlist_schemas import HOTLIST_REQUIRED
 from content.identity_history import lock_owner_history_in_transaction
 from content.models import HotlistEntryRecord, HotlistSnapshot
 from content.schemas import (
@@ -31,11 +38,12 @@ from evidence.schemas import DataClass
 from evidence.services import SourceAccessPolicyService
 from jobs.coverage import (
     count_hotlist_gaps_in_transaction,
+    latest_hotlist_run_in_transaction,
     load_hotlist_due_for_job_in_transaction,
 )
 from jobs.execution import ExecutionLease, JobExecutionService, JobProgress
 from jobs.schemas import JobStage
-from jobs.services import ResourceBudgetService
+from jobs.services import ResourceBudgetService, load_job_execution_configuration
 from monitors.services import ActiveHotlistTopic, MonitorScheduleService, evaluate_monitor_rules
 from sources.adapters.web_targets import normalize_public_article_url
 from sources.contracts import (
@@ -66,9 +74,9 @@ def recover_hotlist_usage_in_transaction(
     )
 
 
-def rank_change(rank: int, previous_rank: int | None) -> Literal["new", "up", "down", "same"]:
+def rank_change(rank: int, previous_rank: int | None) -> Literal["unknown", "up", "down", "same"]:
     if previous_rank is None:
-        return "new"
+        return "unknown"
     if rank < previous_rank:
         return "up"
     if rank > previous_rank:
@@ -189,24 +197,37 @@ class HotlistService:
                 source_key=source_key,
                 capability=SourceCapability.HOTLIST,
                 data_class=DataClass.STRUCTURED,
+                required_fields=HOTLIST_REQUIRED,
             )
             topics = MonitorScheduleService(
                 self._session
             ).list_active_hotlist_topics_in_transaction(owner_id=owner_id)
-            snapshot = HotlistSnapshot(
-                id=uuid4(),
+            configuration = load_job_execution_configuration(self._session, job_id=lease.job_id)
+            due = load_hotlist_due_for_job_in_transaction(
+                self._session,
                 owner_id=owner_id,
+                job_id=lease.job_id,
                 source_key=source_key,
+                operation_id=operation_id,
+            )
+            interval = configuration.scope.get("interval_seconds") if configuration else None
+            if type(interval) is not int:
+                raise ValueError("hotlist interval is not frozen")
+            snapshot, minimized_entries = persist_board_in_transaction(
+                self._session,
+                owner_id=owner_id,
                 job_id=lease.job_id,
                 operation_id=operation_id,
-                observed_at=page.observed_at,
-                entry_count=len(page.items),
+                connection_id=connection_id,
+                connection_version=connection_version,
+                due_at=due.due_at,
+                interval_seconds=interval,
+                page=page,
+                now=self._clock(),
             )
-            self._session.add(snapshot)
-            self._session.flush()
             content = ContentService(self._session, clock=self._clock)
             matched_contents: dict[str, UUID] = {}
-            for entry in page.items:
+            for entry in minimized_entries:
                 normalized_url = normalize_public_article_url(entry.url)
                 matches = matching_hotlist_topics(entry, topics)
                 names = tuple(topic.name for topic in matches)
@@ -236,21 +257,12 @@ class HotlistService:
                             ),
                         )
                         content_id = matched_contents[normalized_url] = persisted.id
-                self._session.add(
-                    HotlistEntryRecord(
-                        snapshot_id=snapshot.id,
-                        owner_id=owner_id,
-                        rank=entry.rank,
-                        title=entry.title,
-                        url=entry.url,
-                        summary=entry.summary,
-                        heat=entry.heat,
-                        published_at=entry.published_at,
-                        content_id=content_id,
-                        matched_topic_names=list(names),
-                        matched_topic_ids=[str(topic.topic_id) for topic in matches],
-                    )
-                )
+                stored = self._session.get(HotlistEntryRecord, (snapshot.id, entry.rank))
+                if stored is None:
+                    raise RuntimeError("registered hotlist position missing")
+                stored.content_id = content_id
+                stored.matched_topic_names = list(names)
+                stored.matched_topic_ids = [str(topic.topic_id) for topic in matches]
             meter.settle_page_in_transaction(
                 page=page, owner_id=owner_id, lease=lease, operation_id=operation_id
             )
@@ -267,24 +279,55 @@ class HotlistService:
         return renewed
 
     def list_sources(self, *, owner_id: UUID) -> tuple[HotlistSourceView, ...]:
+        """List configured source names; only validated current snapshot times are visible."""
         self._session.rollback()
         with self._session.begin():
-            applied = list_applied_hotlist_presets_in_transaction(self._session, owner_id=owner_id)
-            return tuple(
-                HotlistSourceView(
-                    source_key=item.source_key,
-                    latest_observed_at=self._session.scalar(
-                        select(HotlistSnapshot.observed_at)
-                        .where(
-                            HotlistSnapshot.owner_id == owner_id,
-                            HotlistSnapshot.source_key == item.source_key,
-                        )
-                        .order_by(HotlistSnapshot.observed_at.desc(), HotlistSnapshot.id.desc())
-                        .limit(1)
-                    ),
+            result = []
+            for source in list_applied_hotlist_presets_in_transaction(
+                self._session, owner_id=owner_id
+            ):
+                observed = None
+                row = self._session.scalar(
+                    select(HotlistSnapshot)
+                    .where(
+                        HotlistSnapshot.owner_id == owner_id,
+                        HotlistSnapshot.source_key == source.source_key,
+                    )
+                    .order_by(HotlistSnapshot.observed_at.desc(), HotlistSnapshot.id.desc())
+                    .limit(1)
                 )
-                for item in applied
+                if row is not None:
+                    try:
+                        self._require_readable(row, owner_id=owner_id)
+                        run = latest_hotlist_run_in_transaction(
+                            self._session,
+                            owner_id=owner_id,
+                            source_key=source.source_key,
+                            now=self._clock(),
+                        )
+                        due = load_hotlist_due_for_job_in_transaction(
+                            self._session,
+                            owner_id=owner_id,
+                            job_id=row.job_id,
+                            source_key=row.source_key,
+                            operation_id=row.operation_id,
+                        )
+                        if run is None or run.due_at <= due.due_at:
+                            observed = row.observed_at
+                    except ApplicationError:
+                        pass
+                result.append(
+                    HotlistSourceView(source_key=source.source_key, latest_observed_at=observed)
+                )
+            return tuple(result)
+
+    def _require_readable(self, row: HotlistSnapshot, *, owner_id: UUID) -> None:
+        try:
+            read_board_in_transaction(
+                self._session, owner_id=owner_id, snapshot_id=row.id, now=self._clock()
             )
+        except BoardUnavailableError as error:
+            raise ApplicationError("resource_not_found") from error
 
     def get_latest(
         self,
@@ -310,6 +353,18 @@ class HotlistService:
             )
             if latest is None:
                 raise ApplicationError("resource_not_found")
+            run = latest_hotlist_run_in_transaction(
+                self._session, owner_id=owner_id, source_key=source_key, now=self._clock()
+            )
+            due = load_hotlist_due_for_job_in_transaction(
+                self._session,
+                owner_id=owner_id,
+                job_id=latest.job_id,
+                source_key=source_key,
+                operation_id=latest.operation_id,
+            )
+            if run is not None and run.due_at > due.due_at:
+                raise ApplicationError("resource_not_found")
             return self._snapshot_view(latest, owner_id=owner_id, cursor=cursor, limit=limit)
 
     def list_history(
@@ -331,12 +386,15 @@ class HotlistService:
                 anchor = self._session.scalar(query.where(HotlistSnapshot.id == cursor))
                 if anchor is None:
                     raise ValueError("hotlist cursor does not belong to this source")
+                self._require_readable(anchor, owner_id=owner_id)
                 query = query.where(self._older_than(anchor))
             rows = self._session.scalars(
                 query.order_by(HotlistSnapshot.observed_at.desc(), HotlistSnapshot.id.desc()).limit(
                     limit + 1
                 )
             ).all()
+            for row in rows:
+                self._require_readable(row, owner_id=owner_id)
             selected = rows[:limit]
             summaries = tuple(
                 self._summary(row, rows[index + 1] if index + 1 < len(rows) else None)
@@ -397,6 +455,12 @@ class HotlistService:
     def _summary(
         self, snapshot: HotlistSnapshot, previous: HotlistSnapshot | None
     ) -> HotlistSnapshotSummaryView:
+        self._require_readable(snapshot, owner_id=snapshot.owner_id)
+        if previous is not None:
+            try:
+                self._require_readable(previous, owner_id=snapshot.owner_id)
+            except ApplicationError:
+                previous = None
         due = load_hotlist_due_for_job_in_transaction(
             self._session,
             owner_id=snapshot.owner_id,
@@ -433,16 +497,14 @@ class HotlistService:
     def _snapshot_view(
         self, snapshot: HotlistSnapshot, *, owner_id: UUID, cursor: int | None, limit: int
     ) -> HotlistSnapshotView:
-        previous = self._previous(snapshot)
-        summary = self._summary(snapshot, previous)
-        previous_ranks: dict[str, int] = {}
-        if previous is not None:
-            for row in self._session.scalars(
-                select(HotlistEntryRecord)
-                .where(HotlistEntryRecord.snapshot_id == previous.id)
-                .order_by(HotlistEntryRecord.rank)
-            ):
-                previous_ranks.setdefault(_rank_identity(row.url), row.rank)
+        self._require_readable(snapshot, owner_id=owner_id)
+        board = read_board_in_transaction(
+            self._session, owner_id=owner_id, snapshot_id=snapshot.id, now=self._clock()
+        )
+        _, previous_ranks = compare_boards_in_transaction(
+            self._session, owner_id=owner_id, board=board, now=self._clock()
+        )
+        summary = self._summary(snapshot, self._previous(snapshot))
         query = select(HotlistEntryRecord).where(
             HotlistEntryRecord.owner_id == owner_id,
             HotlistEntryRecord.snapshot_id == snapshot.id,

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from connections.services import require_source_connection_version
 from content.discovery import KeywordRequestMeter
 from content.hotlist import HotlistService
+from content.hotlist_schemas import HOTLIST_REQUIRED
 from core.errors import ApplicationError
 from events.heat import record_source_fetch_success_in_transaction
 from evidence.services import RetentionPolicyUnavailableError, SourceAccessUnavailableError
@@ -168,6 +169,7 @@ class HotlistExecutor:
                 clock=self._clock,
                 capability=SourceCapability.HOTLIST,
                 stage="hotlist.request",
+                required_fields=HOTLIST_REQUIRED,
             )
             try:
                 adapter = self._adapter_factory(

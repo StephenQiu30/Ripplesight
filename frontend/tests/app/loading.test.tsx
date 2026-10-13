@@ -34,7 +34,7 @@ describe("route loading", () => {
       screen.getByRole("navigation", { name: "移动站点导航" }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("complementary", { name: "站点侧边栏" }),
+      screen.queryByRole("complementary", { name: "站点侧边栏" }),
     ).toBeTruthy();
     expect(screen.queryByRole("contentinfo")).toBeNull();
     expect(
@@ -44,7 +44,7 @@ describe("route loading", () => {
     ).toBe("true");
   });
 
-  it("retains public navigation while loading the login route", () => {
+  it("keeps an exit to public reading while the standalone login is loading", () => {
     route.pathname = "/login";
     render(
       <BasicLayout>
@@ -52,10 +52,14 @@ describe("route loading", () => {
       </BasicLayout>,
     );
     expect(
-      screen.getByRole("complementary", { name: "站点侧边栏" }),
+      screen.queryByRole("complementary", { name: "站点侧边栏" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "不登录，先看今日热点" }),
     ).toBeTruthy();
-    expect(screen.getByRole("link", { name: "今日热点" })).toBeTruthy();
-    expect(screen.getByRole("status", { name: "首页加载中" })).toBeTruthy();
+    expect(
+      screen.getByRole("status", { name: "正在读取登录方式" }),
+    ).toBeTruthy();
     expect(screen.queryByRole("textbox")).toBeNull();
   });
 });

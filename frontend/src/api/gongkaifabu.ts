@@ -46,6 +46,23 @@ export async function getPublicFactReports(
   );
 }
 
+/** 读取全站公开事件概览与时间依据 同一只读快照下统计完整可公开事件集合,返回有界列表;不触发采集或重发。 GET /api/publication/home */
+export async function getPublicHome(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: HotKeyAPI.getPublicHomeParams,
+  options?: import("@/request").RequestOptions,
+) {
+  return request<HotKeyAPI.PublicHomeView>("/api/publication/home", {
+    method: "GET",
+    params: {
+      // limit has a default value: 50
+      limit: "50",
+      ...params,
+    },
+    ...(options || {}),
+  });
+}
+
 /** 读取公开事件热榜 48小时来源热度排序,至少两个参与方且含编辑来源;全部固定材料必须可公开。 GET /api/publication/hot */
 export async function getPublicHotStories(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)

@@ -127,6 +127,27 @@ def test_public_story_requires_dates_for_all_members_and_complete_narrative_inpu
             "published_at": None if missing == "hidden_member" else NOW,
         }
     )
+    from analysis.public_sentiment import PublicReportSentiment
+
+    analysis_reads = []
+
+    def sentiment_provider(*args, references, **kwargs):
+        # Permission failures must never invoke analysis. Successful stories only
+        # whitelist actual displayed public reports, never the hidden inputs.
+        analysis_reads.append(references)
+        assert {ref.content_id for ref in references} == {displayed.content_id}
+        return {ref.content_id: PublicReportSentiment("not_analyzed") for ref in references}
+
+    monkeypatch.setattr(module, "read_public_report_sentiments_in_transaction", sentiment_provider)
+    history_reads = []
+
+    def history_provider(*args, references, **kwargs):
+        history_reads.append(references)
+        assert {ref.content_id for ref in references} == {displayed.content_id}
+        return None
+
+    monkeypatch.setattr(module, "read_public_history_in_transaction", history_provider)
+
     sources = {
         displayed.observation_id: displayed.source_key,
         hidden.observation_id: hidden.source_key,
@@ -135,6 +156,7 @@ def test_public_story_requires_dates_for_all_members_and_complete_narrative_inpu
     undated_inputs = {extra} if missing in {"narrative", "analysis_input"} else set()
     story = SimpleNamespace(
         event_id=event,
+        topic_id=uuid4(),
         revision=1,
         title="固定故事",
         summary="全部输入摘要",
@@ -143,6 +165,9 @@ def test_public_story_requires_dates_for_all_members_and_complete_narrative_inpu
         first_seen_at=NOW,
         heat=None,
         attention=None,
+        first_seen_basis="published",
+        created_at=NOW,
+        developments=(),
         narrative_input_observation_ids=(displayed.observation_id, hidden.observation_id)
         + ((extra,) if missing == "narrative" else ()),
         members=tuple(
@@ -179,6 +204,7 @@ def test_public_story_requires_dates_for_all_members_and_complete_narrative_inpu
     assert not module.public_stories_in_transaction(
         reader, owner_id=uuid4(), event_ids=(event,), now=NOW
     )
+    assert not analysis_reads and not history_reads
     undated_inputs.clear()
     for identity, (p, _) in values.items():
         values[identity] = (p.model_copy(update={"published_at": NOW}), None)
@@ -186,3 +212,4 @@ def test_public_story_requires_dates_for_all_members_and_complete_narrative_inpu
         reader, owner_id=uuid4(), event_ids=(event,), now=NOW
     )
     assert len(result) == 1 and len(result[0].reports) == 1
+    assert len(analysis_reads) == 1 and len(history_reads) == 1

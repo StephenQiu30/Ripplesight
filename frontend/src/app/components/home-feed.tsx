@@ -1,9 +1,19 @@
 import Link from "next/link";
-import { relativeTime, storyPresentation } from "./home-format";
+import {
+  relativeTime,
+  storyPresentation,
+  storyObservation,
+  homeMonitorHref,
+  homeCategories,
+} from "./home-format";
 import { categories } from "@/components/publication/reading-format";
+import { AuthLink } from "@/components/auth/auth-link";
+import { Button } from "@/components/ui/button";
 import { Content, Heading, InlineCode, Text } from "@/components/ui/content";
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
-import { ObservationGap } from "@/components/ui/signal";
+import { HeatHistory } from "@/components/publication/heat-history";
+import { ReportSentiment } from "@/components/publication/report-sentiment";
+import { StoryTiming } from "@/components/publication/story-timing";
 
 export function HomeStoryFeed({
   stories,
@@ -16,11 +26,12 @@ export function HomeStoryFeed({
     <ItemGroup className="gap-0" aria-label="热点事件列表">
       {stories.map((story, index) => {
         const view = storyPresentation(story);
+        const observation = storyObservation(story, observedAt);
         return (
           <Item
             asChild
             key={story.id}
-            className="border-border flex-nowrap items-start gap-6 rounded-none border-x-0 border-t-0 border-b px-0 py-6"
+            className="border-border flex-nowrap items-start gap-6 rounded-none border-x-0 border-t-0 border-b px-0 py-4.5 md:py-6"
           >
             <Content role="listitem" aria-labelledby={`home-story-${story.id}`}>
               <Text
@@ -36,10 +47,14 @@ export function HomeStoryFeed({
                   {view.categories
                     .map(
                       (category) =>
-                        categories.find(([key]) => key === category)?.[1],
+                        homeCategories.find(([key]) => key === category)?.[1] ??
+                        categories.find(([key]) => key === category)?.[1] ??
+                        category,
                     )
                     .join(" · ") || "事件"}{" "}
-                  · {relativeTime(view.time, observedAt)}
+                  · 材料标注 {relativeTime(observation.materialAt, observedAt)}
+                  {observation.recentMaterials ? " · 24小时内发现材料" : ""}
+                  {observation.backfill ? " · 含补录材料" : ""}
                 </Text>
                 <Heading
                   level={2}
@@ -59,7 +74,8 @@ export function HomeStoryFeed({
                     {view.sources.join(" · ") || "暂无来源"}
                   </Text>
                   <Text size="xs" tone="muted">
-                    <InlineCode>{view.sourceCount}</InlineCode> 个来源
+                    <InlineCode>{view.sourceCount}</InlineCode>{" "}
+                    {view.sourceCountLabel}
                   </Text>
                   <Text size="xs" tone="muted" className="md:hidden">
                     热度{" "}
@@ -67,20 +83,66 @@ export function HomeStoryFeed({
                       {view.heat?.toLocaleString("zh-CN") ?? "—"}
                     </InlineCode>
                   </Text>
-                  <Text size="xs" tone="muted">
-                    情感 暂无数据
-                  </Text>
+                  <ReportSentiment sentiment={story.sentiment} compact />
                 </Content>
+                {story.timing ? (
+                  <StoryTiming timing={story.timing} />
+                ) : (
+                  <>
+                    <Text size="xs" tone="muted">
+                      事件参考 {relativeTime(story.first_seen_at, observedAt)} ·
+                      最新材料发现{" "}
+                      {relativeTime(observation.discoveredAt, observedAt)}
+                      {observation.unverifiedDiscovery
+                        ? " · 另有材料发现时间待核对"
+                        : ""}
+                    </Text>
+                    <Text size="xs" tone="muted">
+                      参考时间不代表已确认发生时间；材料发现不代表新事实。
+                    </Text>
+                  </>
+                )}
+                {story.timing ? (
+                  <Text size="xs" tone="muted">
+                    最新材料发现{" "}
+                    {relativeTime(observation.discoveredAt, observedAt)} ·
+                    材料发现不代表新事实。
+                    {observation.unverifiedDiscovery
+                      ? " · 另有材料发现时间待核对"
+                      : ""}
+                  </Text>
+                ) : null}
+                {story.attention ? (
+                  <Text size="xs" tone="muted">
+                    48小时窗口截至{" "}
+                    {relativeTime(story.attention.window_end, observedAt)} ·{" "}
+                    {story.attention.comparable_participant_count} 个可比来源
+                    {story.attention.uncomparable_participant_count > 0
+                      ? ` · ${story.attention.uncomparable_participant_count} 个来源不可比`
+                      : ""}
+                    {!story.attention.complete ? " · 部分来源采集不完整" : ""}
+                  </Text>
+                ) : null}
+                <HeatHistory history={story.history} />
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  className="self-start"
+                >
+                  <AuthLink href={homeMonitorHref(story.title)}>
+                    设置监测
+                  </AuthLink>
+                </Button>
               </ItemContent>
               <Content className="hidden w-30 shrink-0 flex-col items-end gap-2 md:flex">
-                <Text size="lead">
+                <Text size="sm">
                   <InlineCode>
                     {view.heat?.toLocaleString("zh-CN", {
                       maximumFractionDigits: 1,
                     }) ?? "—"}
                   </InlineCode>
                 </Text>
-                <ObservationGap compact>暂无历史曲线</ObservationGap>
                 <Text size="xs" tone="muted">
                   48 小时热度
                 </Text>

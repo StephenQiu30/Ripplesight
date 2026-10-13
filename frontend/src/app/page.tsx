@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { HomeLoading } from "@/app/components/home-loading";
 
 import { HomeContent, type HomeReading } from "@/app/components/home-content";
-import { getPublicHotStories } from "@/api/gongkaifabu";
+import { getPublicHome } from "@/api/gongkaifabu";
 import { listPublicEditionCatalogue } from "@/api/gongkaikanwumulu";
 import { welcomeMetadata } from "@/components/site/welcome-metadata";
 import { ApiRequestError } from "@/request";
@@ -36,7 +36,7 @@ export default async function Home({
 
 async function HomeReadingPage({ category }: { category?: string }) {
   const results = await Promise.allSettled([
-    getPublicHotStories({ limit: 50 }),
+    getPublicHome({ limit: 50 }),
     listPublicEditionCatalogue({ kind: "daily", limit: 1 }),
   ]);
   const failures = Object.fromEntries(
@@ -58,7 +58,32 @@ async function HomeReadingPage({ category }: { category?: string }) {
     }),
   );
   const reading: HomeReading = {
-    observedAt: new Date().toISOString(),
+    observedAt:
+      results[0].status === "fulfilled"
+        ? results[0].value.snapshot_at
+        : undefined,
+    windowStart:
+      results[0].status === "fulfilled"
+        ? results[0].value.window_start
+        : undefined,
+    sentiment:
+      results[0].status === "fulfilled"
+        ? results[0].value.sentiment
+        : undefined,
+    negativeSurge:
+      results[0].status === "fulfilled"
+        ? results[0].value.negative_surge
+        : undefined,
+    overview:
+      results[0].status === "fulfilled" ? results[0].value.overview : undefined,
+    platformTrends:
+      results[0].status === "fulfilled"
+        ? results[0].value.platform_trends
+        : undefined,
+    rankingBasis:
+      results[0].status === "fulfilled"
+        ? results[0].value.ranking_basis
+        : undefined,
     failures,
     stories: results[0].status === "fulfilled" ? results[0].value.stories : [],
     editions: results[1].status === "fulfilled" ? results[1].value.entries : [],

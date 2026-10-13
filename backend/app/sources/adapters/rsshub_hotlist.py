@@ -43,7 +43,7 @@ class RsshubHotlistAdapter(HttpSourceAdapter):
     """Read one allowlisted local RSSHub ranking; feed order is the rank."""
 
     capabilities: ClassVar[frozenset[SourceCapability]] = frozenset({SourceCapability.HOTLIST})
-    adapter_version: ClassVar[str] = "rsshub-hotlist-v2"
+    adapter_version: ClassVar[str] = "rsshub-hotlist-v3"
 
     def __init__(
         self,
@@ -85,6 +85,8 @@ class RsshubHotlistAdapter(HttpSourceAdapter):
             if self._deadline is not None:
                 raise ValueError("a hotlist adapter can fetch only once")
             self._deadline = time.monotonic() + self._max_seconds
+            source_updated_at = None
+            source_entry_count = 0
             try:
                 parsed = feedparser.parse(self._get_bytes(self._feed_url))
                 if parsed.get("bozo") or not parsed.get("version"):
@@ -92,6 +94,8 @@ class RsshubHotlistAdapter(HttpSourceAdapter):
                 items = tuple(
                     self._entry(raw, rank) for rank, raw in enumerate(parsed.entries[:100], 1)
                 )
+                source_entry_count = len(parsed.entries)
+                source_updated_at = parse_timestamp(parsed.feed.get("updated"))
                 state = SourcePageState.COMPLETE if items else SourcePageState.EMPTY
                 reason = SourceStopReason.END_OF_RESULTS if items else SourceStopReason.SOURCE_EMPTY
             except SourceFailureError as error:
@@ -108,6 +112,9 @@ class RsshubHotlistAdapter(HttpSourceAdapter):
                 observed_at=datetime.now(UTC),
                 request_count=self._request_count,
                 adapter_version=self.adapter_version,
+                source_updated_at=source_updated_at,
+                source_entry_count=source_entry_count if items else 0,
+                truncated=source_entry_count > len(items) if items else False,
             )
         finally:
             self._lock.release()

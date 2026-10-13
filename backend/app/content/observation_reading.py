@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from content.hotlist_reading import readable_hotlist_jobs_in_transaction
 from content.models import ContentObservation, ContentVersion
 from content.observation_context import (
     load_observation_contexts_in_transaction,
@@ -15,6 +16,7 @@ from content.observation_inputs import observation_input_closures_in_transaction
 from evidence.admission_reading import load_current_source_admissions_in_transaction
 from evidence.schemas import DataClass
 from evidence.services import load_readable_resources_in_transaction
+from sources.contracts import SourceCapability
 from sources.editorial_identity import NATIVE_IDENTITY_PURPOSE, EditorialNativeIdentityProof
 
 
@@ -117,6 +119,18 @@ def _readable_leaves(
                 now=now,
             )
         )
+    hotlist_contexts = {
+        (c.job.job_id, c.source_key)
+        for c in contexts.values()
+        if c.job.source_capability is SourceCapability.HOTLIST
+    }
+    readable_hotlist_jobs = (
+        readable_hotlist_jobs_in_transaction(
+            session, owner_id=owner_id, source_jobs=hotlist_contexts, now=now
+        )
+        if hotlist_contexts
+        else set()
+    )
     result = dict.fromkeys(identifiers, False)
     for observation, version in rows:
         if version is None and (not include_metadata or observation.content_version_id is not None):
@@ -126,6 +140,10 @@ def _readable_leaves(
         visible = visibility.get(observation.id)
         if (
             actual is None
+            or (
+                actual.job.source_capability is SourceCapability.HOTLIST
+                and actual.job.job_id not in readable_hotlist_jobs
+            )
             or original is None
             or (visible is not None and visible.status in {"deleted", "restricted"})
         ):

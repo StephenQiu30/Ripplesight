@@ -14,10 +14,10 @@ from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from tests.conftest import TEST_DATABASE_TRUNCATE
+from tests.hotlist_fixtures import ControlledHotlistPresetService
 
 from connections import services as connection_services
 from connections.presets import SOURCE_PRESETS
-from connections.services import SourcePresetService
 from content import hotlist as hotlist_module
 from content.hotlist import HotlistService
 from content.hotlist_execution import HotlistExecutor
@@ -68,7 +68,9 @@ def runtime(
     with engine.begin() as connection:
         connection.execute(text(TEST_DATABASE_TRUNCATE))
     with sessions.begin() as session:
-        service = SourcePresetService(session, clock=lambda: due_at - timedelta(seconds=1))
+        service = ControlledHotlistPresetService(
+            session, clock=lambda: due_at - timedelta(seconds=1)
+        )
         preset = SOURCE_PRESETS["hotlist_weibo"]
         host = getattr(request, "param", "127.0.0.1")
         if host != "127.0.0.1":
@@ -608,12 +610,12 @@ def test_empty_bucket_then_nonempty_bucket_keep_distinct_observations(
     ]
     assert rows[0].operation_id != rows[1].operation_id
     with runtime.sessions() as session:
-        latest = HotlistService(session).get_latest(
-            owner_id=runtime.owner_id, source_key="hotlist_weibo"
-        )
+        latest = HotlistService(
+            session, clock=lambda: runtime.due_at + timedelta(hours=3)
+        ).get_latest(owner_id=runtime.owner_id, source_key="hotlist_weibo")
     assert latest.due_at == next_due
     assert latest.entry_count == 1
-    assert latest.items[0].rank_change == "new"
+    assert latest.items[0].rank_change == "unknown"
     assert (latest.items[0].previous_rank, latest.items[0].rank_delta) == (None, None)
 
 
@@ -925,11 +927,11 @@ def test_repeated_url_keeps_feed_ranks_and_one_content_observation(
     )
     _execute(runtime, second_job, second_page)
     with runtime.sessions() as session:
-        latest = HotlistService(session).get_latest(
-            owner_id=runtime.owner_id, source_key="hotlist_weibo"
-        )
-    assert (latest.items[1].previous_rank, latest.items[1].rank_delta) == (1, -1)
-    assert latest.items[1].rank_change == "down"
+        latest = HotlistService(
+            session, clock=lambda: runtime.due_at + timedelta(hours=3)
+        ).get_latest(owner_id=runtime.owner_id, source_key="hotlist_weibo")
+    assert (latest.items[1].previous_rank, latest.items[1].rank_delta) == (None, None)
+    assert latest.items[1].rank_change == "unknown"
 
 
 def test_same_url_on_two_hotlists_keeps_distinct_source_identities(
@@ -941,7 +943,7 @@ def test_same_url_on_two_hotlists_keeps_distinct_source_identities(
     _execute(runtime, first_job, _ranked_page(runtime.due_at + timedelta(minutes=2), (entry,)))
 
     with runtime.sessions.begin() as session:
-        SourcePresetService(session, clock=lambda: runtime.due_at).apply_in_transaction(
+        ControlledHotlistPresetService(session, clock=lambda: runtime.due_at).apply_in_transaction(
             owner_id=runtime.owner_id, preset=SOURCE_PRESETS["hotlist_baidu"]
         )
     next_due = runtime.due_at + timedelta(minutes=30)
@@ -1018,9 +1020,9 @@ def test_equivalent_hotlist_urls_keep_content_identity_and_previous_rank(
     assert completion.status.value == "succeeded"
 
     with runtime.sessions() as session:
-        latest = HotlistService(session).get_latest(
-            owner_id=runtime.owner_id, source_key="hotlist_weibo"
-        )
+        latest = HotlistService(
+            session, clock=lambda: runtime.due_at + timedelta(hours=3)
+        ).get_latest(owner_id=runtime.owner_id, source_key="hotlist_weibo")
     assert (latest.due_at, latest.entry_count) == (next_due, 2)
     assert (latest.items[0].rank, latest.items[0].rank_change) == (1, "up")
     assert (latest.items[0].previous_rank, latest.items[0].rank_delta) == (2, 1)

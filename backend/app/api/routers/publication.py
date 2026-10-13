@@ -23,6 +23,7 @@ from publication.schemas import (
     Category,
     PublicationOverrideInput,
     PublicEditionView,
+    PublicHomeView,
     PublicItemDetailView,
     PublicItemsPage,
     PublicStoriesPage,
@@ -345,6 +346,26 @@ def changes(
 ) -> SelectedChangesPage:
     _reading_headers(response)
     return service.selected_changes(owner_id=owner_id, epoch=epoch, since=since, limit=limit)
+
+
+@router.get(
+    "/home",
+    operation_id="getPublicHome",
+    response_model=PublicHomeView,
+    status_code=200,
+    summary="读取全站公开事件概览与时间依据",
+    description="同一只读快照下统计完整可公开事件集合,返回有界列表;不触发采集或重发。",
+    responses=_READ_ERRORS,
+)
+def home(
+    response: Response,
+    service: PublicationServiceDependency,
+    owner_id: PublicPublicationScopeDependency,
+    limit: Annotated[int, Query(ge=1, le=50)] = 50,
+) -> PublicHomeView:
+    """Publish exact public counts, never estimates from the displayed page."""
+    _reading_headers(response)
+    return service.home(owner_id=owner_id, limit=limit)
 
 
 @router.get(

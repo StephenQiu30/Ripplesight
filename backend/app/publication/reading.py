@@ -154,10 +154,12 @@ class PublicationReadingService:
         *,
         indexing_enabled: bool = False,
         public_categories: tuple[Category, ...] = (),
+        strict_capacity: bool = False,
     ) -> None:
         self.session, self.indexing_enabled = session, indexing_enabled
         self.public_categories = tuple(sorted(set(public_categories)))
         self._source_icons: dict[str, str] = {}
+        self.strict_capacity = strict_capacity
 
     def source_icon_url(self, source_key: str) -> str | None:
         return self._source_icons.get(source_key)
@@ -241,7 +243,11 @@ class PublicationReadingService:
                 continue
             accepted[row.content_id] = item
         selection = load_publication_selection_in_transaction(
-            self.session, owner_id=owner_id, snapshots=accepted, now=now
+            self.session,
+            owner_id=owner_id,
+            snapshots=accepted,
+            now=now,
+            strict_capacity=self.strict_capacity,
         )
         policies = {
             row.source_key: row

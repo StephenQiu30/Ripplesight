@@ -132,6 +132,8 @@ function rankLabel(entry: HotKeyAPI.HotlistEntryView): string {
       return "持平";
     case "new":
       return "新上榜";
+    case "unknown":
+      return "订阅位置变化未知";
   }
 }
 

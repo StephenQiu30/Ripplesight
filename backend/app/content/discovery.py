@@ -87,6 +87,7 @@ class KeywordRequestMeter:
         clock: Callable[[], datetime] | None = None,
         capability: SourceCapability = SourceCapability.SEARCH,
         stage: str = _SEARCH_STAGE,
+        required_fields: frozenset[str] = frozenset(),
     ) -> None:
         if not 1 <= max_requests <= 100:
             raise ValueError("search request budget must be between 1 and 100")
@@ -106,6 +107,7 @@ class KeywordRequestMeter:
         self._clock = clock or (lambda: datetime.now(UTC))
         self._capability = capability
         self._stage = stage
+        self._required_fields = required_fields
         self._started = 0
         self._pending: list[UUID] = []
 
@@ -152,6 +154,7 @@ class KeywordRequestMeter:
                     source_key=self._source_key,
                     capability=self._capability,
                     data_class=DataClass.STRUCTURED,
+                    required_fields=self._required_fields,
                 )
                 if request_counts.collection_cycle >= self._max_requests:
                     return False

@@ -50,7 +50,7 @@ const snapshot: HotKeyAPI.HotlistSnapshotView = {
       content_id: null,
       previous_rank: null,
       rank_delta: null,
-      rank_change: "new",
+      rank_change: "unknown",
       matched: false,
       matched_topic_names: [],
     },
@@ -64,7 +64,8 @@ describe("hotlist snapshot", () => {
     );
     expect(html).toContain("此前 1 个采集窗口无快照");
     expect(html).toContain("上升 2");
-    expect(html).toContain("新上榜");
+    expect(html).toContain("订阅位置变化未知");
+    expect(html).not.toContain("新上榜");
     expect(html).toContain("snapshot=snapshot-1");
     expect(html).toContain('href="/content/content-1"');
     expect(html).not.toContain("/content/null");

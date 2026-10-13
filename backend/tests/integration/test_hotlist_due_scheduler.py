@@ -12,10 +12,10 @@ import pytest
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 from tests.conftest import TEST_DATABASE_TRUNCATE
+from tests.hotlist_fixtures import ControlledHotlistPresetService
 
 from connections.presets import SOURCE_PRESETS
 from connections.schemas import SourceQuietWindow
-from connections.services import SourcePresetService
 from jobs.coverage import CollectionDueWindowService
 from jobs.schemas import (
     BudgetMetric,
@@ -35,7 +35,9 @@ class HotlistContext:
 
 
 @pytest.fixture
-def hotlist_context() -> Iterator[HotlistContext]:
+def hotlist_context(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[HotlistContext]:
     database_url = os.getenv("HOTKEY_TEST_DATABASE_URL")
     if database_url is None:
         pytest.skip("HOTKEY_TEST_DATABASE_URL is required for PostgreSQL integration tests")
@@ -46,9 +48,31 @@ def hotlist_context() -> Iterator[HotlistContext]:
     due_at = datetime.fromtimestamp((int(now.timestamp()) // 1800) * 1800, UTC)
     with engine.begin() as connection:
         connection.execute(text(TEST_DATABASE_TRUNCATE))
+    preset = SOURCE_PRESETS["hotlist_weibo"]
+    if getattr(request, "param", None) == "quiet":
+        hour = due_at.astimezone(ZoneInfo("Asia/Shanghai")).hour
+        preset = replace(
+            preset,
+            execution_policy=preset.execution_policy.model_copy(
+                update={
+                    "quiet_windows": (
+                        SourceQuietWindow(
+                            timezone="Asia/Shanghai",
+                            start=f"{hour:02d}:00",
+                            end=f"{(hour + 1) % 24:02d}:00",
+                        ),
+                    ),
+                }
+            ),
+        )
+        monkeypatch.setattr(
+            "connections.services.SOURCE_PRESETS", {**SOURCE_PRESETS, "hotlist_weibo": preset}
+        )
     with sessions.begin() as session:
-        presets = SourcePresetService(session, clock=lambda: due_at - timedelta(seconds=1))
-        presets.apply_in_transaction(owner_id=owner_id, preset=SOURCE_PRESETS["hotlist_weibo"])
+        presets = ControlledHotlistPresetService(
+            session, clock=lambda: due_at - timedelta(seconds=1)
+        )
+        presets.apply_in_transaction(owner_id=owner_id, preset=preset)
     with sessions() as session:
         ResourceBudgetService(session, clock=lambda: due_at).save_budget_policy(
             owner_id=owner_id,
@@ -265,7 +289,9 @@ def test_six_hotlist_presets_each_keep_their_own_due_denominator(
     source_keys = {key for key in SOURCE_PRESETS if key.startswith("hotlist_")}
     assert len(source_keys) == 6
     with hotlist_context.sessions.begin() as session:
-        service = SourcePresetService(session, clock=lambda: due_at - timedelta(seconds=1))
+        service = ControlledHotlistPresetService(
+            session, clock=lambda: due_at - timedelta(seconds=1)
+        )
         for source_key in sorted(source_keys - {"hotlist_weibo"}):
             service.apply_in_transaction(
                 owner_id=hotlist_context.owner_id, preset=SOURCE_PRESETS[source_key]
@@ -355,36 +381,13 @@ def test_hotlist_due_records_budget_skip_without_job(
         assert connection.execute(text("SELECT count(*) FROM jobs")).scalar_one() == 0
 
 
+@pytest.mark.parametrize("hotlist_context", ["quiet"], indirect=True)
 def test_hotlist_due_records_quiet_skip_without_job(
     hotlist_context: HotlistContext, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
         scheduler, "get_settings", lambda: SimpleNamespace(hotlist_interval_seconds=1800)
     )
-    hour = hotlist_context.due_at.astimezone(ZoneInfo("Asia/Shanghai")).hour
-    preset = SOURCE_PRESETS["hotlist_weibo"]
-    quiet_preset = replace(
-        preset,
-        execution_policy=preset.execution_policy.model_copy(
-            update={
-                "quiet_windows": (
-                    SourceQuietWindow(
-                        timezone="Asia/Shanghai",
-                        start=f"{hour:02d}:00",
-                        end=f"{(hour + 1) % 24:02d}:00",
-                    ),
-                )
-            }
-        ),
-    )
-    monkeypatch.setattr(
-        "connections.services.SOURCE_PRESETS",
-        {**SOURCE_PRESETS, "hotlist_weibo": quiet_preset},
-    )
-    with hotlist_context.sessions.begin() as session:
-        SourcePresetService(
-            session, clock=lambda: hotlist_context.due_at - timedelta(seconds=1)
-        ).apply_in_transaction(owner_id=hotlist_context.owner_id, preset=quiet_preset)
     with hotlist_context.sessions.begin() as session:
         assert (
             scheduler.enqueue_due_hotlists_in_transaction(

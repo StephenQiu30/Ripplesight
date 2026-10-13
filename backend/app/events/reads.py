@@ -16,10 +16,11 @@ from sqlalchemy.orm import Session
 from content.event_reading import load_event_member_content_in_transaction
 from content.observation_inputs import freeze_observation_inputs_in_transaction
 from content.schemas import EventContentReadReference, EventContentReadView
-from core.errors import ApplicationError
+from core.errors import ApplicationError, DependencyUnavailableError
 from events.digest import load_recorded_event_digest_input_in_transaction
-from events.fact_models import EventDerivedContent, EventFact, EventFactAssignment
+from events.fact_models import EventDerivedContent, EventFact, EventFactAssignment, EventFactMember
 from events.fact_schemas import (
+    EventPublicationDevelopment,
     EventPublicationMemberReference,
     EventPublicationStoryView,
     StoryIndexingChange,
@@ -402,6 +403,7 @@ class EventReadService:
         owner_id: UUID,
         events: dict[UUID, int],
         now: datetime,
+        strict_capacity: bool = False,
     ) -> tuple[
         dict[UUID, list[EventMember]],
         dict[EventContentReadReference, EventContentReadView],
@@ -450,7 +452,11 @@ class EventReadService:
             event = self._session.get(Event, event_id)
             assert event is not None
             current_input = load_recorded_event_digest_input_in_transaction(
-                self._session, event=event, derived=derived, now=now
+                self._session,
+                event=event,
+                derived=derived,
+                now=now,
+                strict_capacity=strict_capacity,
             )
             derived_available[event_id] = (
                 current_input is not None and current_input.fingerprint == derived.input_fingerprint
@@ -516,6 +522,7 @@ def load_publication_stories_in_transaction(
     owner_id: UUID,
     event_ids: tuple[UUID, ...],
     now: datetime,
+    strict_capacity: bool = False,
 ) -> dict[UUID, EventPublicationStoryView]:
     """Freeze readable canonical stories in the publication caller's one snapshot."""
     if not session.in_transaction() or now.utcoffset() is None:
@@ -530,9 +537,6 @@ def load_publication_stories_in_transaction(
             )
         )
     )
-    members, readings, available = service._members_and_readings(
-        owner_id=owner_id, events={event.id: event.revision for event in events}, now=now
-    )
     # Event's compatibility narrative can contain removed reports even without a
     # digest row. Preserve their original source permissions independently of the
     # active public reports, matching the private narrative's historical guard.
@@ -544,7 +548,42 @@ def load_publication_stories_in_transaction(
         )
     )
     if len(historical) > 2000:
+        if strict_capacity:
+            raise DependencyUnavailableError("publication_distribution_unavailable")
         return {}
+    members, readings, available = service._members_and_readings(
+        owner_id=owner_id,
+        events={event.id: event.revision for event in events},
+        now=now,
+        strict_capacity=strict_capacity,
+    )
+    developments: dict[UUID, list[EventPublicationDevelopment]] = {}
+    development_rows = session.execute(
+        select(EventFactAssignment, EventFactMember.content_id)
+        .join(EventFact, EventFact.id == EventFactAssignment.fact_id)
+        .join(
+            EventFactMember,
+            (EventFactMember.fact_id == EventFactAssignment.fact_id)
+            & (EventFactMember.event_id == EventFactAssignment.event_id),
+        )
+        .join(EventMember, EventMember.id == EventFactMember.event_member_id)
+        .where(
+            EventFactAssignment.owner_id == owner_id,
+            EventFactAssignment.event_id.in_(event_ids),
+            EventFactAssignment.removed_revision.is_(None),
+            EventFactAssignment.relation == "development",
+            EventFact.status == "confirmed",
+            EventFactMember.removed_revision.is_(None),
+            EventFactMember.role.in_(("primary", "report")),
+            EventFactMember.assignment_origin.in_(("model", "manual")),
+            EventMember.removed_revision.is_(None),
+            EventFactMember.content_version_id == EventMember.content_version_id,
+        )
+    )
+    for assignment, content_id in development_rows:
+        developments.setdefault(assignment.event_id, []).append(
+            EventPublicationDevelopment(assignment.fact_id, assignment.created_at, (content_id,))
+        )
     narrative_roots: dict[UUID, set[UUID]] = {}
     for member in historical:
         ref = event_content_reference(member)
@@ -584,6 +623,9 @@ def load_publication_stories_in_transaction(
             latest_progress=view.latest_progress,
             phase=view.phase,
             first_seen_at=view.first_seen_at,
+            first_seen_basis=view.first_seen_basis,
+            created_at=view.created_at,
+            developments=tuple(developments.get(event.id, ())),
             heat=attention.heat if attention and attention.participant_count else None,
             attention=attention if attention and attention.participant_count else None,
             narrative_input_observation_ids=narrative_inputs,

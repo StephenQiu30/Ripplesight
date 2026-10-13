@@ -53,3 +53,131 @@ export const publicStory: HotKeyAPI.PublicStoryView = {
   attention,
   reports: [publicItem, { ...publicItem, id: "post-2" }],
 };
+
+export const reportSentiment: HotKeyAPI.PublicReportSentimentView = {
+  snapshot_at: "2026-10-12T12:00:00Z",
+  scope: "public_event_reports",
+  time_basis: "material_discovered",
+  method_version: "public-report-sentiment-v1",
+  comparison_state: "not_calibrated",
+  time_unknown_count: 1,
+  current: {
+    start: "2026-10-11T12:00:00Z",
+    end: "2026-10-12T12:00:00Z",
+    sample_count: 12,
+    valid_count: 8,
+    positive: 3,
+    neutral: 3,
+    negative: 2,
+    excluded_counts: { not_analyzed: 2, backfill: 1, failed: 1 },
+    source_keys: ["rss", "x"],
+    negative_ratio: 0.25,
+    analysis_coverage: 8 / 12,
+  },
+  previous: {
+    start: "2026-10-10T12:00:00Z",
+    end: "2026-10-11T12:00:00Z",
+    sample_count: 5,
+    valid_count: 0,
+    positive: 0,
+    neutral: 0,
+    negative: 0,
+    excluded_counts: { not_analyzed: 5 },
+    source_keys: ["rss"],
+    negative_ratio: null,
+    analysis_coverage: 0,
+  },
+  samples: [
+    {
+      content_id: "post-1",
+      source_key: "rss",
+      discovered_at: "2026-10-12T10:00:00Z",
+      backfill: false,
+      state: "valid",
+      label: "negative",
+    },
+  ],
+};
+
+/** Controlled contract sample; never an operator's production calibration. */
+export const negativeSurge: HotKeyAPI.PublicNegativeSurgeView = {
+  snapshot_at: reportSentiment.snapshot_at,
+  scope: "public_event_reports",
+  time_basis: "material_discovered",
+  method_version: "public-report-negative-surge-v1",
+  state: "triggered",
+  rule: {
+    policy_id: "controlled-visual-only",
+    min_valid_samples: 10,
+    min_analysis_coverage: "0.8",
+    min_sources: 1,
+    min_negative_count: 5,
+    min_negative_count_increase: 3,
+    min_ratio_increase: "0.2",
+  },
+  total_events: 1,
+  evaluated_events: 1,
+  triggered_count: 1,
+  not_triggered_count: 0,
+  insufficient_count: 0,
+  unavailable_count: 0,
+  not_configured_count: 0,
+  events: [
+    {
+      event_id: publicStory.id,
+      title: publicStory.title,
+      reading_url: `/discover/stories/${publicStory.id}`,
+      state: "triggered",
+      reasons: [],
+      current: {
+        ...reportSentiment.current,
+        sample_count: 10,
+        valid_count: 10,
+        positive: 1,
+        neutral: 1,
+        negative: 8,
+        excluded_counts: {},
+        source_keys: ["rss"],
+        negative_ratio: 0.8,
+        analysis_coverage: 1,
+      },
+      previous: {
+        ...reportSentiment.previous,
+        sample_count: 10,
+        valid_count: 10,
+        positive: 4,
+        neutral: 4,
+        negative: 2,
+        excluded_counts: {},
+        source_keys: ["rss"],
+        negative_ratio: 0.2,
+        analysis_coverage: 1,
+      },
+      ratio_increase: 0.6,
+      negative_count_increase: 6,
+    },
+  ],
+};
+
+export const heatHistory: HotKeyAPI.PublicHeatHistory = {
+  state: "available",
+  event_revision: 1,
+  snapshot_at: "2026-10-06T08:30:00Z",
+  formula_version: "attention-v1-48h-halflife24h",
+  trend: { state: "available", direction: "up", percent: 50 },
+  points: Array.from({ length: 48 }, (_, index) => ({
+    window_end: new Date(
+      Date.parse("2026-10-06T08:00:00Z") - (47 - index) * 3600000,
+    ).toISOString(),
+    computed_at:
+      index >= 41
+        ? new Date(
+            Date.parse("2026-10-06T08:10:00Z") - (47 - index) * 3600000,
+          ).toISOString()
+        : null,
+    value: index >= 41 ? 14 + ((index - 41) * 7) / 6 : null,
+    participant_count: index >= 41 ? 2 : null,
+    segment_key: index >= 41 ? "controlled-cohort" : null,
+    reason: index >= 41 ? null : "missing",
+  })),
+};

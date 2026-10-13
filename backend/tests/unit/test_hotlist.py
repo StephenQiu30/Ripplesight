@@ -235,8 +235,8 @@ def test_hotlist_title_without_summary_is_not_marked_as_full_article() -> None:
     assert payload["truncation_reason"] == "source_limit"
 
 
-def test_rank_change_covers_new_up_down_and_same() -> None:
-    assert rank_change(1, None) == "new"
+def test_rank_change_covers_unknown_up_down_and_same() -> None:
+    assert rank_change(1, None) == "unknown"
     assert rank_change(1, 2) == "up"
     assert rank_change(3, 2) == "down"
     assert rank_change(2, 2) == "same"

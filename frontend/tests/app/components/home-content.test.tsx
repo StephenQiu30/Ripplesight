@@ -38,8 +38,81 @@ it("renders the Figma event page and reserves missing analytics without inventin
   expect(screen.queryByText("让信息围绕你")).toBeNull();
   expect(screen.queryByText("探索专题")).toBeNull();
   expect(screen.getAllByTitle("暂无全站统计")).toHaveLength(4);
-  expect(screen.getByText("暂无历史曲线")).toBeTruthy();
-  expect(screen.getByRole("heading", { name: "X 今日趋势" })).toBeTruthy();
+  expect(screen.getByText("历史依据未返回")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "事件热度趋势" })).toBeTruthy();
+});
+
+it("keeps backend full-site counts independent of category and clears stale counts on failure", () => {
+  const overview = {
+    total_events: 123,
+    new_events_24h: 17,
+    updated_events_24h: 9,
+    covered_sources: 12,
+    time_unknown_events: 2,
+    platform_count: null,
+    negative_surge_count: null,
+  };
+  const { rerender } = render(
+    <HomeContent
+      category="policy"
+      reading={{ ...reading, overview, windowStart: "2026-10-07T08:00:00Z" }}
+    />,
+  );
+  const metrics = screen.getByLabelText("今日概览");
+  expect(metrics.textContent).toContain("公开事件123");
+  expect(metrics.textContent).toContain("24小时新识别17");
+  expect(metrics.textContent).toContain("旧事件进展归入9");
+  expect(metrics.textContent).toContain("覆盖来源12");
+  expect(screen.getByText(/2 个事件时间待核对/)).toBeTruthy();
+  expect(screen.getByRole("status", { name: "当前分类暂无事件" })).toBeTruthy();
+  rerender(
+    <HomeContent
+      reading={{
+        ...reading,
+        overview,
+        failures: { stories: { status: 503, code: "database_unavailable" } },
+      }}
+    />,
+  );
+  expect(screen.getAllByTitle("暂无全站统计")).toHaveLength(4);
+  expect(screen.queryByText(/2 个事件时间待核对/)).toBeNull();
+});
+
+it("renders server activity and its basis without deriving it from source publication", () => {
+  render(
+    <HomeContent
+      reading={{
+        ...reading,
+        stories: [
+          {
+            ...publicStory,
+            reports: [
+              ...publicStory.reports,
+              {
+                ...publicStory.reports[0],
+                id: "future-material",
+                discovered_at: "2027-01-01T00:00:00Z",
+              },
+            ],
+            timing: {
+              snapshot_at: reading.observedAt,
+              reference_at: "2026-01-01T00:00:00Z",
+              reference_basis: "published",
+              identified_at: "2026-10-01T00:00:00Z",
+              latest_development_at: "2026-10-08T07:00:00Z",
+              development_fact_ids: ["fact-1"],
+              activity: "existing_updated",
+              occurred_at: null,
+            },
+          },
+        ],
+      }}
+    />,
+  );
+  expect(screen.getByText(/旧事件进展归入 · 系统识别/)).toBeTruthy();
+  expect(screen.getByText(/来源发布时间.*发生时间未记录/)).toBeTruthy();
+  expect(screen.getByText(/进展可能重新归入/)).toBeTruthy();
+  expect(screen.getByText(/另有材料发现时间待核对/)).toBeTruthy();
 });
 it("keeps the category selection in the URL and drops retired pagination state", () => {
   render(<HomeContent category="paper" />);
@@ -120,7 +193,7 @@ it("submits search through the real discovery route and keeps the actual RSS sub
   });
   expect(new FormData(form).get("q")).toBe("模型");
   expect(
-    screen.getByRole("link", { name: "订阅日报" }).getAttribute("href"),
+    screen.getByRole("link", { name: "订阅 RSS" }).getAttribute("href"),
   ).toBe("/feed/daily.xml");
 });
 it("reveals additional real events without manufacturing a cursor or global count", () => {
@@ -158,3 +231,143 @@ it("distinguishes a denied public response from an empty feed", () => {
   ).toBeTruthy();
   expect(screen.queryByText("暂无公开事件")).toBeNull();
 });
+
+it("shows material discovery and sampling limits without calling it a new event or fact", () => {
+  render(
+    <HomeContent
+      reading={{ ...reading, observedAt: "2026-10-06T08:00:00Z" }}
+    />,
+  );
+  const list = screen.getByRole("list", { name: "热点事件列表" });
+  expect(within(list).getByText(/24小时内发现材料/)).toBeTruthy();
+  expect(within(list).getByText(/含补录材料/)).toBeTruthy();
+  expect(within(list).getByText(/事件参考.*最新材料发现/)).toBeTruthy();
+  expect(within(list).getByText("个独立来源").textContent).toBe("3 个独立来源");
+  expect(within(list).getByText(/1 个来源不可比/)).toBeTruthy();
+  expect(within(list).getByText(/部分来源采集不完整/)).toBeTruthy();
+  expect(within(list).queryByText(/今日新事件|旧事件更新/)).toBeNull();
+  expect(screen.getByText(/最多50条.*分类仅筛选当前集合/)).toBeTruthy();
+  const monitor = within(list).getByRole("link", { name: "设置监测" });
+  expect(
+    new URL(monitor.getAttribute("href")!, "http://localhost").searchParams.get(
+      "q",
+    ),
+  ).toBe(publicStory.title);
+  expect(navigation.push).not.toHaveBeenCalled();
+  expect(navigation.refresh).not.toHaveBeenCalled();
+});
+
+it("offers explicit monitor setup from the empty home", () => {
+  render(<HomeContent />);
+  expect(
+    screen.getByRole("link", { name: "设置关键词监测" }).getAttribute("href"),
+  ).toBe("/monitors/new");
+});
+
+it("labels the latest edition by its actual period even when an old period was generated recently", () => {
+  render(
+    <HomeContent
+      reading={{
+        ...reading,
+        editions: [
+          {
+            kind: "daily",
+            key: "2026-10-01",
+            title: "十月一日日报",
+            revision: 2,
+            created_at: "2026-10-08T07:00:00Z",
+            reading_url: "/reports/daily/2026-10-01",
+          },
+        ],
+      }}
+    />,
+  );
+  expect(screen.getByRole("heading", { name: "最新日报" })).toBeTruthy();
+  expect(screen.queryByRole("heading", { name: "今日日报" })).toBeNull();
+  expect(screen.getByText("2026-10-01")).toBeTruthy();
+  expect(
+    screen.getByRole("link", { name: "十月一日日报" }).getAttribute("href"),
+  ).toBe("/reports/daily/2026-10-01");
+});
+
+it("does not expose stale event titles, monitors, counts or update times on denial", () => {
+  render(
+    <HomeContent
+      reading={{
+        ...reading,
+        stories: Array.from({ length: 8 }, (_, i) => ({
+          ...publicStory,
+          id: `old-${i}`,
+        })),
+        failures: { stories: { status: 403, code: "permission_denied" } },
+      }}
+    />,
+  );
+  expect(screen.queryByText(publicStory.title)).toBeNull();
+  expect(screen.queryByRole("link", { name: "设置监测" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "加载更多事件" })).toBeNull();
+  expect(screen.queryByText(/更新于/)).toBeNull();
+  expect(
+    screen.getByRole("heading", { name: "无权读取公开事件" }),
+  ).toBeTruthy();
+});
+
+it("keeps events readable when a denied edition has a newer stale timestamp", () => {
+  render(
+    <HomeContent
+      reading={{
+        ...reading,
+        editions: [
+          {
+            kind: "daily",
+            key: "2026-10-08",
+            title: "不可读的旧日报",
+            revision: 1,
+            created_at: "2026-10-08T08:00:00Z",
+            reading_url: "/reports/daily/2026-10-08",
+          },
+        ],
+        unavailable: ["editions"],
+        failures: { editions: { status: 403, code: "permission_denied" } },
+      }}
+    />,
+  );
+  expect(screen.queryByText("不可读的旧日报")).toBeNull();
+  expect(screen.getByRole("list", { name: "热点事件列表" })).toBeTruthy();
+  expect(screen.getByText(/更新于/).textContent).toContain("2026年10月6日");
+  expect(
+    screen.getByRole("heading", { name: "日报暂时无法读取" }),
+  ).toBeTruthy();
+});
+
+it.each([
+  ["2026-10-09T08:00:00Z", "时间待核对"],
+  ["invalid", "时间未知"],
+])(
+  "does not treat the %s heat window as a valid current observation",
+  (end, label) => {
+    render(
+      <HomeContent
+        reading={{
+          ...reading,
+          stories: [
+            {
+              ...publicStory,
+              attention: { ...publicStory.attention!, window_end: end },
+            },
+          ],
+        }}
+      />,
+    );
+    expect(
+      within(screen.getByRole("region", { name: "上升最快" })).getByText(
+        "暂无可比较的热度变化。",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(screen.getByRole("list", { name: "热点事件列表" })).getByText(
+        new RegExp(`48小时窗口截至 ${label}`),
+      ),
+    ).toBeTruthy();
+  },
+);

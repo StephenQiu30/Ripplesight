@@ -1,18 +1,20 @@
 from __future__ import annotations
 
+import json
 import re
 from decimal import Decimal
 from functools import lru_cache
 from ipaddress import ip_address
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
 from pydantic import Field, SecretStr, StrictInt, ValidationInfo, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from ai.capability_schemas import AI_CAPABILITIES, AiModelServerSpec
+from core.publication_config import PublicNegativeSurgePolicy
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 _REPOSITORY_ROOT = _BACKEND_ROOT.parent
@@ -50,6 +52,16 @@ class Settings(BaseSettings):
     email_code_hmac_key: SecretStr | None = None
     public_contact_owner_id: UUID | None = None
     public_publication_owner_id: UUID | None = None
+    public_negative_surge_policy: Annotated[PublicNegativeSurgePolicy | None, NoDecode] = None
+
+    @field_validator("public_negative_surge_policy", mode="before")
+    @classmethod
+    def parse_public_negative_surge_policy(cls, value: object) -> object:
+        """Decode operator JSON without rounding numeric thresholds through float."""
+        if isinstance(value, str):
+            return json.loads(value, parse_float=Decimal)
+        return value
+
     public_publication_categories: tuple[
         Literal["ai-models", "ai-products", "industry", "paper", "tip", "opinion"], ...
     ] = ()

@@ -43,6 +43,7 @@ def load_publication_groupings_in_transaction(
     now: datetime,
     selected_observations: dict[UUID, UUID | None] | None = None,
     topic_id: UUID | None = None,
+    strict_capacity: bool = False,
 ) -> dict[UUID, EventPublicationGrouping]:
     if not session.in_transaction() or now.tzinfo is None:
         raise RuntimeError("publication grouping read requires caller transaction and aware time")
@@ -85,7 +86,11 @@ def load_publication_groupings_in_transaction(
     )
     by_content: dict[UUID, list[EventPublicationGrouping]] = {}
     fact_inputs = load_fact_observation_inputs_in_transaction(
-        session, owner_id=owner_id, fact_ids=tuple({row[3].id for row in rows}), now=now
+        session,
+        owner_id=owner_id,
+        fact_ids=tuple({row[3].id for row in rows}),
+        now=now,
+        strict_capacity=strict_capacity,
     )
     for member, fact_member, assignment, fact, event in rows:
         reference = event_content_reference(member)

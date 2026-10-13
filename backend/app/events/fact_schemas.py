@@ -254,6 +254,15 @@ class EventPublicationMemberReference:
 
 
 @dataclass(frozen=True, slots=True)
+class EventPublicationDevelopment:
+    """Current confirmed development assignment and its nonlegacy report identities."""
+
+    fact_id: UUID
+    assigned_at: datetime
+    content_ids: tuple[UUID, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class EventPublicationStoryView:
     event_id: UUID
     topic_id: UUID
@@ -267,3 +276,6 @@ class EventPublicationStoryView:
     heat: float | None = None
     attention: EventAttentionView | None = None
     narrative_input_observation_ids: tuple[UUID, ...] = ()
+    first_seen_basis: Literal["published", "discovered"] | None = None
+    created_at: datetime | None = None
+    developments: tuple[EventPublicationDevelopment, ...] = ()

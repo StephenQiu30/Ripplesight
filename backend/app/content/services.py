@@ -2673,7 +2673,12 @@ class ContentService:
             if source_key is not None and (actual is None or actual.source_key != source_key):
                 continue
             if observation.id in readable_ids and (
-                observation.content_version_id is None
+                (
+                    observation.content_version_id is None
+                    and self._metadata_board_readable(
+                        owner_id=owner_id, observation=observation, now=now
+                    )
+                )
                 or observations_readable_in_transaction(
                     self._session,
                     owner_id=owner_id,
@@ -2718,7 +2723,12 @@ class ContentService:
                 for item in observations
                 if item.id in readable_ids
                 and (
-                    item.content_version_id is None
+                    (
+                        item.content_version_id is None
+                        and self._metadata_board_readable(
+                            owner_id=owner_id, observation=item, now=now
+                        )
+                    )
                     or observations_readable_in_transaction(
                         self._session,
                         owner_id=owner_id,
@@ -2729,6 +2739,26 @@ class ContentService:
             ),
             key=lambda item: (item.observed_at, item.received_at, item.id),
             reverse=True,
+        )
+
+    def _metadata_board_readable(
+        self, *, owner_id: UUID, observation: ContentObservation, now: datetime
+    ) -> bool:
+        """Metadata-only views must not bypass a hotlist parent's immediate barrier."""
+        actual = load_observation_context_in_transaction(
+            self._session, owner_id=owner_id, observation_id=observation.id
+        )
+        if actual is None:
+            return False
+        if actual.job.source_capability is not SourceCapability.HOTLIST:
+            return True
+        from content.hotlist_reading import readable_hotlist_jobs_in_transaction
+
+        return observation.job_id in readable_hotlist_jobs_in_transaction(
+            self._session,
+            owner_id=owner_id,
+            source_jobs={(observation.job_id, actual.source_key)},
+            now=now,
         )
 
     def _visibility_history(

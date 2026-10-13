@@ -291,11 +291,13 @@ class CleanupTarget(Base):
             name="evidence_cleanup_targets_deletion_kind_reference_key",
         ),
         CheckConstraint(
-            "target_kind IN ('redis_cache', 'minio_object', 'postgres_content_observation')",
+            "target_kind IN ('redis_cache', 'minio_object', 'postgres_content_observation', "
+            "'postgres_hotlist_snapshot')",
             name="evidence_cleanup_targets_kind_check",
         ),
         CheckConstraint(
-            "target_kind <> 'postgres_content_observation' OR target_reference ~* "
+            "target_kind NOT IN ('postgres_content_observation', 'postgres_hotlist_snapshot') "
+            "OR target_reference ~* "
             "'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'",
             name="evidence_cleanup_targets_postgres_reference_check",
         ),

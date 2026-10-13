@@ -77,6 +77,7 @@ def load_event_digest_input_in_transaction(
     now: datetime,
     prompt_version: str | None = None,
     render_prompt: bool = True,
+    strict_capacity: bool = False,
 ) -> EventDigestInput | None:
     """Hash real fixed evidence and root relations; permission changes invalidate text."""
     if not session.in_transaction():
@@ -193,7 +194,11 @@ def load_event_digest_input_in_transaction(
     if not legacy:
         fact_ids = tuple(fact.id for _, fact in assignments)
         fact_inputs = load_fact_observation_inputs_in_transaction(
-            session, owner_id=event.owner_id, fact_ids=fact_ids, now=now
+            session,
+            owner_id=event.owner_id,
+            fact_ids=fact_ids,
+            now=now,
+            strict_capacity=strict_capacity,
         )
         # A frame may derive from members outside this event. Keep its ALL gate.
         if any(
@@ -294,7 +299,12 @@ def load_event_digest_input_in_transaction(
 
 
 def load_recorded_event_digest_input_in_transaction(
-    session: Session, *, event: Event, derived: EventDerivedContent, now: datetime
+    session: Session,
+    *,
+    event: Event,
+    derived: EventDerivedContent,
+    now: datetime,
+    strict_capacity: bool = False,
 ) -> EventDigestInput | None:
     """Read historical results using their original version, never today's template hash."""
     if derived.job_id is None:
@@ -313,7 +323,12 @@ def load_recorded_event_digest_input_in_transaction(
     if not isinstance(version, str) or not version:
         return None
     return load_event_digest_input_in_transaction(
-        session, event=event, now=now, prompt_version=version, render_prompt=False
+        session,
+        event=event,
+        now=now,
+        prompt_version=version,
+        render_prompt=False,
+        strict_capacity=strict_capacity,
     )
 
 

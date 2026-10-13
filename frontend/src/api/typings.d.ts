@@ -3359,6 +3359,10 @@ declare namespace HotKeyAPI {
     topic?: string | null;
   };
 
+  type getPublicHomeParams = {
+    limit?: number;
+  };
+
   type getPublicHotStoriesParams = {
     limit?: number;
   };
@@ -3581,11 +3585,32 @@ declare namespace HotKeyAPI {
     /** Rank Delta */
     rank_delta: number | null;
     /** Rank Change */
-    rank_change: "new" | "up" | "down" | "same";
+    rank_change: "new" | "unknown" | "up" | "down" | "same";
     /** Matched */
     matched: boolean;
     /** Matched Topic Names */
     matched_topic_names: string[];
+  };
+
+  type HotlistPublicationGrant = {
+    /** Enabled */
+    enabled: boolean;
+    /** Source Policy Version */
+    source_policy_version: number;
+    /** Board Fields */
+    board_fields: string[];
+    /** Entry Fields */
+    entry_fields: string[];
+    /** License Name */
+    license_name: string;
+    /** License Url */
+    license_url: string;
+    /** Reviewed At */
+    reviewed_at: string;
+    /** Expires At */
+    expires_at: string;
+    /** Max Age Seconds */
+    max_age_seconds: number;
   };
 
   type HotlistSnapshotSummaryView = {
@@ -4581,6 +4606,34 @@ declare namespace HotKeyAPI {
     configuration: MonitorConfiguration;
   };
 
+  type NegativeSurgeReason =
+    | "rule_not_configured"
+    | "analysis_unavailable"
+    | "time_unknown"
+    | "evidence_conflict"
+    | "current_empty"
+    | "previous_empty"
+    | "current_samples_insufficient"
+    | "previous_samples_insufficient"
+    | "current_coverage_low"
+    | "previous_coverage_low"
+    | "source_identity_missing"
+    | "sources_changed"
+    | "sources_insufficient"
+    | "source_samples_insufficient"
+    | "source_coverage_low"
+    | "negative_count_below_threshold"
+    | "count_increase_below_threshold"
+    | "ratio_increase_below_threshold"
+    | "source_ratio_increase_below_threshold";
+
+  type NegativeSurgeState =
+    | "triggered"
+    | "not_triggered"
+    | "insufficient_data"
+    | "unavailable"
+    | "not_configured";
+
   type NoiseFilter = {
     /** Drop Markers */
     drop_markers?: string[];
@@ -5136,6 +5189,117 @@ declare namespace HotKeyAPI {
     next_cursor: string | null;
   };
 
+  type PublicHeatHistory = {
+    /** State */
+    state: "available" | "insufficient_data" | "unavailable";
+    /** Reason */
+    reason?:
+      | "missing"
+      | "incomplete"
+      | "recomputed"
+      | "provenance_unknown"
+      | "invalid"
+      | "not_public"
+      | "capacity"
+      | "source_changed"
+      | "zero_baseline"
+      | null;
+    /** Formula Version */
+    formula_version?: string;
+    /** Event Revision */
+    event_revision: number;
+    /** Snapshot At */
+    snapshot_at: string;
+    /** Points */
+    points: PublicHeatPoint[];
+    trend: PublicHeatTrend;
+    /** Scope */
+    scope?: string;
+    /** Time Basis */
+    time_basis?: string;
+  };
+
+  type PublicHeatPoint = {
+    /** Window End */
+    window_end: string;
+    /** Computed At */
+    computed_at?: string | null;
+    /** Value */
+    value?: number | null;
+    /** Participant Count */
+    participant_count?: number | null;
+    /** Segment Key */
+    segment_key?: string | null;
+    /** Reason */
+    reason?:
+      | "missing"
+      | "incomplete"
+      | "recomputed"
+      | "provenance_unknown"
+      | "invalid"
+      | "not_public"
+      | "capacity"
+      | "source_changed"
+      | "zero_baseline"
+      | null;
+  };
+
+  type PublicHeatTrend = {
+    /** State */
+    state: "available" | "insufficient_data" | "unavailable";
+    /** Reason */
+    reason?:
+      | "missing"
+      | "incomplete"
+      | "recomputed"
+      | "provenance_unknown"
+      | "invalid"
+      | "not_public"
+      | "capacity"
+      | "source_changed"
+      | "zero_baseline"
+      | null;
+    /** Direction */
+    direction?: "up" | "down" | "flat" | null;
+    /** Percent */
+    percent?: number | null;
+  };
+
+  type PublicHomeOverview = {
+    /** Total Events */
+    total_events: number;
+    /** New Events 24H */
+    new_events_24h: number;
+    /** Updated Events 24H */
+    updated_events_24h: number;
+    /** Covered Sources */
+    covered_sources: number;
+    /** Time Unknown Events */
+    time_unknown_events: number;
+    /** Platform Count */
+    platform_count?: null;
+    /** Negative Surge Count */
+    negative_surge_count?: number | null;
+  };
+
+  type PublicHomeView = {
+    /** Snapshot At */
+    snapshot_at: string;
+    /** Window Start */
+    window_start: string;
+    /** Scope */
+    scope?: string;
+    /** Ranking Basis */
+    ranking_basis?: string;
+    overview: PublicHomeOverview;
+    /** Stories */
+    stories: PublicStoryView[];
+    sentiment?: PublicReportSentimentView | null;
+    negative_surge?: PublicNegativeSurgeView | null;
+    /** Platform Trends */
+    platform_trends?: PublicPlatformTrend[];
+  };
+
   type PublicItemDetailView = {
     /** Analysis State */
     analysis_state?: "not_analyzed" | "complete";
@@ -5299,6 +5463,77 @@ declare namespace HotKeyAPI {
     renditions?: MediaRenditionView[];
   };
 
+  type PublicNegativeSurgeEvent = {
+    /** Event Id */
+    event_id: string;
+    /** Title */
+    title: string;
+    /** Reading Url */
+    reading_url: string;
+    state: NegativeSurgeState;
+    /** Reasons */
+    reasons: NegativeSurgeReason[];
+    current: PublicSentimentWindow | null;
+    previous: PublicSentimentWindow | null;
+    /** Ratio Increase */
+    ratio_increase?: number | null;
+    /** Negative Count Increase */
+    negative_count_increase?: number | null;
+  };
+
+  type PublicNegativeSurgeRule = {
+    /** Policy Id */
+    policy_id: string;
+    /** Min Valid Samples */
+    min_valid_samples: number;
+    /** Min Analysis Coverage */
+    min_analysis_coverage: string;
+    /** Min Sources */
+    min_sources: number;
+    /** Min Negative Count */
+    min_negative_count: number;
+    /** Min Negative Count Increase */
+    min_negative_count_increase: number;
+    /** Min Ratio Increase */
+    min_ratio_increase: string;
+  };
+
+  type PublicNegativeSurgeView = {
+    /** Snapshot At */
+    snapshot_at: string;
+    /** Scope */
+    scope?: string;
+    /** Time Basis */
+    time_basis?: string;
+    /** Method Version */
+    method_version?: string;
+    /** State */
+    state:
+      | "empty"
+      | "not_configured"
+      | "unavailable"
+      | "insufficient_data"
+      | "triggered"
+      | "not_triggered";
+    rule: PublicNegativeSurgeRule | null;
+    /** Total Events */
+    total_events: number;
+    /** Evaluated Events */
+    evaluated_events: number;
+    /** Triggered Count */
+    triggered_count: number;
+    /** Not Triggered Count */
+    not_triggered_count: number;
+    /** Insufficient Count */
+    insufficient_count: number;
+    /** Unavailable Count */
+    unavailable_count: number;
+    /** Not Configured Count */
+    not_configured_count: number;
+    /** Events */
+    events: PublicNegativeSurgeEvent[];
+  };
+
   type PublicOutlineEntry = {
     /** Id */
     id: string;
@@ -5357,6 +5592,31 @@ declare namespace HotKeyAPI {
     entries: PublicPlatformEntryView[];
   };
 
+  type PublicPlatformEntry = {
+    /** Rank */
+    rank: number;
+    /** Title */
+    title: string;
+    /** Url */
+    url: string;
+    /** Summary */
+    summary?: string | null;
+    /** Heat */
+    heat?: string | null;
+    /** Published At */
+    published_at?: string | null;
+    /** Native Id */
+    native_id?: string | null;
+    /** Native Rank */
+    native_rank?: number | null;
+    /** Heat Unit */
+    heat_unit?: string | null;
+    /** Previous Rank */
+    previous_rank?: number | null;
+    /** Rank Delta */
+    rank_delta?: number | null;
+  };
+
   type PublicPlatformEntryView = {
     /** Entry Key */
     entry_key: string;
@@ -5404,6 +5664,65 @@ declare namespace HotKeyAPI {
     evidence_urls: string[];
     /** Capabilities */
     capabilities: PublicPlatformCapabilityView[];
+  };
+
+  type PublicPlatformTrend = {
+    /** Source Key */
+    source_key: string;
+    /** Source Name */
+    source_name: string;
+    /** Provider */
+    provider?: string;
+    /** Rank Basis */
+    rank_basis?: string;
+    /** State */
+    state:
+      | "available"
+      | "empty"
+      | "partial"
+      | "stale"
+      | "no_snapshot"
+      | "collecting"
+      | "failed"
+      | "not_configured"
+      | "unavailable";
+    /** Reasons */
+    reasons?: string[];
+    /** Snapshot Id */
+    snapshot_id?: string | null;
+    /** Observed At */
+    observed_at?: string | null;
+    /** Received At */
+    received_at?: string | null;
+    /** Source Updated At */
+    source_updated_at?: string | null;
+    /** Due At */
+    due_at?: string | null;
+    /** Last Success At */
+    last_success_at?: string | null;
+    /** Valid Until */
+    valid_until?: string | null;
+    /** Source Entry Count */
+    source_entry_count?: number | null;
+    /** Entry Count */
+    entry_count?: number | null;
+    /** Truncated */
+    truncated?: boolean | null;
+    /** Adapter Version */
+    adapter_version?: string | null;
+    /** License Name */
+    license_name?: string | null;
+    /** License Url */
+    license_url?: string | null;
+    /** Permission Reviewed At */
+    permission_reviewed_at?: string | null;
+    /** Permission Expires At */
+    permission_expires_at?: string | null;
+    /** Comparison Reason */
+    comparison_reason?:
+      "comparable" | "no_baseline" | "gap" | "source_changed" | "unavailable";
+    /** Items */
+    items?: PublicPlatformEntry[];
   };
 
   type PublicQuotedPostView = {
@@ -5469,6 +5788,73 @@ declare namespace HotKeyAPI {
     slug: string;
     /** Name */
     name: string;
+  };
+
+  type PublicReportSentimentView = {
+    /** Snapshot At */
+    snapshot_at: string;
+    /** Scope */
+    scope?: string;
+    /** Time Basis */
+    time_basis?: string;
+    /** Method Version */
+    method_version?: string;
+    /** Comparison State */
+    comparison_state?: string;
+    current: PublicSentimentWindow;
+    previous: PublicSentimentWindow;
+    /** Time Unknown Count */
+    time_unknown_count: number;
+    /** Samples */
+    samples: PublicSentimentSample[];
+  };
+
+  type PublicSentimentSample = {
+    /** Content Id */
+    content_id: string;
+    /** Source Key */
+    source_key: string;
+    /** Discovered At */
+    discovered_at: string | null;
+    /** Backfill */
+    backfill: boolean | null;
+    /** State */
+    state:
+      | "valid"
+      | "not_analyzed"
+      | "pending"
+      | "failed"
+      | "invalid"
+      | "not_relevant"
+      | "unavailable"
+      | "conflict";
+    /** Label */
+    label?: "positive" | "neutral" | "negative" | null;
+  };
+
+  type PublicSentimentWindow = {
+    /** Start */
+    start: string;
+    /** End */
+    end: string;
+    /** Sample Count */
+    sample_count: number;
+    /** Valid Count */
+    valid_count: number;
+    /** Positive */
+    positive: number;
+    /** Neutral */
+    neutral: number;
+    /** Negative */
+    negative: number;
+    /** Excluded Counts */
+    excluded_counts: Record<string, any>;
+    /** Source Keys */
+    source_keys: string[];
+    /** Negative Ratio */
+    negative_ratio: number | null;
+    /** Analysis Coverage */
+    analysis_coverage: number | null;
   };
 
   type PublicSiteFeatures = {
@@ -5554,6 +5940,25 @@ declare namespace HotKeyAPI {
     next_cursor?: string | null;
   };
 
+  type PublicStoryTiming = {
+    /** Snapshot At */
+    snapshot_at: string;
+    /** Reference At */
+    reference_at: string;
+    /** Reference Basis */
+    reference_basis: "published" | "discovered" | null;
+    /** Identified At */
+    identified_at: string | null;
+    /** Latest Development At */
+    latest_development_at: string | null;
+    /** Development Fact Ids */
+    development_fact_ids: string[];
+    /** Activity */
+    activity: "new" | "existing_updated" | "existing" | "unknown";
+    /** Occurred At */
+    occurred_at?: null;
+  };
+
   type PublicStoryView = {
     /** Id */
     id: string;
@@ -5572,12 +5977,15 @@ declare namespace HotKeyAPI {
     /** Heat */
     heat?: number | null;
     attention?: PublicAttentionView | null;
+    history?: PublicHeatHistory | null;
     /** Reports */
     reports: PublicItemView[];
     /** Indexable */
     indexable?: boolean;
     /** Canonical Url */
     canonical_url?: string | null;
+    timing?: PublicStoryTiming | null;
+    sentiment?: PublicReportSentimentView | null;
   };
 
   type PublicTimelineCardView = {
@@ -6776,6 +7184,7 @@ declare namespace HotKeyAPI {
     syndicate_fulltext?: boolean;
     /** Indexable */
     indexable?: boolean;
+    hotlist_publication?: HotlistPublicationGrant | null;
     /** Release Delay Seconds */
     release_delay_seconds?: number;
     /** License Name */
@@ -6807,6 +7216,7 @@ declare namespace HotKeyAPI {
     license_name: string;
     /** License Url */
     license_url: string | null;
+    hotlist_publication?: HotlistPublicationGrant | null;
     /** Updated At */
     updated_at: string;
   };

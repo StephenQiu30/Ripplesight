@@ -26,6 +26,9 @@ import {
   sourceTimeline,
 } from "@/components/events/reading-model";
 import { ApiRequestError } from "@/request";
+import { ReportSentiment } from "@/components/publication/report-sentiment";
+import { HeatHistory } from "@/components/publication/heat-history";
+import { StoryTiming } from "@/components/publication/story-timing";
 
 type DevelopmentsState =
   | { status: "loading" }
@@ -113,6 +116,8 @@ export function PublicStoryReading({
       <EventHeader
         title={story.title}
         firstSeenAt={story.first_seen_at}
+        firstSeenLabel="事件参考"
+        updatedLabel="材料最新标注"
         sourceCount={
           new Set(
             [
@@ -139,11 +144,13 @@ export function PublicStoryReading({
         }
       />
 
+      {story.timing ? <StoryTiming timing={story.timing} showEvidence /> : null}
+      <HeatHistory history={story.history} />
       <EventColumns
         aside={
           <>
             <UI.Content as="section" layout="stack">
-              <UI.Heading>大家怎么看</UI.Heading>
+              <UI.Heading appearance="reading">大家怎么看</UI.Heading>
               <UI.Text size="xs" tone="muted">
                 暂无公开评论样本
               </UI.Text>
@@ -152,11 +159,11 @@ export function PublicStoryReading({
             </UI.Content>
             <SignalNotice title="负面突增提醒">
               <UI.Text size="sm" tone="muted">
-                暂无有效的公开情感观测。
+                公开报道样本尚未校准，暂不判定突增。
               </UI.Text>
             </SignalNotice>
             <UI.Content layout="stack">
-              <UI.Heading>代表观点</UI.Heading>
+              <UI.Heading appearance="reading">代表观点</UI.Heading>
               <ToggleGroup
                 type="single"
                 size="default"
@@ -177,7 +184,7 @@ export function PublicStoryReading({
               <EventEmpty>公开资料暂未提供代表评论。</EventEmpty>
             </UI.Content>
             <UI.Content as="section" layout="stack">
-              <UI.Heading>平台分布</UI.Heading>
+              <UI.Heading appearance="reading">平台分布</UI.Heading>
               <UI.Text size="xs" tone="muted">
                 按当前已加载的公开报道统计
               </UI.Text>
@@ -205,21 +212,27 @@ export function PublicStoryReading({
         }
       >
         <UI.Content as="section" className="flex flex-col gap-4">
-          <UI.Heading>发生了什么</UI.Heading>
-          <UI.Text className="whitespace-pre-wrap">{story.summary}</UI.Text>
+          <UI.Heading appearance="reading">发生了什么</UI.Heading>
+          <UI.Text size="sm" className="whitespace-pre-wrap">
+            {story.summary}
+          </UI.Text>
           {story.latest_progress ? (
             <>
               <UI.Heading level={3}>最新进展</UI.Heading>
-              <UI.Text className="whitespace-pre-wrap">
+              <UI.Text size="sm" className="whitespace-pre-wrap">
                 {story.latest_progress}
               </UI.Text>
             </>
           ) : null}
         </UI.Content>
         <UI.Content as="section" className="flex flex-col gap-4">
-          <UI.Heading>热度与负面占比</UI.Heading>
+          <UI.Heading appearance="reading">热度观察</UI.Heading>
+          <ReportSentiment
+            sentiment={story.sentiment}
+            reports={story.reports}
+          />
           <ObservationGap>
-            暂无公开历史曲线与负面占比，不能由单次热度推算趋势。
+            暂无公开历史曲线，不能由单次热度推算趋势。
           </ObservationGap>
           {story.attention ? (
             <UI.Text size="sm" tone="muted">
@@ -235,6 +248,7 @@ export function PublicStoryReading({
           ) : null}
         </UI.Content>
         <EventTimeline
+          headingAppearance="reading"
           entries={
             developments.length
               ? developments.map((entry) => ({
@@ -288,7 +302,7 @@ export function PublicStoryReading({
             ) : undefined
           }
         />
-        <EventSources sources={sources} />
+        <EventSources sources={sources} headingAppearance="reading" />
       </EventColumns>
     </UI.Content>
   );

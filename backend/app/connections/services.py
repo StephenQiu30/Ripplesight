@@ -99,7 +99,7 @@ def list_current_source_connection_versions_in_transaction(
 
 
 def list_applied_hotlist_presets_in_transaction(
-    session: Session, *, owner_id: UUID | None = None
+    session: Session, *, owner_id: UUID | None = None, lock: bool = True
 ) -> tuple[AppliedHotlistPreset, ...]:
     if not session.in_transaction():
         raise RuntimeError("applied hotlist scan requires the caller's transaction")
@@ -121,7 +121,7 @@ def list_applied_hotlist_presets_in_transaction(
     result: list[AppliedHotlistPreset] = []
     for current_owner in tuple(session.scalars(statement)):
         applied = load_applied_source_presets_in_transaction(
-            session, owner_id=current_owner, source_keys=keys
+            session, owner_id=current_owner, source_keys=keys, lock=lock
         )
         for key, preset in applied.items():
             if SourceCapability.HOTLIST not in preset.capabilities:
@@ -152,6 +152,7 @@ def load_applied_source_presets_in_transaction(
     *,
     owner_id: UUID,
     source_keys: Iterable[str],
+    lock: bool = True,
 ) -> dict[str, AppliedSourcePreset]:
     """Return requested presets whose current active connection still matches the preset."""
     if not session.in_transaction():
@@ -159,7 +160,7 @@ def load_applied_source_presets_in_transaction(
     requested = tuple(dict.fromkeys(source_keys))
     if not requested:
         return {}
-    rows = session.execute(
+    query = (
         select(SourceConnection, SourceConnectionVersion)
         .join(
             SourceConnectionVersion,
@@ -174,8 +175,10 @@ def load_applied_source_presets_in_transaction(
             SourceConnection.source_key.in_(requested),
             SourceConnection.status == SourceConnectionStatus.ACTIVE.value,
         )
-        .with_for_update(of=SourceConnection)
-    ).all()
+    )
+    if lock:
+        query = query.with_for_update(of=SourceConnection)
+    rows = session.execute(query).all()
     applied: dict[str, AppliedSourcePreset] = {}
     for connection, version in rows:
         preset = (
@@ -610,6 +613,16 @@ class SourcePresetService:
         if connection is not None and connection.status == SourceConnectionStatus.DISABLED.value:
             raise ApplicationError("connection_disabled")
 
+        if SourceCapability.HOTLIST in preset_capabilities:
+            return self._apply_hotlist_setup(
+                owner_id=owner_id,
+                preset=preset,
+                connection=connection,
+                config=config,
+                policy_snapshot=policy_snapshot,
+                now=now,
+            )
+
         preset_changed = False
         access_service = SourceAccessPolicyService(self._session, clock=self._clock)
         retention_service = RetentionPolicyService(self._session, clock=self._clock)
@@ -741,6 +754,94 @@ class SourcePresetService:
             connection_id=connection.id,
             connection_version=connection.current_version,
             capabilities=preset_capabilities,
+        )
+
+    def _apply_hotlist_setup(
+        self,
+        *,
+        owner_id: UUID,
+        preset: SourcePreset,
+        connection: SourceConnection | None,
+        config: dict[str, object],
+        policy_snapshot: dict[str, object],
+        now: datetime,
+    ) -> SourcePresetApplyView:
+        """Configure transport only; operator decisions require their own explicit commands."""
+        if connection is None:
+            identifier = self._session.scalar(
+                insert(SourceConnection)
+                .values(
+                    id=uuid4(),
+                    owner_id=owner_id,
+                    source_key=preset.source_key,
+                    status=SourceConnectionStatus.ACTIVE.value,
+                    current_version=1,
+                    created_at=now,
+                    updated_at=now,
+                )
+                .on_conflict_do_nothing(constraint="source_connections_owner_source_key")
+                .returning(SourceConnection.id)
+            )
+            if identifier is not None:
+                self._session.add(
+                    SourceConnectionVersion(
+                        connection_id=identifier,
+                        owner_id=owner_id,
+                        version=1,
+                        auth_kind=SourceConnectionAuthKind.NONE.value,
+                        secret_ref=None,
+                        config=config,
+                        execution_policy=policy_snapshot,
+                        created_by=owner_id,
+                        created_at=now,
+                    )
+                )
+                access = SourceAccessPolicyService(self._session, clock=self._clock)
+                for capability in preset.capabilities:
+                    access.initialize_pending_in_transaction(
+                        owner_id=owner_id,
+                        source_key=preset.source_key,
+                        capability=capability.capability,
+                        processing_purpose=capability.processing_purpose,
+                        field_purposes=dict(capability.field_purposes),
+                    )
+                self._session.flush()
+                return SourcePresetApplyView(
+                    source_key=preset.source_key,
+                    connection_id=identifier,
+                    connection_version=1,
+                    capabilities=tuple(item.capability for item in preset.capabilities),
+                )
+            # Another setup won. Lock its committed connection and verify, never replace it.
+            connection = self._session.scalar(
+                select(SourceConnection)
+                .where(
+                    SourceConnection.owner_id == owner_id,
+                    SourceConnection.source_key == preset.source_key,
+                )
+                .with_for_update()
+            )
+        if connection is None:
+            raise RuntimeError("hotlist setup connection is unavailable")
+        if connection.status != SourceConnectionStatus.ACTIVE.value:
+            raise ApplicationError("connection_disabled")
+        current = self._session.get(
+            SourceConnectionVersion, (connection.id, connection.current_version)
+        )
+        if current is None:
+            raise RuntimeError("hotlist setup version is unavailable")
+        if (
+            current.auth_kind != SourceConnectionAuthKind.NONE.value
+            or current.secret_ref is not None
+            or current.config != config
+            or current.execution_policy != policy_snapshot
+        ):
+            raise ApplicationError("connection_version_conflict")
+        return SourcePresetApplyView(
+            source_key=preset.source_key,
+            connection_id=connection.id,
+            connection_version=connection.current_version,
+            capabilities=tuple(item.capability for item in preset.capabilities),
         )
 
 

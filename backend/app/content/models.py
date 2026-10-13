@@ -190,6 +190,7 @@ class HotlistSnapshot(Base):
         ),
         CheckConstraint("source_key ~ '^[a-z][a-z0-9_-]{0,63}$'"),
         CheckConstraint("entry_count BETWEEN 0 AND 100"),
+        CheckConstraint("provenance IS NULL OR jsonb_typeof(provenance) = 'object'"),
         Index("hotlist_snapshots_latest_idx", "owner_id", "source_key", "observed_at", "id"),
     )
 
@@ -200,6 +201,7 @@ class HotlistSnapshot(Base):
     operation_id: Mapped[UUID]
     observed_at: Mapped[datetime]
     entry_count: Mapped[int]
+    provenance: Mapped[dict[str, object] | None] = mapped_column(JSONB(none_as_null=True))
 
 
 class HotlistEntryRecord(Base):

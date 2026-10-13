@@ -38,6 +38,7 @@ from connections.services import (
     SourceConnectionService,
     SourcePresetService,
 )
+from content.hotlist_cleanup import HotlistSnapshotCleanup
 from content.services import ContentObservationCleanup
 from core.config import get_settings
 from core.errors import ApplicationError
@@ -657,6 +658,7 @@ def cleanup_once(
                     minio,
                     settings.minio_bucket,
                 ),
+                CleanupTargetKind.POSTGRES_HOTLIST_SNAPSHOT: HotlistSnapshotCleanup(sessions),
                 CleanupTargetKind.POSTGRES_CONTENT_OBSERVATION: ContentObservationCleanup(sessions),
             },
         ).process_due(limit=limit)

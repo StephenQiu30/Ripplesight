@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from tests.conftest import TEST_DATABASE_TRUNCATE
+from tests.hotlist_fixtures import ControlledHotlistPresetService
 from tests.integration.test_hotlist_persistence import (
     HotlistRuntime,
     _accept,
@@ -22,7 +23,6 @@ from tests.integration.test_hotlist_persistence import (
 )
 
 from connections.presets import SOURCE_PRESETS
-from connections.services import SourcePresetService
 from content.hotlist import HotlistService
 from core.errors import ApplicationError
 from jobs.execution import JobExecutionFailure, JobExecutionService, MessageReference
@@ -45,7 +45,9 @@ def runtime(monkeypatch: pytest.MonkeyPatch) -> Iterator[HotlistRuntime]:
     with engine.begin() as connection:
         connection.execute(text(TEST_DATABASE_TRUNCATE))
     with sessions.begin() as session:
-        presets = SourcePresetService(session, clock=lambda: due_at - timedelta(seconds=1))
+        presets = ControlledHotlistPresetService(
+            session, clock=lambda: due_at - timedelta(seconds=1)
+        )
         presets.apply_in_transaction(owner_id=owner_id, preset=SOURCE_PRESETS["hotlist_weibo"])
     with sessions() as session:
         ResourceBudgetService(session, clock=lambda: due_at).save_budget_policy(
@@ -97,7 +99,7 @@ def test_history_cursor_and_fixed_snapshot_entries_survive_newer_insert(
         ),
     )
     with runtime.sessions() as session:
-        service = HotlistService(session)
+        service = HotlistService(session, clock=lambda: runtime.due_at + timedelta(hours=3))
         first_page, cursor = service.list_history(
             owner_id=runtime.owner_id, source_key="hotlist_weibo", limit=1
         )
@@ -109,7 +111,7 @@ def test_history_cursor_and_fixed_snapshot_entries_survive_newer_insert(
     third_job = _accept(runtime, third_due)
     _execute(runtime, third_job, _page(third_due + timedelta(minutes=2)))
     with runtime.sessions() as session:
-        service = HotlistService(session)
+        service = HotlistService(session, clock=lambda: runtime.due_at + timedelta(hours=3))
         older_page, next_cursor = service.list_history(
             owner_id=runtime.owner_id,
             source_key="hotlist_weibo",
@@ -134,7 +136,7 @@ def test_history_cursor_and_fixed_snapshot_entries_survive_newer_insert(
     assert next_cursor is None
     assert fixed.entry_count == 2
     assert fixed.previous_snapshot_id == older_page[0].snapshot_id
-    assert [(item.rank, item.rank_change) for item in fixed.items] == [(1, "new")]
+    assert [(item.rank, item.rank_change) for item in fixed.items] == [(1, "unknown")]
     assert [(item.rank, item.previous_rank, item.rank_delta) for item in fixed_next.items] == [
         (2, 1, -1)
     ]
@@ -146,7 +148,7 @@ def test_empty_snapshot_is_in_history_and_cursor_is_source_owner_scoped(
     job = _accept(runtime, runtime.due_at)
     _execute(runtime, job, _page(runtime.due_at + timedelta(minutes=2)))
     with runtime.sessions() as session:
-        service = HotlistService(session)
+        service = HotlistService(session, clock=lambda: runtime.due_at + timedelta(hours=3))
         rows, cursor = service.list_history(owner_id=runtime.owner_id, source_key="hotlist_weibo")
         assert len(rows) == 1 and cursor is None
         assert rows[0].entry_count == 0
@@ -169,11 +171,11 @@ def test_empty_snapshot_is_in_history_and_cursor_is_source_owner_scoped(
         assert inaccessible.value.code == "resource_not_found"
 
     with runtime.sessions.begin() as session:
-        SourcePresetService(session, clock=lambda: runtime.due_at).apply_in_transaction(
+        ControlledHotlistPresetService(session, clock=lambda: runtime.due_at).apply_in_transaction(
             owner_id=runtime.owner_id, preset=SOURCE_PRESETS["hotlist_baidu"]
         )
     with runtime.sessions() as session, pytest.raises(ValueError, match="cursor"):
-        HotlistService(session).list_history(
+        HotlistService(session, clock=lambda: runtime.due_at + timedelta(hours=3)).list_history(
             owner_id=runtime.owner_id,
             source_key="hotlist_baidu",
             cursor=rows[0].snapshot_id,
@@ -216,16 +218,25 @@ def test_unsuccessful_due_bucket_is_reported_as_gap_between_snapshots(
         )
     third_due = runtime.due_at + timedelta(minutes=60)
     third = _accept(runtime, third_due)
-    _execute(runtime, third, _page(third_due + timedelta(minutes=2)))
+    _execute(runtime, third, _page(third_due + timedelta(minutes=2), entries=1))
 
     with runtime.sessions() as session:
-        service = HotlistService(session)
+        service = HotlistService(session, clock=lambda: runtime.due_at + timedelta(hours=3))
         rows, _ = service.list_history(owner_id=runtime.owner_id, source_key="hotlist_weibo")
         current = service.get_historical(
             owner_id=runtime.owner_id,
             source_key="hotlist_weibo",
             snapshot_id=rows[0].snapshot_id,
         )
-    assert [(row.entry_count, row.gap_count) for row in rows] == [(0, 1), (1, 0)]
+    assert [(row.entry_count, row.gap_count) for row in rows] == [(1, 1), (1, 0)]
     assert rows[0].previous_snapshot_id == rows[1].snapshot_id
     assert current.gap_count == 1
+
+    with runtime.sessions() as session:
+        latest = HotlistService(
+            session, clock=lambda: runtime.due_at + timedelta(hours=3)
+        ).get_latest(owner_id=runtime.owner_id, source_key="hotlist_weibo")
+    for view in (current, latest):
+        assert [(item.previous_rank, item.rank_delta, item.rank_change) for item in view.items] == [
+            (None, None, "unknown")
+        ]

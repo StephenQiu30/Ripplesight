@@ -14,7 +14,7 @@ from content.observation_context import load_observation_contexts_in_transaction
 from content.observation_inputs import freeze_observation_inputs_in_transaction
 from content.schemas import EventContentReadReference
 from content.version_inputs import observations_readable_in_transaction
-from core.errors import ApplicationError
+from core.errors import ApplicationError, DependencyUnavailableError
 from events.fact_models import EventFactMember
 from events.models import EventMember
 from events.schemas import EventInput
@@ -103,7 +103,12 @@ def event_member_input_manifest(item: EventInput) -> dict[str, object] | None:
 
 
 def load_fact_observation_inputs_in_transaction(
-    session: Session, *, owner_id: UUID, fact_ids: tuple[UUID, ...], now: datetime
+    session: Session,
+    *,
+    owner_id: UUID,
+    fact_ids: tuple[UUID, ...],
+    now: datetime,
+    strict_capacity: bool = False,
 ) -> dict[UUID, tuple[UUID, ...]]:
     """A fact's frame needs every member, including members outside a recall page."""
     if not session.in_transaction() or len(fact_ids) > 2000:
@@ -127,6 +132,8 @@ def load_fact_observation_inputs_in_transaction(
         .limit(2001)
     ).all()
     if len(rows) > 2000:
+        if strict_capacity:
+            raise DependencyUnavailableError("publication_distribution_unavailable")
         return {}
     by_fact: dict[UUID, list[EventMember]] = {}
     unavailable: set[UUID] = set()

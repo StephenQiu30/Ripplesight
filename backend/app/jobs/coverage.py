@@ -1467,3 +1467,44 @@ class CollectionCoverageQueryService:
             if job is not None
             else None,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class HotlistRunFact:
+    """Latest known scheduled bucket, independent of whether any snapshot survived."""
+
+    due_at: datetime
+    status: str | None
+    skipped: bool
+
+
+def latest_hotlist_run_in_transaction(
+    session: Session,
+    *,
+    owner_id: UUID,
+    source_key: str,
+    now: datetime,
+) -> HotlistRunFact | None:
+    """Keep failed, skipped and deleted-latest runs visible instead of falling back."""
+    if not session.in_transaction() or now.utcoffset() is None:
+        raise ValueError("hotlist run read requires aware caller transaction")
+    row = session.execute(
+        select(CollectionDueWindow.due_at, CollectionDueWindow.admission_state, Job.status)
+        .outerjoin(
+            Job,
+            (Job.owner_id == CollectionDueWindow.owner_id) & (Job.id == CollectionDueWindow.job_id),
+        )
+        .where(
+            CollectionDueWindow.owner_id == owner_id,
+            CollectionDueWindow.source_key == source_key,
+            CollectionDueWindow.capability == SourceCapability.HOTLIST.value,
+            CollectionDueWindow.due_at <= now,
+        )
+        .order_by(CollectionDueWindow.due_at.desc(), CollectionDueWindow.id.desc())
+        .limit(1)
+    ).first()
+    return (
+        None
+        if row is None
+        else HotlistRunFact(row.due_at, row.status, row.admission_state != "accepted")
+    )

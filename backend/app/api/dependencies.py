@@ -252,6 +252,7 @@ def get_publication_service(
         origin=settings.web_base_url,
         indexing_enabled=settings.publication_indexing_enabled,
         public_categories=settings.public_publication_categories,
+        surge_policy=settings.public_negative_surge_policy,
     )
 
 

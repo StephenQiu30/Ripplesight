@@ -40,15 +40,17 @@ def iter_current_publications_in_transaction(
     include_body: bool = False,
     indexing_enabled: bool = False,
     public_categories: tuple[Category, ...] = (),
+    strict_capacity: bool = False,
+    recheck_all: bool = False,
 ) -> Iterator[PublicationListingMember]:
     require_transaction(session)
     if now.utcoffset() is None:
         raise ValueError("publication listing needs an aware bounded caller transaction")
-    query = select(PublicationRecord).where(
-        PublicationRecord.owner_id == owner_id,
-        PublicationRecord.visibility == "public",
-        PublicationRecord.eligible.is_(True),
-    )
+    query = select(PublicationRecord).where(PublicationRecord.owner_id == owner_id)
+    if not recheck_all:
+        query = query.where(
+            PublicationRecord.visibility == "public", PublicationRecord.eligible.is_(True)
+        )
     query = (
         query.order_by(PublicationRecord.content_id)
         if order == "identity"
@@ -66,7 +68,10 @@ def iter_current_publications_in_transaction(
         query = query.where(PublicationRecord.source_key == source_key)
     reader, after = (
         PublicationReadingService(
-            session, indexing_enabled=indexing_enabled, public_categories=public_categories
+            session,
+            indexing_enabled=indexing_enabled,
+            public_categories=public_categories,
+            strict_capacity=strict_capacity,
         ),
         None,
     )
@@ -89,7 +94,7 @@ def iter_current_publications_in_transaction(
             if value is None:
                 continue
             projection, snapshot = value
-            if projection.visibility != "public" or not projection.eligible:
+            if projection.visibility != "public" or (not recheck_all and not projection.eligible):
                 continue
             subject_tags = editorial_subject_tags(snapshot)
             body = ""

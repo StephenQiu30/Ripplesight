@@ -19,9 +19,10 @@ from confluent_kafka.admin import AdminClient, NewTopic
 from sqlalchemy import Engine, create_engine, select, text
 from sqlalchemy.orm import Session, sessionmaker
 from tests.conftest import TEST_DATABASE_TRUNCATE
+from tests.hotlist_fixtures import ControlledHotlistPresetService
 
 from connections.presets import BILIBILI_PRESET, SOURCE_PRESETS
-from connections.services import SourcePresetService, pause_bilibili_connection_in_transaction
+from connections.services import pause_bilibili_connection_in_transaction
 from content.discovery import (
     KeywordDiscoveryPageCommitService,
     KeywordRequestMeter,
@@ -577,7 +578,7 @@ def test_36kr_feed_replay_keeps_source_time_and_separate_budget() -> None:
                 ),
                 {"id": topic_id, "owner_id": owner_id, "now": now},
             )
-            presets = SourcePresetService(session, clock=lambda: now)
+            presets = ControlledHotlistPresetService(session, clock=lambda: now)
             rss = presets.apply_in_transaction(owner_id=owner_id, preset=SOURCE_PRESETS["rss_36kr"])
             presets.apply_in_transaction(owner_id=owner_id, preset=SOURCE_PRESETS["hotlist_36kr"])
             ResourceBudgetService(session, clock=lambda: now).save_budget_policy_in_transaction(
@@ -901,9 +902,9 @@ def test_36kr_kafka_redelivery_does_not_repeat_collection() -> None:
                 ),
                 {"id": topic_id, "owner_id": owner_id, "now": now},
             )
-            applied = SourcePresetService(session, clock=lambda: now).apply_in_transaction(
-                owner_id=owner_id, preset=SOURCE_PRESETS["rss_36kr"]
-            )
+            applied = ControlledHotlistPresetService(
+                session, clock=lambda: now
+            ).apply_in_transaction(owner_id=owner_id, preset=SOURCE_PRESETS["rss_36kr"])
             ResourceBudgetService(session, clock=lambda: now).save_budget_policy_in_transaction(
                 owner_id=owner_id,
                 command=BudgetPolicyInput(

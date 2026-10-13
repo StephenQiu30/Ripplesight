@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
@@ -10,6 +11,8 @@ from uuid import UUID
 from pydantic import Field, field_validator, model_validator
 
 from core.schemas import InputModel, OutputModel
+from events.public_history_schemas import PublicHeatHistory
+from publication.hotlist_schemas import HotlistPublicationGrant, PublicPlatformTrend
 from publication.media_mirror_schemas import MediaRenditionView
 
 SharePage = Literal[
@@ -44,6 +47,7 @@ class SourcePolicyInput(InputModel):
     site_fulltext: bool = False
     syndicate_fulltext: bool = False
     indexable: bool = False
+    hotlist_publication: HotlistPublicationGrant | None = None
     release_delay_seconds: int = Field(default=180, ge=0, le=3600)
     license_name: str = Field(min_length=1, max_length=1000)
     license_url: str | None = Field(default=None, max_length=2048)
@@ -83,6 +87,7 @@ class SourcePolicyView(OutputModel):
     release_delay_seconds: int
     license_name: str
     license_url: str | None
+    hotlist_publication: HotlistPublicationGrant | None = None
     updated_at: datetime
 
 
@@ -346,6 +351,69 @@ class PublicAttentionView(OutputModel):
     badges: list[Literal["new", "surge", "rising"]]
 
 
+class PublicStoryTiming(OutputModel):
+    """System identification and public development assignment, never occurrence inference."""
+
+    snapshot_at: datetime
+    reference_at: datetime
+    reference_basis: Literal["published", "discovered"] | None
+    identified_at: datetime | None
+    latest_development_at: datetime | None
+    development_fact_ids: list[UUID]
+    activity: Literal["new", "existing_updated", "existing", "unknown"]
+    occurred_at: None = None
+
+
+class PublicSentimentSample(OutputModel):
+    """One already public report, with descriptive analysis availability only."""
+
+    content_id: UUID
+    source_key: str
+    discovered_at: datetime | None
+    backfill: bool | None
+    state: Literal[
+        "valid",
+        "not_analyzed",
+        "pending",
+        "failed",
+        "invalid",
+        "not_relevant",
+        "unavailable",
+        "conflict",
+    ]
+    label: Literal["positive", "neutral", "negative"] | None = None
+
+
+class PublicSentimentWindow(OutputModel):
+    """An auditable material-discovery denominator, not a population estimate."""
+
+    start: datetime
+    end: datetime
+    sample_count: int = Field(ge=0)
+    valid_count: int = Field(ge=0)
+    positive: int = Field(ge=0)
+    neutral: int = Field(ge=0)
+    negative: int = Field(ge=0)
+    excluded_counts: dict[str, int]
+    source_keys: list[str]
+    negative_ratio: float | None
+    analysis_coverage: float | None
+
+
+class PublicReportSentimentView(OutputModel):
+    """Two adjacent descriptive windows; comparison awaits calibrated coverage."""
+
+    snapshot_at: datetime
+    scope: Literal["public_event_reports"] = "public_event_reports"
+    time_basis: Literal["material_discovered"] = "material_discovered"
+    method_version: Literal["public-report-sentiment-v1"] = "public-report-sentiment-v1"
+    comparison_state: Literal["not_calibrated"] = "not_calibrated"
+    current: PublicSentimentWindow
+    previous: PublicSentimentWindow
+    time_unknown_count: int = Field(ge=0)
+    samples: list[PublicSentimentSample]
+
+
 class PublicStoryView(OutputModel):
     id: UUID
     revision: int
@@ -356,15 +424,117 @@ class PublicStoryView(OutputModel):
     first_seen_at: datetime
     heat: float | None = None
     attention: PublicAttentionView | None = None
+    history: PublicHeatHistory | None = None
     reports: list[PublicItemView]
     indexable: bool = False
     canonical_url: str | None = None
+    timing: PublicStoryTiming | None = None
+    sentiment: PublicReportSentimentView | None = None
 
 
 class PublicStoriesPage(OutputModel):
     stories: list[PublicStoryView]
     ranking_basis: Literal["heat", "recent_without_heat"]
     next_cursor: str | None = None
+
+
+class PublicHomeOverview(OutputModel):
+    """Exact counts of the complete currently readable canonical story set."""
+
+    total_events: int = Field(ge=0)
+    new_events_24h: int = Field(ge=0)
+    updated_events_24h: int = Field(ge=0)
+    covered_sources: int = Field(ge=0)
+    time_unknown_events: int = Field(ge=0)
+    platform_count: None = None
+    negative_surge_count: int | None = Field(default=None, ge=0)
+
+
+class PublicNegativeSurgeRule(OutputModel):
+    """Public numeric policy, deliberately excluding the private calibration reference."""
+
+    policy_id: str
+    min_valid_samples: int
+    min_analysis_coverage: Decimal
+    min_sources: int
+    min_negative_count: int
+    min_negative_count_increase: int
+    min_ratio_increase: Decimal
+
+
+type NegativeSurgeState = Literal[
+    "triggered", "not_triggered", "insufficient_data", "unavailable", "not_configured"
+]
+type NegativeSurgeReason = Literal[
+    "rule_not_configured",
+    "analysis_unavailable",
+    "time_unknown",
+    "evidence_conflict",
+    "current_empty",
+    "previous_empty",
+    "current_samples_insufficient",
+    "previous_samples_insufficient",
+    "current_coverage_low",
+    "previous_coverage_low",
+    "source_identity_missing",
+    "sources_changed",
+    "sources_insufficient",
+    "source_samples_insufficient",
+    "source_coverage_low",
+    "negative_count_below_threshold",
+    "count_increase_below_threshold",
+    "ratio_increase_below_threshold",
+    "source_ratio_increase_below_threshold",
+]
+
+
+class PublicNegativeSurgeEvent(OutputModel):
+    """One permission-checked event's explainable read-only decision."""
+
+    event_id: UUID
+    title: str
+    reading_url: str
+    state: NegativeSurgeState
+    reasons: list[NegativeSurgeReason]
+    current: PublicSentimentWindow | None
+    previous: PublicSentimentWindow | None
+    ratio_increase: float | None = None
+    negative_count_increase: int | None = None
+
+
+class PublicNegativeSurgeView(OutputModel):
+    """Complete event state counts and a bounded list, independent of the home ranking."""
+
+    snapshot_at: datetime
+    scope: Literal["public_event_reports"] = "public_event_reports"
+    time_basis: Literal["material_discovered"] = "material_discovered"
+    method_version: Literal["public-report-negative-surge-v1"] = "public-report-negative-surge-v1"
+    state: Literal[
+        "empty", "not_configured", "unavailable", "insufficient_data", "triggered", "not_triggered"
+    ]
+    rule: PublicNegativeSurgeRule | None
+    total_events: int = Field(ge=0)
+    evaluated_events: int = Field(ge=0)
+    triggered_count: int = Field(ge=0)
+    not_triggered_count: int = Field(ge=0)
+    insufficient_count: int = Field(ge=0)
+    unavailable_count: int = Field(ge=0)
+    not_configured_count: int = Field(ge=0)
+    events: list[PublicNegativeSurgeEvent]
+
+
+class PublicHomeView(OutputModel):
+    """One snapshot's full-site overview and bounded public event selection."""
+
+    snapshot_at: datetime
+    window_start: datetime
+    scope: Literal["public_readable_events"] = "public_readable_events"
+    ranking_basis: Literal["heat_then_recent"] = "heat_then_recent"
+    overview: PublicHomeOverview
+    stories: list[PublicStoryView]
+    sentiment: PublicReportSentimentView | None = None
+    negative_surge: PublicNegativeSurgeView | None = None
+    platform_trends: list[PublicPlatformTrend] = Field(default_factory=list)
 
 
 class RepublishInput(InputModel):

@@ -3,9 +3,12 @@ import {
   homeUpdatedAt,
   relativeTime,
   storyPresentation,
+  storyObservation,
+  homeMonitorHref,
+  homeRisingStories,
   type HomeReading,
 } from "@/app/components/home-format";
-import { attention, publicStory } from "./home-fixtures";
+import { attention, publicStory, publicItem } from "./home-fixtures";
 
 const reading: HomeReading = {
   stories: [publicStory],
@@ -107,4 +110,119 @@ it("formats relative times against a stable server observation without presentin
   expect(relativeTime(null, now)).toBe("时间未知");
   expect(relativeTime("invalid", now)).toBe("时间未知");
   expect(relativeTime("2026-10-07T08:00:00Z", now)).toBe("时间待核对");
+});
+
+it.each([
+  ["2026-10-05T08:00:00Z", false],
+  ["2026-10-05T08:00:01Z", true],
+  ["2026-10-06T08:00:00Z", true],
+  ["2026-10-06T08:00:01Z", false],
+  ["invalid", false],
+])(
+  "uses only material discovery within the rolling 24h window: %s",
+  (time, recent) => {
+    const observation = storyObservation(
+      {
+        ...publicStory,
+        // A newly dated event reference does not make old materials new.
+        first_seen_at: "2026-10-06T08:00:00Z",
+        reports: [{ ...publicItem, discovered_at: time }],
+      },
+      "2026-10-06T08:00:00Z",
+    );
+    expect(observation.recentMaterials).toBe(recent);
+  },
+);
+
+it("preserves valid discoveries and flags future/invalid records and backfills separately", () => {
+  const observation = storyObservation(
+    {
+      ...publicStory,
+      reports: [
+        publicItem,
+        { ...publicItem, discovered_at: "2026-10-07T08:00:00Z" },
+        { ...publicItem, discovered_at: "invalid" },
+      ],
+    },
+    "2026-10-06T08:00:00Z",
+  );
+  expect(observation).toMatchObject({
+    discoveredAt: publicItem.discovered_at,
+    recentMaterials: true,
+    unverifiedDiscovery: true,
+    backfill: true,
+  });
+  expect(storyObservation(publicStory, "invalid").recentMaterials).toBe(false);
+  expect(storyObservation({ ...publicStory, reports: [] }, "")).toMatchObject({
+    discoveredAt: null,
+    materialAt: null,
+    recentMaterials: false,
+  });
+});
+
+it("ranks only backend comparable history and never estimates trend from current attention", () => {
+  const base: HotKeyAPI.PublicHeatHistory = {
+    state: "available",
+    event_revision: 1,
+    snapshot_at: "2026-10-06T08:00:00Z",
+    points: [],
+    trend: { state: "available", direction: "up", percent: 20 },
+  };
+  const rising = { ...publicStory, history: base };
+  const fastest = {
+    ...rising,
+    id: "fastest",
+    history: { ...base, trend: { ...base.trend, percent: 50 } },
+  };
+  const rejected = [
+    { state: "insufficient_data" as const },
+    { state: "unavailable" as const },
+    { direction: "down" as const },
+    { percent: NaN },
+    { percent: Infinity },
+    { percent: 0 },
+  ].map((patch, i) => ({
+    ...rising,
+    id: `rejected-${i}`,
+    history: { ...base, trend: { ...base.trend, ...patch } },
+  }));
+  expect(
+    homeRisingStories([publicStory, ...rejected, rising, fastest]),
+  ).toEqual([fastest, rising]);
+});
+
+it("removes failed sections from the derived header update time", () => {
+  const edition = {
+    kind: "daily" as const,
+    key: "2026-10-01",
+    title: "旧刊期",
+    revision: 1,
+    created_at: "2026-10-06T08:00:00Z",
+    reading_url: "/reports/daily/2026-10-01",
+  };
+  expect(
+    homeUpdatedAt({
+      ...reading,
+      editions: [edition],
+      unavailable: ["editions"],
+    }),
+  ).toBe("2026-10-06T07:00:00Z");
+  expect(
+    homeUpdatedAt({
+      ...reading,
+      editions: [edition],
+      failures: { stories: { status: 403 }, editions: { status: 503 } },
+    }),
+  ).toBeNull();
+});
+
+it("encodes editable monitor intent with a Unicode-safe 200-unit limit and no execution flags", () => {
+  const title = "模型 / 开源? & # + 🧠";
+  const url = new URL(homeMonitorHref(title), "http://localhost");
+  expect(url.pathname).toBe("/monitors/new");
+  expect([...url.searchParams]).toEqual([["q", title]]);
+  const longTitle = "文".repeat(199) + "🧠后续";
+  expect(new URL(homeMonitorHref(longTitle), url).searchParams.get("q")).toBe(
+    "文".repeat(199),
+  );
 });

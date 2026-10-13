@@ -749,6 +749,13 @@ class EventHeatService:
             evidence, at=at, historical=historical, first_report_at=event.first_seen_at
         )
         result = result.model_copy(update={"event_id": event.id, "event_revision": event.revision})
+        computed_at = self._clock()
+        manifest["measurement_kind"] = (
+            "recorded"
+            if not historical
+            and at == computed_at.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+            else "recomputed"
+        )
         fingerprint = hashlib.sha256(
             json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
         ).digest()
@@ -766,7 +773,7 @@ class EventHeatService:
                 input_manifest=manifest,
                 result=result.model_dump(mode="json"),
                 complete=result.complete,
-                computed_at=self._clock(),
+                computed_at=computed_at,
             )
             .on_conflict_do_nothing(constraint="event_attention_snapshots_input_key")
         )

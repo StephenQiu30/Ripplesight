@@ -513,6 +513,9 @@ class HotlistEntry(_ContractModel):
     summary: str | None = Field(default=None, max_length=100_000)
     published_at: datetime | None = None
     heat: str | None = Field(default=None, max_length=256)
+    native_id: str | None = Field(default=None, min_length=1, max_length=512)
+    native_rank: int | None = Field(default=None, ge=1, le=10000)
+    heat_unit: str | None = Field(default=None, min_length=1, max_length=100)
 
     @field_validator("published_at")
     @classmethod
@@ -545,6 +548,9 @@ class HotlistPage(_ContractModel):
     request_count: int = Field(ge=0, le=1)
     adapter_version: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._+:-]{0,63}$")
     retry_at: datetime | None = None
+    source_updated_at: datetime | None = None
+    source_entry_count: int | None = Field(default=None, ge=0)
+    truncated: bool = False
 
     @model_validator(mode="after")
     def validate_page(self) -> HotlistPage:
@@ -566,6 +572,13 @@ class HotlistPage(_ContractModel):
             valid = False
         if not valid or any(item.rank != index for index, item in enumerate(self.items, 1)):
             raise ValueError("invalid hotlist page state or ranks")
+        count = self.source_entry_count if self.source_entry_count is not None else len(self.items)
+        if count < len(self.items) or self.truncated != (count > len(self.items)):
+            raise ValueError("hotlist truncation must disclose its original count")
+        if self.source_updated_at is not None and (
+            self.source_updated_at.utcoffset() is None or self.source_updated_at > self.observed_at
+        ):
+            raise ValueError("hotlist source update time requires an aware past time")
         return self
 
 

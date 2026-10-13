@@ -7,18 +7,41 @@ from uuid import UUID
 
 from sqlalchemy import select
 
+from analysis.public_sentiment import (
+    PublicReportAnalysisRef,
+    read_public_report_sentiments_in_transaction,
+)
 from content.observation_context import load_observation_context_in_transaction
+from events.public_history import read_public_history_in_transaction
+from events.public_history_schemas import PublicHeatReference
 from events.reads import load_publication_stories_in_transaction
 from publication.publication_models import PublicationRecord, PublicationSourcePolicy
 from publication.reading import PublicationReadingService
-from publication.schemas import PublicAttentionView, PublicStoriesPage, PublicStoryView
+from publication.report_sentiment import public_report_sentiment
+from publication.schemas import (
+    PublicAttentionView,
+    PublicSentimentSample,
+    PublicStoriesPage,
+    PublicStoryView,
+)
+from publication.story_timing import public_story_timing
 
 
 def public_stories_in_transaction(
-    reader: PublicationReadingService, *, owner_id: UUID, event_ids: tuple[UUID, ...], now: datetime
+    reader: PublicationReadingService,
+    *,
+    owner_id: UUID,
+    event_ids: tuple[UUID, ...],
+    now: datetime,
+    strict_capacity: bool = False,
+    include_history: bool = True,
 ) -> list[PublicStoryView]:
     stories = load_publication_stories_in_transaction(
-        reader.session, owner_id=owner_id, event_ids=event_ids, now=now
+        reader.session,
+        owner_id=owner_id,
+        event_ids=event_ids,
+        now=now,
+        strict_capacity=strict_capacity,
     )
     references = {
         member.content_id: member.content_version_id
@@ -119,6 +142,36 @@ def public_stories_in_transaction(
         if allowed and reports:
             reports.sort(key=lambda item: (item.timeline_at, str(item.id)))
             attention = story.attention
+            report_ids = {report.id for report in reports}
+            sentiments = read_public_report_sentiments_in_transaction(
+                reader.session,
+                owner_id=owner_id,
+                topic_id=story.topic_id,
+                references=tuple(
+                    PublicReportAnalysisRef(
+                        content_id=member.content_id,
+                        content_version_id=member.content_version_id,
+                        observation_id=member.observation_id,
+                    )
+                    for member in story.members
+                    if member.content_id in report_ids and member.observation_id is not None
+                ),
+                now=now,
+            )
+            samples = [
+                PublicSentimentSample(
+                    content_id=report.id,
+                    source_key=report.source.key,
+                    discovered_at=report.discovered_at,
+                    backfill=report.backfill,
+                    state=sentiments[report.id].state
+                    if report.backfill is not None
+                    else "unavailable",
+                    label=sentiments[report.id].label if report.backfill is not None else None,
+                )
+                for report in reports
+            ]
+
             result.append(
                 PublicStoryView(
                     id=story.event_id,
@@ -128,6 +181,8 @@ def public_stories_in_transaction(
                     latest_progress=story.latest_progress,
                     phase=story.phase,
                     first_seen_at=story.first_seen_at,
+                    sentiment=public_report_sentiment(samples, now=now),
+                    timing=public_story_timing(story, reports=reports, now=now),
                     heat=story.heat,
                     attention=PublicAttentionView(
                         **attention.model_dump(
@@ -146,6 +201,22 @@ def public_stories_in_transaction(
                         ),
                     )
                     if attention
+                    else None,
+                    history=read_public_history_in_transaction(
+                        reader.session,
+                        owner_id=owner_id,
+                        event_id=story.event_id,
+                        revision=story.revision,
+                        now=now,
+                        references=frozenset(
+                            PublicHeatReference(
+                                member.content_id, member.content_version_id, member.observation_id
+                            )
+                            for member in story.members
+                            if member.content_id in report_ids and member.observation_id is not None
+                        ),
+                    )
+                    if include_history
                     else None,
                     reports=reports,
                     indexable=indexable,

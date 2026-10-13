@@ -13,6 +13,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from core.errors import ApplicationError
+from core.publication_config import PublicNegativeSurgePolicy
 from jobs.schemas import JobAcceptanceInput, JobObservationContext
 from jobs.services import JobService
 from publication.edition_schemas import (
@@ -37,6 +38,7 @@ from publication.group_schemas import (
     PublicReadingFilters,
     PublicTimelinePage,
 )
+from publication.home import home_in_transaction
 from publication.publication_models import (
     PublicationRecord,
     PublicationRepublishRun,
@@ -49,6 +51,7 @@ from publication.schemas import (
     PublicEditionSectionView,
     PublicEditionThemeView,
     PublicEditionView,
+    PublicHomeView,
     PublicItemDetailView,
     PublicItemsPage,
     PublicItemView,
@@ -79,17 +82,20 @@ class PublicationApplicationService:
         origin: str = "http://127.0.0.1:8667",
         indexing_enabled: bool = False,
         public_categories: tuple[Category, ...] = (),
+        surge_policy: PublicNegativeSurgePolicy | None = None,
     ) -> None:
         self.session, self.origin, self.indexing_enabled = session, origin, indexing_enabled
         self.public_categories = tuple(sorted(set(public_categories)))
+        self.surge_policy = surge_policy
 
     @contextmanager
-    def _read(self) -> Iterator[PublicationReadingService]:
+    def _read(self, *, strict_capacity: bool = False) -> Iterator[PublicationReadingService]:
         if self.session.in_transaction():
             yield PublicationReadingService(
                 self.session,
                 indexing_enabled=self.indexing_enabled,
                 public_categories=self.public_categories,
+                strict_capacity=strict_capacity,
             )
         else:
             with self.session.begin():
@@ -99,6 +105,7 @@ class PublicationApplicationService:
                     self.session,
                     indexing_enabled=self.indexing_enabled,
                     public_categories=self.public_categories,
+                    strict_capacity=strict_capacity,
                 )
 
     def items(
@@ -403,6 +410,28 @@ class PublicationApplicationService:
         with self._read() as reader:
             return hot_stories_in_transaction(
                 reader, owner_id=owner_id, limit=limit, now=now or datetime.now(UTC)
+            )
+
+    def home(
+        self, *, owner_id: UUID, limit: int = 50, now: datetime | None = None
+    ) -> PublicHomeView:
+        """Read exact full-site event counts and their bounded selection in one snapshot."""
+        if self.session.in_transaction():
+            isolation, read_only = self.session.execute(
+                text(
+                    "SELECT current_setting('transaction_isolation'), "
+                    "current_setting('transaction_read_only')"
+                )
+            ).one()
+            if isolation != "repeatable read" or read_only != "on":
+                raise RuntimeError("public home requires a repeatable-read read-only snapshot")
+        with self._read(strict_capacity=True) as reader:
+            return home_in_transaction(
+                reader,
+                owner_id=owner_id,
+                limit=limit,
+                now=now or datetime.now(UTC),
+                surge_policy=self.surge_policy,
             )
 
     def feed(
