@@ -1,7 +1,14 @@
 import * as UI from "@/components/ui/content";
 import type { ReactNode } from "react";
 
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardFooter,
+} from "@/components/ui/card";
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -19,8 +26,14 @@ export function LoginFormLayout({
       <UI.Content layout="stack" className="gap-5">
         <UI.Content aria-busy={loading}>{children}</UI.Content>
         <UI.Text tone="muted" size="xs">
-          登录即表示你已阅读<UI.TextLink href="/terms">使用条款</UI.TextLink>与
-          <UI.TextLink href="/privacy">隐私说明</UI.TextLink>
+          登录即表示同意
+          <UI.TextLink className="underline" href="/terms">
+            使用条款
+          </UI.TextLink>
+          与
+          <UI.TextLink className="underline" href="/privacy">
+            隐私说明
+          </UI.TextLink>
           。本站仅供个人非商业使用。
         </UI.Text>
       </UI.Content>
@@ -31,26 +44,33 @@ export function LoginFormLayout({
       aria-labelledby="login-title"
       className="max-w-login-form mx-auto w-full min-w-0 lg:mr-0"
     >
-      <Card variant="muted" className="gap-6 py-7 sm:py-9">
-        <CardHeader className="gap-2 px-6 sm:px-9">
-          <UI.Heading level={1} appearance="form" id="login-title">
-            登录
-          </UI.Heading>
-          <UI.Text tone="muted" size="sm">
+      <Card variant="muted" size="auth" className="gap-6">
+        <CardHeader className="gap-1.5">
+          <CardTitle asChild size="form">
+            <UI.Heading level={1} appearance="form" id="login-title">
+              登录
+            </UI.Heading>
+          </CardTitle>
+          <CardDescription size="caption">
             个人工作台与监控主题仅对本人可见。
-          </UI.Text>
+          </CardDescription>
         </CardHeader>
-        <CardContent className="px-6 sm:px-9">
+        <CardContent>
           <UI.Content aria-busy={loading}>{children}</UI.Content>
         </CardContent>
-        <CardContent className="px-6 sm:px-9">
+        <CardFooter>
           <UI.Text tone="muted" size="xs">
-            登录即表示你已阅读
-            <UI.TextLink href="/terms">使用条款</UI.TextLink>与
-            <UI.TextLink href="/privacy">隐私说明</UI.TextLink>
+            登录即表示同意
+            <UI.TextLink className="underline" href="/terms">
+              使用条款
+            </UI.TextLink>
+            与
+            <UI.TextLink className="underline" href="/privacy">
+              隐私说明
+            </UI.TextLink>
             。本站仅供个人非商业使用。
           </UI.Text>
-        </CardContent>
+        </CardFooter>
       </Card>
     </UI.Content>
   );

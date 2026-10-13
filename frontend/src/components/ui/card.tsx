@@ -8,7 +8,7 @@ function Card({
   variant = "default",
   ...props
 }: React.ComponentProps<"div"> & {
-  size?: "default" | "sm";
+  size?: "default" | "sm" | "reading" | "auth";
   variant?: "default" | "muted" | "inverse";
 }) {
   return (
@@ -18,7 +18,10 @@ function Card({
       data-variant={variant}
       className={cn(
         "group/card bg-card text-card-foreground flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl py-(--card-spacing) text-sm [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
-        variant === "muted" && "bg-muted rounded-2xl",
+        variant === "muted" && "bg-muted",
+        size === "reading" && "[--card-spacing:--spacing(5)]",
+        size === "auth" &&
+          "rounded-2xl [--card-spacing:--spacing(6)] sm:[--card-spacing:--spacing(9)]",
         variant === "inverse" && "bg-primary text-primary-foreground",
         className,
       )}
@@ -47,7 +50,7 @@ function CardTitle({
   ...props
 }: React.ComponentProps<"div"> & {
   asChild?: boolean;
-  size?: "default" | "section" | "post";
+  size?: "default" | "section" | "post" | "form" | "sidebar";
 }) {
   const Comp = asChild ? Slot.Root : "div";
   return (
@@ -56,6 +59,8 @@ function CardTitle({
       className={cn(
         "font-heading text-base leading-snug font-medium group-data-[size=sm]/card:text-sm",
         size === "section" && "text-xl font-semibold",
+        size === "form" && "text-[22px] leading-7 font-semibold",
+        size === "sidebar" && "text-sm leading-6 font-semibold",
         size === "post" && "text-lg leading-7 font-semibold sm:text-xl",
         className,
       )}
@@ -68,13 +73,14 @@ function CardDescription({
   className,
   size = "default",
   ...props
-}: React.ComponentProps<"div"> & { size?: "default" | "reading" }) {
+}: React.ComponentProps<"div"> & { size?: "default" | "reading" | "caption" }) {
   return (
     <div
       data-slot="card-description"
       className={cn(
         "text-muted-foreground text-sm",
         size === "reading" && "text-base leading-6",
+        size === "caption" && "text-[13px] leading-[18px]",
         className,
       )}
       {...props}
@@ -105,7 +111,21 @@ function CardContent({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
+function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="card-footer"
+      className={cn(
+        "flex items-center px-(--card-spacing) pb-(--card-spacing)",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
 export {
+  CardFooter,
   Card,
   CardHeader,
   CardTitle,

@@ -41,6 +41,7 @@ export function BasicLayout({
 }) {
   const pathname = usePathname();
   const mainRef = useRef<HTMLElement>(null);
+  const standaloneLogin = pathname === "/login";
 
   useEffect(() => {
     if (mainRef.current) mainRef.current.scrollTop = 0;
@@ -53,33 +54,45 @@ export function BasicLayout({
           <LoginProvider>
             <LayoutScrollContext.Provider value={mainRef}>
               <TooltipProvider>
-                <SidebarProvider className="h-dvh min-h-0 overflow-hidden print:block print:h-auto print:overflow-visible">
-                  <Button
-                    asChild
-                    className="sr-only focus-within:not-sr-only focus-within:fixed focus-within:top-3 focus-within:left-5 focus-within:z-50"
+                {standaloneLogin ? (
+                  <UI.Content
+                    as="main"
+                    id="page-content"
+                    ref={mainRef}
+                    tabIndex={-1}
+                    className="h-dvh min-w-0 overflow-y-auto focus-visible:outline-none"
                   >
-                    <UI.TextLink href="#page-content">跳到正文</UI.TextLink>
-                  </Button>
-                  <SidebarLayout>
-                    <SidebarInset
+                    {children}
+                  </UI.Content>
+                ) : (
+                  <SidebarProvider className="h-dvh min-h-0 overflow-hidden print:block print:h-auto print:overflow-visible">
+                    <Button
                       asChild
-                      id="main-content"
-                      tabIndex={-1}
-                      className="min-h-0 min-w-0 overflow-clip pb-16 focus-visible:outline-none data-[login=true]:pb-0 md:pb-0 print:overflow-visible print:pb-0"
+                      className="sr-only focus-within:not-sr-only focus-within:fixed focus-within:top-3 focus-within:left-5 focus-within:z-50"
                     >
-                      <UI.Content
-                        as="main"
-                        className="flex min-h-0 flex-1 flex-col"
+                      <UI.TextLink href="#page-content">跳到正文</UI.TextLink>
+                    </Button>
+                    <SidebarLayout>
+                      <SidebarInset
+                        asChild
+                        id="main-content"
+                        tabIndex={-1}
+                        className="min-h-0 min-w-0 overflow-clip pb-16 focus-visible:outline-none data-[login=true]:pb-0 md:pb-0 print:overflow-visible print:pb-0"
                       >
-                        <BasicMobileHeader />
-                        <PageContainer scrollRef={mainRef}>
-                          {children}
-                        </PageContainer>
-                      </UI.Content>
-                    </SidebarInset>
-                  </SidebarLayout>
-                  <BasicMobileNavigation />
-                </SidebarProvider>
+                        <UI.Content
+                          as="main"
+                          className="flex min-h-0 flex-1 flex-col"
+                        >
+                          <BasicMobileHeader />
+                          <PageContainer scrollRef={mainRef}>
+                            {children}
+                          </PageContainer>
+                        </UI.Content>
+                      </SidebarInset>
+                    </SidebarLayout>
+                    <BasicMobileNavigation />
+                  </SidebarProvider>
+                )}
               </TooltipProvider>
               <Toaster
                 position="top-right"

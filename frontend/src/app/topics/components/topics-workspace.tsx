@@ -34,39 +34,45 @@ export function TopicsWorkspace({
   }, []);
   const selectedTopicId = topicId ?? firstTopicId;
   return (
-    <UI.Content className="flex min-w-0 flex-col gap-8">
+    <Collapsible
+      open={topicsOpen || !selectedTopicId || listForbidden}
+      onOpenChange={setTopicsOpen}
+      className="flex min-w-0 flex-col gap-8"
+    >
       <PageHeader
         title={workspace ? "我的工作台" : "监控主题"}
         description="跟踪关键词，查看各平台的命中内容与讨论。"
         actions={
-          <Button asChild size="navigation">
-            <Link href="/monitors/new">
-              <PlusIcon data-icon="inline-start" />
-              新建主题
-            </Link>
-          </Button>
+          <UI.Content layout="row">
+            {selectedTopicId && !listForbidden && (
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="navigation">
+                  {topicsOpen ? "收起主题列表" : "切换监控主题"}
+                </Button>
+              </CollapsibleTrigger>
+            )}
+            <Button asChild size="navigation">
+              <Link href="/monitors/new">
+                <PlusIcon data-icon="inline-start" />
+                新建主题
+              </Link>
+            </Button>
+          </UI.Content>
         }
       />
-      <UI.Content className="flex min-w-0 flex-col items-stretch gap-8">
-        <Collapsible
-          open={topicsOpen || !selectedTopicId || listForbidden}
-          onOpenChange={setTopicsOpen}
-          className="min-w-0"
-        >
-          <CollapsibleTrigger asChild className="mb-4">
-            <Button variant="outline">
-              {topicsOpen ? "收起主题列表" : "切换监控主题"}
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent forceMount motion="height">
-            <TopicList
-              selectedTopicId={selectedTopicId}
-              onFirstTopic={setFirstTopicId}
-              updatedTopics={updatedTopics}
-              onForbidden={setListForbidden}
-            />
-          </CollapsibleContent>
-        </Collapsible>
+      <UI.Content
+        className="workspace-columns min-w-0"
+        data-list-collapsed={!topicsOpen && !!selectedTopicId && !listForbidden}
+      >
+        <CollapsibleContent forceMount motion="height" className="min-w-0">
+          <TopicList
+            compact
+            selectedTopicId={selectedTopicId}
+            onFirstTopic={setFirstTopicId}
+            updatedTopics={updatedTopics}
+            onForbidden={setListForbidden}
+          />
+        </CollapsibleContent>
         {selectedTopicId && !listForbidden && (
           <UI.Content className="min-w-0 flex-1">
             <TopicEditor
@@ -78,6 +84,6 @@ export function TopicsWorkspace({
           </UI.Content>
         )}
       </UI.Content>
-    </UI.Content>
+    </Collapsible>
   );
 }

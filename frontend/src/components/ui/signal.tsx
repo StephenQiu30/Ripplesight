@@ -1,12 +1,15 @@
 import { cn } from "@/lib/utils";
+import { Alert, AlertTitle, AlertDescription } from "./alert";
 
 /** Unknown observations retain their place in the design without inventing a series. */
 export function ObservationGap({
   children,
   compact = false,
+  size = "default",
 }: {
   children: React.ReactNode;
   compact?: boolean;
+  size?: "default" | "hourly";
 }) {
   return (
     <div
@@ -16,6 +19,7 @@ export function ObservationGap({
         compact
           ? "h-8"
           : "bg-muted/50 h-48 rounded-lg border-b px-6 text-center",
+        !compact && size === "hourly" && "h-35",
       )}
     >
       {children}
@@ -54,18 +58,15 @@ export function SignalNotice({
   children: React.ReactNode;
 }) {
   return (
-    <section
-      aria-label={title}
-      className="bg-muted flex flex-col gap-3 rounded-xl p-5 text-sm leading-6"
-    >
-      <h2 className="text-destructive flex items-center gap-2 text-xs font-semibold">
+    <Alert variant="signal" role="note" aria-label={title}>
+      <AlertTitle className="text-destructive flex items-center gap-2 text-xs font-semibold">
         <span
           aria-hidden="true"
           className="bg-destructive size-1.5 rounded-full"
         />
         {title}
-      </h2>
-      {children}
-    </section>
+      </AlertTitle>
+      <AlertDescription>{children}</AlertDescription>
+    </Alert>
   );
 }

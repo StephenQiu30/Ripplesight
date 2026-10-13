@@ -20,7 +20,7 @@ import { publicSiteMetadata } from "@/components/publication/site-metadata";
 import { DiscoveryFilters } from "./components/discovery-filters";
 import { DiscoveryResults } from "./components/discovery-results";
 import { DiscoveryPlatforms } from "./components/discovery-platforms";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { DiscoveryTopics } from "./components/discovery-topics";
 import {
   discoveryScope,
@@ -251,11 +251,13 @@ async function DiscoveryReadingPage({ params }: { params: DiscoveryParams }) {
               暂无搜索建议。
             </UI.Text>
           </UI.Content>
-          <Card variant="muted">
+          <Card variant="muted" size="reading">
             <CardHeader>
-              <UI.Heading level={2} appearance="sidebar">
-                持续关注这个主题
-              </UI.Heading>
+              <CardTitle asChild size="sidebar">
+                <UI.Heading level={2} appearance="sidebar">
+                  持续关注这个主题
+                </UI.Heading>
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <UI.Text size="sm" tone="muted">

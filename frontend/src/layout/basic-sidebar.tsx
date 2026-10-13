@@ -106,13 +106,6 @@ const starredDestination: Destination = {
 };
 const workspaceDestinations: Destination[] = [
   {
-    href: "/monitors/new",
-    label: "设置关键词",
-    icon: Settings2Icon,
-    match: ["/monitors/new"],
-  },
-  { href: "/sources", label: "平台接入", icon: PlugIcon, match: ["/sources"] },
-  {
     href: "/topics",
     label: "监控主题",
     icon: EyeIcon,
@@ -122,6 +115,13 @@ const workspaceDestinations: Destination[] = [
   starredDestination,
 ];
 const moreDestinations: Destination[] = [
+  {
+    href: "/monitors/new",
+    label: "设置关键词",
+    icon: Settings2Icon,
+    match: ["/monitors/new"],
+  },
+  { href: "/sources", label: "平台接入", icon: PlugIcon, match: ["/sources"] },
   {
     href: "/workspace",
     label: "工作台",
@@ -227,7 +227,7 @@ function DestinationGroup({
     <SidebarGroup
       role="navigation"
       aria-label={navLabel}
-      className="px-3 pt-0 pb-4 group-data-[collapsible=icon]:px-2"
+      className="max-w-64 px-4 pt-0 pb-7 group-data-[collapsible=icon]:px-2"
     >
       <SidebarGroupLabel className="h-7 group-data-[collapsible=icon]:hidden">
         {label}
@@ -269,7 +269,7 @@ export function BasicSidebar() {
       aria-label="站点侧边栏"
       className="hidden shrink-0 transition-none md:flex print:hidden"
     >
-      <SidebarHeader className="h-22 flex-row items-center justify-between gap-1 px-3 group-data-[collapsible=icon]:h-auto group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:px-2 group-data-[collapsible=icon]:py-4">
+      <SidebarHeader className="h-22 flex-row items-center justify-between gap-1 px-4 group-data-[collapsible=icon]:h-auto group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:px-2 group-data-[collapsible=icon]:py-4">
         <BrandLockup href="/" collapsible />
         <SidebarTrigger
           aria-label={open ? "折叠侧边栏" : "展开侧边栏"}
@@ -412,7 +412,7 @@ export function BasicMobileNavigation() {
             >
               <EyeIcon aria-hidden="true" />
               <Text as="span" size="xs">
-                监控
+                工作台
               </Text>
             </Link>
           </NavigationMenuLink>

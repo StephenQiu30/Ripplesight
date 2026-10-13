@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Content } from "@/components/ui/content";
 
-/** Figma's shared reading grid: a 666px feed and 357px aside at 1440px. */
+/** Keeps the feed fluid and stacks supplementary content when space is limited. */
 export function ReadingLayout({
   children,
   aside,

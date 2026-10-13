@@ -5,9 +5,12 @@ import { connection } from "next/server";
 import { headers } from "next/headers";
 
 import { safeReturnTo } from "@/components/auth/access";
-import Home from "@/app/page";
-import { HomeLoading } from "@/app/components/home-loading";
-import { LoginRouteDialog } from "@/components/auth/login-route-dialog";
+import { LoginExperience } from "./components/login-experience";
+import { LoginForm } from "./components/login-form";
+import {
+  LoginFormLayout,
+  LoginFormSkeleton,
+} from "./components/login-form-layout";
 import { PageState } from "@/components/system/page-state";
 import { Button } from "@/components/ui/button";
 
@@ -47,15 +50,20 @@ export default async function LoginPage({
       />
     ) : undefined;
   return (
-    <>
-      <Suspense fallback={<HomeLoading />}>
-        <Home searchParams={Promise.resolve({})} />
-      </Suspense>
-      <LoginRouteDialog
-        returnTo={returnTo}
-        oauthFailed={!!params.error}
-        errorContent={errorContent}
-      />
-    </>
+    <LoginExperience>
+      {errorContent ? (
+        <LoginFormLayout>{errorContent}</LoginFormLayout>
+      ) : (
+        <Suspense
+          fallback={
+            <LoginFormLayout loading>
+              <LoginFormSkeleton />
+            </LoginFormLayout>
+          }
+        >
+          <LoginForm returnTo={returnTo} oauthFailed={!!params.error} />
+        </Suspense>
+      )}
+    </LoginExperience>
   );
 }

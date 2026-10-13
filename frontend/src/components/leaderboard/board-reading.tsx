@@ -15,7 +15,7 @@ import {
   TableRow,
   TableCaption,
 } from "@/components/ui/table";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageState } from "@/components/system/page-state";
 import { BoardPageFrame } from "./page-header";
@@ -41,7 +41,7 @@ export function BoardReading({
       <Content className="reading-columns items-start">
         <Content as="section" aria-label="模型排名" className="min-w-0">
           {data.entries.length ? (
-            <Table>
+            <Table aria-label="模型排名表" tabIndex={0} className="min-w-xl">
               <TableCaption>
                 支持指数为固定锚点 0–100 分；缺失证据不补分。
                 <TextLink href="/leaderboard/rules">计算规则</TextLink> ·{" "}
@@ -111,11 +111,13 @@ export function BoardReading({
           layout="stack"
           className="gap-10"
         >
-          <Card variant="muted">
+          <Card variant="muted" size="reading">
             <CardHeader>
-              <Heading level={2} appearance="sidebar">
-                本周变化
-              </Heading>
+              <CardTitle asChild size="sidebar">
+                <Heading level={2} appearance="sidebar">
+                  本周变化
+                </Heading>
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <Text size="sm" tone="muted">

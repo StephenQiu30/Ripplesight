@@ -18,11 +18,11 @@
 @theme inline {
   --text-page: 2rem;
   --text-page--line-height: 2.5rem;
-  --text-mobile-page: 1.625rem;
-  --text-mobile-page--line-height: 2.125rem;
+  --text-mobile-page: 1.5rem;
+  --text-mobile-page--line-height: 2rem;
   --text-metric: 1.75rem;
   --text-metric--line-height: 2.25rem;
-  --spacing-site-sidebar: 15rem;
+  --spacing-site-sidebar: 18.875rem;
   --spacing-monitor-list: 20.625rem;
   --spacing-login-art: 12.5rem;
   --container-login: 65rem;
@@ -162,7 +162,7 @@
 
 @layer components {
   .rich-content {
-    @apply text-sm leading-8;
+    @apply max-w-[90ch] text-sm leading-8;
     & p {
       @apply my-4 whitespace-pre-wrap;
     }
@@ -232,15 +232,28 @@
   }
 }
 
-/* Geometry measured from the desktop-exported Figma frames (1440 / 390). */
+/* Page queries use the content box after navigation and page gutters. */
+@utility page-layout {
+  container-type: inline-size;
+  container-name: page;
+  padding-inline: 1rem;
+  @media (min-width: 48rem) {
+    padding-inline: 1.5rem;
+  }
+  @media (min-width: 80rem) {
+    padding-inline: 2rem;
+  }
+}
+
+/* Reading columns follow available space, including sidebar resize changes. */
 @utility reading-columns {
   display: grid;
   align-items: start;
   grid-template-columns: minmax(0, 1fr);
-  gap: 2rem;
-  @media (min-width: 64rem) {
-    grid-template-columns: minmax(0, 1.8667fr) minmax(0, 1fr);
-    column-gap: 1.25rem;
+  gap: 1.5rem;
+  @container page (min-width: 56rem) {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+    column-gap: 2rem;
   }
 }
 @utility site-sidebar-width {
@@ -249,7 +262,7 @@
 }
 
 @utility login-page {
-  min-height: calc(100dvh - 4rem);
+  min-height: 100dvh;
 }
 @utility login-columns {
   grid-template-columns: minmax(0, 1fr);
@@ -261,10 +274,23 @@
 @utility edition-columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 2rem;
-  @media (min-width: 64rem) {
-    grid-template-columns: minmax(0, 2.35fr) minmax(0, 1fr);
-    column-gap: 3rem;
+  gap: 1.5rem;
+  @container page (min-width: 56rem) {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+    column-gap: 2rem;
+  }
+}
+
+@utility workspace-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.5rem;
+  @container page (min-width: 64rem) {
+    grid-template-columns: minmax(0, 20.625rem) minmax(0, 1fr);
+    gap: 2rem;
+    &[data-list-collapsed="true"] {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 }
 

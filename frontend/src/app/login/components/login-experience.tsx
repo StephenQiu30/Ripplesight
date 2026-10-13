@@ -3,6 +3,7 @@ import * as UI from "@/components/ui/content";
 import { BrandLockup } from "@/components/brand/brand-lockup";
 import { Button } from "@/components/ui/button";
 import { LoginBrandStory } from "./login-brand-story";
+import { BasicFooter } from "@/layout/basic-footer";
 
 export function LoginExperience({
   children,
@@ -22,10 +23,11 @@ export function LoginExperience({
           <UI.TextLink href="/">不登录，先看今日热点</UI.TextLink>
         </Button>
       </UI.Content>
-      <UI.Content className="login-columns max-w-login mx-auto grid w-full min-w-0 flex-1 items-start gap-8 px-4 pt-12 pb-16 lg:gap-16 lg:px-0 lg:pt-23 lg:pb-20">
+      <UI.Content className="login-columns max-w-login mx-auto grid w-full min-w-0 flex-1 items-start gap-8 px-4 pt-8 pb-16 lg:gap-16 lg:px-0 lg:pt-23">
         <LoginBrandStory>{liveStories}</LoginBrandStory>
         {children}
       </UI.Content>
+      <BasicFooter />
     </UI.Content>
   );
 }

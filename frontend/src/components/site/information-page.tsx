@@ -18,7 +18,7 @@ export function InformationPage({
   return (
     <UI.Content>
       <PageHeader title={<>{title}</>} />
-      <UI.Content className="text-muted-foreground mt-8 flex flex-col gap-y-6 text-sm leading-7">
+      <UI.Content className="text-muted-foreground mt-8 flex max-w-3xl flex-col gap-y-6 text-sm leading-7">
         {children}
       </UI.Content>
       <NavigationMenu

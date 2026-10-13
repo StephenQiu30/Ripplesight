@@ -111,16 +111,10 @@ describe("Figma reading shell", () => {
       within(screen.getByRole("navigation", { name: "工作台导航" }))
         .getAllByRole("link")
         .map((link) => link.getAttribute("href")),
-    ).toEqual([
-      "/monitors/new",
-      "/sources",
-      "/topics",
-      "/alerts",
-      "/discover/starred",
-    ]);
+    ).toEqual(["/topics", "/alerts", "/discover/starred"]);
     const mobile = within(screen.getByRole("navigation", { name: "手机导航" }));
     expect(mobile.getAllByRole("link").map((link) => link.textContent)).toEqual(
-      ["首页", "探索", "收藏", "监控"],
+      ["首页", "探索", "收藏", "工作台"],
     );
     expect(
       mobile.getByRole("link", { name: "监控主题" }).getAttribute("href"),
@@ -196,11 +190,13 @@ describe("Figma reading shell", () => {
     await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(trigger));
   });
-  it("retains public navigation behind the login route dialog", () => {
+  it("renders the standalone login without the reading shell", () => {
     route.pathname = "/login";
     render(<BasicLayout>{page}</BasicLayout>);
-    expect(sidebar().getByRole("link", { name: "今日热点" })).toBeTruthy();
-    expect(screen.getByRole("navigation", { name: "手机导航" })).toBeTruthy();
+    expect(
+      screen.queryByRole("complementary", { name: "站点侧边栏" }),
+    ).toBeNull();
+    expect(screen.queryByRole("navigation", { name: "手机导航" })).toBeNull();
     expect(screen.getAllByRole("main")).toHaveLength(1);
     expect(screen.queryByRole("contentinfo")).toBeNull();
   });
@@ -281,12 +277,13 @@ describe("Figma reading shell", () => {
     fireEvent.keyDown(window, { key: "b", ctrlKey: true });
     expect(sidebar().getByRole("button", { name: "展开侧边栏" })).toBeTruthy();
   });
-  it("exposes platform configuration as a primary destination", () => {
+  it("keeps platform configuration reachable in More", async () => {
     route.pathname = "/sources";
     render(<BasicLayout>{page}</BasicLayout>);
+    const { menu } = await openMore();
     expect(
-      sidebar()
-        .getByRole("link", { name: "平台接入", current: "page" })
+      within(menu)
+        .getByRole("menuitem", { name: "平台接入", current: "page" })
         .getAttribute("href"),
     ).toBe("/sources");
   });

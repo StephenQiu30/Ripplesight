@@ -15,12 +15,7 @@ export function LayoutContainer({
 }) {
   const Container = routeTransition ? PageTransition : UI.Content;
   return (
-    <Container
-      className={cn(
-        "mx-auto w-full max-w-screen-2xl min-w-0 px-4 md:px-8 lg:px-12",
-        className,
-      )}
-    >
+    <Container className={cn("page-layout w-full min-w-0", className)}>
       {children}
     </Container>
   );

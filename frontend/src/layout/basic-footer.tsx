@@ -11,13 +11,13 @@ export function BasicFooter() {
     <Content
       as="footer"
       role="contentinfo"
-      className="flex min-h-16 flex-wrap items-center justify-between gap-4 px-4 py-3 md:px-8 print:hidden"
+      className="flex min-h-16 flex-col items-start justify-between gap-x-5 gap-y-2 px-4 py-6 md:flex-row md:items-center md:px-8 print:hidden"
     >
       <Text tone="muted" size="xs">
         © {new Date().getFullYear()} 知微见澜 Ripplesight
       </Text>
       <NavigationMenu viewport={false} aria-label="站点信息">
-        <NavigationMenuList className="flex-wrap gap-3">
+        <NavigationMenuList className="flex-wrap gap-5">
           {[
             ["/about", "关于"],
             ["/privacy", "隐私"],
@@ -25,7 +25,7 @@ export function BasicFooter() {
             ["/changelog", "更新日志"],
           ].map(([href, label]) => (
             <NavigationMenuItem key={href}>
-              <NavigationMenuLink asChild>
+              <NavigationMenuLink asChild size="footer">
                 <Link href={href}>{label}</Link>
               </NavigationMenuLink>
             </NavigationMenuItem>

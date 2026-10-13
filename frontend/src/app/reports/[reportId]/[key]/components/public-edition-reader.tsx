@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 import { Item, ItemContent, ItemGroup } from "@/components/ui/item";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableHeader,
@@ -92,7 +92,7 @@ export function PublicEditionReader({
               {labels[edition.kind]} · {edition.key} · 修订 {edition.revision}
             </UI.InlineCode>
           </UI.Text>
-          <UI.Heading level={1} appearance="display" className="break-words">
+          <UI.Heading level={1} className="break-words">
             {edition.title}
           </UI.Heading>
           <UI.Content className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -181,16 +181,18 @@ export function PublicEditionReader({
         {rest.map((section) => (
           <EditionContent key={section.id} section={section} />
         ))}
-        <Card variant="muted">
+        <Card variant="muted" size="reading">
           <CardHeader>
-            <UI.Heading
-              level={2}
-              appearance="sidebar"
-              id="edition-sentiment"
-              tabIndex={-1}
-            >
-              舆情提示
-            </UI.Heading>
+            <CardTitle asChild size="sidebar">
+              <UI.Heading
+                level={2}
+                appearance="sidebar"
+                id="edition-sentiment"
+                tabIndex={-1}
+              >
+                舆情提示
+              </UI.Heading>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <UI.Text size="sm" tone="muted">
@@ -296,7 +298,7 @@ export function PublicEditionReader({
         >
           <Button asChild>
             <UI.TextLink href={`/feed/${edition.kind}.xml`}>
-              订阅{labels[edition.kind]}
+              订阅{labels[edition.kind]} RSS
             </UI.TextLink>
           </Button>
           <UI.Content className="flex flex-wrap gap-2">

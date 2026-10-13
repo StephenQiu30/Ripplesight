@@ -30,6 +30,12 @@ import { LoginForm } from "@/app/login/components/login-form";
 import { LoginProvider } from "@/components/auth/login-context";
 import { AuthLink } from "@/components/auth/auth-link";
 import { IdentitySessionProvider } from "@/components/auth/session-context";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 function Reader() {
   const [draft, setDraft] = useState("");
@@ -96,6 +102,34 @@ it("continues the requested keyword configuration after successful login", async
   );
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(mocks.refresh).toHaveBeenCalled();
+});
+
+it("restores the menu trigger after its login item has unmounted", async () => {
+  render(
+    <IdentitySessionProvider session={null}>
+      <LoginProvider>
+        <DropdownMenu>
+          <DropdownMenuTrigger>更多导航</DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem asChild>
+              <AuthLink href="/monitors/new">设置关键词</AuthLink>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </LoginProvider>
+    </IdentitySessionProvider>,
+  );
+  const trigger = screen.getByRole("button", { name: "更多导航" });
+  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+  const item = await screen.findByRole("menuitem", { name: "设置关键词" });
+  item.focus();
+  fireEvent.click(item);
+  await screen.findByRole("dialog", { name: "登录 Ripplesight" });
+  await waitFor(() => expect(screen.queryByRole("menuitem")).toBeNull());
+  fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(document.activeElement).toBe(trigger);
+  expect(mocks.replace).not.toHaveBeenCalled();
 });
 
 it("keeps failed login open with input preserved", async () => {

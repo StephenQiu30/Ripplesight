@@ -34,6 +34,8 @@ export function EventHeader({
   title,
   firstSeenAt,
   firstSeenBasis,
+  firstSeenLabel,
+  updatedLabel = "最近更新",
   updatedAt,
   sourceCount,
   heat,
@@ -45,6 +47,8 @@ export function EventHeader({
   title: string;
   firstSeenAt: string;
   firstSeenBasis?: "published" | "discovered";
+  firstSeenLabel?: string;
+  updatedLabel?: string;
   updatedAt?: string | null;
   sourceCount: number;
   heat?: number | null;
@@ -61,7 +65,8 @@ export function EventHeader({
     >
       <UI.Content className="flex flex-wrap gap-x-5 gap-y-2">
         <UI.Text size="xs" tone="muted">
-          首次{firstSeenBasis === "published" ? "发布" : "发现"}{" "}
+          {firstSeenLabel ??
+            `首次${firstSeenBasis === "published" ? "发布" : "发现"}`}{" "}
           <UI.InlineCode>
             <UI.Timestamp dateTime={firstSeenAt}>
               {eventTime(firstSeenAt)}
@@ -71,7 +76,7 @@ export function EventHeader({
         <UI.Text size="xs" tone="muted">
           {updatedAt ? (
             <>
-              最近更新{" "}
+              {updatedLabel}{" "}
               <UI.InlineCode>
                 <UI.Timestamp dateTime={updatedAt}>
                   {eventTime(updatedAt)}
@@ -213,12 +218,14 @@ export function EventTimeline({
   entries,
   feedback,
   footer,
+  headingAppearance,
   description = "按当前已加载成员的发布时间排列；未提供发布时间时使用观察时间。",
 }: {
   entries: TimelineEntry[];
   feedback?: ReactNode;
   footer?: ReactNode;
   description?: string;
+  headingAppearance?: React.ComponentProps<typeof UI.Heading>["appearance"];
 }) {
   return (
     <UI.Content
@@ -226,7 +233,9 @@ export function EventTimeline({
       aria-labelledby="event-timeline-heading"
       className="flex flex-col gap-4"
     >
-      <UI.Heading id="event-timeline-heading">时间线</UI.Heading>
+      <UI.Heading appearance={headingAppearance} id="event-timeline-heading">
+        时间线
+      </UI.Heading>
       <UI.Text size="xs" tone="muted">
         {description}
       </UI.Text>
@@ -294,14 +303,22 @@ export function EventTimeline({
   );
 }
 
-export function EventSources({ sources }: { sources: EventSource[] }) {
+export function EventSources({
+  sources,
+  headingAppearance,
+}: {
+  sources: EventSource[];
+  headingAppearance?: React.ComponentProps<typeof UI.Heading>["appearance"];
+}) {
   return (
     <UI.Content
       as="section"
       aria-labelledby="event-sources-heading"
       className="flex min-w-0 flex-col gap-4"
     >
-      <UI.Heading id="event-sources-heading">来源</UI.Heading>
+      <UI.Heading appearance={headingAppearance} id="event-sources-heading">
+        来源
+      </UI.Heading>
       {!sources.length ? (
         <EventEmpty>当前事件尚无可读来源。</EventEmpty>
       ) : (

@@ -18,7 +18,7 @@ import { useReducedMotion } from "@/hooks/use-reduced-motion";
 gsap.registerPlugin(useGSAP);
 
 const STORAGE_KEY = "ripplesight-sidebar";
-const DEFAULT_WIDTH = 240;
+const DEFAULT_WIDTH = 302;
 const MIN_WIDTH = 224;
 const MAX_WIDTH = 320;
 const COLLAPSED_WIDTH = 48;

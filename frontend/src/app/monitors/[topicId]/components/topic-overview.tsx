@@ -60,14 +60,14 @@ export function TopicOverview({
       </Content>
       <Content as="section" aria-labelledby="hourly-hits" layout="stack">
         <Content className="flex items-center justify-between gap-4">
-          <Heading level={3} appearance="sidebar" id="hourly-hits">
+          <Heading level={3} appearance="subsection" id="hourly-hits">
             每小时命中
           </Heading>
           <Text size="xs" tone="muted">
             过去 24 小时
           </Text>
         </Content>
-        <ObservationGap>
+        <ObservationGap size="hourly">
           暂无小时统计。采集结果保留在下方“查看监控结果”。
         </ObservationGap>
       </Content>
@@ -77,7 +77,7 @@ export function TopicOverview({
         layout="stack"
       >
         <Content className="flex items-center justify-between gap-4">
-          <Heading level={3} appearance="sidebar" id="collection-platforms">
+          <Heading level={3} appearance="subsection" id="collection-platforms">
             采集平台
           </Heading>
           <Text size="xs" tone="muted">

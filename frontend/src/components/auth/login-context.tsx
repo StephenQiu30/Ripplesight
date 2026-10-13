@@ -17,10 +17,17 @@ export function LoginProvider({ children }: { children: ReactNode }) {
   return (
     <LoginContext.Provider
       value={(returnTo) => {
-        origin.current =
+        const active =
           document.activeElement instanceof HTMLElement
             ? document.activeElement
             : null;
+        // A selected menu item disappears when its menu closes.
+        const menuTrigger = active
+          ?.closest('[role="menu"]')
+          ?.getAttribute("aria-labelledby");
+        origin.current = menuTrigger
+          ? (document.getElementById(menuTrigger) ?? active)
+          : active;
         setTarget(returnTo);
       }}
     >
@@ -30,7 +37,12 @@ export function LoginProvider({ children }: { children: ReactNode }) {
         returnTo={target ?? "/topics"}
         onClose={() => setTarget(null)}
         onAuthenticated={() => setTarget(null)}
-        onRestoreFocus={() => origin.current?.focus({ preventScroll: true })}
+        onRestoreFocus={() => {
+          const target = origin.current?.isConnected
+            ? origin.current
+            : document.getElementById("page-content");
+          target?.focus({ preventScroll: true });
+        }}
       />
     </LoginContext.Provider>
   );

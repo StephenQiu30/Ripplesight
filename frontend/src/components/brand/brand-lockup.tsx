@@ -10,12 +10,12 @@ export function BrandMark({ className }: { className?: string }) {
       src="/icon.png?v=2"
       alt=""
       aria-hidden="true"
-      width={44}
-      height={44}
+      width={36}
+      height={36}
       loading="eager"
       unoptimized
       className={cn(
-        "size-11 shrink-0 mix-blend-multiply dark:mix-blend-screen dark:invert",
+        "size-9 shrink-0 mix-blend-multiply dark:mix-blend-screen dark:invert",
         className,
       )}
     />
@@ -36,18 +36,14 @@ export function BrandLockup({
   bilingual?: boolean;
 }) {
   return (
-    <Button
-      asChild
-      variant="ghost"
-      className="h-auto min-h-11 min-w-0 justify-start gap-2 px-0 hover:bg-transparent"
-    >
+    <Button asChild variant="brand" size="brand">
       <Link
         href={href}
         aria-label={href === "/" ? "Ripplesight首页" : "Ripplesight工作台"}
       >
         <BrandMark
           className={cn(
-            "size-8 md:size-11",
+            "size-6 md:size-9",
             collapsible && "group-data-[collapsible=icon]:size-8",
           )}
         />
@@ -61,7 +57,7 @@ export function BrandLockup({
             collapsible && "group-data-[collapsible=icon]:hidden",
           )}
         >
-          <UI.Text as="strong" size="sm">
+          <UI.Text as="strong" size="brand">
             {bilingual ? "知微见澜 / Ripplesight" : "知微见澜"}
           </UI.Text>
           {collapsible ? (

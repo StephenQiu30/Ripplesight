@@ -124,7 +124,7 @@ function NavigationMenuLink({
   size = "default",
   ...props
 }: React.ComponentProps<typeof NavigationMenuPrimitive.Link> & {
-  size?: "default" | "rail" | "mobile";
+  size?: "default" | "rail" | "mobile" | "footer";
 }) {
   return (
     <NavigationMenuPrimitive.Link
@@ -136,6 +136,8 @@ function NavigationMenuLink({
           "min-h-14 flex-row gap-4 rounded-full px-4 text-xl data-active:font-semibold [&_svg:not([class*='size-'])]:size-6",
         size === "mobile" &&
           "min-h-12 justify-center rounded-full [&_svg:not([class*='size-'])]:size-6",
+        size === "footer" &&
+          "text-muted-foreground min-h-11 p-0 text-xs md:min-h-4",
         className,
       )}
       {...props}
